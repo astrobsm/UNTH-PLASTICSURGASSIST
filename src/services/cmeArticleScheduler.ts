@@ -84,7 +84,7 @@ class CMEArticleSchedulerService {
     const notification = {
       title: '📚 New CME Article Available!',
       body: `${article.title} - ${article.reading_time_minutes} min read`,
-      icon: '/icon-192x192.png',
+      icon: '/logo.png',
       badge: '/badge-72x72.png',
       data: {
         type: 'cme_article',

@@ -1,15 +1,16 @@
 import React from 'react';
 
-// University of Nigeria Teaching Hospital Enugu Logo
-// Since we couldn't fetch the actual logo, I'll create a placeholder that can be replaced with the actual logo
+// Plastic Surgery Logo
 export const UNTHLogo = () => (
   <div className="flex items-center space-x-3">
-    <div className="w-12 h-12 bg-primary-500 rounded-full flex items-center justify-center">
-      <span className="text-white font-bold text-lg">UNTH</span>
-    </div>
+    <img 
+      src="/logo.png" 
+      alt="Plastic Surgery Logo" 
+      className="w-12 h-12 object-contain"
+    />
     <div className="text-left">
-      <div className="text-lg font-bold text-clinical-dark">UNTH</div>
-      <div className="text-xs text-clinical">Ituku/Ozalla, Enugu</div>
+      <div className="text-lg font-bold text-clinical-dark">Plastic Surgery</div>
+      <div className="text-xs text-clinical">UNTH, Ituku/Ozalla</div>
     </div>
   </div>
 );

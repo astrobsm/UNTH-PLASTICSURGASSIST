@@ -129,7 +129,7 @@ class CMEWACSService {
     const prompt = this.buildArticlePrompt(topicData);
     
     try {
-      const response = await aiService.generateText(prompt);
+      const response = await aiService.generateContent(prompt);
       
       // Parse AI response
       const article = this.parseArticleResponse(response, topicData);
@@ -443,7 +443,7 @@ Please generate the article in HTML format with proper headings, paragraphs, lis
       article.title.toLowerCase().includes(lowerQuery) ||
       article.topic.toLowerCase().includes(lowerQuery) ||
       article.summary.toLowerCase().includes(lowerQuery) ||
-      article.key_points.some(point => point.toLowerCase().includes(lowerQuery))
+      article.key_points.some((point: string) => point.toLowerCase().includes(lowerQuery))
     );
   }
 

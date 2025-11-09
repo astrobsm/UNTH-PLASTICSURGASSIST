@@ -104,8 +104,8 @@ class NotificationService {
 
     const options: NotificationOptions = {
       body: payload.message,
-      icon: '/medical-cross.svg',
-      badge: '/medical-cross.svg',
+      icon: '/logo.png',
+      badge: '/logo.png',
       tag: `clinical-${payload.type}`,
       requireInteraction: payload.type === 'urgent',
       silent: false,
@@ -121,12 +121,12 @@ class NotificationService {
         {
           action: 'view',
           title: 'View Details',
-          icon: '/medical-cross.svg'
+          icon: '/logo.png'
         },
         {
           action: 'dismiss',
           title: 'Dismiss',
-          icon: '/medical-cross.svg'
+          icon: '/logo.png'
         }
       ]
     };
@@ -203,7 +203,7 @@ class NotificationService {
       notification: {
         title: payload.title,
         body: payload.message,
-        icon: '/medical-cross.svg',
+        icon: '/logo.png',
         data: payload
       }
     };

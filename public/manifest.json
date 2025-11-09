@@ -1,0 +1,64 @@
+{
+  "name": "Plastic Surgeon Assistant",
+  "short_name": "PS Assistant",
+  "description": "Progressive Web App for plastic surgery clinical workflows - designed for interns and resident doctors",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F9FAFB",
+  "theme_color": "#0E9F6E",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "categories": ["medical", "health", "education"],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Patient List",
+      "short_name": "Patients",
+      "description": "View patient list",
+      "url": "/patients",
+      "icons": [
+        {
+          "src": "/logo.png",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "MCQ Assessment",
+      "short_name": "MCQ",
+      "description": "Take MCQ test",
+      "url": "/mcq-education",
+      "icons": [
+        {
+          "src": "/logo.png",
+          "sizes": "96x96"
+        }
+      ]
+    }
+  ]
+}

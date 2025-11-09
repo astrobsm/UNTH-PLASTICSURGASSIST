@@ -37,8 +37,8 @@ self.addEventListener('push', (event) => {
     
     const options = {
       body: notification.body,
-      icon: notification.icon || '/medical-cross.svg',
-      badge: '/medical-cross.svg',
+      icon: notification.icon || '/logo.png',
+      badge: '/logo.png',
       tag: `clinical-${notification.data?.type || 'info'}`,
       requireInteraction: notification.data?.type === 'urgent',
       data: notification.data,

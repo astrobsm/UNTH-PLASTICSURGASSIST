@@ -90,7 +90,11 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center bg-clinical-light">
       <div className="max-w-md w-full space-y-8 p-8">
         <div className="text-center">
-          <Stethoscope className="mx-auto h-12 w-12 text-primary-500" />
+          <img 
+            src="/logo.png" 
+            alt="Plastic Surgery Logo" 
+            className="mx-auto h-20 w-20 object-contain"
+          />
           <h2 className="mt-6 text-3xl font-bold text-clinical-dark">
             Plastic Surgeon Assistant
           </h2>

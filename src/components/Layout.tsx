@@ -56,9 +56,11 @@ export default function Layout({ children }: LayoutProps) {
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
               <div className="flex items-center space-x-3">
-                <div className="w-8 h-8 bg-primary-500 rounded-full flex items-center justify-center">
-                  <span className="text-white font-bold text-sm">PS</span>
-                </div>
+                <img 
+                  src="/logo.png" 
+                  alt="Plastic Surgery Logo" 
+                  className="w-10 h-10 object-contain"
+                />
                 <div className="text-left">
                   <h1 className="text-xl font-semibold text-clinical-dark">
                     Plastic Surgery Assistant
