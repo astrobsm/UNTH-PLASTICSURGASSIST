@@ -1,0 +1,173 @@
+# ============================================
+# PLASTIC SURGEON ASSISTANT - DEPLOYMENT COMMANDS
+# Digital Ocean Droplet: 164.90.225.181
+# ============================================
+
+# STEP 1: Copy deployment script to droplet
+# Run this from your Windows PowerShell:
+scp deploy-to-droplet.sh root@164.90.225.181:~/
+
+# STEP 2: SSH into your droplet
+ssh root@164.90.225.181
+
+# STEP 3: Once connected, run these commands:
+chmod +x ~/deploy-to-droplet.sh
+./deploy-to-droplet.sh
+
+# ============================================
+# THAT'S IT! The script will:
+# - Install all dependencies (Node.js, Nginx, Git)
+# - Clone your repository
+# - Build the production app
+# - Configure web server
+# - Set up firewall
+# - Start the application
+# ============================================
+
+# After deployment completes:
+# Visit: http://164.90.225.181
+
+# Default Login:
+# Email: admin@unth.edu.ng
+# Password: admin123
+
+# ============================================
+# MANUAL DEPLOYMENT (if automated script fails):
+# ============================================
+
+# 1. SSH into droplet
+ssh root@164.90.225.181
+
+# 2. Update system
+apt update && apt upgrade -y
+
+# 3. Install Node.js
+curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+apt install -y nodejs
+
+# 4. Install Nginx and Git
+apt install -y nginx git
+
+# 5. Clone repository
+mkdir -p /var/www
+cd /var/www
+git clone https://github.com/astrobsm/plasticsurg_assisstant.git
+cd plasticsurg_assisstant
+
+# 6. Install dependencies and build
+npm install --legacy-peer-deps
+npm run build
+
+# 7. Configure Nginx (create config file)
+cat > /etc/nginx/sites-available/plasticsurg << 'EOF'
+server {
+    listen 80;
+    server_name 164.90.225.181;
+    root /var/www/plasticsurg_assisstant/dist;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    location /sw.js {
+        add_header Cache-Control "no-cache";
+    }
+}
+EOF
+
+# 8. Enable site
+ln -s /etc/nginx/sites-available/plasticsurg /etc/nginx/sites-enabled/
+rm -f /etc/nginx/sites-enabled/default
+nginx -t
+systemctl restart nginx
+
+# 9. Configure firewall
+ufw allow OpenSSH
+ufw allow 'Nginx Full'
+echo "y" | ufw enable
+
+# ============================================
+# DEPLOYMENT COMPLETE!
+# Access your app at: http://164.90.225.181
+# ============================================
+
+# ============================================
+# USEFUL COMMANDS AFTER DEPLOYMENT:
+# ============================================
+
+# Check if app is running:
+curl http://164.90.225.181
+
+# View Nginx error logs:
+tail -f /var/log/nginx/plasticsurg_error.log
+
+# View Nginx access logs:
+tail -f /var/log/nginx/plasticsurg_access.log
+
+# Restart Nginx:
+systemctl restart nginx
+
+# Check Nginx status:
+systemctl status nginx
+
+# Update app (when you push changes to GitHub):
+cd /var/www/plasticsurg_assisstant
+git pull origin main
+npm install --legacy-peer-deps
+npm run build
+systemctl restart nginx
+
+# Check disk space:
+df -h
+
+# Check memory usage:
+free -m
+
+# ============================================
+# TROUBLESHOOTING:
+# ============================================
+
+# If app won't load:
+# 1. Check if Nginx is running:
+systemctl status nginx
+
+# 2. Check if build exists:
+ls -la /var/www/plasticsurg_assisstant/dist
+
+# 3. Rebuild if needed:
+cd /var/www/plasticsurg_assisstant
+npm run build
+
+# 4. Check Nginx configuration:
+nginx -t
+
+# 5. Restart Nginx:
+systemctl restart nginx
+
+# If you see 502 Bad Gateway:
+tail -f /var/log/nginx/plasticsurg_error.log
+
+# If permission errors:
+chown -R www-data:www-data /var/www/plasticsurg_assisstant
+chmod -R 755 /var/www/plasticsurg_assisstant
+
+# ============================================
+# NEXT STEPS (OPTIONAL):
+# ============================================
+
+# 1. Set up SSL certificate (if you have a domain):
+apt install -y certbot python3-certbot-nginx
+certbot --nginx -d yourdomain.com
+
+# 2. Set up automatic backups:
+# Create a backup script in /root/backup.sh
+
+# 3. Monitor application:
+# Use Digital Ocean monitoring dashboard
+
+# 4. Configure custom domain:
+# Update DNS records to point to 164.90.225.181
+# Update Nginx config with your domain name
+
+# ============================================
