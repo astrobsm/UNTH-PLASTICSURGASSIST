@@ -31,7 +31,3 @@ yarn-error.log*
 
 # Build outputs
 *.tsbuildinfo
-
-# Deployment secrets
-deploy-password.txt
-deploy-to-droplet-unix.sh
