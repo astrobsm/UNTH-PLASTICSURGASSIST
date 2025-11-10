@@ -5,8 +5,7 @@
 
 param(
     [string]$DropletIP = "164.90.225.181",
-    [string]$SSHUser = "root",
-    [string]$Password = "289e3de323931fad90f44ea7f8"
+    [string]$SSHUser = "root"
 )
 
 $ErrorActionPreference = "Continue"
@@ -25,12 +24,6 @@ Write-Host ""
 Write-Info "Droplet IP: $DropletIP"
 Write-Info "SSH User: $SSHUser"
 Write-Host ""
-Write-Host "=== PASSWORD FOR THIS SESSION ===" -ForegroundColor Yellow
-Write-Host $Password -ForegroundColor Green
-Write-Host "=================================" -ForegroundColor Yellow
-Write-Host ""
-Write-Warn "Copy the password above - you'll need to paste it 3 times during deployment"
-Write-Host ""
 
 # Step 1: Check if SSH is available
 Write-Info "Step 1: Checking SSH connectivity..."
@@ -45,23 +38,20 @@ try {
 
 # Step 2: Test connection
 Write-Info "`nStep 2: Testing connection to droplet..."
-Write-Warn "You will be prompted for your password..."
+Write-Host ""
+Write-Warn "==> PASSWORD: 289e3de323931fad90f44ea7f8"
 Write-Host ""
 
-# Simple connection test - just try to connect
-Write-Info "Connecting to $SSHUser@$DropletIP..."
-$connectionTest = ssh -o StrictHostKeyChecking=no $SSHUser@$DropletIP "echo 'connected'" 2>&1
+# Simple connection test
+ssh -o StrictHostKeyChecking=no $SSHUser@$DropletIP "echo 'connected'" 2>&1 | Out-Null
 
-if (-not ($connectionTest -match 'connected')) {
+if ($LASTEXITCODE -eq 0) {
+    Write-Success "[OK] Connection successful"
+} else {
     Write-Err "[ERROR] Failed to connect to droplet"
-    Write-Info "Please ensure:"
-    Write-Info "  1. Droplet IP is correct: $DropletIP"
-    Write-Info "  2. You have the root password"
-    Write-Info "  3. SSH is enabled on the droplet"
-    Write-Info "Received output: $connectionTest"
+    Write-Info "Please ensure you entered the password correctly"
     exit 1
 }
-Write-Success "[OK] Connection successful"
 
 # Step 3: Copy deployment script
 Write-Info "`nStep 3: Copying deployment script to droplet..."
@@ -88,11 +78,10 @@ Write-Success "[OK] Deployment script copied"
 Write-Info "`nStep 4: Executing deployment on droplet..."
 Write-Warn "This will take 3-5 minutes. Please wait..."
 Write-Host ""
+Write-Warn "==> PASSWORD: 289e3de323931fad90f44ea7f8"
+Write-Host ""
 
-ssh -o StrictHostKeyChecking=no $SSHUser@$DropletIP @"
-chmod +x ~/deploy-to-droplet.sh
-./deploy-to-droplet.sh
-"@
+ssh -o StrictHostKeyChecking=no $SSHUser@$DropletIP "chmod +x ~/deploy-to-droplet.sh && bash ~/deploy-to-droplet.sh"
 
 if ($LASTEXITCODE -ne 0) {
     Write-Err "[ERROR] Deployment script failed"

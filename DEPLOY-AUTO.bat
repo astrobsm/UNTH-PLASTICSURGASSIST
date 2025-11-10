@@ -1,9 +1,4 @@
 @echo off
-REM ============================================
-REM PLASTIC SURGEON ASSISTANT - ONE-CLICK DEPLOY
-REM ============================================
-
-echo.
 echo ============================================
 echo PLASTIC SURGEON ASSISTANT - AUTO DEPLOYMENT
 echo ============================================
@@ -14,15 +9,12 @@ echo.
 echo When prompted for password, use:
 echo 289e3de323931fad90f44ea7f8
 echo.
-echo (You may need to enter it 2-3 times for different steps)
+echo (You may need to enter it 2-3 times)
 echo.
 pause
 
-echo.
 echo Starting automated deployment...
-echo.
-
-powershell.exe -ExecutionPolicy Bypass -File "%~dp0Deploy-ToDroplet.ps1"
+powershell.exe -ExecutionPolicy Bypass -File Deploy-ToDroplet.ps1
 
 if %ERRORLEVEL% EQU 0 (
     echo.
@@ -30,12 +22,11 @@ if %ERRORLEVEL% EQU 0 (
     echo DEPLOYMENT SUCCESSFUL!
     echo ============================================
     echo.
-    echo Open your browser and visit:
-    echo http://164.90.225.181
+    echo Your app is now live at: http://164.90.225.181
     echo.
-    echo Login with:
-    echo   Email: admin@unth.edu.ng
-    echo   Password: admin123
+    echo Login Credentials:
+    echo   Admin: admin@unth.edu.ng / admin123
+    echo   Doctor: doctor@unth.edu.ng / doctor123
     echo.
 ) else (
     echo.
