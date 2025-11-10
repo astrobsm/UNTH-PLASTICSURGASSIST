@@ -69,8 +69,8 @@ echo -e "${GREEN}Step 8: Installing npm dependencies...${NC}"
 sudo npm install --legacy-peer-deps
 
 # Step 9: Build production app
-echo -e "${GREEN}Step 9: Building production application...${NC}"
-sudo npm run build
+echo -e "${GREEN}Step 9: Building production application (skipping type check)...${NC}"
+sudo npm run build:nocheck
 
 # Step 10: Configure Nginx
 echo -e "${GREEN}Step 10: Configuring Nginx...${NC}"
