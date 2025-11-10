@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { userManagementService } from '../services/userManagementService';
+import { apiClient } from '../services/apiClient';
 
 export interface User {
   id: string;
@@ -17,6 +18,17 @@ interface AuthState {
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
   initializeAuth: () => Promise<void>;
+  useBackend: boolean;
+}
+
+// Check if backend is available
+async function checkBackend(): Promise<boolean> {
+  try {
+    await apiClient.healthCheck();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -25,32 +37,52 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       token: null,
       loading: true,
+      useBackend: true, // Will be determined on init
 
       login: async (email: string, password: string) => {
         try {
-          // Authenticate user via userManagementService
-          const authenticatedUser = await userManagementService.authenticateUser(email, password);
+          // Try backend first
+          const backendAvailable = await checkBackend();
+          set({ useBackend: backendAvailable });
+
+          if (backendAvailable) {
+            // Use backend API
+            const response = await apiClient.login(email, password);
+            
+            const user: User = {
+              id: response.user.id,
+              name: response.user.full_name,
+              email: response.user.email,
+              role: response.user.role as any,
+              privileges: [] // Will be populated from role
+            };
+
+            set({ user, token: response.token });
+          } else {
+            // Fallback to IndexedDB
+            const authenticatedUser = await userManagementService.authenticateUser(email, password);
+            
+            if (!authenticatedUser) {
+              throw new Error('Invalid email or password');
+            }
+
+            if (!authenticatedUser.is_active) {
+              throw new Error('Your account has been deactivated. Please contact the administrator.');
+            }
+
+            const user: User = {
+              id: authenticatedUser.id!.toString(),
+              name: authenticatedUser.name,
+              email: authenticatedUser.email,
+              role: authenticatedUser.role as any,
+              privileges: authenticatedUser.privileges
+            };
+
+            const token = btoa(JSON.stringify({ userId: user.id, timestamp: Date.now() }));
+            set({ user, token });
+          }
           
-          if (!authenticatedUser) {
-            throw new Error('Invalid email or password');
-          }
-
-          if (!authenticatedUser.is_active) {
-            throw new Error('Your account has been deactivated. Please contact the administrator.');
-          }
-
-          const user: User = {
-            id: authenticatedUser.id!.toString(),
-            name: authenticatedUser.name,
-            email: authenticatedUser.email,
-            role: authenticatedUser.role as any,
-            privileges: authenticatedUser.privileges
-          };
-
-          // Generate a simple token (in production, use JWT from backend)
-          const token = btoa(JSON.stringify({ userId: user.id, timestamp: Date.now() }));
-
-          set({ user, token, loading: false });
+          set({ loading: false });
         } catch (error) {
           set({ loading: false });
           throw error;

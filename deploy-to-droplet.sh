@@ -163,19 +163,135 @@ sudo ln -sf /etc/nginx/sites-available/plasticsurg /etc/nginx/sites-enabled/
 echo -e "${YELLOW}Testing Nginx configuration...${NC}"
 sudo nginx -t
 
-# Step 12: Restart Nginx
-echo -e "${GREEN}Step 12: Restarting Nginx...${NC}"
+# Step 12: Install PM2 for Node.js process management
+echo -e "${GREEN}Step 12: Installing PM2...${NC}"
+sudo npm install -g pm2
+
+# Step 13: Setup backend server
+echo -e "${GREEN}Step 13: Setting up backend server...${NC}"
+cd /var/www/plasticsurg_assisstant/server
+sudo npm install --legacy-peer-deps
+
+# Stop existing backend if running
+pm2 delete plasticsurg-backend 2>/dev/null || true
+
+# Start backend server
+echo -e "${GREEN}Starting backend server...${NC}"
+pm2 start index.js --name plasticsurg-backend
+pm2 save
+pm2 startup systemd -u root --hp /root
+
+# Step 14: Update Nginx to proxy backend
+echo -e "${GREEN}Step 14: Updating Nginx configuration for backend...${NC}"
+sudo tee /etc/nginx/sites-available/plasticsurg > /dev/null <<'EOF'
+upstream backend {
+    server 127.0.0.1:3001;
+}
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name 164.90.225.181;
+
+    root /var/www/plasticsurg_assisstant/dist;
+    index index.html;
+
+    # Backend API proxy
+    location /api/ {
+        proxy_pass http://backend;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+    }
+
+    # Enable gzip compression
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types text/plain text/css text/xml text/javascript application/x-javascript application/xml+rss application/json application/javascript;
+
+    # PWA Service Worker support - NO CACHE
+    location /sw.js {
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+        add_header Pragma "no-cache";
+        add_header Expires "0";
+        proxy_cache_bypass $http_pragma;
+        proxy_cache_revalidate on;
+        expires off;
+    }
+
+    # Manifest file
+    location /manifest.json {
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+        expires off;
+    }
+
+    # Static assets with caching
+    location ~* \.(js|css|png|jpg|jpeg|gif|svg|ico)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        access_log off;
+    }
+
+    # Fonts
+    location ~* \.(woff|woff2|ttf|eot)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        access_log off;
+    }
+
+    # SPA fallback - route all requests to index.html
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "no-referrer-when-downgrade" always;
+    add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
+
+    # Prevent access to hidden files
+    location ~ /\. {
+        deny all;
+        access_log off;
+        log_not_found off;
+    }
+
+    # Client body size
+    client_max_body_size 10M;
+
+    # Logging
+    access_log /var/log/nginx/plasticsurg_access.log;
+    error_log /var/log/nginx/plasticsurg_error.log;
+}
+EOF
+
+# Step 15: Restart Nginx
+echo -e "${GREEN}Step 15: Restarting Nginx...${NC}"
+# Step 15: Restart Nginx
+echo -e "${GREEN}Step 15: Restarting Nginx...${NC}"
 sudo systemctl restart nginx
 sudo systemctl enable nginx
 
-# Step 13: Set proper permissions
-echo -e "${GREEN}Step 13: Setting file permissions...${NC}"
+# Step 16: Set proper permissions
+echo -e "${GREEN}Step 16: Setting file permissions...${NC}"
 sudo chown -R www-data:www-data /var/www/plasticsurg_assisstant
 sudo chmod -R 755 /var/www/plasticsurg_assisstant
 
-# Step 14: Display status
-echo -e "${GREEN}Step 14: Checking service status...${NC}"
-sudo systemctl status nginx --no-pager
+# Step 17: Display status
+echo -e "${GREEN}Step 17: Checking service status...${NC}"
+echo "Nginx status:"
+sudo systemctl status nginx --no-pager | head -5
+echo ""
+echo "Backend status:"
+pm2 status
 
 # Final summary
 echo ""
@@ -184,6 +300,7 @@ echo -e "${GREEN}✅ DEPLOYMENT COMPLETED SUCCESSFULLY!${NC}"
 echo "================================================"
 echo ""
 echo "Application URL: http://164.90.225.181"
+echo "Backend API URL: http://164.90.225.181/api"
 echo "Application Path: /var/www/plasticsurg_assisstant"
 echo ""
 echo "Default Login Credentials:"
@@ -192,18 +309,20 @@ echo "  Doctor: doctor@unth.edu.ng / doctor123"
 echo ""
 echo "Next Steps:"
 echo "  1. Visit http://164.90.225.181 to access your app"
-echo "  2. Test all features (login, patient registration, MCQ, etc.)"
-echo "  3. Set up SSL certificate with: sudo certbot --nginx -d yourdomain.com"
-echo "  4. Configure domain name if you have one"
+echo "  2. Login with credentials above"
+echo "  3. Test all features (patient registration, MCQ, etc.)"
+echo "  4. Set up SSL certificate with: sudo certbot --nginx -d yourdomain.com"
 echo ""
 echo "Useful Commands:"
+echo "  - Check backend logs: pm2 logs plasticsurg-backend"
 echo "  - Check Nginx logs: sudo tail -f /var/log/nginx/plasticsurg_error.log"
+echo "  - Restart backend: pm2 restart plasticsurg-backend"
 echo "  - Restart Nginx: sudo systemctl restart nginx"
-echo "  - Update app: cd /var/www/plasticsurg_assisstant && git pull && npm run build"
+echo "  - Update app: cd /var/www/plasticsurg_assisstant && git pull && npm run build:nocheck && pm2 restart plasticsurg-backend && systemctl restart nginx"
 echo ""
 echo "Database Info:"
-echo "  Database ID: [Configure your database in Digital Ocean]"
-echo "  Note: Currently using IndexedDB (client-side)"
-echo "  For backend integration, connect to your database in future updates"
+echo "  ✅ MySQL Database Connected"
+echo "  Host: dbaas-db-3645547-do-user-23752526-0.e.db.ondigitalocean.com"
+echo "  Database: defaultdb"
 echo ""
 echo "================================================"
