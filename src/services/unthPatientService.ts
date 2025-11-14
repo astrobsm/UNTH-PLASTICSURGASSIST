@@ -316,7 +316,8 @@ class UNTHPatientService {
   ): Promise<PatientSummary> {
     try {
       if (!aiService.isReady()) {
-        throw new Error('AI service not configured');
+        // Return a basic summary when AI is not configured
+        return this.generateBasicSummary(patientId, summaryType);
       }
 
       // Gather patient data
@@ -347,6 +348,34 @@ class UNTHPatientService {
       console.error('Error generating patient summary:', error);
       throw new Error('Failed to generate patient summary');
     }
+  }
+
+  /**
+   * Generate basic summary when AI is not available
+   */
+  private async generateBasicSummary(
+    patientId: string,
+    summaryType: PatientSummary['summary_type']
+  ): Promise<PatientSummary> {
+    
+    return {
+      id: this.generateId(),
+      patient_id: patientId,
+      summary_type: summaryType,
+      generated_by: 'manual',
+      content: `Basic ${summaryType} summary. AI features are currently disabled. Please configure OpenAI API key for AI-powered summaries or enter summary manually.`,
+      key_points: [
+        'AI summary generation not configured',
+        'Manual summary entry recommended'
+      ],
+      current_problems: [],
+      medications: [],
+      investigations_pending: [],
+      plan: [],
+      generated_at: new Date(),
+      generated_by_user: 'system',
+      ai_confidence: 0
+    };
   }
 
   /**

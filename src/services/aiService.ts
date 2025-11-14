@@ -89,7 +89,7 @@ class AIService {
       });
       this.isConfigured = true;
     } else {
-      console.warn('OpenAI API key not configured. AI features will be disabled.');
+      // Silently disable AI features - no warning needed
       this.isConfigured = false;
     }
   }
