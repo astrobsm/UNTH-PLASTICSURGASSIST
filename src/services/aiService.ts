@@ -77,87 +77,100 @@ export interface ClinicalData {
 }
 
 class AIService {
-  private openai: OpenAI;
   private isConfigured: boolean = false;
 
   constructor() {
-    const apiKey = this.getApiKey();
-    if (apiKey) {
-      this.openai = new OpenAI({
-        apiKey,
-        dangerouslyAllowBrowser: true // Note: In production, use a backend proxy
+    // Check if backend AI is configured
+    this.checkBackendConfiguration();
+  }
+
+  private async checkBackendConfiguration() {
+    try {
+      const response = await fetch('/api/ai/settings', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        }
       });
-      this.isConfigured = true;
-    } else {
-      // Silently disable AI features - no warning needed
+      
+      if (response.ok) {
+        const data = await response.json();
+        const keySetting = data.settings?.find((s: any) => s.setting_key === 'openai_api_key');
+        this.isConfigured = !!keySetting?.setting_value;
+      }
+    } catch {
       this.isConfigured = false;
     }
   }
 
-  private getApiKey(): string | null {
-    // Try multiple sources for API key
-    return (
-      localStorage.getItem('openai_api_key') ||
-      null
-    );
-  }
-
-  public setApiKey(apiKey: string): void {
-    localStorage.setItem('openai_api_key', apiKey);
-    this.openai = new OpenAI({
-      apiKey,
-      dangerouslyAllowBrowser: true
-    });
-    this.isConfigured = true;
-  }
-
-  public isReady(): boolean {
+  public async isReady(): Promise<boolean> {
+    await this.checkBackendConfiguration();
     return this.isConfigured;
+  }
+
+  /**
+   * Call OpenAI API through backend proxy
+   */
+  private async callAI(messages: Array<{role: string, content: string}>, maxTokens: number = 2000): Promise<string> {
+    const response = await fetch('/api/ai/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+      },
+      body: JSON.stringify({
+        messages,
+        model: 'gpt-4',
+        max_tokens: maxTokens
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'AI service error');
+    }
+
+    const data = await response.json();
+    return data.choices[0].message.content;
   }
 
   /**
    * Generate weekly CME topics based on clinical data from the application
    */
   async generateWeeklyCMETopic(clinicalData: ClinicalData): Promise<CMETopic> {
-    if (!this.isConfigured) {
-      throw new Error('AI service not configured. Please set OpenAI API key.');
+    const isReady = await this.isReady();
+    if (!isReady) {
+      throw new Error('AI service not configured. Please set OpenAI API key in Admin settings.');
     }
 
     const prompt = this.buildCMETopicPrompt(clinicalData);
     
     try {
-      const completion = await this.openai.chat.completions.create({
-        model: "gpt-4",
-        messages: [
+      const response = await this.callAI([
+        {
+          role: "system",
+          content: `You are an expert medical educator specializing in plastic surgery. 
+          Generate comprehensive continuing medical education content based on real clinical data. 
+          Focus on practical, evidence-based learning that enhances clinical practice.
+          
+          Respond with a valid JSON object only, following this exact structure:
           {
-            role: "system",
-            content: `You are an expert medical educator specializing in plastic surgery. 
-            Generate comprehensive continuing medical education content based on real clinical data. 
-            Focus on practical, evidence-based learning that enhances clinical practice.
-            
-            Respond with a valid JSON object only, following this exact structure:
-            {
-              "title": "string",
-              "category": "string",
-              "description": "string", 
-              "learningObjectives": ["string"],
-              "content": "detailed educational content in markdown",
-              "keyPoints": ["string"],
-              "clinicalPearls": ["string"]
-            }`
-          },
-          {
-            role: "user",
-            content: prompt
-          }
-        ],
-        temperature: 0.7,
-        max_tokens: 2000
-      });
+            "title": "string",
+            "category": "string",
+            "description": "string", 
+            "learningObjectives": ["string"],
+            "content": "detailed educational content in markdown",
+            "keyPoints": ["string"],
+            "clinicalPearls": ["string"]
+          }`
+        },
+        {
+          role: "user",
+          content: prompt
+        }
+      ], 2000);
 
-      const response = completion.choices[0]?.message?.content;
       if (!response) {
-        throw new Error('No response from OpenAI');
+        throw new Error('No response from AI service');
       }
 
       // Parse the JSON response

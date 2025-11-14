@@ -315,7 +315,8 @@ class UNTHPatientService {
     additionalContext?: string
   ): Promise<PatientSummary> {
     try {
-      if (!aiService.isReady()) {
+      const isReady = await aiService.isReady();
+      if (!isReady) {
         // Return a basic summary when AI is not configured
         return this.generateBasicSummary(patientId, summaryType);
       }

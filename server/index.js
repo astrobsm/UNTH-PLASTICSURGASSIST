@@ -70,6 +70,21 @@ async function initializeTables() {
     `);
 
     console.log('✅ Users table created/verified');
+
+    // AI Settings table
+    await pool.execute(`
+      CREATE TABLE IF NOT EXISTS ai_settings (
+        id VARCHAR(36) PRIMARY KEY,
+        setting_key VARCHAR(100) UNIQUE NOT NULL,
+        setting_value TEXT,
+        is_encrypted BOOLEAN DEFAULT TRUE,
+        updated_by VARCHAR(36),
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    console.log('✅ AI settings table created/verified');
   } catch (error) {
     console.error('❌ Error creating tables:', error);
     throw error;
@@ -291,6 +306,107 @@ app.put('/api/users/:id/approve', authenticateToken, async (req, res) => {
     res.json({ message: 'User approved successfully' });
   } catch (error) {
     console.error('Approve user error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// AI Settings endpoints
+app.get('/api/ai/settings', authenticateToken, async (req, res) => {
+  try {
+    // Only super_admin can view AI settings
+    if (req.user.role !== 'super_admin') {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const [settings] = await pool.execute(
+      'SELECT setting_key, setting_value, updated_at FROM ai_settings'
+    );
+
+    res.json({ settings });
+  } catch (error) {
+    console.error('Get AI settings error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.post('/api/ai/settings', authenticateToken, async (req, res) => {
+  try {
+    // Only super_admin can update AI settings
+    if (req.user.role !== 'super_admin') {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const { setting_key, setting_value } = req.body;
+
+    if (!setting_key || !setting_value) {
+      return res.status(400).json({ error: 'Setting key and value required' });
+    }
+
+    const id = `setting_${Date.now()}`;
+
+    await pool.execute(
+      `INSERT INTO ai_settings (id, setting_key, setting_value, updated_by) 
+       VALUES (?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE 
+       setting_value = VALUES(setting_value),
+       updated_by = VALUES(updated_by),
+       updated_at = CURRENT_TIMESTAMP`,
+      [id, setting_key, setting_value, req.user.id]
+    );
+
+    res.json({ message: 'AI settings updated successfully' });
+  } catch (error) {
+    console.error('Update AI settings error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// AI Proxy endpoint for OpenAI requests
+app.post('/api/ai/chat', authenticateToken, async (req, res) => {
+  try {
+    const { messages, model = 'gpt-4', max_tokens = 2000 } = req.body;
+
+    if (!messages || !Array.isArray(messages)) {
+      return res.status(400).json({ error: 'Messages array required' });
+    }
+
+    // Get OpenAI API key from settings
+    const [settings] = await pool.execute(
+      'SELECT setting_value FROM ai_settings WHERE setting_key = ?',
+      ['openai_api_key']
+    );
+
+    if (!settings || settings.length === 0 || !settings[0].setting_value) {
+      return res.status(503).json({ error: 'AI service not configured' });
+    }
+
+    const apiKey = settings[0].setting_value;
+
+    // Call OpenAI API
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model,
+        messages,
+        max_tokens,
+        temperature: 0.7
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      console.error('OpenAI API error:', error);
+      return res.status(response.status).json({ error: 'AI service error' });
+    }
+
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error('AI chat error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

@@ -41,6 +41,7 @@ import {
 } from 'lucide-react';
 import Layout from '../components/Layout';
 import { UserApprovalManager } from '../components/UserApprovalManager';
+import { AISettingsPanel } from '../components/AISettingsPanel';
 import { db } from '../db/database';
 import { resetDatabase } from '../utils/dbReset';
 
@@ -813,68 +814,73 @@ export default function Admin() {
             <p className="text-gray-600">Configure system-wide settings and preferences</p>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* General Settings */}
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">General Settings</h3>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Application Name
-                  </label>
-                  <input
-                    type="text"
-                    defaultValue="Plastic Surgeon Assistant"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Default Language
-                  </label>
-                  <select className="w-full border border-gray-300 rounded-lg px-3 py-2">
-                    <option value="en">English</option>
-                    <option value="es">Spanish</option>
-                    <option value="fr">French</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Session Timeout (minutes)
-                  </label>
-                  <input
-                    type="number"
-                    defaultValue="30"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                  />
+          <div className="grid grid-cols-1 gap-6">
+            {/* AI Configuration */}
+            <AISettingsPanel />
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* General Settings */}
+              <div className="bg-white rounded-lg border border-gray-200 p-6">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">General Settings</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Application Name
+                    </label>
+                    <input
+                      type="text"
+                      defaultValue="Plastic Surgeon Assistant"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Default Language
+                    </label>
+                    <select className="w-full border border-gray-300 rounded-lg px-3 py-2">
+                      <option value="en">English</option>
+                      <option value="es">Spanish</option>
+                      <option value="fr">French</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Session Timeout (minutes)
+                    </label>
+                    <input
+                      type="number"
+                      defaultValue="30"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Security Settings */}
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Security Settings</h3>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">Require 2FA</p>
-                    <p className="text-xs text-gray-500">Require two-factor authentication for all users</p>
+              {/* Security Settings */}
+              <div className="bg-white rounded-lg border border-gray-200 p-6">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">Security Settings</h3>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">Require 2FA</p>
+                      <p className="text-xs text-gray-500">Require two-factor authentication for all users</p>
+                    </div>
+                    <input type="checkbox" className="rounded" />
                   </div>
-                  <input type="checkbox" className="rounded" />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">Password Complexity</p>
-                    <p className="text-xs text-gray-500">Enforce strong password requirements</p>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">Password Complexity</p>
+                      <p className="text-xs text-gray-500">Enforce strong password requirements</p>
+                    </div>
+                    <input type="checkbox" defaultChecked className="rounded" />
                   </div>
-                  <input type="checkbox" defaultChecked className="rounded" />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">Audit Logging</p>
-                    <p className="text-xs text-gray-500">Log all user actions for security audit</p>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">Audit Logging</p>
+                      <p className="text-xs text-gray-500">Log all user actions for security audit</p>
+                    </div>
+                    <input type="checkbox" defaultChecked className="rounded" />
                   </div>
-                  <input type="checkbox" defaultChecked className="rounded" />
                 </div>
               </div>
             </div>
