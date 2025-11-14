@@ -41,9 +41,9 @@ const SPECIALTIES = [
 ];
 
 const CONSULTANTS = [
-  'Dr. Nnadi E.C',
-  'Dr. Eze C.B',
-  'Dr. Okwesili O.R'
+  'Dr Okwesili',
+  'Dr Nnadi',
+  'Dr Eze C. B'
 ];
 
 export default function AdmissionsPage() {

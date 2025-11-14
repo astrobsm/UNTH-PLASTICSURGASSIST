@@ -27,11 +27,9 @@ const CLINICS = [
 ];
 
 const CONSULTANTS = [
-  'Prof. Okafor',
-  'Dr. Adeleke',
-  'Dr. Chukwuma',
-  'Dr. Ibrahim',
-  'Dr. Okeke'
+  'Dr Okwesili',
+  'Dr Nnadi',
+  'Dr Eze C. B'
 ];
 
 export default function DischargesPage() {
