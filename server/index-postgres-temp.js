@@ -50,9 +50,9 @@ async function connectDB() {
     
     // Test connection
     const client = await pool.connect();
-    console.log('✅ Connected to PostgreSQL database');
+    console.log('Γ£à Connected to PostgreSQL database');
     const result = await client.query('SELECT version()');
-    console.log('📊 PostgreSQL version:', result.rows[0].version);
+    console.log('≡ƒôè PostgreSQL version:', result.rows[0].version);
     client.release();
     
     // Initialize database
@@ -62,7 +62,7 @@ async function connectDB() {
     await createDefaultUsers();
     
   } catch (error) {
-    console.error('❌ Database connection error:', error);
+    console.error('Γ¥î Database connection error:', error);
     process.exit(1);
   }
 }
@@ -76,15 +76,15 @@ async function initializeDatabase() {
     // Execute schema
     const schema = await fs.readFile(schemaPath, 'utf8');
     await pool.query(schema);
-    console.log('✅ Database schema initialized');
+    console.log('Γ£à Database schema initialized');
     
     // Execute seed data
     const seed = await fs.readFile(seedPath, 'utf8');
     await pool.query(seed);
-    console.log('✅ Seed data inserted');
+    console.log('Γ£à Seed data inserted');
     
   } catch (error) {
-    console.error('⚠️  Error initializing database:', error.message);
+    console.error('ΓÜá∩╕Å  Error initializing database:', error.message);
     // Don't exit - database might already be initialized
   }
 }
@@ -109,9 +109,9 @@ async function createDefaultUsers() {
       ON CONFLICT (id) DO NOTHING
     `, ['doctor-001', 'doctor@unth.edu.ng', consultantPassword, 'Dr. Okwesili', 'consultant', 'Plastic Surgery', 'Reconstructive Surgery', true, true]);
     
-    console.log('✅ Default users verified');
+    console.log('Γ£à Default users verified');
   } catch (error) {
-    console.error('⚠️  Error creating default users:', error.message);
+    console.error('ΓÜá∩╕Å  Error creating default users:', error.message);
   }
 }
 
@@ -137,61 +137,59 @@ const authenticateToken = (req, res, next) => {
 // AUTHENTICATION ROUTES
 // =====================================================
 
-// Single handler supports legacy and new auth routes
-const handleLogin = async (req, res) => {
+// Login endpoint
+app.post('/api/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-
+    
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
     }
-
+    
     const result = await pool.query(
       'SELECT * FROM users WHERE email = $1 AND is_active = true',
       [email.toLowerCase()]
     );
-
+    
     if (result.rows.length === 0) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
-
+    
     const user = result.rows[0];
-
+    
     if (!user.is_approved) {
       return res.status(403).json({ error: 'Account pending approval' });
     }
-
+    
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
-
+    
     const token = jwt.sign(
-      {
-        id: user.id,
-        email: user.email,
-        role: user.role
+      { 
+        id: user.id, 
+        email: user.email, 
+        role: user.role 
       },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
-
+    
+    // Remove password from response
     delete user.password;
-
-    res.json({
-      token,
+    
+    res.json({ 
+      token, 
       user,
       message: 'Login successful'
     });
+    
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
-};
-
-// Login endpoint aliases for compatibility with older frontend builds
-app.post('/api/login', handleLogin);
-app.post('/api/auth/login', handleLogin);
+});
 
 // Register endpoint
 app.post('/api/register', async (req, res) => {
@@ -212,8 +210,8 @@ app.post('/api/register', async (req, res) => {
     
     const result = await pool.query(`
       INSERT INTO users (email, password, full_name, role, department, specialization, license_number, phone)
-      // Login endpoint handler reused for legacy routes
-      const handleLogin = async (req, res) => {
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      RETURNING id, email, full_name, role, department, is_approved, is_active, created_at
     `, [email.toLowerCase(), hashedPassword, full_name, role, department, specialization, license_number, phone]);
     
     res.status(201).json({ 
@@ -264,11 +262,10 @@ app.get('/api/users', authenticateToken, async (req, res) => {
       ORDER BY created_at DESC
     `);
     
-      app.post('/api/login', handleLogin);
-      app.post('/api/auth/login', handleLogin);
+    res.json({ users: result.rows });
   } catch (error) {
-      // Register endpoint handler reused for legacy routes
-      const handleRegister = async (req, res) => {
+    console.error('Get users error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -301,11 +298,10 @@ app.patch('/api/users/:id/approve', authenticateToken, async (req, res) => {
 // Get AI setting
 async function getAISettings(key) {
   try {
-      app.post('/api/register', handleRegister);
-      app.post('/api/auth/register', handleRegister);
+    const result = await pool.query(
       'SELECT setting_value FROM ai_settings WHERE setting_key = $1',
-      // Current user endpoint handler reused for legacy routes
-      const handleGetCurrentUser = async (req, res) => {
+      [key]
+    );
     return result.rows.length > 0 ? result.rows[0].setting_value : null;
   } catch (error) {
     console.error('Get AI settings error:', error);
@@ -323,8 +319,7 @@ app.post('/api/ai/settings', authenticateToken, async (req, res) => {
     const { openai_api_key } = req.body;
     
     await pool.query(`
-      app.get('/api/user', authenticateToken, handleGetCurrentUser);
-      app.get('/api/auth/me', authenticateToken, handleGetCurrentUser);
+      INSERT INTO ai_settings (setting_key, setting_value, is_encrypted, updated_by)
       VALUES ($1, $2, $3, $4)
       ON CONFLICT (setting_key) 
       DO UPDATE SET setting_value = $2, updated_by = $4, updated_at = CURRENT_TIMESTAMP
@@ -573,7 +568,7 @@ app.get('*', (req, res) => {
 // Start server
 connectDB().then(() => {
   app.listen(PORT, () => {
-    console.log(`🚀 Backend server running on port ${PORT}`);
-    console.log(`📍 http://localhost:${PORT}`);
+    console.log(`≡ƒÜÇ Backend server running on port ${PORT}`);
+    console.log(`≡ƒôì http://localhost:${PORT}`);
   });
 });
