@@ -419,7 +419,7 @@ const MCQEducation: React.FC = () => {
                 <li>Push notifications sent to all users in target levels</li>
                 <li>Each question worth 4 marks, wrong answer: -1 mark</li>
                 <li>Test duration: 10 minutes with countdown timer</li>
-                <li>Real-time scoring and AI-powered recommendations</li>
+                <li>Real-time scoring and recommendations</li>
                 <li>Personalized study materials generated based on performance</li>
               </ol>
             </div>
@@ -709,7 +709,7 @@ const MCQEducation: React.FC = () => {
           <div className="bg-white rounded-lg shadow-md p-6">
             <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
               <Brain className="w-6 h-6 text-purple-600" />
-              AI-Powered Performance Analysis
+              Performance Analysis
             </h3>
             <div className="prose max-w-none">
               <div dangerouslySetInnerHTML={{ __html: currentSession.aiRecommendations.replace(/\n/g, '<br/>') }} />
@@ -962,7 +962,7 @@ const MCQEducation: React.FC = () => {
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
           <Brain className="w-8 h-8 text-green-600" />
-          Continuing Medical Education - AI-Powered MCQ Assessment
+          Continuing Medical Education - MCQ Assessment
         </h1>
         <p className="text-gray-600 mt-2">
           Weekly clinical scenario-based assessments with intelligent feedback and personalized study materials

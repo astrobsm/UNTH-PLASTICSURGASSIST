@@ -234,7 +234,7 @@ const PatientSummariesPage: React.FC = () => {
     <div className="p-6">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">AI-Powered Patient Summaries</h1>
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">Patient Summaries</h1>
         <p className="text-gray-600">Comprehensive patient care summaries from admission to current date</p>
       </div>
 

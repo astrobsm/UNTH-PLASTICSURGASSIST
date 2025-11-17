@@ -1243,7 +1243,7 @@ X-ray: Hardware placement verified...`}
           </div>
           <div className="flex-1">
             <h4 className="text-lg font-bold text-gray-900 mb-2">
-              AI-Powered Postoperative Care Plan
+              Postoperative Care Plan
             </h4>
             <p className="text-sm text-gray-700 mb-4">
               Generate a comprehensive, intelligent postoperative note and care plan based on the intraoperative findings. 
@@ -1292,7 +1292,7 @@ X-ray: Hardware placement verified...`}
               className="w-full bg-gradient-to-r from-green-600 to-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:from-green-700 hover:to-blue-700 transition-all duration-200 shadow-md hover:shadow-lg flex items-center justify-center space-x-2"
             >
               <span className="text-xl">🤖</span>
-              <span>Generate AI-Powered Postoperative Note & Care Plan (PDF)</span>
+              <span>Generate Postoperative Note & Care Plan (PDF)</span>
               <span className="text-xl">📄</span>
             </button>
             <p className="text-xs text-gray-500 mt-2 text-center">

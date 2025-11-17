@@ -615,7 +615,7 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
         <div className="flex items-center justify-between mb-4">
           <h4 className="text-lg font-bold text-gray-900 flex items-center">
             <span className="text-2xl mr-2">🤖</span>
-            AI-Powered Wound Dimension Measurement
+            Wound Dimension Measurement
           </h4>
           <button
             type="button"

@@ -179,7 +179,7 @@ const Education: React.FC = () => {
             Continuing Medical Education
           </h1>
           <p className="text-clinical mt-1">
-            AI-powered learning modules for plastic surgery residents
+            Learning modules for plastic surgery residents
           </p>
         </div>
         <div className="flex items-center space-x-4">
@@ -297,7 +297,7 @@ const Education: React.FC = () => {
                 <BookOpen className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                 <h3 className="text-lg font-medium text-clinical-dark mb-2">No Topics Available</h3>
                 <p className="text-clinical mb-4">
-                  Configure your OpenAI API key to generate AI-powered educational content.
+                  Configure your OpenAI API key to generate educational content.
                 </p>
                 <button
                   onClick={() => setActiveTab('settings')}

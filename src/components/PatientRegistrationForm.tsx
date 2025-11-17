@@ -3535,7 +3535,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
               className="w-full bg-gradient-to-r from-green-600 to-green-700 text-white px-6 py-3 rounded-lg hover:from-green-700 hover:to-green-800 transition-all shadow-md flex items-center justify-center space-x-2"
             >
               <span className="text-lg">🍽️</span>
-              <span className="font-medium">Generate AI-Powered Weekly Meal Plan</span>
+              <span className="font-medium">Generate Weekly Meal Plan</span>
               <span className="text-sm opacity-90">(Based on Nigerian Foods & Comorbidities)</span>
             </button>
             <p className="text-xs text-gray-500 text-center mt-2">

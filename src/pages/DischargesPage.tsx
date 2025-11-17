@@ -575,7 +575,7 @@ export default function DischargesPage() {
                   {/* AI-Generated Instructions */}
                   <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                     <div className="flex justify-between items-center mb-4">
-                      <h3 className="text-lg font-semibold text-gray-900">AI-Powered Discharge Instructions</h3>
+                      <h3 className="text-lg font-semibold text-gray-900">Discharge Instructions</h3>
                       <button
                         type="button"
                         onClick={handleGenerateInstructions}
@@ -593,7 +593,7 @@ export default function DischargesPage() {
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 bg-white"
                       />
                     ) : (
-                      <p className="text-gray-600 text-sm">Click "Generate Instructions" to create comprehensive AI-powered discharge instructions based on the patient's diagnosis and treatment.</p>
+                      <p className="text-gray-600 text-sm">Click "Generate Instructions" to create comprehensive discharge instructions based on the patient's diagnosis and treatment.</p>
                     )}
                   </div>
 

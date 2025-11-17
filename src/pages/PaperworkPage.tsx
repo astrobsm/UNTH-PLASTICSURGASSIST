@@ -676,7 +676,7 @@ const PaperworkPage: React.FC = () => {
             </button>
           </div>
         </div>
-        <p className="text-gray-600">AI-powered document generation for clinical workflows</p>
+        <p className="text-gray-600">Automated document generation for clinical workflows</p>
       </div>
 
       {/* Filter Tabs */}

@@ -247,7 +247,7 @@ export function AISettingsPanel() {
           <ul className="space-y-2 text-sm text-gray-600">
             <li className="flex items-center space-x-2">
               <CheckCircle className="h-4 w-4 text-green-600" />
-              <span>AI-powered patient summaries (admission, progress, discharge)</span>
+              <span>Patient summaries (admission, progress, discharge)</span>
             </li>
             <li className="flex items-center space-x-2">
               <CheckCircle className="h-4 w-4 text-green-600" />
