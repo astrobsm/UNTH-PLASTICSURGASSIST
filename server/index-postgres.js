@@ -212,8 +212,8 @@ app.post('/api/register', async (req, res) => {
     
     const result = await pool.query(`
       INSERT INTO users (email, password, full_name, role, department, specialization, license_number, phone)
-      // Login endpoint handler reused for legacy routes
-      const handleLogin = async (req, res) => {
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      RETURNING id, email, full_name, role, department, specialization, license_number, phone, is_approved
     `, [email.toLowerCase(), hashedPassword, full_name, role, department, specialization, license_number, phone]);
     
     res.status(201).json({ 
@@ -264,11 +264,10 @@ app.get('/api/users', authenticateToken, async (req, res) => {
       ORDER BY created_at DESC
     `);
     
-      app.post('/api/login', handleLogin);
-      app.post('/api/auth/login', handleLogin);
+    res.json(result.rows);
   } catch (error) {
-      // Register endpoint handler reused for legacy routes
-      const handleRegister = async (req, res) => {
+    console.error('Error fetching users:', error);
+    res.status(500).json({ error: 'Failed to fetch users' });
   }
 });
 
@@ -301,11 +300,10 @@ app.patch('/api/users/:id/approve', authenticateToken, async (req, res) => {
 // Get AI setting
 async function getAISettings(key) {
   try {
-      app.post('/api/register', handleRegister);
-      app.post('/api/auth/register', handleRegister);
+    const result = await pool.query(
       'SELECT setting_value FROM ai_settings WHERE setting_key = $1',
-      // Current user endpoint handler reused for legacy routes
-      const handleGetCurrentUser = async (req, res) => {
+      [key]
+    );
     return result.rows.length > 0 ? result.rows[0].setting_value : null;
   } catch (error) {
     console.error('Get AI settings error:', error);
@@ -323,8 +321,7 @@ app.post('/api/ai/settings', authenticateToken, async (req, res) => {
     const { openai_api_key } = req.body;
     
     await pool.query(`
-      app.get('/api/user', authenticateToken, handleGetCurrentUser);
-      app.get('/api/auth/me', authenticateToken, handleGetCurrentUser);
+      INSERT INTO ai_settings (setting_key, setting_value, is_encrypted, updated_by)
       VALUES ($1, $2, $3, $4)
       ON CONFLICT (setting_key) 
       DO UPDATE SET setting_value = $2, updated_by = $4, updated_at = CURRENT_TIMESTAMP
