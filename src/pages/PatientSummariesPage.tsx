@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FileText, Download, Loader, User, Calendar, Activity, AlertCircle, TrendingUp } from 'lucide-react';
 import { db } from '../db/database';
+import { patientService } from '../services/patientService';
 import { patientSummaryService, PatientSummary } from '../services/patientSummaryService';
 import { format } from 'date-fns';
 import jsPDF from 'jspdf';
@@ -25,7 +26,7 @@ const PatientSummariesPage: React.FC = () => {
 
   const loadPatients = async () => {
     try {
-      const patientsData = await db.patients.toArray();
+      const patientsData = await patientService.getAllPatients();
       setPatients(patientsData);
     } catch (error) {
       console.error('Error loading patients:', error);

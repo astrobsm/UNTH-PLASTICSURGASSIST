@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../db/database';
+import { patientService } from '../services/patientService';
 import { admissionService, Admission, AdmissionStatistics } from '../services/admissionService';
 
 interface Ward {
@@ -92,7 +93,7 @@ export default function AdmissionsPage() {
   }, []);
 
   const loadPatients = async () => {
-    const allPatients = await db.patients.toArray();
+    const allPatients = await patientService.getAllPatients();
     setPatients(allPatients);
   };
 

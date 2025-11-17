@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { db } from '../db/database';
 import { Patient } from '../db/database';
+import { patientService } from '../services/patientService';
 import { unthPatientService } from '../services/unthPatientService';
 import { PatientSummaryView, QuickSummaryCard } from '../components/PatientSummary';
 import { PatientTransferForm, TransferHistory } from '../components/PatientTransfer';
@@ -31,8 +32,8 @@ export const PatientProfile: React.FC = () => {
     try {
       setLoading(true);
       
-      // Load patient basic info
-      const patientData = await db.patients.get(parseInt(id));
+      // Load patient basic info from API
+      const patientData = await patientService.getPatient(id);
       setPatient(patientData || null);
 
       // Load upcoming plans

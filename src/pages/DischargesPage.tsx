@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../db/database';
+import { patientService } from '../services/patientService';
 import { admissionService, Admission } from '../services/admissionService';
 import { dischargeService, Discharge, DischargeInstructionsData, DischargeMedication } from '../services/dischargeService';
 
@@ -104,7 +105,7 @@ export default function DischargesPage() {
     setGeneratingInstructions(true);
 
     try {
-      const patient = await db.patients.get(selectedAdmission.patient_id);
+      const patient = await patientService.getPatient(selectedAdmission.patient_id);
       if (!patient) throw new Error('Patient not found');
 
       const instructionsData: DischargeInstructionsData = {
@@ -159,7 +160,7 @@ export default function DischargesPage() {
     setLoading(true);
 
     try {
-      const patient = await db.patients.get(selectedAdmission.patient_id);
+      const patient = await patientService.getPatient(selectedAdmission.patient_id);
       if (!patient) throw new Error('Patient not found');
 
       const admissionDate = new Date(selectedAdmission.admission_date);
@@ -227,7 +228,7 @@ export default function DischargesPage() {
       setGeneratingPDF(true);
 
       try {
-        const patient = await db.patients.get(selectedAdmission.patient_id);
+        const patient = await patientService.getPatient(selectedAdmission.patient_id);
         if (!patient) throw new Error('Patient not found');
 
         const admissionDate = new Date(selectedAdmission.admission_date);

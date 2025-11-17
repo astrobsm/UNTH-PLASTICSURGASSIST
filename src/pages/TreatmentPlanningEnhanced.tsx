@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import { db } from '../db/database';
+import { patientService } from '../services/patientService';
 import { 
   treatmentPlanningService, 
   EnhancedTreatmentPlan,
@@ -109,7 +110,7 @@ export default function TreatmentPlanningEnhanced() {
   }, [selectedPatient]);
 
   const loadPatients = async () => {
-    const allPatients = await db.patients.toArray();
+    const allPatients = await patientService.getAllPatients();
     setPatients(allPatients);
   };
 

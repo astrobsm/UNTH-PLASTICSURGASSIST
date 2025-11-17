@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FileText, Download, Plus, Send, Edit, Trash2 } from 'lucide-react';
 import { db } from '../db/database';
+import { patientService } from '../services/patientService';
 import {
   paperworkService,
   PaperworkDocument,
@@ -32,7 +33,7 @@ const PaperworkPage: React.FC = () => {
     try {
       const [docsData, patientsData] = await Promise.all([
         paperworkService.getRecentDocuments(50),
-        db.patients.toArray()
+        patientService.getAllPatients()
       ]);
       setDocuments(docsData);
       setPatients(patientsData);

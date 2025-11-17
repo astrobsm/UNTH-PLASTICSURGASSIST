@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../db/database';
+import { patientService } from '../services/patientService';
 import { format } from 'date-fns';
 import { 
   Plus, 
@@ -121,7 +122,7 @@ export default function SurgeryBookingEnhanced({ selectedDate, onRefresh }: Surg
 
   const loadPatients = async () => {
     try {
-      const list = await db.patients.toArray();
+      const list = await patientService.getAllPatients();
       setPatients(list);
     } catch (err) {
       console.error('Failed to load patients', err);
@@ -132,7 +133,7 @@ export default function SurgeryBookingEnhanced({ selectedDate, onRefresh }: Surg
     // Check if patient has completed pre-operative assessments
     // This would ideally query the PreoperativeAssessment records
     try {
-      const patient = await db.patients.get(Number(patientId));
+      const patient = await patientService.getPatient(patientId);
       if (!patient) {
         return {
           lab_tests_done: false,

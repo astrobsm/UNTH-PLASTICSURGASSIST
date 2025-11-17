@@ -13,6 +13,7 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { db } from '../db/database';
+import { patientService } from '../services/patientService';
 import { 
   treatmentPlanningService, 
   EnhancedTreatmentPlan,
@@ -49,7 +50,7 @@ const TreatmentPlanningPage: React.FC = () => {
     try {
       const [plansData, patientsData] = await Promise.all([
         treatmentPlanningService.getActiveTreatmentPlans(),
-        db.patients.toArray()
+        patientService.getAllPatients()
       ]);
       setActivePlans(plansData);
       setPatients(patientsData);

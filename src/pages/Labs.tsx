@@ -859,7 +859,7 @@ const RequestSection = ({ onRefresh }: any) => {
 
   const loadPatients = async () => {
     try {
-      const allPatients = await db.patients.toArray();
+      const allPatients = await patientService.getAllPatients();
       setPatients(allPatients);
     } catch (error) {
       console.error('Error loading patients:', error);

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../db/database';
+import { patientService } from '../services/patientService';
 import { format, addDays, startOfWeek, parseISO } from 'date-fns';
 import SurgeryBookingEnhanced from '../components/SurgeryBookingEnhanced';
 import { 
@@ -942,10 +943,10 @@ const SurgerySection = ({
   const [manualEntry, setManualEntry] = useState(false);
 
   useEffect(() => {
-    // Load patients from IndexedDB directly for selection
+    // Load patients from API for selection
     const loadPatients = async () => {
       try {
-        const list = await db.patients.toArray();
+        const list = await patientService.getAllPatients();
         setPatients(list);
       } catch (err) {
         console.error('Failed to load patients', err);

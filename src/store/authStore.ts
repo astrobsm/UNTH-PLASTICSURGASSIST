@@ -95,9 +95,6 @@ export const useAuthStore = create<AuthState>()(
 
       initializeAuth: async () => {
         try {
-          // Initialize admin account if it doesn't exist
-          await userManagementService.initializeAdminAccount();
-          
           // Check if we have stored auth data
           const state = get();
           if (state.token && state.user) {

@@ -10,6 +10,7 @@ import { Link } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { useState, useEffect } from 'react';
 import { db } from '../db/database';
+import { patientService } from '../services/patientService';
 
 export default function Dashboard() {
   const { user } = useAuthStore();
@@ -32,8 +33,8 @@ export default function Dashboard() {
 
   const loadDashboardData = async () => {
     try {
-      // Get patients data from database (exclude deleted)
-      const allPatients = await db.patients.toArray();
+      // Get patients data from API/database (exclude deleted)
+      const allPatients = await patientService.getAllPatients();
       const activePatients = allPatients.filter(p => !p.deleted).length;
 
       // Get treatment plans from database (exclude deleted)

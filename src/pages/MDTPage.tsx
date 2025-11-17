@@ -16,6 +16,7 @@ import {
   MapPin
 } from 'lucide-react';
 import { db } from '../db/database';
+import { patientService } from '../services/patientService';
 import { 
   mdtService, 
   MDTPatientTeam, 
@@ -60,7 +61,7 @@ const MDTPage: React.FC = () => {
     try {
       const [mdtPatientsData, allPatients, meetings, stats] = await Promise.all([
         mdtService.getAllActiveMDTPatients(),
-        db.patients.toArray(),
+        patientService.getAllPatients(),
         mdtService.getUpcomingMeetings(),
         mdtService.getMDTStatistics()
       ]);
