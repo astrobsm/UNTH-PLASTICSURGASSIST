@@ -1,5 +1,7 @@
 import { aiService } from './aiService';
 import { db } from '../db/database';
+import { apiClient } from './apiClient';
+import { v4 as uuidv4 } from 'uuid';
 
 // Enhanced Patient Management Interfaces for UNTH
 export interface Ward {
@@ -717,43 +719,76 @@ Please review patient file for complete clinical details or retry AI summary gen
   }
 
   private async savePatientRegistration(registrationData: PatientRegistration): Promise<string> {
-    // Convert to database format and save
-    const patientRecord = {
-      hospital_number: registrationData.hospital_number,
-      first_name: registrationData.first_name,
-      last_name: registrationData.last_name,
-      dob: registrationData.date_of_birth,
-      sex: registrationData.sex,
-      phone: registrationData.phone,
-      address: registrationData.address,
-      allergies: registrationData.allergies,
-      comorbidities: registrationData.medical_history,
-      consultant_in_charge: registrationData.consultant_in_charge,
-      resident_in_charge: registrationData.resident_in_charge,
-      ward_id: registrationData.ward_id,
-      bed_number: registrationData.bed_number,
-      patient_type: registrationData.patient_type,
-      admission_type: registrationData.admission_type,
-      referring_hospital: registrationData.referring_hospital,
-      registration_date: registrationData.registration_date || new Date(),
-      admission_date: registrationData.admission_date,
-      created_at: new Date(),
-      updated_at: new Date(),
-      synced: false,
-      deleted: false  // Explicitly set deleted to false
-    };
+    try {
+      // Generate a unique ID for the patient
+      const patientId = uuidv4();
 
-    const id = await db.patients.add(patientRecord);
-    
-    // Verify the patient was saved
-    const savedPatient = await db.patients.get(id);
-    if (!savedPatient) {
-      throw new Error('Failed to save patient to database');
+      // Convert to database format matching PostgreSQL schema
+      const patientRecord = {
+        id: patientId,
+        hospital_number: registrationData.hospital_number,
+        first_name: registrationData.first_name,
+        last_name: registrationData.last_name,
+        other_names: registrationData.middle_name || '',
+        date_of_birth: registrationData.date_of_birth,
+        gender: registrationData.sex === 'male' ? 'Male' : 'Female',
+        phone: registrationData.phone || '',
+        email: registrationData.email || '',
+        address: registrationData.address || '',
+        city: '',
+        state: registrationData.state_of_origin || '',
+        country: registrationData.nationality || 'Nigeria',
+        emergency_contact_name: registrationData.next_of_kin?.name || '',
+        emergency_contact_phone: registrationData.next_of_kin?.phone || '',
+        emergency_contact_relationship: registrationData.next_of_kin?.relationship || '',
+        blood_group: registrationData.blood_group || null,
+        genotype: registrationData.genotype || null,
+        allergies: registrationData.allergies?.join(', ') || '',
+        chronic_conditions: registrationData.medical_history?.join(', ') || '',
+        current_medications: registrationData.drug_history?.join(', ') || '',
+        synced: true
+      };
+
+      // Save to backend API instead of IndexedDB
+      const savedPatient = await apiClient.createPatient(patientRecord);
+      
+      if (!savedPatient || !savedPatient.id) {
+        throw new Error('Failed to save patient to server');
+      }
+      
+      // Also save to IndexedDB for offline support (sync will happen automatically)
+      try {
+        await db.patients.put({
+          ...patientRecord,
+          consultant_in_charge: registrationData.consultant_in_charge,
+          resident_in_charge: registrationData.resident_in_charge,
+          ward_id: registrationData.ward_id,
+          bed_number: registrationData.bed_number,
+          patient_type: registrationData.patient_type,
+          admission_type: registrationData.admission_type,
+          referring_hospital: registrationData.referring_hospital,
+          registration_date: registrationData.registration_date || new Date(),
+          admission_date: registrationData.admission_date,
+          created_at: new Date(),
+          updated_at: new Date(),
+          synced: true,
+          deleted: false
+        });
+      } catch (dbError) {
+        console.warn('Failed to save to IndexedDB (offline cache):', dbError);
+        // Continue - server save succeeded
+      }
+      
+      console.log('Patient registered successfully:', { 
+        id: savedPatient.id, 
+        hospital_number: patientRecord.hospital_number 
+      });
+      
+      return savedPatient.id;
+    } catch (error) {
+      console.error('Error saving patient registration:', error);
+      throw new Error('Patient registration failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
     }
-    
-    console.log('Patient registered successfully:', { id, hospital_number: patientRecord.hospital_number });
-    
-    return id.toString();
   }
 
   private async updatePatientWard(patientId: string, wardId: string, bedNumber?: string) {

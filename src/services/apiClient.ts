@@ -86,6 +86,39 @@ class ApiClient {
     });
   }
 
+  // Patient management
+  async getPatients(since?: string) {
+    const query = since ? `?since=${since}` : '';
+    const data = await this.request(`/sync/patients${query}`);
+    return data.patients || [];
+  }
+
+  async getPatient(id: string) {
+    return this.request(`/sync/patients/${id}`);
+  }
+
+  async createPatient(patientData: any) {
+    const data = await this.request('/sync/patients', {
+      method: 'POST',
+      body: JSON.stringify(patientData)
+    });
+    return data.patient;
+  }
+
+  async updatePatient(id: string, patientData: any) {
+    const data = await this.request(`/sync/patients/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(patientData)
+    });
+    return data.patient;
+  }
+
+  async deletePatient(id: string) {
+    return this.request(`/sync/patients/${id}`, {
+      method: 'DELETE'
+    });
+  }
+
   // Health check
   async healthCheck() {
     return this.request('/health');
