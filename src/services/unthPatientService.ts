@@ -3,6 +3,26 @@ import { db } from '../db/database';
 import { apiClient } from './apiClient';
 import { v4 as uuidv4 } from 'uuid';
 
+// Helper for authenticated fetch requests
+const authenticatedFetch = async (url: string, options: RequestInit = {}): Promise<Response> => {
+  const token = apiClient.getToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    ...(options.headers as Record<string, string> || {})
+  };
+  
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  
+  return fetch(url, {
+    ...options,
+    headers,
+    credentials: 'include'
+  });
+};
+
 // Enhanced Patient Management Interfaces for UNTH
 export interface Ward {
   id: string;
@@ -609,12 +629,8 @@ Current clinical data has been documented above. For full AI analysis, please co
       }
 
       // Use AI service to generate comprehensive summary
-      const aiResponse = await fetch('/api/ai/chat', {
+      const aiResponse = await authenticatedFetch('/api/ai/chat', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-        },
         body: JSON.stringify({
           messages: [
             {

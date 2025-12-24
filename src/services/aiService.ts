@@ -1,4 +1,25 @@
 import OpenAI from 'openai';
+import { apiClient } from './apiClient';
+
+// Helper for authenticated fetch requests
+const authenticatedFetch = async (url: string, options: RequestInit = {}): Promise<Response> => {
+  const token = apiClient.getToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    ...(options.headers as Record<string, string> || {})
+  };
+  
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  
+  return fetch(url, {
+    ...options,
+    headers,
+    credentials: 'include'
+  });
+};
 
 // Types for medical education content
 export interface CMEProgress {
@@ -94,7 +115,7 @@ class AIService {
       }
 
       // Otherwise check backend
-      const response = await fetch('/api/ai/settings');
+      const response = await authenticatedFetch('/api/ai/settings');
       
       if (response.ok) {
         const data = await response.json();
@@ -118,12 +139,8 @@ class AIService {
     model: string = 'gpt-4',
     maxTokens: number = 2000
   ): Promise<string> {
-    const response = await fetch('/api/ai/chat', {
+    const response = await authenticatedFetch('/api/ai/chat', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-      },
       body: JSON.stringify({
         messages,
         model,

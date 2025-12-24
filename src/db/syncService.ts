@@ -1,8 +1,13 @@
 import { db, SyncQueue, Patient, TreatmentPlan, PlanStep } from './database';
+import { apiClient } from '../services/apiClient';
 import toast from 'react-hot-toast';
 
-// Mock API base URL - replace with actual API
-const API_BASE_URL = 'https://api.plastic-surgeon-assistant.com/v1';
+// Use the actual API client base URL
+const getApiBaseUrl = () => {
+  return import.meta.env.PROD 
+    ? '/api'  // Production: use relative path
+    : 'http://localhost:3001/api';  // Development
+};
 
 interface SyncResult {
   success: boolean;
@@ -15,6 +20,7 @@ class SyncService {
   private isOnline = navigator.onLine;
   private syncInProgress = false;
   private retryTimeouts: Map<number, NodeJS.Timeout> = new Map();
+  private syncListeners: Set<(status: { isOnline: boolean; pendingCount: number }) => void> = new Set();
 
   constructor() {
     // Listen for online/offline events
@@ -23,12 +29,29 @@ class SyncService {
     
     // Start periodic sync when online
     this.startPeriodicSync();
+    
+    // Listen for auth expiration
+    window.addEventListener('auth:expired', () => {
+      toast.error('Session expired. Please log in again.');
+    });
+  }
+
+  // Subscribe to sync status changes
+  onSyncStatusChange(listener: (status: { isOnline: boolean; pendingCount: number }) => void) {
+    this.syncListeners.add(listener);
+    return () => this.syncListeners.delete(listener);
+  }
+
+  private async notifyListeners() {
+    const pendingCount = await db.sync_queue.count();
+    this.syncListeners.forEach(listener => listener({ isOnline: this.isOnline, pendingCount }));
   }
 
   private handleOnline() {
     this.isOnline = true;
     toast.success('Back online! Syncing data...', { id: 'connectivity' });
     this.syncAll();
+    this.notifyListeners();
   }
 
   private handleOffline() {
@@ -37,6 +60,7 @@ class SyncService {
       id: 'connectivity',
       duration: 5000 
     });
+    this.notifyListeners();
   }
 
   // Queue an action for sync when online
@@ -142,35 +166,46 @@ class SyncService {
 
     switch (action) {
       case 'create':
-        const response = await this.apiCall('POST', '/patients', {
+        const createResponse = await this.apiCall('POST', '/sync/patients', {
           hospital_number: patient.hospital_number,
           first_name: patient.first_name,
           last_name: patient.last_name,
-          dob: patient.dob,
-          sex: patient.sex,
+          date_of_birth: patient.dob,
+          gender: patient.sex,
           phone: patient.phone,
           address: patient.address,
           allergies: patient.allergies,
-          comorbidities: patient.comorbidities
+          chronic_conditions: patient.comorbidities
         });
         
         // Update local record with server ID
         await db.patients.update(localId, {
-          serverId: response.id,
+          serverId: createResponse.patient?.id || createResponse.id,
           synced: true
         });
         break;
 
       case 'update':
         if (patient.serverId) {
-          await this.apiCall('PUT', `/patients/${patient.serverId}`, data);
+          await this.apiCall('PUT', `/sync/patients/${patient.serverId}`, {
+            hospital_number: patient.hospital_number,
+            first_name: patient.first_name,
+            last_name: patient.last_name,
+            date_of_birth: patient.dob,
+            gender: patient.sex,
+            phone: patient.phone,
+            address: patient.address,
+            allergies: patient.allergies,
+            chronic_conditions: patient.comorbidities,
+            ...data
+          });
           await db.patients.update(localId, { synced: true });
         }
         break;
 
       case 'delete':
         if (patient.serverId) {
-          await this.apiCall('DELETE', `/patients/${patient.serverId}`);
+          await this.apiCall('DELETE', `/sync/patients/${patient.serverId}`);
         }
         await db.patients.delete(localId);
         break;
@@ -269,22 +304,33 @@ class SyncService {
     }
   }
 
-  // Mock API call - replace with actual implementation
+  // Real API call using the apiClient
   private async apiCall(method: string, endpoint: string, data?: any): Promise<any> {
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1000));
+    const token = apiClient.getToken();
+    const baseUrl = getApiBaseUrl();
     
-    // Simulate occasional failures for testing
-    if (Math.random() < 0.1) {
-      throw new Error('Network error (simulated)');
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    };
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
     }
 
-    // Mock successful response
-    return {
-      id: `server_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      success: true,
-      timestamp: new Date().toISOString()
-    };
+    const response = await fetch(`${baseUrl}${endpoint}`, {
+      method,
+      headers,
+      credentials: 'include',
+      body: data ? JSON.stringify(data) : undefined,
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Request failed' }));
+      throw new Error(errorData.error || errorData.message || `HTTP ${response.status}`);
+    }
+
+    return response.json();
   }
 
   // Start periodic sync every 5 minutes when online

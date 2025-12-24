@@ -20,9 +20,12 @@ import {
   Home,
   Droplet,
   BookOpenCheck,
-  ShoppingCart
+  ShoppingCart,
+  MessageSquare,
+  Video
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
+import SyncStatusIndicator from './SyncStatusIndicator';
 
 interface LayoutProps {
   children: ReactNode;
@@ -44,6 +47,8 @@ const navigation = [
   { name: 'Labs', href: '/labs', icon: FlaskConical },
   { name: 'Patient Education', href: '/patient-education', icon: BookOpenCheck },
   { name: 'Shopping List', href: '/shopping-list', icon: ShoppingCart },
+  { name: 'Chat', href: '/chat', icon: MessageSquare },
+  { name: 'Video Conference', href: '/conference', icon: Video },
   { name: 'Education', href: '/education', icon: GraduationCap },
   { name: 'MCQ Assessment', href: '/mcq-education', icon: GraduationCap },
   { name: 'Topic Management', href: '/topic-management', icon: BookOpen },
@@ -78,6 +83,9 @@ export default function Layout({ children }: LayoutProps) {
             </div>
             
             <div className="flex items-center space-x-4">
+              {/* Sync Status Indicator */}
+              <SyncStatusIndicator />
+              
               <button 
                 className="relative p-2 text-gray-400 hover:text-clinical-dark"
                 title="Notifications"

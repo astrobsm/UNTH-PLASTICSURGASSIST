@@ -720,3 +720,112 @@ CREATE TRIGGER update_user_assessments_updated_at BEFORE UPDATE ON user_assessme
 CREATE TRIGGER update_surgical_consumables_updated_at BEFORE UPDATE ON surgical_consumables FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_mdt_meetings_updated_at BEFORE UPDATE ON mdt_meetings FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_mdt_cases_updated_at BEFORE UPDATE ON mdt_cases FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+-- =====================================================
+-- CHAT AND VIDEO CONFERENCE TABLES
+-- =====================================================
+
+-- Chat Rooms
+CREATE TABLE IF NOT EXISTS chat_rooms (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(255) NOT NULL,
+    type VARCHAR(50) NOT NULL CHECK (type IN ('direct', 'group', 'conference', 'patient')),
+    patient_id UUID REFERENCES patients(id) ON DELETE SET NULL,
+    created_by UUID REFERENCES users(id),
+    is_active BOOLEAN DEFAULT TRUE,
+    last_message_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Chat Room Participants
+CREATE TABLE IF NOT EXISTS chat_room_participants (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    room_id UUID NOT NULL REFERENCES chat_rooms(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    joined_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    last_read_at TIMESTAMP WITH TIME ZONE,
+    is_admin BOOLEAN DEFAULT FALSE,
+    is_active BOOLEAN DEFAULT TRUE,
+    UNIQUE(room_id, user_id)
+);
+
+-- Chat Messages
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    room_id UUID NOT NULL REFERENCES chat_rooms(id) ON DELETE CASCADE,
+    sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    content TEXT NOT NULL,
+    message_type VARCHAR(50) DEFAULT 'text' CHECK (message_type IN ('text', 'file', 'image', 'system', 'reaction')),
+    file_url TEXT,
+    file_name VARCHAR(255),
+    file_size BIGINT,
+    reply_to UUID REFERENCES chat_messages(id) ON DELETE SET NULL,
+    is_edited BOOLEAN DEFAULT FALSE,
+    edited_at TIMESTAMP WITH TIME ZONE,
+    is_deleted BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Chat Message Reactions
+CREATE TABLE IF NOT EXISTS chat_message_reactions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    message_id UUID NOT NULL REFERENCES chat_messages(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    emoji VARCHAR(50) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(message_id, user_id, emoji)
+);
+
+-- Chat Message Read Receipts
+CREATE TABLE IF NOT EXISTS chat_read_receipts (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    message_id UUID NOT NULL REFERENCES chat_messages(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    read_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(message_id, user_id)
+);
+
+-- Video Conference Rooms
+CREATE TABLE IF NOT EXISTS conference_rooms (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(255) NOT NULL,
+    room_type VARCHAR(50) DEFAULT 'general' CHECK (room_type IN ('mdt', 'consultation', 'education', 'general')),
+    host_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    max_participants INTEGER DEFAULT 50,
+    allow_screen_share BOOLEAN DEFAULT TRUE,
+    allow_recording BOOLEAN DEFAULT FALSE,
+    allow_chat BOOLEAN DEFAULT TRUE,
+    waiting_room_enabled BOOLEAN DEFAULT FALSE,
+    is_active BOOLEAN DEFAULT TRUE,
+    started_at TIMESTAMP WITH TIME ZONE,
+    ended_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Conference Participants Log
+CREATE TABLE IF NOT EXISTS conference_participants (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    room_id UUID NOT NULL REFERENCES conference_rooms(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    joined_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    left_at TIMESTAMP WITH TIME ZONE,
+    duration_seconds INTEGER,
+    was_presenter BOOLEAN DEFAULT FALSE
+);
+
+-- Indexes for chat tables
+CREATE INDEX IF NOT EXISTS idx_chat_rooms_created_by ON chat_rooms(created_by);
+CREATE INDEX IF NOT EXISTS idx_chat_rooms_patient_id ON chat_rooms(patient_id);
+CREATE INDEX IF NOT EXISTS idx_chat_room_participants_room ON chat_room_participants(room_id);
+CREATE INDEX IF NOT EXISTS idx_chat_room_participants_user ON chat_room_participants(user_id);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_room ON chat_messages(room_id);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_sender ON chat_messages(sender_id);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_created ON chat_messages(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_chat_reactions_message ON chat_message_reactions(message_id);
+CREATE INDEX IF NOT EXISTS idx_conference_rooms_host ON conference_rooms(host_id);
+CREATE INDEX IF NOT EXISTS idx_conference_participants_room ON conference_participants(room_id);
+
+-- Triggers for chat tables
+CREATE TRIGGER update_chat_rooms_updated_at BEFORE UPDATE ON chat_rooms FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_conference_rooms_updated_at BEFORE UPDATE ON conference_rooms FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

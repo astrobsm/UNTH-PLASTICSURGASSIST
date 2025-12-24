@@ -1,4 +1,25 @@
 import { db } from '../db/database';
+import { apiClient } from './apiClient';
+
+// Helper for authenticated fetch requests
+const authenticatedFetch = async (url: string, options: RequestInit = {}): Promise<Response> => {
+  const token = apiClient.getToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    ...(options.headers as Record<string, string> || {})
+  };
+  
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  
+  return fetch(url, {
+    ...options,
+    headers,
+    credentials: 'include'
+  });
+};
 
 export interface PatientTeamAssignment {
   id?: string;
@@ -38,9 +59,7 @@ class PatientAssignmentService {
     houseOfficers: TeamMember[];
   }> {
     try {
-      const response = await fetch('/api/team/members', {
-        credentials: 'include'
-      });
+      const response = await authenticatedFetch('/api/team/members');
 
       if (!response.ok) throw new Error('Failed to fetch team members');
 
@@ -121,10 +140,8 @@ class PatientAssignmentService {
       };
 
       // Save to backend
-      const response = await fetch('/api/team/assignments', {
+      const response = await authenticatedFetch('/api/team/assignments', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify(assignment)
       });
 
@@ -175,10 +192,8 @@ class PatientAssignmentService {
         assignment_method: 'manual'
       };
 
-      const response = await fetch('/api/team/assignments', {
+      const response = await authenticatedFetch('/api/team/assignments', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify(assignment)
       });
 
@@ -196,9 +211,7 @@ class PatientAssignmentService {
    */
   async getPatientAssignment(patientId: string): Promise<PatientTeamAssignment | null> {
     try {
-      const response = await fetch(`/api/team/assignments/patient/${patientId}`, {
-        credentials: 'include'
-      });
+      const response = await authenticatedFetch(`/api/team/assignments/patient/${patientId}`);
 
       if (!response.ok) {
         if (response.status === 404) return null;
@@ -220,9 +233,7 @@ class PatientAssignmentService {
     role: 'consultant' | 'registrar' | 'house_officer'
   ): Promise<PatientTeamAssignment[]> {
     try {
-      const response = await fetch(`/api/team/assignments/user/${userId}?role=${role}`, {
-        credentials: 'include'
-      });
+      const response = await authenticatedFetch(`/api/team/assignments/user/${userId}?role=${role}`);
 
       if (!response.ok) throw new Error('Failed to fetch team member assignments');
 
@@ -238,9 +249,7 @@ class PatientAssignmentService {
    */
   async getAllAssignments(activeOnly: boolean = true): Promise<PatientTeamAssignment[]> {
     try {
-      const response = await fetch(`/api/team/assignments?activeOnly=${activeOnly}`, {
-        credentials: 'include'
-      });
+      const response = await authenticatedFetch(`/api/team/assignments?activeOnly=${activeOnly}`);
 
       if (!response.ok) throw new Error('Failed to fetch assignments');
 
@@ -259,10 +268,8 @@ class PatientAssignmentService {
     updates: Partial<PatientTeamAssignment>
   ): Promise<boolean> {
     try {
-      const response = await fetch(`/api/team/assignments/${assignmentId}`, {
+      const response = await authenticatedFetch(`/api/team/assignments/${assignmentId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({
           ...updates,
           updated_at: new Date()
@@ -341,9 +348,7 @@ class PatientAssignmentService {
     };
   }> {
     try {
-      const response = await fetch('/api/team/assignments/statistics', {
-        credentials: 'include'
-      });
+      const response = await authenticatedFetch('/api/team/assignments/statistics');
 
       if (!response.ok) throw new Error('Failed to fetch assignment statistics');
 

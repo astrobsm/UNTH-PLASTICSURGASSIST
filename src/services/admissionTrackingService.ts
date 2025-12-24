@@ -1,5 +1,26 @@
 import { db } from '../db/database';
 import { differenceInDays, differenceInHours, differenceInMinutes, format } from 'date-fns';
+import { apiClient } from './apiClient';
+
+// Helper for authenticated fetch requests
+const authenticatedFetch = async (url: string, options: RequestInit = {}): Promise<Response> => {
+  const token = apiClient.getToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    ...(options.headers as Record<string, string> || {})
+  };
+  
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  
+  return fetch(url, {
+    ...options,
+    headers,
+    credentials: 'include'
+  });
+};
 
 export interface AdmissionTracking {
   id?: string;
@@ -89,9 +110,7 @@ class AdmissionTrackingService {
    */
   async getPatientAdmission(patientId: string): Promise<AdmissionTracking | null> {
     try {
-      const response = await fetch(`/api/admissions/tracking/${patientId}`, {
-        credentials: 'include'
-      });
+      const response = await authenticatedFetch(`/api/admissions/tracking/${patientId}`);
 
       if (!response.ok) {
         if (response.status === 404) return null;
@@ -122,9 +141,7 @@ class AdmissionTrackingService {
    */
   async getTreatmentPlanExecution(treatmentPlanId: string): Promise<TreatmentPlanExecution | null> {
     try {
-      const response = await fetch(`/api/treatment-plans/execution/${treatmentPlanId}`, {
-        credentials: 'include'
-      });
+      const response = await authenticatedFetch(`/api/treatment-plans/execution/${treatmentPlanId}`);
 
       if (!response.ok) {
         if (response.status === 404) return null;
@@ -157,9 +174,7 @@ class AdmissionTrackingService {
    */
   async getPatientTreatmentPlans(patientId: string): Promise<TreatmentPlanExecution[]> {
     try {
-      const response = await fetch(`/api/treatment-plans/execution/patient/${patientId}`, {
-        credentials: 'include'
-      });
+      const response = await authenticatedFetch(`/api/treatment-plans/execution/patient/${patientId}`);
 
       if (!response.ok) throw new Error('Failed to fetch patient treatment plans');
 
@@ -267,9 +282,7 @@ class AdmissionTrackingService {
    */
   async getAllActiveAdmissions(): Promise<AdmissionTracking[]> {
     try {
-      const response = await fetch('/api/admissions/active', {
-        credentials: 'include'
-      });
+      const response = await authenticatedFetch('/api/admissions/active');
 
       if (!response.ok) throw new Error('Failed to fetch active admissions');
 
@@ -301,10 +314,8 @@ class AdmissionTrackingService {
     completedSteps: number
   ): Promise<boolean> {
     try {
-      const response = await fetch(`/api/treatment-plans/execution/${treatmentPlanId}/progress`, {
+      const response = await authenticatedFetch(`/api/treatment-plans/execution/${treatmentPlanId}/progress`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ completedSteps })
       });
 
@@ -328,9 +339,7 @@ class AdmissionTrackingService {
     overall_completion_rate: number;
   }> {
     try {
-      const response = await fetch('/api/admissions/dashboard-summary', {
-        credentials: 'include'
-      });
+      const response = await authenticatedFetch('/api/admissions/dashboard-summary');
 
       if (!response.ok) throw new Error('Failed to fetch dashboard summary');
 

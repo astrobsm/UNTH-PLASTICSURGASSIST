@@ -1,4 +1,25 @@
 import { db } from '../db/database';
+import { apiClient } from './apiClient';
+
+// Helper for authenticated fetch requests
+const authenticatedFetch = async (url: string, options: RequestInit = {}): Promise<Response> => {
+  const token = apiClient.getToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    ...(options.headers as Record<string, string> || {})
+  };
+  
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  
+  return fetch(url, {
+    ...options,
+    headers,
+    credentials: 'include'
+  });
+};
 
 export interface Medication {
   drug_name: string;
@@ -415,12 +436,8 @@ class PreoperativeService {
     try {
       const prompt = this.buildComprehensiveSummaryPrompt(data);
       
-      const response = await fetch('/api/ai/chat', {
+      const response = await authenticatedFetch('/api/ai/chat', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-        },
         body: JSON.stringify({
           messages: [
             {
@@ -558,12 +575,8 @@ Date: ${new Date().toLocaleDateString()}
     try {
       const prompt = this.buildInstructionsPrompt(data);
       
-      const response = await fetch('/api/ai/chat', {
+      const response = await authenticatedFetch('/api/ai/chat', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-        },
         body: JSON.stringify({
           messages: [
             {

@@ -1,4 +1,25 @@
 import { db } from '../db/database';
+import { apiClient } from './apiClient';
+
+// Helper for authenticated fetch requests
+const authenticatedFetch = async (url: string, options: RequestInit = {}): Promise<Response> => {
+  const token = apiClient.getToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    ...(options.headers as Record<string, string> || {})
+  };
+  
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  
+  return fetch(url, {
+    ...options,
+    headers,
+    credentials: 'include'
+  });
+};
 
 export interface UserActivity {
   id?: string;
@@ -71,10 +92,8 @@ class AnalyticsService {
 
     // Also send to backend for permanent storage
     try {
-      await fetch('/api/analytics/activities', {
+      await authenticatedFetch('/api/analytics/activities', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify(activityRecord)
       });
     } catch (error) {
@@ -92,9 +111,8 @@ class AnalyticsService {
     period: 'day' | 'week' | 'month' | 'year' = 'week'
   ): Promise<UserPerformanceMetrics | null> {
     try {
-      const response = await fetch(
-        `/api/analytics/user-performance?userId=${userId}&period=${period}`,
-        { credentials: 'include' }
+      const response = await authenticatedFetch(
+        `/api/analytics/user-performance?userId=${userId}&period=${period}`
       );
 
       if (!response.ok) throw new Error('Failed to fetch user performance');
@@ -112,9 +130,8 @@ class AnalyticsService {
     period: 'day' | 'week' | 'month' | 'year' = 'month'
   ): Promise<UserPerformanceMetrics[]> {
     try {
-      const response = await fetch(
-        `/api/analytics/all-users-performance?period=${period}`,
-        { credentials: 'include' }
+      const response = await authenticatedFetch(
+        `/api/analytics/all-users-performance?period=${period}`
       );
 
       if (!response.ok) throw new Error('Failed to fetch all users performance');
@@ -132,9 +149,8 @@ class AnalyticsService {
     period: 'day' | 'week' | 'month' | 'year' = 'month'
   ): Promise<DepartmentMetrics | null> {
     try {
-      const response = await fetch(
-        `/api/analytics/department-metrics?period=${period}`,
-        { credentials: 'include' }
+      const response = await authenticatedFetch(
+        `/api/analytics/department-metrics?period=${period}`
       );
 
       if (!response.ok) throw new Error('Failed to fetch department metrics');
@@ -158,9 +174,8 @@ class AnalyticsService {
       if (startDate) params.append('startDate', startDate.toISOString());
       if (endDate) params.append('endDate', endDate.toISOString());
 
-      const response = await fetch(
-        `/api/analytics/user-activities?${params.toString()}`,
-        { credentials: 'include' }
+      const response = await authenticatedFetch(
+        `/api/analytics/user-activities?${params.toString()}`
       );
 
       if (!response.ok) throw new Error('Failed to fetch user activities');
@@ -178,9 +193,8 @@ class AnalyticsService {
     period: 'week' | 'month' | 'year' = 'month'
   ): Promise<{ houseOfficers: UserPerformanceMetrics[], registrars: UserPerformanceMetrics[] }> {
     try {
-      const response = await fetch(
-        `/api/analytics/comparative-performance?period=${period}`,
-        { credentials: 'include' }
+      const response = await authenticatedFetch(
+        `/api/analytics/comparative-performance?period=${period}`
       );
 
       if (!response.ok) throw new Error('Failed to fetch comparative performance');
@@ -202,9 +216,8 @@ class AnalyticsService {
       const params = new URLSearchParams({ days: days.toString() });
       if (userId) params.append('userId', userId);
 
-      const response = await fetch(
-        `/api/analytics/activity-trends?${params.toString()}`,
-        { credentials: 'include' }
+      const response = await authenticatedFetch(
+        `/api/analytics/activity-trends?${params.toString()}`
       );
 
       if (!response.ok) throw new Error('Failed to fetch activity trends');
@@ -255,9 +268,8 @@ class AnalyticsService {
       const params = new URLSearchParams({ period });
       if (role) params.append('role', role);
 
-      const response = await fetch(
-        `/api/analytics/leaderboard?${params.toString()}`,
-        { credentials: 'include' }
+      const response = await authenticatedFetch(
+        `/api/analytics/leaderboard?${params.toString()}`
       );
 
       if (!response.ok) throw new Error('Failed to fetch leaderboard');
