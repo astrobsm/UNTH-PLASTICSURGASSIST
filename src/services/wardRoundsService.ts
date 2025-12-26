@@ -1,5 +1,15 @@
 import { db } from '../db/database';
 
+// Round types as requested
+export type RoundType = 'house_officers_round' | 'registrars_round' | 'senior_registrars_round' | 'consultants_round';
+
+export const ROUND_TYPES: { value: RoundType; label: string; description: string }[] = [
+  { value: 'house_officers_round', label: 'House Officers Round', description: 'Daily routine rounds by interns/house officers' },
+  { value: 'registrars_round', label: 'Registrars Round', description: 'Intermediate review by registrars' },
+  { value: 'senior_registrars_round', label: 'Senior Registrars Round', description: 'Senior resident review rounds' },
+  { value: 'consultants_round', label: 'Consultants Round', description: 'Attending/consultant ward rounds' }
+];
+
 export interface WardRound {
   id?: string;
   patient_id: string;
@@ -7,8 +17,10 @@ export interface WardRound {
   hospital_number?: string;
   round_date: Date;
   round_time: string;
+  round_type: RoundType; // NEW: Type of ward round
   reviewing_doctor: string;
-  doctor_role: 'consultant' | 'senior_registrar' | 'house_officer';
+  doctor_role: 'consultant' | 'senior_registrar' | 'registrar' | 'house_officer';
+  accompanying_team?: string[]; // NEW: Team members present
   
   // Clinical Assessment
   chief_complaint: string;

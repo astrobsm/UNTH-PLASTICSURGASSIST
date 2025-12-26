@@ -60,27 +60,33 @@ class PatientService {
    */
   async getPatient(id: string | number) {
     try {
-      // Try API first
-      const patient = await apiClient.getPatient(String(id));
-      
-      // Update local cache
-      if (patient) {
-        const normalized = normalizePatientData({ ...patient, synced: true });
-        await db.patients.put(normalized);
-        return normalized;
+      // Try API first (only if online)
+      if (navigator.onLine) {
+        const patient = await apiClient.getPatient(String(id));
+        
+        // Update local cache
+        if (patient) {
+          const normalized = normalizePatientData({ ...patient, synced: true });
+          await db.patients.put(normalized);
+          return normalized;
+        }
+        
+        return patient;
       }
-      
-      return patient;
     } catch (error) {
-      console.error('Error fetching patient from API:', error);
-      
-      // Fallback to IndexedDB
-      const localPatient = await db.patients.get(
-        typeof id === 'string' ? id : Number(id)
-      );
-      
-      return localPatient ? normalizePatientData(localPatient) : localPatient;
+      // Only log if it's an unexpected error, not a 404 or network error
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (!errorMessage.includes('404') && !errorMessage.includes('not found')) {
+        console.error('Error fetching patient from API:', errorMessage);
+      }
     }
+    
+    // Fallback to IndexedDB
+    const localPatient = await db.patients.get(
+      typeof id === 'string' ? parseInt(id, 10) || id : Number(id)
+    );
+    
+    return localPatient ? normalizePatientData(localPatient) : localPatient;
   }
 
   /**

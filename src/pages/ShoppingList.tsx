@@ -33,6 +33,8 @@ export default function ShoppingList() {
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all');
+  const [manualPatientName, setManualPatientName] = useState('');
+  const [manualHospitalNumber, setManualHospitalNumber] = useState('');
 
   useEffect(() => {
     loadPatients();
@@ -51,8 +53,8 @@ export default function ShoppingList() {
   };
 
   const filteredPatients = patients.filter(patient =>
-    patient.full_name.toLowerCase().includes(patientSearchTerm.toLowerCase()) ||
-    patient.hospital_number.toLowerCase().includes(patientSearchTerm.toLowerCase())
+    (patient.full_name || '').toLowerCase().includes(patientSearchTerm.toLowerCase()) ||
+    (patient.hospital_number || '').toLowerCase().includes(patientSearchTerm.toLowerCase())
   );
 
   // Comprehensive item database
@@ -205,7 +207,7 @@ export default function ShoppingList() {
   const categories = Array.from(new Set(availableItems.map(item => item.category))).sort();
 
   const filteredAvailableItems = availableItems.filter(item => {
-    const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = (item.name || '').toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = selectedCategoryFilter === 'all' || item.category === selectedCategoryFilter;
     const notSelected = !selectedItems.find(si => si.id === item.id);
     return matchesSearch && matchesCategory && notSelected;
@@ -235,10 +237,15 @@ export default function ShoppingList() {
       alert('Please select at least one item');
       return;
     }
+    setManualPatientName('');
+    setManualHospitalNumber('');
     setShowPatientSelector(true);
   };
 
-  const generatePDF = (patient: Patient) => {
+  const generatePDF = (patient: Patient | null, manualName?: string, manualHospNum?: string) => {
+    const patientName = patient?.full_name || manualName || 'Unknown Patient';
+    const hospitalNum = patient?.hospital_number || manualHospNum || 'N/A';
+    
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
@@ -276,8 +283,8 @@ export default function ShoppingList() {
     doc.text('Patient Information:', margin + 3, yPos + 6);
     
     doc.setFont('helvetica', 'normal');
-    doc.text(`Name: ${patient.full_name}`, margin + 3, yPos + 13);
-    doc.text(`Hospital Number: ${patient.hospital_number}`, margin + 3, yPos + 19);
+    doc.text(`Name: ${patientName}`, margin + 3, yPos + 13);
+    doc.text(`Hospital Number: ${hospitalNum}`, margin + 3, yPos + 19);
     doc.text(`Date: ${new Date().toLocaleDateString()}`, margin + 3, yPos + 25);
     
     yPos += 40;
@@ -591,13 +598,15 @@ export default function ShoppingList() {
                 <div>
                   <h2 className="text-xl font-bold mb-1">Select Patient</h2>
                   <p className="text-green-100 text-sm">
-                    Choose a patient for the shopping list
+                    Choose a patient or enter details manually
                   </p>
                 </div>
                 <button
                   onClick={() => {
                     setShowPatientSelector(false);
                     setPatientSearchTerm('');
+                    setManualPatientName('');
+                    setManualHospitalNumber('');
                   }}
                   className="text-white hover:text-green-100"
                 >
@@ -609,8 +618,44 @@ export default function ShoppingList() {
               </div>
             </div>
 
+            {/* Manual Entry Section */}
+            <div className="p-4 border-b border-gray-200 bg-gray-50">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Or Enter Patient Details Manually:</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <input
+                  type="text"
+                  placeholder="Patient Name"
+                  value={manualPatientName}
+                  onChange={(e) => setManualPatientName(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
+                />
+                <input
+                  type="text"
+                  placeholder="Hospital Number (optional)"
+                  value={manualHospitalNumber}
+                  onChange={(e) => setManualHospitalNumber(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
+                />
+              </div>
+              {manualPatientName && (
+                <button
+                  onClick={() => {
+                    generatePDF(null, manualPatientName, manualHospitalNumber);
+                    setShowPatientSelector(false);
+                    setManualPatientName('');
+                    setManualHospitalNumber('');
+                  }}
+                  className="mt-3 w-full flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+                >
+                  <Download className="w-4 h-4" />
+                  Generate PDF for "{manualPatientName}"
+                </button>
+              )}
+            </div>
+
             {/* Search */}
             <div className="p-4 border-b border-gray-200">
+              <h3 className="text-sm font-semibold text-gray-700 mb-2">Or Select from Database:</h3>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
                 <input
@@ -619,7 +664,6 @@ export default function ShoppingList() {
                   value={patientSearchTerm}
                   onChange={(e) => setPatientSearchTerm(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  autoFocus
                 />
               </div>
             </div>
@@ -639,7 +683,11 @@ export default function ShoppingList() {
                   {filteredPatients.map((patient) => (
                     <button
                       key={patient.id}
-                      onClick={() => generatePDF(patient)}
+                      onClick={() => {
+                        generatePDF(patient);
+                        setShowPatientSelector(false);
+                        setPatientSearchTerm('');
+                      }}
                       className="w-full text-left p-4 bg-white border border-gray-200 rounded-lg hover:border-green-500 hover:bg-green-50 transition-colors"
                     >
                       <div className="flex items-start gap-3">
@@ -666,7 +714,7 @@ export default function ShoppingList() {
             {/* Footer */}
             <div className="p-4 bg-gray-50 border-t border-gray-200">
               <p className="text-xs text-gray-600 text-center">
-                The selected patient's information will be included in the shopping list PDF
+                Patient information will be included in the shopping list PDF
               </p>
             </div>
           </div>

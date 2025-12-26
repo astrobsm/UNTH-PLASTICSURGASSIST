@@ -22,7 +22,9 @@ import {
   BookOpenCheck,
   ShoppingCart,
   MessageSquare,
-  Video
+  Video,
+  Footprints,
+  Flame
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import SyncStatusIndicator from './SyncStatusIndicator';
@@ -44,6 +46,9 @@ const navigation = [
   { name: 'Discharges', href: '/discharges', icon: Home },
   { name: 'Blood Transfusion', href: '/blood-transfusion', icon: Droplet },
   { name: 'Ward Rounds', href: '/ward-rounds', icon: Activity },
+  { name: 'Limb Salvage', href: '/limb-salvage', icon: Footprints },
+  { name: 'Burn Care', href: '/burn-care', icon: Flame },
+  { name: 'Medical Training', href: '/medical-training', icon: BookOpen },
   { name: 'Labs', href: '/labs', icon: FlaskConical },
   { name: 'Patient Education', href: '/patient-education', icon: BookOpenCheck },
   { name: 'Shopping List', href: '/shopping-list', icon: ShoppingCart },

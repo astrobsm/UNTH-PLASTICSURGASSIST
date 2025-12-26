@@ -93,7 +93,26 @@ class ChatService {
     this.currentUserId = userId;
     this.currentUserName = userName;
     this.currentUserRole = userRole;
+    
+    // Skip WebSocket connection on Vercel (serverless doesn't support WebSockets)
+    if (this.isServerless()) {
+      console.log('Chat: WebSocket disabled on serverless platform (using offline mode)');
+      this.emit('connection-status', { connected: false, reason: 'serverless' });
+      return;
+    }
+    
     await this.connect();
+  }
+
+  /**
+   * Check if running on serverless platform (Vercel)
+   */
+  private isServerless(): boolean {
+    // Vercel production URLs contain 'vercel.app' or custom domains without WebSocket support
+    return import.meta.env.PROD && (
+      window.location.host.includes('vercel.app') ||
+      !window.location.host.includes('localhost')
+    );
   }
 
   /**

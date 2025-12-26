@@ -177,6 +177,16 @@ class VideoConferenceService {
    * Create a new conference room
    */
   async createRoom(name: string, type: ConferenceRoom['type'], settings?: Partial<RoomSettings>): Promise<ConferenceRoom | null> {
+    // Check if running on serverless platform (no WebSocket support)
+    if (this.isServerless()) {
+      console.log('Video conference: WebSocket disabled on serverless platform');
+      this.emit('error', { 
+        message: 'Video conferencing requires a dedicated server with WebSocket support. This feature is not available on serverless deployments.',
+        code: 'SERVERLESS_NOT_SUPPORTED'
+      });
+      return null;
+    }
+
     try {
       const roomId = `room-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       
@@ -207,6 +217,16 @@ class VideoConferenceService {
       console.error('Error creating room:', error);
       return null;
     }
+  }
+
+  /**
+   * Check if running on serverless platform (Vercel)
+   */
+  private isServerless(): boolean {
+    return import.meta.env.PROD && (
+      window.location.host.includes('vercel.app') ||
+      !window.location.host.includes('localhost')
+    );
   }
 
   /**

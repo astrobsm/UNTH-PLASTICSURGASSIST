@@ -143,6 +143,7 @@ export type LabCategory =
   | 'diabetes_markers'
   | 'tumor_markers'
   | 'drug_levels'
+  | 'imaging'
   | 'other';
 
 // WHO-Compliant Lab Tests by Category
@@ -263,6 +264,57 @@ export const COMMON_LAB_TESTS: Record<LabCategory, LabTest[]> = {
   diabetes_markers: [],
   kidney_function: [],
   drug_levels: [],
+
+  imaging: [
+    // Plain Radiographs
+    { id: 'cxr', test_code: 'CXR', test_name: 'Chest X-Ray (PA)', category: 'imaging', sample_type: 'other', fasting_required: false, status: 'pending', priority: 1 },
+    { id: 'cxr_ap', test_code: 'CXR-AP', test_name: 'Chest X-Ray (AP)', category: 'imaging', sample_type: 'other', fasting_required: false, status: 'pending', priority: 2 },
+    { id: 'axr', test_code: 'AXR', test_name: 'Abdominal X-Ray', category: 'imaging', sample_type: 'other', fasting_required: false, status: 'pending', priority: 3 },
+    { id: 'xray_hand', test_code: 'XHAND', test_name: 'X-Ray Hand', category: 'imaging', sample_type: 'other', fasting_required: false, status: 'pending', priority: 4 },
+    { id: 'xray_foot', test_code: 'XFOOT', test_name: 'X-Ray Foot', category: 'imaging', sample_type: 'other', fasting_required: false, status: 'pending', priority: 5 },
+    { id: 'xray_ankle', test_code: 'XANKLE', test_name: 'X-Ray Ankle', category: 'imaging', sample_type: 'other', fasting_required: false, status: 'pending', priority: 6 },
+    { id: 'xray_knee', test_code: 'XKNEE', test_name: 'X-Ray Knee', category: 'imaging', sample_type: 'other', fasting_required: false, status: 'pending', priority: 7 },
+    { id: 'xray_pelvis', test_code: 'XPELVIS', test_name: 'X-Ray Pelvis', category: 'imaging', sample_type: 'other', fasting_required: false, status: 'pending', priority: 8 },
+    { id: 'xray_spine', test_code: 'XSPINE', test_name: 'X-Ray Spine (AP/Lat)', category: 'imaging', sample_type: 'other', fasting_required: false, status: 'pending', priority: 9 },
+    { id: 'xray_skull', test_code: 'XSKULL', test_name: 'X-Ray Skull', category: 'imaging', sample_type: 'other', fasting_required: false, status: 'pending', priority: 10 },
+    
+    // Ultrasound
+    { id: 'uss_abd', test_code: 'USS-ABD', test_name: 'Ultrasound Abdomen', category: 'imaging', sample_type: 'other', fasting_required: true, special_preparation: '6-8 hours fasting, full bladder', status: 'pending', priority: 11 },
+    { id: 'uss_pelvis', test_code: 'USS-PEL', test_name: 'Ultrasound Pelvis', category: 'imaging', sample_type: 'other', fasting_required: false, special_preparation: 'Full bladder required', status: 'pending', priority: 12 },
+    { id: 'uss_renal', test_code: 'USS-REN', test_name: 'Ultrasound Renal/KUB', category: 'imaging', sample_type: 'other', fasting_required: false, special_preparation: 'Full bladder required', status: 'pending', priority: 13 },
+    { id: 'uss_soft_tissue', test_code: 'USS-ST', test_name: 'Ultrasound Soft Tissue', category: 'imaging', sample_type: 'other', fasting_required: false, status: 'pending', priority: 14 },
+    { id: 'doppler_arterial', test_code: 'DOP-ART', test_name: 'Doppler Arterial', category: 'imaging', sample_type: 'other', fasting_required: false, status: 'pending', priority: 15 },
+    { id: 'doppler_venous', test_code: 'DOP-VEN', test_name: 'Doppler Venous', category: 'imaging', sample_type: 'other', fasting_required: false, status: 'pending', priority: 16 },
+    
+    // CT Scans
+    { id: 'ct_head', test_code: 'CT-HEAD', test_name: 'CT Brain (Plain)', category: 'imaging', sample_type: 'other', fasting_required: false, status: 'pending', priority: 17 },
+    { id: 'ct_head_contrast', test_code: 'CT-HEAD-C', test_name: 'CT Brain (With Contrast)', category: 'imaging', sample_type: 'other', fasting_required: true, special_preparation: 'Check creatinine, allergy history', status: 'pending', priority: 18 },
+    { id: 'ct_chest', test_code: 'CT-CHEST', test_name: 'CT Chest', category: 'imaging', sample_type: 'other', fasting_required: false, status: 'pending', priority: 19 },
+    { id: 'ct_abd', test_code: 'CT-ABD', test_name: 'CT Abdomen/Pelvis', category: 'imaging', sample_type: 'other', fasting_required: true, special_preparation: '4-6 hours fasting, oral contrast', status: 'pending', priority: 20 },
+    { id: 'ct_angio', test_code: 'CTA', test_name: 'CT Angiography', category: 'imaging', sample_type: 'other', fasting_required: true, special_preparation: 'Check creatinine, allergy history', status: 'pending', priority: 21 },
+    
+    // MRI
+    { id: 'mri_brain', test_code: 'MRI-BRAIN', test_name: 'MRI Brain', category: 'imaging', sample_type: 'other', fasting_required: false, special_preparation: 'Remove all metal objects, screen for pacemaker', status: 'pending', priority: 22 },
+    { id: 'mri_spine', test_code: 'MRI-SPINE', test_name: 'MRI Spine', category: 'imaging', sample_type: 'other', fasting_required: false, special_preparation: 'Remove all metal objects', status: 'pending', priority: 23 },
+    { id: 'mri_joint', test_code: 'MRI-JOINT', test_name: 'MRI Joint (Specify)', category: 'imaging', sample_type: 'other', fasting_required: false, special_preparation: 'Remove all metal objects', status: 'pending', priority: 24 },
+    { id: 'mri_soft_tissue', test_code: 'MRI-ST', test_name: 'MRI Soft Tissue', category: 'imaging', sample_type: 'other', fasting_required: false, special_preparation: 'Remove all metal objects', status: 'pending', priority: 25 },
+    { id: 'mra', test_code: 'MRA', test_name: 'MR Angiography', category: 'imaging', sample_type: 'other', fasting_required: false, special_preparation: 'Check for contraindications', status: 'pending', priority: 26 },
+    
+    // Fluoroscopy & Special Procedures
+    { id: 'ba_swallow', test_code: 'BA-SWAL', test_name: 'Barium Swallow', category: 'imaging', sample_type: 'other', fasting_required: true, special_preparation: 'NPO 8 hours', status: 'pending', priority: 27 },
+    { id: 'ba_meal', test_code: 'BA-MEAL', test_name: 'Barium Meal', category: 'imaging', sample_type: 'other', fasting_required: true, special_preparation: 'NPO overnight', status: 'pending', priority: 28 },
+    { id: 'ba_enema', test_code: 'BA-ENEM', test_name: 'Barium Enema', category: 'imaging', sample_type: 'other', fasting_required: true, special_preparation: 'Bowel preparation required', status: 'pending', priority: 29 },
+    { id: 'ivp', test_code: 'IVP', test_name: 'Intravenous Pyelogram', category: 'imaging', sample_type: 'other', fasting_required: true, special_preparation: 'NPO 6 hours, check creatinine', status: 'pending', priority: 30 },
+    
+    // Nuclear Medicine
+    { id: 'bone_scan', test_code: 'BONE-SCAN', test_name: 'Bone Scan', category: 'imaging', sample_type: 'other', fasting_required: false, special_preparation: 'Radiotracer injection', status: 'pending', priority: 31 },
+    { id: 'thyroid_scan', test_code: 'THYROID-SCAN', test_name: 'Thyroid Scan', category: 'imaging', sample_type: 'other', fasting_required: false, special_preparation: 'Discontinue iodine supplements', status: 'pending', priority: 32 },
+    
+    // Special Imaging
+    { id: 'echo', test_code: 'ECHO', test_name: 'Echocardiogram', category: 'imaging', sample_type: 'other', fasting_required: false, status: 'pending', priority: 33 },
+    { id: 'mammogram', test_code: 'MAMMO', test_name: 'Mammogram', category: 'imaging', sample_type: 'other', fasting_required: false, special_preparation: 'No deodorant on day of exam', status: 'pending', priority: 34 }
+  ],
+
   other: []
 };
 
@@ -591,6 +643,7 @@ class LabService {
       { value: 'diabetes_markers', label: 'Diabetes Markers' },
       { value: 'tumor_markers', label: 'Tumor Markers' },
       { value: 'drug_levels', label: 'Drug Levels' },
+      { value: 'imaging', label: '📷 Imaging & Radiology' },
       { value: 'other', label: 'Other' }
     ];
   }
@@ -998,6 +1051,238 @@ class LabService {
 
     return gfrCalculations;
   }
-}
 
+  // PDF Export for Lab Trends
+  async generateTrendsPDF(
+    patientId: string,
+    patientName: string,
+    testName: string,
+    startDate: Date,
+    endDate: Date
+  ): Promise<Blob> {
+    // Get trend data
+    const monthsDiff = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 30));
+    const trend = await this.getLabTrends(patientId, testName, monthsDiff);
+    
+    // Build HTML content for PDF
+    const formatDate = (date: Date) => {
+      return new Date(date).toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: 'short', 
+        day: 'numeric' 
+      });
+    };
+
+    const trendDirectionStyle = 
+      trend.trend_direction === 'improving' ? 'color: #10B981;' :
+      trend.trend_direction === 'worsening' ? 'color: #EF4444;' :
+      trend.trend_direction === 'fluctuating' ? 'color: #F59E0B;' : 'color: #3B82F6;';
+
+    const resultRows = trend.results.map(result => `
+      <tr>
+        <td style="padding: 8px; border: 1px solid #e5e7eb;">${formatDate(result.date)}</td>
+        <td style="padding: 8px; border: 1px solid #e5e7eb; font-weight: bold;">${result.value}</td>
+        <td style="padding: 8px; border: 1px solid #e5e7eb;">
+          <span style="${result.flag === 'normal' ? 'background: #D1FAE5; color: #065F46;' : 'background: #FEE2E2; color: #991B1B;'} padding: 2px 8px; border-radius: 4px;">
+            ${result.flag.toUpperCase()}
+          </span>
+        </td>
+      </tr>
+    `).join('');
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <title>Lab Trend Report - ${testName}</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 40px; color: #1F2937; }
+          .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #10B981; padding-bottom: 20px; }
+          .header h1 { color: #10B981; margin: 0 0 10px 0; }
+          .patient-info { background: #F3F4F6; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+          .patient-info p { margin: 5px 0; }
+          .summary { background: #ECFDF5; padding: 20px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #10B981; }
+          .summary h3 { margin-top: 0; color: #065F46; }
+          .trend-badge { display: inline-block; padding: 4px 12px; border-radius: 4px; font-weight: bold; }
+          table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+          th { background: #10B981; color: white; padding: 10px; text-align: left; }
+          tr:nth-child(even) { background: #F9FAFB; }
+          .analysis { margin-top: 20px; padding: 15px; background: #FEF3C7; border-radius: 8px; }
+          .footer { margin-top: 30px; text-align: center; font-size: 12px; color: #6B7280; border-top: 1px solid #E5E7EB; padding-top: 15px; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>📊 Laboratory Trend Report</h1>
+          <p>Plastic Surgery Assistant PWA</p>
+        </div>
+        
+        <div class="patient-info">
+          <p><strong>Patient:</strong> ${patientName}</p>
+          <p><strong>Test:</strong> ${testName}</p>
+          <p><strong>Period:</strong> ${formatDate(startDate)} - ${formatDate(endDate)}</p>
+          <p><strong>Generated:</strong> ${formatDate(new Date())}</p>
+        </div>
+
+        <div class="summary">
+          <h3>Trend Summary</h3>
+          <p><strong>Trend Direction:</strong> <span class="trend-badge" style="${trendDirectionStyle}">${trend.trend_direction.toUpperCase()}</span></p>
+          <p><strong>Total Results:</strong> ${trend.results.length}</p>
+        </div>
+
+        <h3>📈 Result History</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Value</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${resultRows}
+          </tbody>
+        </table>
+
+        <div class="analysis">
+          <h4>📋 Clinical Analysis</h4>
+          <p>${trend.trend_analysis || 'No detailed analysis available.'}</p>
+        </div>
+
+        <div class="footer">
+          <p>This report is generated for clinical decision support purposes only.</p>
+          <p>Please verify results with original laboratory reports.</p>
+          <p>© ${new Date().getFullYear()} Plastic Surgery Assistant</p>
+        </div>
+      </body>
+      </html>
+    `;
+
+    // Convert HTML to Blob for download
+    const blob = new Blob([htmlContent], { type: 'text/html' });
+    return blob;
+  }
+
+  // Generate multiple test trends PDF
+  async generateMultiTestTrendsPDF(
+    patientId: string,
+    patientName: string,
+    testNames: string[],
+    startDate: Date,
+    endDate: Date
+  ): Promise<Blob> {
+    const monthsDiff = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 30));
+    
+    const formatDate = (date: Date) => {
+      return new Date(date).toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: 'short', 
+        day: 'numeric' 
+      });
+    };
+
+    // Collect all trends
+    const allTrends = await Promise.all(
+      testNames.map(async (testName) => {
+        try {
+          const trend = await this.getLabTrends(patientId, testName, monthsDiff);
+          return { testName, trend };
+        } catch {
+          return { testName, trend: null };
+        }
+      })
+    );
+
+    const testSections = allTrends
+      .filter(t => t.trend && t.trend.results.length > 0)
+      .map(({ testName, trend }) => {
+        if (!trend) return '';
+        
+        const trendDirectionStyle = 
+          trend.trend_direction === 'improving' ? 'background: #D1FAE5; color: #065F46;' :
+          trend.trend_direction === 'worsening' ? 'background: #FEE2E2; color: #991B1B;' :
+          trend.trend_direction === 'fluctuating' ? 'background: #FEF3C7; color: #92400E;' : 'background: #DBEAFE; color: #1E40AF;';
+
+        const resultRows = trend.results.map(result => `
+          <tr>
+            <td style="padding: 6px; border: 1px solid #e5e7eb;">${formatDate(result.date)}</td>
+            <td style="padding: 6px; border: 1px solid #e5e7eb; font-weight: bold;">${result.value}</td>
+            <td style="padding: 6px; border: 1px solid #e5e7eb;">
+              <span style="${result.flag === 'normal' ? 'color: #10B981;' : 'color: #EF4444;'}">●</span>
+              ${result.flag}
+            </td>
+          </tr>
+        `).join('');
+
+        return `
+          <div class="test-section">
+            <h3>${testName} <span class="trend-badge" style="${trendDirectionStyle}">${trend.trend_direction}</span></h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Value</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${resultRows}
+              </tbody>
+            </table>
+            <p class="analysis-text"><em>${trend.trend_analysis}</em></p>
+          </div>
+        `;
+      }).join('');
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <title>Comprehensive Lab Trend Report</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 40px; color: #1F2937; }
+          .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #10B981; padding-bottom: 20px; }
+          .header h1 { color: #10B981; margin: 0 0 10px 0; }
+          .patient-info { background: #F3F4F6; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+          .patient-info p { margin: 5px 0; }
+          .test-section { margin-bottom: 25px; padding: 15px; background: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 8px; }
+          .test-section h3 { margin-top: 0; color: #1F2937; display: flex; align-items: center; gap: 10px; }
+          .trend-badge { font-size: 12px; padding: 2px 8px; border-radius: 4px; font-weight: normal; }
+          table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+          th { background: #F3F4F6; color: #374151; padding: 8px; text-align: left; }
+          tr:nth-child(even) { background: #F9FAFB; }
+          .analysis-text { font-size: 12px; color: #6B7280; margin-top: 8px; }
+          .footer { margin-top: 30px; text-align: center; font-size: 12px; color: #6B7280; border-top: 1px solid #E5E7EB; padding-top: 15px; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>📊 Comprehensive Lab Trend Report</h1>
+          <p>Plastic Surgery Assistant PWA</p>
+        </div>
+        
+        <div class="patient-info">
+          <p><strong>Patient:</strong> ${patientName}</p>
+          <p><strong>Tests Analyzed:</strong> ${testNames.join(', ')}</p>
+          <p><strong>Period:</strong> ${formatDate(startDate)} - ${formatDate(endDate)}</p>
+          <p><strong>Generated:</strong> ${formatDate(new Date())}</p>
+        </div>
+
+        ${testSections || '<p>No trend data available for the selected tests and period.</p>'}
+
+        <div class="footer">
+          <p>This report is generated for clinical decision support purposes only.</p>
+          <p>Please verify results with original laboratory reports.</p>
+          <p>© ${new Date().getFullYear()} Plastic Surgery Assistant</p>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const blob = new Blob([htmlContent], { type: 'text/html' });
+    return blob;
+  }
+}
 export const labService = new LabService();

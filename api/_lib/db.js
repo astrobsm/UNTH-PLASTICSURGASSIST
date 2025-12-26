@@ -1,5 +1,5 @@
 // Shared database connection for Vercel serverless functions
-// Uses Neon PostgreSQL (free tier) or any PostgreSQL-compatible database
+// Supports: Supabase (recommended), Neon PostgreSQL, or any PostgreSQL-compatible database
 
 import pg from 'pg';
 
@@ -15,14 +15,23 @@ export function getPool() {
       throw new Error('DATABASE_URL environment variable is not set');
     }
 
+    // Detect if using Supabase (connection pooler uses port 6543)
+    const isSupabase = connectionString.includes('supabase') || connectionString.includes(':6543');
+    
     pool = new Pool({
       connectionString,
       ssl: {
         rejectUnauthorized: false
       },
-      max: 10,
-      idleTimeoutMillis: 30000,
+      // Optimized settings for serverless (Vercel)
+      max: isSupabase ? 5 : 10,  // Supabase free tier has connection limits
+      idleTimeoutMillis: 20000,  // Close idle connections faster for serverless
       connectionTimeoutMillis: 10000,
+    });
+
+    // Handle pool errors gracefully
+    pool.on('error', (err) => {
+      console.error('Unexpected pool error:', err);
     });
   }
   return pool;
@@ -42,4 +51,21 @@ export async function query(text, params) {
   }
 }
 
-export default { getPool, query };
+// Test database connection
+export async function testConnection() {
+  try {
+    const result = await query('SELECT NOW() as current_time');
+    return { 
+      success: true, 
+      message: 'Database connected', 
+      time: result.rows[0].current_time 
+    };
+  } catch (error) {
+    return { 
+      success: false, 
+      message: error.message 
+    };
+  }
+}
+
+export default { getPool, query, testConnection };

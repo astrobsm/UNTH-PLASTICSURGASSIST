@@ -1,0 +1,1 @@
+export { DiabeticFootAssessmentForm } from './DiabeticFootAssessmentForm';

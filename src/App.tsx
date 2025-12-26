@@ -20,12 +20,16 @@ import PaperworkPage from './pages/PaperworkPage';
 import MDTPage from './pages/MDTPage';
 import AdmissionsPage from './pages/AdmissionsPage';
 import DischargesPage from './pages/DischargesPage';
+import AdmissionDischargePage from './pages/AdmissionDischargePage';
 import BloodTransfusionPage from './pages/BloodTransfusion';
 import WardRoundsPage from './pages/WardRounds';
 import PatientEducation from './pages/PatientEducation';
 import ShoppingList from './pages/ShoppingList';
 import VideoConference from './pages/VideoConference';
 import ChatRooms from './pages/ChatRooms';
+import LimbSalvagePage from './pages/LimbSalvagePage';
+import BurnCarePage from './pages/BurnCarePage';
+import MedicalTrainingPage from './pages/MedicalTrainingPage';
 import { useAuthStore } from './store/authStore';
 import { PWAInstallPrompt } from './components/PWAInstallPrompt';
 import TreatmentPlanBuilder from './components/TreatmentPlanBuilder';
@@ -91,6 +95,7 @@ function App() {
             <Route path="/paperwork" element={<PaperworkPage />} />
             <Route path="/admissions" element={<AdmissionsPage />} />
             <Route path="/discharges" element={<DischargesPage />} />
+            <Route path="/admission-discharge" element={<AdmissionDischargePage />} />
             <Route path="/mdt" element={<MDTPage />} />
             <Route path="/blood-transfusion" element={<BloodTransfusionPage />} />
             <Route path="/ward-rounds" element={<WardRoundsPage />} />
@@ -99,6 +104,9 @@ function App() {
             <Route path="/labs" element={<Labs />} />
             <Route path="/patient-education" element={<PatientEducation />} />
             <Route path="/shopping-list" element={<ShoppingList />} />
+            <Route path="/limb-salvage" element={<LimbSalvagePage />} />
+            <Route path="/burn-care" element={<BurnCarePage />} />
+            <Route path="/medical-training" element={<MedicalTrainingPage />} />
             <Route path="/education" element={<Education />} />
             <Route path="/mcq-education" element={<MCQEducation />} />
             <Route path="/topic-management" element={<TopicManagement />} />

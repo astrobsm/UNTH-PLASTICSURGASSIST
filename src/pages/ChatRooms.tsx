@@ -315,7 +315,7 @@ const ChatRooms: React.FC = () => {
 
   // Filter rooms by search
   const filteredRooms = rooms.filter(room =>
-    room.name.toLowerCase().includes(searchQuery.toLowerCase())
+    (room.name || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   // Common emojis

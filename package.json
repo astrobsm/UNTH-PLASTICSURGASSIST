@@ -1,10 +1,10 @@
 {
   "name": "plastic-surgeon-assistant",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "engines": {
-    "node": "20.x"
+    "node": ">=18.x"
   },
   "scripts": {
     "dev": "vite",

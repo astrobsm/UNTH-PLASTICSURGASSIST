@@ -440,10 +440,10 @@ Please generate the article in HTML format with proper headings, paragraphs, lis
     const lowerQuery = query.toLowerCase();
     
     return allArticles.filter(article => 
-      article.title.toLowerCase().includes(lowerQuery) ||
-      article.topic.toLowerCase().includes(lowerQuery) ||
-      article.summary.toLowerCase().includes(lowerQuery) ||
-      article.key_points.some((point: string) => point.toLowerCase().includes(lowerQuery))
+      (article.title || '').toLowerCase().includes(lowerQuery) ||
+      (article.topic || '').toLowerCase().includes(lowerQuery) ||
+      (article.summary || '').toLowerCase().includes(lowerQuery) ||
+      (article.key_points || []).some((point: string) => (point || '').toLowerCase().includes(lowerQuery))
     );
   }
 

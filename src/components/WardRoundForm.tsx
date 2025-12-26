@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, User, Calendar, FileText, Activity, AlertCircle, TrendingUp, Pill, Stethoscope, ClipboardList } from 'lucide-react';
-import { wardRoundsService, WardRound } from '../services/wardRoundsService';
+import { X, Save, User, Calendar, FileText, Activity, AlertCircle, TrendingUp, Pill, Stethoscope, ClipboardList, Users } from 'lucide-react';
+import { wardRoundsService, WardRound, ROUND_TYPES, RoundType } from '../services/wardRoundsService';
 import { db } from '../db/database';
 import { format } from 'date-fns';
 
@@ -27,6 +27,11 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
     reviewer_id: '',
     round_date: format(new Date(), 'yyyy-MM-dd'),
     round_time: format(new Date(), 'HH:mm'),
+    
+    // Round Type - NEW
+    round_type: 'house_officers_round' as RoundType,
+    doctor_role: 'house_officer' as 'consultant' | 'senior_registrar' | 'registrar' | 'house_officer',
+    accompanying_team: [] as string[],
     
     // Subjective Assessment
     subjective_complaints: '',
@@ -314,6 +319,74 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
                       onChange={(e) => setFormData({ ...formData, round_time: e.target.value })}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
                       required
+                    />
+                  </div>
+                </div>
+
+                {/* Round Type Selection */}
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                  <h3 className="font-semibold text-purple-900 mb-3 flex items-center gap-2">
+                    <Users className="w-5 h-5" />
+                    Round Type
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {ROUND_TYPES.map(rt => (
+                      <label
+                        key={rt.value}
+                        className={`flex items-start p-3 border-2 rounded-lg cursor-pointer transition-colors ${
+                          formData.round_type === rt.value
+                            ? 'border-purple-500 bg-purple-100'
+                            : 'border-gray-200 hover:border-purple-300'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="round_type"
+                          value={rt.value}
+                          checked={formData.round_type === rt.value}
+                          onChange={(e) => setFormData({ ...formData, round_type: e.target.value as RoundType })}
+                          className="mt-1 mr-3"
+                        />
+                        <div>
+                          <div className="font-medium text-gray-800">{rt.label}</div>
+                          <div className="text-sm text-gray-600">{rt.description}</div>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Doctor Role */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Your Role *
+                    </label>
+                    <select
+                      value={formData.doctor_role}
+                      onChange={(e) => setFormData({ ...formData, doctor_role: e.target.value as any })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                      required
+                    >
+                      <option value="house_officer">House Officer / Intern</option>
+                      <option value="registrar">Registrar</option>
+                      <option value="senior_registrar">Senior Registrar</option>
+                      <option value="consultant">Consultant</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Accompanying Team Members
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Separate names with commas"
+                      value={formData.accompanying_team?.join(', ') || ''}
+                      onChange={(e) => setFormData({ 
+                        ...formData, 
+                        accompanying_team: e.target.value.split(',').map(s => s.trim()).filter(s => s) 
+                      })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
                     />
                   </div>
                 </div>

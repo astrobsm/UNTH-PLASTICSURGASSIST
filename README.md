@@ -108,21 +108,55 @@ src/
 
 ## 🏗️ Deployment
 
-### Production Build
+### Quick Deploy to Vercel + Supabase (Recommended - Free)
+
+1. **Set up Supabase Database:**
+   - Create account at [supabase.com](https://supabase.com)
+   - Create new project, save the database password
+   - Get connection string: Settings → Database → URI → Transaction pooler
+
+2. **Deploy to Vercel:**
+   - Connect GitHub repo at [vercel.com](https://vercel.com)
+   - Add environment variables:
+     - `DATABASE_URL`: Your Supabase connection string
+     - `JWT_SECRET`: Generate with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
+     - `INIT_SECRET`: `plasticsurg2024`
+     - `NODE_ENV`: `production`
+   - Deploy!
+
+3. **Initialize Database:**
+   ```bash
+   curl -X POST https://your-app.vercel.app/api/init-db \
+     -H "x-init-secret: plasticsurg2024"
+   ```
+
+4. **Login:**
+   - Default: `admin` / `admin123`
+   - **Change password immediately after first login!**
+
+📖 **Full Guide**: See [SUPABASE_VERCEL_DEPLOYMENT.md](./SUPABASE_VERCEL_DEPLOYMENT.md)
+
+### Production Build (Self-Hosted)
 ```bash
 npm run build
 ```
 
 ### Environment Variables
 ```env
-VITE_API_BASE_URL=https://api.yourserver.com
-VITE_VAPID_PUBLIC_KEY=your-vapid-public-key
+# Required for Vercel deployment
+DATABASE_URL=postgresql://...@pooler.supabase.com:6543/postgres
+JWT_SECRET=your-64-char-secret
+INIT_SECRET=your-init-secret
+NODE_ENV=production
+
+# Optional
+VITE_OPENAI_API_KEY=sk-your-key
 ```
 
 ### Hosting Options
-- **Static Hosting**: Vercel, Netlify, GitHub Pages
-- **Self-hosted**: Nginx, Apache with HTTPS
-- **Cloud**: Azure Static Web Apps, AWS S3 + CloudFront
+- **Recommended**: Vercel + Supabase (both free tier)
+- **Alternatives**: Vercel + Neon, Railway, or Vercel Postgres
+- **Self-hosted**: Nginx + PostgreSQL with HTTPS
 
 ## 📋 Clinical Workflows
 

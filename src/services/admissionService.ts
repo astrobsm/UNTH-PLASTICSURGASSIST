@@ -110,10 +110,10 @@ class AdmissionService {
     const searchLower = query.toLowerCase();
     
     return admissions.filter(admission => 
-      admission.patient_name.toLowerCase().includes(searchLower) ||
-      admission.hospital_number.toLowerCase().includes(searchLower) ||
-      admission.provisional_diagnosis.toLowerCase().includes(searchLower) ||
-      admission.ward_location.toLowerCase().includes(searchLower)
+      (admission.patient_name || '').toLowerCase().includes(searchLower) ||
+      (admission.hospital_number || '').toLowerCase().includes(searchLower) ||
+      (admission.provisional_diagnosis || '').toLowerCase().includes(searchLower) ||
+      (admission.ward_location || '').toLowerCase().includes(searchLower)
     );
   }
 

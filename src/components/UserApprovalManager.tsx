@@ -118,16 +118,16 @@ export function UserApprovalManager() {
 
   const filteredPending = pendingUsers.filter(user => {
     const matchesSearch = 
-      user.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchQuery.toLowerCase());
+      (user.full_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (user.email || '').toLowerCase().includes(searchQuery.toLowerCase());
     const matchesRole = filterRole === 'all' || user.role === filterRole;
     return matchesSearch && matchesRole;
   });
 
   const filteredApproved = approvedUsers.filter(user => {
     const matchesSearch = 
-      user.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchQuery.toLowerCase());
+      (user.full_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (user.email || '').toLowerCase().includes(searchQuery.toLowerCase());
     const matchesRole = filterRole === 'all' || user.role === filterRole;
     return matchesSearch && matchesRole;
   });

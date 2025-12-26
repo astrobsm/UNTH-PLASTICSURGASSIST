@@ -111,9 +111,9 @@ class DischargeService {
     const searchLower = query.toLowerCase();
     
     return discharges.filter(discharge => 
-      discharge.patient_name.toLowerCase().includes(searchLower) ||
-      discharge.hospital_number.toLowerCase().includes(searchLower) ||
-      discharge.final_diagnosis.toLowerCase().includes(searchLower)
+      (discharge.patient_name || '').toLowerCase().includes(searchLower) ||
+      (discharge.hospital_number || '').toLowerCase().includes(searchLower) ||
+      (discharge.final_diagnosis || '').toLowerCase().includes(searchLower)
     );
   }
 

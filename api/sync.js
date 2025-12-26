@@ -25,6 +25,19 @@ export default async function handler(req, res) {
         }
         return await handleFullSync(req.body, auth.user, res);
       case 'GET':
+        // Handle /sync/patients, /sync/surgeries, etc.
+        if (action === 'patients') {
+          return await getSyncPatients(res);
+        }
+        if (action === 'surgeries') {
+          return await getSyncEntity('surgeries', res);
+        }
+        if (action === 'admissions') {
+          return await getSyncEntity('admissions', res);
+        }
+        if (action === 'treatment-plans') {
+          return await getSyncEntity('treatment_plans', res);
+        }
         return await getSyncStatus(auth.user, res);
       default:
         res.status(405).json({ error: 'Method not allowed' });
@@ -33,6 +46,23 @@ export default async function handler(req, res) {
     console.error('Sync API error:', error);
     res.status(500).json({ error: 'Internal server error', message: error.message });
   }
+}
+
+async function getSyncPatients(res) {
+  const result = await query(
+    `SELECT id, hospital_number, first_name, last_name, date_of_birth, gender, 
+            phone, email, address, blood_group, allergies, medical_history,
+            created_at, updated_at
+     FROM patients ORDER BY updated_at DESC LIMIT 500`
+  );
+  res.status(200).json(result.rows);
+}
+
+async function getSyncEntity(tableName, res) {
+  const result = await query(
+    `SELECT * FROM ${tableName} ORDER BY updated_at DESC LIMIT 500`
+  );
+  res.status(200).json(result.rows);
 }
 
 async function getSyncStatus(user, res) {

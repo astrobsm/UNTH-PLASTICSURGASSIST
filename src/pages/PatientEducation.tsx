@@ -55,8 +55,8 @@ export default function PatientEducation() {
   };
 
   const filteredPatients = patients.filter(patient =>
-    patient.full_name.toLowerCase().includes(patientSearchTerm.toLowerCase()) ||
-    patient.hospital_number.toLowerCase().includes(patientSearchTerm.toLowerCase())
+    (patient.full_name || '').toLowerCase().includes(patientSearchTerm.toLowerCase()) ||
+    (patient.hospital_number || '').toLowerCase().includes(patientSearchTerm.toLowerCase())
   );
 
   const educationTopics: EducationTopic[] = [
@@ -983,8 +983,8 @@ export default function PatientEducation() {
   ];
 
   const filteredTopics = educationTopics.filter(topic =>
-    topic.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    topic.category.toLowerCase().includes(searchTerm.toLowerCase())
+    (topic.title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (topic.category || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const categories = Array.from(new Set(educationTopics.map(t => t.category)));

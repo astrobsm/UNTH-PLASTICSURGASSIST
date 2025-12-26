@@ -119,18 +119,26 @@ class ApiClient {
       const response = await fetch(`${this.baseURL}${endpoint}`, fetchOptions);
 
       if (!response.ok) {
-        const error = await response.json().catch(() => ({ error: 'Request failed' }));
+        const errorData = await response.json().catch(() => ({ error: 'Request failed' }));
         
         // Handle token expiration
         if (response.status === 401 || response.status === 403) {
           // Token might be expired, clear it
-          if (error.error?.includes('expired') || error.error?.includes('invalid')) {
+          const errorMsg = typeof errorData.error === 'string' ? errorData.error : '';
+          if (errorMsg.includes('expired') || errorMsg.includes('invalid')) {
             this.setToken(null);
             window.dispatchEvent(new CustomEvent('auth:expired'));
           }
         }
         
-        throw new Error(error.error || error.message || 'Request failed');
+        // Create a proper error message
+        const errorMessage = typeof errorData.error === 'string' 
+          ? errorData.error 
+          : typeof errorData.message === 'string'
+            ? errorData.message
+            : `HTTP ${response.status}: ${response.statusText}`;
+        
+        throw new Error(errorMessage);
       }
 
       // Update sync timestamp for successful requests
@@ -164,9 +172,9 @@ class ApiClient {
 
   // Auth endpoints
   async login(email: string, password: string) {
-    const data = await this.request('/auth/login', {
+    const data = await this.request('/auth', {
       method: 'POST',
-      body: JSON.stringify({ email, password })
+      body: JSON.stringify({ username: email, password })
     });
     this.setToken(data.token);
     return data;
@@ -214,11 +222,13 @@ class ApiClient {
   }
 
   async getPatient(id: string) {
-    return this.request(`/sync/patients/${id}`);
+    // Use /patients endpoint for individual patient, not /sync/patients
+    const data = await this.request(`/patients/${id}`);
+    return data.patient;
   }
 
   async createPatient(patientData: any) {
-    const data = await this.request('/sync/patients', {
+    const data = await this.request('/patients', {
       method: 'POST',
       body: JSON.stringify(patientData)
     });
@@ -226,7 +236,7 @@ class ApiClient {
   }
 
   async updatePatient(id: string, patientData: any) {
-    const data = await this.request(`/sync/patients/${id}`, {
+    const data = await this.request(`/patients/${id}`, {
       method: 'PUT',
       body: JSON.stringify(patientData)
     });
@@ -234,7 +244,7 @@ class ApiClient {
   }
 
   async deletePatient(id: string) {
-    return this.request(`/sync/patients/${id}`, {
+    return this.request(`/patients/${id}`, {
       method: 'DELETE'
     });
   }

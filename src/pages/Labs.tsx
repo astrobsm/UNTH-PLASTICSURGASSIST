@@ -14,7 +14,9 @@ import {
   Eye,
   BarChart3,
   Activity,
-  Zap
+  Zap,
+  Download,
+  Loader2
 } from 'lucide-react';
 import { 
   labService, 
@@ -728,6 +730,11 @@ const TrendsSection = ({ selectedPatient }: any) => {
   const [trendData, setTrendData] = useState<LabTrend[]>([]);
   const [selectedTest, setSelectedTest] = useState('');
   const [timeRange, setTimeRange] = useState(6);
+  const [exporting, setExporting] = useState(false);
+  const [dateRange, setDateRange] = useState({
+    start: new Date(Date.now() - 6 * 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    end: new Date().toISOString().split('T')[0]
+  });
 
   useEffect(() => {
     if (selectedPatient && selectedTest) {
@@ -741,6 +748,40 @@ const TrendsSection = ({ selectedPatient }: any) => {
       setTrendData([trend]);
     } catch (error) {
       console.error('Error loading trend data:', error);
+    }
+  };
+
+  const handleExportPDF = async () => {
+    if (!selectedPatient || !selectedTest || trendData.length === 0) {
+      alert('Please select a patient and test, then analyze trends before exporting.');
+      return;
+    }
+    
+    try {
+      setExporting(true);
+      const patientName = trendData[0]?.test_name ? `Patient_${selectedPatient}` : 'Unknown';
+      const blob = await labService.generateTrendsPDF(
+        selectedPatient,
+        patientName,
+        selectedTest,
+        new Date(dateRange.start),
+        new Date(dateRange.end)
+      );
+      
+      // Create download link
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Lab_Trend_${selectedTest}_${new Date().toISOString().split('T')[0]}.html`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error exporting PDF:', error);
+      alert('Failed to export trend report. Please try again.');
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -788,13 +829,22 @@ const TrendsSection = ({ selectedPatient }: any) => {
             <option value={24}>Last 2 years</option>
           </select>
         </div>
-        <div className="flex items-end">
+        <div className="flex items-end gap-2">
           <button
             onClick={loadTrendData}
             disabled={!selectedPatient || !selectedTest}
-            className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+            className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
           >
             Analyze Trends
+          </button>
+          <button
+            onClick={handleExportPDF}
+            disabled={!selectedPatient || !selectedTest || trendData.length === 0 || exporting}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+            title="Export Trend Report"
+          >
+            {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            PDF
           </button>
         </div>
       </div>

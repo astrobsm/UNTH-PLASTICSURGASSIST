@@ -321,9 +321,9 @@ export default function Admin() {
   );
 
   const filteredUsers = users.filter(user => 
-    user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    user.department.toLowerCase().includes(searchQuery.toLowerCase())
+    (user.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (user.email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (user.department || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (

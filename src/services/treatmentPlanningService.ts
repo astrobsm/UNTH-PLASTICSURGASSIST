@@ -1,5 +1,7 @@
 import { db } from '../db/database';
 import { format, addDays, differenceInDays, isBefore, isAfter } from 'date-fns';
+import toast from 'react-hot-toast';
+import { notificationService } from './notificationService';
 
 // Enhanced Treatment Planning Interfaces
 
@@ -495,6 +497,124 @@ class TreatmentPlanningService {
       hospital_number: plan.hospital_number || '',
       admission_date: plan.admission_date || new Date()
     })) as EnhancedTreatmentPlan[];
+  }
+
+  // Real-time notifications
+  async notifyTreatmentPlanCreated(plan: EnhancedTreatmentPlan, patientName: string): Promise<void> {
+    toast.success(`Treatment plan created for ${patientName}`);
+    
+    // Schedule notification for reviews
+    if (plan.reviews && plan.reviews.length > 0) {
+      const firstReview = plan.reviews[0];
+      if (firstReview.scheduled_date) {
+        try {
+          await notificationService.scheduleLocalNotification({
+            title: 'Upcoming Review',
+            message: `Review scheduled for ${patientName} on ${format(new Date(firstReview.scheduled_date), 'MMM dd, yyyy')}`,
+            type: 'reminder',
+            scheduledFor: new Date(firstReview.scheduled_date),
+            url: `/treatment-planning?planId=${plan.id}`
+          });
+        } catch (error) {
+          // Silent fail if notifications not supported
+        }
+      }
+    }
+  }
+
+  async notifyReviewScheduled(patientName: string, reviewDate: Date, assignedTo: string): Promise<void> {
+    toast.success(`Review scheduled for ${patientName} on ${format(reviewDate, 'MMM dd, yyyy')}`);
+    
+    try {
+      await notificationService.scheduleLocalNotification({
+        title: 'Review Reminder',
+        message: `Patient review due for ${patientName}`,
+        type: 'reminder',
+        scheduledFor: reviewDate,
+        url: '/treatment-planning'
+      });
+    } catch (error) {
+      // Silent fail if notifications not supported
+    }
+  }
+
+  async notifyProcedureScheduled(patientName: string, procedureName: string, procedureDate: Date): Promise<void> {
+    toast.success(`${procedureName} scheduled for ${patientName}`);
+    
+    // Schedule reminder notification 1 day before
+    const reminderDate = addDays(procedureDate, -1);
+    if (isAfter(reminderDate, new Date())) {
+      try {
+        await notificationService.scheduleLocalNotification({
+          title: 'Procedure Tomorrow',
+          message: `${procedureName} scheduled for ${patientName} tomorrow`,
+          type: 'alert',
+          scheduledFor: reminderDate,
+          url: '/treatment-planning'
+        });
+      } catch (error) {
+        // Silent fail if notifications not supported
+      }
+    }
+  }
+
+  async notifyOverdueItems(overdueCount: number, patientName: string): Promise<void> {
+    if (overdueCount > 0) {
+      toast.error(`${overdueCount} overdue item(s) for ${patientName}`, {
+        duration: 5000,
+        icon: '⚠️'
+      });
+    }
+  }
+
+  async notifyMedicationDue(patientName: string, medicationName: string, scheduledTime: Date): Promise<void> {
+    try {
+      await notificationService.scheduleLocalNotification({
+        title: 'Medication Due',
+        message: `${medicationName} due for ${patientName}`,
+        type: 'urgent',
+        scheduledFor: scheduledTime,
+        url: '/treatment-planning'
+      });
+    } catch (error) {
+      // Silent fail if notifications not supported
+    }
+  }
+
+  async notifyLabResultCritical(patientName: string, testName: string, result: string): Promise<void> {
+    toast.error(`Critical lab result: ${testName} for ${patientName}: ${result}`, {
+      duration: 10000,
+      icon: '🚨'
+    });
+    
+    try {
+      await notificationService.showLocalNotification({
+        title: 'CRITICAL Lab Result',
+        message: `${testName} for ${patientName}: ${result}`,
+        type: 'urgent',
+        url: '/treatment-planning'
+      });
+    } catch (error) {
+      // Silent fail if notifications not supported
+    }
+  }
+
+  // Check for overdue items periodically and notify
+  async checkAndNotifyOverdueItems(): Promise<void> {
+    try {
+      const activePlans = await this.getActiveTreatmentPlans();
+      
+      for (const plan of activePlans) {
+        const overdue = this.getOverdueItems(plan);
+        const totalOverdue = overdue.reviews.length + overdue.procedures.length + overdue.medications.length;
+        
+        if (totalOverdue > 0) {
+          await this.notifyOverdueItems(totalOverdue, plan.patient_name || 'Unknown Patient');
+        }
+      }
+    } catch (error) {
+      console.error('Error checking overdue items:', error);
+    }
   }
 }
 

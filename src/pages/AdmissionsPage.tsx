@@ -219,10 +219,10 @@ export default function AdmissionsPage() {
   };
 
   const filteredAdmissions = admissions.filter(admission =>
-    admission.patient_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    admission.hospital_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    admission.ward_location.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    admission.provisional_diagnosis.toLowerCase().includes(searchTerm.toLowerCase())
+    (admission.patient_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (admission.hospital_number || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (admission.ward_location || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (admission.provisional_diagnosis || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
