@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   ArrowLeft, 
   ArrowRight, 
@@ -15,7 +15,8 @@ import {
   Info,
   Clock,
   Search,
-  UserPlus
+  UserPlus,
+  Brain
 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { 
@@ -29,6 +30,7 @@ import {
   LUND_BROWDER_CHART
 } from '../../services/burnCareService';
 import { patientService } from '../../services/patientService';
+import AIBurnExpert from './AIBurnExpert';
 
 interface Patient {
   id: string;
@@ -574,6 +576,16 @@ const BurnAdmissionForm: React.FC<BurnAdmissionFormProps> = ({ onComplete, onCan
                 {calculatedTBSA.toFixed(1)}% TBSA
               </div>
             </div>
+
+            {/* AI Burn Expert */}
+            <AIBurnExpert
+              patientAge={age}
+              patientWeight={weight}
+              mechanism={mechanism}
+              hasInhalationInjury={inhalationAssessment.suspected || inhalationAssessment.confirmed}
+              currentRegions={tbsaRegions}
+              onApplyAIResults={(newRegions) => setTbsaRegions(newRegions)}
+            />
 
             {/* Depth Selection */}
             <div>
