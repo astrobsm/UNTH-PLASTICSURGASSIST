@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { ReactNode, useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { 
   Users, 
@@ -24,7 +24,9 @@ import {
   MessageSquare,
   Video,
   Footprints,
-  Flame
+  Flame,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import SyncStatusIndicator from './SyncStatusIndicator';
@@ -63,6 +65,16 @@ const navigation = [
 export default function Layout({ children }: LayoutProps) {
   const location = useLocation();
   const { user, logout } = useAuthStore();
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    const saved = localStorage.getItem('sidebar-collapsed');
+    return saved ? JSON.parse(saved) : false;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('sidebar-collapsed', JSON.stringify(isCollapsed));
+  }, [isCollapsed]);
+
+  const toggleSidebar = () => setIsCollapsed(!isCollapsed);
 
   return (
     <div className="min-h-screen bg-clinical-light">
@@ -122,24 +134,38 @@ export default function Layout({ children }: LayoutProps) {
 
       <div className="flex">
         {/* Sidebar Navigation */}
-        <nav className="bg-white w-64 min-h-screen shadow-sm border-r border-gray-200">
-          <div className="px-4 py-6 space-y-1">
+        <nav className={`bg-white ${isCollapsed ? 'w-16' : 'w-64'} min-h-screen shadow-sm border-r border-gray-200 transition-all duration-300 relative`}>
+          {/* Collapse Toggle Button */}
+          <button
+            onClick={toggleSidebar}
+            className="absolute -right-3 top-6 bg-white border border-gray-200 rounded-full p-1 shadow-md hover:bg-gray-50 transition-colors z-10"
+            title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {isCollapsed ? (
+              <ChevronRight className="h-4 w-4 text-gray-600" />
+            ) : (
+              <ChevronLeft className="h-4 w-4 text-gray-600" />
+            )}
+          </button>
+
+          <div className={`${isCollapsed ? 'px-2' : 'px-4'} py-6 space-y-1`}>
             {navigation.map((item) => {
               const isActive = location.pathname === item.href;
               return (
                 <Link
                   key={item.name}
                   to={item.href}
+                  title={isCollapsed ? item.name : undefined}
                   className={`
-                    flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors
+                    flex items-center ${isCollapsed ? 'justify-center px-2' : 'px-3'} py-2 rounded-md text-sm font-medium transition-colors
                     ${isActive
                       ? 'bg-primary-50 text-primary-700 border-r-2 border-primary-500'
                       : 'text-gray-700 hover:bg-gray-50 hover:text-clinical-dark'
                     }
                   `}
                 >
-                  <item.icon className="mr-3 h-5 w-5" />
-                  {item.name}
+                  <item.icon className={`${isCollapsed ? '' : 'mr-3'} h-5 w-5 flex-shrink-0`} />
+                  {!isCollapsed && <span className="truncate">{item.name}</span>}
                 </Link>
               );
             })}
