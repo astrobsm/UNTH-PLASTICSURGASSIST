@@ -8,7 +8,7 @@
  * - Clinical recommendations
  */
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   Camera,
   Upload,
@@ -78,6 +78,47 @@ const DEPTH_COLORS: Record<BurnDepth, { bg: string; text: string; label: string 
   superficial_partial: { bg: 'bg-red-400', text: 'text-white', label: '2° Superficial Partial' },
   deep_partial: { bg: 'bg-yellow-400', text: 'text-yellow-900', label: '2° Deep Partial' },
   full_thickness: { bg: 'bg-amber-800', text: 'text-white', label: '3° Full Thickness' }
+};
+
+// Camera Preview component that mirrors the hidden video element
+const CameraPreview: React.FC<{ videoRef: React.RefObject<HTMLVideoElement> }> = ({ videoRef }) => {
+  const previewCanvasRef = useRef<HTMLCanvasElement>(null);
+  const animationFrameRef = useRef<number>();
+
+  useEffect(() => {
+    const drawFrame = () => {
+      if (videoRef.current && previewCanvasRef.current) {
+        const video = videoRef.current;
+        const canvas = previewCanvasRef.current;
+        const ctx = canvas.getContext('2d');
+        
+        if (ctx && video.readyState >= 2) {
+          // Set canvas size to match video
+          if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+            canvas.width = video.videoWidth || 640;
+            canvas.height = video.videoHeight || 480;
+          }
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        }
+      }
+      animationFrameRef.current = requestAnimationFrame(drawFrame);
+    };
+
+    drawFrame();
+
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, [videoRef]);
+
+  return (
+    <canvas
+      ref={previewCanvasRef}
+      className="w-full min-h-[300px] rounded-lg bg-black object-contain"
+    />
+  );
 };
 
 const AIBurnExpert: React.FC<AIBurnExpertProps> = ({
@@ -383,6 +424,15 @@ const AIBurnExpert: React.FC<AIBurnExpertProps> = ({
             </div>
           )}
 
+          {/* Hidden video element - always rendered to ensure ref is available */}
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            style={{ display: 'none' }}
+          />
+
           {/* Tab Content */}
           {activeTab === 'capture' && (
             <div className="space-y-4">
@@ -391,24 +441,19 @@ const AIBurnExpert: React.FC<AIBurnExpertProps> = ({
                 <div className="space-y-4">
                   {/* Camera Loading State */}
                   {isCameraLoading && (
-                    <div className="flex flex-col items-center justify-center p-12 bg-gray-100 rounded-lg">
-                      <RefreshCw className="h-10 w-10 text-purple-600 animate-spin mb-3" />
-                      <p className="text-sm text-gray-600">Initializing camera...</p>
-                      <p className="text-xs text-gray-500">Please allow camera access when prompted</p>
+                    <div className="flex flex-col items-center justify-center p-12 bg-gray-900 rounded-lg">
+                      <RefreshCw className="h-10 w-10 text-purple-400 animate-spin mb-3" />
+                      <p className="text-sm text-gray-200">Initializing camera...</p>
+                      <p className="text-xs text-gray-400">Please allow camera access when prompted</p>
                     </div>
                   )}
                   
                   {/* Active Camera View */}
                   {isCameraActive && !isCameraLoading ? (
-                    <div className="relative">
-                      <video
-                        ref={videoRef}
-                        autoPlay
-                        playsInline
-                        muted
-                        className="w-full min-h-[300px] rounded-lg bg-black object-cover"
-                      />
-                      <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-4">
+                    <div className="relative rounded-lg overflow-hidden bg-black">
+                      {/* Live video display using canvas mirror */}
+                      <CameraPreview videoRef={videoRef} />
+                      <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-4 z-10">
                         <button
                           onClick={captureFromCamera}
                           className="p-4 bg-white rounded-full shadow-lg hover:bg-gray-100 border-4 border-purple-500"
@@ -424,7 +469,7 @@ const AIBurnExpert: React.FC<AIBurnExpertProps> = ({
                           <X className="h-6 w-6 text-red-600" />
                         </button>
                       </div>
-                      <div className="absolute top-4 left-4 px-3 py-1 bg-red-500 text-white text-xs font-medium rounded-full flex items-center gap-1">
+                      <div className="absolute top-4 left-4 px-3 py-1 bg-red-500 text-white text-xs font-medium rounded-full flex items-center gap-1 z-10">
                         <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
                         LIVE
                       </div>
