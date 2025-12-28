@@ -20,7 +20,9 @@ import {
   Stethoscope,
   BarChart3,
   Bell,
-  BellOff
+  BellOff,
+  Brain,
+  Calendar
 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { 
@@ -32,13 +34,15 @@ import {
   burnCareService,
   BURN_ALERT_THRESHOLDS
 } from '../../services/burnCareService';
+import BurnFollowUpAssessment from './BurnFollowUpAssessment';
+import { FollowUpAssessment } from '../../services/burnExpertAIService';
 
 interface BurnMonitoringDashboardProps {
   patient: BurnPatient;
   onBack: () => void;
 }
 
-type TabType = 'overview' | 'vitals' | 'fluids' | 'alerts' | 'wounds';
+type TabType = 'overview' | 'vitals' | 'fluids' | 'alerts' | 'wounds' | 'followup';
 
 const BurnMonitoringDashboard: React.FC<BurnMonitoringDashboardProps> = ({ patient, onBack }) => {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
@@ -46,6 +50,8 @@ const BurnMonitoringDashboard: React.FC<BurnMonitoringDashboardProps> = ({ patie
   const [showVitalsModal, setShowVitalsModal] = useState(false);
   const [showUrineModal, setShowUrineModal] = useState(false);
   const [showFluidModal, setShowFluidModal] = useState(false);
+  const [showFollowUpModal, setShowFollowUpModal] = useState(false);
+  const [followUpAssessments, setFollowUpAssessments] = useState<FollowUpAssessment[]>([]);
 
   // Calculate hours since burn
   const hoursSinceBurn = Math.floor(
@@ -239,6 +245,7 @@ const BurnMonitoringDashboard: React.FC<BurnMonitoringDashboardProps> = ({ patie
               { id: 'fluids', label: 'Fluids & UO', icon: Droplets },
               { id: 'alerts', label: 'Alerts', icon: Bell },
               { id: 'wounds', label: 'Wounds', icon: FileText },
+              { id: 'followup', label: 'AI Follow-Up', icon: Brain },
             ] as const).map((tab) => {
               const Icon = tab.icon;
               return (
@@ -780,6 +787,138 @@ const BurnMonitoringDashboard: React.FC<BurnMonitoringDashboardProps> = ({ patie
             </div>
           </div>
         )}
+
+        {/* Follow-Up Assessment Tab */}
+        {activeTab === 'followup' && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <Brain className="h-5 w-5 text-purple-600" />
+                AI-Powered Follow-Up Assessments
+              </h2>
+              <button
+                onClick={() => setShowFollowUpModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+              >
+                <Plus className="h-4 w-4" />
+                New Assessment
+              </button>
+            </div>
+
+            {/* Stats */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-white rounded-lg p-4 shadow-sm">
+                <div className="text-3xl font-bold text-purple-600">{followUpAssessments.length}</div>
+                <div className="text-sm text-gray-600">Total Assessments</div>
+              </div>
+              <div className="bg-white rounded-lg p-4 shadow-sm">
+                <div className="text-3xl font-bold text-blue-600">
+                  {Math.floor((Date.now() - new Date(patient.timeOfBurn).getTime()) / (1000 * 60 * 60 * 24))}
+                </div>
+                <div className="text-sm text-gray-600">Days Since Injury</div>
+              </div>
+              <div className="bg-white rounded-lg p-4 shadow-sm">
+                <div className="text-3xl font-bold text-green-600">
+                  {followUpAssessments.length > 0 
+                    ? `${Math.round(followUpAssessments[followUpAssessments.length - 1].percentEpithelialized)}%`
+                    : '0%'}
+                </div>
+                <div className="text-sm text-gray-600">Epithelialized</div>
+              </div>
+              <div className="bg-white rounded-lg p-4 shadow-sm">
+                <div className={`text-3xl font-bold ${
+                  followUpAssessments.length > 0 && followUpAssessments[followUpAssessments.length - 1].overallHealingStatus === 'improving'
+                    ? 'text-green-600' 
+                    : followUpAssessments.length > 0 && followUpAssessments[followUpAssessments.length - 1].overallHealingStatus === 'deteriorating'
+                    ? 'text-red-600'
+                    : 'text-yellow-600'
+                }`}>
+                  {followUpAssessments.length > 0 
+                    ? followUpAssessments[followUpAssessments.length - 1].overallHealingStatus.charAt(0).toUpperCase() + 
+                      followUpAssessments[followUpAssessments.length - 1].overallHealingStatus.slice(1)
+                    : 'Pending'}
+                </div>
+                <div className="text-sm text-gray-600">Healing Status</div>
+              </div>
+            </div>
+
+            {/* Assessment History */}
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <h3 className="font-medium text-gray-900 mb-4 flex items-center gap-2">
+                <Calendar className="h-4 w-4" />
+                Assessment History
+              </h3>
+              
+              {followUpAssessments.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <Brain className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                  <p>No follow-up assessments yet</p>
+                  <p className="text-sm mt-1">Click "New Assessment" to record wound healing progress</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {followUpAssessments.map((assessment, idx) => (
+                    <div key={assessment.id} className="border rounded-lg p-4 hover:bg-gray-50">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                            assessment.overallHealingStatus === 'improving' ? 'bg-green-100 text-green-600' :
+                            assessment.overallHealingStatus === 'healed' ? 'bg-blue-100 text-blue-600' :
+                            assessment.overallHealingStatus === 'deteriorating' ? 'bg-red-100 text-red-600' :
+                            'bg-yellow-100 text-yellow-600'
+                          }`}>
+                            {assessment.overallHealingStatus === 'improving' && <TrendingUp className="h-5 w-5" />}
+                            {assessment.overallHealingStatus === 'healed' && <CheckCircle className="h-5 w-5" />}
+                            {assessment.overallHealingStatus === 'deteriorating' && <TrendingDown className="h-5 w-5" />}
+                            {assessment.overallHealingStatus === 'static' && <Minus className="h-5 w-5" />}
+                            {assessment.overallHealingStatus === 'grafted' && <Stethoscope className="h-5 w-5" />}
+                          </div>
+                          <div>
+                            <p className="font-medium text-gray-900">
+                              Assessment #{assessment.assessmentNumber} - Day {assessment.daysSinceInjury}
+                            </p>
+                            <p className="text-sm text-gray-500">
+                              {new Date(assessment.assessmentDate).toLocaleDateString()} by {assessment.assessedBy}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-medium text-gray-900">
+                            {assessment.percentEpithelialized}% Epithelialized
+                          </p>
+                          {assessment.tbsaChange !== 0 && (
+                            <p className={`text-xs ${assessment.tbsaChange < 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              {assessment.tbsaChange < 0 ? '↓' : '↑'} {Math.abs(assessment.tbsaChange).toFixed(1)}% TBSA
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* Recommendations preview */}
+                      {assessment.recommendations.filter(r => r.priority === 'urgent' || r.priority === 'high').length > 0 && (
+                        <div className="mt-3 pt-3 border-t">
+                          <p className="text-xs text-gray-500 mb-1">Priority Recommendations:</p>
+                          <div className="flex flex-wrap gap-2">
+                            {assessment.recommendations
+                              .filter(r => r.priority === 'urgent' || r.priority === 'high')
+                              .slice(0, 2)
+                              .map((rec, i) => (
+                                <span key={i} className={`text-xs px-2 py-1 rounded ${
+                                  rec.priority === 'urgent' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'
+                                }`}>
+                                  {rec.recommendation.substring(0, 40)}...
+                                </span>
+                              ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Vitals Modal */}
@@ -805,6 +944,26 @@ const BurnMonitoringDashboard: React.FC<BurnMonitoringDashboardProps> = ({ patie
           onSubmit={addFluidInput}
           onClose={() => setShowFluidModal(false)}
         />
+      )}
+
+      {/* Follow-Up Assessment Modal */}
+      {showFollowUpModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <BurnFollowUpAssessment
+            burnPatientId={patient.id}
+            patientName={patient.patientId}
+            injuryDate={patient.timeOfBurn}
+            initialTBSA={patient.tbsaAssessment.totalTBSA}
+            initialRegions={patient.tbsaAssessment.regions}
+            previousAssessments={followUpAssessments}
+            currentUser="Current User"
+            onSaveAssessment={(assessment) => {
+              setFollowUpAssessments(prev => [...prev, assessment]);
+              setShowFollowUpModal(false);
+            }}
+            onClose={() => setShowFollowUpModal(false)}
+          />
+        </div>
       )}
     </div>
   );
