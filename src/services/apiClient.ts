@@ -99,6 +99,14 @@ class ApiClient {
   }
 
   async request<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
+    // Check if this is a protected endpoint that requires authentication
+    const isProtectedEndpoint = !endpoint.includes('/auth') && !endpoint.includes('/health');
+    
+    // If it's a protected endpoint and we don't have a token, throw immediately
+    if (isProtectedEndpoint && !this.token) {
+      throw new Error('No token provided');
+    }
+
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
       'Accept': 'application/json',

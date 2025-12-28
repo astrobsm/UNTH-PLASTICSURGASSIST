@@ -765,42 +765,54 @@ Please review patient file for complete clinical details or retry AI summary gen
         synced: true
       };
 
-      // Save to backend API instead of IndexedDB
-      const savedPatient = await apiClient.createPatient(patientRecord);
-      
-      if (!savedPatient || !savedPatient.id) {
-        throw new Error('Failed to save patient to server');
+      // Prepare full patient record for IndexedDB
+      const fullPatientRecord = {
+        ...patientRecord,
+        consultant_in_charge: registrationData.consultant_in_charge,
+        resident_in_charge: registrationData.resident_in_charge,
+        ward_id: registrationData.ward_id,
+        bed_number: registrationData.bed_number,
+        patient_type: registrationData.patient_type,
+        admission_type: registrationData.admission_type,
+        referring_hospital: registrationData.referring_hospital,
+        registration_date: registrationData.registration_date || new Date(),
+        admission_date: registrationData.admission_date,
+        created_at: new Date(),
+        updated_at: new Date(),
+        synced: false,
+        deleted: false
+      };
+
+      // Try to save to backend API if online
+      let savedPatient;
+      try {
+        savedPatient = await apiClient.createPatient(patientRecord);
+        if (savedPatient && savedPatient.id) {
+          // Update with server ID and mark as synced
+          fullPatientRecord.id = savedPatient.id;
+          fullPatientRecord.synced = true;
+        }
+      } catch (apiError) {
+        // If offline or no auth, save locally and queue for sync
+        console.warn('Unable to save to server, saving locally:', apiError);
+        fullPatientRecord.synced = false;
       }
       
-      // Also save to IndexedDB for offline support (sync will happen automatically)
+      // Save to IndexedDB (either synced or pending sync)
       try {
-        await db.patients.put({
-          ...patientRecord,
-          consultant_in_charge: registrationData.consultant_in_charge,
-          resident_in_charge: registrationData.resident_in_charge,
-          ward_id: registrationData.ward_id,
-          bed_number: registrationData.bed_number,
-          patient_type: registrationData.patient_type,
-          admission_type: registrationData.admission_type,
-          referring_hospital: registrationData.referring_hospital,
-          registration_date: registrationData.registration_date || new Date(),
-          admission_date: registrationData.admission_date,
-          created_at: new Date(),
-          updated_at: new Date(),
-          synced: true,
-          deleted: false
-        });
+        await db.patients.put(fullPatientRecord);
       } catch (dbError) {
-        console.warn('Failed to save to IndexedDB (offline cache):', dbError);
-        // Continue - server save succeeded
+        console.error('Failed to save to IndexedDB:', dbError);
+        throw new Error('Patient registration failed: Unable to save patient data');
       }
       
       console.log('Patient registered successfully:', { 
-        id: savedPatient.id, 
-        hospital_number: patientRecord.hospital_number 
+        id: fullPatientRecord.id, 
+        hospital_number: patientRecord.hospital_number,
+        synced: fullPatientRecord.synced
       });
       
-      return savedPatient.id;
+      return fullPatientRecord.id;
     } catch (error) {
       console.error('Error saving patient registration:', error);
       throw new Error('Patient registration failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
