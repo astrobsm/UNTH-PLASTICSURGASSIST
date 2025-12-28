@@ -11,7 +11,12 @@ import {
   Save,
   Play,
   Square,
-  CheckSquare
+  CheckSquare,
+  Download,
+  Upload,
+  Printer,
+  FileDown,
+  ClipboardList
 } from 'lucide-react';
 import { db } from '../db/database';
 import { patientService } from '../services/patientService';
@@ -23,6 +28,8 @@ import {
   TransfusionComplication,
   PreviousTransfusion
 } from '../services/bloodTransfusionService';
+import { transfusionPdfService, TransfusionOrderData, TransfusionMonitoringEntry } from '../services/transfusionPdfService';
+import TransfusionChartUpload from './TransfusionChartUpload';
 import { format } from 'date-fns';
 
 // Helper component to display vitals
@@ -56,7 +63,7 @@ export default function BloodTransfusionForm({
   const [saving, setSaving] = useState(false);
   const [patients, setPatients] = useState<any[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<'details' | 'bags' | 'vitals' | 'complications'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'bags' | 'vitals' | 'complications' | 'documents'>('details');
 
   // Form data
   const [formData, setFormData] = useState<Partial<BloodTransfusion>>({
@@ -130,7 +137,8 @@ export default function BloodTransfusionForm({
     { id: 'details', label: 'Patient & Indication', icon: FileText },
     { id: 'bags', label: 'Blood Bags', icon: Droplet },
     { id: 'vitals', label: 'Vitals Monitoring', icon: Activity },
-    { id: 'complications', label: 'Complications', icon: AlertCircle }
+    { id: 'complications', label: 'Complications', icon: AlertCircle },
+    { id: 'documents', label: 'Documents & Charts', icon: ClipboardList }
   ];
 
   useEffect(() => {
@@ -443,6 +451,143 @@ export default function BloodTransfusionForm({
       console.error('Failed to stop transfusion:', error);
       alert('Failed to stop transfusion');
     }
+  };
+
+  // PDF Generation Functions
+  const generateTransfusionOrderPDF = () => {
+    if (!formData.patient_id || !formData.indication) {
+      alert('Please fill in patient and indication details first');
+      return;
+    }
+
+    const orderData: TransfusionOrderData = {
+      transfusion: formData as BloodTransfusion,
+      patientDetails: {
+        name: selectedPatient ? `${selectedPatient.first_name} ${selectedPatient.last_name}` : formData.patient_name || 'Unknown',
+        age: selectedPatient?.date_of_birth ? 
+          Math.floor((new Date().getTime() - new Date(selectedPatient.date_of_birth).getTime()) / (365.25 * 24 * 60 * 60 * 1000)) : 
+          undefined,
+        gender: selectedPatient?.gender,
+        ward: selectedPatient?.ward_id || 'N/A',
+        bed_number: selectedPatient?.bed_number,
+        diagnosis: formData.clinical_status
+      },
+      patientBloodDetails: {
+        blood_group: selectedPatient?.blood_group || formData.blood_bags?.[0]?.blood_group || 'Unknown',
+        genotype: selectedPatient?.genotype,
+        rh_factor: selectedPatient?.blood_group?.includes('+') ? 'Positive' : selectedPatient?.blood_group?.includes('-') ? 'Negative' : undefined,
+        antibody_screen: 'Negative',
+        crossmatch_result: formData.crossmatch_checked ? 'Compatible' : 'Pending',
+        previous_transfusion_history: formData.previous_transfusions?.length > 0 
+          ? `${formData.previous_transfusions.length} previous transfusion(s). ${formData.history_of_reactions ? 'History of reactions.' : 'No reactions reported.'}`
+          : 'None'
+      },
+      productDetails: {
+        component_type: formData.blood_bags?.[0]?.component_type || 'packed_rbc',
+        volume_ml: formData.blood_bags?.reduce((sum, bag) => sum + bag.volume_ml, 0) || 350,
+        special_requirements: []
+      },
+      transfusionRate: {
+        initial_rate_ml_per_hour: 50, // Slow initial rate for first 15 min
+        maintenance_rate_ml_per_hour: formData.rate_ml_per_hour || 150,
+        max_duration_hours: 4
+      },
+      productSource: {
+        source: formData.blood_bags?.[0]?.source || 'blood_bank',
+        source_name: formData.blood_bags?.[0]?.source_details
+      },
+      screeningTests: {
+        hiv: 'negative',
+        hbsag: 'negative',
+        hcv: 'negative',
+        vdrl: 'negative',
+        malaria: 'negative'
+      },
+      reactionProtocol: [
+        '1. STOP the transfusion immediately',
+        '2. Keep IV line open with normal saline',
+        '3. Call the doctor immediately',
+        '4. Check and record vital signs (BP, pulse, temperature, SpO2)',
+        '5. Recheck patient identity and blood bag details',
+        '6. Send blood bag, tubing, and fresh patient samples to blood bank',
+        '7. Collect blood and urine samples for investigation',
+        '8. Document all observations and actions taken',
+        '9. Administer emergency medications as ordered',
+        '10. Complete transfusion reaction report form'
+      ],
+      orderingPhysician: formData.administered_by || 'Current User',
+      orderDate: new Date()
+    };
+
+    transfusionPdfService.generateTransfusionOrderPDF(orderData);
+  };
+
+  const generateMonitoringChartPDF = (blank: boolean = false) => {
+    if (blank) {
+      transfusionPdfService.generateBlankMonitoringChart();
+      return;
+    }
+
+    const patientName = selectedPatient 
+      ? `${selectedPatient.first_name} ${selectedPatient.last_name}` 
+      : formData.patient_name || 'Unknown';
+
+    // Convert recorded vitals to monitoring entries
+    const entries: TransfusionMonitoringEntry[] = [];
+    
+    if (formData.pre_transfusion_vitals) {
+      entries.push({
+        time: 'Pre-transfusion',
+        volume_infused_ml: 0,
+        temperature: formData.pre_transfusion_vitals.temperature,
+        pulse: formData.pre_transfusion_vitals.pulse,
+        bp_systolic: formData.pre_transfusion_vitals.bp_systolic,
+        bp_diastolic: formData.pre_transfusion_vitals.bp_diastolic,
+        respiratory_rate: formData.pre_transfusion_vitals.respiratory_rate,
+        spo2: formData.pre_transfusion_vitals.spo2,
+        observations: '',
+        initials: formData.pre_transfusion_vitals.recorded_by?.substring(0, 3) || ''
+      });
+    }
+
+    if (formData.during_transfusion_vitals) {
+      formData.during_transfusion_vitals.forEach((vitals, idx) => {
+        entries.push({
+          time: `During (${idx + 1})`,
+          volume_infused_ml: 0,
+          temperature: vitals.temperature,
+          pulse: vitals.pulse,
+          bp_systolic: vitals.bp_systolic,
+          bp_diastolic: vitals.bp_diastolic,
+          respiratory_rate: vitals.respiratory_rate,
+          spo2: vitals.spo2,
+          observations: '',
+          initials: vitals.recorded_by?.substring(0, 3) || ''
+        });
+      });
+    }
+
+    if (formData.post_transfusion_vitals) {
+      entries.push({
+        time: 'Post-transfusion',
+        volume_infused_ml: formData.blood_bags?.reduce((sum, bag) => sum + bag.volume_ml, 0) || 0,
+        temperature: formData.post_transfusion_vitals.temperature,
+        pulse: formData.post_transfusion_vitals.pulse,
+        bp_systolic: formData.post_transfusion_vitals.bp_systolic,
+        bp_diastolic: formData.post_transfusion_vitals.bp_diastolic,
+        respiratory_rate: formData.post_transfusion_vitals.respiratory_rate,
+        spo2: formData.post_transfusion_vitals.spo2,
+        observations: formData.adverse_events ? 'Adverse event recorded' : 'Completed without complications',
+        initials: formData.post_transfusion_vitals.recorded_by?.substring(0, 3) || ''
+      });
+    }
+
+    transfusionPdfService.generateMonitoringChartPDF(
+      formData as BloodTransfusion,
+      patientName,
+      entries,
+      entries.length === 0
+    );
   };
 
   if (loading) {
@@ -1240,6 +1385,198 @@ export default function BloodTransfusionForm({
                   </button>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* DOCUMENTS TAB */}
+          {activeTab === 'documents' && (
+            <div className="space-y-6">
+              {/* PDF Generation Section */}
+              <div className="bg-gradient-to-r from-red-50 to-orange-50 border border-red-200 rounded-lg p-6">
+                <h3 className="text-lg font-bold text-red-900 mb-4 flex items-center">
+                  <FileDown className="h-5 w-5 mr-2" />
+                  Generate Transfusion Documents
+                </h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {/* Transfusion Order PDF */}
+                  <div className="bg-white rounded-lg border border-red-200 p-4 shadow-sm">
+                    <div className="flex items-center mb-3">
+                      <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center mr-3">
+                        <Printer className="h-5 w-5 text-red-600" />
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-gray-900">Transfusion Order</h4>
+                        <p className="text-xs text-gray-500">Official order form</p>
+                      </div>
+                    </div>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Complete transfusion order with patient details, blood product info, screening tests, and reaction protocol.
+                    </p>
+                    <button
+                      onClick={generateTransfusionOrderPDF}
+                      className="w-full bg-red-600 text-white py-2 px-4 rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center space-x-2"
+                    >
+                      <Download className="h-4 w-4" />
+                      <span>Download Order PDF</span>
+                    </button>
+                  </div>
+
+                  {/* Monitoring Chart PDF */}
+                  <div className="bg-white rounded-lg border border-blue-200 p-4 shadow-sm">
+                    <div className="flex items-center mb-3">
+                      <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+                        <Activity className="h-5 w-5 text-blue-600" />
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-gray-900">Monitoring Chart</h4>
+                        <p className="text-xs text-gray-500">With recorded vitals</p>
+                      </div>
+                    </div>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Transfusion monitoring chart populated with any recorded vital signs and observations.
+                    </p>
+                    <button
+                      onClick={() => generateMonitoringChartPDF(false)}
+                      className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2"
+                    >
+                      <Download className="h-4 w-4" />
+                      <span>Download Chart PDF</span>
+                    </button>
+                  </div>
+
+                  {/* Blank Monitoring Chart */}
+                  <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
+                    <div className="flex items-center mb-3">
+                      <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center mr-3">
+                        <ClipboardList className="h-5 w-5 text-gray-600" />
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-gray-900">Blank Chart Template</h4>
+                        <p className="text-xs text-gray-500">For manual documentation</p>
+                      </div>
+                    </div>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Empty monitoring chart template for bedside documentation during transfusion.
+                    </p>
+                    <button
+                      onClick={() => generateMonitoringChartPDF(true)}
+                      className="w-full bg-gray-600 text-white py-2 px-4 rounded-lg hover:bg-gray-700 transition-colors flex items-center justify-center space-x-2"
+                    >
+                      <Download className="h-4 w-4" />
+                      <span>Download Blank Chart</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Document Details */}
+                <div className="mt-4 p-4 bg-white rounded-lg border border-gray-200">
+                  <h4 className="font-semibold text-gray-900 mb-2">Transfusion Order Includes:</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm text-gray-600">
+                    <div className="flex items-center">
+                      <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
+                      Patient Information
+                    </div>
+                    <div className="flex items-center">
+                      <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
+                      Blood Group Details
+                    </div>
+                    <div className="flex items-center">
+                      <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
+                      Indication & Baseline Hb
+                    </div>
+                    <div className="flex items-center">
+                      <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
+                      Product Details
+                    </div>
+                    <div className="flex items-center">
+                      <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
+                      Transfusion Rate
+                    </div>
+                    <div className="flex items-center">
+                      <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
+                      Screening Tests
+                    </div>
+                    <div className="flex items-center">
+                      <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
+                      Reaction Protocol
+                    </div>
+                    <div className="flex items-center">
+                      <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
+                      Pre-transfusion Checklist
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Upload Completed Charts Section */}
+              <div className="bg-white border border-gray-200 rounded-lg p-6">
+                <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
+                  <Upload className="h-5 w-5 mr-2 text-red-600" />
+                  Upload Completed Monitoring Charts
+                </h3>
+                
+                <p className="text-sm text-gray-600 mb-4">
+                  Upload scanned or photographed transfusion monitoring charts. You can also use OCR to extract text from images for efficient storage.
+                </p>
+
+                <TransfusionChartUpload
+                  transfusionId={transfusionId || 'new'}
+                  hospitalNumber={formData.hospital_number || ''}
+                  onChartUploaded={(chart) => {
+                    console.log('Chart uploaded:', chart);
+                    // In production, save this to the database
+                  }}
+                  existingCharts={[]}
+                />
+              </div>
+
+              {/* Transfusion Summary */}
+              {transfusionId && formData.status === 'completed' && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-6">
+                  <h3 className="text-lg font-bold text-green-900 mb-4 flex items-center">
+                    <CheckCircle className="h-5 w-5 mr-2" />
+                    Transfusion Summary
+                  </h3>
+                  
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-white rounded-lg p-3 border border-green-200">
+                      <p className="text-sm text-gray-500">Date</p>
+                      <p className="text-lg font-semibold text-gray-900">
+                        {format(new Date(formData.transfusion_date!), 'dd MMM yyyy')}
+                      </p>
+                    </div>
+                    <div className="bg-white rounded-lg p-3 border border-green-200">
+                      <p className="text-sm text-gray-500">Duration</p>
+                      <p className="text-lg font-semibold text-gray-900">
+                        {formData.duration_minutes ? `${Math.floor(formData.duration_minutes / 60)}h ${formData.duration_minutes % 60}m` : 'N/A'}
+                      </p>
+                    </div>
+                    <div className="bg-white rounded-lg p-3 border border-green-200">
+                      <p className="text-sm text-gray-500">Units Transfused</p>
+                      <p className="text-lg font-semibold text-gray-900">{formData.total_units}</p>
+                    </div>
+                    <div className="bg-white rounded-lg p-3 border border-green-200">
+                      <p className="text-sm text-gray-500">Hb Rise</p>
+                      <p className="text-lg font-semibold text-gray-900">
+                        {formData.baseline_hb} → {formData.post_transfusion_hb || '?'} g/dL
+                        {formData.hb_increment && (
+                          <span className="text-green-600 text-sm ml-1">(+{formData.hb_increment.toFixed(1)})</span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+
+                  {formData.adverse_events && (
+                    <div className="mt-4 p-3 bg-red-100 rounded-lg border border-red-200">
+                      <p className="text-sm font-medium text-red-800 flex items-center">
+                        <AlertCircle className="h-4 w-4 mr-2" />
+                        Adverse events were recorded during this transfusion. See Complications tab for details.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
