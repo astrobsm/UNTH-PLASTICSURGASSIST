@@ -97,6 +97,7 @@ const AIBurnExpert: React.FC<AIBurnExpertProps> = ({
   const [showWarnings, setShowWarnings] = useState(true);
   const [activeTab, setActiveTab] = useState<'capture' | 'analysis' | 'recommendations'>('capture');
   const [error, setError] = useState<string | null>(null);
+  const [isCameraLoading, setIsCameraLoading] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -106,17 +107,48 @@ const AIBurnExpert: React.FC<AIBurnExpertProps> = ({
   // Start camera capture
   const startCamera = useCallback(async () => {
     try {
+      setError(null);
+      setIsCameraLoading(true);
+      
+      // Check if mediaDevices is available
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setError('Camera not supported on this device or browser. Please use file upload.');
+        setIsCameraLoading(false);
+        return;
+      }
+      
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
       });
       
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        // Wait for metadata to load then play
+        videoRef.current.onloadedmetadata = () => {
+          videoRef.current?.play().catch(err => {
+            console.error('Video play error:', err);
+          });
+          setIsCameraLoading(false);
+        };
         setIsCameraActive(true);
+      } else {
+        // If video ref not available, stop the stream
+        stream.getTracks().forEach(track => track.stop());
+        setError('Camera initialization failed. Please try again.');
+        setIsCameraLoading(false);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Camera access error:', err);
-      setError('Unable to access camera. Please use file upload instead.');
+      setIsCameraLoading(false);
+      if (err.name === 'NotAllowedError') {
+        setError('Camera permission denied. Please allow camera access and try again.');
+      } else if (err.name === 'NotFoundError') {
+        setError('No camera found. Please use file upload instead.');
+      } else if (err.name === 'NotReadableError') {
+        setError('Camera is in use by another application. Please close it and try again.');
+      } else {
+        setError('Unable to access camera. Please use file upload instead.');
+      }
     }
   }, []);
 
@@ -357,34 +389,52 @@ const AIBurnExpert: React.FC<AIBurnExpertProps> = ({
               {/* Camera / Upload Area */}
               {!capturedImage ? (
                 <div className="space-y-4">
-                  {isCameraActive ? (
+                  {/* Camera Loading State */}
+                  {isCameraLoading && (
+                    <div className="flex flex-col items-center justify-center p-12 bg-gray-100 rounded-lg">
+                      <RefreshCw className="h-10 w-10 text-purple-600 animate-spin mb-3" />
+                      <p className="text-sm text-gray-600">Initializing camera...</p>
+                      <p className="text-xs text-gray-500">Please allow camera access when prompted</p>
+                    </div>
+                  )}
+                  
+                  {/* Active Camera View */}
+                  {isCameraActive && !isCameraLoading ? (
                     <div className="relative">
                       <video
                         ref={videoRef}
                         autoPlay
                         playsInline
-                        className="w-full rounded-lg bg-black"
+                        muted
+                        className="w-full min-h-[300px] rounded-lg bg-black object-cover"
                       />
                       <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-4">
                         <button
                           onClick={captureFromCamera}
-                          className="p-4 bg-white rounded-full shadow-lg hover:bg-gray-100"
+                          className="p-4 bg-white rounded-full shadow-lg hover:bg-gray-100 border-4 border-purple-500"
+                          title="Capture Photo"
                         >
                           <Camera className="h-6 w-6 text-purple-600" />
                         </button>
                         <button
                           onClick={stopCamera}
                           className="p-4 bg-white rounded-full shadow-lg hover:bg-gray-100"
+                          title="Cancel"
                         >
                           <X className="h-6 w-6 text-red-600" />
                         </button>
                       </div>
+                      <div className="absolute top-4 left-4 px-3 py-1 bg-red-500 text-white text-xs font-medium rounded-full flex items-center gap-1">
+                        <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
+                        LIVE
+                      </div>
                     </div>
-                  ) : (
+                  ) : !isCameraLoading && (
                     <div className="grid grid-cols-2 gap-4">
                       <button
                         onClick={startCamera}
-                        className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-purple-300 rounded-lg hover:bg-purple-100 transition-colors"
+                        disabled={isCameraLoading}
+                        className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-purple-300 rounded-lg hover:bg-purple-100 transition-colors disabled:opacity-50"
                       >
                         <Camera className="h-10 w-10 text-purple-500 mb-2" />
                         <span className="text-sm font-medium text-purple-700">Use Camera</span>
