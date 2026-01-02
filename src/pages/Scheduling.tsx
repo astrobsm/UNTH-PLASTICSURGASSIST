@@ -95,39 +95,40 @@ export default function Scheduling() {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Scheduling Management</h1>
-          <div className="flex items-center space-x-4">
+      <div className="bg-white rounded-lg shadow-md p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4 sm:mb-6">
+          <h1 className="page-title">Scheduling Management</h1>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4">
             <input
               type="date"
               value={format(selectedDate, 'yyyy-MM-dd')}
               onChange={(e) => setSelectedDate(parseISO(e.target.value))}
-              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+              className="form-input"
               aria-label="Select schedule date"
             />
             <button
               onClick={generateOperationList}
-              className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+              className="btn-primary flex items-center justify-center gap-2 whitespace-nowrap"
             >
               <Download className="h-4 w-4" />
-              <span>Operation List PDF</span>
+              <span className="hidden sm:inline">Operation List PDF</span>
+              <span className="sm:hidden">PDF</span>
             </button>
           </div>
         </div>
 
-        {/* Date Navigation */}
-        <div className="flex items-center space-x-2 mb-6 overflow-x-auto">
+        {/* Date Navigation - Scrollable on mobile */}
+        <div className="flex items-center gap-2 mb-4 sm:mb-6 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-hide">
           {getWeekDates().map((date) => (
             <button
               key={date.toISOString()}
               onClick={() => setSelectedDate(date)}
-              className={`flex-shrink-0 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              className={`flex-shrink-0 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-colors min-w-[50px] ${
                 format(date, 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd')
                   ? 'bg-green-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200 active:bg-gray-300'
               }`}
             >
               <div className="text-xs">{format(date, 'EEE')}</div>
@@ -136,8 +137,8 @@ export default function Scheduling() {
           ))}
         </div>
 
-        {/* Tab Navigation */}
-        <div className="flex space-x-4">
+        {/* Tab Navigation - Scrollable on mobile */}
+        <div className="flex gap-2 sm:gap-4 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-hide">
           <TabButton tab="ward_rounds" label="Ward Rounds" icon={Users} />
           <TabButton tab="clinics" label="Clinics" icon={MapPin} />
           <TabButton tab="surgery" label="Surgery" icon={Clock} />

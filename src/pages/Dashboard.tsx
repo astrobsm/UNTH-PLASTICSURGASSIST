@@ -147,75 +147,79 @@ export default function Dashboard() {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-clinical-dark">
+      <div className="page-header">
+        <h1 className="page-title">
           Welcome back, {user?.name?.split(' ')[1] || user?.name}
         </h1>
-        <p className="text-clinical mt-1">
+        <p className="page-subtitle">
           Here's what's happening with your patients today.
         </p>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {/* Stats Grid - Mobile: 2 cols, Desktop: 4 cols */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
         {statsDisplay.map((stat) => (
-          <div key={stat.name} className="card p-6">
+          <div key={stat.name} className="stat-card">
             <div className="flex items-center">
-              <div className={`p-3 rounded-lg ${stat.bg}`}>
-                <stat.icon className={`h-6 w-6 ${stat.color}`} />
+              <div className={`p-2 sm:p-3 rounded-lg ${stat.bg}`}>
+                <stat.icon className={`h-5 w-5 sm:h-6 sm:w-6 ${stat.color}`} />
               </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">{stat.name}</p>
-                <p className="text-2xl font-bold text-clinical-dark">{stat.value}</p>
+              <div className="ml-3 sm:ml-4 min-w-0">
+                <p className="stat-label truncate">{stat.name}</p>
+                <p className="stat-value">{stat.value}</p>
               </div>
             </div>
           </div>
         ))}
       </div>
 
-      {/* Recent Activities & Quick Actions */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Recent Activities & Quick Actions - Stack on mobile */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         {/* Recent Activities */}
-        <div className="card p-6">
-          <h3 className="text-lg font-semibold text-clinical-dark mb-4">
+        <div className="card p-4 sm:p-6">
+          <h3 className="text-base sm:text-lg font-semibold text-clinical-dark mb-3 sm:mb-4">
             Recent Activities
           </h3>
-          <div className="space-y-4">
-            {recentActivities.map((activity) => (
-              <div key={activity.id} className="flex items-start space-x-3">
-                <div className="w-2 h-2 bg-primary-500 rounded-full mt-2"></div>
-                <div className="flex-1">
-                  <p className="text-sm text-clinical-dark">{activity.title}</p>
-                  <p className="text-xs text-gray-500">{activity.time}</p>
+          <div className="space-y-3 sm:space-y-4">
+            {recentActivities.length > 0 ? (
+              recentActivities.map((activity) => (
+                <div key={activity.id} className="flex items-start space-x-3">
+                  <div className="w-2 h-2 bg-primary-500 rounded-full mt-2 flex-shrink-0"></div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-clinical-dark line-clamp-2">{activity.title}</p>
+                    <p className="text-xs text-gray-500">{activity.time}</p>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            ) : (
+              <p className="text-sm text-gray-500">No recent activities</p>
+            )}
           </div>
         </div>
 
         {/* Quick Actions */}
-        <div className="card p-6">
-          <h3 className="text-lg font-semibold text-clinical-dark mb-4">
+        <div className="card p-4 sm:p-6">
+          <h3 className="text-base sm:text-lg font-semibold text-clinical-dark mb-3 sm:mb-4">
             Quick Actions
           </h3>
-          <div className="space-y-3">
-            <Link to="/patients" className="w-full btn-primary justify-start">
-              <Users className="h-4 w-4 mr-2" />
-              Add New Patient
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-2 sm:gap-3">
+            <Link to="/patients" className="btn-primary w-full justify-start">
+              <Users className="h-4 w-4 mr-2 flex-shrink-0" />
+              <span className="truncate">Add New Patient</span>
             </Link>
-            <Link to="/treatment-planning" className="w-full btn-secondary justify-start">
-              <ClipboardCheck className="h-4 w-4 mr-2" />
-              Create Treatment Plan
+            <Link to="/treatment-planning" className="btn-secondary w-full justify-start">
+              <ClipboardCheck className="h-4 w-4 mr-2 flex-shrink-0" />
+              <span className="truncate">Create Treatment Plan</span>
             </Link>
-            <Link to="/scheduling" className="w-full btn-secondary justify-start">
-              <Calendar className="h-4 w-4 mr-2" />
-              Schedule Surgery
+            <Link to="/scheduling" className="btn-secondary w-full justify-start">
+              <Calendar className="h-4 w-4 mr-2 flex-shrink-0" />
+              <span className="truncate">Schedule Surgery</span>
             </Link>
-            <Link to="/labs" className="w-full btn-secondary justify-start">
-              <FlaskConical className="h-4 w-4 mr-2" />
-              Order Lab Tests
+            <Link to="/labs" className="btn-secondary w-full justify-start">
+              <FlaskConical className="h-4 w-4 mr-2 flex-shrink-0" />
+              <span className="truncate">Order Lab Tests</span>
             </Link>
           </div>
         </div>

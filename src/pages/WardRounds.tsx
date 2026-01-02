@@ -154,19 +154,19 @@ export default function WardRounds() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <Activity className="w-8 h-8 text-green-600" />
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center gap-2">
+            <Activity className="w-6 h-6 sm:w-8 sm:h-8 text-green-600 flex-shrink-0" />
             Ward Rounds
           </h1>
-          <p className="text-gray-600 mt-1">Daily patient reviews and clinical updates</p>
+          <p className="text-sm sm:text-base text-gray-600 mt-1">Daily patient reviews and clinical updates</p>
         </div>
         <button
           onClick={handleCreateRound}
-          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+          className="flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 w-full sm:w-auto"
         >
           <Plus className="w-5 h-5" />
           New Ward Round
@@ -174,76 +174,76 @@ export default function WardRounds() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <div className="bg-white rounded-lg shadow p-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 sm:gap-4">
+        <div className="bg-white rounded-lg shadow p-3 sm:p-4">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Total Rounds</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+            <div className="min-w-0">
+              <p className="text-xs sm:text-sm text-gray-600 truncate">Total Rounds</p>
+              <p className="text-xl sm:text-2xl font-bold text-gray-900">{stats.total}</p>
             </div>
-            <Activity className="w-8 h-8 text-blue-600" />
+            <Activity className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600 flex-shrink-0" />
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-4">
+        <div className="bg-white rounded-lg shadow p-3 sm:p-4">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Today</p>
-              <p className="text-2xl font-bold text-green-600">{stats.today}</p>
+            <div className="min-w-0">
+              <p className="text-xs sm:text-sm text-gray-600 truncate">Today</p>
+              <p className="text-xl sm:text-2xl font-bold text-green-600">{stats.today}</p>
             </div>
-            <Clock className="w-8 h-8 text-green-600" />
+            <Clock className="w-6 h-6 sm:w-8 sm:h-8 text-green-600 flex-shrink-0" />
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-4">
+        <div className="bg-white rounded-lg shadow p-3 sm:p-4">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Stable</p>
-              <p className="text-2xl font-bold text-green-600">{stats.stable}</p>
+            <div className="min-w-0">
+              <p className="text-xs sm:text-sm text-gray-600 truncate">Stable</p>
+              <p className="text-xl sm:text-2xl font-bold text-green-600">{stats.stable}</p>
             </div>
-            <TrendingUp className="w-8 h-8 text-green-600" />
+            <TrendingUp className="w-6 h-6 sm:w-8 sm:h-8 text-green-600 flex-shrink-0" />
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-4">
+        <div className="bg-white rounded-lg shadow p-3 sm:p-4">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Deteriorating</p>
-              <p className="text-2xl font-bold text-yellow-600">{stats.deteriorating}</p>
+            <div className="min-w-0">
+              <p className="text-xs sm:text-sm text-gray-600 truncate">Deteriorating</p>
+              <p className="text-xl sm:text-2xl font-bold text-yellow-600">{stats.deteriorating}</p>
             </div>
-            <AlertCircle className="w-8 h-8 text-yellow-600" />
+            <AlertCircle className="w-6 h-6 sm:w-8 sm:h-8 text-yellow-600 flex-shrink-0" />
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-4">
+        <div className="bg-white rounded-lg shadow p-3 sm:p-4 col-span-2 sm:col-span-1">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Critical</p>
-              <p className="text-2xl font-bold text-red-600">{stats.critical}</p>
+            <div className="min-w-0">
+              <p className="text-xs sm:text-sm text-gray-600 truncate">Critical</p>
+              <p className="text-xl sm:text-2xl font-bold text-red-600">{stats.critical}</p>
             </div>
-            <AlertCircle className="w-8 h-8 text-red-600" />
+            <AlertCircle className="w-6 h-6 sm:w-8 sm:h-8 text-red-600 flex-shrink-0" />
           </div>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-lg shadow p-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="bg-white rounded-lg shadow p-3 sm:p-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type="text"
-              placeholder="Search patients, hospital number, complaints..."
+              placeholder="Search patients..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              className="form-input pl-10"
             />
           </div>
 
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value as any)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+            className="form-select"
           >
             <option value="all">All Status</option>
             <option value="stable">Stable</option>
@@ -254,7 +254,7 @@ export default function WardRounds() {
           <select
             value={filterDate}
             onChange={(e) => setFilterDate(e.target.value as any)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+            className="form-select"
           >
             <option value="today">Today</option>
             <option value="week">This Week</option>
@@ -267,11 +267,11 @@ export default function WardRounds() {
       {/* Ward Rounds List */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         {loading ? (
-          <div className="p-8 text-center text-gray-500">Loading ward rounds...</div>
+          <div className="p-6 sm:p-8 text-center text-gray-500">Loading ward rounds...</div>
         ) : filteredRounds.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">
-            <Activity className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-            <p className="text-lg font-medium">No ward rounds found</p>
+          <div className="p-6 sm:p-8 text-center text-gray-500">
+            <Activity className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-4 text-gray-400" />
+            <p className="text-base sm:text-lg font-medium">No ward rounds found</p>
             <p className="text-sm mt-2">Create your first ward round entry to get started</p>
           </div>
         ) : (
@@ -281,46 +281,46 @@ export default function WardRounds() {
               return (
                 <div
                   key={round.id}
-                  className="p-4 hover:bg-gray-50 cursor-pointer"
+                  className="p-3 sm:p-4 hover:bg-gray-50 cursor-pointer active:bg-gray-100"
                   onClick={() => handleEditRound(round)}
                 >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <h3 className="font-semibold text-gray-900">
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
+                        <h3 className="font-semibold text-gray-900 truncate">
                           {patient?.name || 'Unknown Patient'}
                         </h3>
-                        <span className="text-sm text-gray-500">
+                        <span className="text-xs sm:text-sm text-gray-500">
                           {patient?.hospital_number}
                         </span>
-                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusBadgeColor(round.clinical_status)}`}>
+                        <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${getStatusBadgeColor(round.clinical_status)}`}>
                           {round.clinical_status.charAt(0).toUpperCase() + round.clinical_status.slice(1)}
                         </span>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-gray-600">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 sm:gap-2 text-xs sm:text-sm text-gray-600">
                         <div className="flex items-center gap-2">
-                          <Calendar className="w-4 h-4" />
-                          {format(new Date(round.round_date), 'MMM dd, yyyy')}
+                          <Calendar className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
+                          <span className="truncate">{format(new Date(round.round_date), 'MMM dd, yyyy')}</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <User className="w-4 h-4" />
-                          {round.reviewed_by}
+                          <User className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
+                          <span className="truncate">{round.reviewed_by}</span>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <FileText className="w-4 h-4" />
-                          {round.chief_complaint}
+                        <div className="flex items-center gap-2 sm:col-span-2">
+                          <FileText className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
+                          <span className="truncate">{round.chief_complaint}</span>
                         </div>
                       </div>
 
                       {round.assessment_notes && (
-                        <p className="mt-2 text-sm text-gray-700 line-clamp-2">
+                        <p className="mt-2 text-xs sm:text-sm text-gray-700 line-clamp-2">
                           {round.assessment_notes}
                         </p>
                       )}
 
                       {round.plan_changes && round.plan_changes.length > 0 && (
-                        <div className="mt-2 flex items-center gap-2 text-sm">
+                        <div className="mt-2 flex items-center gap-2 text-xs sm:text-sm">
                           <span className="font-medium text-gray-700">Plan Changes:</span>
                           <span className="text-gray-600">{round.plan_changes.length} updates</span>
                         </div>
@@ -332,7 +332,7 @@ export default function WardRounds() {
                         e.stopPropagation();
                         handleDeleteRound(round.id!);
                       }}
-                      className="ml-4 text-red-600 hover:text-red-800"
+                      className="self-start sm:ml-4 text-red-600 hover:text-red-800 text-sm px-3 py-1.5 border border-red-200 rounded-lg sm:border-0 sm:p-0"
                     >
                       Delete
                     </button>

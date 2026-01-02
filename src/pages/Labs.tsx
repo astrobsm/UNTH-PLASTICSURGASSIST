@@ -108,98 +108,100 @@ export default function Labs() {
   const TabButton = ({ tab, label, icon: Icon }: { tab: LabTab; label: string; icon: any }) => (
     <button
       onClick={() => setActiveTab(tab)}
-      className={`flex items-center space-x-2 px-6 py-3 rounded-lg font-medium transition-colors ${
+      className={`flex items-center space-x-1 sm:space-x-2 px-3 sm:px-6 py-2 sm:py-3 rounded-lg font-medium transition-colors whitespace-nowrap flex-shrink-0 text-sm sm:text-base ${
         activeTab === tab
           ? 'bg-green-600 text-white'
           : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
       }`}
     >
-      <Icon className="h-5 w-5" />
+      <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
       <span>{label}</span>
     </button>
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Laboratory Management</h1>
-          <div className="flex items-center space-x-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-              <input
-                type="text"
-                placeholder="Search labs..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              />
+      <div className="bg-white rounded-lg shadow-md p-4 sm:p-6">
+        <div className="flex flex-col gap-4 mb-4 sm:mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Laboratory Management</h1>
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                <input
+                  type="text"
+                  placeholder="Search labs..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="form-input pl-10 w-full"
+                />
+              </div>
+              <select
+                value={selectedPatient}
+                onChange={(e) => setSelectedPatient(e.target.value)}
+                className="form-select"
+              >
+                <option value="">All Patients</option>
+                {patients.map(patient => (
+                  <option key={patient.id} value={patient.id}>
+                    {patient.first_name} {patient.last_name} ({patient.hospital_number})
+                  </option>
+                ))}
+              </select>
             </div>
-            <select
-              value={selectedPatient}
-              onChange={(e) => setSelectedPatient(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-            >
-              <option value="">All Patients</option>
-              {patients.map(patient => (
-                <option key={patient.id} value={patient.id}>
-                  {patient.first_name} {patient.last_name} ({patient.hospital_number})
-                </option>
-              ))}
-            </select>
           </div>
         </div>
 
         {/* Lab Statistics */}
         {labStats && (
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <div className="flex items-center space-x-2">
-                <TestTube className="h-5 w-5 text-blue-600" />
-                <span className="text-sm font-medium text-blue-600">Total</span>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 sm:gap-4 mb-4 sm:mb-6">
+            <div className="bg-blue-50 p-3 sm:p-4 rounded-lg">
+              <div className="flex items-center space-x-1 sm:space-x-2">
+                <TestTube className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 flex-shrink-0" />
+                <span className="text-xs sm:text-sm font-medium text-blue-600 truncate">Total</span>
               </div>
-              <p className="text-2xl font-bold text-blue-900">{labStats.totalInvestigations}</p>
+              <p className="text-xl sm:text-2xl font-bold text-blue-900">{labStats.totalInvestigations}</p>
             </div>
-            <div className="bg-green-50 p-4 rounded-lg">
-              <div className="flex items-center space-x-2">
-                <CheckCircle className="h-5 w-5 text-green-600" />
-                <span className="text-sm font-medium text-green-600">Completed</span>
+            <div className="bg-green-50 p-3 sm:p-4 rounded-lg">
+              <div className="flex items-center space-x-1 sm:space-x-2">
+                <CheckCircle className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 flex-shrink-0" />
+                <span className="text-xs sm:text-sm font-medium text-green-600 truncate">Done</span>
               </div>
-              <p className="text-2xl font-bold text-green-900">{labStats.completedResults}</p>
+              <p className="text-xl sm:text-2xl font-bold text-green-900">{labStats.completedResults}</p>
             </div>
-            <div className="bg-yellow-50 p-4 rounded-lg">
-              <div className="flex items-center space-x-2">
-                <Clock className="h-5 w-5 text-yellow-600" />
-                <span className="text-sm font-medium text-yellow-600">Pending</span>
+            <div className="bg-yellow-50 p-3 sm:p-4 rounded-lg">
+              <div className="flex items-center space-x-1 sm:space-x-2">
+                <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-yellow-600 flex-shrink-0" />
+                <span className="text-xs sm:text-sm font-medium text-yellow-600 truncate">Pending</span>
               </div>
-              <p className="text-2xl font-bold text-yellow-900">{labStats.pendingResults}</p>
+              <p className="text-xl sm:text-2xl font-bold text-yellow-900">{labStats.pendingResults}</p>
             </div>
-            <div className="bg-orange-50 p-4 rounded-lg">
-              <div className="flex items-center space-x-2">
-                <AlertTriangle className="h-5 w-5 text-orange-600" />
-                <span className="text-sm font-medium text-orange-600">Abnormal</span>
+            <div className="bg-orange-50 p-3 sm:p-4 rounded-lg">
+              <div className="flex items-center space-x-1 sm:space-x-2">
+                <AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5 text-orange-600 flex-shrink-0" />
+                <span className="text-xs sm:text-sm font-medium text-orange-600 truncate">Abnormal</span>
               </div>
-              <p className="text-2xl font-bold text-orange-900">{labStats.abnormalResults}</p>
+              <p className="text-xl sm:text-2xl font-bold text-orange-900">{labStats.abnormalResults}</p>
             </div>
-            <div className="bg-red-50 p-4 rounded-lg">
-              <div className="flex items-center space-x-2">
-                <Zap className="h-5 w-5 text-red-600" />
-                <span className="text-sm font-medium text-red-600">Critical</span>
+            <div className="bg-red-50 p-3 sm:p-4 rounded-lg col-span-2 sm:col-span-1">
+              <div className="flex items-center space-x-1 sm:space-x-2">
+                <Zap className="h-4 w-4 sm:h-5 sm:w-5 text-red-600 flex-shrink-0" />
+                <span className="text-xs sm:text-sm font-medium text-red-600 truncate">Critical</span>
               </div>
-              <p className="text-2xl font-bold text-red-900">{labStats.criticalResults}</p>
+              <p className="text-xl sm:text-2xl font-bold text-red-900">{labStats.criticalResults}</p>
             </div>
           </div>
         )}
 
         {/* Tab Navigation */}
-        <div className="flex space-x-4 overflow-x-auto">
+        <div className="flex space-x-2 sm:space-x-4 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0 pb-2">
           <TabButton tab="investigations" label="Investigations" icon={TestTube} />
           <TabButton tab="results" label="Results" icon={FileText} />
-          <TabButton tab="upload" label="Upload Results" icon={Upload} />
+          <TabButton tab="upload" label="Upload" icon={Upload} />
           <TabButton tab="trends" label="Trends" icon={TrendingUp} />
-          <TabButton tab="gfr" label="GFR Analysis" icon={Activity} />
-          <TabButton tab="requests" label="New Request" icon={Plus} />
+          <TabButton tab="gfr" label="GFR" icon={Activity} />
+          <TabButton tab="requests" label="New" icon={Plus} />
         </div>
       </div>
 

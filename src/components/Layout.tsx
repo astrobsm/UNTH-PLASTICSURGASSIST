@@ -26,7 +26,9 @@ import {
   Footprints,
   Flame,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Menu,
+  X
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import SyncStatusIndicator from './SyncStatusIndicator';
@@ -65,6 +67,11 @@ const navigation = [
 export default function Layout({ children }: LayoutProps) {
   const location = useLocation();
   const { user, logout } = useAuthStore();
+  
+  // Mobile menu state
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  
+  // Desktop sidebar collapse state
   const [isCollapsed, setIsCollapsed] = useState(() => {
     const saved = localStorage.getItem('sidebar-collapsed');
     return saved ? JSON.parse(saved) : false;
@@ -74,54 +81,90 @@ export default function Layout({ children }: LayoutProps) {
     localStorage.setItem('sidebar-collapsed', JSON.stringify(isCollapsed));
   }, [isCollapsed]);
 
+  // Close mobile menu on route change
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [location.pathname]);
+
+  // Prevent body scroll when mobile menu is open
+  useEffect(() => {
+    if (isMobileMenuOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isMobileMenuOpen]);
+
   const toggleSidebar = () => setIsCollapsed(!isCollapsed);
+  const toggleMobileMenu = () => setIsMobileMenuOpen(!isMobileMenuOpen);
 
   return (
     <div className="min-h-screen bg-clinical-light">
       {/* Top Navigation */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
+      <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-40">
+        <div className="px-3 sm:px-4 lg:px-6">
+          <div className="flex justify-between items-center h-14 sm:h-16">
+            {/* Left side - Logo and hamburger */}
             <div className="flex items-center">
-              <div className="flex items-center space-x-3">
+              {/* Mobile hamburger menu */}
+              <button
+                onClick={toggleMobileMenu}
+                className="lg:hidden p-2 -ml-2 mr-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                aria-label="Open menu"
+              >
+                <Menu className="h-6 w-6" />
+              </button>
+              
+              <div className="flex items-center space-x-2 sm:space-x-3">
                 <img 
                   src="/logo.png" 
                   alt="Plastic Surgery Logo" 
-                  className="w-10 h-10 object-contain"
+                  className="w-8 h-8 sm:w-10 sm:h-10 object-contain"
                 />
                 <div className="text-left">
-                  <h1 className="text-xl font-semibold text-clinical-dark">
-                    Plastic Surgery Assistant
+                  <h1 className="text-sm sm:text-xl font-semibold text-clinical-dark leading-tight">
+                    <span className="hidden sm:inline">Plastic Surgery Assistant</span>
+                    <span className="sm:hidden">PS Assistant</span>
                   </h1>
-                  <p className="text-xs text-clinical">Clinical Management System</p>
+                  <p className="text-xs text-clinical hidden sm:block">Clinical Management</p>
                 </div>
               </div>
             </div>
             
-            <div className="flex items-center space-x-4">
-              {/* Sync Status Indicator */}
-              <SyncStatusIndicator />
+            {/* Right side - User actions */}
+            <div className="flex items-center space-x-1 sm:space-x-4">
+              {/* Sync Status - Hidden on very small screens */}
+              <div className="hidden sm:block">
+                <SyncStatusIndicator />
+              </div>
               
+              {/* Notifications */}
               <button 
-                className="relative p-2 text-gray-400 hover:text-clinical-dark"
+                className="relative p-2 text-gray-400 hover:text-clinical-dark rounded-full hover:bg-gray-100"
                 title="Notifications"
               >
-                <Bell className="h-6 w-6" />
+                <Bell className="h-5 w-5 sm:h-6 sm:w-6" />
                 <span className="absolute top-1 right-1 h-2 w-2 bg-danger-500 rounded-full"></span>
               </button>
               
-              <div className="flex items-center space-x-3">
-                <div className="flex items-center space-x-2">
-                  <User className="h-6 w-6 text-gray-400" />
+              {/* User info - Condensed on mobile */}
+              <div className="flex items-center space-x-2 sm:space-x-3">
+                <div className="hidden md:flex items-center space-x-2">
+                  <User className="h-5 w-5 sm:h-6 sm:w-6 text-gray-400" />
                   <div className="text-sm">
-                    <p className="font-medium text-clinical-dark">{user?.name}</p>
-                    <p className="text-gray-500 capitalize">{user?.role.replace('_', ' ')}</p>
+                    <p className="font-medium text-clinical-dark truncate max-w-[100px] lg:max-w-none">
+                      {user?.name}
+                    </p>
+                    <p className="text-gray-500 capitalize text-xs">{user?.role?.replace('_', ' ')}</p>
                   </div>
                 </div>
                 
                 <button
                   onClick={logout}
-                  className="p-2 text-gray-400 hover:text-clinical-dark"
+                  className="p-2 text-gray-400 hover:text-clinical-dark rounded-full hover:bg-gray-100"
                   title="Logout"
                 >
                   <LogOut className="h-5 w-5" />
@@ -133,8 +176,78 @@ export default function Layout({ children }: LayoutProps) {
       </header>
 
       <div className="flex">
-        {/* Sidebar Navigation */}
-        <nav className={`bg-white ${isCollapsed ? 'w-16' : 'w-64'} min-h-screen shadow-sm border-r border-gray-200 transition-all duration-300 relative`}>
+        {/* Mobile Navigation Overlay */}
+        {isMobileMenuOpen && (
+          <div 
+            className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+            onClick={() => setIsMobileMenuOpen(false)}
+          />
+        )}
+
+        {/* Mobile Navigation Drawer */}
+        <nav 
+          className={`
+            fixed top-0 left-0 bottom-0 w-72 max-w-[85vw] bg-white shadow-xl z-50 
+            transform transition-transform duration-300 ease-in-out
+            lg:hidden
+            ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
+          `}
+        >
+          {/* Mobile nav header */}
+          <div className="flex items-center justify-between p-4 border-b border-gray-200">
+            <div className="flex items-center space-x-3">
+              <img src="/logo.png" alt="Logo" className="w-8 h-8 object-contain" />
+              <span className="font-semibold text-clinical-dark">Menu</span>
+            </div>
+            <button
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+              aria-label="Close menu"
+            >
+              <X className="h-6 w-6" />
+            </button>
+          </div>
+
+          {/* Mobile user info */}
+          <div className="p-4 border-b border-gray-200 bg-gray-50">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 bg-primary-500 rounded-full flex items-center justify-center text-white font-semibold">
+                {user?.name?.[0]?.toUpperCase()}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="font-medium text-clinical-dark truncate">{user?.name}</p>
+                <p className="text-sm text-gray-500 capitalize">{user?.role?.replace('_', ' ')}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Mobile navigation links */}
+          <div className="overflow-y-auto h-[calc(100vh-140px)] py-2 overscroll-contain">
+            {navigation.map((item) => {
+              const isActive = location.pathname === item.href;
+              return (
+                <Link
+                  key={item.name}
+                  to={item.href}
+                  className={`
+                    flex items-center px-4 py-3 text-sm font-medium transition-colors
+                    active:bg-gray-100
+                    ${isActive
+                      ? 'bg-primary-50 text-primary-700 border-l-4 border-primary-500'
+                      : 'text-gray-700 hover:bg-gray-50 hover:text-clinical-dark border-l-4 border-transparent'
+                    }
+                  `}
+                >
+                  <item.icon className="mr-3 h-5 w-5 flex-shrink-0" />
+                  <span>{item.name}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </nav>
+
+        {/* Desktop Sidebar Navigation */}
+        <nav className={`hidden lg:block bg-white ${isCollapsed ? 'w-16' : 'w-64'} min-h-[calc(100vh-64px)] shadow-sm border-r border-gray-200 transition-all duration-300 relative flex-shrink-0`}>
           {/* Collapse Toggle Button */}
           <button
             onClick={toggleSidebar}
@@ -148,7 +261,7 @@ export default function Layout({ children }: LayoutProps) {
             )}
           </button>
 
-          <div className={`${isCollapsed ? 'px-2' : 'px-4'} py-6 space-y-1`}>
+          <div className={`${isCollapsed ? 'px-2' : 'px-4'} py-6 space-y-1 overflow-y-auto max-h-[calc(100vh-100px)]`}>
             {navigation.map((item) => {
               const isActive = location.pathname === item.href;
               return (
@@ -173,8 +286,10 @@ export default function Layout({ children }: LayoutProps) {
         </nav>
 
         {/* Main Content */}
-        <main className="flex-1 p-6">
-          {children}
+        <main className="flex-1 min-w-0 overflow-x-hidden">
+          <div className="p-3 sm:p-4 lg:p-6">
+            {children}
+          </div>
         </main>
       </div>
     </div>

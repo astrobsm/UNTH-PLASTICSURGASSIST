@@ -96,15 +96,15 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-clinical-light">
-      <div className="max-w-md w-full space-y-8 p-8">
+    <div className="min-h-screen flex items-center justify-center bg-clinical-light px-4 py-8">
+      <div className="max-w-md w-full space-y-6 sm:space-y-8">
         <div className="text-center">
           <img 
             src="/logo.png" 
             alt="Plastic Surgery Logo" 
-            className="mx-auto h-20 w-20 object-contain"
+            className="mx-auto h-16 w-16 sm:h-20 sm:w-20 object-contain"
           />
-          <h2 className="mt-6 text-3xl font-bold text-clinical-dark">
+          <h2 className="mt-4 sm:mt-6 text-2xl sm:text-3xl font-bold text-clinical-dark">
             Plastic Surgeon Assistant
           </h2>
           <p className="mt-2 text-sm text-clinical">
@@ -113,15 +113,15 @@ export default function Login() {
         </div>
         
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded text-sm">
             {error}
           </div>
         )}
         
-        <form className="mt-8 space-y-6" onSubmit={handleLogin}>
+        <form className="mt-6 sm:mt-8 space-y-4 sm:space-y-6" onSubmit={handleLogin}>
           <div className="space-y-4">
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-clinical-dark">
+              <label htmlFor="email" className="form-label">
                 Email address
               </label>
               <input
@@ -129,7 +129,7 @@ export default function Login() {
                 name="email"
                 type="email"
                 required
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                className="form-input"
                 placeholder="doctor@hospital.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -137,7 +137,7 @@ export default function Login() {
             </div>
             
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-clinical-dark">
+              <label htmlFor="password" className="form-label">
                 Password
               </label>
               <input
@@ -145,7 +145,7 @@ export default function Login() {
                 name="password"
                 type="password"
                 required
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                className="form-input"
                 placeholder="Enter password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -165,7 +165,7 @@ export default function Login() {
           <button
             type="button"
             onClick={() => setShowRegistration(true)}
-            className="w-full border-2 border-primary-500 text-primary-500 hover:bg-primary-50 py-3 rounded-md font-medium transition flex items-center justify-center gap-2"
+            className="w-full btn-secondary py-3 text-base flex items-center justify-center gap-2"
           >
             <UserPlus className="h-5 w-5" />
             Create New Profile
@@ -175,20 +175,20 @@ export default function Login() {
 
       {/* Registration Modal */}
       {showRegistration && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
-              <h3 className="text-xl font-bold text-clinical-dark">Create New Profile</h3>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start sm:items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl my-4 sm:my-8">
+            <div className="sticky top-0 bg-white border-b px-4 sm:px-6 py-4 flex items-center justify-between rounded-t-lg z-10">
+              <h3 className="text-lg sm:text-xl font-bold text-clinical-dark">Create New Profile</h3>
               <button
                 onClick={() => setShowRegistration(false)}
-                className="text-gray-400 hover:text-gray-600"
+                className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100"
                 aria-label="Close registration form"
               >
                 <X className="h-6 w-6" />
               </button>
             </div>
 
-            <form onSubmit={handleRegistration} className="p-6 space-y-4">
+            <form onSubmit={handleRegistration} className="p-4 sm:p-6 space-y-4">
               {/* Success Message */}
               {successMessage && (
                 <div className="bg-green-50 border border-green-200 rounded p-3 text-sm text-green-800">

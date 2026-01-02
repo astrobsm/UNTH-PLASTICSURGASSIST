@@ -11,12 +11,26 @@
   body {
     @apply bg-clinical-light text-clinical-dark font-sans;
     font-feature-settings: "rlig" 1, "calt" 1;
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  /* Better touch targets for mobile */
+  button, a, input, select, textarea {
+    @apply touch-manipulation;
+  }
+  
+  /* Prevent zoom on input focus on iOS */
+  @media screen and (max-width: 768px) {
+    input, select, textarea {
+      font-size: 16px !important;
+    }
   }
 }
 
 @layer components {
   .btn {
     @apply inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none;
+    @apply min-h-[44px] px-4; /* Touch-friendly min height */
   }
   
   .btn-primary {
@@ -31,8 +45,97 @@
     @apply btn bg-clinical-light text-clinical-dark border border-gray-300 hover:bg-gray-50;
   }
   
+  .btn-sm {
+    @apply min-h-[36px] px-3 text-xs;
+  }
+  
+  .btn-lg {
+    @apply min-h-[52px] px-6 text-base;
+  }
+  
   .card {
     @apply rounded-lg border border-gray-200 bg-white text-clinical-dark shadow-sm;
+  }
+  
+  /* Mobile-first form inputs */
+  .form-input {
+    @apply block w-full rounded-md border border-gray-300 px-3 py-3 text-base
+           placeholder-gray-400 shadow-sm
+           focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500
+           disabled:bg-gray-100 disabled:cursor-not-allowed;
+  }
+  
+  .form-select {
+    @apply form-input pr-10 appearance-none bg-no-repeat;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 0.5rem center;
+    background-size: 1.5em 1.5em;
+  }
+  
+  .form-label {
+    @apply block text-sm font-medium text-gray-700 mb-1;
+  }
+  
+  .form-group {
+    @apply mb-4;
+  }
+  
+  /* Mobile-friendly checkbox and radio */
+  .form-checkbox, .form-radio {
+    @apply w-5 h-5 text-primary-500 border-gray-300 rounded focus:ring-primary-500;
+  }
+  
+  /* Responsive grid helpers */
+  .grid-mobile {
+    @apply grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4;
+  }
+  
+  .grid-mobile-2 {
+    @apply grid grid-cols-1 gap-4 sm:grid-cols-2;
+  }
+  
+  /* Mobile-first table wrapper */
+  .table-responsive {
+    @apply w-full overflow-x-auto -mx-3 px-3 sm:mx-0 sm:px-0;
+  }
+  
+  .table-responsive table {
+    @apply min-w-full;
+  }
+  
+  /* Card list for mobile (alternative to tables) */
+  .card-list {
+    @apply space-y-3;
+  }
+  
+  .card-list-item {
+    @apply card p-4;
+  }
+  
+  /* Mobile page header */
+  .page-header {
+    @apply mb-4 sm:mb-6;
+  }
+  
+  .page-title {
+    @apply text-xl sm:text-2xl font-bold text-gray-900;
+  }
+  
+  .page-subtitle {
+    @apply text-sm sm:text-base text-gray-600 mt-1;
+  }
+  
+  /* Stat cards */
+  .stat-card {
+    @apply card p-4 sm:p-6;
+  }
+  
+  .stat-value {
+    @apply text-xl sm:text-2xl font-bold text-clinical-dark;
+  }
+  
+  .stat-label {
+    @apply text-xs sm:text-sm font-medium text-gray-500;
   }
   
   .clinical-status-pending {
@@ -50,6 +153,47 @@
   .clinical-status-overdue {
     @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-danger-100 text-danger-800;
   }
+  
+  /* Mobile action bar (fixed bottom on mobile) */
+  .mobile-action-bar {
+    @apply fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-3 sm:relative sm:border-0 sm:p-0 sm:bg-transparent z-30;
+  }
+  
+  /* Hide on mobile / Show on desktop */
+  .desktop-only {
+    @apply hidden lg:block;
+  }
+  
+  .mobile-only {
+    @apply block lg:hidden;
+  }
+  
+  /* Scrollable tabs for mobile */
+  .tabs-scroll {
+    @apply flex overflow-x-auto gap-2 pb-2 -mx-3 px-3 sm:mx-0 sm:px-0 scrollbar-hide;
+  }
+  
+  .tab-item {
+    @apply flex-shrink-0 px-4 py-2 text-sm font-medium rounded-full whitespace-nowrap
+           transition-colors cursor-pointer;
+  }
+  
+  .tab-item-active {
+    @apply bg-primary-500 text-white;
+  }
+  
+  .tab-item-inactive {
+    @apply bg-gray-100 text-gray-700 hover:bg-gray-200;
+  }
+}
+
+/* Hide scrollbar but allow scrolling */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }
 
 /* PWA Install Button Animation */
@@ -69,5 +213,12 @@
   }
   90% {
     transform: translate3d(0, -2px, 0);
+  }
+}
+
+/* Safe area insets for notched devices */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .mobile-action-bar {
+    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
   }
 }

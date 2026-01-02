@@ -309,14 +309,15 @@ export default function Admin() {
   const TabButton = ({ tab, label, icon: Icon }: { tab: AdminTab; label: string; icon: any }) => (
     <button
       onClick={() => setActiveTab(tab)}
-      className={`flex items-center space-x-2 px-4 py-3 rounded-lg font-medium transition-colors ${
+      className={`flex items-center space-x-1 sm:space-x-2 px-3 sm:px-4 py-2 sm:py-3 rounded-lg font-medium transition-colors whitespace-nowrap flex-shrink-0 text-sm sm:text-base ${
         activeTab === tab
           ? 'bg-green-600 text-white'
           : 'text-gray-600 hover:bg-gray-100'
       }`}
     >
-      <Icon className="h-5 w-5" />
-      <span>{label}</span>
+      <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
+      <span className="hidden sm:inline">{label}</span>
+      <span className="sm:hidden">{label.split(' ')[0]}</span>
     </button>
   );
 
@@ -327,39 +328,39 @@ export default function Admin() {
   );
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-4 sm:mb-6">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">System Administration</h1>
-          <p className="text-gray-600">Manage users, system settings, and monitor application health</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">System Administration</h1>
+          <p className="text-sm sm:text-base text-gray-600">Manage users, settings, and monitor health</p>
         </div>
-        <div className="flex items-center space-x-4">
-          <div className={`flex items-center space-x-2 px-3 py-2 rounded-lg ${
+        <div className="flex items-center space-x-2 sm:space-x-4">
+          <div className={`flex items-center space-x-1 sm:space-x-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm ${
             isOnline ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
           }`}>
-            {isOnline ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4" />}
-            <span className="text-sm font-medium">
+            {isOnline ? <Wifi className="h-3 w-3 sm:h-4 sm:w-4" /> : <WifiOff className="h-3 w-3 sm:h-4 sm:w-4" />}
+            <span className="font-medium">
               {isOnline ? 'Online' : 'Offline'}
             </span>
           </div>
           <button
             onClick={loadAdminData}
             disabled={loading}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
+            className="bg-blue-600 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-1 sm:space-x-2 text-sm sm:text-base"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            <span>Refresh</span>
+            <span className="hidden sm:inline">Refresh</span>
           </button>
         </div>
       </div>
 
       {/* Tab Navigation */}
-      <div className="flex space-x-2 mb-6 overflow-x-auto">
+      <div className="flex space-x-2 mb-4 sm:mb-6 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0 pb-2">
         <TabButton tab="dashboard" label="Dashboard" icon={BarChart3} />
-        <TabButton tab="user-approvals" label="User Approvals" icon={UserCheck} />
-        <TabButton tab="users" label="User Management" icon={Users} />
-        <TabButton tab="system" label="System Health" icon={Activity} />
+        <TabButton tab="user-approvals" label="Approvals" icon={UserCheck} />
+        <TabButton tab="users" label="Users" icon={Users} />
+        <TabButton tab="system" label="System" icon={Activity} />
         <TabButton tab="database" label="Database" icon={Database} />
         <TabButton tab="security" label="Security" icon={Shield} />
         <TabButton tab="analytics" label="Analytics" icon={BarChart3} />
@@ -368,46 +369,46 @@ export default function Admin() {
 
       {/* Dashboard Tab */}
       {activeTab === 'dashboard' && (
-        <div className="space-y-6">
+        <div className="space-y-4 sm:space-y-6">
           {/* System Metrics Overview */}
           {metrics && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <div className="bg-white rounded-lg border border-gray-200 p-6">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
+              <div className="bg-white rounded-lg border border-gray-200 p-4 sm:p-6">
                 <div className="flex items-center">
-                  <Users className="h-8 w-8 text-blue-600" />
-                  <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-500">Total Users</p>
-                    <p className="text-2xl font-bold text-gray-900">{metrics.totalUsers}</p>
+                  <Users className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600 flex-shrink-0" />
+                  <div className="ml-3 sm:ml-4 min-w-0">
+                    <p className="text-xs sm:text-sm font-medium text-gray-500 truncate">Total Users</p>
+                    <p className="text-xl sm:text-2xl font-bold text-gray-900">{metrics.totalUsers}</p>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-white rounded-lg border border-gray-200 p-6">
+              <div className="bg-white rounded-lg border border-gray-200 p-4 sm:p-6">
                 <div className="flex items-center">
-                  <UserCheck className="h-8 w-8 text-green-600" />
-                  <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-500">Active Users</p>
-                    <p className="text-2xl font-bold text-gray-900">{metrics.activeUsers}</p>
+                  <UserCheck className="h-6 w-6 sm:h-8 sm:w-8 text-green-600 flex-shrink-0" />
+                  <div className="ml-3 sm:ml-4 min-w-0">
+                    <p className="text-xs sm:text-sm font-medium text-gray-500 truncate">Active Users</p>
+                    <p className="text-xl sm:text-2xl font-bold text-gray-900">{metrics.activeUsers}</p>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-white rounded-lg border border-gray-200 p-6">
+              <div className="bg-white rounded-lg border border-gray-200 p-4 sm:p-6">
                 <div className="flex items-center">
-                  <Users className="h-8 w-8 text-purple-600" />
-                  <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-500">Total Patients</p>
-                    <p className="text-2xl font-bold text-gray-900">{metrics.totalPatients}</p>
+                  <Users className="h-6 w-6 sm:h-8 sm:w-8 text-purple-600 flex-shrink-0" />
+                  <div className="ml-3 sm:ml-4 min-w-0">
+                    <p className="text-xs sm:text-sm font-medium text-gray-500 truncate">Total Patients</p>
+                    <p className="text-xl sm:text-2xl font-bold text-gray-900">{metrics.totalPatients}</p>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-white rounded-lg border border-gray-200 p-6">
+              <div className="bg-white rounded-lg border border-gray-200 p-4 sm:p-6">
                 <div className="flex items-center">
-                  <Activity className="h-8 w-8 text-orange-600" />
-                  <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-500">System Health</p>
-                    <p className="text-2xl font-bold text-gray-900">{metrics.performanceScore}%</p>
+                  <Activity className="h-6 w-6 sm:h-8 sm:w-8 text-orange-600 flex-shrink-0" />
+                  <div className="ml-3 sm:ml-4 min-w-0">
+                    <p className="text-xs sm:text-sm font-medium text-gray-500 truncate">System Health</p>
+                    <p className="text-xl sm:text-2xl font-bold text-gray-900">{metrics.performanceScore}%</p>
                   </div>
                 </div>
               </div>
@@ -415,23 +416,23 @@ export default function Admin() {
           )}
 
           {/* Recent Activity */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Recent System Activity</h3>
-            <div className="space-y-4">
+          <div className="bg-white rounded-lg border border-gray-200 p-4 sm:p-6">
+            <h3 className="text-base sm:text-lg font-medium text-gray-900 mb-3 sm:mb-4">Recent System Activity</h3>
+            <div className="space-y-3 sm:space-y-4">
               {auditLogs.slice(0, 5).map((log) => (
-                <div key={log.id} className="flex items-center space-x-4 p-3 bg-gray-50 rounded-lg">
-                  <div className={`p-2 rounded-full ${
+                <div key={log.id} className="flex items-start sm:items-center space-x-3 sm:space-x-4 p-2 sm:p-3 bg-gray-50 rounded-lg">
+                  <div className={`p-1.5 sm:p-2 rounded-full flex-shrink-0 ${
                     log.success ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'
                   }`}>
-                    {log.success ? <CheckCircle className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
+                    {log.success ? <CheckCircle className="h-3 w-3 sm:h-4 sm:w-4" /> : <XCircle className="h-3 w-3 sm:h-4 sm:w-4" />}
                   </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-900">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs sm:text-sm font-medium text-gray-900 truncate">
                       {log.userName} {log.action.toLowerCase()}d {log.resource}
                     </p>
-                    <p className="text-xs text-gray-500">{log.details}</p>
+                    <p className="text-xs text-gray-500 truncate">{log.details}</p>
                   </div>
-                  <div className="text-xs text-gray-500">
+                  <div className="text-xs text-gray-500 flex-shrink-0">
                     {format(new Date(log.timestamp), 'MMM d, HH:mm')}
                   </div>
                 </div>
@@ -448,16 +449,16 @@ export default function Admin() {
 
       {/* User Management Tab */}
       {activeTab === 'users' && (
-        <div className="space-y-6">
+        <div className="space-y-4 sm:space-y-6">
           {/* User Management Header */}
-          <div className="flex justify-between items-center">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
             <div>
-              <h2 className="text-xl font-semibold text-gray-900">User Management</h2>
-              <p className="text-gray-600">Manage user accounts, roles, and permissions</p>
+              <h2 className="text-lg sm:text-xl font-semibold text-gray-900">User Management</h2>
+              <p className="text-sm text-gray-600">Manage user accounts, roles, and permissions</p>
             </div>
             <button
               onClick={handleCreateUser}
-              className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2"
+              className="bg-green-600 text-white px-4 py-2.5 rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center space-x-2 w-full sm:w-auto"
             >
               <UserPlus className="h-4 w-4" />
               <span>Add User</span>
@@ -465,28 +466,81 @@ export default function Admin() {
           </div>
 
           {/* Search and Filters */}
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <div className="flex space-x-4">
+          <div className="bg-white rounded-lg border border-gray-200 p-3 sm:p-4">
+            <div className="flex flex-col sm:flex-row gap-3 sm:space-x-4">
               <div className="flex-1 relative">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                 <input
                   type="text"
-                  placeholder="Search users by name, email, or department..."
+                  placeholder="Search users..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  className="form-input pl-10"
                 />
               </div>
-              <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center space-x-2">
+              <button className="px-4 py-2.5 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center justify-center space-x-2 w-full sm:w-auto">
                 <Filter className="h-4 w-4" />
                 <span>Filter</span>
               </button>
             </div>
           </div>
 
-          {/* Users Table */}
+          {/* Users - Card layout on mobile, table on desktop */}
           <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-            <div className="overflow-x-auto">
+            {/* Mobile Card Layout */}
+            <div className="sm:hidden divide-y divide-gray-200">
+              {filteredUsers.map((user) => (
+                <div key={user.id} className="p-4 space-y-3">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 bg-green-100 text-green-600 rounded-full flex items-center justify-center font-semibold">
+                        {user.name.charAt(0)}
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900">{user.name}</p>
+                        <p className="text-xs text-gray-500">{user.email}</p>
+                      </div>
+                    </div>
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                      user.status === 'active' ? 'bg-green-100 text-green-800' :
+                      user.status === 'suspended' ? 'bg-red-100 text-red-800' :
+                      'bg-gray-100 text-gray-800'
+                    }`}>
+                      {user.status}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-600">{user.role.replace('_', ' ')}</span>
+                    <span className="text-gray-500">{user.department}</span>
+                  </div>
+                  <div className="flex items-center space-x-2 pt-2">
+                    <button
+                      onClick={() => handleEditUser(user)}
+                      className="flex-1 px-3 py-2 text-sm bg-gray-100 rounded-lg hover:bg-gray-200"
+                    >
+                      <Edit3 className="h-4 w-4 inline mr-1" /> Edit
+                    </button>
+                    <button
+                      onClick={() => handleSuspendUser(user.id)}
+                      className={`flex-1 px-3 py-2 text-sm rounded-lg ${
+                        user.status === 'suspended' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                      }`}
+                    >
+                      {user.status === 'suspended' ? 'Activate' : 'Suspend'}
+                    </button>
+                    <button
+                      onClick={() => handleDeleteUser(user.id)}
+                      className="px-3 py-2 text-sm bg-red-100 text-red-600 rounded-lg"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop Table Layout */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>

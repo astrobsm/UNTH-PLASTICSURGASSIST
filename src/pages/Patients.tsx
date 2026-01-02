@@ -54,7 +54,7 @@ export const Patients: React.FC = () => {
 
   if (showRegistrationForm) {
     return (
-      <div className="p-8">
+      <div>
         <PatientRegistrationForm 
           onSuccess={handleRegistrationSuccess}
           onCancel={() => setShowRegistrationForm(false)}
@@ -64,53 +64,51 @@ export const Patients: React.FC = () => {
   }
 
   return (
-    <div className="p-8">
+    <div>
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Patients - UNTH</h1>
-          <p className="text-gray-600">Manage patient records and registrations</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4 sm:mb-6">
+        <div className="page-header mb-0">
+          <h1 className="page-title">Patients - UNTH</h1>
+          <p className="page-subtitle">Manage patient records and registrations</p>
         </div>
         <button
           onClick={() => setShowRegistrationForm(true)}
-          className="px-6 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors"
+          className="btn-primary w-full sm:w-auto"
         >
           + Register New Patient
         </button>
       </div>
 
       {/* Search and Filters */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
-          <div className="flex-1 max-w-lg">
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <svg className="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <input
-                type="text"
-                placeholder="Search patients by name, hospital number, or phone..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-green-500 focus:border-green-500"
-              />
+      <div className="card p-3 sm:p-4 mb-4">
+        <div className="flex flex-col gap-3">
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <svg className="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
+              </svg>
             </div>
+            <input
+              type="text"
+              placeholder="Search patients..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="form-input pl-10"
+            />
           </div>
           
-          <div className="flex items-center space-x-4">
+          <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value as any)}
-              className="block w-full pl-3 pr-10 py-2 text-base border border-gray-300 focus:outline-none focus:ring-green-500 focus:border-green-500 rounded-md"
+              className="form-select sm:w-48"
             >
               <option value="all">All Patients</option>
               <option value="active">Active</option>
               <option value="discharged">Discharged</option>
             </select>
             
-            <span className="text-sm text-gray-500">
+            <span className="text-sm text-gray-500 text-center sm:text-right">
               {filteredPatients.length} patient{filteredPatients.length !== 1 ? 's' : ''}
             </span>
           </div>
@@ -160,43 +158,43 @@ export const Patients: React.FC = () => {
               <Link
                 key={patient.id}
                 to={`/patients/${patient.id}`}
-                className="block hover:bg-gray-50 transition-colors"
+                className="block hover:bg-gray-50 active:bg-gray-100 transition-colors"
               >
-                <div className="p-6">
-                  <div className="flex items-center space-x-4">
+                <div className="p-3 sm:p-4">
+                  <div className="flex items-start sm:items-center gap-3">
                     {/* Patient Avatar */}
-                    <div className="w-12 h-12 bg-green-600 rounded-full flex items-center justify-center text-white font-semibold">
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-600 rounded-full flex items-center justify-center text-white font-semibold text-sm sm:text-base flex-shrink-0">
                       {patient.first_name?.[0]}{patient.last_name?.[0]}
                     </div>
                     
                     {/* Patient Info */}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center space-x-3">
-                        <h3 className="text-lg font-semibold text-gray-900 truncate">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-base sm:text-lg font-semibold text-gray-900 truncate">
                           {patient.first_name} {patient.last_name}
                         </h3>
-                        <span className="px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full">
+                        <span className="px-2 py-0.5 bg-green-100 text-green-800 text-xs font-medium rounded-full">
                           Active
                         </span>
                       </div>
                       
-                      <div className="mt-1 flex items-center space-x-6 text-sm text-gray-500">
+                      <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs sm:text-sm text-gray-500">
                         <span className="flex items-center">
-                          <svg className="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="mr-1 h-3.5 w-3.5 sm:h-4 sm:w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
                           </svg>
                           {patient.hospital_number}
                         </span>
                         
                         <span className="flex items-center">
-                          <svg className="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="mr-1 h-3.5 w-3.5 sm:h-4 sm:w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
                           </svg>
                           {patient.phone}
                         </span>
                         
-                        <span className="flex items-center">
-                          <svg className="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <span className="flex items-center hidden sm:flex">
+                          <svg className="mr-1 h-3.5 w-3.5 sm:h-4 sm:w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3a2 2 0 012-2h4a2 2 0 012 2v4m-6 4h6m-6 4h6m-6 4h6M3 7h18" />
                           </svg>
                           DOB: {patient.dob}
@@ -268,29 +266,29 @@ export const Patients: React.FC = () => {
 
       {/* Statistics Footer */}
       {!loading && filteredPatients.length > 0 && (
-        <div className="mt-6 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="mt-4 sm:mt-6 card p-4 sm:p-6">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6">
             <div className="text-center">
-              <div className="text-2xl font-bold text-green-600">{filteredPatients.length}</div>
-              <div className="text-sm text-gray-500">Total Patients</div>
+              <div className="stat-value text-green-600">{filteredPatients.length}</div>
+              <div className="stat-label">Total Patients</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-blue-600">
+              <div className="stat-value text-blue-600">
                 {filteredPatients.filter(p => p.sex === 'male').length}
               </div>
-              <div className="text-sm text-gray-500">Male</div>
+              <div className="stat-label">Male</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-pink-600">
+              <div className="stat-value text-pink-600">
                 {filteredPatients.filter(p => p.sex === 'female').length}
               </div>
-              <div className="text-sm text-gray-500">Female</div>
+              <div className="stat-label">Female</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-purple-600">
+              <div className="stat-value text-purple-600">
                 {filteredPatients.filter(p => p.allergies && p.allergies.length > 0).length}
               </div>
-              <div className="text-sm text-gray-500">With Allergies</div>
+              <div className="stat-label">With Allergies</div>
             </div>
           </div>
         </div>

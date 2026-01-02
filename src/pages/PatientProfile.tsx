@@ -140,34 +140,32 @@ export const PatientProfile: React.FC = () => {
       {/* Patient Header */}
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="py-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <div className="w-16 h-16 bg-green-600 rounded-full flex items-center justify-center text-white text-xl font-bold">
+          <div className="py-4 sm:py-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="flex items-center space-x-3 sm:space-x-4">
+                <div className="w-12 h-12 sm:w-16 sm:h-16 bg-green-600 rounded-full flex items-center justify-center text-white text-lg sm:text-xl font-bold flex-shrink-0">
                   {patient.first_name?.[0]}{patient.last_name?.[0]}
                 </div>
-                <div>
-                  <h1 className="text-2xl font-bold text-gray-900">
+                <div className="min-w-0">
+                  <h1 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">
                     {patient.first_name} {patient.last_name}
                   </h1>
-                  <div className="flex items-center space-x-4 text-sm text-gray-500">
-                    <span>Hospital #: {patient.hospital_number}</span>
-                    <span>•</span>
-                    <span>Age: {calculateAge(patient.dob)} years</span>
-                    <span>•</span>
-                    <span>Sex: {patient.sex}</span>
-                    <span>•</span>
-                    <span>📞 {patient.phone}</span>
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs sm:text-sm text-gray-500">
+                    <span>#{patient.hospital_number}</span>
+                    <span className="hidden sm:inline">•</span>
+                    <span>{calculateAge(patient.dob)}y, {patient.sex}</span>
+                    <span className="hidden sm:inline">•</span>
+                    <span className="hidden sm:inline">📞 {patient.phone}</span>
                   </div>
                 </div>
               </div>
               
-              <div className="flex items-center space-x-3">
-                <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
-                  Active Patient
+              <div className="flex items-center gap-2 sm:gap-3">
+                <span className="px-2 sm:px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs sm:text-sm font-medium">
+                  Active
                 </span>
-                <button className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">
-                  Edit Profile
+                <button className="px-3 sm:px-4 py-1.5 sm:py-2 border border-gray-300 rounded-md text-sm text-gray-700 hover:bg-gray-50">
+                  Edit
                 </button>
               </div>
             </div>
@@ -175,10 +173,10 @@ export const PatientProfile: React.FC = () => {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Sidebar - Quick Info */}
-          <div className="lg:col-span-1 space-y-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 sm:gap-6">
+          {/* Sidebar - Quick Info - Hidden on mobile, show in tabs */}
+          <div className="hidden lg:block lg:col-span-1 space-y-6">
             {/* Quick Summary Card */}
             <QuickSummaryCard patientId={id!} />
             
@@ -260,21 +258,22 @@ export const PatientProfile: React.FC = () => {
           {/* Main Content */}
           <div className="lg:col-span-3">
             {/* Tab Navigation */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
-              <div className="border-b border-gray-200">
-                <nav className="flex space-x-8 px-6">
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-4 sm:mb-6">
+              <div className="border-b border-gray-200 overflow-x-auto scrollbar-hide">
+                <nav className="flex -mx-4 px-4 sm:mx-0 sm:px-6 min-w-max sm:min-w-0">
                   {tabs.map(tab => (
                     <button
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id)}
-                      className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                      className={`py-3 sm:py-4 px-3 sm:px-4 border-b-2 font-medium text-xs sm:text-sm whitespace-nowrap ${
                         activeTab === tab.id
                           ? 'border-green-500 text-green-600'
                           : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                       }`}
                     >
-                      <span className="mr-2">{tab.icon}</span>
-                      {tab.name}
+                      <span className="mr-1 sm:mr-2">{tab.icon}</span>
+                      <span className="hidden sm:inline">{tab.name}</span>
+                      <span className="sm:hidden">{tab.name.split(' ')[0]}</span>
                     </button>
                   ))}
                 </nav>

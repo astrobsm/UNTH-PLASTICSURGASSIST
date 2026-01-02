@@ -3665,14 +3665,15 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
   return (
     <div className="max-w-4xl mx-auto">
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-900">Patient Registration - UNTH</h2>
+        <div className="px-4 sm:px-6 py-4 border-b border-gray-200">
+          <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Patient Registration - UNTH</h2>
           <div className="mt-4 flex items-center justify-between">
-            <div className="flex space-x-4">
+            {/* Step indicators - scrollable on mobile */}
+            <div className="flex space-x-2 sm:space-x-4 overflow-x-auto">
               {[1, 2, 3, 4].map(step => (
                 <div
                   key={step}
-                  className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium ${
+                  className={`flex-shrink-0 flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium transition-colors ${
                     step === currentStep
                       ? 'bg-green-600 text-white'
                       : step < currentStep
@@ -3684,20 +3685,21 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
                 </div>
               ))}
             </div>
-            <span className="text-sm text-gray-500">
+            <span className="text-xs sm:text-sm text-gray-500 whitespace-nowrap ml-2">
               Step {currentStep} of 4
             </span>
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6">
           {currentStep === 1 && renderStep1()}
           {currentStep === 2 && renderStep2()}
           {currentStep === 3 && renderStep3()}
           {currentStep === 4 && renderStep4()}
 
-          <div className="flex justify-between mt-8 pt-6 border-t border-gray-200">
-            <div className="flex space-x-3">
+          {/* Mobile-friendly button layout */}
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-between gap-3 mt-6 sm:mt-8 pt-4 sm:pt-6 border-t border-gray-200">
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
               {currentStep > 1 && (
                 <button
                   type="button"
@@ -3705,7 +3707,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
                     e.preventDefault();
                     setCurrentStep(currentStep - 1);
                   }}
-                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                  className="btn-secondary w-full sm:w-auto"
                 >
                   Previous
                 </button>
@@ -3714,14 +3716,14 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
                 <button
                   type="button"
                   onClick={onCancel}
-                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                  className="btn-secondary w-full sm:w-auto"
                 >
                   Cancel
                 </button>
               )}
             </div>
 
-            <div>
+            <div className="w-full sm:w-auto">
               {currentStep < 4 ? (
                 <button
                   type="button"
@@ -3729,7 +3731,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
                     e.preventDefault();
                     setCurrentStep(currentStep + 1);
                   }}
-                  className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                  className="btn-primary w-full sm:w-auto"
                 >
                   Next
                 </button>
@@ -3737,7 +3739,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="btn-primary w-full sm:w-auto"
                 >
                   {isSubmitting ? 'Registering...' : 'Register Patient'}
                 </button>
