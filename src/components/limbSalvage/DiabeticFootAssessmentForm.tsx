@@ -122,6 +122,7 @@ export const DiabeticFootAssessmentForm: React.FC<Props> = ({
     // Step 1: Demographics
     age: 0,
     gender: 'male' as 'male' | 'female',
+    weight: 70, // Weight in kg for eGFR calculation
     diabetesType: 'type2' as 'type1' | 'type2',
     diabetesDuration: 0,
     smokingStatus: 'never' as 'current' | 'former' | 'never',
@@ -862,11 +863,46 @@ const Step3Comorbidities: React.FC<{ formData: any; setFormData: any }> = ({ for
 
 // Step 4: Renal Status
 const Step4RenalStatus: React.FC<{ formData: any; setFormData: any }> = ({ formData, setFormData }) => {
+  // Calculate eGFR using CKD-EPI equation (2021 formula without race adjustment)
+  const calculateEGFR = (creatinine: number, age: number, gender: 'male' | 'female', weight: number): number => {
+    if (creatinine <= 0 || age <= 0) return 0;
+    
+    // CKD-EPI 2021 equation (without race coefficient)
+    // eGFR = 142 × min(Scr/κ, 1)^α × max(Scr/κ, 1)^-1.200 × 0.9938^age × (1.012 if female)
+    // κ = 0.7 for females, 0.9 for males
+    // α = -0.241 for females, -0.302 for males
+    
+    const isFemale = gender === 'female';
+    const kappa = isFemale ? 0.7 : 0.9;
+    const alpha = isFemale ? -0.241 : -0.302;
+    const genderMultiplier = isFemale ? 1.012 : 1;
+    
+    const scrOverKappa = creatinine / kappa;
+    const minTerm = Math.pow(Math.min(scrOverKappa, 1), alpha);
+    const maxTerm = Math.pow(Math.max(scrOverKappa, 1), -1.200);
+    const ageTerm = Math.pow(0.9938, age);
+    
+    const egfr = 142 * minTerm * maxTerm * ageTerm * genderMultiplier;
+    
+    return Math.round(egfr);
+  };
+
+  // Auto-calculate eGFR when creatinine, age, gender, or weight changes
+  React.useEffect(() => {
+    if (formData.creatinine > 0 && formData.age > 0) {
+      const calculatedEGFR = calculateEGFR(formData.creatinine, formData.age, formData.gender, formData.weight);
+      if (calculatedEGFR !== formData.egfr) {
+        setFormData((prev: any) => ({ ...prev, egfr: calculatedEGFR }));
+      }
+    }
+  }, [formData.creatinine, formData.age, formData.gender, formData.weight]);
+
   // Calculate CKD Stage based on eGFR
   const getCKDStage = (egfr: number) => {
     if (egfr >= 90) return { stage: 1, label: 'Stage 1 - Normal', color: 'green' };
     if (egfr >= 60) return { stage: 2, label: 'Stage 2 - Mild decrease', color: 'yellow' };
-    if (egfr >= 30) return { stage: 3, label: 'Stage 3 - Moderate decrease', color: 'orange' };
+    if (egfr >= 45) return { stage: 3, label: 'Stage 3a - Mild to moderate decrease', color: 'orange' };
+    if (egfr >= 30) return { stage: 3, label: 'Stage 3b - Moderate to severe decrease', color: 'orange' };
     if (egfr >= 15) return { stage: 4, label: 'Stage 4 - Severe decrease', color: 'red' };
     return { stage: 5, label: 'Stage 5 - Kidney failure', color: 'red' };
   };
@@ -877,19 +913,59 @@ const Step4RenalStatus: React.FC<{ formData: any; setFormData: any }> = ({ formD
     <div className="space-y-6">
       <h3 className="text-lg font-medium text-gray-900">Renal Status Assessment</h3>
       
+      {/* Patient Parameters for eGFR Calculation */}
+      <div className="bg-indigo-50 p-4 rounded-lg">
+        <h4 className="font-medium text-indigo-900 mb-3">Patient Parameters for eGFR Calculation</h4>
+        <div className="grid grid-cols-3 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Age (years)</label>
+            <input
+              type="number"
+              value={formData.age}
+              onChange={(e) => setFormData({ ...formData, age: parseInt(e.target.value) || 0 })}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-gray-100"
+              readOnly
+            />
+            <p className="text-xs text-gray-500 mt-1">From Step 1</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Weight (kg)</label>
+            <input
+              type="number"
+              step="0.1"
+              value={formData.weight}
+              onChange={(e) => setFormData({ ...formData, weight: parseFloat(e.target.value) || 0 })}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
+            <input
+              type="text"
+              value={formData.gender === 'male' ? 'Male' : 'Female'}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-gray-100"
+              readOnly
+            />
+            <p className="text-xs text-gray-500 mt-1">From Step 1</p>
+          </div>
+        </div>
+      </div>
+
       {/* Laboratory Values */}
       <div className="bg-blue-50 p-4 rounded-lg">
         <h4 className="font-medium text-blue-900 mb-3">Laboratory Values</h4>
         <div className="grid grid-cols-3 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Creatinine (mg/dL)</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Serum Creatinine (mg/dL)</label>
             <input
               type="number"
-              step="0.1"
+              step="0.01"
               value={formData.creatinine}
               onChange={(e) => setFormData({ ...formData, creatinine: parseFloat(e.target.value) || 0 })}
               className="w-full border border-gray-300 rounded-lg px-3 py-2"
+              placeholder="Enter creatinine"
             />
+            <p className="text-xs text-gray-500 mt-1">Normal: 0.7-1.3 mg/dL</p>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">BUN (mg/dL)</label>
@@ -899,17 +975,35 @@ const Step4RenalStatus: React.FC<{ formData: any; setFormData: any }> = ({ formD
               onChange={(e) => setFormData({ ...formData, bun: parseInt(e.target.value) || 0 })}
               className="w-full border border-gray-300 rounded-lg px-3 py-2"
             />
+            <p className="text-xs text-gray-500 mt-1">Normal: 7-20 mg/dL</p>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">eGFR (mL/min/1.73m²)</label>
-            <input
-              type="number"
-              value={formData.egfr}
-              onChange={(e) => setFormData({ ...formData, egfr: parseInt(e.target.value) || 0 })}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2"
-            />
+            <div className="relative">
+              <input
+                type="number"
+                value={formData.egfr}
+                className="w-full border border-green-400 rounded-lg px-3 py-2 bg-green-50 font-semibold"
+                readOnly
+              />
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs bg-green-600 text-white px-2 py-0.5 rounded">
+                Auto
+              </span>
+            </div>
+            <p className="text-xs text-green-600 mt-1">✓ Calculated using CKD-EPI 2021</p>
           </div>
         </div>
+      </div>
+
+      {/* eGFR Formula Info */}
+      <div className="bg-gray-50 p-3 rounded-lg text-sm text-gray-600">
+        <p className="font-medium mb-1">eGFR Calculation (CKD-EPI 2021 Equation):</p>
+        <p className="text-xs">
+          eGFR = 142 × min(Scr/κ, 1)<sup>α</sup> × max(Scr/κ, 1)<sup>-1.200</sup> × 0.9938<sup>age</sup> × (1.012 if female)
+        </p>
+        <p className="text-xs mt-1 text-gray-500">
+          Where: κ = 0.7 (female) or 0.9 (male), α = -0.241 (female) or -0.302 (male)
+        </p>
       </div>
 
       {/* CKD Stage Display */}
@@ -922,6 +1016,9 @@ const Step4RenalStatus: React.FC<{ formData: any; setFormData: any }> = ({ formD
         <div className="flex items-center justify-between">
           <span className="font-medium">Calculated CKD Stage:</span>
           <span className="text-lg font-bold">{ckd.label}</span>
+        </div>
+        <div className="mt-2 text-sm">
+          <p className="font-medium">eGFR: {formData.egfr} mL/min/1.73m²</p>
         </div>
         {ckd.stage >= 4 && (
           <p className="text-sm mt-2 text-red-700">

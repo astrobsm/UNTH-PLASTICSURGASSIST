@@ -1,34 +1,37 @@
 /**
- * Authenticated Fetch Helper - Now with Offline-First Support
- * Provides consistent authentication and error handling across all services
- * Automatically handles offline scenarios with IndexedDB caching and sync queue
+ * Offline-First Fetch Helper
+ * Provides offline-first data access with automatic sync
+ * - Reads from cache when offline
+ * - Queues mutations for sync when offline
+ * - Updates cache on successful API calls
  */
 
 import { apiClient } from './apiClient';
 import { offlineManager } from './offlineManager';
 import toast from 'react-hot-toast';
 
-export interface FetchOptions extends Omit<RequestInit, 'priority'> {
+export interface OfflineFetchOptions extends Omit<RequestInit, 'priority'> {
   timeout?: number;
   retries?: number;
-  // Offline options
-  cacheKey?: string;
-  entityType?: string;
-  entityId?: string | number;
-  skipCache?: boolean;
-  skipQueue?: boolean;
-  syncPriority?: 'high' | 'normal' | 'low';
+  // Offline-specific options
+  cacheKey?: string; // Key for caching in IndexedDB
+  entityType?: string; // Entity type for sync queue
+  entityId?: string | number; // Entity ID for updates/deletes
+  skipCache?: boolean; // Skip reading from cache
+  skipQueue?: boolean; // Skip queueing for sync
+  syncPriority?: 'high' | 'normal' | 'low'; // Sync priority (renamed to avoid conflict)
 }
 
 // API Base URL
 const API_BASE_URL = (import.meta as any).env?.PROD ? '/api' : 'http://localhost:3001/api';
 
 /**
- * Extract entity type from URL
+ * Extract entity type and ID from URL
  */
 function parseUrl(url: string): { entityType: string; entityId?: string } {
   const cleanUrl = url.replace(API_BASE_URL, '').replace('/api', '');
   const parts = cleanUrl.split('/').filter(Boolean);
+  
   return {
     entityType: parts[0] || '',
     entityId: parts[1],
@@ -36,12 +39,11 @@ function parseUrl(url: string): { entityType: string; entityId?: string } {
 }
 
 /**
- * Make an authenticated fetch request with proper headers and error handling
- * Now with full offline support
+ * Make an authenticated fetch request with offline support
  */
-export const authenticatedFetch = async (
+export const offlineFetch = async (
   url: string,
-  options: FetchOptions = {}
+  options: OfflineFetchOptions = {}
 ): Promise<Response> => {
   const token = apiClient.getToken();
   const { 
@@ -60,10 +62,12 @@ export const authenticatedFetch = async (
   const { entityType, entityId } = parseUrl(url);
   const resolvedEntityType = providedEntityType || entityType;
   const resolvedEntityId = providedEntityId || entityId;
+
+  // Check if we're online
   const isOnline = offlineManager.isNetworkOnline();
 
-  // Handle offline GET requests - serve from cache
-  if (method === 'GET' && !isOnline && !skipCache && resolvedEntityType) {
+  // For GET requests when offline, try to serve from cache
+  if (method === 'GET' && !isOnline && !skipCache) {
     console.log(`📴 Offline: Serving ${resolvedEntityType} from cache`);
     
     const cachedData = await offlineManager.getCachedData(
@@ -72,15 +76,23 @@ export const authenticatedFetch = async (
     );
 
     if (cachedData !== null) {
+      // Create a mock response with cached data
       return new Response(JSON.stringify(cachedData), {
         status: 200,
         statusText: 'OK (Cached)',
         headers: { 'Content-Type': 'application/json', 'X-From-Cache': 'true' },
       });
+    } else {
+      // No cached data available
+      return new Response(JSON.stringify({ error: 'No cached data available', offline: true }), {
+        status: 503,
+        statusText: 'Offline - No Cache',
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
   }
 
-  // Handle offline mutations - queue for sync
+  // For mutations when offline, queue them
   if (!isOnline && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && !skipQueue) {
     console.log(`📴 Offline: Queueing ${method} request to ${url}`);
     
@@ -91,10 +103,12 @@ export const authenticatedFetch = async (
       bodyData = fetchOptions.body;
     }
 
+    // Store in local database
     if (resolvedEntityType && bodyData) {
       const action = method === 'POST' ? 'create' : method === 'DELETE' ? 'delete' : 'update';
       const localId = await offlineManager.storeLocally(resolvedEntityType, bodyData, action);
       
+      // Queue for sync
       await offlineManager.queueRequest({
         url,
         method: method as 'POST' | 'PUT' | 'PATCH' | 'DELETE',
@@ -104,8 +118,7 @@ export const authenticatedFetch = async (
         priority: syncPriority,
       });
 
-      toast('Saved offline. Will sync when connected.', { icon: '📴', duration: 2000 });
-
+      // Return success response with local ID
       return new Response(JSON.stringify({ 
         ...bodyData, 
         id: localId, 
@@ -117,9 +130,27 @@ export const authenticatedFetch = async (
         headers: { 'Content-Type': 'application/json', 'X-Offline': 'true' },
       });
     }
+
+    // Queue the request without local storage
+    await offlineManager.queueRequest({
+      url,
+      method: method as 'POST' | 'PUT' | 'PATCH' | 'DELETE',
+      body: bodyData,
+      entityType: resolvedEntityType,
+      entityId: resolvedEntityId,
+      priority: syncPriority,
+    });
+
+    toast('Changes saved locally. Will sync when online.', { icon: '📴' });
+
+    return new Response(JSON.stringify({ _offline: true, _queued: true }), {
+      status: 202,
+      statusText: 'Accepted (Queued)',
+      headers: { 'Content-Type': 'application/json', 'X-Queued': 'true' },
+    });
   }
 
-  // Online request
+  // Online: make the actual request
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
@@ -166,7 +197,7 @@ export const authenticatedFetch = async (
       }
     }
 
-    // Cache successful mutations
+    // Cache successful POST/PUT responses (update local cache)
     if (response.ok && ['POST', 'PUT', 'PATCH'].includes(method) && resolvedEntityType) {
       const data = await response.clone().json().catch(() => null);
       if (data) {
@@ -178,11 +209,12 @@ export const authenticatedFetch = async (
   } catch (error) {
     clearTimeout(timeoutId);
 
-    // Network error - try offline fallback
+    // Network error - we might have gone offline
     if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
-      console.log('🔌 Network error - falling back to offline mode');
+      console.log('🔌 Network error detected, falling back to offline mode');
       
-      if (method === 'GET' && !skipCache && resolvedEntityType) {
+      // For GET requests, try cache
+      if (method === 'GET' && !skipCache) {
         const cachedData = await offlineManager.getCachedData(
           resolvedEntityType,
           resolvedEntityId
@@ -198,6 +230,7 @@ export const authenticatedFetch = async (
         }
       }
 
+      // For mutations, queue them
       if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && !skipQueue) {
         let bodyData: any;
         try {
@@ -227,9 +260,9 @@ export const authenticatedFetch = async (
 
     // Retry logic for network errors
     if (retries > 0 && error instanceof Error && error.name !== 'AbortError') {
-      console.log(`Retrying request to ${url}, ${retries} attempts remaining`);
+      console.log(`🔄 Retrying request to ${url}, ${retries} attempts remaining`);
       await new Promise((resolve) => setTimeout(resolve, 1000));
-      return authenticatedFetch(url, { ...options, retries: retries - 1 });
+      return offlineFetch(url, { ...options, retries: retries - 1 });
     }
 
     throw error;
@@ -237,13 +270,13 @@ export const authenticatedFetch = async (
 };
 
 /**
- * Make an authenticated JSON request and parse the response
+ * Make an offline-first JSON request and parse the response
  */
-export const fetchJSON = async <T = any>(
+export const offlineFetchJSON = async <T = any>(
   url: string,
-  options: FetchOptions = {}
+  options: OfflineFetchOptions = {}
 ): Promise<T> => {
-  const response = await authenticatedFetch(url, options);
+  const response = await offlineFetch(url, options);
 
   if (!response.ok && !response.headers.get('X-Offline')) {
     const error = await response.json().catch(() => ({ error: 'Request failed' }));
@@ -251,6 +284,76 @@ export const fetchJSON = async <T = any>(
   }
 
   return response.json();
+};
+
+/**
+ * GET request with offline support
+ */
+export const offlineGet = async <T = any>(
+  endpoint: string,
+  options: Omit<OfflineFetchOptions, 'method'> = {}
+): Promise<T> => {
+  const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
+  return offlineFetchJSON<T>(url, { ...options, method: 'GET' });
+};
+
+/**
+ * POST request with offline support
+ */
+export const offlinePost = async <T = any>(
+  endpoint: string,
+  body: any,
+  options: Omit<OfflineFetchOptions, 'method' | 'body'> = {}
+): Promise<T> => {
+  const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
+  return offlineFetchJSON<T>(url, {
+    ...options,
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+};
+
+/**
+ * PUT request with offline support
+ */
+export const offlinePut = async <T = any>(
+  endpoint: string,
+  body: any,
+  options: Omit<OfflineFetchOptions, 'method' | 'body'> = {}
+): Promise<T> => {
+  const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
+  return offlineFetchJSON<T>(url, {
+    ...options,
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+};
+
+/**
+ * PATCH request with offline support
+ */
+export const offlinePatch = async <T = any>(
+  endpoint: string,
+  body: any,
+  options: Omit<OfflineFetchOptions, 'method' | 'body'> = {}
+): Promise<T> => {
+  const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
+  return offlineFetchJSON<T>(url, {
+    ...options,
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+};
+
+/**
+ * DELETE request with offline support
+ */
+export const offlineDelete = async <T = any>(
+  endpoint: string,
+  options: Omit<OfflineFetchOptions, 'method'> = {}
+): Promise<T> => {
+  const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
+  return offlineFetchJSON<T>(url, { ...options, method: 'DELETE' });
 };
 
 /**
@@ -293,4 +396,6 @@ export const getPendingSyncCount = async (): Promise<number> => {
   return offlineManager.getPendingCount();
 };
 
-export default authenticatedFetch;
+// Export for backward compatibility
+export { offlineFetch as authenticatedFetch, offlineFetchJSON as fetchJSON };
+export default offlineFetch;

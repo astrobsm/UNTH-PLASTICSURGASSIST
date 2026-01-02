@@ -366,7 +366,7 @@ export default function ShoppingList() {
     doc.setFontSize(8);
     doc.setTextColor(150, 150, 150);
     doc.text(
-      `Generated: ${new Date().toLocaleDateString()} | Patient: ${patient.full_name}`,
+      `Generated: ${new Date().toLocaleDateString()} | Patient: ${patientName}`,
       pageWidth / 2,
       footerY,
       { align: 'center' }
@@ -380,7 +380,7 @@ export default function ShoppingList() {
     );
 
     // Save
-    const sanitizedPatientName = patient.full_name.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+    const sanitizedPatientName = patientName.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
     const filename = `ShoppingList_${sanitizedPatientName}_${categoryTitle.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
     doc.save(filename);
     

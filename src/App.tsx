@@ -32,6 +32,7 @@ import BurnCarePage from './pages/BurnCarePage';
 import MedicalTrainingPage from './pages/MedicalTrainingPage';
 import { useAuthStore } from './store/authStore';
 import { PWAInstallPrompt } from './components/PWAInstallPrompt';
+import { OfflineIndicator } from './components/OfflineIndicator';
 import TreatmentPlanBuilder from './components/TreatmentPlanBuilder';
 import { notificationService } from './services/notificationBackgroundService';
 
@@ -122,6 +123,9 @@ function App() {
               onInstall={() => setDeferredPrompt(null)} 
             />
           )}
+          
+          {/* Offline Status Indicator */}
+          <OfflineIndicator position="bottom" showSyncButton showDetails />
         </Layout>
       } />
     </Routes>

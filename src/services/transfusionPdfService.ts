@@ -395,7 +395,7 @@ class TransfusionPdfService {
     ];
 
     checklist.forEach(item => {
-      const symbol = item.checked ? '☑' : '☐';
+      const symbol = item.checked ? '[X]' : '[ ]';
       pdf.text(`${symbol} ${item.item}`, col1X, yPos);
       yPos += 6;
     });
@@ -599,12 +599,12 @@ class TransfusionPdfService {
 
     pdf.setFont('helvetica', 'normal');
     pdf.setFontSize(9);
-    pdf.text('☐ None observed', 15, yPos);
-    pdf.text('☐ Fever/Chills', 60, yPos);
-    pdf.text('☐ Rash/Urticaria', 105, yPos);
-    pdf.text('☐ Dyspnea', 150, yPos);
-    pdf.text('☐ Hypotension', 190, yPos);
-    pdf.text('☐ Other: _________________', 235, yPos);
+    pdf.text('[ ] None observed', 15, yPos);
+    pdf.text('[ ] Fever/Chills', 62, yPos);
+    pdf.text('[ ] Rash/Urticaria', 110, yPos);
+    pdf.text('[ ] Dyspnea', 160, yPos);
+    pdf.text('[ ] Hypotension', 200, yPos);
+    pdf.text('[ ] Other: _________________', 245, yPos);
     yPos += 10;
 
     // Action Taken
@@ -623,7 +623,8 @@ class TransfusionPdfService {
     yPos += 8;
 
     pdf.text('Post-Transfusion Hb (if done): ____________ g/dL', 15, yPos);
-    pdf.text('Transfusion Outcome: ☐ Successful   ☐ Incomplete   ☐ Reaction occurred', 130, yPos);
+    yPos += 8;
+    pdf.text('Transfusion Outcome: [ ] Successful   [ ] Incomplete   [ ] Reaction occurred', 15, yPos);
     yPos += 12;
 
     // Signatures
@@ -762,8 +763,8 @@ class TransfusionPdfService {
         xPos = 15;
         yPos += 6;
       }
-      pdf.text(`☐ ${reaction}`, xPos, yPos);
-      xPos += 35;
+      pdf.text(`[ ] ${reaction}`, xPos, yPos);
+      xPos += 38;
     });
     yPos += 10;
 
@@ -777,13 +778,13 @@ class TransfusionPdfService {
     pdf.text('End Time: ________', 55, yPos);
     pdf.text('Total Volume: ________ mL', 105, yPos);
     pdf.text('Duration: ________ hrs', 175, yPos);
-    pdf.text('Outcome: ☐ Complete  ☐ Incomplete', 235, yPos);
+    pdf.text('Outcome: [ ] Complete  [ ] Incomplete', 230, yPos);
     yPos += 10;
 
     // Signatures
     pdf.text('Nurse Signature: ___________________', 15, yPos);
-    pdf.text('Doctor Signature: ___________________', 120, yPos);
-    pdf.text('Date: ______________', 230, yPos);
+    pdf.text('Doctor Signature: ___________________', 115, yPos);
+    pdf.text('Date: ______________', 215, yPos);
 
     // Footer
     pdf.setFontSize(7);
@@ -792,6 +793,239 @@ class TransfusionPdfService {
 
     // Save
     pdf.save(`Blank_Transfusion_Monitoring_Chart_${format(new Date(), 'yyyyMMdd')}.pdf`);
+  }
+
+  /**
+   * Generate Blood Transfusion Consent Form PDF
+   */
+  generateConsentFormPDF(patientData?: {
+    name?: string;
+    hospital_number?: string;
+    age?: number;
+    gender?: string;
+    ward?: string;
+    diagnosis?: string;
+    blood_group?: string;
+    units_requested?: number;
+    component_type?: string;
+    indication?: string;
+    physician_name?: string;
+  }): void {
+    const pdf = new jsPDF();
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    let yPos = 15;
+
+    // Header
+    pdf.setFontSize(10);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text('UNIVERSITY OF NIGERIA TEACHING HOSPITAL', pageWidth / 2, yPos, { align: 'center' });
+    yPos += 5;
+    pdf.text('ITUKU OZALLA, ENUGU', pageWidth / 2, yPos, { align: 'center' });
+    yPos += 8;
+    
+    pdf.setFontSize(14);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('CONSENT FOR BLOOD TRANSFUSION', pageWidth / 2, yPos, { align: 'center' });
+    yPos += 8;
+    
+    // Draw header line
+    pdf.setDrawColor(139, 0, 0);
+    pdf.setLineWidth(1);
+    pdf.line(15, yPos, pageWidth - 15, yPos);
+    yPos += 10;
+
+    // Patient Information Section
+    pdf.setFontSize(11);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('PATIENT INFORMATION', 15, yPos);
+    yPos += 8;
+
+    pdf.setFontSize(10);
+    pdf.setFont('helvetica', 'normal');
+    
+    const col1X = 15;
+    const col2X = pageWidth / 2 + 10;
+    const lineLength = 60;
+    
+    pdf.text('Patient Name:', col1X, yPos);
+    pdf.line(col1X + 28, yPos, col1X + 28 + lineLength, yPos);
+    if (patientData?.name) pdf.text(patientData.name, col1X + 30, yPos - 1);
+    
+    pdf.text('Hospital No:', col2X, yPos);
+    pdf.line(col2X + 25, yPos, col2X + 25 + 50, yPos);
+    if (patientData?.hospital_number) pdf.text(patientData.hospital_number, col2X + 27, yPos - 1);
+    yPos += 8;
+
+    pdf.text('Age:', col1X, yPos);
+    pdf.line(col1X + 12, yPos, col1X + 12 + 30, yPos);
+    if (patientData?.age) pdf.text(String(patientData.age) + ' years', col1X + 14, yPos - 1);
+    
+    pdf.text('Gender:', col1X + 55, yPos);
+    pdf.line(col1X + 72, yPos, col1X + 72 + 30, yPos);
+    if (patientData?.gender) pdf.text(patientData.gender, col1X + 74, yPos - 1);
+    
+    pdf.text('Ward:', col2X, yPos);
+    pdf.line(col2X + 14, yPos, col2X + 14 + 60, yPos);
+    if (patientData?.ward) pdf.text(patientData.ward, col2X + 16, yPos - 1);
+    yPos += 8;
+
+    pdf.text('Diagnosis:', col1X, yPos);
+    pdf.line(col1X + 22, yPos, pageWidth - 15, yPos);
+    if (patientData?.diagnosis) pdf.text(patientData.diagnosis, col1X + 24, yPos - 1);
+    yPos += 8;
+
+    pdf.text('Blood Group:', col1X, yPos);
+    pdf.line(col1X + 28, yPos, col1X + 28 + 40, yPos);
+    if (patientData?.blood_group) pdf.text(patientData.blood_group, col1X + 30, yPos - 1);
+    
+    pdf.text('Units Requested:', col1X + 80, yPos);
+    pdf.line(col1X + 115, yPos, col1X + 115 + 25, yPos);
+    if (patientData?.units_requested) pdf.text(String(patientData.units_requested), col1X + 117, yPos - 1);
+    yPos += 12;
+
+    // Transfusion Details
+    pdf.setFontSize(11);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('TRANSFUSION DETAILS', 15, yPos);
+    yPos += 8;
+
+    pdf.setFontSize(10);
+    pdf.setFont('helvetica', 'normal');
+    
+    pdf.text('Blood Component Type:', col1X, yPos);
+    pdf.line(col1X + 48, yPos, pageWidth - 15, yPos);
+    if (patientData?.component_type) pdf.text(patientData.component_type, col1X + 50, yPos - 1);
+    yPos += 8;
+
+    pdf.text('Indication for Transfusion:', col1X, yPos);
+    pdf.line(col1X + 53, yPos, pageWidth - 15, yPos);
+    if (patientData?.indication) pdf.text(patientData.indication, col1X + 55, yPos - 1);
+    yPos += 12;
+
+    // Consent Statement
+    pdf.setFontSize(11);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('CONSENT STATEMENT', 15, yPos);
+    yPos += 8;
+
+    pdf.setFontSize(10);
+    pdf.setFont('helvetica', 'normal');
+    
+    const consentText = [
+      'I, the undersigned, hereby confirm that:',
+      '',
+      '1. I have been informed about the need for blood transfusion and the reasons for it.',
+      '',
+      '2. The nature, benefits, and risks of blood transfusion have been explained to me in a',
+      '   language I understand.',
+      '',
+      '3. I understand that blood transfusion, while generally safe, carries certain risks including',
+      '   but not limited to:',
+      '   - Allergic reactions (rash, itching, fever)',
+      '   - Transfusion reactions (fever, chills, difficulty breathing)',
+      '   - Transmission of infections (rare due to screening)',
+      '   - Fluid overload',
+      '   - Other complications',
+      '',
+      '4. I have been given the opportunity to ask questions, and all my questions have been',
+      '   answered satisfactorily.',
+      '',
+      '5. I understand that I have the right to refuse this transfusion, and the consequences of',
+      '   refusal have been explained to me.',
+      '',
+      '6. I voluntarily consent to receive blood transfusion(s) as deemed necessary by my',
+      '   treating physician(s).',
+    ];
+
+    consentText.forEach(line => {
+      pdf.text(line, col1X, yPos);
+      yPos += 5;
+    });
+    yPos += 5;
+
+    // Signatures Section
+    pdf.setFontSize(11);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('SIGNATURES', 15, yPos);
+    yPos += 10;
+
+    pdf.setFontSize(10);
+    pdf.setFont('helvetica', 'normal');
+
+    // Patient/Guardian Signature
+    pdf.text('Patient/Guardian Signature:', col1X, yPos);
+    pdf.line(col1X + 55, yPos, col1X + 55 + 70, yPos);
+    yPos += 8;
+
+    pdf.text('Name (Print):', col1X, yPos);
+    pdf.line(col1X + 28, yPos, col1X + 28 + 70, yPos);
+    
+    pdf.text('Date:', col2X, yPos);
+    pdf.line(col2X + 14, yPos, col2X + 14 + 50, yPos);
+    yPos += 8;
+
+    pdf.text('Relationship to Patient (if not patient):', col1X, yPos);
+    pdf.line(col1X + 77, yPos, pageWidth - 15, yPos);
+    yPos += 12;
+
+    // Witness Signature
+    pdf.text('Witness Signature:', col1X, yPos);
+    pdf.line(col1X + 40, yPos, col1X + 40 + 70, yPos);
+    yPos += 8;
+
+    pdf.text('Name (Print):', col1X, yPos);
+    pdf.line(col1X + 28, yPos, col1X + 28 + 70, yPos);
+    
+    pdf.text('Date:', col2X, yPos);
+    pdf.line(col2X + 14, yPos, col2X + 14 + 50, yPos);
+    yPos += 12;
+
+    // Physician Signature
+    pdf.text('Explaining Physician:', col1X, yPos);
+    pdf.line(col1X + 45, yPos, col1X + 45 + 70, yPos);
+    if (patientData?.physician_name) pdf.text('Dr. ' + patientData.physician_name, col1X + 47, yPos - 1);
+    yPos += 8;
+
+    pdf.text('Signature:', col1X, yPos);
+    pdf.line(col1X + 22, yPos, col1X + 22 + 70, yPos);
+    
+    pdf.text('Date/Time:', col2X, yPos);
+    pdf.line(col2X + 24, yPos, col2X + 24 + 50, yPos);
+    yPos += 15;
+
+    // Refusal Section (if applicable)
+    pdf.setFontSize(11);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('REFUSAL OF CONSENT (Complete only if patient refuses)', 15, yPos);
+    yPos += 8;
+
+    pdf.setFontSize(10);
+    pdf.setFont('helvetica', 'normal');
+    
+    const refusalText = 'I have been informed of the need for blood transfusion and the risks of refusing. ' +
+      'I understand that refusing this transfusion may result in serious harm or death. ' +
+      'Despite this, I choose to refuse blood transfusion.';
+    
+    const refusalLines = pdf.splitTextToSize(refusalText, pageWidth - 30);
+    pdf.text(refusalLines, col1X, yPos);
+    yPos += refusalLines.length * 5 + 5;
+
+    pdf.text('Patient/Guardian Signature:', col1X, yPos);
+    pdf.line(col1X + 55, yPos, col1X + 55 + 60, yPos);
+    pdf.text('Date:', col2X, yPos);
+    pdf.line(col2X + 14, yPos, col2X + 14 + 50, yPos);
+
+    // Footer
+    pdf.setFontSize(7);
+    pdf.setTextColor(128, 128, 128);
+    pdf.text(`Generated: ${format(new Date(), 'dd/MM/yyyy HH:mm')} | Blood Transfusion Consent Form | UNTH Plastic Surgery`, pageWidth / 2, pageHeight - 5, { align: 'center' });
+
+    // Save
+    const fileName = patientData?.hospital_number 
+      ? `Blood_Transfusion_Consent_${patientData.hospital_number}_${format(new Date(), 'yyyyMMdd')}.pdf`
+      : `Blood_Transfusion_Consent_Blank_${format(new Date(), 'yyyyMMdd')}.pdf`;
+    pdf.save(fileName);
   }
 }
 

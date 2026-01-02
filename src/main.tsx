@@ -7,19 +7,70 @@ import App from './App.tsx';
 import './index.css';
 import { cmeArticleScheduler } from './services/cmeArticleScheduler';
 import { mcqGenerationService } from './services/mcqGenerationService';
+import { offlineManager } from './services/offlineManager';
 
-// Service Worker registration - TEMPORARILY DISABLED FOR CACHE CLEARING
+// Service Worker Registration for PWA Offline Support
 if ('serviceWorker' in navigator) {
-  // Unregister any existing service workers
-  navigator.serviceWorker.getRegistrations().then((registrations) => {
-    for (let registration of registrations) {
-      registration.unregister();
-      console.log('Unregistered old service worker');
+  window.addEventListener('load', async () => {
+    try {
+      // Register the service worker
+      const registration = await navigator.serviceWorker.register('/sw.js', {
+        scope: '/',
+      });
+      
+      console.log('✅ Service Worker registered successfully:', registration.scope);
+      
+      // Handle updates
+      registration.addEventListener('updatefound', () => {
+        const newWorker = registration.installing;
+        if (newWorker) {
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              // New content is available, show update notification
+              console.log('🔄 New version available! Refresh to update.');
+              if (window.confirm('A new version is available. Reload to update?')) {
+                window.location.reload();
+              }
+            }
+          });
+        }
+      });
+
+      // Request background sync permission if available
+      if ('sync' in registration) {
+        console.log('📡 Background Sync available');
+      }
+
+      // Request periodic background sync if available
+      if ('periodicSync' in registration) {
+        try {
+          await (registration as any).periodicSync.register('clinical-data-sync', {
+            minInterval: 60 * 60 * 1000, // 1 hour
+          });
+          console.log('⏰ Periodic Background Sync registered');
+        } catch (error) {
+          console.log('Periodic Background Sync not available');
+        }
+      }
+    } catch (error) {
+      console.error('❌ Service Worker registration failed:', error);
+    }
+  });
+
+  // Listen for service worker messages
+  navigator.serviceWorker.addEventListener('message', (event) => {
+    console.log('📨 Message from Service Worker:', event.data);
+    
+    if (event.data.type === 'SYNC_COMPLETE') {
+      console.log('✅ Background sync completed');
     }
   });
 }
 
-// Start services without service worker
+// Initialize offline manager
+console.log('🔌 Offline Manager initialized');
+
+// Start services after load
 window.addEventListener('load', () => {
   // Start CME Article Scheduler
   cmeArticleScheduler.start();

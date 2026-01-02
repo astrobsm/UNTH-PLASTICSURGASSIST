@@ -16,7 +16,8 @@ import {
   Upload,
   Printer,
   FileDown,
-  ClipboardList
+  ClipboardList,
+  Eye
 } from 'lucide-react';
 import { db } from '../db/database';
 import { patientService } from '../services/patientService';
@@ -132,6 +133,15 @@ export default function BloodTransfusionForm({
     units: 1,
     complications: ''
   });
+
+  // Signed consent upload
+  const [signedConsentFile, setSignedConsentFile] = useState<{
+    id: string;
+    fileName: string;
+    base64Data: string;
+    uploadedAt: Date;
+  } | null>(null);
+  const [uploadingConsent, setUploadingConsent] = useState(false);
 
   const tabs = [
     { id: 'details', label: 'Patient & Indication', icon: FileText },
@@ -588,6 +598,104 @@ export default function BloodTransfusionForm({
       entries,
       entries.length === 0
     );
+  };
+
+  // Generate Consent Form PDF
+  const generateConsentFormPDF = () => {
+    const patientAge = selectedPatient?.date_of_birth 
+      ? Math.floor((new Date().getTime() - new Date(selectedPatient.date_of_birth).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+      : undefined;
+
+    transfusionPdfService.generateConsentFormPDF({
+      name: selectedPatient ? `${selectedPatient.first_name} ${selectedPatient.last_name}` : formData.patient_name,
+      hospital_number: formData.hospital_number,
+      age: patientAge,
+      gender: selectedPatient?.gender,
+      ward: selectedPatient?.ward_id || 'N/A',
+      diagnosis: formData.clinical_status,
+      blood_group: selectedPatient?.blood_group || formData.blood_bags?.[0]?.blood_group,
+      units_requested: formData.total_units || formData.blood_bags?.length || 1,
+      component_type: formData.blood_bags?.[0]?.component_type || 'Packed Red Blood Cells',
+      indication: formData.indication,
+      physician_name: formData.administered_by
+    });
+  };
+
+  // Handle signed consent file upload
+  const handleConsentFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'application/pdf'];
+    if (!validTypes.includes(file.type)) {
+      alert('Please upload an image (JPEG, PNG, GIF) or PDF file.');
+      return;
+    }
+
+    // Validate file size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      alert('File size must be less than 10MB.');
+      return;
+    }
+
+    setUploadingConsent(true);
+
+    try {
+      // Read file as base64
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64Data = reader.result as string;
+        setSignedConsentFile({
+          id: `consent_${Date.now()}`,
+          fileName: file.name,
+          base64Data,
+          uploadedAt: new Date()
+        });
+        
+        // Update form data to mark consent as obtained
+        setFormData(prev => ({
+          ...prev,
+          consent_obtained: true
+        }));
+        
+        alert('Signed consent form uploaded successfully!');
+      };
+      reader.onerror = () => {
+        alert('Failed to read file. Please try again.');
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+      console.error('Failed to upload consent:', error);
+      alert('Failed to upload consent form. Please try again.');
+    } finally {
+      setUploadingConsent(false);
+    }
+  };
+
+  // Delete uploaded consent
+  const handleDeleteConsent = () => {
+    if (confirm('Are you sure you want to remove the uploaded consent form?')) {
+      setSignedConsentFile(null);
+      setFormData(prev => ({
+        ...prev,
+        consent_obtained: false
+      }));
+    }
+  };
+
+  // View uploaded consent
+  const handleViewConsent = () => {
+    if (signedConsentFile?.base64Data) {
+      const win = window.open();
+      if (win) {
+        if (signedConsentFile.base64Data.includes('application/pdf')) {
+          win.document.write(`<iframe src="${signedConsentFile.base64Data}" style="width:100%;height:100%;border:none;"></iframe>`);
+        } else {
+          win.document.write(`<img src="${signedConsentFile.base64Data}" style="max-width:100%;height:auto;" />`);
+        }
+      }
+    }
   };
 
   if (loading) {
@@ -1467,6 +1575,29 @@ export default function BloodTransfusionForm({
                       <span>Download Blank Chart</span>
                     </button>
                   </div>
+
+                  {/* Consent Form PDF */}
+                  <div className="bg-white rounded-lg border border-purple-200 p-4 shadow-sm">
+                    <div className="flex items-center mb-3">
+                      <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center mr-3">
+                        <FileText className="h-5 w-5 text-purple-600" />
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-gray-900">Consent Form</h4>
+                        <p className="text-xs text-gray-500">Patient consent document</p>
+                      </div>
+                    </div>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Blood transfusion consent form with patient information pre-filled for signature.
+                    </p>
+                    <button
+                      onClick={generateConsentFormPDF}
+                      className="w-full bg-purple-600 text-white py-2 px-4 rounded-lg hover:bg-purple-700 transition-colors flex items-center justify-center space-x-2"
+                    >
+                      <Download className="h-4 w-4" />
+                      <span>Download Consent Form</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Document Details */}
@@ -1507,6 +1638,95 @@ export default function BloodTransfusionForm({
                     </div>
                   </div>
                 </div>
+              </div>
+
+              {/* Signed Consent Upload Section */}
+              <div className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-6">
+                <h3 className="text-lg font-bold text-purple-900 mb-4 flex items-center">
+                  <FileText className="h-5 w-5 mr-2" />
+                  Signed Consent Form
+                </h3>
+                
+                <p className="text-sm text-gray-600 mb-4">
+                  Upload the signed blood transfusion consent form. This is required before starting the transfusion.
+                </p>
+
+                {!signedConsentFile ? (
+                  <div className="border-2 border-dashed border-purple-300 rounded-lg p-6 text-center">
+                    <Upload className="h-10 w-10 text-purple-400 mx-auto mb-3" />
+                    <p className="text-sm text-gray-600 mb-3">
+                      Drop a signed consent form here, or click to browse
+                    </p>
+                    <input
+                      type="file"
+                      accept="image/*,application/pdf"
+                      onChange={handleConsentFileUpload}
+                      className="hidden"
+                      id="consent-upload"
+                      disabled={uploadingConsent}
+                    />
+                    <label
+                      htmlFor="consent-upload"
+                      className={`inline-flex items-center px-4 py-2 rounded-lg transition-colors cursor-pointer ${
+                        uploadingConsent 
+                          ? 'bg-gray-400 text-white cursor-not-allowed' 
+                          : 'bg-purple-600 text-white hover:bg-purple-700'
+                      }`}
+                    >
+                      {uploadingConsent ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                          Uploading...
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="h-4 w-4 mr-2" />
+                          Upload Signed Consent
+                        </>
+                      )}
+                    </label>
+                    <p className="text-xs text-gray-500 mt-3">
+                      Accepted formats: JPEG, PNG, GIF, PDF (max 10MB)
+                    </p>
+                  </div>
+                ) : (
+                  <div className="bg-white border border-purple-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center">
+                        <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mr-4">
+                          <CheckCircle className="h-6 w-6 text-purple-600" />
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-900">Signed Consent Uploaded</p>
+                          <p className="text-sm text-gray-600">{signedConsentFile.fileName}</p>
+                          <p className="text-xs text-gray-500">
+                            Uploaded: {format(signedConsentFile.uploadedAt, 'dd MMM yyyy, HH:mm')}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={handleViewConsent}
+                          className="p-2 text-purple-600 hover:bg-purple-100 rounded-lg transition-colors"
+                          title="View Consent"
+                        >
+                          <Eye className="h-5 w-5" />
+                        </button>
+                        <button
+                          onClick={handleDeleteConsent}
+                          className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors"
+                          title="Remove Consent"
+                        >
+                          <X className="h-5 w-5" />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex items-center text-sm text-green-600">
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      Consent obtained and documented
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Upload Completed Charts Section */}

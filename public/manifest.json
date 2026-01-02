@@ -1,12 +1,14 @@
 {
   "name": "Plastic Surgeon Assistant",
   "short_name": "PS Assistant",
-  "description": "Progressive Web App for plastic surgery clinical workflows - designed for interns and resident doctors",
+  "description": "Progressive Web App for plastic surgery clinical workflows - designed for interns and resident doctors. Works fully offline!",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#F9FAFB",
   "theme_color": "#0E9F6E",
   "orientation": "portrait-primary",
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/logo.png",
@@ -59,6 +61,23 @@
           "sizes": "96x96"
         }
       ]
+    },
+    {
+      "name": "Treatment Plans",
+      "short_name": "Plans",
+      "description": "View treatment plans",
+      "url": "/treatment-plan-builder",
+      "icons": [
+        {
+          "src": "/logo.png",
+          "sizes": "96x96"
+        }
+      ]
     }
-  ]
+  ],
+  "related_applications": [],
+  "handle_links": "preferred",
+  "launch_handler": {
+    "client_mode": "navigate-existing"
+  }
 }
