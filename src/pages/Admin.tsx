@@ -53,6 +53,7 @@ type AdminTab = 'dashboard' | 'user-approvals' | 'users' | 'bulk-import' | 'syst
 
 interface User {
   id: string;
+  username?: string;
   email: string;
   name: string;
   role: 'admin' | 'consultant' | 'senior_registrar' | 'junior_registrar' | 'house_officer';
@@ -134,46 +135,27 @@ export default function Admin() {
   };
 
   const loadUsers = async () => {
-    // Mock users data - in real app would come from API
-    const mockUsers: User[] = [
-      {
-        id: '1',
-        email: 'admin@hospital.com',
-        name: 'System Administrator',
-        role: 'admin',
-        department: 'IT',
-        status: 'active',
-        lastLogin: new Date(),
-        permissions: ['all'],
-        createdAt: new Date('2024-01-01'),
-        updatedAt: new Date()
-      },
-      {
-        id: '2',
-        email: 'dr.smith@hospital.com',
-        name: 'Dr. John Smith',
-        role: 'consultant',
-        department: 'Plastic Surgery',
-        status: 'active',
-        lastLogin: new Date(),
-        permissions: ['patient_read', 'patient_write', 'procedure_all'],
-        createdAt: new Date('2024-01-15'),
-        updatedAt: new Date()
-      },
-      {
-        id: '3',
-        email: 'dr.jones@hospital.com',
-        name: 'Dr. Sarah Jones',
-        role: 'registrar',
-        department: 'Plastic Surgery',
-        status: 'active',
-        lastLogin: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
-        permissions: ['patient_read', 'patient_write', 'procedure_read'],
-        createdAt: new Date('2024-02-01'),
-        updatedAt: new Date()
-      }
-    ];
-    setUsers(mockUsers);
+    try {
+      // Fetch real users from API
+      const apiUsers = await apiClient.getUsers();
+      const mappedUsers: User[] = apiUsers.map((u: any) => ({
+        id: u.id?.toString() || '',
+        username: u.username || '',
+        email: u.email || '',
+        name: u.full_name || u.name || '',
+        role: u.role || 'house_officer',
+        department: u.department || 'Plastic Surgery',
+        status: u.is_active ? 'active' : 'inactive',
+        lastLogin: u.last_login ? new Date(u.last_login) : null,
+        permissions: u.role === 'admin' ? ['all'] : ['patient_read'],
+        createdAt: u.created_at ? new Date(u.created_at) : new Date(),
+        updatedAt: u.updated_at ? new Date(u.updated_at) : new Date()
+      }));
+      setUsers(mappedUsers);
+    } catch (error) {
+      console.error('Error loading users:', error);
+      setUsers([]);
+    }
   };
 
   const loadSystemMetrics = async () => {
@@ -553,6 +535,9 @@ export default function Admin() {
                       User
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Login Credentials
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Role & Department
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -579,6 +564,15 @@ export default function Admin() {
                           <div className="ml-4">
                             <div className="text-sm font-medium text-gray-900">{user.name}</div>
                             <div className="text-sm text-gray-500">{user.email}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center space-x-2">
+                          <Key className="h-4 w-4 text-gray-400" />
+                          <div>
+                            <div className="text-sm font-mono text-gray-900">{user.username || 'N/A'}</div>
+                            <div className="text-xs text-gray-500">Username</div>
                           </div>
                         </div>
                       </td>
