@@ -497,11 +497,14 @@ async function createDefaultUsers() {
 
 async function migrateRoles() {
   // Migrate old roles to new role system
-  // Old roles: super_admin, intern, nurse, lab_staff, pharmacy, resident, attending
+  // Old roles: super_admin, super admin, intern, nurse, lab_staff, pharmacy, resident, attending
   // New roles: admin, consultant, senior_registrar, junior_registrar, house_officer
   
   const roleMappings = [
     { oldRole: 'super_admin', newRole: 'admin' },
+    { oldRole: 'super admin', newRole: 'admin' },  // Handle space variant
+    { oldRole: 'Super Admin', newRole: 'admin' },  // Handle capitalized variant
+    { oldRole: 'superadmin', newRole: 'admin' },   // Handle no separator variant
     { oldRole: 'attending', newRole: 'consultant' },
     { oldRole: 'resident', newRole: 'senior_registrar' },
     { oldRole: 'intern', newRole: 'house_officer' },
@@ -512,7 +515,7 @@ async function migrateRoles() {
   
   for (const mapping of roleMappings) {
     const result = await query(
-      'UPDATE users SET role = $1 WHERE role = $2',
+      'UPDATE users SET role = $1 WHERE LOWER(role) = LOWER($2)',
       [mapping.newRole, mapping.oldRole]
     );
     if (result.rowCount > 0) {
