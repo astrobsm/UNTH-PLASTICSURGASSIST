@@ -173,6 +173,31 @@ class UserManagementService {
     }
   }
 
+  // Parse a single CSV line handling quoted values with commas
+  private parseCSVLine(line: string): string[] {
+    const result: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      
+      if (char === '"' && (i === 0 || line[i-1] !== '\\')) {
+        inQuotes = !inQuotes;
+      } else if (char === ',' && !inQuotes) {
+        result.push(current.trim().replace(/^["']|["']$/g, ''));
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    
+    // Push the last value
+    result.push(current.trim().replace(/^["']|["']$/g, ''));
+    
+    return result;
+  }
+
   // Parse CSV content for bulk import
   parseCSV(csvContent: string): BulkImportUser[] {
     const lines = csvContent.trim().split('\n');
@@ -180,7 +205,7 @@ class UserManagementService {
       throw new Error('CSV must contain a header row and at least one data row');
     }
 
-    const headers = lines[0].toLowerCase().split(',').map(h => h.trim());
+    const headers = this.parseCSVLine(lines[0]).map(h => h.toLowerCase().trim());
     const requiredHeaders = ['fullname', 'email'];
     const missingHeaders = requiredHeaders.filter(h => !headers.includes(h) && !headers.includes(h.replace('fullname', 'full_name')));
     
@@ -196,7 +221,7 @@ class UserManagementService {
     const users: BulkImportUser[] = [];
 
     for (let i = 1; i < lines.length; i++) {
-      const values = lines[i].split(',').map(v => v.trim().replace(/^["']|["']$/g, ''));
+      const values = this.parseCSVLine(lines[i]);
       
       if (values.length < 2 || !values[fullNameIndex] || !values[emailIndex]) {
         continue; // Skip empty or invalid rows
