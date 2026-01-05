@@ -474,6 +474,9 @@ async function createTables() {
 }
 
 async function createDefaultUsers() {
+  // First, migrate old roles to new role system
+  await migrateRoles();
+  
   // Check if admin exists
   const existing = await query('SELECT id FROM users WHERE username = $1', ['admin']);
   
@@ -490,4 +493,32 @@ async function createDefaultUsers() {
   } else {
     console.log('ℹ️ Admin user already exists');
   }
+}
+
+async function migrateRoles() {
+  // Migrate old roles to new role system
+  // Old roles: super_admin, intern, nurse, lab_staff, pharmacy, resident, attending
+  // New roles: admin, consultant, senior_registrar, junior_registrar, house_officer
+  
+  const roleMappings = [
+    { oldRole: 'super_admin', newRole: 'admin' },
+    { oldRole: 'attending', newRole: 'consultant' },
+    { oldRole: 'resident', newRole: 'senior_registrar' },
+    { oldRole: 'intern', newRole: 'house_officer' },
+    { oldRole: 'nurse', newRole: 'house_officer' },
+    { oldRole: 'lab_staff', newRole: 'house_officer' },
+    { oldRole: 'pharmacy', newRole: 'house_officer' }
+  ];
+  
+  for (const mapping of roleMappings) {
+    const result = await query(
+      'UPDATE users SET role = $1 WHERE role = $2',
+      [mapping.newRole, mapping.oldRole]
+    );
+    if (result.rowCount > 0) {
+      console.log(`✅ Migrated ${result.rowCount} users from '${mapping.oldRole}' to '${mapping.newRole}'`);
+    }
+  }
+  
+  console.log('✅ Role migration completed');
 }
