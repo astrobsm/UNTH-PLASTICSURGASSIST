@@ -1,7 +1,13 @@
 import { db } from '../db/database';
-import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { format, addDays, startOfWeek, endOfWeek } from 'date-fns';
+import {
+  createPDF,
+  sanitizeTextForPDF,
+  PDF_MARGINS,
+  PDF_FONT_SIZES,
+  PDF_COLORS
+} from '../utils/pdfUtils';
 
 // Scheduling Interfaces
 export interface WardRound {
@@ -350,15 +356,14 @@ class SchedulingService {
 
   async generateOperationListPDF(operationList: OperationList): Promise<void> {
     // Create landscape PDF for comprehensive information display
-    const pdf = new jsPDF({
-      orientation: 'landscape',
-      unit: 'mm',
-      format: 'a4'
-    });
+    const pdf = createPDF('landscape');
     
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
-    const margin = 10;
+    const margin = PDF_MARGINS.left;
+    
+    // Helper to sanitize text
+    const clean = (text: string | undefined | null): string => sanitizeTextForPDF(text || '');
     
     // Header Section
     pdf.setFontSize(18);
@@ -366,13 +371,13 @@ class SchedulingService {
     pdf.text('OPERATION LIST', pageWidth / 2, 15, { align: 'center' });
     
     // Date and Theatre Info
-    pdf.setFontSize(10);
+    pdf.setFontSize(PDF_FONT_SIZES.body);
     pdf.setFont('helvetica', 'normal');
-    pdf.text(`Date: ${format(operationList.date, 'EEEE, MMMM d, yyyy')}`, margin, 25);
-    pdf.text(`Theatre Complex: ${operationList.theatre_complex}`, margin, 30);
-    pdf.text(`Generated: ${format(operationList.generated_at, 'HH:mm dd/MM/yyyy')}`, pageWidth - margin - 60, 25);
-    pdf.text(`Total Cases: ${operationList.total_cases}`, pageWidth - margin - 60, 30);
-    pdf.text(`Est. Total Time: ${Math.floor(operationList.estimated_total_time / 60)}h ${operationList.estimated_total_time % 60}m`, pageWidth - margin - 60, 35);
+    pdf.text('Date: ' + format(operationList.date, 'EEEE, MMMM d, yyyy'), margin, 25);
+    pdf.text('Theatre Complex: ' + clean(operationList.theatre_complex), margin, 30);
+    pdf.text('Generated: ' + format(operationList.generated_at, 'HH:mm dd/MM/yyyy'), pageWidth - margin - 60, 25);
+    pdf.text('Total Cases: ' + operationList.total_cases, pageWidth - margin - 60, 30);
+    pdf.text('Est. Total Time: ' + Math.floor(operationList.estimated_total_time / 60) + 'h ' + (operationList.estimated_total_time % 60) + 'm', pageWidth - margin - 60, 35);
     
     // Horizontal line
     pdf.setDrawColor(0, 0, 0);
@@ -389,15 +394,15 @@ class SchedulingService {
       }
       
       // Surgery number and urgency badge
-      pdf.setFontSize(11);
+      pdf.setFontSize(PDF_FONT_SIZES.subHeader);
       pdf.setFont('helvetica', 'bold');
-      pdf.text(`Case ${index + 1}`, margin, yPosition);
+      pdf.text('Case ' + (index + 1), margin, yPosition);
       
       // Urgency badge with color
       const urgencyColor = 
-        surgery.urgency === 'emergency' ? [220, 38, 38] :
-        surgery.urgency === 'urgent' ? [245, 158, 11] :
-        [34, 197, 94];
+        surgery.urgency === 'emergency' ? [PDF_COLORS.danger.r, PDF_COLORS.danger.g, PDF_COLORS.danger.b] :
+        surgery.urgency === 'urgent' ? [PDF_COLORS.warning.r, PDF_COLORS.warning.g, PDF_COLORS.warning.b] :
+        [PDF_COLORS.primary.r, PDF_COLORS.primary.g, PDF_COLORS.primary.b];
       pdf.setFillColor(urgencyColor[0], urgencyColor[1], urgencyColor[2]);
       pdf.setTextColor(255, 255, 255);
       pdf.rect(margin + 18, yPosition - 4, 20, 5, 'F');

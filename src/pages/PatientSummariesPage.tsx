@@ -4,7 +4,13 @@ import { db } from '../db/database';
 import { patientService } from '../services/patientService';
 import { patientSummaryService, PatientSummary } from '../services/patientSummaryService';
 import { format, parseISO } from 'date-fns';
-import jsPDF from 'jspdf';
+import {
+  createPDF,
+  sanitizeTextForPDF,
+  PDF_MARGINS,
+  PDF_FONT_SIZES,
+  PDF_COLORS
+} from '../utils/pdfUtils';
 
 const PatientSummariesPage: React.FC = () => {
   const [patients, setPatients] = useState<any[]>([]);
@@ -66,9 +72,12 @@ const PatientSummariesPage: React.FC = () => {
   };
 
   const exportToPDF = (summaryData: PatientSummary) => {
-    const doc = new jsPDF();
+    const doc = createPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
-    let yPos = 20;
+    let yPos = PDF_MARGINS.top;
+    
+    // Helper to sanitize text
+    const clean = (text: string | undefined | null): string => sanitizeTextForPDF(text || '');
 
     // Header
     doc.setFontSize(18);
@@ -76,7 +85,7 @@ const PatientSummariesPage: React.FC = () => {
     doc.text('PATIENT SUMMARY', pageWidth / 2, yPos, { align: 'center' });
     yPos += 10;
 
-    doc.setFontSize(10);
+    doc.setFontSize(PDF_FONT_SIZES.body);
     doc.setFont('helvetica', 'normal');
     doc.text('University of Nigeria Teaching Hospital', pageWidth / 2, yPos, { align: 'center' });
     yPos += 5;
@@ -84,71 +93,71 @@ const PatientSummariesPage: React.FC = () => {
     yPos += 15;
 
     // Patient Information
-    doc.setFontSize(12);
+    doc.setFontSize(PDF_FONT_SIZES.sectionHeader);
     doc.setFont('helvetica', 'bold');
-    doc.text('PATIENT INFORMATION', 15, yPos);
+    doc.text('PATIENT INFORMATION', PDF_MARGINS.left, yPos);
     yPos += 7;
 
-    doc.setFontSize(10);
+    doc.setFontSize(PDF_FONT_SIZES.body);
     doc.setFont('helvetica', 'normal');
-    doc.text(`Name: ${summaryData.patient_name}`, 15, yPos);
+    doc.text('Name: ' + clean(summaryData.patient_name), PDF_MARGINS.left, yPos);
     yPos += 5;
-    doc.text(`Hospital Number: ${summaryData.hospital_number}`, 15, yPos);
+    doc.text('Hospital Number: ' + clean(summaryData.hospital_number), PDF_MARGINS.left, yPos);
     yPos += 5;
     const admissionDate = typeof summaryData.admission_date === 'string' ? parseISO(summaryData.admission_date) : new Date(summaryData.admission_date);
-    doc.text(`Admission Date: ${format(admissionDate, 'MMMM d, yyyy')}`, 15, yPos);
+    doc.text('Admission Date: ' + format(admissionDate, 'MMMM d, yyyy'), PDF_MARGINS.left, yPos);
     yPos += 5;
     const currentDate = typeof summaryData.current_date === 'string' ? parseISO(summaryData.current_date) : new Date(summaryData.current_date);
-    doc.text(`Summary Generated: ${format(currentDate, 'MMMM d, yyyy')}`, 15, yPos);
+    doc.text('Summary Generated: ' + format(currentDate, 'MMMM d, yyyy'), PDF_MARGINS.left, yPos);
     yPos += 5;
-    doc.text(`Length of Stay: ${summaryData.length_of_stay} day(s)`, 15, yPos);
+    doc.text('Length of Stay: ' + summaryData.length_of_stay + ' day(s)', PDF_MARGINS.left, yPos);
     yPos += 10;
 
     // Overview
     doc.setFont('helvetica', 'bold');
-    doc.text('OVERVIEW', 15, yPos);
+    doc.text('OVERVIEW', PDF_MARGINS.left, yPos);
     yPos += 7;
     doc.setFont('helvetica', 'normal');
-    const overviewLines = doc.splitTextToSize(summaryData.summary.overview, pageWidth - 30);
-    doc.text(overviewLines, 15, yPos);
+    const overviewLines = doc.splitTextToSize(clean(summaryData.summary.overview), pageWidth - PDF_MARGINS.left - PDF_MARGINS.right);
+    doc.text(overviewLines, PDF_MARGINS.left, yPos);
     yPos += overviewLines.length * 5 + 5;
 
     // Diagnosis
     doc.setFont('helvetica', 'bold');
-    doc.text('DIAGNOSIS', 15, yPos);
+    doc.text('DIAGNOSIS', PDF_MARGINS.left, yPos);
     yPos += 7;
     doc.setFont('helvetica', 'normal');
-    const diagnosisLines = doc.splitTextToSize(summaryData.summary.diagnosis, pageWidth - 30);
-    doc.text(diagnosisLines, 15, yPos);
+    const diagnosisLines = doc.splitTextToSize(clean(summaryData.summary.diagnosis), pageWidth - PDF_MARGINS.left - PDF_MARGINS.right);
+    doc.text(diagnosisLines, PDF_MARGINS.left, yPos);
     yPos += diagnosisLines.length * 5 + 5;
 
     // Check if we need a new page
     if (yPos > 250) {
       doc.addPage();
-      yPos = 20;
+      yPos = PDF_MARGINS.top;
     }
 
     // Treatment Progress
     doc.setFont('helvetica', 'bold');
-    doc.text('TREATMENT PROGRESS', 15, yPos);
+    doc.text('TREATMENT PROGRESS', PDF_MARGINS.left, yPos);
     yPos += 7;
     doc.setFont('helvetica', 'normal');
-    const progressLines = doc.splitTextToSize(summaryData.summary.treatment_progress, pageWidth - 30);
-    doc.text(progressLines, 15, yPos);
+    const progressLines = doc.splitTextToSize(clean(summaryData.summary.treatment_progress), pageWidth - PDF_MARGINS.left - PDF_MARGINS.right);
+    doc.text(progressLines, PDF_MARGINS.left, yPos);
     yPos += progressLines.length * 5 + 5;
 
     // Procedures Performed
     if (summaryData.summary.procedures_performed.length > 0) {
       doc.setFont('helvetica', 'bold');
-      doc.text('PROCEDURES PERFORMED', 15, yPos);
+      doc.text('PROCEDURES PERFORMED', PDF_MARGINS.left, yPos);
       yPos += 7;
       doc.setFont('helvetica', 'normal');
       summaryData.summary.procedures_performed.forEach((proc, idx) => {
         if (yPos > 270) {
           doc.addPage();
-          yPos = 20;
+          yPos = PDF_MARGINS.top;
         }
-        doc.text(`${idx + 1}. ${proc}`, 20, yPos);
+        doc.text((idx + 1) + '. ' + clean(proc), PDF_MARGINS.left + 5, yPos);
         yPos += 5;
       });
       yPos += 5;
@@ -157,21 +166,21 @@ const PatientSummariesPage: React.FC = () => {
     // Check if we need a new page
     if (yPos > 250) {
       doc.addPage();
-      yPos = 20;
+      yPos = PDF_MARGINS.top;
     }
 
     // Medications
     if (summaryData.summary.medications.length > 0) {
       doc.setFont('helvetica', 'bold');
-      doc.text('CURRENT MEDICATIONS', 15, yPos);
+      doc.text('CURRENT MEDICATIONS', PDF_MARGINS.left, yPos);
       yPos += 7;
       doc.setFont('helvetica', 'normal');
       summaryData.summary.medications.forEach((med, idx) => {
         if (yPos > 270) {
           doc.addPage();
-          yPos = 20;
+          yPos = PDF_MARGINS.top;
         }
-        doc.text(`${idx + 1}. ${med}`, 20, yPos);
+        doc.text((idx + 1) + '. ' + clean(med), PDF_MARGINS.left + 5, yPos);
         yPos += 5;
       });
       yPos += 5;
@@ -179,25 +188,25 @@ const PatientSummariesPage: React.FC = () => {
 
     // Lab Results Summary
     doc.setFont('helvetica', 'bold');
-    doc.text('LABORATORY INVESTIGATIONS', 15, yPos);
+    doc.text('LABORATORY INVESTIGATIONS', PDF_MARGINS.left, yPos);
     yPos += 7;
     doc.setFont('helvetica', 'normal');
-    const labLines = doc.splitTextToSize(summaryData.summary.lab_results_summary, pageWidth - 30);
-    doc.text(labLines, 15, yPos);
+    const labLines = doc.splitTextToSize(clean(summaryData.summary.lab_results_summary), pageWidth - PDF_MARGINS.left - PDF_MARGINS.right);
+    doc.text(labLines, PDF_MARGINS.left, yPos);
     yPos += labLines.length * 5 + 5;
 
     // Complications
     if (summaryData.summary.complications.length > 0) {
       doc.setFont('helvetica', 'bold');
-      doc.text('COMPLICATIONS/DELAYS', 15, yPos);
+      doc.text('COMPLICATIONS/DELAYS', PDF_MARGINS.left, yPos);
       yPos += 7;
       doc.setFont('helvetica', 'normal');
       summaryData.summary.complications.forEach((comp, idx) => {
         if (yPos > 270) {
           doc.addPage();
-          yPos = 20;
+          yPos = PDF_MARGINS.top;
         }
-        doc.text(`${idx + 1}. ${comp}`, 20, yPos);
+        doc.text((idx + 1) + '. ' + clean(comp), PDF_MARGINS.left + 5, yPos);
         yPos += 5;
       });
       yPos += 5;
@@ -205,32 +214,32 @@ const PatientSummariesPage: React.FC = () => {
 
     // Current Status
     doc.setFont('helvetica', 'bold');
-    doc.text('CURRENT STATUS', 15, yPos);
+    doc.text('CURRENT STATUS', PDF_MARGINS.left, yPos);
     yPos += 7;
     doc.setFont('helvetica', 'normal');
-    doc.text(summaryData.summary.current_status, 15, yPos);
+    doc.text(clean(summaryData.summary.current_status), PDF_MARGINS.left, yPos);
     yPos += 10;
 
     // Plan Forward
     doc.setFont('helvetica', 'bold');
-    doc.text('PLAN FORWARD', 15, yPos);
+    doc.text('PLAN FORWARD', PDF_MARGINS.left, yPos);
     yPos += 7;
     doc.setFont('helvetica', 'normal');
-    const planLines = doc.splitTextToSize(summaryData.summary.plan_forward, pageWidth - 30);
-    doc.text(planLines, 15, yPos);
+    const planLines = doc.splitTextToSize(clean(summaryData.summary.plan_forward), pageWidth - PDF_MARGINS.left - PDF_MARGINS.right);
+    doc.text(planLines, PDF_MARGINS.left, yPos);
     yPos += planLines.length * 5 + 10;
 
     // Footer
     if (yPos > 250) {
       doc.addPage();
-      yPos = 20;
+      yPos = PDF_MARGINS.top;
     }
-    doc.setFontSize(8);
+    doc.setFontSize(PDF_FONT_SIZES.small);
     doc.setFont('helvetica', 'italic');
-    doc.text('This summary was automatically generated and should be reviewed by a qualified healthcare professional.', 15, yPos);
+    doc.text('This summary was automatically generated and should be reviewed by a qualified healthcare professional.', PDF_MARGINS.left, yPos);
 
     // Save PDF
-    doc.save(`Patient_Summary_${summaryData.hospital_number}_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
+    doc.save('Patient_Summary_' + clean(summaryData.hospital_number) + '_' + format(new Date(), 'yyyy-MM-dd') + '.pdf');
   };
 
   return (

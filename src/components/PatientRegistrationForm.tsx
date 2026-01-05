@@ -1,7 +1,13 @@
 import React, { useState } from 'react';
 import { unthPatientService, PatientRegistration, Ward } from '../services/unthPatientService';
 import { riskAssessmentService } from '../services/riskAssessmentService';
-import jsPDF from 'jspdf';
+import {
+  createPDF,
+  sanitizeTextForPDF,
+  PDF_MARGINS,
+  PDF_FONT_SIZES,
+  PDF_COLORS
+} from '../utils/pdfUtils';
 
 interface PatientRegistrationFormProps {
   onSuccess?: (patientId: string) => void;
@@ -867,21 +873,24 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
 
   // Export Meal Plan to PDF
   const exportMealPlanToPDF = () => {
-    const doc = new jsPDF();
+    const doc = createPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
     let yPosition = 20;
     
+    // Helper to sanitize text
+    const clean = (text: string | undefined | null): string => sanitizeTextForPDF(text || '');
+    
     // Header with UNTH branding
-    doc.setFillColor(14, 159, 110); // Green color
+    doc.setFillColor(PDF_COLORS.primary.r, PDF_COLORS.primary.g, PDF_COLORS.primary.b);
     doc.rect(0, 0, pageWidth, 40, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(20);
     doc.setFont('helvetica', 'bold');
     doc.text('UNIVERSITY OF NIGERIA TEACHING HOSPITAL', pageWidth / 2, 15, { align: 'center' });
-    doc.setFontSize(14);
+    doc.setFontSize(PDF_FONT_SIZES.sectionHeader + 2);
     doc.text('Department of Plastic Surgery', pageWidth / 2, 25, { align: 'center' });
-    doc.setFontSize(12);
+    doc.setFontSize(PDF_FONT_SIZES.sectionHeader);
     doc.text('7-DAY PERSONALIZED MEAL PLAN', pageWidth / 2, 35, { align: 'center' });
     
     yPosition = 50;
@@ -890,28 +899,28 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     // Patient Details Section
     doc.setFillColor(240, 240, 240);
     doc.rect(10, yPosition, pageWidth - 20, 8, 'F');
-    doc.setFontSize(11);
+    doc.setFontSize(PDF_FONT_SIZES.subHeader);
     doc.setFont('helvetica', 'bold');
-    doc.text('PATIENT INFORMATION', 15, yPosition + 5.5);
+    doc.text('PATIENT INFORMATION', PDF_MARGINS.left, yPosition + 5.5);
     yPosition += 12;
     
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10);
-    doc.text(`Name: ${(formData as any).surname || ''} ${formData.first_name || ''} ${(formData as any).other_names || ''}`, 15, yPosition);
+    doc.setFontSize(PDF_FONT_SIZES.body);
+    doc.text('Name: ' + clean((formData as any).surname) + ' ' + clean(formData.first_name) + ' ' + clean((formData as any).other_names), PDF_MARGINS.left, yPosition);
     yPosition += 5;
-    doc.text(`Hospital Number: ${formData.hospital_number || 'Pending'}`, 15, yPosition);
-    doc.text(`Date: ${new Date().toLocaleDateString('en-NG', { day: '2-digit', month: 'short', year: 'numeric' })}`, pageWidth - 60, yPosition);
+    doc.text('Hospital Number: ' + (clean(formData.hospital_number) || 'Pending'), PDF_MARGINS.left, yPosition);
+    doc.text('Date: ' + new Date().toLocaleDateString('en-NG', { day: '2-digit', month: 'short', year: 'numeric' }), pageWidth - 60, yPosition);
     yPosition += 5;
-    doc.text(`Age: ${formData.date_of_birth ? Math.floor((new Date().getTime() - new Date(formData.date_of_birth).getTime()) / (365.25 * 24 * 60 * 60 * 1000)) : 'N/A'} years`, 15, yPosition);
-    doc.text(`Gender: ${formData.sex || 'N/A'}`, 60, yPosition);
-    doc.text(`Ward: ${(formData as any).ward || 'Outpatient'}`, 100, yPosition);
+    doc.text('Age: ' + (formData.date_of_birth ? Math.floor((new Date().getTime() - new Date(formData.date_of_birth).getTime()) / (365.25 * 24 * 60 * 60 * 1000)) : 'N/A') + ' years', PDF_MARGINS.left, yPosition);
+    doc.text('Gender: ' + (clean(formData.sex) || 'N/A'), 60, yPosition);
+    doc.text('Ward: ' + (clean((formData as any).ward) || 'Outpatient'), 100, yPosition);
     yPosition += 8;
     
     // Clinical Information Section
     doc.setFillColor(240, 240, 240);
     doc.rect(10, yPosition, pageWidth - 20, 8, 'F');
     doc.setFont('helvetica', 'bold');
-    doc.text('CLINICAL INFORMATION', 15, yPosition + 5.5);
+    doc.text('CLINICAL INFORMATION', PDF_MARGINS.left, yPosition + 5.5);
     yPosition += 12;
     
     doc.setFont('helvetica', 'normal');
@@ -1082,10 +1091,13 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
 
   // Generate Specialist Consultation Letter PDF
   const generateConsultationLetterPDF = (assessmentType: 'dvt' | 'pressureSore' | 'nutritional') => {
-    const doc = new jsPDF();
+    const doc = createPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
     let yPosition = 20;
+    
+    // Helper to sanitize text
+    const clean = (text: string | undefined | null): string => sanitizeTextForPDF(text || '');
 
     // Determine specialist and consultation details based on assessment type
     const consultationDetails = {
@@ -1095,7 +1107,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
         subtitle: 'Venous Thromboembolism (VTE) Risk Assessment',
         urgency: aiRecommendations.dvt.riskLevel === 'very_high' ? 'EMERGENCY' : 
                  aiRecommendations.dvt.riskLevel === 'high' ? 'URGENT' : 'ROUTINE',
-        score: `Caprini Score: ${aiRecommendations.dvt.score}`,
+        score: 'Caprini Score: ' + aiRecommendations.dvt.score,
         riskLevel: aiRecommendations.dvt.riskLevel.toUpperCase().replace('_', ' ')
       },
       pressureSore: {
@@ -1104,7 +1116,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
         subtitle: 'Pressure Injury Risk Assessment',
         urgency: aiRecommendations.pressureSore.riskLevel === 'very_high' ? 'EMERGENCY' : 
                  aiRecommendations.pressureSore.riskLevel === 'high' ? 'URGENT' : 'ROUTINE',
-        score: `Braden Scale Score: ${aiRecommendations.pressureSore.score}`,
+        score: 'Braden Scale Score: ' + aiRecommendations.pressureSore.score,
         riskLevel: aiRecommendations.pressureSore.riskLevel.toUpperCase().replace('_', ' ')
       },
       nutritional: {
@@ -1112,7 +1124,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
         title: 'CONSULTATION REQUEST',
         subtitle: 'Malnutrition Risk Assessment',
         urgency: aiRecommendations.nutritional.riskLevel === 'high' ? 'URGENT' : 'ROUTINE',
-        score: `MUST Score: ${aiRecommendations.nutritional.score}`,
+        score: 'MUST Score: ' + aiRecommendations.nutritional.score,
         riskLevel: aiRecommendations.nutritional.riskLevel.toUpperCase()
       }
     };
@@ -1121,13 +1133,13 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     const recommendations = aiRecommendations[assessmentType];
 
     // Header - UNTH Branding
-    doc.setFillColor(14, 159, 110); // Green
+    doc.setFillColor(PDF_COLORS.primary.r, PDF_COLORS.primary.g, PDF_COLORS.primary.b);
     doc.rect(0, 0, pageWidth, 45, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(18);
     doc.setFont('helvetica', 'bold');
     doc.text('UNIVERSITY OF NIGERIA TEACHING HOSPITAL', pageWidth / 2, 15, { align: 'center' });
-    doc.setFontSize(12);
+    doc.setFontSize(PDF_FONT_SIZES.sectionHeader);
     doc.text('ITUKU-OZALLA, ENUGU', pageWidth / 2, 22, { align: 'center' });
     doc.setFontSize(10);
     doc.text('Department of Plastic & Reconstructive Surgery', pageWidth / 2, 29, { align: 'center' });
@@ -1395,10 +1407,13 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
 
   // Generate Patient Education Material PDF
   const generatePatientEducationPDF = (assessmentType: 'dvt' | 'pressureSore' | 'nutritional') => {
-    const doc = new jsPDF();
+    const doc = createPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
     let yPosition = 20;
+    
+    // Helper to sanitize text
+    const clean = (text: string | undefined | null): string => sanitizeTextForPDF(text || '');
 
     // Education content based on assessment type
     const educationContent = {
@@ -1778,28 +1793,31 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
 
   // Generate Comprehensive Care Plan PDF (for Pressure Sore Risk Assessment)
   const generateCarePlanPDF = () => {
-    const doc = new jsPDF();
+    const doc = createPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
     let yPosition = 0;
+    
+    // Helper to sanitize text
+    const clean = (text: string | undefined | null): string => sanitizeTextForPDF(text || '');
 
     const recommendations = aiRecommendations.pressureSore;
 
     // Header - UNTH Branding
-    doc.setFillColor(14, 159, 110); // Green
+    doc.setFillColor(PDF_COLORS.primary.r, PDF_COLORS.primary.g, PDF_COLORS.primary.b);
     doc.rect(0, 0, pageWidth, 50, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(18);
     doc.setFont('helvetica', 'bold');
     doc.text('UNIVERSITY OF NIGERIA TEACHING HOSPITAL', pageWidth / 2, 15, { align: 'center' });
-    doc.setFontSize(12);
+    doc.setFontSize(PDF_FONT_SIZES.sectionHeader);
     doc.text('ITUKU-OZALLA, ENUGU', pageWidth / 2, 22, { align: 'center' });
-    doc.setFontSize(11);
+    doc.setFontSize(PDF_FONT_SIZES.subHeader);
     doc.text('Department of Plastic & Reconstructive Surgery', pageWidth / 2, 29, { align: 'center' });
-    doc.setFontSize(16);
+    doc.setFontSize(PDF_FONT_SIZES.title);
     doc.setFont('helvetica', 'bold');
     doc.text('COMPREHENSIVE CARE PLAN', pageWidth / 2, 38, { align: 'center' });
-    doc.setFontSize(12);
+    doc.setFontSize(PDF_FONT_SIZES.sectionHeader);
     doc.text('Pressure Injury Prevention & Management', pageWidth / 2, 45, { align: 'center' });
 
     yPosition = 60;
@@ -1807,21 +1825,21 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
 
     // Risk Level Banner
     const riskColors = {
-      low: [34, 197, 94],       // Green
-      moderate: [234, 179, 8],  // Yellow
-      high: [249, 115, 22],     // Orange
-      very_high: [220, 38, 38]  // Red
+      low: PDF_COLORS.primary,
+      moderate: PDF_COLORS.warning,
+      high: { r: 249, g: 115, b: 22 },
+      very_high: PDF_COLORS.danger
     };
-    const color = riskColors[recommendations.riskLevel as keyof typeof riskColors] || [107, 114, 128];
-    doc.setFillColor(color[0], color[1], color[2]);
+    const color = riskColors[recommendations.riskLevel as keyof typeof riskColors] || PDF_COLORS.gray;
+    doc.setFillColor(color.r, color.g, color.b);
     doc.rect(10, yPosition, pageWidth - 20, 12, 'F');
     doc.setTextColor(255, 255, 255);
-    doc.setFontSize(12);
+    doc.setFontSize(PDF_FONT_SIZES.sectionHeader);
     doc.setFont('helvetica', 'bold');
     const riskText = recommendations.riskLevel === 'very_high' ? 'CRITICAL RISK' :
                      recommendations.riskLevel === 'high' ? 'HIGH RISK' :
                      recommendations.riskLevel === 'moderate' ? 'MODERATE RISK' : 'LOW RISK';
-    doc.text(`${riskText} - Braden Scale Score: ${recommendations.score}/23`, pageWidth / 2, yPosition + 8, { align: 'center' });
+    doc.text(riskText + ' - Braden Scale Score: ' + recommendations.score + '/23', pageWidth / 2, yPosition + 8, { align: 'center' });
     yPosition += 18;
     doc.setTextColor(0, 0, 0);
 

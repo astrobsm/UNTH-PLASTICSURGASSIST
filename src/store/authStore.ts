@@ -9,6 +9,7 @@ export interface User {
   email: string;
   role: 'super_admin' | 'consultant' | 'senior_registrar' | 'junior_registrar' | 'medical_officer' | 'house_officer' | 'nursing' | 'lab' | 'pharmacy';
   privileges: string[];
+  mustChangePassword?: boolean;
 }
 
 interface AuthState {
@@ -18,6 +19,7 @@ interface AuthState {
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
   initializeAuth: () => Promise<void>;
+  clearMustChangePassword: () => void;
   useBackend: boolean;
 }
 
@@ -54,10 +56,11 @@ export const useAuthStore = create<AuthState>()(
           
           const user: User = {
             id: response.user.id,
-            name: response.user.full_name,
+            name: response.user.fullName,
             email: response.user.email,
             role: response.user.role as any,
-            privileges: [] // Will be populated from role
+            privileges: [], // Will be populated from role
+            mustChangePassword: response.user.mustChangePassword || false
           };
 
           set({ user, token: response.token });
@@ -70,6 +73,14 @@ export const useAuthStore = create<AuthState>()(
 
       logout: () => {
         set({ user: null, token: null, loading: false });
+        apiClient.logout();
+      },
+
+      clearMustChangePassword: () => {
+        const currentUser = get().user;
+        if (currentUser) {
+          set({ user: { ...currentUser, mustChangePassword: false } });
+        }
       },
 
       initializeAuth: async () => {

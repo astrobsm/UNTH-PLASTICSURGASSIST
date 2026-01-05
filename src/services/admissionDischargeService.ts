@@ -1,6 +1,21 @@
 import { db } from '../db/database';
-import jsPDF from 'jspdf';
 import { format } from 'date-fns';
+import {
+  createPDF,
+  addPDFHeader,
+  addSectionHeader,
+  addBodyText,
+  addBulletList,
+  addWarningBox,
+  addSeparator,
+  addFooter,
+  addLabeledField,
+  sanitizeTextForPDF,
+  formatDateForPDF,
+  PDF_MARGINS,
+  PDF_COLORS,
+  PDF_FONT_SIZES
+} from '../utils/pdfUtils';
 
 // ============= INTERFACES =============
 
@@ -833,154 +848,275 @@ class AdmissionDischargeService {
   // ============= PDF GENERATION =============
 
   async generateDischargePDF(discharge: Discharge, admission: Admission, whoScore?: WHODischargeScore): Promise<Blob> {
-    const pdf = new jsPDF();
+    const pdf = createPDF();
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
-    let yPos = 15;
+    let yPos = PDF_MARGINS.top;
 
-    const addHeader = () => {
-      pdf.setFontSize(12);
+    // Helper to sanitize all text for proper rendering
+    const clean = (text: string | undefined | null): string => sanitizeTextForPDF(text || '');
+
+    const addHeader = (): number => {
+      let y = PDF_MARGINS.top;
+      pdf.setFontSize(PDF_FONT_SIZES.sectionHeader);
       pdf.setFont('helvetica', 'bold');
-      pdf.text('PLASTIC AND RECONSTRUCTIVE SURGERY UNIT', pageWidth / 2, yPos, { align: 'center' });
-      yPos += 6;
-      pdf.setFontSize(10);
+      pdf.text('PLASTIC AND RECONSTRUCTIVE SURGERY UNIT', pageWidth / 2, y, { align: 'center' });
+      y += 6;
+      pdf.setFontSize(PDF_FONT_SIZES.body);
       pdf.setFont('helvetica', 'normal');
-      pdf.text('University of Nigeria Teaching Hospital, Enugu', pageWidth / 2, yPos, { align: 'center' });
-      yPos += 10;
+      pdf.text('University of Nigeria Teaching Hospital, Enugu', pageWidth / 2, y, { align: 'center' });
+      y += 10;
+      return y;
     };
 
-    const checkPageBreak = (neededSpace: number) => {
-      if (yPos + neededSpace > pageHeight - 20) {
+    const checkPageBreak = (neededSpace: number): boolean => {
+      if (yPos + neededSpace > pageHeight - PDF_MARGINS.bottom) {
         pdf.addPage();
-        yPos = 20;
+        yPos = PDF_MARGINS.top;
         return true;
       }
       return false;
     };
 
-    const addSection = (title: string, content: string) => {
+    const addSection = (title: string, content: string): void => {
       checkPageBreak(30);
-      pdf.setFontSize(11);
+      pdf.setFontSize(PDF_FONT_SIZES.subHeader);
       pdf.setFont('helvetica', 'bold');
-      pdf.text(title, 15, yPos);
-      yPos += 6;
+      pdf.setTextColor(PDF_COLORS.primary.r, PDF_COLORS.primary.g, PDF_COLORS.primary.b);
+      pdf.text(clean(title), PDF_MARGINS.left, yPos);
+      pdf.setTextColor(0, 0, 0);
+      yPos += 7;
       
-      pdf.setFontSize(10);
+      pdf.setFontSize(PDF_FONT_SIZES.body);
       pdf.setFont('helvetica', 'normal');
-      const lines = pdf.splitTextToSize(content, pageWidth - 30);
+      const cleanContent = clean(content);
+      const lines = pdf.splitTextToSize(cleanContent, pageWidth - PDF_MARGINS.left - PDF_MARGINS.right);
       lines.forEach((line: string) => {
         checkPageBreak(6);
-        pdf.text(line, 15, yPos);
+        pdf.text(line, PDF_MARGINS.left, yPos);
         yPos += 5;
       });
       yPos += 5;
     };
 
+    const addBulletSection = (title: string, items: string[]): void => {
+      checkPageBreak(30);
+      pdf.setFontSize(PDF_FONT_SIZES.subHeader);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setTextColor(PDF_COLORS.primary.r, PDF_COLORS.primary.g, PDF_COLORS.primary.b);
+      pdf.text(clean(title), PDF_MARGINS.left, yPos);
+      pdf.setTextColor(0, 0, 0);
+      yPos += 7;
+      
+      pdf.setFontSize(PDF_FONT_SIZES.body);
+      pdf.setFont('helvetica', 'normal');
+      items.forEach((item) => {
+        if (item && item.trim()) {
+          checkPageBreak(8);
+          const cleanItem = clean(item);
+          const bulletText = '• ' + cleanItem;
+          const lines = pdf.splitTextToSize(bulletText, pageWidth - PDF_MARGINS.left - PDF_MARGINS.right - 5);
+          lines.forEach((line: string, idx: number) => {
+            pdf.text(idx === 0 ? line : '  ' + line, PDF_MARGINS.left + 3, yPos);
+            yPos += 5;
+          });
+        }
+      });
+      yPos += 5;
+    };
+
     // Page 1: Discharge Summary
-    addHeader();
-    pdf.setFontSize(14);
+    yPos = addHeader();
+    pdf.setFontSize(PDF_FONT_SIZES.title);
     pdf.setFont('helvetica', 'bold');
     pdf.text('DISCHARGE SUMMARY', pageWidth / 2, yPos, { align: 'center' });
-    yPos += 10;
+    yPos += 12;
 
     // Patient Info Box
-    pdf.setDrawColor(0, 128, 0);
-    pdf.rect(15, yPos, pageWidth - 30, 25);
+    pdf.setDrawColor(PDF_COLORS.primary.r, PDF_COLORS.primary.g, PDF_COLORS.primary.b);
+    pdf.setLineWidth(0.5);
+    pdf.rect(PDF_MARGINS.left, yPos - 2, pageWidth - PDF_MARGINS.left - PDF_MARGINS.right, 28);
+    yPos += 5;
+    
+    pdf.setFontSize(PDF_FONT_SIZES.body);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Patient: ', PDF_MARGINS.left + 5, yPos);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(clean(discharge.patient_name), PDF_MARGINS.left + 22, yPos);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Hospital No: ', pageWidth / 2, yPos);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(clean(discharge.hospital_number), pageWidth / 2 + 28, yPos);
     yPos += 6;
-    pdf.setFontSize(10);
-    pdf.text(`Patient: ${discharge.patient_name}`, 20, yPos);
-    pdf.text(`Hospital No: ${discharge.hospital_number}`, pageWidth / 2, yPos);
+    
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Age/Gender: ', PDF_MARGINS.left + 5, yPos);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(`${discharge.age || 'N/A'} / ${discharge.gender || 'N/A'}`, PDF_MARGINS.left + 32, yPos);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Ward: ', pageWidth / 2, yPos);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(clean(admission.ward_location), pageWidth / 2 + 15, yPos);
     yPos += 6;
-    pdf.text(`Age/Gender: ${discharge.age || 'N/A'} / ${discharge.gender || 'N/A'}`, 20, yPos);
-    pdf.text(`Ward: ${admission.ward_location}`, pageWidth / 2, yPos);
+    
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Admission: ', PDF_MARGINS.left + 5, yPos);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(format(new Date(discharge.admission_date), 'dd/MM/yyyy'), PDF_MARGINS.left + 28, yPos);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Discharge: ', pageWidth / 2, yPos);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(format(new Date(discharge.discharge_date), 'dd/MM/yyyy'), pageWidth / 2 + 24, yPos);
     yPos += 6;
-    pdf.text(`Admission: ${format(new Date(discharge.admission_date), 'dd/MM/yyyy')}`, 20, yPos);
-    pdf.text(`Discharge: ${format(new Date(discharge.discharge_date), 'dd/MM/yyyy')}`, pageWidth / 2, yPos);
-    yPos += 6;
-    pdf.text(`Length of Stay: ${discharge.length_of_stay_days} days`, 20, yPos);
+    
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Length of Stay: ', PDF_MARGINS.left + 5, yPos);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(`${discharge.length_of_stay_days} days`, PDF_MARGINS.left + 35, yPos);
     yPos += 15;
 
-    addSection('DIAGNOSIS', `Admitting: ${discharge.admitting_diagnosis}\nFinal: ${discharge.final_diagnosis}`);
+    addSection('DIAGNOSIS', `Admitting: ${clean(discharge.admitting_diagnosis)}\nFinal: ${clean(discharge.final_diagnosis)}`);
     
     if (discharge.procedures_performed?.length) {
-      addSection('PROCEDURES', discharge.procedures_performed.join('\n'));
+      addBulletSection('PROCEDURES PERFORMED', discharge.procedures_performed);
     }
 
-    addSection('HOSPITAL COURSE', discharge.hospital_course_summary);
-    addSection('CONDITION AT DISCHARGE', `${discharge.condition_at_discharge}\nDischarge Type: ${discharge.discharge_type.replace('_', ' ').toUpperCase()}`);
+    addSection('HOSPITAL COURSE', clean(discharge.hospital_course_summary));
+    addSection('CONDITION AT DISCHARGE', `${clean(discharge.condition_at_discharge)}\nDischarge Type: ${discharge.discharge_type.replace('_', ' ').toUpperCase()}`);
 
     // Page 2: Medications
     if (discharge.medications_on_discharge?.length) {
       pdf.addPage();
-      yPos = 20;
-      addHeader();
+      yPos = addHeader();
       
-      pdf.setFontSize(14);
+      pdf.setFontSize(PDF_FONT_SIZES.title);
       pdf.setFont('helvetica', 'bold');
       pdf.text('DISCHARGE MEDICATIONS', pageWidth / 2, yPos, { align: 'center' });
-      yPos += 10;
+      yPos += 12;
 
       discharge.medications_on_discharge.forEach((med, idx) => {
         checkPageBreak(25);
-        pdf.setFontSize(10);
+        pdf.setFontSize(PDF_FONT_SIZES.body);
         pdf.setFont('helvetica', 'bold');
-        pdf.text(`${idx + 1}. ${med.medication}`, 15, yPos);
-        yPos += 5;
+        pdf.text(`${idx + 1}. ${clean(med.medication)}`, PDF_MARGINS.left, yPos);
+        yPos += 6;
         pdf.setFont('helvetica', 'normal');
-        pdf.text(`   Dosage: ${med.dosage} | Frequency: ${med.frequency} | Duration: ${med.duration}`, 15, yPos);
+        pdf.text(`   Dosage: ${clean(med.dosage)}`, PDF_MARGINS.left + 5, yPos);
+        yPos += 5;
+        pdf.text(`   Frequency: ${clean(med.frequency)}`, PDF_MARGINS.left + 5, yPos);
+        yPos += 5;
+        pdf.text(`   Duration: ${clean(med.duration)}`, PDF_MARGINS.left + 5, yPos);
         yPos += 5;
         if (med.instructions) {
-          pdf.text(`   Instructions: ${med.instructions}`, 15, yPos);
-          yPos += 5;
+          const instrLines = pdf.splitTextToSize(`   Instructions: ${clean(med.instructions)}`, pageWidth - PDF_MARGINS.left - PDF_MARGINS.right - 10);
+          instrLines.forEach((line: string) => {
+            pdf.text(line, PDF_MARGINS.left + 5, yPos);
+            yPos += 5;
+          });
         }
-        yPos += 3;
+        yPos += 5;
       });
     }
 
-    // Page 3: Instructions & Meal Plan
+    // Page 3: Instructions
     pdf.addPage();
-    yPos = 20;
-    addHeader();
+    yPos = addHeader();
     
-    pdf.setFontSize(14);
+    pdf.setFontSize(PDF_FONT_SIZES.title);
     pdf.setFont('helvetica', 'bold');
     pdf.text('DISCHARGE INSTRUCTIONS', pageWidth / 2, yPos, { align: 'center' });
-    yPos += 10;
+    yPos += 12;
 
     if (discharge.wound_care_instructions) {
-      addSection('WOUND CARE', discharge.wound_care_instructions);
+      addSection('WOUND CARE', clean(discharge.wound_care_instructions));
     }
 
     if (discharge.activity_restrictions?.length) {
-      addSection('ACTIVITY RESTRICTIONS', discharge.activity_restrictions.join('\n'));
+      addBulletSection('ACTIVITY RESTRICTIONS', discharge.activity_restrictions);
     }
 
     if (discharge.lifestyle_modifications?.length) {
-      addSection('LIFESTYLE MODIFICATIONS', discharge.lifestyle_modifications.join('\n'));
+      addBulletSection('LIFESTYLE MODIFICATIONS', discharge.lifestyle_modifications);
     }
 
-    // Warning Signs
+    // Warning Signs Box
     const warningSigns = discharge.warning_signs || [
-      'Fever above 38°C', 'Increasing pain', 'Wound infection signs', 'Difficulty breathing'
+      'Fever above 38°C (100.4°F)',
+      'Increasing pain not relieved by medication',
+      'Wound redness, swelling, or discharge',
+      'Difficulty breathing',
+      'Persistent nausea or vomiting'
     ];
-    addSection('SEEK MEDICAL ATTENTION IF', warningSigns.join('\n'));
+    
+    checkPageBreak(50);
+    const warningBoxHeight = 15 + (warningSigns.length * 6);
+    pdf.setDrawColor(PDF_COLORS.danger.r, PDF_COLORS.danger.g, PDF_COLORS.danger.b);
+    pdf.setLineWidth(1);
+    pdf.rect(PDF_MARGINS.left, yPos - 3, pageWidth - PDF_MARGINS.left - PDF_MARGINS.right, warningBoxHeight);
+    
+    pdf.setFontSize(PDF_FONT_SIZES.subHeader);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setTextColor(PDF_COLORS.danger.r, PDF_COLORS.danger.g, PDF_COLORS.danger.b);
+    pdf.text('WARNING SIGNS - RETURN IMMEDIATELY IF:', PDF_MARGINS.left + 5, yPos + 5);
+    yPos += 12;
+    
+    pdf.setFontSize(PDF_FONT_SIZES.body);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setTextColor(0, 0, 0);
+    warningSigns.forEach((sign) => {
+      if (sign && sign.trim()) {
+        pdf.text('• ' + clean(sign), PDF_MARGINS.left + 8, yPos);
+        yPos += 6;
+      }
+    });
+    yPos += 10;
 
     // Follow-up
     if (discharge.follow_up_appointments?.length) {
-      const followUpText = discharge.follow_up_appointments.map(apt => 
-        `${format(new Date(apt.date), 'dd MMM yyyy')} - ${apt.clinic}: ${apt.purpose}`
-      ).join('\n');
-      addSection('FOLLOW-UP APPOINTMENTS', followUpText);
+      checkPageBreak(30);
+      pdf.setFontSize(PDF_FONT_SIZES.subHeader);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setTextColor(PDF_COLORS.primary.r, PDF_COLORS.primary.g, PDF_COLORS.primary.b);
+      pdf.text('FOLLOW-UP APPOINTMENTS', PDF_MARGINS.left, yPos);
+      pdf.setTextColor(0, 0, 0);
+      yPos += 8;
+      
+      pdf.setFontSize(PDF_FONT_SIZES.body);
+      pdf.setFont('helvetica', 'normal');
+      discharge.follow_up_appointments.forEach(apt => {
+        checkPageBreak(8);
+        const aptText = `• ${format(new Date(apt.date), 'dd MMM yyyy')} - ${clean(apt.clinic)}: ${clean(apt.purpose)}`;
+        pdf.text(aptText, PDF_MARGINS.left + 3, yPos);
+        yPos += 6;
+      });
     }
 
-    // Signature section
-    yPos = pageHeight - 40;
-    pdf.setFontSize(10);
-    pdf.text(`Discharging Doctor: ${discharge.discharging_doctor}`, 15, yPos);
+    // Signature section at bottom
+    yPos = pageHeight - 45;
+    pdf.setDrawColor(150, 150, 150);
+    pdf.setLineWidth(0.3);
+    pdf.line(PDF_MARGINS.left, yPos - 5, pageWidth - PDF_MARGINS.right, yPos - 5);
+    
+    pdf.setFontSize(PDF_FONT_SIZES.body);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Discharging Doctor: ', PDF_MARGINS.left, yPos);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(clean(discharge.discharging_doctor), PDF_MARGINS.left + 40, yPos);
     yPos += 6;
-    pdf.text(`Consultant: ${discharge.discharging_consultant || 'N/A'}`, 15, yPos);
+    
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Consultant: ', PDF_MARGINS.left, yPos);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(clean(discharge.discharging_consultant) || 'N/A', PDF_MARGINS.left + 25, yPos);
     yPos += 6;
-    pdf.text(`Date: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, 15, yPos);
+    
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Date Generated: ', PDF_MARGINS.left, yPos);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(format(new Date(), 'dd/MM/yyyy HH:mm'), PDF_MARGINS.left + 35, yPos);
+
+    // Add page numbers
+    addFooter(pdf, 'Plastic & Reconstructive Surgery Unit - UNTH');
 
     return pdf.output('blob');
   }

@@ -1,6 +1,12 @@
 import React, { useState } from 'react';
 import { procedureService, IntraoperativeFindings } from '../../services/procedureService';
-import jsPDF from 'jspdf';
+import {
+  createPDF,
+  sanitizeTextForPDF,
+  PDF_MARGINS,
+  PDF_FONT_SIZES,
+  PDF_COLORS
+} from '../../utils/pdfUtils';
 
 interface IntraoperativeFindingsFormProps {
   patientId: string;
@@ -104,27 +110,30 @@ export const IntraoperativeFindingsForm: React.FC<IntraoperativeFindingsFormProp
   };
 
   const generatePostoperativeNote = () => {
-    const doc = new jsPDF();
+    const doc = createPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
     let yPosition = 0;
+    
+    // Helper to sanitize text
+    const clean = (text: string | undefined | null): string => sanitizeTextForPDF(text || '');
 
     // Header - UNTH Branding
-    doc.setFillColor(14, 159, 110); // Green
+    doc.setFillColor(PDF_COLORS.primary.r, PDF_COLORS.primary.g, PDF_COLORS.primary.b);
     doc.rect(0, 0, pageWidth, 50, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(18);
     doc.setFont('helvetica', 'bold');
     doc.text('UNIVERSITY OF NIGERIA TEACHING HOSPITAL', pageWidth / 2, 15, { align: 'center' });
-    doc.setFontSize(12);
+    doc.setFontSize(PDF_FONT_SIZES.sectionHeader);
     doc.text('ITUKU-OZALLA, ENUGU', pageWidth / 2, 22, { align: 'center' });
-    doc.setFontSize(11);
+    doc.setFontSize(PDF_FONT_SIZES.subHeader);
     doc.text('Department of Plastic & Reconstructive Surgery', pageWidth / 2, 29, { align: 'center' });
-    doc.setFontSize(16);
+    doc.setFontSize(PDF_FONT_SIZES.title);
     doc.setFont('helvetica', 'bold');
     doc.text('POSTOPERATIVE CARE PLAN & MANAGEMENT', pageWidth / 2, 38, { align: 'center' });
-    doc.setFontSize(10);
-    doc.text(`Generated: ${new Date().toLocaleDateString('en-NG')}`, pageWidth / 2, 45, { align: 'center' });
+    doc.setFontSize(PDF_FONT_SIZES.body);
+    doc.text('Generated: ' + new Date().toLocaleDateString('en-NG'), pageWidth / 2, 45, { align: 'center' });
 
     yPosition = 60;
     doc.setTextColor(0, 0, 0);
@@ -132,23 +141,23 @@ export const IntraoperativeFindingsForm: React.FC<IntraoperativeFindingsFormProp
     // Patient & Procedure Information
     doc.setFillColor(243, 244, 246);
     doc.rect(10, yPosition, pageWidth - 20, 8, 'F');
-    doc.setFontSize(11);
+    doc.setFontSize(PDF_FONT_SIZES.subHeader);
     doc.setFont('helvetica', 'bold');
-    doc.text('PATIENT & PROCEDURE INFORMATION', 15, yPosition + 6);
+    doc.text('PATIENT & PROCEDURE INFORMATION', PDF_MARGINS.left, yPosition + 6);
     yPosition += 12;
 
-    doc.setFontSize(9);
+    doc.setFontSize(PDF_FONT_SIZES.small);
     doc.setFont('helvetica', 'normal');
     const patientInfo = [
-      `Patient ID: ${patientId}`,
-      `Procedure ID: ${procedureId}`,
-      `Procedure Date: ${findings.procedure_date || 'N/A'}`,
-      `Procedure Time: ${findings.start_time || 'N/A'} - ${findings.end_time || 'N/A'}`,
-      `Surgical Approach: ${findings.surgical_approach || 'N/A'}`,
-      `Anesthesia Type: ${findings.anesthesia_type || 'General'}`,
-      `Primary Surgeon: ${findings.surgical_team?.primary_surgeon || 'N/A'}`,
-      `Assistant Surgeon: ${findings.surgical_team?.assistant_surgeon || 'N/A'}`,
-      `Anesthesiologist: ${findings.surgical_team?.anesthesiologist || 'N/A'}`
+      'Patient ID: ' + clean(patientId),
+      'Procedure ID: ' + clean(procedureId),
+      'Procedure Date: ' + clean(findings.procedure_date) || 'N/A',
+      'Procedure Time: ' + (clean(findings.start_time) || 'N/A') + ' - ' + (clean(findings.end_time) || 'N/A'),
+      'Surgical Approach: ' + clean(findings.surgical_approach) || 'N/A',
+      'Anesthesia Type: ' + clean(findings.anesthesia_type) || 'General',
+      'Primary Surgeon: ' + clean(findings.surgical_team?.primary_surgeon) || 'N/A',
+      'Assistant Surgeon: ' + clean(findings.surgical_team?.assistant_surgeon) || 'N/A',
+      'Anesthesiologist: ' + clean(findings.surgical_team?.anesthesiologist) || 'N/A'
     ];
     
     patientInfo.forEach(info => {

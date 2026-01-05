@@ -1,6 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Download, BookOpen, AlertCircle, Info, FileText, Heart, Activity, User, Search } from 'lucide-react';
-import jsPDF from 'jspdf';
+import {
+  createPDF,
+  sanitizeTextForPDF,
+  PDF_MARGINS,
+  PDF_FONT_SIZES,
+  PDF_COLORS
+} from '../utils/pdfUtils';
 import { patientService } from '../services/patientService';
 
 interface EducationTopic {
@@ -995,26 +1001,29 @@ export default function PatientEducation() {
   };
 
   const generatePDF = (topic: EducationTopic, patient: Patient) => {
-    const doc = new jsPDF();
+    const doc = createPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
-    const margin = 20;
+    const margin = PDF_MARGINS.left + 5;
     const maxWidth = pageWidth - 2 * margin;
     let yPos = margin;
+    
+    // Helper to sanitize text
+    const clean = (text: string | undefined | null): string => sanitizeTextForPDF(text || '');
 
     // Header
-    doc.setFillColor(14, 159, 110); // Green color
+    doc.setFillColor(PDF_COLORS.primary.r, PDF_COLORS.primary.g, PDF_COLORS.primary.b);
     doc.rect(0, 0, pageWidth, 40, 'F');
     doc.setTextColor(255, 255, 255);
-    doc.setFontSize(16);
+    doc.setFontSize(PDF_FONT_SIZES.title);
     doc.setFont('helvetica', 'bold');
     doc.text('Patient Education Material', pageWidth / 2, 12, { align: 'center' });
-    doc.setFontSize(10);
+    doc.setFontSize(PDF_FONT_SIZES.body);
     doc.setFont('helvetica', 'normal');
     doc.text('Burns Plastic and Reconstructive Surgery Unit', pageWidth / 2, 20, { align: 'center' });
-    doc.setFontSize(9);
+    doc.setFontSize(PDF_FONT_SIZES.small);
     doc.text('Drs Okwesili / Nnadi / Eze', pageWidth / 2, 26, { align: 'center' });
-    doc.setFontSize(8);
+    doc.setFontSize(PDF_FONT_SIZES.footer);
     doc.text('Department of Surgery, University of Nigeria Teaching Hospital', pageWidth / 2, 32, { align: 'center' });
     doc.setFontSize(7);
     doc.text('Enugu, Nigeria', pageWidth / 2, 37, { align: 'center' });
@@ -1024,24 +1033,24 @@ export default function PatientEducation() {
 
     // Patient Information Box
     doc.setFillColor(240, 253, 244);
-    doc.setDrawColor(14, 159, 110);
+    doc.setDrawColor(PDF_COLORS.primary.r, PDF_COLORS.primary.g, PDF_COLORS.primary.b);
     doc.rect(margin, yPos, maxWidth, 25, 'FD');
     
-    doc.setFontSize(10);
+    doc.setFontSize(PDF_FONT_SIZES.body);
     doc.setFont('helvetica', 'bold');
     doc.text('Patient Information:', margin + 3, yPos + 5);
     
     doc.setFont('helvetica', 'normal');
-    doc.text(`Name: ${patient.full_name}`, margin + 3, yPos + 11);
-    doc.text(`Hospital Number: ${patient.hospital_number}`, margin + 3, yPos + 17);
-    doc.text(`Date: ${new Date().toLocaleDateString()}`, margin + 3, yPos + 23);
+    doc.text('Name: ' + clean(patient.full_name), margin + 3, yPos + 11);
+    doc.text('Hospital Number: ' + clean(patient.hospital_number), margin + 3, yPos + 17);
+    doc.text('Date: ' + new Date().toLocaleDateString(), margin + 3, yPos + 23);
     
     yPos += 35;
 
     // Title
-    doc.setFontSize(16);
+    doc.setFontSize(PDF_FONT_SIZES.title);
     doc.setFont('helvetica', 'bold');
-    doc.text(topic.title, margin, yPos);
+    doc.text(clean(topic.title), margin, yPos);
     yPos += 10;
 
     // Category

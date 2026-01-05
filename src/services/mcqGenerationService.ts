@@ -1,5 +1,11 @@
 import { db } from '../db/database';
-import jsPDF from 'jspdf';
+import {
+  createPDF,
+  sanitizeTextForPDF,
+  PDF_MARGINS,
+  PDF_FONT_SIZES,
+  PDF_COLORS
+} from '../utils/pdfUtils';
 
 // WACS Curriculum Topics Database
 export const WACS_CURRICULUM_TOPICS = {
@@ -1278,29 +1284,32 @@ Apply these algorithms systematically in your clinical practice.`
     const material = await db.study_materials.get(studyMaterialId);
     if (!material) throw new Error('Study material not found');
 
-    const doc = new jsPDF();
+    const doc = createPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
-    const margin = 15;
+    const margin = PDF_MARGINS.left;
     const contentWidth = pageWidth - (2 * margin);
 
+    // Helper to sanitize text
+    const clean = (text: string): string => sanitizeTextForPDF(text);
+
     // Header
-    doc.setFillColor(14, 159, 110);
+    doc.setFillColor(PDF_COLORS.primary.r, PDF_COLORS.primary.g, PDF_COLORS.primary.b);
     doc.rect(0, 0, pageWidth, 25, 'F');
     doc.setTextColor(255, 255, 255);
-    doc.setFontSize(16);
+    doc.setFontSize(PDF_FONT_SIZES.title);
     doc.setFont('helvetica', 'bold');
     doc.text('PLASTIC AND RECONSTRUCTIVE SURGERY UNIT - Personalized Study Materials', pageWidth / 2, 12, { align: 'center' });
-    doc.setFontSize(10);
-    doc.text(`Generated: ${material.generatedAt.toLocaleDateString()}`, pageWidth / 2, 19, { align: 'center' });
+    doc.setFontSize(PDF_FONT_SIZES.body);
+    doc.text('Generated: ' + material.generatedAt.toLocaleDateString(), pageWidth / 2, 19, { align: 'center' });
 
     // Content
     doc.setTextColor(0, 0, 0);
-    doc.setFontSize(11);
+    doc.setFontSize(PDF_FONT_SIZES.subHeader);
     let yPos = 35;
 
     // Split content into pages
-    const lines = doc.splitTextToSize(material.content, contentWidth);
+    const lines = doc.splitTextToSize(clean(material.content), contentWidth);
     
     lines.forEach((line: string) => {
       if (yPos > pageHeight - 20) {
@@ -1311,13 +1320,13 @@ Apply these algorithms systematically in your clinical practice.`
       // Format headings
       if (line.startsWith('##')) {
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(14);
-        doc.setTextColor(14, 159, 110);
+        doc.setFontSize(PDF_FONT_SIZES.sectionHeader + 2);
+        doc.setTextColor(PDF_COLORS.primary.r, PDF_COLORS.primary.g, PDF_COLORS.primary.b);
         yPos += 5;
       } else if (line.startsWith('#')) {
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(16);
-        doc.setTextColor(14, 159, 110);
+        doc.setFontSize(PDF_FONT_SIZES.title);
+        doc.setTextColor(PDF_COLORS.primary.r, PDF_COLORS.primary.g, PDF_COLORS.primary.b);
         yPos += 8;
       } else {
         doc.setFont('helvetica', 'normal');

@@ -42,10 +42,11 @@ import {
 import Layout from '../components/Layout';
 import { UserApprovalManager } from '../components/UserApprovalManager';
 import { AISettingsPanel } from '../components/AISettingsPanel';
+import BulkUserImport from '../components/BulkUserImport';
 import { db } from '../db/database';
 import { resetDatabase } from '../utils/dbReset';
 
-type AdminTab = 'dashboard' | 'user-approvals' | 'users' | 'system' | 'database' | 'security' | 'analytics' | 'settings';
+type AdminTab = 'dashboard' | 'user-approvals' | 'users' | 'bulk-import' | 'system' | 'database' | 'security' | 'analytics' | 'settings';
 
 interface User {
   id: string;
@@ -360,6 +361,7 @@ export default function Admin() {
         <TabButton tab="dashboard" label="Dashboard" icon={BarChart3} />
         <TabButton tab="user-approvals" label="Approvals" icon={UserCheck} />
         <TabButton tab="users" label="Users" icon={Users} />
+        <TabButton tab="bulk-import" label="Bulk Import" icon={UserPlus} />
         <TabButton tab="system" label="System" icon={Activity} />
         <TabButton tab="database" label="Database" icon={Database} />
         <TabButton tab="security" label="Security" icon={Shield} />
@@ -622,6 +624,11 @@ export default function Admin() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Bulk Import Tab */}
+      {activeTab === 'bulk-import' && (
+        <BulkUserImport />
       )}
 
       {/* System Health Tab */}

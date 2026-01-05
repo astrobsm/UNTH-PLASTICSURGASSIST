@@ -43,9 +43,9 @@ async function handleLogin(req, res) {
     return res.status(400).json({ error: 'Username/email and password are required' });
   }
 
-  // Try to find user by username OR email
+  // Try to find user by username OR email (include must_change_password)
   const result = await query(
-    `SELECT id, username, password_hash, role, full_name, email, is_approved, is_active 
+    `SELECT id, username, password_hash, role, full_name, email, is_approved, is_active, COALESCE(must_change_password, FALSE) as must_change_password 
      FROM users WHERE username = $1 OR email = $1`,
     [loginId]
   );
@@ -86,7 +86,8 @@ async function handleLogin(req, res) {
       username: user.username,
       role: user.role,
       fullName: user.full_name,
-      email: user.email
+      email: user.email,
+      mustChangePassword: user.must_change_password
     }
   });
 }

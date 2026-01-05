@@ -107,10 +107,14 @@ const MCQEducation: React.FC = () => {
         cmeWACSService.getAllArticles()
       ]);
 
-      setUpcomingTests(upcomingData);
-      setTestHistory(historyData);
-      setCmeArticles(articlesData);
-      setFilteredArticles(articlesData);
+      setUpcomingTests(upcomingData || []);
+      // Filter out incomplete sessions that might cause errors
+      const validHistory = (historyData || []).filter(session => 
+        session && Array.isArray(session.questions) && session.answers
+      );
+      setTestHistory(validHistory);
+      setCmeArticles(articlesData || []);
+      setFilteredArticles(articlesData || []);
     } catch (error) {
       console.error('Error loading data:', error);
     }
@@ -732,7 +736,7 @@ const MCQEducation: React.FC = () => {
             <div className="bg-blue-50 rounded-md p-4 mb-4">
               <h4 className="font-semibold text-blue-900 mb-2">Weak Areas Identified:</h4>
               <div className="flex flex-wrap gap-2">
-                {currentSession.weakAreas.map((area, index) => (
+                {(currentSession?.weakAreas || []).map((area, index) => (
                   <span key={index} className="bg-blue-200 text-blue-800 px-3 py-1 rounded-full text-sm font-medium">
                     {area}
                   </span>
@@ -795,12 +799,12 @@ const MCQEducation: React.FC = () => {
 
                 <div className="grid grid-cols-3 gap-4 text-center">
                   <div>
-                    <div className="text-2xl font-bold text-gray-900">{session.rawScore}</div>
+                    <div className="text-2xl font-bold text-gray-900">{session.rawScore || 0}</div>
                     <div className="text-xs text-gray-600">Raw Score</div>
                   </div>
                   <div>
                     <div className="text-2xl font-bold text-gray-900">
-                      {Object.keys(session.answers).length}/{session.questions.length}
+                      {Object.keys(session.answers || {}).length}/{(session.questions || []).length}
                     </div>
                     <div className="text-xs text-gray-600">Attempted</div>
                   </div>
@@ -812,11 +816,11 @@ const MCQEducation: React.FC = () => {
                   </div>
                 </div>
 
-                {session.weakAreas.length > 0 && (
+                {(session.weakAreas || []).length > 0 && (
                   <div className="mt-3 pt-3 border-t">
                     <div className="text-xs font-semibold text-gray-700 mb-1">Weak Areas:</div>
                     <div className="flex flex-wrap gap-1">
-                      {session.weakAreas.map((area, idx) => (
+                      {(session.weakAreas || []).map((area, idx) => (
                         <span key={idx} className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded">
                           {area}
                         </span>

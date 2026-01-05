@@ -3,9 +3,15 @@
  * Generates downloadable PDFs for transfusion orders and monitoring charts
  */
 
-import jsPDF from 'jspdf';
 import { format } from 'date-fns';
 import { BloodTransfusion, BloodBagDetails, TransfusionVitals } from './bloodTransfusionService';
+import {
+  createPDF,
+  sanitizeTextForPDF,
+  PDF_MARGINS,
+  PDF_FONT_SIZES,
+  PDF_COLORS
+} from '../utils/pdfUtils';
 
 export interface PatientBloodDetails {
   blood_group: string;
@@ -70,17 +76,22 @@ export interface TransfusionOrderData {
 }
 
 class TransfusionPdfService {
+  // Helper to sanitize text for proper rendering
+  private clean(text: string | undefined | null): string {
+    return sanitizeTextForPDF(text || '');
+  }
+
   /**
    * Generate Transfusion Order PDF
    */
   generateTransfusionOrderPDF(data: TransfusionOrderData): void {
-    const pdf = new jsPDF();
+    const pdf = createPDF();
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
-    let yPos = 15;
+    let yPos = PDF_MARGINS.top;
 
     // Header
-    pdf.setFontSize(10);
+    pdf.setFontSize(PDF_FONT_SIZES.body);
     pdf.setFont('helvetica', 'normal');
     pdf.text('UNIVERSITY HOSPITAL', pageWidth / 2, yPos, { align: 'center' });
     yPos += 5;
@@ -451,10 +462,10 @@ class TransfusionPdfService {
     monitoringEntries: TransfusionMonitoringEntry[] = [],
     generateBlank: boolean = false
   ): void {
-    const pdf = new jsPDF('landscape');
+    const pdf = createPDF('landscape');
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
-    let yPos = 15;
+    let yPos = PDF_MARGINS.top;
 
     // Header
     pdf.setFontSize(10);
@@ -651,10 +662,10 @@ class TransfusionPdfService {
    * Generate a blank monitoring chart template
    */
   generateBlankMonitoringChart(): void {
-    const pdf = new jsPDF('landscape');
+    const pdf = createPDF('landscape');
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
-    let yPos = 15;
+    let yPos = PDF_MARGINS.top;
 
     // Header
     pdf.setFontSize(10);
@@ -811,10 +822,10 @@ class TransfusionPdfService {
     indication?: string;
     physician_name?: string;
   }): void {
-    const pdf = new jsPDF();
+    const pdf = createPDF();
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
-    let yPos = 15;
+    let yPos = PDF_MARGINS.top;
 
     // Header
     pdf.setFontSize(10);

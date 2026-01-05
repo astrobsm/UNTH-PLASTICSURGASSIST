@@ -11,7 +11,13 @@ import {
   PaperworkType
 } from '../services/paperworkService';
 import { format } from 'date-fns';
-import jsPDF from 'jspdf';
+import {
+  createPDF,
+  sanitizeTextForPDF,
+  PDF_MARGINS,
+  PDF_FONT_SIZES,
+  PDF_COLORS
+} from '../utils/pdfUtils';
 import { useAuthStore } from '../store/authStore';
 
 const PaperworkPage: React.FC = () => {
@@ -49,32 +55,35 @@ const PaperworkPage: React.FC = () => {
     : documents.filter(d => d.type === filter);
 
   const exportToPDF = (doc: PaperworkDocument) => {
-    const pdf = new jsPDF();
+    const pdf = createPDF();
     const pageWidth = pdf.internal.pageSize.getWidth();
-    let yPos = 20;
+    let yPos = PDF_MARGINS.top;
+    
+    // Helper to sanitize text
+    const clean = (text: string | undefined | null): string => sanitizeTextForPDF(text || '');
 
     // Header
-    pdf.setFontSize(16);
+    pdf.setFontSize(PDF_FONT_SIZES.title);
     pdf.setFont('helvetica', 'bold');
-    pdf.text(doc.title.toUpperCase(), pageWidth / 2, yPos, { align: 'center' });
+    pdf.text(clean(doc.title).toUpperCase(), pageWidth / 2, yPos, { align: 'center' });
     yPos += 15;
 
     // Content
-    pdf.setFontSize(10);
+    pdf.setFontSize(PDF_FONT_SIZES.body);
     pdf.setFont('helvetica', 'normal');
-    const lines = pdf.splitTextToSize(doc.content, pageWidth - 30);
+    const lines = pdf.splitTextToSize(clean(doc.content), pageWidth - PDF_MARGINS.left - PDF_MARGINS.right);
     
     lines.forEach((line: string) => {
       if (yPos > 270) {
         pdf.addPage();
-        yPos = 20;
+        yPos = PDF_MARGINS.top;
       }
-      pdf.text(line, 15, yPos);
+      pdf.text(line, PDF_MARGINS.left, yPos);
       yPos += 5;
     });
 
     // Save
-    const filename = `${doc.type}_${doc.hospital_number}_${format(new Date(), 'yyyy-MM-dd')}.pdf`;
+    const filename = doc.type + '_' + doc.hospital_number + '_' + format(new Date(), 'yyyy-MM-dd') + '.pdf';
     pdf.save(filename);
   };
 

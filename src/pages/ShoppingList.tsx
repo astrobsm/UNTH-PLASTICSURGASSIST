@@ -1,6 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Download, ShoppingCart, User, Search, Heart, Scissors, Plus, Minus, Trash2 } from 'lucide-react';
-import jsPDF from 'jspdf';
+import {
+  createPDF,
+  sanitizeTextForPDF,
+  PDF_MARGINS,
+  PDF_FONT_SIZES,
+  PDF_COLORS
+} from '../utils/pdfUtils';
 import { patientService } from '../services/patientService';
 
 interface Patient {
@@ -246,26 +252,29 @@ export default function ShoppingList() {
     const patientName = patient?.full_name || manualName || 'Unknown Patient';
     const hospitalNum = patient?.hospital_number || manualHospNum || 'N/A';
     
-    const doc = new jsPDF();
+    // Helper to sanitize text
+    const clean = (text: string | undefined | null): string => sanitizeTextForPDF(text || '');
+    
+    const doc = createPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
-    const margin = 20;
+    const margin = PDF_MARGINS.left + 5;
     const maxWidth = pageWidth - 2 * margin;
     let yPos = margin;
 
     // Header
-    doc.setFillColor(14, 159, 110);
+    doc.setFillColor(PDF_COLORS.primary.r, PDF_COLORS.primary.g, PDF_COLORS.primary.b);
     doc.rect(0, 0, pageWidth, 40, 'F');
     doc.setTextColor(255, 255, 255);
-    doc.setFontSize(16);
+    doc.setFontSize(PDF_FONT_SIZES.title);
     doc.setFont('helvetica', 'bold');
     doc.text('Surgical Shopping List', pageWidth / 2, 12, { align: 'center' });
-    doc.setFontSize(10);
+    doc.setFontSize(PDF_FONT_SIZES.body);
     doc.setFont('helvetica', 'normal');
     doc.text('Burns Plastic and Reconstructive Surgery Unit', pageWidth / 2, 20, { align: 'center' });
-    doc.setFontSize(9);
+    doc.setFontSize(PDF_FONT_SIZES.small);
     doc.text('Drs Okwesili / Nnadi / Eze', pageWidth / 2, 26, { align: 'center' });
-    doc.setFontSize(8);
+    doc.setFontSize(PDF_FONT_SIZES.footer);
     doc.text('Department of Surgery, University of Nigeria Teaching Hospital', pageWidth / 2, 32, { align: 'center' });
     doc.setFontSize(7);
     doc.text('Enugu, Nigeria', pageWidth / 2, 37, { align: 'center' });
@@ -275,24 +284,24 @@ export default function ShoppingList() {
 
     // Patient Information Box
     doc.setFillColor(240, 253, 244);
-    doc.setDrawColor(14, 159, 110);
+    doc.setDrawColor(PDF_COLORS.primary.r, PDF_COLORS.primary.g, PDF_COLORS.primary.b);
     doc.rect(margin, yPos, maxWidth, 30, 'FD');
     
-    doc.setFontSize(10);
+    doc.setFontSize(PDF_FONT_SIZES.body);
     doc.setFont('helvetica', 'bold');
     doc.text('Patient Information:', margin + 3, yPos + 6);
     
     doc.setFont('helvetica', 'normal');
-    doc.text(`Name: ${patientName}`, margin + 3, yPos + 13);
-    doc.text(`Hospital Number: ${hospitalNum}`, margin + 3, yPos + 19);
-    doc.text(`Date: ${new Date().toLocaleDateString()}`, margin + 3, yPos + 25);
+    doc.text('Name: ' + clean(patientName), margin + 3, yPos + 13);
+    doc.text('Hospital Number: ' + clean(hospitalNum), margin + 3, yPos + 19);
+    doc.text('Date: ' + new Date().toLocaleDateString(), margin + 3, yPos + 25);
     
     yPos += 40;
 
     // Category Title
-    doc.setFontSize(12);
+    doc.setFontSize(PDF_FONT_SIZES.sectionHeader);
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(14, 159, 110);
+    doc.setTextColor(PDF_COLORS.primary.r, PDF_COLORS.primary.g, PDF_COLORS.primary.b);
     const categoryTitle = selectedCategory === 'wound_dressing' ? 'Wound Dressing' : 
                           selectedCategory === 'bedside_debridement' ? 'Bedside Debridement' : 
                           'Surgical Procedure';

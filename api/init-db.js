@@ -53,10 +53,19 @@ async function createTables() {
       training_level VARCHAR(50) DEFAULT 'house_officer',
       is_approved BOOLEAN DEFAULT FALSE,
       is_active BOOLEAN DEFAULT TRUE,
+      must_change_password BOOLEAN DEFAULT FALSE,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       last_login TIMESTAMP
     );
+    
+    -- Add must_change_password column if it doesn't exist (for existing databases)
+    DO $$ 
+    BEGIN 
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'must_change_password') THEN
+        ALTER TABLE users ADD COLUMN must_change_password BOOLEAN DEFAULT FALSE;
+      END IF;
+    END $$;
 
     -- Patients table
     CREATE TABLE IF NOT EXISTS patients (

@@ -205,7 +205,16 @@ class ApiClient {
 
   // User management
   async getUsers() {
-    return this.request('/users');
+    const response = await this.request('/users');
+    // Handle different possible response structures
+    if (Array.isArray(response)) {
+      return response;
+    }
+    if (response && Array.isArray(response.users)) {
+      return response.users;
+    }
+    console.warn('Unexpected getUsers response structure:', response);
+    return [];
   }
 
   async approveUser(userId: string, isApproved: boolean = true) {
@@ -219,6 +228,35 @@ class ApiClient {
     return this.request(`/users/${userId}/status`, {
       method: 'PATCH',
       body: JSON.stringify({ is_active: isActive })
+    });
+  }
+
+  // Bulk import users with auto-generated credentials
+  async bulkImportUsers(users: Array<{
+    fullName: string;
+    email: string;
+    role?: string;
+    department?: string;
+  }>) {
+    return this.request('/users/bulk-import', {
+      method: 'POST',
+      body: JSON.stringify({ users })
+    });
+  }
+
+  // Force password change (for first login after bulk import)
+  async forcePasswordChange(userId: string, currentPassword: string, newPassword: string) {
+    return this.request(`/users/${userId}/force-password-change`, {
+      method: 'PATCH',
+      body: JSON.stringify({ currentPassword, newPassword })
+    });
+  }
+
+  // Change user password
+  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    return this.request(`/users/${userId}/password`, {
+      method: 'PATCH',
+      body: JSON.stringify({ currentPassword, newPassword })
     });
   }
 

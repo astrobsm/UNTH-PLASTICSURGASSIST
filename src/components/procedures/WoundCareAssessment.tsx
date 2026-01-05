@@ -1,7 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { procedureService, WoundCareAssessment } from '../../services/procedureService';
 import { aiWoundMeasurement, WoundMeasurementResult, CalibrationReference } from '../../services/aiWoundMeasurement';
-import jsPDF from 'jspdf';
+import {
+  createPDF,
+  sanitizeTextForPDF,
+  PDF_MARGINS,
+  PDF_FONT_SIZES,
+  PDF_COLORS
+} from '../../utils/pdfUtils';
 
 interface WoundCareAssessmentFormProps {
   patientId: string;
@@ -254,48 +260,51 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
     }
 
     const report = aiWoundMeasurement.generateProgressReport(assessment.dimension_history);
+    
+    // Helper to sanitize text
+    const clean = (text: string): string => sanitizeTextForPDF(text);
 
     // Generate PDF report
-    const doc = new jsPDF();
+    const doc = createPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     let yPosition = 20;
 
     // Header
-    doc.setFillColor(14, 159, 110);
+    doc.setFillColor(PDF_COLORS.primary.r, PDF_COLORS.primary.g, PDF_COLORS.primary.b);
     doc.rect(0, 0, pageWidth, 40, 'F');
     doc.setTextColor(255, 255, 255);
-    doc.setFontSize(16);
+    doc.setFontSize(PDF_FONT_SIZES.title);
     doc.setFont('helvetica', 'bold');
     doc.text('WOUND HEALING PROGRESS REPORT', pageWidth / 2, 15, { align: 'center' });
-    doc.setFontSize(10);
+    doc.setFontSize(PDF_FONT_SIZES.body);
     doc.text('PLASTIC AND RECONSTRUCTIVE SURGERY UNIT', pageWidth / 2, 25, { align: 'center' });
-    doc.text(`Generated: ${new Date().toLocaleDateString('en-NG')}`, pageWidth / 2, 32, { align: 'center' });
+    doc.text('Generated: ' + new Date().toLocaleDateString('en-NG'), pageWidth / 2, 32, { align: 'center' });
 
     yPosition = 50;
     doc.setTextColor(0, 0, 0);
 
     // Patient info
-    doc.setFontSize(11);
+    doc.setFontSize(PDF_FONT_SIZES.subHeader);
     doc.setFont('helvetica', 'bold');
-    doc.text(`Patient ID: ${patientId}`, 15, yPosition);
+    doc.text('Patient ID: ' + clean(patientId), PDF_MARGINS.left, yPosition);
     yPosition += 7;
-    doc.text(`Procedure ID: ${procedureId}`, 15, yPosition);
+    doc.text('Procedure ID: ' + clean(procedureId), PDF_MARGINS.left, yPosition);
     yPosition += 10;
 
     // Overall trend
-    doc.setFontSize(12);
+    doc.setFontSize(PDF_FONT_SIZES.sectionHeader);
     doc.setFont('helvetica', 'bold');
-    const trendColor = report.trend === 'improving' ? [14, 159, 110] : report.trend === 'worsening' ? [220, 38, 38] : [234, 179, 8];
-    doc.setTextColor(...trendColor);
-    doc.text(`Healing Trend: ${report.trend.toUpperCase()}`, 15, yPosition);
+    const trendColor = report.trend === 'improving' ? PDF_COLORS.primary : report.trend === 'worsening' ? PDF_COLORS.danger : PDF_COLORS.warning;
+    doc.setTextColor(trendColor.r, trendColor.g, trendColor.b);
+    doc.text('Healing Trend: ' + report.trend.toUpperCase(), PDF_MARGINS.left, yPosition);
     yPosition += 10;
 
     doc.setTextColor(0, 0, 0);
-    doc.setFontSize(10);
+    doc.setFontSize(PDF_FONT_SIZES.body);
     doc.setFont('helvetica', 'normal');
-    doc.text(`Area Change: ${report.percentageChange > 0 ? '+' : ''}${report.percentageChange}%`, 15, yPosition);
+    doc.text('Area Change: ' + (report.percentageChange > 0 ? '+' : '') + report.percentageChange + '%', PDF_MARGINS.left, yPosition);
     yPosition += 6;
-    doc.text(`Average Healing Rate: ${report.averageHealingRate} cm²/day`, 15, yPosition);
+    doc.text('Average Healing Rate: ' + report.averageHealingRate + ' cm²/day', PDF_MARGINS.left, yPosition);
     yPosition += 6;
     if (report.estimatedHealingTime) {
       doc.text(`Estimated Complete Healing: ${report.estimatedHealingTime} days`, 15, yPosition);
@@ -365,20 +374,20 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
   };
 
   const downloadReferencePaperTemplate = () => {
-    const doc = new jsPDF();
+    const doc = createPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
 
     // Minimal header
-    doc.setFillColor(14, 159, 110);
+    doc.setFillColor(PDF_COLORS.primary.r, PDF_COLORS.primary.g, PDF_COLORS.primary.b);
     doc.rect(0, 0, pageWidth, 12, 'F');
     doc.setTextColor(255, 255, 255);
-    doc.setFontSize(10);
+    doc.setFontSize(PDF_FONT_SIZES.body);
     doc.setFont('helvetica', 'bold');
     doc.text('WOUND MEASUREMENT REFERENCE - 10cm Lines', pageWidth / 2, 7, { align: 'center' });
 
     // Minimal footer
-    doc.setFillColor(14, 159, 110);
+    doc.setFillColor(PDF_COLORS.primary.r, PDF_COLORS.primary.g, PDF_COLORS.primary.b);
     doc.rect(0, pageHeight - 8, pageWidth, 8, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(6);

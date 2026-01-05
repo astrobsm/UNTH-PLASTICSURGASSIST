@@ -30,6 +30,7 @@ import ChatRooms from './pages/ChatRooms';
 import LimbSalvagePage from './pages/LimbSalvagePage';
 import BurnCarePage from './pages/BurnCarePage';
 import MedicalTrainingPage from './pages/MedicalTrainingPage';
+import ForcePasswordChange from './components/ForcePasswordChange';
 import { useAuthStore } from './store/authStore';
 import { PWAInstallPrompt } from './components/PWAInstallPrompt';
 import { OfflineIndicator } from './components/OfflineIndicator';
@@ -37,7 +38,7 @@ import TreatmentPlanBuilder from './components/TreatmentPlanBuilder';
 import { notificationService } from './services/notificationBackgroundService';
 
 function App() {
-  const { user, loading, initializeAuth } = useAuthStore();
+  const { user, loading, initializeAuth, clearMustChangePassword, logout } = useAuthStore();
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
 
   useEffect(() => {
@@ -74,6 +75,20 @@ function App() {
 
   if (!user) {
     return <Login />;
+  }
+
+  // Check if user must change password (for bulk imported users on first login)
+  if (user.mustChangePassword) {
+    return (
+      <ForcePasswordChange
+        userId={user.id}
+        userName={user.name}
+        onPasswordChanged={() => {
+          clearMustChangePassword();
+        }}
+        onLogout={logout}
+      />
+    );
   }
 
   return (

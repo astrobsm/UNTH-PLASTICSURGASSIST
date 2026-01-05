@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { format } from 'date-fns';
-import { jsPDF } from 'jspdf';
+import { createPDF, sanitizeTextForPDF, PDF_MARGINS, PDF_FONT_SIZES, PDF_COLORS } from '../utils/pdfUtils';
 import { Discharge, admissionDischargeService } from '../services/admissionDischargeService';
 
 interface DischargeDocumentsPreviewProps {
@@ -402,41 +402,44 @@ export default function DischargeDocumentsPreview({
   const generatePDF = async (docType: DocumentType) => {
     setIsGenerating(true);
     try {
-      const doc = new jsPDF();
+      const doc = createPDF();
       const pageWidth = doc.internal.pageSize.getWidth();
-      const margin = 15;
-      let y = 20;
+      const margin = PDF_MARGINS.left;
+      let y = PDF_MARGINS.top;
+      
+      // Helper to sanitize text
+      const clean = (text: string | undefined | null): string => sanitizeTextForPDF(text || '');
 
       const addHeader = () => {
         doc.setFontSize(14);
         doc.setFont('helvetica', 'bold');
-        doc.setTextColor(0, 128, 0);
+        doc.setTextColor(PDF_COLORS.primary[0], PDF_COLORS.primary[1], PDF_COLORS.primary[2]);
         doc.text('UNIVERSITY OF NIGERIA TEACHING HOSPITAL', pageWidth / 2, y, { align: 'center' });
         y += 6;
-        doc.setFontSize(12);
+        doc.setFontSize(PDF_FONT_SIZES.sectionHeader);
         doc.text('DEPARTMENT OF PLASTIC SURGERY', pageWidth / 2, y, { align: 'center' });
         y += 5;
-        doc.setFontSize(8);
-        doc.setTextColor(100);
+        doc.setFontSize(PDF_FONT_SIZES.small);
+        doc.setTextColor(100, 100, 100);
         doc.text('Ituku-Ozalla, Enugu State, Nigeria', pageWidth / 2, y, { align: 'center' });
         y += 10;
-        doc.setDrawColor(0, 128, 0);
+        doc.setDrawColor(PDF_COLORS.primary[0], PDF_COLORS.primary[1], PDF_COLORS.primary[2]);
         doc.setLineWidth(0.5);
         doc.line(margin, y, pageWidth - margin, y);
         y += 10;
       };
 
       const addText = (text: string, options: { fontSize?: number; bold?: boolean; color?: number[] } = {}) => {
-        const { fontSize = 10, bold = false, color = [0, 0, 0] } = options;
+        const { fontSize = PDF_FONT_SIZES.body, bold = false, color = PDF_COLORS.black } = options;
         doc.setFontSize(fontSize);
         doc.setFont('helvetica', bold ? 'bold' : 'normal');
         doc.setTextColor(color[0], color[1], color[2]);
         
-        const lines = doc.splitTextToSize(text, pageWidth - 2 * margin);
+        const lines = doc.splitTextToSize(clean(text), pageWidth - 2 * margin);
         lines.forEach((line: string) => {
           if (y > 280) {
             doc.addPage();
-            y = 20;
+            y = PDF_MARGINS.top;
           }
           doc.text(line, margin, y);
           y += fontSize * 0.5;
@@ -447,15 +450,15 @@ export default function DischargeDocumentsPreview({
       const addSectionTitle = (title: string) => {
         if (y > 260) {
           doc.addPage();
-          y = 20;
+          y = PDF_MARGINS.top;
         }
         y += 3;
         doc.setFillColor(240, 240, 240);
         doc.rect(margin, y - 4, pageWidth - 2 * margin, 7, 'F');
-        doc.setFontSize(11);
+        doc.setFontSize(PDF_FONT_SIZES.subHeader);
         doc.setFont('helvetica', 'bold');
-        doc.setTextColor(0, 100, 0);
-        doc.text(title, margin + 2, y);
+        doc.setTextColor(PDF_COLORS.primary[0], PDF_COLORS.primary[1], PDF_COLORS.primary[2]);
+        doc.text(clean(title), margin + 2, y);
         y += 8;
       };
 
@@ -463,199 +466,199 @@ export default function DischargeDocumentsPreview({
       if (docType === 'summary' || docType === 'all') {
         addHeader();
         
-        doc.setFontSize(12);
+        doc.setFontSize(PDF_FONT_SIZES.sectionHeader);
         doc.setFont('helvetica', 'bold');
-        doc.setTextColor(0, 0, 0);
+        doc.setTextColor(PDF_COLORS.black[0], PDF_COLORS.black[1], PDF_COLORS.black[2]);
         doc.text('DISCHARGE SUMMARY', pageWidth / 2, y, { align: 'center' });
         y += 10;
 
-        addText(`Patient: ${discharge.patient_name}  |  Hospital No: ${discharge.hospital_number}  |  Age/Gender: ${discharge.age}/${discharge.gender}`);
-        addText(`Admission: ${format(new Date(discharge.admission_date), 'dd MMM yyyy')}  |  Discharge: ${format(new Date(discharge.discharge_date), 'dd MMM yyyy')}  |  LOS: ${discharge.length_of_stay_days} days`);
+        addText('Patient: ' + clean(discharge.patient_name) + '  |  Hospital No: ' + clean(discharge.hospital_number) + '  |  Age/Gender: ' + discharge.age + '/' + clean(discharge.gender));
+        addText('Admission: ' + format(new Date(discharge.admission_date), 'dd MMM yyyy') + '  |  Discharge: ' + format(new Date(discharge.discharge_date), 'dd MMM yyyy') + '  |  LOS: ' + discharge.length_of_stay_days + ' days');
         y += 3;
 
         addSectionTitle('FINAL DIAGNOSIS');
-        addText(discharge.final_diagnosis);
+        addText(clean(discharge.final_diagnosis));
         if (discharge.secondary_diagnoses?.length) {
-          addText(`Secondary: ${discharge.secondary_diagnoses.join(', ')}`);
+          addText('Secondary: ' + discharge.secondary_diagnoses.map(d => clean(d)).join(', '));
         }
 
         if (discharge.procedures_performed?.length) {
           addSectionTitle('PROCEDURES PERFORMED');
-          discharge.procedures_performed.forEach(p => addText(`• ${p}`));
+          discharge.procedures_performed.forEach(p => addText('- ' + clean(p)));
         }
 
         addSectionTitle('HOSPITAL COURSE');
-        addText(discharge.hospital_course_summary || '');
+        addText(clean(discharge.hospital_course_summary || ''));
 
         addSectionTitle('CONDITION AT DISCHARGE');
-        addText(discharge.condition_at_discharge || '');
+        addText(clean(discharge.condition_at_discharge || ''));
 
         addSectionTitle('MEDICATIONS ON DISCHARGE');
         discharge.medications_on_discharge?.forEach(med => {
-          addText(`• ${med.medication} ${med.dosage} - ${med.frequency} for ${med.duration}`);
+          addText('- ' + clean(med.medication) + ' ' + clean(med.dosage) + ' - ' + clean(med.frequency) + ' for ' + clean(med.duration));
         });
 
         if (discharge.follow_up_appointments?.length) {
           addSectionTitle('FOLLOW-UP');
           discharge.follow_up_appointments.forEach(apt => {
-            addText(`• ${format(new Date(apt.date), 'dd MMM yyyy')} - ${apt.clinic}: ${apt.purpose}`);
+            addText('- ' + format(new Date(apt.date), 'dd MMM yyyy') + ' - ' + clean(apt.clinic) + ': ' + clean(apt.purpose));
           });
         }
 
         // Signature area
         y += 15;
-        doc.setFontSize(9);
+        doc.setFontSize(PDF_FONT_SIZES.small);
         doc.text('_____________________', margin, y);
         doc.text('_____________________', pageWidth / 2 + 10, y);
         y += 5;
         doc.text('Discharging Doctor', margin, y);
         doc.text('Consultant', pageWidth / 2 + 10, y);
         y += 4;
-        doc.setFontSize(8);
-        doc.text(discharge.discharging_doctor || '', margin, y);
-        doc.text(discharge.discharging_consultant || '', pageWidth / 2 + 10, y);
+        doc.setFontSize(PDF_FONT_SIZES.small);
+        doc.text(clean(discharge.discharging_doctor || ''), margin, y);
+        doc.text(clean(discharge.discharging_consultant || ''), pageWidth / 2 + 10, y);
 
         if (docType === 'all') {
           doc.addPage();
-          y = 20;
+          y = PDF_MARGINS.top;
         }
       }
 
       if (docType === 'fitness' || docType === 'all') {
         addHeader();
         
-        doc.setFontSize(12);
+        doc.setFontSize(PDF_FONT_SIZES.sectionHeader);
         doc.setFont('helvetica', 'bold');
         doc.text('MEDICAL REPORT OF FITNESS FOR DISCHARGE', pageWidth / 2, y, { align: 'center' });
         y += 10;
 
         addText('This is to certify that:');
         y += 3;
-        addText(`Patient Name: ${discharge.patient_name}`, { bold: true });
-        addText(`Hospital Number: ${discharge.hospital_number}`);
-        addText(`Age/Gender: ${discharge.age} years / ${discharge.gender}`);
+        addText('Patient Name: ' + clean(discharge.patient_name), { bold: true });
+        addText('Hospital Number: ' + clean(discharge.hospital_number));
+        addText('Age/Gender: ' + discharge.age + ' years / ' + clean(discharge.gender));
         y += 5;
 
-        addText(`Was admitted on ${format(new Date(discharge.admission_date), 'dd MMMM yyyy')} with a diagnosis of ${discharge.final_diagnosis} and has been treated.`);
+        addText('Was admitted on ' + format(new Date(discharge.admission_date), 'dd MMMM yyyy') + ' with a diagnosis of ' + clean(discharge.final_diagnosis) + ' and has been treated.');
         y += 5;
 
         addSectionTitle('DISCHARGE ASSESSMENT');
-        addText(`WHO Discharge Readiness Score: ${discharge.discharge_readiness_score}/33`);
-        addText(`Discharge Type: ${discharge.discharge_type.replace('_', ' ').toUpperCase()}`);
-        addText(`Condition at Discharge: ${discharge.condition_at_discharge}`);
+        addText('WHO Discharge Readiness Score: ' + discharge.discharge_readiness_score + '/33');
+        addText('Discharge Type: ' + clean(discharge.discharge_type.replace('_', ' ').toUpperCase()));
+        addText('Condition at Discharge: ' + clean(discharge.condition_at_discharge));
         y += 5;
 
         if (discharge.discharge_type === 'normal') {
-          addText('Based on the WHO discharge readiness assessment, the patient is FIT FOR DISCHARGE.', { color: [0, 128, 0] });
+          addText('Based on the WHO discharge readiness assessment, the patient is FIT FOR DISCHARGE.', { color: [PDF_COLORS.primary.r, PDF_COLORS.primary.g, PDF_COLORS.primary.b] });
         } else if (discharge.discharge_type === 'on_request') {
           addText('Patient has requested discharge. Counseled about risks. Agreed to follow-up.', { color: [200, 150, 0] });
         } else {
-          addText('Patient leaving AGAINST MEDICAL ADVICE. Risks fully explained.', { color: [200, 0, 0] });
+          addText('Patient leaving AGAINST MEDICAL ADVICE. Risks fully explained.', { color: [PDF_COLORS.danger.r, PDF_COLORS.danger.g, PDF_COLORS.danger.b] });
         }
 
         y += 15;
-        addText(`Issued on: ${format(new Date(), 'dd MMMM yyyy')}`);
+        addText('Issued on: ' + format(new Date(), 'dd MMMM yyyy'));
         y += 10;
         doc.text('_____________________', margin, y);
         doc.text('_____________________', pageWidth / 2 + 10, y);
         y += 5;
-        doc.setFontSize(9);
+        doc.setFontSize(PDF_FONT_SIZES.small);
         doc.text('Discharging Doctor', margin, y);
         doc.text('Consultant', pageWidth / 2 + 10, y);
 
         if (docType === 'all') {
           doc.addPage();
-          y = 20;
+          y = PDF_MARGINS.top;
         }
       }
 
       if (docType === 'instructions' || docType === 'all') {
         addHeader();
         
-        doc.setFontSize(12);
+        doc.setFontSize(PDF_FONT_SIZES.sectionHeader);
         doc.setFont('helvetica', 'bold');
         doc.text('DISCHARGE INSTRUCTIONS', pageWidth / 2, y, { align: 'center' });
         y += 10;
 
-        addText(`Patient: ${discharge.patient_name}  |  Discharge Date: ${format(new Date(discharge.discharge_date), 'dd MMM yyyy')}`);
+        addText('Patient: ' + clean(discharge.patient_name) + '  |  Discharge Date: ' + format(new Date(discharge.discharge_date), 'dd MMM yyyy'));
         y += 5;
 
         if (discharge.wound_care_instructions) {
           addSectionTitle('WOUND CARE');
-          addText(discharge.wound_care_instructions);
+          addText(clean(discharge.wound_care_instructions));
         }
 
         addSectionTitle('MEDICATIONS');
         discharge.medications_on_discharge?.forEach(med => {
-          addText(`• ${med.medication} ${med.dosage}`);
-          addText(`  Take ${med.frequency} for ${med.duration}`, { fontSize: 9 });
+          addText('- ' + clean(med.medication) + ' ' + clean(med.dosage));
+          addText('  Take ' + clean(med.frequency) + ' for ' + clean(med.duration), { fontSize: PDF_FONT_SIZES.small });
         });
 
         if (discharge.lifestyle_modifications?.length) {
           addSectionTitle('LIFESTYLE MODIFICATIONS');
-          discharge.lifestyle_modifications.forEach(mod => addText(`✓ ${mod}`));
+          discharge.lifestyle_modifications.forEach(mod => addText('- ' + clean(mod)));
         }
 
         if (discharge.warning_signs?.length) {
-          addSectionTitle('⚠️ WARNING SIGNS - RETURN IMMEDIATELY IF:');
-          discharge.warning_signs.forEach(sign => addText(`🚨 ${sign}`));
+          addSectionTitle('WARNING SIGNS - RETURN IMMEDIATELY IF:');
+          discharge.warning_signs.forEach(sign => addText('! ' + clean(sign)));
         }
 
         if (discharge.follow_up_appointments?.length) {
           addSectionTitle('FOLLOW-UP APPOINTMENTS');
           discharge.follow_up_appointments.forEach(apt => {
-            addText(`📅 ${format(new Date(apt.date), 'EEE, dd MMM yyyy')} at ${apt.clinic}`);
+            addText('- ' + format(new Date(apt.date), 'EEE, dd MMM yyyy') + ' at ' + clean(apt.clinic));
           });
         }
 
         y += 10;
-        addText('Emergency Contact: Hospital Emergency: 112', { fontSize: 9 });
+        addText('Emergency Contact: Hospital Emergency: 112', { fontSize: PDF_FONT_SIZES.small });
 
         if (docType === 'all') {
           doc.addPage();
-          y = 20;
+          y = PDF_MARGINS.top;
         }
       }
 
       if ((docType === 'meal_plan' || docType === 'all') && discharge.meal_plan_7_day) {
         addHeader();
         
-        doc.setFontSize(12);
+        doc.setFontSize(PDF_FONT_SIZES.sectionHeader);
         doc.setFont('helvetica', 'bold');
         doc.text('7-DAY MEAL PLAN', pageWidth / 2, y, { align: 'center' });
         y += 10;
 
-        addText(`Patient: ${discharge.patient_name}`);
-        addText(`Based on: ${discharge.final_diagnosis}`);
+        addText('Patient: ' + clean(discharge.patient_name));
+        addText('Based on: ' + clean(discharge.final_diagnosis));
         y += 5;
 
         if (discharge.meal_plan_7_day.special_considerations.length) {
           addSectionTitle('DIETARY CONSIDERATIONS');
-          discharge.meal_plan_7_day.special_considerations.forEach(c => addText(`• ${c}`));
+          discharge.meal_plan_7_day.special_considerations.forEach(c => addText('- ' + clean(c)));
         }
 
         if (discharge.meal_plan_7_day.foods_to_avoid.length) {
           addSectionTitle('FOODS TO AVOID');
-          addText(discharge.meal_plan_7_day.foods_to_avoid.join(', '));
+          addText(discharge.meal_plan_7_day.foods_to_avoid.map(f => clean(f)).join(', '));
         }
 
         // Daily meal plan
         ['day1', 'day2', 'day3', 'day4', 'day5', 'day6', 'day7'].forEach((dayKey, idx) => {
           const day = discharge.meal_plan_7_day![dayKey as keyof typeof discharge.meal_plan_7_day] as any;
-          addSectionTitle(`DAY ${idx + 1}`);
-          addText(`Breakfast: ${day.breakfast}`);
-          addText(`Mid-Morning: ${day.mid_morning_snack}`);
-          addText(`Lunch: ${day.lunch}`);
-          addText(`Afternoon: ${day.afternoon_snack}`);
-          addText(`Dinner: ${day.dinner}`);
+          addSectionTitle('DAY ' + (idx + 1));
+          addText('Breakfast: ' + clean(day.breakfast));
+          addText('Mid-Morning: ' + clean(day.mid_morning_snack));
+          addText('Lunch: ' + clean(day.lunch));
+          addText('Afternoon: ' + clean(day.afternoon_snack));
+          addText('Dinner: ' + clean(day.dinner));
         });
 
         addSectionTitle('HYDRATION');
-        addText(discharge.meal_plan_7_day.hydration_goals);
+        addText(clean(discharge.meal_plan_7_day.hydration_goals));
       }
 
       // Save PDF
-      const filename = `${discharge.patient_name.replace(/\s+/g, '_')}_${docType}_${format(new Date(), 'yyyyMMdd')}.pdf`;
+      const filename = clean(discharge.patient_name).replace(/\s+/g, '_') + '_' + docType + '_' + format(new Date(), 'yyyyMMdd') + '.pdf';
       doc.save(filename);
       
       setDownloadedDocs(prev => new Set([...prev, docType]));

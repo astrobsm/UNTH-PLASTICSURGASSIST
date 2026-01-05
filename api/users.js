@@ -25,6 +25,10 @@ export default async function handler(req, res) {
         }
         return await getAllUsers(url.searchParams, auth.user, res);
       case 'POST':
+        // Check for bulk import action
+        if (userId === 'bulk-import') {
+          return await bulkImportUsers(req.body, auth.user, res);
+        }
         return await createUser(req.body, auth.user, res);
       case 'PUT':
       case 'PATCH':
@@ -36,6 +40,9 @@ export default async function handler(req, res) {
         }
         if (action === 'password') {
           return await changePassword(userId, req.body, auth.user, res);
+        }
+        if (action === 'force-password-change') {
+          return await forcePasswordChange(userId, req.body, auth.user, res);
         }
         return await updateUser(userId, req.body, auth.user, res);
       case 'DELETE':
@@ -207,7 +214,8 @@ async function changePassword(id, data, currentUser, res) {
 
   const passwordHash = await bcrypt.hash(newPassword, 10);
 
-  await query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, id]);
+  // Also clear the must_change_password flag when user changes password
+  await query('UPDATE users SET password_hash = $1, must_change_password = FALSE WHERE id = $2', [passwordHash, id]);
 
   res.status(200).json({ message: 'Password changed successfully' });
 }
@@ -229,4 +237,157 @@ async function deleteUser(id, currentUser, res) {
   }
 
   res.status(200).json({ message: 'User deleted successfully' });
+}
+
+// Generate a random password
+function generatePassword(length = 10) {
+  const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%';
+  let password = '';
+  // Ensure at least one of each type
+  password += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[Math.floor(Math.random() * 26)];
+  password += 'abcdefghijklmnopqrstuvwxyz'[Math.floor(Math.random() * 26)];
+  password += '0123456789'[Math.floor(Math.random() * 10)];
+  password += '!@#$%'[Math.floor(Math.random() * 5)];
+  
+  for (let i = password.length; i < length; i++) {
+    password += charset[Math.floor(Math.random() * charset.length)];
+  }
+  // Shuffle the password
+  return password.split('').sort(() => Math.random() - 0.5).join('');
+}
+
+// Bulk import users with auto-generated credentials
+async function bulkImportUsers(data, currentUser, res) {
+  // Only super_admin can bulk import users
+  if (!['super_admin'].includes(currentUser.role)) {
+    return res.status(403).json({ error: 'Access denied. Only administrators can bulk import users.' });
+  }
+
+  const { users: usersToImport } = data;
+
+  if (!usersToImport || !Array.isArray(usersToImport) || usersToImport.length === 0) {
+    return res.status(400).json({ error: 'No users provided for import. Expected array of users with fullName, email, and role.' });
+  }
+
+  const results = {
+    success: [],
+    failed: [],
+    credentials: []
+  };
+
+  for (const userData of usersToImport) {
+    try {
+      const { fullName, email, role = 'intern', department = '' } = userData;
+
+      if (!fullName || !email) {
+        results.failed.push({
+          email: email || 'N/A',
+          fullName: fullName || 'N/A',
+          error: 'Missing required fields: fullName and email are required'
+        });
+        continue;
+      }
+
+      // Generate username from email (part before @)
+      let username = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+      
+      // Check if username already exists
+      const existingUsername = await query('SELECT id FROM users WHERE username = $1', [username]);
+      if (existingUsername.rows.length > 0) {
+        // Append random numbers to make unique
+        username = `${username}${Math.floor(Math.random() * 1000)}`;
+      }
+
+      // Check if email already exists
+      const existingEmail = await query('SELECT id FROM users WHERE email = $1', [email]);
+      if (existingEmail.rows.length > 0) {
+        results.failed.push({
+          email,
+          fullName,
+          error: 'Email already exists'
+        });
+        continue;
+      }
+
+      // Generate a temporary password
+      const tempPassword = generatePassword(12);
+      const passwordHash = await bcrypt.hash(tempPassword, 10);
+
+      // Determine if user should be required to change password
+      // Admin users (super_admin) do NOT need to change password on first login
+      const mustChangePassword = role !== 'super_admin';
+
+      const result = await query(
+        `INSERT INTO users (username, password_hash, email, full_name, role, is_approved, is_active, must_change_password)
+         VALUES ($1, $2, $3, $4, $5, true, true, $6)
+         RETURNING id, username, email, full_name, role, is_approved, is_active`,
+        [username, passwordHash, email, fullName, role, mustChangePassword]
+      );
+
+      const createdUser = result.rows[0];
+      
+      results.success.push({
+        id: createdUser.id,
+        username: createdUser.username,
+        email: createdUser.email,
+        fullName: createdUser.full_name,
+        role: createdUser.role
+      });
+
+      // Store credentials for download (only for admin to distribute)
+      results.credentials.push({
+        fullName,
+        email,
+        username,
+        tempPassword,
+        role,
+        mustChangePassword
+      });
+
+    } catch (error) {
+      results.failed.push({
+        email: userData.email || 'N/A',
+        fullName: userData.fullName || 'N/A',
+        error: error.message
+      });
+    }
+  }
+
+  res.status(200).json({
+    message: `Bulk import completed. ${results.success.length} users created, ${results.failed.length} failed.`,
+    success: results.success,
+    failed: results.failed,
+    credentials: results.credentials
+  });
+}
+
+// Force password change - used when user logs in with must_change_password flag
+async function forcePasswordChange(id, data, currentUser, res) {
+  // User can only change their own password via this endpoint
+  if (currentUser.id !== parseInt(id)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+
+  const { newPassword, currentPassword } = data;
+
+  if (!newPassword || !currentPassword) {
+    return res.status(400).json({ error: 'Current password and new password are required' });
+  }
+
+  // Verify current password
+  const userResult = await query('SELECT password_hash, must_change_password FROM users WHERE id = $1', [id]);
+  if (userResult.rows.length === 0) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+
+  const validPassword = await bcrypt.compare(currentPassword, userResult.rows[0].password_hash);
+  if (!validPassword) {
+    return res.status(401).json({ error: 'Current password is incorrect' });
+  }
+
+  // Hash new password and clear the must_change_password flag
+  const passwordHash = await bcrypt.hash(newPassword, 10);
+  await query('UPDATE users SET password_hash = $1, must_change_password = FALSE WHERE id = $2', [passwordHash, id]);
+
+  res.status(200).json({ message: 'Password changed successfully. You can now continue using the application.' });
 }

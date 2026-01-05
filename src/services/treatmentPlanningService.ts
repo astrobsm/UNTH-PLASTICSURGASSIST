@@ -435,29 +435,28 @@ class TreatmentPlanningService {
     return discharge.id;
   }
 
-  // Get overdue items for a plan
-  async getOverdueItems(planId: string): Promise<{
+  // Get overdue items for a plan (synchronous version - takes plan object directly)
+  getOverdueItems(plan: EnhancedTreatmentPlan | null | undefined): {
     reviews: TreatmentPlanReview[];
     procedures: PlannedProcedure[];
     medications: any[];
-  }> {
-    const plan = await db.treatment_plans.get({ id: planId } as any);
-    const now = new Date();
-
+  } {
     if (!plan) {
       return { reviews: [], procedures: [], medications: [] };
     }
 
+    const now = new Date();
+
     const overdueReviews = (plan.reviews || []).filter((r: TreatmentPlanReview) => 
-      r.status === 'pending' && isBefore(r.scheduled_date, now)
+      r.status === 'pending' && isBefore(new Date(r.scheduled_date), now)
     );
 
     const overdueProcedures = (plan.procedures || []).filter((p: PlannedProcedure) => 
-      p.status === 'planned' && isBefore(p.proposed_date, now)
+      p.status === 'planned' && isBefore(new Date(p.proposed_date), now)
     );
 
     const overdueMedications = (plan.medications || []).flatMap((m: MedicationAdministration) =>
-      m.administration_records.filter(r => r.status === 'pending' && isBefore(r.scheduled_datetime, now))
+      (m.administration_records || []).filter(r => r.status === 'pending' && isBefore(new Date(r.scheduled_datetime), now))
     );
 
     return {
@@ -465,6 +464,16 @@ class TreatmentPlanningService {
       procedures: overdueProcedures,
       medications: overdueMedications
     };
+  }
+
+  // Get overdue items for a plan by ID (async version)
+  async getOverdueItemsById(planId: string): Promise<{
+    reviews: TreatmentPlanReview[];
+    procedures: PlannedProcedure[];
+    medications: any[];
+  }> {
+    const plan = await db.treatment_plans.get({ id: planId } as any);
+    return this.getOverdueItems(plan as EnhancedTreatmentPlan);
   }
 
   // Get treatment plan by ID
