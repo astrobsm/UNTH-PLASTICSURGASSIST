@@ -3,6 +3,16 @@ import bcrypt from 'bcryptjs';
 import { query } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
 
+// Generate a random password
+function generatePassword(length = 12) {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
+  let password = '';
+  for (let i = 0; i < length; i++) {
+    password += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return password;
+}
+
 export default async function handler(req, res) {
   if (cors(req, res)) return;
 
@@ -92,27 +102,59 @@ async function createUser(data, currentUser, res) {
     return res.status(403).json({ error: 'Access denied' });
   }
 
-  const { username, password, email, fullName, role = 'house_officer' } = data;
+  const { email, fullName, role = 'house_officer' } = data;
 
-  if (!username || !password || !email || !fullName) {
-    return res.status(400).json({ error: 'All fields are required' });
+  // Only email and fullName are required now - password is auto-generated
+  if (!email || !fullName) {
+    return res.status(400).json({ error: 'Email and full name are required' });
   }
 
-  const existing = await query('SELECT id FROM users WHERE username = $1', [username]);
-  if (existing.rows.length > 0) {
-    return res.status(409).json({ error: 'Username already exists' });
+  // Check if email already exists
+  const existingEmail = await query('SELECT id FROM users WHERE email = $1', [email]);
+  if (existingEmail.rows.length > 0) {
+    return res.status(409).json({ error: 'Email already exists' });
   }
 
-  const passwordHash = await bcrypt.hash(password, 10);
+  // Generate username from email (part before @)
+  let username = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+  
+  // Check if username already exists, append random numbers if so
+  const existingUsername = await query('SELECT id FROM users WHERE username = $1', [username]);
+  if (existingUsername.rows.length > 0) {
+    username = `${username}${Math.floor(Math.random() * 1000)}`;
+  }
+
+  // Auto-generate a temporary password
+  const tempPassword = generatePassword(12);
+  const passwordHash = await bcrypt.hash(tempPassword, 10);
+
+  // Admin users don't need to change password, all others must
+  const mustChangePassword = role !== 'admin';
 
   const result = await query(
-    `INSERT INTO users (username, password_hash, email, full_name, role, is_approved, is_active)
-     VALUES ($1, $2, $3, $4, $5, true, true)
+    `INSERT INTO users (username, password_hash, email, full_name, role, is_approved, is_active, must_change_password)
+     VALUES ($1, $2, $3, $4, $5, true, true, $6)
      RETURNING id, username, email, full_name, role, is_approved, is_active`,
-    [username, passwordHash, email, fullName, role]
+    [username, passwordHash, email, fullName, role, mustChangePassword]
   );
 
-  res.status(201).json({ user: result.rows[0] });
+  const createdUser = result.rows[0];
+
+  // Return the user with temporary credentials for admin to distribute
+  res.status(201).json({ 
+    user: createdUser,
+    credentials: {
+      username: username,
+      email: email,
+      temporaryPassword: tempPassword,
+      fullName: fullName,
+      role: role,
+      mustChangePassword: mustChangePassword
+    },
+    message: mustChangePassword 
+      ? 'User created successfully. Share the temporary password with the user. They must change it on first login.'
+      : 'Admin user created successfully.'
+  });
 }
 
 async function updateUser(id, data, currentUser, res) {

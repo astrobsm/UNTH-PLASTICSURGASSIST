@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { adminService } from '../services/adminService';
+import { apiClient } from '../services/apiClient';
 import { 
   Users, 
   Settings, 
@@ -37,7 +38,9 @@ import {
   UserCheck,
   Globe,
   Wifi,
-  WifiOff
+  WifiOff,
+  Copy,
+  Check
 } from 'lucide-react';
 import Layout from '../components/Layout';
 import { UserApprovalManager } from '../components/UserApprovalManager';
@@ -962,13 +965,20 @@ export default function Admin() {
         <UserModal
           user={selectedUser}
           onClose={() => setShowUserModal(false)}
-          onSave={(user) => {
+          onSave={async (user, credentials) => {
             if (selectedUser) {
+              // Update existing user
               setUsers(users.map(u => u.id === user.id ? user : u));
             } else {
-              setUsers([...users, { ...user, id: Date.now().toString() }]);
+              // Add new user to the list
+              setUsers([...users, user]);
             }
             setShowUserModal(false);
+            
+            // If credentials were generated, show a prompt to copy them
+            if (credentials) {
+              alert(`User created successfully!\n\nUsername: ${credentials.username}\nTemporary Password: ${credentials.temporaryPassword}\n\nPlease share these credentials with the user securely. They must change their password on first login.`);
+            }
           }}
         />
       )}
@@ -985,7 +995,7 @@ export default function Admin() {
   );
 }
 
-// User Modal Component
+// User Modal Component with auto-generated credentials
 const UserModal = ({ 
   user, 
   onClose, 
@@ -993,7 +1003,7 @@ const UserModal = ({
 }: { 
   user: User | null; 
   onClose: () => void; 
-  onSave: (user: User) => void; 
+  onSave: (user: User, credentials?: { username: string; temporaryPassword: string }) => void; 
 }) => {
   const [formData, setFormData] = useState({
     name: user?.name || '',
@@ -1002,19 +1012,178 @@ const UserModal = ({
     department: user?.department || '',
     status: user?.status || 'active'
   });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [createdCredentials, setCreatedCredentials] = useState<{
+    username: string;
+    temporaryPassword: string;
+    email: string;
+    fullName: string;
+    role: string;
+    mustChangePassword: boolean;
+  } | null>(null);
+  const [copied, setCopied] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const userData: User = {
-      id: user?.id || '',
-      ...formData,
-      permissions: formData.role === 'admin' ? ['all'] : ['patient_read'],
-      lastLogin: user?.lastLogin || null,
-      createdAt: user?.createdAt || new Date(),
-      updatedAt: new Date()
-    };
-    onSave(userData);
+    setError(null);
+    setLoading(true);
+
+    try {
+      if (user) {
+        // Update existing user - just local state for now
+        const userData: User = {
+          id: user.id,
+          ...formData,
+          permissions: formData.role === 'admin' ? ['all'] : ['patient_read'],
+          lastLogin: user.lastLogin,
+          createdAt: user.createdAt,
+          updatedAt: new Date()
+        };
+        onSave(userData);
+      } else {
+        // Create new user via API
+        const response = await apiClient.createUser({
+          fullName: formData.name,
+          email: formData.email,
+          role: formData.role
+        });
+
+        if (response.credentials) {
+          setCreatedCredentials(response.credentials);
+        } else {
+          // User created but no credentials returned
+          const userData: User = {
+            id: response.user?.id?.toString() || Date.now().toString(),
+            name: formData.name,
+            email: formData.email,
+            role: formData.role as User['role'],
+            department: formData.department,
+            status: 'active',
+            permissions: formData.role === 'admin' ? ['all'] : ['patient_read'],
+            lastLogin: null,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          };
+          onSave(userData);
+        }
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to save user');
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const handleCopyCredentials = () => {
+    if (createdCredentials) {
+      const text = `Username: ${createdCredentials.username}\nTemporary Password: ${createdCredentials.temporaryPassword}\nEmail: ${createdCredentials.email}`;
+      navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const handleDone = () => {
+    if (createdCredentials) {
+      const userData: User = {
+        id: Date.now().toString(),
+        name: createdCredentials.fullName,
+        email: createdCredentials.email,
+        role: createdCredentials.role as User['role'],
+        department: formData.department,
+        status: 'active',
+        permissions: createdCredentials.role === 'admin' ? ['all'] : ['patient_read'],
+        lastLogin: null,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+      onSave(userData, {
+        username: createdCredentials.username,
+        temporaryPassword: createdCredentials.temporaryPassword
+      });
+    }
+  };
+
+  // Show credentials screen after user is created
+  if (createdCredentials) {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+          <div className="p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-medium text-gray-900 flex items-center">
+                <CheckCircle className="h-5 w-5 text-green-500 mr-2" />
+                User Created Successfully
+              </h3>
+            </div>
+
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+              <p className="text-sm text-green-800 mb-3">
+                Share these credentials with <strong>{createdCredentials.fullName}</strong> securely.
+                {createdCredentials.mustChangePassword && (
+                  <span className="block mt-1">They must change their password on first login.</span>
+                )}
+              </p>
+              
+              <div className="space-y-2 bg-white rounded-lg p-3 border border-green-300">
+                <div className="flex justify-between">
+                  <span className="text-sm font-medium text-gray-600">Username:</span>
+                  <span className="text-sm font-mono text-gray-900">{createdCredentials.username}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm font-medium text-gray-600">Email:</span>
+                  <span className="text-sm font-mono text-gray-900">{createdCredentials.email}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm font-medium text-gray-600">Temp Password:</span>
+                  <span className="text-sm font-mono text-gray-900 bg-yellow-100 px-2 rounded">{createdCredentials.temporaryPassword}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm font-medium text-gray-600">Role:</span>
+                  <span className="text-sm text-gray-900 capitalize">{createdCredentials.role.replace('_', ' ')}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
+              <div className="flex items-start">
+                <AlertTriangle className="h-4 w-4 text-yellow-600 mt-0.5 flex-shrink-0" />
+                <p className="ml-2 text-xs text-yellow-800">
+                  This is the only time you can see the password. Please copy it now and share it securely with the user.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex space-x-3">
+              <button
+                onClick={handleCopyCredentials}
+                className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2"
+              >
+                {copied ? (
+                  <>
+                    <Check className="h-4 w-4" />
+                    <span>Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-4 w-4" />
+                    <span>Copy Credentials</span>
+                  </>
+                )}
+              </button>
+              <button
+                onClick={handleDone}
+                className="flex-1 bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -1029,10 +1198,25 @@ const UserModal = ({
             </button>
           </div>
 
+          {!user && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+              <p className="text-sm text-blue-800">
+                <Key className="h-4 w-4 inline mr-1" />
+                A temporary password will be auto-generated. The user must change it on first login.
+              </p>
+            </div>
+          )}
+
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
+              <p className="text-sm text-red-800">{error}</p>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Full Name
+                Full Name *
               </label>
               <input
                 type="text"
@@ -1040,12 +1224,13 @@ const UserModal = ({
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                placeholder="Enter full name"
               />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Email Address
+                Email Address *
               </label>
               <input
                 type="email"
@@ -1053,12 +1238,16 @@ const UserModal = ({
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                placeholder="user@hospital.com"
               />
+              {!user && (
+                <p className="text-xs text-gray-500 mt-1">Username will be generated from email</p>
+              )}
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Role
+                Role *
               </label>
               <select
                 value={formData.role}
@@ -1079,39 +1268,50 @@ const UserModal = ({
               </label>
               <input
                 type="text"
-                required
                 value={formData.department}
                 onChange={(e) => setFormData({ ...formData, department: e.target.value })}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                placeholder="e.g., Plastic Surgery"
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Status
-              </label>
-              <select
-                value={formData.status}
-                onChange={(e) => setFormData({ ...formData, status: e.target.value as User['status'] })}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              >
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-                <option value="suspended">Suspended</option>
-              </select>
-            </div>
+            {user && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Status
+                </label>
+                <select
+                  value={formData.status}
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value as User['status'] })}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                >
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                  <option value="suspended">Suspended</option>
+                </select>
+              </div>
+            )}
 
             <div className="flex space-x-3 pt-4">
               <button
                 type="submit"
-                className="flex-1 bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors"
+                disabled={loading}
+                className="flex-1 bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center space-x-2 disabled:opacity-50"
               >
-                {user ? 'Update User' : 'Create User'}
+                {loading ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    <span>Creating...</span>
+                  </>
+                ) : (
+                  <span>{user ? 'Update User' : 'Create User'}</span>
+                )}
               </button>
               <button
                 type="button"
                 onClick={onClose}
-                className="flex-1 bg-gray-500 text-white py-2 px-4 rounded-lg hover:bg-gray-600 transition-colors"
+                disabled={loading}
+                className="flex-1 bg-gray-500 text-white py-2 px-4 rounded-lg hover:bg-gray-600 transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>

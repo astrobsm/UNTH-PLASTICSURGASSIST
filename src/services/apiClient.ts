@@ -224,6 +224,18 @@ class ApiClient {
     });
   }
 
+  // Create a new user with auto-generated credentials
+  async createUser(userData: {
+    fullName: string;
+    email: string;
+    role?: string;
+  }) {
+    return this.request('/users', {
+      method: 'POST',
+      body: JSON.stringify(userData)
+    });
+  }
+
   async updateUserStatus(userId: string, isActive: boolean) {
     return this.request(`/users/${userId}/status`, {
       method: 'PATCH',
