@@ -14,26 +14,36 @@ function generatePassword(length = 12) {
 }
 
 export default async function handler(req, res) {
-  if (cors(req, res)) return;
-
-  const auth = authenticateRequest(req);
-  if (!auth.authenticated) {
-    return res.status(401).json({ error: auth.error });
-  }
-
-  const { method } = req;
-  const url = new URL(req.url, `http://${req.headers.host}`);
-  const pathParts = url.pathname.replace('/api/users', '').split('/').filter(Boolean);
-  const userId = pathParts[0];
-  const action = pathParts[1];
-
   try {
+    if (cors(req, res)) return;
+
+    const auth = authenticateRequest(req);
+    if (!auth.authenticated) {
+      return res.status(401).json({ error: auth.error });
+    }
+
+    const { method } = req;
+    
+    // Safe URL parsing
+    let pathParts = [];
+    try {
+      const url = new URL(req.url, `http://${req.headers.host}`);
+      pathParts = url.pathname.replace('/api/users', '').split('/').filter(Boolean);
+    } catch (urlError) {
+      console.error('URL parsing error:', urlError);
+      // Fallback: try to parse path directly
+      pathParts = (req.url || '').replace('/api/users', '').split('?')[0].split('/').filter(Boolean);
+    }
+    
+    const userId = pathParts[0];
+    const action = pathParts[1];
+
     switch (method) {
       case 'GET':
         if (userId) {
           return await getUser(userId, res);
         }
-        return await getAllUsers(url.searchParams, auth.user, res);
+        return await getAllUsers(null, auth.user, res);
       case 'POST':
         // Check for bulk import action
         if (userId === 'bulk-import') {
@@ -65,13 +75,25 @@ export default async function handler(req, res) {
     }
   } catch (error) {
     console.error('Users API error:', error);
-    res.status(500).json({ error: 'Internal server error', message: error.message });
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ 
+      error: 'Internal server error', 
+      message: error.message,
+      stack: process.env.NODE_ENV !== 'production' ? error.stack : undefined
+    });
   }
 }
 
 async function getAllUsers(searchParams, currentUser, res) {
+  console.log('getAllUsers called');
+  console.log('currentUser:', currentUser ? JSON.stringify(currentUser) : 'undefined');
+  
+  if (!currentUser) {
+    return res.status(401).json({ error: 'User not authenticated' });
+  }
+  
   // Debug logging
-  console.log('getAllUsers called by user:', JSON.stringify(currentUser));
+  console.log('User role:', currentUser.role);
   
   // Only admins and consultants can list all users
   if (!['admin', 'consultant'].includes(currentUser.role)) {
