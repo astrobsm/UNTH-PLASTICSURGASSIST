@@ -70,17 +70,26 @@ export default async function handler(req, res) {
 }
 
 async function getAllUsers(searchParams, currentUser, res) {
-  // Only admins can list all users
+  // Debug logging
+  console.log('getAllUsers called by user:', JSON.stringify(currentUser));
+  
+  // Only admins and consultants can list all users
   if (!['admin', 'consultant'].includes(currentUser.role)) {
-    return res.status(403).json({ error: 'Access denied' });
+    console.log('Access denied for role:', currentUser.role);
+    return res.status(403).json({ error: 'Access denied', userRole: currentUser.role });
   }
 
-  const result = await query(
-    `SELECT id, username, email, full_name, role, is_approved, is_active, created_at, last_login
-     FROM users ORDER BY created_at DESC`
-  );
+  try {
+    const result = await query(
+      `SELECT id, username, email, full_name, role, is_approved, is_active, created_at, last_login
+       FROM users ORDER BY created_at DESC`
+    );
 
-  res.status(200).json({ users: result.rows });
+    res.status(200).json({ users: result.rows });
+  } catch (dbError) {
+    console.error('Database error in getAllUsers:', dbError);
+    return res.status(500).json({ error: 'Database error', message: dbError.message });
+  }
 }
 
 async function getUser(id, res) {
