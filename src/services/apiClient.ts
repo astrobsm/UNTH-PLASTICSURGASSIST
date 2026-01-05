@@ -139,12 +139,21 @@ class ApiClient {
           }
         }
         
-        // Create a proper error message
-        const errorMessage = typeof errorData.error === 'string' 
-          ? errorData.error 
-          : typeof errorData.message === 'string'
-            ? errorData.message
-            : `HTTP ${response.status}: ${response.statusText}`;
+        // Create a proper error message with all available info
+        let errorMessage = `HTTP ${response.status}`;
+        if (typeof errorData.error === 'string') {
+          errorMessage = errorData.error;
+        } else if (typeof errorData.message === 'string') {
+          errorMessage = errorData.message;
+        }
+        
+        // Include debug info if available
+        if (errorData.userRole) {
+          errorMessage += ` (Your role: ${errorData.userRole})`;
+        }
+        if (errorData.debug) {
+          console.error('API Error Debug:', errorData.debug);
+        }
         
         throw new Error(errorMessage);
       }
