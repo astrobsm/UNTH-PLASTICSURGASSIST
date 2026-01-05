@@ -26,7 +26,7 @@ export default function BulkUserImport() {
   const [csvContent, setCsvContent] = useState('');
   const [parsedUsers, setParsedUsers] = useState<BulkImportUser[]>([]);
   const [manualEntries, setManualEntries] = useState<ManualUserEntry[]>([
-    { id: '1', fullName: '', email: '', role: 'intern', department: '' }
+    { id: '1', fullName: '', email: '', role: 'house_officer', department: '' }
   ]);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<BulkImportResult | null>(null);
@@ -35,13 +35,11 @@ export default function BulkUserImport() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const roles = [
-    { value: 'intern', label: 'Intern' },
-    { value: 'registrar', label: 'Registrar' },
+    { value: 'house_officer', label: 'House Officer' },
+    { value: 'junior_registrar', label: 'Junior Registrar' },
+    { value: 'senior_registrar', label: 'Senior Registrar' },
     { value: 'consultant', label: 'Consultant' },
-    { value: 'nurse', label: 'Nurse' },
-    { value: 'lab_staff', label: 'Lab Staff' },
-    { value: 'pharmacy', label: 'Pharmacy' },
-    { value: 'super_admin', label: 'Super Admin' }
+    { value: 'admin', label: 'Admin' }
   ];
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -81,7 +79,7 @@ export default function BulkUserImport() {
   const addManualEntry = () => {
     setManualEntries([
       ...manualEntries,
-      { id: Date.now().toString(), fullName: '', email: '', role: 'intern', department: '' }
+      { id: Date.now().toString(), fullName: '', email: '', role: 'house_officer', department: '' }
     ]);
   };
 
@@ -129,7 +127,7 @@ export default function BulkUserImport() {
           setCsvContent('');
           setParsedUsers([]);
         } else {
-          setManualEntries([{ id: '1', fullName: '', email: '', role: 'intern', department: '' }]);
+          setManualEntries([{ id: '1', fullName: '', email: '', role: 'house_officer', department: '' }]);
         }
       }
     } catch (err: any) {

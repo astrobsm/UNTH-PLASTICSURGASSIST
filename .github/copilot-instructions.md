@@ -32,10 +32,8 @@ This is a Progressive Web App (PWA) for plastic surgery clinical workflows, desi
 8. Educational content and assessments
 
 ## User Roles
-- Super Admin / Hospital IT
+- Admin (System Administrator)
 - Consultant (Attending Surgeon)
-- Registrar / Senior Resident  
-- Intern / Junior Resident
-- Nursing / Theater Coordinator
-- Laboratory Staff
-- Pharmacy / Stores
+- Senior Registrar
+- Junior Registrar
+- House Officer

@@ -7,7 +7,7 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  role: 'super_admin' | 'consultant' | 'senior_registrar' | 'junior_registrar' | 'medical_officer' | 'house_officer' | 'nursing' | 'lab' | 'pharmacy';
+  role: 'admin' | 'consultant' | 'senior_registrar' | 'junior_registrar' | 'house_officer';
   privileges: string[];
   mustChangePassword?: boolean;
 }

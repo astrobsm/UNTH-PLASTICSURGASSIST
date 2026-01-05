@@ -35,7 +35,7 @@ async function handleGet(req, res, userId, userRole) {
   const { action, targetUserId, startDate, endDate, activityType, limit = 50 } = req.query;
   
   // Allow supervisors to view other users' activities
-  const effectiveUserId = (userRole === 'consultant' || userRole === 'super_admin') && targetUserId 
+  const effectiveUserId = (userRole === 'consultant' || userRole === 'admin') && targetUserId 
     ? targetUserId 
     : userId;
 
@@ -127,7 +127,7 @@ async function handleGet(req, res, userId, userRole) {
          LEFT JOIN activity_logs al ON u.id = al.user_id 
            AND al.created_at >= CURRENT_DATE - INTERVAL '30 days'
          WHERE u.is_active = true 
-           AND u.role IN ('intern', 'registrar', 'senior_registrar')
+           AND u.role IN ('house_officer', 'junior_registrar', 'senior_registrar')
          GROUP BY u.id, u.full_name, u.training_level
          ORDER BY total_points DESC
          LIMIT 20`,

@@ -93,7 +93,7 @@ async function handleLogin(req, res) {
 }
 
 async function handleRegister(req, res) {
-  const { username, password, email, fullName, role = 'intern' } = req.body;
+  const { username, password, email, fullName, role = 'house_officer' } = req.body;
 
   if (!username || !password || !email || !fullName) {
     return res.status(400).json({ error: 'All fields are required' });

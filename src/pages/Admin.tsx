@@ -52,7 +52,7 @@ interface User {
   id: string;
   email: string;
   name: string;
-  role: 'super_admin' | 'consultant' | 'registrar' | 'intern' | 'nurse' | 'lab_staff' | 'pharmacy';
+  role: 'admin' | 'consultant' | 'senior_registrar' | 'junior_registrar' | 'house_officer';
   department: string;
   status: 'active' | 'inactive' | 'suspended';
   lastLogin: Date | null;
@@ -137,7 +137,7 @@ export default function Admin() {
         id: '1',
         email: 'admin@hospital.com',
         name: 'System Administrator',
-        role: 'super_admin',
+        role: 'admin',
         department: 'IT',
         status: 'active',
         lastLogin: new Date(),
@@ -998,7 +998,7 @@ const UserModal = ({
   const [formData, setFormData] = useState({
     name: user?.name || '',
     email: user?.email || '',
-    role: user?.role || 'intern',
+    role: user?.role || 'house_officer',
     department: user?.department || '',
     status: user?.status || 'active'
   });
@@ -1008,7 +1008,7 @@ const UserModal = ({
     const userData: User = {
       id: user?.id || '',
       ...formData,
-      permissions: formData.role === 'super_admin' ? ['all'] : ['patient_read'],
+      permissions: formData.role === 'admin' ? ['all'] : ['patient_read'],
       lastLogin: user?.lastLogin || null,
       createdAt: user?.createdAt || new Date(),
       updatedAt: new Date()
@@ -1065,13 +1065,11 @@ const UserModal = ({
                 onChange={(e) => setFormData({ ...formData, role: e.target.value as User['role'] })}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent"
               >
-                <option value="intern">Intern</option>
-                <option value="registrar">Registrar</option>
+                <option value="house_officer">House Officer</option>
+                <option value="junior_registrar">Junior Registrar</option>
+                <option value="senior_registrar">Senior Registrar</option>
                 <option value="consultant">Consultant</option>
-                <option value="nurse">Nurse</option>
-                <option value="lab_staff">Lab Staff</option>
-                <option value="pharmacy">Pharmacy</option>
-                <option value="super_admin">Super Admin</option>
+                <option value="admin">Admin</option>
               </select>
             </div>
 

@@ -4,7 +4,7 @@ export interface PendingUser {
   id: string;
   full_name: string;
   email: string;
-  role: 'consultant' | 'registrar' | 'intern' | 'nurse' | 'lab_staff' | 'pharmacy';
+  role: 'admin' | 'consultant' | 'senior_registrar' | 'junior_registrar' | 'house_officer';
   phone?: string;
   department?: string;
   specialization?: string;
@@ -18,7 +18,7 @@ export interface ApprovedUser {
   id: string;
   full_name: string;
   email: string;
-  role: 'super_admin' | 'consultant' | 'registrar' | 'intern' | 'nurse' | 'lab_staff' | 'pharmacy';
+  role: 'admin' | 'consultant' | 'senior_registrar' | 'junior_registrar' | 'house_officer';
   phone?: string;
   department?: string;
   specialization?: string;
@@ -204,7 +204,7 @@ class UserManagementService {
       users.push({
         fullName: values[fullNameIndex],
         email: values[emailIndex],
-        role: roleIndex >= 0 ? values[roleIndex] : 'intern',
+        role: roleIndex >= 0 ? values[roleIndex] : 'house_officer',
         department: departmentIndex >= 0 ? values[departmentIndex] : ''
       });
     }

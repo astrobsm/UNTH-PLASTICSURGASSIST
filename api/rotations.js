@@ -37,7 +37,7 @@ async function handleGet(req, res, userId, userRole) {
   const { action, rotationId, targetUserId, level, status } = req.query;
   
   // Allow supervisors to view other users' rotations
-  const effectiveUserId = (userRole === 'consultant' || userRole === 'super_admin') && targetUserId 
+  const effectiveUserId = (userRole === 'consultant' || userRole === 'admin') && targetUserId 
     ? targetUserId 
     : userId;
 
@@ -84,7 +84,7 @@ async function handleGet(req, res, userId, userRole) {
 
     case 'all':
       // Get all rotations (for supervisors)
-      if (userRole !== 'consultant' && userRole !== 'super_admin') {
+      if (userRole !== 'consultant' && userRole !== 'admin') {
         return res.status(403).json({ error: 'Access denied' });
       }
       
@@ -112,7 +112,7 @@ async function handleGet(req, res, userId, userRole) {
 
     case 'pending-signouts':
       // Get pending sign-out requests (for supervisors)
-      if (userRole !== 'consultant' && userRole !== 'super_admin') {
+      if (userRole !== 'consultant' && userRole !== 'admin') {
         return res.status(403).json({ error: 'Access denied' });
       }
       
@@ -127,7 +127,7 @@ async function handleGet(req, res, userId, userRole) {
 
     case 'statistics':
       // Get rotation statistics (for supervisors)
-      if (userRole !== 'consultant' && userRole !== 'super_admin') {
+      if (userRole !== 'consultant' && userRole !== 'admin') {
         return res.status(403).json({ error: 'Access denied' });
       }
       
@@ -244,7 +244,7 @@ async function handlePost(req, res, userId, userRole) {
 
     case 'create-for-user':
       // Create rotation for another user (supervisors only)
-      if (userRole !== 'consultant' && userRole !== 'super_admin') {
+      if (userRole !== 'consultant' && userRole !== 'admin') {
         return res.status(403).json({ error: 'Access denied' });
       }
       
@@ -286,7 +286,7 @@ async function handlePut(req, res, userId, userRole) {
   switch (action) {
     case 'extend':
       // Extend a rotation (supervisors only)
-      if (userRole !== 'consultant' && userRole !== 'super_admin') {
+      if (userRole !== 'consultant' && userRole !== 'admin') {
         return res.status(403).json({ error: 'Only supervisors can extend rotations' });
       }
       
@@ -315,7 +315,7 @@ async function handlePut(req, res, userId, userRole) {
 
     case 'approve-signout':
       // Approve or reject sign-out (supervisors only)
-      if (userRole !== 'consultant' && userRole !== 'super_admin') {
+      if (userRole !== 'consultant' && userRole !== 'admin') {
         return res.status(403).json({ error: 'Only supervisors can approve sign-outs' });
       }
       
@@ -380,7 +380,7 @@ async function handlePut(req, res, userId, userRole) {
       
       const canEdit = noteCheck.rows[0].user_id === userId || 
                       userRole === 'consultant' || 
-                      userRole === 'super_admin';
+                      userRole === 'admin';
       
       if (!canEdit) {
         return res.status(403).json({ error: 'Access denied' });

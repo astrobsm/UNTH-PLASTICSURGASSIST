@@ -39,7 +39,7 @@ async function handleGet(req, res, userId, userRole) {
   const { action, dutyId, status, targetUserId, startDate, endDate } = req.query;
   
   // Allow supervisors to view other users' duties
-  const effectiveUserId = (userRole === 'consultant' || userRole === 'super_admin') && targetUserId 
+  const effectiveUserId = (userRole === 'consultant' || userRole === 'admin') && targetUserId 
     ? targetUserId 
     : userId;
 
@@ -74,7 +74,7 @@ async function handleGet(req, res, userId, userRole) {
 
     case 'all':
       // Get all duties (for supervisors)
-      if (userRole !== 'consultant' && userRole !== 'super_admin') {
+      if (userRole !== 'consultant' && userRole !== 'admin') {
         return res.status(403).json({ error: 'Access denied' });
       }
       
@@ -160,7 +160,7 @@ async function handlePost(req, res, userId, userRole) {
       
       // Only supervisors can assign to others
       const targetUser = assignedTo || userId;
-      if (targetUser !== userId && userRole !== 'consultant' && userRole !== 'super_admin') {
+      if (targetUser !== userId && userRole !== 'consultant' && userRole !== 'admin') {
         return res.status(403).json({ error: 'Only supervisors can assign duties to others' });
       }
       
@@ -223,7 +223,7 @@ async function handlePost(req, res, userId, userRole) {
 
     case 'bulk-assign':
       // Bulk assign duties (supervisors only)
-      if (userRole !== 'consultant' && userRole !== 'super_admin') {
+      if (userRole !== 'consultant' && userRole !== 'admin') {
         return res.status(403).json({ error: 'Access denied' });
       }
       
@@ -301,7 +301,7 @@ async function handlePut(req, res, userId, userRole) {
         dutyOwner.rows[0].user_id === userId || 
         dutyOwner.rows[0].assigned_by === userId ||
         userRole === 'consultant' || 
-        userRole === 'super_admin';
+        userRole === 'admin';
       
       if (!canEdit) {
         return res.status(403).json({ error: 'Access denied' });
@@ -337,7 +337,7 @@ async function handlePut(req, res, userId, userRole) {
       const canCancel = 
         cancelCheck.rows[0].assigned_by === userId ||
         userRole === 'consultant' || 
-        userRole === 'super_admin';
+        userRole === 'admin';
       
       if (!canCancel) {
         return res.status(403).json({ error: 'Only the assigner or supervisors can cancel duties' });
@@ -360,9 +360,9 @@ async function handlePut(req, res, userId, userRole) {
 }
 
 async function handleDelete(req, res, userId, userRole) {
-  // Only super_admin can delete duties permanently
-  if (userRole !== 'super_admin') {
-    return res.status(403).json({ error: 'Only super admin can delete duties' });
+  // Only admin can delete duties permanently
+  if (userRole !== 'admin') {
+    return res.status(403).json({ error: 'Only admin can delete duties' });
   }
   
   const { dutyId } = req.query;

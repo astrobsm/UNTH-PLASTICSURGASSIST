@@ -46,7 +46,7 @@ export default function TopicManagement() {
     title: '',
     category: 'plastic_surgery',
     description: '',
-    targetLevels: [] as ('intern' | 'registrar' | 'consultant')[],
+    targetLevels: [] as ('house_officer' | 'junior_registrar' | 'senior_registrar' | 'consultant')[],
     keywords: '',
     difficulty: 'intermediate' as 'beginner' | 'intermediate' | 'advanced',
     estimatedStudyTime: 60
@@ -55,7 +55,7 @@ export default function TopicManagement() {
   const [bulkTopics, setBulkTopics] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const isAdmin = user?.role === 'consultant' || user?.role === 'super_admin';
+  const isAdmin = user?.role === 'consultant' || user?.role === 'admin';
 
   useEffect(() => {
     loadData();
@@ -181,7 +181,7 @@ export default function TopicManagement() {
     }
   };
 
-  const toggleTargetLevel = (level: 'intern' | 'registrar' | 'consultant') => {
+  const toggleTargetLevel = (level: 'house_officer' | 'junior_registrar' | 'senior_registrar' | 'consultant') => {
     setTopicForm(prev => ({
       ...prev,
       targetLevels: prev.targetLevels.includes(level)
@@ -442,20 +442,29 @@ export default function TopicManagement() {
                     <label className="flex items-center space-x-2 cursor-pointer">
                       <input
                         type="checkbox"
-                        checked={topicForm.targetLevels.includes('intern')}
-                        onChange={() => toggleTargetLevel('intern')}
+                        checked={topicForm.targetLevels.includes('house_officer')}
+                        onChange={() => toggleTargetLevel('house_officer')}
                         className="rounded text-green-600 focus:ring-green-500"
                       />
-                      <span className="text-sm">Interns / House Officers</span>
+                      <span className="text-sm">House Officers</span>
                     </label>
                     <label className="flex items-center space-x-2 cursor-pointer">
                       <input
                         type="checkbox"
-                        checked={topicForm.targetLevels.includes('registrar')}
-                        onChange={() => toggleTargetLevel('registrar')}
+                        checked={topicForm.targetLevels.includes('junior_registrar')}
+                        onChange={() => toggleTargetLevel('junior_registrar')}
                         className="rounded text-green-600 focus:ring-green-500"
                       />
-                      <span className="text-sm">Registrars / Residents</span>
+                      <span className="text-sm">Junior Registrars</span>
+                    </label>
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={topicForm.targetLevels.includes('senior_registrar')}
+                        onChange={() => toggleTargetLevel('senior_registrar')}
+                        className="rounded text-green-600 focus:ring-green-500"
+                      />
+                      <span className="text-sm">Senior Registrars</span>
                     </label>
                     <label className="flex items-center space-x-2 cursor-pointer">
                       <input

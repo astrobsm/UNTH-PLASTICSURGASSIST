@@ -49,7 +49,7 @@ async function createTables() {
       password_hash VARCHAR(255) NOT NULL,
       email VARCHAR(255),
       full_name VARCHAR(255),
-      role VARCHAR(50) DEFAULT 'intern',
+      role VARCHAR(50) DEFAULT 'house_officer',
       training_level VARCHAR(50) DEFAULT 'house_officer',
       is_approved BOOLEAN DEFAULT FALSE,
       is_active BOOLEAN DEFAULT TRUE,
@@ -483,7 +483,7 @@ async function createDefaultUsers() {
     await query(
       `INSERT INTO users (username, password_hash, email, full_name, role, is_approved, is_active)
        VALUES ($1, $2, $3, $4, $5, true, true)`,
-      ['admin', passwordHash, 'admin@plasticsurg.local', 'System Administrator', 'super_admin']
+      ['admin', passwordHash, 'admin@plasticsurg.local', 'System Administrator', 'admin']
     );
     
     console.log('✅ Default admin user created (username: admin, password: admin123)');

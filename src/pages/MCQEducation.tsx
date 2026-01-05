@@ -65,8 +65,9 @@ const MCQEducation: React.FC = () => {
   // Timer ref
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const userLevel = user?.role === 'intern' ? 'house_officer' : 
-                    user?.role === 'registrar' ? 'junior_resident' : 'senior_resident';
+  const userLevel = user?.role === 'house_officer' ? 'house_officer' : 
+                    user?.role === 'junior_registrar' ? 'junior_resident' : 
+                    user?.role === 'senior_registrar' ? 'senior_resident' : 'consultant';
   const isAdmin = user?.role === 'admin' || user?.role === 'consultant' || true; // Always show for demo
 
   useEffect(() => {

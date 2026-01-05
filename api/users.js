@@ -61,7 +61,7 @@ export default async function handler(req, res) {
 
 async function getAllUsers(searchParams, currentUser, res) {
   // Only admins can list all users
-  if (!['super_admin', 'consultant'].includes(currentUser.role)) {
+  if (!['admin', 'consultant'].includes(currentUser.role)) {
     return res.status(403).json({ error: 'Access denied' });
   }
 
@@ -88,11 +88,11 @@ async function getUser(id, res) {
 }
 
 async function createUser(data, currentUser, res) {
-  if (!['super_admin', 'consultant'].includes(currentUser.role)) {
+  if (!['admin', 'consultant'].includes(currentUser.role)) {
     return res.status(403).json({ error: 'Access denied' });
   }
 
-  const { username, password, email, fullName, role = 'intern' } = data;
+  const { username, password, email, fullName, role = 'house_officer' } = data;
 
   if (!username || !password || !email || !fullName) {
     return res.status(400).json({ error: 'All fields are required' });
@@ -117,7 +117,7 @@ async function createUser(data, currentUser, res) {
 
 async function updateUser(id, data, currentUser, res) {
   // Users can update themselves, admins can update anyone
-  if (currentUser.id !== parseInt(id) && !['super_admin', 'consultant'].includes(currentUser.role)) {
+  if (currentUser.id !== parseInt(id) && !['admin', 'consultant'].includes(currentUser.role)) {
     return res.status(403).json({ error: 'Access denied' });
   }
 
@@ -126,7 +126,7 @@ async function updateUser(id, data, currentUser, res) {
   let paramCount = 1;
 
   const allowedFields = ['email', 'full_name'];
-  if (['super_admin', 'consultant'].includes(currentUser.role)) {
+  if (['admin', 'consultant'].includes(currentUser.role)) {
     allowedFields.push('role', 'is_active', 'is_approved');
   }
 
@@ -166,7 +166,7 @@ async function updateUser(id, data, currentUser, res) {
 }
 
 async function approveUser(id, currentUser, res) {
-  if (!['super_admin', 'consultant'].includes(currentUser.role)) {
+  if (!['admin', 'consultant'].includes(currentUser.role)) {
     return res.status(403).json({ error: 'Access denied' });
   }
 
@@ -185,7 +185,7 @@ async function approveUser(id, currentUser, res) {
 
 async function changePassword(id, data, currentUser, res) {
   // Users can change their own password, admins can change anyone's
-  if (currentUser.id !== parseInt(id) && !['super_admin', 'consultant'].includes(currentUser.role)) {
+  if (currentUser.id !== parseInt(id) && !['admin', 'consultant'].includes(currentUser.role)) {
     return res.status(403).json({ error: 'Access denied' });
   }
 
@@ -221,7 +221,7 @@ async function changePassword(id, data, currentUser, res) {
 }
 
 async function deleteUser(id, currentUser, res) {
-  if (!['super_admin'].includes(currentUser.role)) {
+  if (!['admin'].includes(currentUser.role)) {
     return res.status(403).json({ error: 'Access denied' });
   }
 
@@ -258,8 +258,8 @@ function generatePassword(length = 10) {
 
 // Bulk import users with auto-generated credentials
 async function bulkImportUsers(data, currentUser, res) {
-  // Only super_admin can bulk import users
-  if (!['super_admin'].includes(currentUser.role)) {
+  // Only admin can bulk import users
+  if (!['admin'].includes(currentUser.role)) {
     return res.status(403).json({ error: 'Access denied. Only administrators can bulk import users.' });
   }
 
@@ -277,7 +277,7 @@ async function bulkImportUsers(data, currentUser, res) {
 
   for (const userData of usersToImport) {
     try {
-      const { fullName, email, role = 'intern', department = '' } = userData;
+      const { fullName, email, role = 'house_officer', department = '' } = userData;
 
       if (!fullName || !email) {
         results.failed.push({
@@ -314,8 +314,8 @@ async function bulkImportUsers(data, currentUser, res) {
       const passwordHash = await bcrypt.hash(tempPassword, 10);
 
       // Determine if user should be required to change password
-      // Admin users (super_admin) do NOT need to change password on first login
-      const mustChangePassword = role !== 'super_admin';
+      // Admin users do NOT need to change password on first login
+      const mustChangePassword = role !== 'admin';
 
       const result = await query(
         `INSERT INTO users (username, password_hash, email, full_name, role, is_approved, is_active, must_change_password)

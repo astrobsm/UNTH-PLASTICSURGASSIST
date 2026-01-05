@@ -8,7 +8,7 @@ export interface EducationalTopic {
   title: string;
   category: string;
   description: string;
-  targetLevels: ('intern' | 'registrar' | 'consultant')[];
+  targetLevels: ('house_officer' | 'junior_registrar' | 'senior_registrar' | 'consultant')[];
   keywords: string[];
   difficulty: 'beginner' | 'intermediate' | 'advanced';
   estimatedStudyTime: number; // in minutes
@@ -33,7 +33,7 @@ export interface WeeklyContent {
   generatedAt: Date;
   publishedAt?: Date;
   viewCount: number;
-  targetLevels: ('intern' | 'registrar' | 'consultant')[];
+  targetLevels: ('house_officer' | 'junior_registrar' | 'senior_registrar' | 'consultant')[];
 }
 
 export interface WHOReference {
@@ -57,7 +57,7 @@ export interface TopicSchedule {
   scheduledWeek: Date;
   status: 'scheduled' | 'published' | 'completed';
   notificationsSent: boolean;
-  targetLevels: ('intern' | 'registrar' | 'consultant')[];
+  targetLevels: ('house_officer' | 'junior_registrar' | 'senior_registrar' | 'consultant')[];
   createdAt: Date;
 }
 
