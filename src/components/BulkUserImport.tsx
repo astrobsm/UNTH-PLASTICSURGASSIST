@@ -119,7 +119,12 @@ export default function BulkUserImport() {
       }
 
       const result = await userManagementService.bulkImportUsers(usersToImport);
-      setImportResult(result);
+      // Ensure result has required arrays with defaults
+      setImportResult({
+        success: result?.success || [],
+        failed: result?.failed || [],
+        credentials: result?.credentials || []
+      });
 
       // Clear the form on success
       if (result.success.length > 0) {

@@ -144,8 +144,9 @@ class UserManagementService {
   // Bulk import users with auto-generated credentials
   async bulkImportUsers(users: BulkImportUser[]): Promise<BulkImportResult> {
     try {
-      const result = await apiClient.bulkImportUsers(users);
-      return result;
+      const response = await apiClient.bulkImportUsers(users);
+      // API returns { message, results } - extract results
+      return response.results || response;
     } catch (error) {
       console.error('Error bulk importing users:', error);
       throw error;
