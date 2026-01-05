@@ -14,48 +14,31 @@ function generatePassword(length = 12) {
 }
 
 export default async function handler(req, res) {
-  console.log('Users API handler called');
-  console.log('Method:', req.method);
-  console.log('URL:', req.url);
-  
+  // Wrap EVERYTHING in try-catch at the very top
   try {
+    console.log('Users API handler called');
+    console.log('Method:', req.method);
+    console.log('URL:', req.url);
+    
     if (cors(req, res)) return;
-  } catch (corsError) {
-    console.error('CORS error:', corsError);
-    return res.status(500).json({ error: 'CORS error', message: corsError.message });
-  }
 
-  let auth;
-  try {
-    auth = authenticateRequest(req);
+    const auth = authenticateRequest(req);
     console.log('Auth result:', auth.authenticated, auth.user?.role);
-  } catch (authError) {
-    console.error('Auth error:', authError);
-    return res.status(500).json({ error: 'Auth error', message: authError.message });
-  }
-  
-  if (!auth.authenticated) {
-    return res.status(401).json({ error: auth.error });
-  }
+    
+    if (!auth.authenticated) {
+      return res.status(401).json({ error: auth.error });
+    }
 
-  const { method } = req;
-  
-  // Safe URL parsing
-  let pathParts = [];
-  try {
-    const url = new URL(req.url, `http://${req.headers.host}`);
-    pathParts = url.pathname.replace('/api/users', '').split('/').filter(Boolean);
-  } catch (urlError) {
-    console.error('URL parsing error:', urlError);
-    // Fallback: try to parse path directly
-    pathParts = (req.url || '').replace('/api/users', '').split('?')[0].split('/').filter(Boolean);
-  }
-  
-  const userId = pathParts[0];
-  const action = pathParts[1];
-  console.log('userId:', userId, 'action:', action);
+    const { method } = req;
+    
+    // Safe URL parsing - use simple approach
+    const urlPath = (req.url || '').split('?')[0];
+    const pathParts = urlPath.replace('/api/users', '').split('/').filter(Boolean);
+    
+    const userId = pathParts[0];
+    const action = pathParts[1];
+    console.log('userId:', userId, 'action:', action);
 
-  try {
     switch (method) {
       case 'GET':
         if (userId) {
