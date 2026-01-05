@@ -1,4 +1,4 @@
-﻿// Simplified users endpoint to debug the 500 error
+// Simplified users endpoint to debug the 500 error
 import bcrypt from "bcryptjs";
 import { query } from "./_lib/db.js";
 import { cors, authenticateRequest } from "./_lib/auth.js";
