@@ -25,9 +25,16 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  // Debug logging
+  console.log('Bulk import request from user:', JSON.stringify(auth.user));
+  console.log('User role:', auth.user.role);
+
   // Only admin can bulk import users
   if (!['admin'].includes(auth.user.role)) {
-    return res.status(403).json({ error: 'Access denied. Only administrators can bulk import users.' });
+    return res.status(403).json({ 
+      error: 'Access denied. Only administrators can bulk import users.',
+      debug: { userRole: auth.user.role, expectedRole: 'admin' }
+    });
   }
 
   try {
