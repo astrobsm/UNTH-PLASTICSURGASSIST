@@ -1,6 +1,6 @@
 // User status (activate/deactivate) endpoint
-import { query } from '../../_lib/db.js';
-import { cors, authenticateRequest } from '../../_lib/auth.js';
+import { query } from '../_lib/db.js';
+import { cors, authenticateRequest } from '../_lib/auth.js';
 
 export default async function handler(req, res) {
   try {
@@ -20,10 +20,10 @@ export default async function handler(req, res) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    // Get user ID from URL path
-    const { id } = req.query;
+    // Get user ID from body or query
+    const userId = req.body.userId || req.query.userId;
 
-    if (!id) {
+    if (!userId) {
       return res.status(400).json({ error: 'User ID is required' });
     }
 
@@ -34,14 +34,14 @@ export default async function handler(req, res) {
     }
 
     // Prevent deactivating own account
-    if (auth.user.id === parseInt(id) && !is_active) {
+    if (auth.user.id === parseInt(userId) && !is_active) {
       return res.status(400).json({ error: 'Cannot deactivate your own account' });
     }
 
     const result = await query(
       `UPDATE users SET is_active = $1 WHERE id = $2
        RETURNING id, username, email, full_name, role, is_approved, is_active`,
-      [is_active, id]
+      [is_active, userId]
     );
 
     if (result.rows.length === 0) {

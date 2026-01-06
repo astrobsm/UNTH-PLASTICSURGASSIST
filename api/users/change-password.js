@@ -1,7 +1,7 @@
 // Password change endpoint for regular password changes
 import bcrypt from 'bcryptjs';
-import { query } from '../../_lib/db.js';
-import { cors, authenticateRequest } from '../../_lib/auth.js';
+import { query } from '../_lib/db.js';
+import { cors, authenticateRequest } from '../_lib/auth.js';
 
 export default async function handler(req, res) {
   try {
@@ -16,15 +16,15 @@ export default async function handler(req, res) {
       return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    // Get user ID from URL path
-    const { id } = req.query;
+    // Get user ID from body or query
+    const userId = req.body.userId || req.query.userId;
 
-    if (!id) {
+    if (!userId) {
       return res.status(400).json({ error: 'User ID is required' });
     }
 
     // Users can change their own password, admins/consultants can change any password
-    if (auth.user.id !== parseInt(id) && !['admin', 'consultant'].includes(auth.user.role)) {
+    if (auth.user.id !== parseInt(userId) && !['admin', 'consultant'].includes(auth.user.role)) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -35,12 +35,12 @@ export default async function handler(req, res) {
     }
 
     // If changing own password, verify current password
-    if (auth.user.id === parseInt(id)) {
+    if (auth.user.id === parseInt(userId)) {
       if (!currentPassword) {
         return res.status(400).json({ error: 'Current password is required' });
       }
 
-      const userResult = await query('SELECT password_hash FROM users WHERE id = $1', [id]);
+      const userResult = await query('SELECT password_hash FROM users WHERE id = $1', [userId]);
       if (userResult.rows.length === 0) {
         return res.status(404).json({ error: 'User not found' });
       }
@@ -55,7 +55,7 @@ export default async function handler(req, res) {
     const passwordHash = await bcrypt.hash(newPassword, 10);
     await query(
       'UPDATE users SET password_hash = $1, must_change_password = FALSE WHERE id = $2',
-      [passwordHash, id]
+      [passwordHash, userId]
     );
 
     return res.status(200).json({ message: 'Password changed successfully' });

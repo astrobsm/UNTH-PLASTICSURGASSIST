@@ -227,9 +227,9 @@ class ApiClient {
   }
 
   async approveUser(userId: string, isApproved: boolean = true) {
-    return this.request(`/users/${userId}/approve`, {
+    return this.request('/users/approve', {
       method: 'PATCH',
-      body: JSON.stringify({ is_approved: isApproved })
+      body: JSON.stringify({ userId, is_approved: isApproved })
     });
   }
 
@@ -246,9 +246,9 @@ class ApiClient {
   }
 
   async updateUserStatus(userId: string, isActive: boolean) {
-    return this.request(`/users/${userId}/status`, {
+    return this.request('/users/update-status', {
       method: 'PATCH',
-      body: JSON.stringify({ is_active: isActive })
+      body: JSON.stringify({ userId, is_active: isActive })
     });
   }
 
@@ -267,17 +267,17 @@ class ApiClient {
 
   // Force password change (for first login after bulk import)
   async forcePasswordChange(userId: string, currentPassword: string, newPassword: string) {
-    return this.request(`/users/${userId}/force-password-change`, {
+    return this.request('/users/force-password-change', {
       method: 'PATCH',
-      body: JSON.stringify({ currentPassword, newPassword })
+      body: JSON.stringify({ userId, currentPassword, newPassword })
     });
   }
 
   // Change user password
   async changePassword(userId: string, currentPassword: string, newPassword: string) {
-    return this.request(`/users/${userId}/password`, {
+    return this.request('/users/change-password', {
       method: 'PATCH',
-      body: JSON.stringify({ currentPassword, newPassword })
+      body: JSON.stringify({ userId, currentPassword, newPassword })
     });
   }
 
