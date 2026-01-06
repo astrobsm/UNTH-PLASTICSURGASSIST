@@ -1,7 +1,7 @@
 // Users/Admin API endpoint for Vercel serverless
 import bcrypt from 'bcryptjs';
-import { query } from './_lib/db.js';
-import { cors, authenticateRequest } from './_lib/auth.js';
+import { query } from '../_lib/db.js';
+import { cors, authenticateRequest } from '../_lib/auth.js';
 
 // Generate a random password with at least one of each type
 function generatePassword(length = 12) {
