@@ -1,6 +1,6 @@
 // Patients API endpoint for Vercel serverless
-import { query } from './_lib/db.js';
-import { cors, authenticateRequest } from './_lib/auth.js';
+import { query } from '../_lib/db.js';
+import { cors, authenticateRequest } from '../_lib/auth.js';
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
