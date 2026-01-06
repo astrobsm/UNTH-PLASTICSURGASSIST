@@ -378,8 +378,8 @@ export default function ShoppingList() {
     addFooter(doc);
 
     // Save
-    const sanitizedPatientName = patientName.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
-    const filename = `ShoppingList_${sanitizedPatientName}_${categoryTitle.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
+    const sanitizedPatientName = (patientName || 'Unknown_Patient').replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+    const filename = `ShoppingList_${sanitizedPatientName}_${(categoryTitle || 'Items').replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
     
     // Handle download or WhatsApp share
     if (shareAction === 'whatsapp') {

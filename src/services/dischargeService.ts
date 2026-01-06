@@ -503,7 +503,7 @@ class DischargeService {
     addFooter(pdf);
 
     // Save with patient name
-    const fileName = 'Discharge_Summary_' + discharge.patient_name.replace(/\s+/g, '_') + '_' + format(discharge.discharge_date, 'yyyyMMdd') + '.pdf';
+    const fileName = 'Discharge_Summary_' + (discharge.patient_name || 'Unknown_Patient').replace(/\s+/g, '_') + '_' + format(discharge.discharge_date, 'yyyyMMdd') + '.pdf';
     
     if (shareViaWhatsApp) {
       const message = `Discharge Summary for ${discharge.patient_name} (${discharge.hospital_number}) - ${format(discharge.discharge_date, 'dd/MM/yyyy')}`;

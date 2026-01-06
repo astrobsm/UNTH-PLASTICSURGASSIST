@@ -2440,15 +2440,15 @@ export default function PatientEducation() {
     addFooter(doc);
 
     // Save with patient name in filename
-    const sanitizedPatientName = patient.full_name.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
-    const sanitizedTopicName = topic.title.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+    const sanitizedPatientName = (patient.full_name || 'Unknown_Patient').replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+    const sanitizedTopicName = (topic.title || 'Education_Material').replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
     const filename = `${sanitizedPatientName}_${sanitizedTopicName}_${new Date().toISOString().split('T')[0]}.pdf`;
     
     // Handle download or WhatsApp share
     if (shareAction === 'whatsapp') {
       setIsSharing(true);
       try {
-        const message = `Patient Education: ${topic.title} for ${patient.full_name} (${patient.hospital_number})`;
+        const message = `Patient Education: ${topic.title || 'Education Material'} for ${patient.full_name || 'Patient'} (${patient.hospital_number || ''})`;
         await sharePDFViaWhatsApp(doc, filename, message);
       } catch (error) {
         console.error('Failed to share via WhatsApp:', error);

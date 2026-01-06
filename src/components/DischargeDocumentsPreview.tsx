@@ -661,7 +661,7 @@ export default function DischargeDocumentsPreview({
       addFooter(doc);
 
       // Save PDF
-      const filename = clean(discharge.patient_name).replace(/\s+/g, '_') + '_' + docType + '_' + format(new Date(), 'yyyyMMdd') + '.pdf';
+      const filename = clean(discharge.patient_name || 'Unknown_Patient').replace(/\s+/g, '_') + '_' + docType + '_' + format(new Date(), 'yyyyMMdd') + '.pdf';
       doc.save(filename);
       
       setDownloadedDocs(prev => new Set([...prev, docType]));

@@ -1126,7 +1126,7 @@ class AdmissionDischargeService {
     const url = URL.createObjectURL(pdfBlob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `Discharge_${discharge.patient_name.replace(/\s+/g, '_')}_${format(new Date(discharge.discharge_date), 'yyyyMMdd')}.pdf`;
+    link.download = `Discharge_${(discharge.patient_name || 'Unknown_Patient').replace(/\s+/g, '_')}_${format(new Date(discharge.discharge_date), 'yyyyMMdd')}.pdf`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -1135,7 +1135,7 @@ class AdmissionDischargeService {
 
   async shareDischargePDF(discharge: Discharge, admission: Admission, method: 'email' | 'whatsapp'): Promise<void> {
     const pdfBlob = await this.generateDischargePDF(discharge, admission);
-    const fileName = `Discharge_${discharge.patient_name.replace(/\s+/g, '_')}.pdf`;
+    const fileName = `Discharge_${(discharge.patient_name || 'Unknown_Patient').replace(/\s+/g, '_')}.pdf`;
 
     if (method === 'whatsapp') {
       // For WhatsApp, we need to share via Web Share API if available
@@ -1144,8 +1144,8 @@ class AdmissionDischargeService {
         try {
           await navigator.share({
             files: [file],
-            title: `Discharge Summary - ${discharge.patient_name}`,
-            text: `Discharge summary for ${discharge.patient_name}`
+            title: `Discharge Summary - ${discharge.patient_name || 'Unknown Patient'}`,
+            text: `Discharge summary for ${discharge.patient_name || 'Unknown Patient'}`
           });
         } catch (error) {
           console.error('Share failed:', error);
