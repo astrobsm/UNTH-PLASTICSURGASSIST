@@ -5,7 +5,8 @@ import {
   sanitizeTextForPDF,
   PDF_MARGINS,
   PDF_FONT_SIZES,
-  addFooter
+  addFooter,
+  sharePDFViaWhatsApp
 } from '../utils/pdfUtils';
 
 export interface Discharge {
@@ -275,7 +276,7 @@ class DischargeService {
   }
 
   // Generate PDF discharge summary
-  async generateDischargePDF(discharge: Discharge, patientDetails?: any): Promise<void> {
+  async generateDischargePDF(discharge: Discharge, patientDetails?: any, shareViaWhatsApp: boolean = false): Promise<void> {
     const pdf = createPDF();
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
@@ -503,7 +504,13 @@ class DischargeService {
 
     // Save with patient name
     const fileName = 'Discharge_Summary_' + discharge.patient_name.replace(/\s+/g, '_') + '_' + format(discharge.discharge_date, 'yyyyMMdd') + '.pdf';
-    pdf.save(fileName);
+    
+    if (shareViaWhatsApp) {
+      const message = `Discharge Summary for ${discharge.patient_name} (${discharge.hospital_number}) - ${format(discharge.discharge_date, 'dd/MM/yyyy')}`;
+      await sharePDFViaWhatsApp(pdf, fileName, message);
+    } else {
+      pdf.save(fileName);
+    }
   }
 
   // Delete discharge

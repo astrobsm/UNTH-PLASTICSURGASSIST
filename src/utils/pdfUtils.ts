@@ -737,6 +737,156 @@ export function addNewPage(pdf: jsPDF, addHeader?: () => number): number {
   return addHeader ? addHeader() : PDF_MARGINS.top;
 }
 
+/**
+ * Converts a jsPDF document to a Blob
+ * @param pdf - jsPDF instance
+ * @returns Blob representing the PDF
+ */
+export function pdfToBlob(pdf: jsPDF): Blob {
+  return pdf.output('blob');
+}
+
+/**
+ * Converts a jsPDF document to a base64 data URL
+ * @param pdf - jsPDF instance
+ * @returns Base64 data URL string
+ */
+export function pdfToDataUrl(pdf: jsPDF): string {
+  return pdf.output('dataurlstring');
+}
+
+/**
+ * Shares a PDF document via WhatsApp using Web Share API or fallback
+ * Works on mobile devices and desktop browsers that support Web Share API
+ * 
+ * @param pdf - jsPDF instance to share
+ * @param filename - The filename for the shared PDF
+ * @param message - Optional message to include with the share
+ * @returns Promise that resolves when sharing is complete
+ */
+export async function sharePDFViaWhatsApp(
+  pdf: jsPDF,
+  filename: string,
+  message: string = 'Medical document from UNTH Plastic Surgery Unit'
+): Promise<{ success: boolean; method: 'native' | 'whatsapp-web' | 'download' }> {
+  const blob = pdf.output('blob');
+  const file = new File([blob], filename, { type: 'application/pdf' });
+  
+  // Check if Web Share API with files is supported (mobile devices)
+  if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({
+        title: filename.replace('.pdf', ''),
+        text: message,
+        files: [file]
+      });
+      return { success: true, method: 'native' };
+    } catch (error) {
+      // User cancelled or sharing failed
+      if ((error as Error).name !== 'AbortError') {
+        console.error('Web Share API failed:', error);
+      }
+    }
+  }
+  
+  // Fallback: Create a blob URL and open WhatsApp Web with instructions
+  // Note: WhatsApp Web doesn't support direct file sharing via URL
+  // We'll save the file and prompt user to attach it
+  const blobUrl = URL.createObjectURL(blob);
+  
+  // First, trigger download so user has the file
+  const link = document.createElement('a');
+  link.href = blobUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  
+  // Then open WhatsApp with a message
+  const encodedMessage = encodeURIComponent(
+    `${message}\n\n📎 The PDF document "${filename}" has been downloaded. Please attach it to this chat.`
+  );
+  
+  // Check if on mobile for WhatsApp app vs WhatsApp Web
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  const whatsappUrl = isMobile 
+    ? `whatsapp://send?text=${encodedMessage}`
+    : `https://web.whatsapp.com/send?text=${encodedMessage}`;
+  
+  window.open(whatsappUrl, '_blank');
+  
+  // Clean up blob URL after a delay
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+  
+  return { success: true, method: 'whatsapp-web' };
+}
+
+/**
+ * Creates a shareable PDF and triggers WhatsApp sharing
+ * Alternative method that creates a temporary download + share flow
+ * 
+ * @param pdf - jsPDF instance
+ * @param filename - Filename for the PDF
+ * @param recipientPhone - Optional phone number with country code (e.g., "2348012345678")
+ * @param message - Message to accompany the document
+ */
+export async function shareToWhatsAppWithPhone(
+  pdf: jsPDF,
+  filename: string,
+  recipientPhone?: string,
+  message: string = 'Medical document from UNTH Plastic Surgery Unit'
+): Promise<void> {
+  const blob = pdf.output('blob');
+  const file = new File([blob], filename, { type: 'application/pdf' });
+  
+  // Try native share first
+  if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({
+        title: filename.replace('.pdf', ''),
+        text: message,
+        files: [file]
+      });
+      return;
+    } catch (error) {
+      if ((error as Error).name === 'AbortError') return;
+    }
+  }
+  
+  // Download the file
+  const blobUrl = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = blobUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  
+  // Open WhatsApp with optional phone number
+  const encodedMessage = encodeURIComponent(
+    `${message}\n\n📎 Please find the attached document: "${filename}"`
+  );
+  
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  
+  let whatsappUrl: string;
+  if (recipientPhone) {
+    // Direct to specific contact
+    const cleanPhone = recipientPhone.replace(/\D/g, '');
+    whatsappUrl = isMobile
+      ? `whatsapp://send?phone=${cleanPhone}&text=${encodedMessage}`
+      : `https://web.whatsapp.com/send?phone=${cleanPhone}&text=${encodedMessage}`;
+  } else {
+    // Open WhatsApp to select contact
+    whatsappUrl = isMobile
+      ? `whatsapp://send?text=${encodedMessage}`
+      : `https://web.whatsapp.com/send?text=${encodedMessage}`;
+  }
+  
+  window.open(whatsappUrl, '_blank');
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+}
+
 export default {
   // Core functions
   createPDF,
@@ -762,6 +912,12 @@ export default {
   validatePDFConfig,
   needsNewPage,
   addNewPage,
+  
+  // PDF output and sharing
+  pdfToBlob,
+  pdfToDataUrl,
+  sharePDFViaWhatsApp,
+  shareToWhatsAppWithPhone,
   
   // Configuration (MANDATORY standards)
   PDF_FONT_SIZES,

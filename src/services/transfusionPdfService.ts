@@ -94,7 +94,7 @@ class TransfusionPdfService {
     // Header
     pdf.setFontSize(PDF_FONT_SIZES.body);
     pdf.setFont('helvetica', 'normal');
-    pdf.text('UNIVERSITY HOSPITAL', pageWidth / 2, yPos, { align: 'center' });
+    pdf.text('UNIVERSITY OF NIGERIA TEACHING HOSPITAL - PLASTIC AND RECONSTRUCTIVE SURGERY UNIT', pageWidth / 2, yPos, { align: 'center' });
     yPos += 5;
     pdf.setFontSize(16);
     pdf.setFont('helvetica', 'bold');
@@ -468,7 +468,7 @@ class TransfusionPdfService {
     // Header
     pdf.setFontSize(10);
     pdf.setFont('helvetica', 'normal');
-    pdf.text('UNIVERSITY HOSPITAL - PLASTIC AND RECONSTRUCTIVE SURGERY UNIT', pageWidth / 2, yPos, { align: 'center' });
+    pdf.text('UNIVERSITY OF NIGERIA TEACHING HOSPITAL - PLASTIC AND RECONSTRUCTIVE SURGERY UNIT', pageWidth / 2, yPos, { align: 'center' });
     yPos += 7;
     pdf.setFontSize(14);
     pdf.setFont('helvetica', 'bold');
@@ -666,7 +666,7 @@ class TransfusionPdfService {
     // Header
     pdf.setFontSize(10);
     pdf.setFont('helvetica', 'normal');
-    pdf.text('UNIVERSITY HOSPITAL - PLASTIC AND RECONSTRUCTIVE SURGERY UNIT', pageWidth / 2, yPos, { align: 'center' });
+    pdf.text('UNIVERSITY OF NIGERIA TEACHING HOSPITAL - PLASTIC AND RECONSTRUCTIVE SURGERY UNIT', pageWidth / 2, yPos, { align: 'center' });
     yPos += 7;
     pdf.setFontSize(14);
     pdf.setFont('helvetica', 'bold');

@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { X, Save, User, Calendar, FileText, Activity, AlertCircle, TrendingUp, Pill, Stethoscope, ClipboardList, Users, Edit3 } from 'lucide-react';
-import { wardRoundsService, WardRound, ROUND_TYPES, RoundType } from '../services/wardRoundsService';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, Save, User, Calendar, FileText, Activity, AlertCircle, TrendingUp, Pill, Stethoscope, ClipboardList, Users, Edit3, Camera, Image, Upload, Trash2, FileSearch, Loader2 } from 'lucide-react';
+import { wardRoundsService, WardRound, ROUND_TYPES, RoundType, ClinicalImage } from '../services/wardRoundsService';
 import { db } from '../db/database';
 import { format } from 'date-fns';
 import { useAuthStore } from '../store/authStore';
 import { TreatmentPlanModificationPanel } from './TreatmentPlanModificationPanel';
+import Tesseract from 'tesseract.js';
 
 interface WardRoundFormProps {
   patientId?: string;
@@ -26,6 +27,13 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
   const { user: authUser } = useAuthStore();
   const [patientTreatmentPlan, setPatientTreatmentPlan] = useState<any>(null);
   const [showTreatmentPlanModification, setShowTreatmentPlanModification] = useState(false);
+  
+  // Clinical Images state
+  const [clinicalImages, setClinicalImages] = useState<ClinicalImage[]>([]);
+  const [isProcessingOCR, setIsProcessingOCR] = useState(false);
+  const [ocrProgress, setOcrProgress] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState({
     patient_id: initialPatientId || '',
@@ -80,6 +88,10 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
     next_review_date: '',
     discharge_plan: '',
     consultant_notified: false,
+    
+    // Clinical images and OCR
+    clinical_images: [] as ClinicalImage[],
+    ocr_extracted_text: '',
     
     notes: ''
   });
@@ -214,10 +226,119 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
     }
   };
 
+  // Clinical Image handling functions
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, imageType: ClinicalImage['type']) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const reader = new FileReader();
+      
+      reader.onload = async (event) => {
+        const base64Data = event.target?.result as string;
+        const newImage: ClinicalImage = {
+          id: crypto.randomUUID(),
+          type: imageType,
+          filename: file.name,
+          data: base64Data,
+          caption: '',
+          timestamp: new Date().toISOString()
+        };
+        
+        setClinicalImages(prev => [...prev, newImage]);
+        setFormData(prev => ({
+          ...prev,
+          clinical_images: [...prev.clinical_images, newImage]
+        }));
+      };
+      
+      reader.readAsDataURL(file);
+    }
+    
+    // Reset input
+    e.target.value = '';
+  };
+
+  const removeImage = (imageId: string) => {
+    setClinicalImages(prev => prev.filter(img => img.id !== imageId));
+    setFormData(prev => ({
+      ...prev,
+      clinical_images: prev.clinical_images.filter(img => img.id !== imageId)
+    }));
+  };
+
+  const updateImageCaption = (imageId: string, caption: string) => {
+    setClinicalImages(prev => prev.map(img => 
+      img.id === imageId ? { ...img, caption } : img
+    ));
+    setFormData(prev => ({
+      ...prev,
+      clinical_images: prev.clinical_images.map(img => 
+        img.id === imageId ? { ...img, caption } : img
+      )
+    }));
+  };
+
+  const performOCR = async (imageId: string) => {
+    const image = clinicalImages.find(img => img.id === imageId);
+    if (!image) return;
+
+    setIsProcessingOCR(true);
+    setOcrProgress(0);
+
+    try {
+      const result = await Tesseract.recognize(
+        image.data,
+        'eng',
+        {
+          logger: (m) => {
+            if (m.status === 'recognizing text') {
+              setOcrProgress(Math.round(m.progress * 100));
+            }
+          }
+        }
+      );
+
+      const extractedText = result.data.text;
+      
+      // Update the image with extracted text
+      setClinicalImages(prev => prev.map(img => 
+        img.id === imageId ? { ...img, extracted_text: extractedText } : img
+      ));
+      setFormData(prev => ({
+        ...prev,
+        clinical_images: prev.clinical_images.map(img => 
+          img.id === imageId ? { ...img, extracted_text: extractedText } : img
+        ),
+        ocr_extracted_text: prev.ocr_extracted_text + '\n\n' + extractedText
+      }));
+
+      alert('Text extracted successfully!');
+    } catch (error) {
+      console.error('OCR Error:', error);
+      alert('Error extracting text. Please try again.');
+    } finally {
+      setIsProcessingOCR(false);
+      setOcrProgress(0);
+    }
+  };
+
+  const getImageTypeLabel = (type: ClinicalImage['type']) => {
+    switch (type) {
+      case 'wound_photo': return 'Wound Photo';
+      case 'lab_result': return 'Lab Result';
+      case 'imaging': return 'Imaging';
+      case 'handwritten_note': return 'Handwritten Note';
+      default: return 'Other';
+    }
+  };
+
   const tabs = [
     { id: 'patient', label: 'Patient Selection', icon: User },
     { id: 'subjective', label: 'Subjective', icon: FileText },
     { id: 'vitals', label: 'Vitals & Examination', icon: Activity },
+    { id: 'clinical_images', label: 'Clinical Images', icon: Camera },
     { id: 'assessment', label: 'Clinical Assessment', icon: Stethoscope },
     { id: 'plan', label: 'Management Plan', icon: ClipboardList },
     { id: 'medications', label: 'Medications', icon: Pill },
@@ -635,6 +756,194 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
                     </div>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* Clinical Images Tab */}
+            {activeTab === 'clinical_images' && (
+              <div className="space-y-6">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h3 className="font-semibold text-blue-800 mb-2">📷 Clinical Documentation</h3>
+                  <p className="text-sm text-blue-700">
+                    Upload wound photographs, laboratory results, imaging studies, or handwritten notes. 
+                    Use the OCR feature to extract text from handwritten notes for faster documentation.
+                  </p>
+                </div>
+
+                {/* Upload Buttons */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => handleImageUpload(e, 'wound_photo')}
+                  />
+                  <input
+                    type="file"
+                    ref={cameraInputRef}
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    onChange={(e) => handleImageUpload(e, 'wound_photo')}
+                  />
+                  
+                  <button
+                    type="button"
+                    onClick={() => cameraInputRef.current?.click()}
+                    className="flex flex-col items-center gap-2 p-4 border-2 border-dashed border-green-300 rounded-lg hover:border-green-500 hover:bg-green-50 transition-colors"
+                  >
+                    <Camera className="w-8 h-8 text-green-600" />
+                    <span className="text-sm font-medium text-green-700">Take Photo</span>
+                    <span className="text-xs text-gray-500">Wound/Clinical</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const input = document.createElement('input');
+                      input.type = 'file';
+                      input.accept = 'image/*';
+                      input.multiple = true;
+                      input.onchange = (e) => handleImageUpload(e as any, 'wound_photo');
+                      input.click();
+                    }}
+                    className="flex flex-col items-center gap-2 p-4 border-2 border-dashed border-red-300 rounded-lg hover:border-red-500 hover:bg-red-50 transition-colors"
+                  >
+                    <Image className="w-8 h-8 text-red-600" />
+                    <span className="text-sm font-medium text-red-700">Wound Photo</span>
+                    <span className="text-xs text-gray-500">From Gallery</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const input = document.createElement('input');
+                      input.type = 'file';
+                      input.accept = 'image/*';
+                      input.multiple = true;
+                      input.onchange = (e) => handleImageUpload(e as any, 'lab_result');
+                      input.click();
+                    }}
+                    className="flex flex-col items-center gap-2 p-4 border-2 border-dashed border-blue-300 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-colors"
+                  >
+                    <Upload className="w-8 h-8 text-blue-600" />
+                    <span className="text-sm font-medium text-blue-700">Lab Results</span>
+                    <span className="text-xs text-gray-500">Upload Image</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const input = document.createElement('input');
+                      input.type = 'file';
+                      input.accept = 'image/*';
+                      input.multiple = true;
+                      input.onchange = (e) => handleImageUpload(e as any, 'handwritten_note');
+                      input.click();
+                    }}
+                    className="flex flex-col items-center gap-2 p-4 border-2 border-dashed border-purple-300 rounded-lg hover:border-purple-500 hover:bg-purple-50 transition-colors"
+                  >
+                    <FileSearch className="w-8 h-8 text-purple-600" />
+                    <span className="text-sm font-medium text-purple-700">Handwritten Note</span>
+                    <span className="text-xs text-gray-500">With OCR</span>
+                  </button>
+                </div>
+
+                {/* Uploaded Images Grid */}
+                {clinicalImages.length > 0 && (
+                  <div className="space-y-4">
+                    <h4 className="font-semibold text-gray-900">Uploaded Images ({clinicalImages.length})</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {clinicalImages.map((image) => (
+                        <div key={image.id} className="border rounded-lg overflow-hidden bg-white shadow-sm">
+                          <div className="relative">
+                            <img
+                              src={image.data}
+                              alt={image.caption || image.filename}
+                              className="w-full h-48 object-cover"
+                            />
+                            <span className={`absolute top-2 left-2 px-2 py-1 rounded text-xs font-medium ${
+                              image.type === 'wound_photo' ? 'bg-red-100 text-red-800' :
+                              image.type === 'lab_result' ? 'bg-blue-100 text-blue-800' :
+                              image.type === 'handwritten_note' ? 'bg-purple-100 text-purple-800' :
+                              'bg-gray-100 text-gray-800'
+                            }`}>
+                              {getImageTypeLabel(image.type)}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => removeImage(image.id)}
+                              className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                          <div className="p-3 space-y-2">
+                            <input
+                              type="text"
+                              value={image.caption || ''}
+                              onChange={(e) => updateImageCaption(image.id, e.target.value)}
+                              placeholder="Add caption..."
+                              className="w-full px-3 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-green-500"
+                            />
+                            <p className="text-xs text-gray-500">
+                              {format(new Date(image.timestamp), 'dd/MM/yyyy HH:mm')}
+                            </p>
+                            
+                            {/* OCR Button for handwritten notes */}
+                            {(image.type === 'handwritten_note' || image.type === 'lab_result') && (
+                              <button
+                                type="button"
+                                onClick={() => performOCR(image.id)}
+                                disabled={isProcessingOCR}
+                                className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-purple-600 text-white text-sm rounded hover:bg-purple-700 disabled:opacity-50"
+                              >
+                                {isProcessingOCR ? (
+                                  <>
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                    Extracting... {ocrProgress}%
+                                  </>
+                                ) : (
+                                  <>
+                                    <FileSearch className="w-4 h-4" />
+                                    Extract Text (OCR)
+                                  </>
+                                )}
+                              </button>
+                            )}
+                            
+                            {/* Display extracted text */}
+                            {image.extracted_text && (
+                              <div className="mt-2 p-2 bg-gray-50 rounded border">
+                                <p className="text-xs font-medium text-gray-700 mb-1">Extracted Text:</p>
+                                <p className="text-sm text-gray-600 whitespace-pre-wrap">{image.extracted_text}</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Extracted Text Summary */}
+                {formData.ocr_extracted_text && (
+                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                    <h4 className="font-semibold text-purple-800 mb-2">📝 Combined Extracted Text</h4>
+                    <textarea
+                      value={formData.ocr_extracted_text}
+                      onChange={(e) => setFormData({ ...formData, ocr_extracted_text: e.target.value })}
+                      className="w-full px-3 py-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-sm"
+                      rows={6}
+                      placeholder="Text extracted from handwritten notes will appear here..."
+                    />
+                    <p className="text-xs text-purple-600 mt-2">
+                      You can edit the extracted text to correct any OCR errors.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 

@@ -87,6 +87,25 @@ export default function AdmissionsPage() {
   const [examinationFindings, setExaminationFindings] = useState('');
   const [initialManagementPlan, setInitialManagementPlan] = useState('');
 
+  // Helper function to calculate patient age
+  const getPatientAge = (): number | null => {
+    if (!selectedPatient?.date_of_birth) return null;
+    const birthDate = new Date(selectedPatient.date_of_birth);
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age;
+  };
+
+  // Check if BP should be optional (children under 10)
+  const isBpOptional = (): boolean => {
+    const age = getPatientAge();
+    return age !== null && age < 10;
+  };
+
   useEffect(() => {
     loadPatients();
     loadAdmissions();
@@ -581,13 +600,18 @@ export default function AdmissionsPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">BP (mmHg)</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      BP (mmHg)
+                      {isBpOptional() && (
+                        <span className="text-xs text-gray-500 ml-1">(Optional for children &lt;10 yrs)</span>
+                      )}
+                    </label>
                     <input
                       type="text"
                       value={bloodPressure}
                       onChange={(e) => setBloodPressure(e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
-                      placeholder="120/80"
+                      placeholder={isBpOptional() ? "Optional" : "120/80"}
                     />
                   </div>
                   <div>

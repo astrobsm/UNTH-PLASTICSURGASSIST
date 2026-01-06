@@ -14,10 +14,12 @@ import {
   FileText,
   CheckCircle,
   Search,
-  UserPlus
+  UserPlus,
+  Download
 } from 'lucide-react';
 import { DiabeticFootAssessment } from '../../services/diabeticFootService';
 import { patientService } from '../../services/patientService';
+import { dopplerRequestService, DopplerRequestData } from '../../services/dopplerRequestService';
 
 interface Patient {
   id: string;
@@ -1540,6 +1542,82 @@ const Step6Vascular: React.FC<{ formData: any; setFormData: any }> = ({ formData
           </ul>
         </div>
       )}
+      
+      {/* Doppler Request PDF Button */}
+      <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
+        <h4 className="font-medium text-blue-900 mb-3">📋 Generate Doppler Ultrasound Request</h4>
+        <p className="text-sm text-blue-700 mb-4">
+          Generate a comprehensive Doppler Ultrasound request form for radiology with all required vascular assessment parameters.
+        </p>
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              const requestData: DopplerRequestData = {
+                patientName: formData.patientName || '_________________________________',
+                hospitalNumber: formData.hospitalNumber || '_______________',
+                dateOfBirth: formData.dateOfBirth || '_______________',
+                gender: formData.gender || 'male',
+                ward: formData.ward || 'Plastic Surgery',
+                bedNumber: formData.bedNumber,
+                requestingPhysician: formData.assessedBy || '_________________________________',
+                designation: 'Plastic Surgery Unit',
+                clinicalDiagnosis: `Diabetic Foot - Wagner Grade ${formData.wagnerGrade || 'N/A'}`,
+                reasonForRequest: 'Vascular assessment for limb salvage evaluation. Please assess arterial and venous circulation to determine revascularization needs.',
+                relevantHistory: `Diabetes Type: ${formData.diabetesType || 'Type 2'}, Duration: ${formData.diabetesDuration || 'N/A'} years. ${formData.peripheralVascularDisease ? 'Known PVD. ' : ''}${formData.smokingStatus === 'current' ? 'Current smoker.' : ''}`,
+                examinationType: 'both',
+                arterialAssessment: {
+                  abiRequired: true,
+                  toePressureRequired: true,
+                  waveformAnalysisRequired: true,
+                  segmentalPressures: true,
+                  pulseVolumeRecording: true,
+                  specificVessels: {
+                    commonFemoralArtery: true,
+                    superficialFemoralArtery: true,
+                    profundaFemoralArtery: true,
+                    poplitealArtery: true,
+                    anteriorTibialArtery: true,
+                    posteriorTibialArtery: true,
+                    peronealArtery: true,
+                    dorsalisPedisArtery: true
+                  }
+                },
+                venousAssessment: {
+                  dvtScreening: true,
+                  chronicVenousInsufficiency: true,
+                  varicoseVeinMapping: false,
+                  perforatorIncompetence: true,
+                  specificVeins: {
+                    commonFemoralVein: true,
+                    greatSaphenousVein: true,
+                    smallSaphenousVein: true,
+                    poplitealVein: true,
+                    tibialVeins: true,
+                    perforators: true
+                  }
+                },
+                urgency: affectedABI < 0.5 ? 'urgent' : 'routine',
+                additionalNotes: formData.waveformType === 'absent' ? 'Absent pedal pulses noted. Critical limb ischemia suspected.' : undefined,
+                requestDate: new Date()
+              };
+              dopplerRequestService.downloadDopplerRequest(requestData);
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            <Download className="w-4 h-4" />
+            Download Filled Request
+          </button>
+          <button
+            type="button"
+            onClick={() => dopplerRequestService.downloadBlankDopplerRequest()}
+            className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+          >
+            <FileText className="w-4 h-4" />
+            Download Blank Form
+          </button>
+        </div>
+      </div>
     </div>
   );
 };

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { MessageCircle } from 'lucide-react';
 import { db } from '../db/database';
 import { patientService } from '../services/patientService';
 import { admissionService, Admission } from '../services/admissionService';
@@ -213,7 +214,7 @@ export default function DischargesPage() {
     }
   };
 
-  const handleSaveAndGeneratePDF = async () => {
+  const handleSaveAndGeneratePDF = async (shareViaWhatsApp: boolean = false) => {
     // First save the discharge
     const form = document.querySelector('form');
     if (form) {
@@ -266,8 +267,8 @@ export default function DischargesPage() {
           discharging_consultant: dischargingConsultant
         };
 
-        await dischargeService.generateDischargePDF(dischargeData as Discharge);
-        alert('Discharge PDF generated successfully!');
+        await dischargeService.generateDischargePDF(dischargeData as Discharge, undefined, shareViaWhatsApp);
+        alert(shareViaWhatsApp ? 'Discharge PDF shared via WhatsApp!' : 'Discharge PDF generated successfully!');
       } catch (error) {
         console.error('Error generating PDF:', error);
         alert('Failed to generate PDF. Please try again.');
@@ -277,11 +278,11 @@ export default function DischargesPage() {
     }
   };
 
-  const handleRegeneratePDF = async (discharge: Discharge) => {
+  const handleRegeneratePDF = async (discharge: Discharge, shareViaWhatsApp: boolean = false) => {
     setGeneratingPDF(true);
     try {
-      await dischargeService.generateDischargePDF(discharge);
-      alert('PDF regenerated successfully!');
+      await dischargeService.generateDischargePDF(discharge, undefined, shareViaWhatsApp);
+      alert(shareViaWhatsApp ? 'PDF shared via WhatsApp!' : 'PDF regenerated successfully!');
     } catch (error) {
       console.error('Error regenerating PDF:', error);
       alert('Failed to regenerate PDF');
@@ -670,11 +671,21 @@ export default function DischargesPage() {
                     </button>
                     <button
                       type="button"
-                      onClick={handleSaveAndGeneratePDF}
+                      onClick={() => handleSaveAndGeneratePDF(false)}
                       disabled={generatingPDF}
                       className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400"
                     >
                       {generatingPDF ? 'Generating PDF...' : '📄 Save & Generate PDF'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSaveAndGeneratePDF(true)}
+                      disabled={generatingPDF}
+                      className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 disabled:bg-gray-400 flex items-center gap-2"
+                      title="Share via WhatsApp"
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                      Share
                     </button>
                   </div>
                 </>
@@ -754,11 +765,19 @@ export default function DischargesPage() {
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                             <button className="text-green-600 hover:text-green-900 mr-3">View</button>
                             <button
-                              onClick={() => handleRegeneratePDF(discharge)}
+                              onClick={() => handleRegeneratePDF(discharge, false)}
                               disabled={generatingPDF}
-                              className="text-blue-600 hover:text-blue-900"
+                              className="text-blue-600 hover:text-blue-900 mr-3"
                             >
                               Re-generate PDF
+                            </button>
+                            <button
+                              onClick={() => handleRegeneratePDF(discharge, true)}
+                              disabled={generatingPDF}
+                              className="text-green-500 hover:text-green-700"
+                              title="Share via WhatsApp"
+                            >
+                              <MessageCircle className="w-4 h-4 inline-block" />
                             </button>
                           </td>
                         </tr>

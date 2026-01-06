@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Download, ShoppingCart, User, Search, Heart, Scissors, Plus, Minus, Trash2 } from 'lucide-react';
+import { Download, ShoppingCart, User, Search, Heart, Scissors, Plus, Minus, Trash2, MessageCircle, Loader2 } from 'lucide-react';
 import {
   createPDF,
   sanitizeTextForPDF,
   PDF_MARGINS,
   PDF_FONT_SIZES,
   PDF_COLORS,
-  addFooter
+  addFooter,
+  sharePDFViaWhatsApp
 } from '../utils/pdfUtils';
 import { patientService } from '../services/patientService';
 
@@ -42,6 +43,8 @@ export default function ShoppingList() {
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all');
   const [manualPatientName, setManualPatientName] = useState('');
   const [manualHospitalNumber, setManualHospitalNumber] = useState('');
+  const [shareAction, setShareAction] = useState<'download' | 'whatsapp'>('download');
+  const [isSharing, setIsSharing] = useState(false);
 
   useEffect(() => {
     loadPatients();
@@ -249,7 +252,7 @@ export default function ShoppingList() {
     setShowPatientSelector(true);
   };
 
-  const generatePDF = (patient: Patient | null, manualName?: string, manualHospNum?: string) => {
+  const generatePDF = async (patient: Patient | null, manualName?: string, manualHospNum?: string) => {
     const patientName = patient?.full_name || manualName || 'Unknown Patient';
     const hospitalNum = patient?.hospital_number || manualHospNum || 'N/A';
     
@@ -377,11 +380,27 @@ export default function ShoppingList() {
     // Save
     const sanitizedPatientName = patientName.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
     const filename = `ShoppingList_${sanitizedPatientName}_${categoryTitle.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
-    doc.save(filename);
+    
+    // Handle download or WhatsApp share
+    if (shareAction === 'whatsapp') {
+      setIsSharing(true);
+      try {
+        const message = `Surgical Shopping List for ${patientName} (${hospitalNum}) - ${categoryTitle}`;
+        await sharePDFViaWhatsApp(doc, filename, message);
+      } catch (error) {
+        console.error('Failed to share via WhatsApp:', error);
+        doc.save(filename);
+      } finally {
+        setIsSharing(false);
+      }
+    } else {
+      doc.save(filename);
+    }
     
     // Close modals and reset
     setShowPatientSelector(false);
     setPatientSearchTerm('');
+    setShareAction('download');
   };
 
   return (
@@ -572,13 +591,28 @@ export default function ShoppingList() {
           </div>
 
           {selectedItems.length > 0 && (
-            <button
-              onClick={handleDownloadClick}
-              className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
-            >
-              <Download className="w-5 h-5" />
-              Generate Shopping List
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setShareAction('download');
+                  handleDownloadClick();
+                }}
+                className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
+              >
+                <Download className="w-5 h-5" />
+                Generate Shopping List
+              </button>
+              <button
+                onClick={() => {
+                  setShareAction('whatsapp');
+                  handleDownloadClick();
+                }}
+                className="flex items-center justify-center gap-2 px-4 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                title="Share via WhatsApp"
+              >
+                <MessageCircle className="w-5 h-5" />
+              </button>
+            </div>
           )}
         </div>
       </div>

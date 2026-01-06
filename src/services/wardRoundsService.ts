@@ -61,10 +61,25 @@ export interface WardRound {
   consultation_specialty?: string;
   consultation_reason?: string;
   
+  // Clinical Images & Documents
+  clinical_images?: ClinicalImage[];
+  ocr_extracted_text?: string;
+  
   // Timestamps
   created_at?: Date;
   updated_at?: Date;
   synced?: boolean;
+}
+
+// Clinical image interface for wound photos, lab results, etc.
+export interface ClinicalImage {
+  id: string;
+  type: 'wound_photo' | 'lab_result' | 'imaging' | 'handwritten_note' | 'other';
+  filename: string;
+  data: string; // Base64 encoded image
+  caption?: string;
+  extracted_text?: string; // OCR extracted text for handwritten notes
+  timestamp: string;
 }
 
 export interface WardRoundSummary {
