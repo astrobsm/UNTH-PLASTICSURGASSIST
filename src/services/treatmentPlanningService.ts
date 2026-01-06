@@ -275,6 +275,103 @@ export interface EnhancedTreatmentPlan {
   created_by: string;
   created_at: Date;
   updated_at: Date;
+  
+  // Approval workflow fields
+  pending_modifications?: TreatmentPlanModification[];
+  modification_history?: TreatmentPlanModification[];
+}
+
+// Treatment Plan Modification Request (for approval workflow)
+export interface TreatmentPlanModification {
+  id: string;
+  plan_id: string;
+  patient_id: string;
+  patient_name: string;
+  
+  // Who requested the modification
+  requested_by: string;
+  requested_by_role: 'senior_registrar' | 'junior_registrar' | 'house_officer';
+  requested_at: Date;
+  
+  // Source of modification
+  source: 'ward_round' | 'mdt_review' | 'direct_edit';
+  ward_round_id?: string;
+  mdt_session_id?: string;
+  specialty_input?: string; // For MDT: which specialty suggested this
+  
+  // What's being modified
+  modification_type: 'medication' | 'investigation' | 'procedure' | 'review' | 'discharge' | 'diagnosis' | 'general';
+  modification_action: 'add' | 'update' | 'remove' | 'reschedule';
+  
+  // The actual changes
+  original_value?: any;
+  proposed_value: any;
+  reason: string;
+  clinical_justification?: string;
+  
+  // Approval status
+  status: 'pending' | 'approved' | 'rejected' | 'auto_approved';
+  
+  // Approval details
+  reviewed_by?: string;
+  reviewed_by_role?: 'consultant' | 'senior_registrar';
+  reviewed_at?: Date;
+  review_comments?: string;
+  
+  // Priority
+  priority: 'routine' | 'urgent' | 'emergency';
+  
+  created_at: Date;
+  updated_at: Date;
+}
+
+// MDT Specialty Input for treatment plan modifications
+export interface MDTSpecialtyInput {
+  id: string;
+  plan_id: string;
+  patient_id: string;
+  mdt_session_id: string;
+  
+  // Specialty details
+  specialty: string;
+  specialist_name: string;
+  specialist_role: string;
+  
+  // Recommendations
+  recommendations: string;
+  suggested_medications?: Array<{
+    action: 'add' | 'modify' | 'discontinue';
+    medication_name: string;
+    dosage?: string;
+    frequency?: string;
+    duration?: string;
+    reason: string;
+  }>;
+  suggested_investigations?: Array<{
+    action: 'add' | 'cancel';
+    investigation_name: string;
+    urgency: 'routine' | 'urgent' | 'stat';
+    reason: string;
+  }>;
+  suggested_procedures?: Array<{
+    action: 'add' | 'modify' | 'cancel';
+    procedure_name: string;
+    timing?: string;
+    reason: string;
+  }>;
+  
+  // Follow-up
+  follow_up_required: boolean;
+  follow_up_details?: string;
+  
+  // Approval
+  status: 'pending' | 'approved' | 'rejected' | 'partially_approved';
+  approved_by?: string;
+  approved_at?: Date;
+  approval_notes?: string;
+  
+  created_at: Date;
+  updated_at: Date;
 }
 
 class TreatmentPlanningService {
@@ -624,6 +721,375 @@ class TreatmentPlanningService {
     } catch (error) {
       console.error('Error checking overdue items:', error);
     }
+  }
+
+  // ==================== MODIFICATION & APPROVAL WORKFLOW ====================
+
+  // Check if user can directly modify (consultants) or needs approval
+  canDirectlyModify(userRole: string): boolean {
+    return userRole === 'consultant' || userRole === 'admin';
+  }
+
+  // Check if user can approve modifications
+  canApproveModifications(userRole: string): boolean {
+    return userRole === 'consultant' || userRole === 'admin';
+  }
+
+  // Check if user can request modifications
+  canRequestModifications(userRole: string): boolean {
+    return ['consultant', 'senior_registrar', 'junior_registrar', 'house_officer'].includes(userRole);
+  }
+
+  // Create a modification request (for non-consultants)
+  async createModificationRequest(
+    planId: string,
+    modification: Omit<TreatmentPlanModification, 'id' | 'created_at' | 'updated_at' | 'status'>
+  ): Promise<string> {
+    const plan = await this.getTreatmentPlan(planId);
+    if (!plan) throw new Error('Treatment plan not found');
+
+    const modificationId = `mod_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    const modificationRequest: TreatmentPlanModification = {
+      ...modification,
+      id: modificationId,
+      plan_id: planId,
+      status: 'pending',
+      created_at: new Date(),
+      updated_at: new Date()
+    };
+
+    // Add to plan's pending modifications
+    const pendingMods = plan.pending_modifications || [];
+    pendingMods.push(modificationRequest);
+
+    await db.treatment_plans.update(planId, {
+      pending_modifications: pendingMods,
+      updated_at: new Date()
+    });
+
+    // Notify consultants about pending modification
+    toast.success('Modification request submitted for consultant approval', {
+      icon: '📝'
+    });
+
+    return modificationId;
+  }
+
+  // Get all pending modifications for a plan
+  async getPendingModifications(planId: string): Promise<TreatmentPlanModification[]> {
+    const plan = await this.getTreatmentPlan(planId);
+    return plan?.pending_modifications || [];
+  }
+
+  // Get all pending modifications across all plans (for consultant dashboard)
+  async getAllPendingModifications(): Promise<TreatmentPlanModification[]> {
+    const plans = await this.getActiveTreatmentPlans();
+    const allPending: TreatmentPlanModification[] = [];
+    
+    for (const plan of plans) {
+      if (plan.pending_modifications && plan.pending_modifications.length > 0) {
+        allPending.push(...plan.pending_modifications);
+      }
+    }
+    
+    return allPending.sort((a, b) => {
+      // Sort by priority first (emergency > urgent > routine)
+      const priorityOrder = { emergency: 0, urgent: 1, routine: 2 };
+      const priorityDiff = priorityOrder[a.priority] - priorityOrder[b.priority];
+      if (priorityDiff !== 0) return priorityDiff;
+      
+      // Then by date (oldest first)
+      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    });
+  }
+
+  // Approve a modification (consultant only)
+  async approveModification(
+    planId: string,
+    modificationId: string,
+    approverName: string,
+    approverRole: string,
+    comments?: string
+  ): Promise<void> {
+    if (!this.canApproveModifications(approverRole)) {
+      throw new Error('You do not have permission to approve modifications');
+    }
+
+    const plan = await this.getTreatmentPlan(planId);
+    if (!plan) throw new Error('Treatment plan not found');
+
+    const pendingMods = plan.pending_modifications || [];
+    const modIndex = pendingMods.findIndex(m => m.id === modificationId);
+    
+    if (modIndex === -1) throw new Error('Modification request not found');
+
+    const modification = pendingMods[modIndex];
+    
+    // Apply the modification to the plan
+    await this.applyModification(plan, modification);
+
+    // Update modification status
+    modification.status = 'approved';
+    modification.reviewed_by = approverName;
+    modification.reviewed_by_role = approverRole as 'consultant' | 'senior_registrar';
+    modification.reviewed_at = new Date();
+    modification.review_comments = comments;
+    modification.updated_at = new Date();
+
+    // Move from pending to history
+    pendingMods.splice(modIndex, 1);
+    const history = plan.modification_history || [];
+    history.push(modification);
+
+    await db.treatment_plans.update(planId, {
+      pending_modifications: pendingMods,
+      modification_history: history,
+      updated_at: new Date()
+    });
+
+    toast.success('Modification approved and applied', { icon: '✅' });
+  }
+
+  // Reject a modification (consultant only)
+  async rejectModification(
+    planId: string,
+    modificationId: string,
+    approverName: string,
+    approverRole: string,
+    comments: string
+  ): Promise<void> {
+    if (!this.canApproveModifications(approverRole)) {
+      throw new Error('You do not have permission to reject modifications');
+    }
+
+    const plan = await this.getTreatmentPlan(planId);
+    if (!plan) throw new Error('Treatment plan not found');
+
+    const pendingMods = plan.pending_modifications || [];
+    const modIndex = pendingMods.findIndex(m => m.id === modificationId);
+    
+    if (modIndex === -1) throw new Error('Modification request not found');
+
+    const modification = pendingMods[modIndex];
+    
+    // Update modification status
+    modification.status = 'rejected';
+    modification.reviewed_by = approverName;
+    modification.reviewed_by_role = approverRole as 'consultant' | 'senior_registrar';
+    modification.reviewed_at = new Date();
+    modification.review_comments = comments;
+    modification.updated_at = new Date();
+
+    // Move from pending to history
+    pendingMods.splice(modIndex, 1);
+    const history = plan.modification_history || [];
+    history.push(modification);
+
+    await db.treatment_plans.update(planId, {
+      pending_modifications: pendingMods,
+      modification_history: history,
+      updated_at: new Date()
+    });
+
+    toast.error('Modification rejected', { icon: '❌' });
+  }
+
+  // Apply a modification to a treatment plan
+  private async applyModification(plan: EnhancedTreatmentPlan, modification: TreatmentPlanModification): Promise<void> {
+    const updates: Partial<EnhancedTreatmentPlan> = {};
+
+    switch (modification.modification_type) {
+      case 'medication':
+        const meds = plan.planned_medications || [];
+        if (modification.modification_action === 'add') {
+          meds.push({ ...modification.proposed_value, id: `med_${Date.now()}` });
+        } else if (modification.modification_action === 'update') {
+          const idx = meds.findIndex(m => m.id === modification.original_value?.id);
+          if (idx !== -1) meds[idx] = { ...meds[idx], ...modification.proposed_value };
+        } else if (modification.modification_action === 'remove') {
+          const rmIdx = meds.findIndex(m => m.id === modification.original_value?.id);
+          if (rmIdx !== -1) meds.splice(rmIdx, 1);
+        }
+        updates.planned_medications = meds;
+        break;
+
+      case 'investigation':
+        const invs = plan.planned_investigations || [];
+        if (modification.modification_action === 'add') {
+          invs.push({ ...modification.proposed_value, id: `inv_${Date.now()}`, scheduled_dates: [], results: [] });
+        } else if (modification.modification_action === 'update') {
+          const idx = invs.findIndex(i => i.id === modification.original_value?.id);
+          if (idx !== -1) invs[idx] = { ...invs[idx], ...modification.proposed_value };
+        } else if (modification.modification_action === 'remove') {
+          const rmIdx = invs.findIndex(i => i.id === modification.original_value?.id);
+          if (rmIdx !== -1) invs.splice(rmIdx, 1);
+        }
+        updates.planned_investigations = invs;
+        break;
+
+      case 'procedure':
+        const procs = plan.planned_procedures || [];
+        if (modification.modification_action === 'add') {
+          procs.push({ ...modification.proposed_value, id: `proc_${Date.now()}`, actual_dates: [] });
+        } else if (modification.modification_action === 'update') {
+          const idx = procs.findIndex(p => p.id === modification.original_value?.id);
+          if (idx !== -1) procs[idx] = { ...procs[idx], ...modification.proposed_value };
+        } else if (modification.modification_action === 'remove') {
+          const rmIdx = procs.findIndex(p => p.id === modification.original_value?.id);
+          if (rmIdx !== -1) procs.splice(rmIdx, 1);
+        }
+        updates.planned_procedures = procs;
+        break;
+
+      case 'diagnosis':
+        updates.diagnosis = modification.proposed_value;
+        break;
+
+      case 'discharge':
+        updates.discharge_plan = {
+          ...(plan.discharge_plan || {}),
+          ...modification.proposed_value
+        };
+        break;
+
+      case 'general':
+        Object.assign(updates, modification.proposed_value);
+        break;
+    }
+
+    await db.treatment_plans.update(plan.id!, {
+      ...updates,
+      updated_at: new Date()
+    });
+  }
+
+  // Create modification from ward round (by registrars)
+  async createWardRoundModification(
+    planId: string,
+    wardRoundId: string,
+    modificationType: TreatmentPlanModification['modification_type'],
+    modificationAction: TreatmentPlanModification['modification_action'],
+    proposedValue: any,
+    reason: string,
+    requestedBy: string,
+    requestedByRole: 'senior_registrar' | 'junior_registrar' | 'house_officer',
+    priority: 'routine' | 'urgent' | 'emergency' = 'routine',
+    originalValue?: any
+  ): Promise<string> {
+    const plan = await this.getTreatmentPlan(planId);
+    if (!plan) throw new Error('Treatment plan not found');
+
+    return await this.createModificationRequest(planId, {
+      plan_id: planId,
+      patient_id: plan.patient_id,
+      patient_name: plan.patient_name,
+      requested_by: requestedBy,
+      requested_by_role: requestedByRole,
+      requested_at: new Date(),
+      source: 'ward_round',
+      ward_round_id: wardRoundId,
+      modification_type: modificationType,
+      modification_action: modificationAction,
+      original_value: originalValue,
+      proposed_value: proposedValue,
+      reason: reason,
+      priority: priority
+    });
+  }
+
+  // Create modification from MDT specialty input
+  async createMDTModification(
+    planId: string,
+    mdtSessionId: string,
+    specialty: string,
+    modificationType: TreatmentPlanModification['modification_type'],
+    modificationAction: TreatmentPlanModification['modification_action'],
+    proposedValue: any,
+    reason: string,
+    requestedBy: string,
+    requestedByRole: 'senior_registrar' | 'junior_registrar',
+    priority: 'routine' | 'urgent' | 'emergency' = 'routine',
+    originalValue?: any
+  ): Promise<string> {
+    const plan = await this.getTreatmentPlan(planId);
+    if (!plan) throw new Error('Treatment plan not found');
+
+    return await this.createModificationRequest(planId, {
+      plan_id: planId,
+      patient_id: plan.patient_id,
+      patient_name: plan.patient_name,
+      requested_by: requestedBy,
+      requested_by_role: requestedByRole,
+      requested_at: new Date(),
+      source: 'mdt_review',
+      mdt_session_id: mdtSessionId,
+      specialty_input: specialty,
+      modification_type: modificationType,
+      modification_action: modificationAction,
+      original_value: originalValue,
+      proposed_value: proposedValue,
+      reason: reason,
+      clinical_justification: `MDT recommendation from ${specialty}`,
+      priority: priority
+    });
+  }
+
+  // Direct modification by consultant (no approval needed)
+  async directModification(
+    planId: string,
+    modificationType: TreatmentPlanModification['modification_type'],
+    modificationAction: TreatmentPlanModification['modification_action'],
+    proposedValue: any,
+    reason: string,
+    modifiedBy: string,
+    modifiedByRole: string,
+    originalValue?: any
+  ): Promise<void> {
+    if (!this.canDirectlyModify(modifiedByRole)) {
+      throw new Error('You must submit a modification request for approval');
+    }
+
+    const plan = await this.getTreatmentPlan(planId);
+    if (!plan) throw new Error('Treatment plan not found');
+
+    // Create a modification record for history
+    const modification: TreatmentPlanModification = {
+      id: `mod_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      plan_id: planId,
+      patient_id: plan.patient_id,
+      patient_name: plan.patient_name,
+      requested_by: modifiedBy,
+      requested_by_role: modifiedByRole as any,
+      requested_at: new Date(),
+      source: 'direct_edit',
+      modification_type: modificationType,
+      modification_action: modificationAction,
+      original_value: originalValue,
+      proposed_value: proposedValue,
+      reason: reason,
+      status: 'auto_approved',
+      reviewed_by: modifiedBy,
+      reviewed_by_role: 'consultant',
+      reviewed_at: new Date(),
+      priority: 'routine',
+      created_at: new Date(),
+      updated_at: new Date()
+    };
+
+    // Apply the modification
+    await this.applyModification(plan, modification);
+
+    // Add to history
+    const history = plan.modification_history || [];
+    history.push(modification);
+
+    await db.treatment_plans.update(planId, {
+      modification_history: history,
+      updated_at: new Date()
+    });
+
+    toast.success('Treatment plan updated', { icon: '✅' });
   }
 }
 

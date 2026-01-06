@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, User, Calendar, FileText, Activity, AlertCircle, TrendingUp, Pill, Stethoscope, ClipboardList, Users } from 'lucide-react';
+import { X, Save, User, Calendar, FileText, Activity, AlertCircle, TrendingUp, Pill, Stethoscope, ClipboardList, Users, Edit3 } from 'lucide-react';
 import { wardRoundsService, WardRound, ROUND_TYPES, RoundType } from '../services/wardRoundsService';
 import { db } from '../db/database';
 import { format } from 'date-fns';
+import { useAuthStore } from '../store/authStore';
+import { TreatmentPlanModificationPanel } from './TreatmentPlanModificationPanel';
 
 interface WardRoundFormProps {
   patientId?: string;
@@ -21,6 +23,9 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
   const [patients, setPatients] = useState<any[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<any>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const { user: authUser } = useAuthStore();
+  const [patientTreatmentPlan, setPatientTreatmentPlan] = useState<any>(null);
+  const [showTreatmentPlanModification, setShowTreatmentPlanModification] = useState(false);
 
   const [formData, setFormData] = useState({
     patient_id: initialPatientId || '',
@@ -116,6 +121,24 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
     const patient = await db.patients.get(patientId);
     setSelectedPatient(patient);
     setFormData(prev => ({ ...prev, patient_id: patientId }));
+    
+    // Load patient's treatment plan
+    try {
+      const response = await fetch(`/api/treatment-plans?patient_id=${patientId}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.treatmentPlans && data.treatmentPlans.length > 0) {
+          // Get the most recent active plan
+          const activePlan = data.treatmentPlans.find((p: any) => p.status === 'active') || data.treatmentPlans[0];
+          setPatientTreatmentPlan(activePlan);
+        } else {
+          setPatientTreatmentPlan(null);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading treatment plan:', error);
+      setPatientTreatmentPlan(null);
+    }
   };
 
   const loadWardRound = async () => {
@@ -198,8 +221,9 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
     { id: 'assessment', label: 'Clinical Assessment', icon: Stethoscope },
     { id: 'plan', label: 'Management Plan', icon: ClipboardList },
     { id: 'medications', label: 'Medications', icon: Pill },
+    { id: 'treatment_plan', label: 'Treatment Plan', icon: Edit3, show: !!patientTreatmentPlan },
     { id: 'followup', label: 'Follow-up', icon: TrendingUp }
-  ];
+  ].filter(tab => tab.show !== false);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -865,6 +889,79 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
                     </div>
                   )}
                 </div>
+              </div>
+            )}
+
+            {/* Treatment Plan Modification Tab */}
+            {activeTab === 'treatment_plan' && patientTreatmentPlan && (
+              <div className="space-y-4">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h3 className="font-semibold text-blue-900 mb-2">Current Treatment Plan</h3>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="text-gray-600">Plan ID:</span>
+                      <span className="ml-2 font-medium">{patientTreatmentPlan.id?.substring(0, 8)}...</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Status:</span>
+                      <span className={`ml-2 font-medium px-2 py-0.5 rounded ${
+                        patientTreatmentPlan.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
+                      }`}>
+                        {patientTreatmentPlan.status}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Phase:</span>
+                      <span className="ml-2 font-medium">{patientTreatmentPlan.current_phase || 'N/A'}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Last Updated:</span>
+                      <span className="ml-2 font-medium">
+                        {patientTreatmentPlan.updated_at 
+                          ? format(new Date(patientTreatmentPlan.updated_at), 'dd MMM yyyy')
+                          : 'N/A'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Role-based modification capability notice */}
+                {authUser?.role === 'consultant' || authUser?.role === 'admin' ? (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                    <p className="text-green-800 text-sm">
+                      <strong>Consultant Access:</strong> Your modifications will be applied immediately to the treatment plan.
+                    </p>
+                  </div>
+                ) : authUser?.role === 'senior_registrar' || authUser?.role === 'junior_registrar' ? (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                    <p className="text-yellow-800 text-sm">
+                      <strong>Registrar Access:</strong> Your modifications will be submitted for consultant approval before being applied.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                    <p className="text-gray-600 text-sm">
+                      Your role does not allow direct treatment plan modifications. Please discuss changes with your supervising registrar or consultant.
+                    </p>
+                  </div>
+                )}
+
+                {/* Treatment Plan Modification Panel */}
+                {(authUser?.role === 'consultant' || authUser?.role === 'admin' || 
+                  authUser?.role === 'senior_registrar' || authUser?.role === 'junior_registrar') && (
+                  <TreatmentPlanModificationPanel
+                    planId={patientTreatmentPlan.id}
+                    patientId={selectedPatient?.id}
+                    patientName={`${selectedPatient?.first_name || ''} ${selectedPatient?.last_name || ''}`}
+                    source="ward_round"
+                    onModificationSubmitted={() => {
+                      // Refresh the treatment plan after modification
+                      if (selectedPatient?.id) {
+                        loadPatientDetails(selectedPatient.id);
+                      }
+                    }}
+                  />
+                )}
               </div>
             )}
 

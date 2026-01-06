@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { unthPatientService, PatientRegistration, Ward } from '../services/unthPatientService';
 import { riskAssessmentService } from '../services/riskAssessmentService';
+import { useAuthStore } from '../store/authStore';
 import {
   createPDF,
   sanitizeTextForPDF,
@@ -178,6 +179,21 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [availableWards, setAvailableWards] = useState<Ward[]>([]);
+  const { user } = useAuthStore();
+  
+  // Treatment Plan Creation State
+  const [createTreatmentPlan, setCreateTreatmentPlan] = useState(false);
+  const [treatmentPlanData, setTreatmentPlanData] = useState({
+    treatment_goals: '',
+    primary_procedure: '',
+    estimated_duration: '',
+    surgical_approach: '',
+    anesthesia_type: 'general',
+    expected_outcome: '',
+    post_op_care: '',
+    medications: [] as Array<{name: string, dose: string, frequency: string, route: string, duration: string}>,
+    investigations: [] as Array<{name: string, priority: string, reason: string}>
+  });
 
   React.useEffect(() => {
     setAvailableWards(unthPatientService.getAvailableWards());
@@ -2428,6 +2444,50 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
         };
 
         await riskAssessmentService.saveNutritionalAssessment(nutritionalAssessment);
+        
+        // Create treatment plan if enabled
+        if (createTreatmentPlan && treatmentPlanData.treatment_goals) {
+          try {
+            const treatmentPlanPayload = {
+              patient_id: patientId,
+              diagnosis: riskAssessmentData.clinical.primary_diagnosis,
+              treatment_goals: treatmentPlanData.treatment_goals,
+              current_phase: 'pre_operative',
+              status: 'active',
+              created_by: user?.name || user?.email || 'System',
+              created_by_role: user?.role || 'house_officer',
+              primary_procedure: treatmentPlanData.primary_procedure,
+              estimated_duration: treatmentPlanData.estimated_duration,
+              surgical_approach: treatmentPlanData.surgical_approach,
+              anesthesia_type: treatmentPlanData.anesthesia_type,
+              expected_outcome: treatmentPlanData.expected_outcome,
+              post_op_care: treatmentPlanData.post_op_care,
+              medications: treatmentPlanData.medications,
+              investigations: treatmentPlanData.investigations,
+              medical_team: {
+                consultant: '',
+                registrar: user?.role === 'senior_registrar' || user?.role === 'junior_registrar' ? user.name : '',
+                house_officer: user?.role === 'house_officer' ? user.name : ''
+              }
+            };
+
+            const response = await fetch('/api/treatment-plans', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
+              },
+              body: JSON.stringify(treatmentPlanPayload)
+            });
+
+            if (!response.ok) {
+              console.error('Failed to create treatment plan');
+            }
+          } catch (tpError) {
+            console.error('Error creating treatment plan:', tpError);
+            // Don't fail the entire registration if treatment plan fails
+          }
+        }
       }
 
       onSuccess?.(patientId);
@@ -3676,6 +3736,138 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
             </div>
           </div>
         )}
+
+        {/* Treatment Plan Creation Section */}
+        <div className="mt-8 p-6 bg-gradient-to-r from-green-50 to-blue-50 rounded-lg border-2 border-green-200">
+          <div className="flex items-start justify-between mb-4">
+            <div>
+              <h4 className="text-lg font-semibold text-green-900 flex items-center gap-2">
+                📋 Initial Treatment Plan (Optional)
+              </h4>
+              <p className="text-sm text-gray-600 mt-1">
+                Create an initial treatment plan for this patient during registration
+              </p>
+            </div>
+            <label className="flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={createTreatmentPlan}
+                onChange={(e) => setCreateTreatmentPlan(e.target.checked)}
+                className="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500 mr-2"
+              />
+              <span className="text-sm font-medium text-gray-700">Enable</span>
+            </label>
+          </div>
+
+          {createTreatmentPlan && (
+            <div className="space-y-4 pt-4 border-t border-green-200">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Treatment Goals *
+                  </label>
+                  <textarea
+                    value={treatmentPlanData.treatment_goals}
+                    onChange={(e) => setTreatmentPlanData(prev => ({ ...prev, treatment_goals: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                    rows={3}
+                    placeholder="Define the primary treatment goals for this patient..."
+                    required={createTreatmentPlan}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Primary Procedure
+                  </label>
+                  <input
+                    type="text"
+                    value={treatmentPlanData.primary_procedure}
+                    onChange={(e) => setTreatmentPlanData(prev => ({ ...prev, primary_procedure: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                    placeholder="e.g., Wound debridement, Skin graft"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Estimated Duration
+                  </label>
+                  <input
+                    type="text"
+                    value={treatmentPlanData.estimated_duration}
+                    onChange={(e) => setTreatmentPlanData(prev => ({ ...prev, estimated_duration: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                    placeholder="e.g., 2 weeks, 1 month"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Surgical Approach
+                  </label>
+                  <input
+                    type="text"
+                    value={treatmentPlanData.surgical_approach}
+                    onChange={(e) => setTreatmentPlanData(prev => ({ ...prev, surgical_approach: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                    placeholder="e.g., Local flap, Free flap"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Anesthesia Type
+                  </label>
+                  <select
+                    value={treatmentPlanData.anesthesia_type}
+                    onChange={(e) => setTreatmentPlanData(prev => ({ ...prev, anesthesia_type: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                  >
+                    <option value="local">Local Anesthesia</option>
+                    <option value="regional">Regional Anesthesia</option>
+                    <option value="general">General Anesthesia</option>
+                    <option value="sedation">Sedation</option>
+                    <option value="none">None Required</option>
+                  </select>
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Expected Outcome
+                  </label>
+                  <textarea
+                    value={treatmentPlanData.expected_outcome}
+                    onChange={(e) => setTreatmentPlanData(prev => ({ ...prev, expected_outcome: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                    rows={2}
+                    placeholder="Describe the expected outcome of treatment..."
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Post-Operative Care Instructions
+                  </label>
+                  <textarea
+                    value={treatmentPlanData.post_op_care}
+                    onChange={(e) => setTreatmentPlanData(prev => ({ ...prev, post_op_care: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                    rows={2}
+                    placeholder="Wound care, activity restrictions, follow-up..."
+                  />
+                </div>
+              </div>
+
+              <div className="bg-blue-50 p-3 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  <strong>Note:</strong> This creates a basic treatment plan. Detailed medications, investigations, 
+                  and procedures can be added after registration through the Treatment Plan module.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

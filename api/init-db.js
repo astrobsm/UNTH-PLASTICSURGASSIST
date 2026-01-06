@@ -101,10 +101,53 @@ async function createTables() {
       objectives JSONB DEFAULT '[]',
       procedures JSONB DEFAULT '[]',
       medications JSONB DEFAULT '[]',
+      investigations JSONB DEFAULT '[]',
       follow_up_schedule JSONB DEFAULT '[]',
+      medical_team JSONB,
+      discharge_plan JSONB,
       notes TEXT,
       status VARCHAR(50) DEFAULT 'draft',
       created_by INTEGER REFERENCES users(id),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Treatment Plan Modifications table (for approval workflow)
+    CREATE TABLE IF NOT EXISTS treatment_plan_modifications (
+      id SERIAL PRIMARY KEY,
+      plan_id INTEGER REFERENCES treatment_plans(id) ON DELETE CASCADE,
+      patient_id INTEGER REFERENCES patients(id) ON DELETE CASCADE,
+      patient_name VARCHAR(255),
+      
+      -- Who requested the modification
+      requested_by VARCHAR(255) NOT NULL,
+      requested_by_role VARCHAR(50) NOT NULL,
+      requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      
+      -- Source of modification
+      source VARCHAR(50) DEFAULT 'direct_edit',
+      ward_round_id INTEGER,
+      mdt_session_id INTEGER,
+      specialty_input VARCHAR(255),
+      
+      -- What's being modified
+      modification_type VARCHAR(50) NOT NULL,
+      modification_action VARCHAR(50) NOT NULL,
+      original_value JSONB,
+      proposed_value JSONB NOT NULL,
+      reason TEXT NOT NULL,
+      clinical_justification TEXT,
+      
+      -- Approval status
+      status VARCHAR(50) DEFAULT 'pending',
+      priority VARCHAR(50) DEFAULT 'routine',
+      
+      -- Approval details
+      reviewed_by VARCHAR(255),
+      reviewed_by_role VARCHAR(50),
+      reviewed_at TIMESTAMP,
+      review_comments TEXT,
+      
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
