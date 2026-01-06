@@ -9,7 +9,8 @@ import {
   sanitizeTextForPDF,
   PDF_MARGINS,
   PDF_FONT_SIZES,
-  PDF_COLORS
+  PDF_COLORS,
+  addFooter
 } from '../utils/pdfUtils';
 
 const PatientSummariesPage: React.FC = () => {
@@ -229,7 +230,7 @@ const PatientSummariesPage: React.FC = () => {
     doc.text(planLines, PDF_MARGINS.left, yPos);
     yPos += planLines.length * 5 + 10;
 
-    // Footer
+    // Disclaimer
     if (yPos > 250) {
       doc.addPage();
       yPos = PDF_MARGINS.top;
@@ -237,6 +238,9 @@ const PatientSummariesPage: React.FC = () => {
     doc.setFontSize(PDF_FONT_SIZES.small);
     doc.setFont('helvetica', 'italic');
     doc.text('This summary was automatically generated and should be reviewed by a qualified healthcare professional.', PDF_MARGINS.left, yPos);
+
+    // Add professional footer with page numbers and timestamp
+    addFooter(doc);
 
     // Save PDF
     doc.save('Patient_Summary_' + clean(summaryData.hospital_number) + '_' + format(new Date(), 'yyyy-MM-dd') + '.pdf');

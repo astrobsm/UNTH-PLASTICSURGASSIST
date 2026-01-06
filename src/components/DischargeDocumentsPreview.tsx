@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { format } from 'date-fns';
-import { createPDF, sanitizeTextForPDF, PDF_MARGINS, PDF_FONT_SIZES, PDF_COLORS } from '../utils/pdfUtils';
+import { createPDF, sanitizeTextForPDF, PDF_MARGINS, PDF_FONT_SIZES, PDF_COLORS, addFooter } from '../utils/pdfUtils';
 import { Discharge, admissionDischargeService } from '../services/admissionDischargeService';
 
 interface DischargeDocumentsPreviewProps {
@@ -656,6 +656,9 @@ export default function DischargeDocumentsPreview({
         addSectionTitle('HYDRATION');
         addText(clean(discharge.meal_plan_7_day.hydration_goals));
       }
+
+      // Add professional footer with page numbers and timestamp
+      addFooter(doc);
 
       // Save PDF
       const filename = clean(discharge.patient_name).replace(/\s+/g, '_') + '_' + docType + '_' + format(new Date(), 'yyyyMMdd') + '.pdf';

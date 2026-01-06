@@ -6,7 +6,8 @@ import {
   sanitizeTextForPDF,
   PDF_MARGINS,
   PDF_FONT_SIZES,
-  PDF_COLORS
+  PDF_COLORS,
+  addFooter
 } from '../utils/pdfUtils';
 
 // Scheduling Interfaces
@@ -605,18 +606,8 @@ class SchedulingService {
       yPosition += 8;
     });
     
-    // Footer on all pages
-    const pageCount = pdf.internal.getNumberOfPages();
-    for (let i = 1; i <= pageCount; i++) {
-      pdf.setPage(i);
-      pdf.setFontSize(8);
-      pdf.setFont('helvetica', 'normal');
-      pdf.setTextColor(100, 100, 100);
-      pdf.text(`Page ${i} of ${pageCount}`, pageWidth / 2, pageHeight - 5, { align: 'center' });
-      pdf.text('Plastic Surgery Department - UNTH', margin, pageHeight - 5);
-      pdf.text(`Generated: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, pageWidth - margin - 45, pageHeight - 5);
-      pdf.setTextColor(0, 0, 0);
-    }
+    // Add professional footer with page numbers and timestamp
+    addFooter(pdf);
     
     // Save the PDF
     pdf.save(`Operation_List_${format(operationList.date, 'yyyy-MM-dd')}.pdf`);

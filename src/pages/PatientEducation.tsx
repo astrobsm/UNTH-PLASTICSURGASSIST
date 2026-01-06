@@ -5,7 +5,8 @@ import {
   sanitizeTextForPDF,
   PDF_MARGINS,
   PDF_FONT_SIZES,
-  PDF_COLORS
+  PDF_COLORS,
+  addFooter
 } from '../utils/pdfUtils';
 import { patientService } from '../services/patientService';
 
@@ -1159,16 +1160,8 @@ export default function PatientEducation() {
       });
     });
 
-    // Footer
-    const footerY = pageHeight - 10;
-    doc.setFontSize(8);
-    doc.setTextColor(150, 150, 150);
-    doc.text(
-      `Generated: ${new Date().toLocaleDateString()} | UNTH Plastic Surgery | Patient: ${patient.full_name}`,
-      pageWidth / 2,
-      footerY,
-      { align: 'center' }
-    );
+    // Add professional footer with page numbers and timestamp
+    addFooter(doc);
 
     // Save with patient name in filename
     const sanitizedPatientName = patient.full_name.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');

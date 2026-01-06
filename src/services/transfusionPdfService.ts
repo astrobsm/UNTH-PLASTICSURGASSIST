@@ -10,7 +10,8 @@ import {
   sanitizeTextForPDF,
   PDF_MARGINS,
   PDF_FONT_SIZES,
-  PDF_COLORS
+  PDF_COLORS,
+  addFooter
 } from '../utils/pdfUtils';
 
 export interface PatientBloodDetails {
@@ -442,11 +443,8 @@ class TransfusionPdfService {
     pdf.text('Time Started:', col2X, yPos);
     pdf.line(col2X + 28, yPos, col2X + 70, yPos);
 
-    // Footer
-    yPos = pageHeight - 10;
-    pdf.setFontSize(8);
-    pdf.setTextColor(128, 128, 128);
-    pdf.text(`Generated: ${format(new Date(), 'dd/MM/yyyy HH:mm')} | Plastic Surgery Assistant`, pageWidth / 2, yPos, { align: 'center' });
+    // Add professional footer with page numbers and timestamp
+    addFooter(pdf);
 
     // Save the PDF
     const fileName = `Transfusion_Order_${data.transfusion.hospital_number}_${format(data.orderDate, 'yyyyMMdd')}.pdf`;
@@ -648,10 +646,8 @@ class TransfusionPdfService {
     pdf.text('Signature: _________________', 120, yPos);
     pdf.text('Date/Time: _________________', 200, yPos);
 
-    // Footer
-    pdf.setFontSize(7);
-    pdf.setTextColor(128, 128, 128);
-    pdf.text(`Form Generated: ${format(new Date(), 'dd/MM/yyyy HH:mm')} | Blood Transfusion Module - Plastic Surgery Assistant`, pageWidth / 2, pageHeight - 5, { align: 'center' });
+    // Add professional footer with page numbers and timestamp
+    addFooter(pdf);
 
     // Save
     const fileName = `Transfusion_Chart_${transfusion.hospital_number}_${format(new Date(transfusion.transfusion_date), 'yyyyMMdd')}.pdf`;
@@ -797,10 +793,8 @@ class TransfusionPdfService {
     pdf.text('Doctor Signature: ___________________', 115, yPos);
     pdf.text('Date: ______________', 215, yPos);
 
-    // Footer
-    pdf.setFontSize(7);
-    pdf.setTextColor(128, 128, 128);
-    pdf.text('Blood Transfusion Monitoring Chart Template | Plastic Surgery Assistant', pageWidth / 2, pageHeight - 5, { align: 'center' });
+    // Add professional footer with page numbers and timestamp
+    addFooter(pdf);
 
     // Save
     pdf.save(`Blank_Transfusion_Monitoring_Chart_${format(new Date(), 'yyyyMMdd')}.pdf`);
@@ -1027,10 +1021,8 @@ class TransfusionPdfService {
     pdf.text('Date:', col2X, yPos);
     pdf.line(col2X + 14, yPos, col2X + 14 + 50, yPos);
 
-    // Footer
-    pdf.setFontSize(7);
-    pdf.setTextColor(128, 128, 128);
-    pdf.text(`Generated: ${format(new Date(), 'dd/MM/yyyy HH:mm')} | Blood Transfusion Consent Form | UNTH Plastic Surgery`, pageWidth / 2, pageHeight - 5, { align: 'center' });
+    // Add professional footer with page numbers and timestamp
+    addFooter(pdf);
 
     // Save
     const fileName = patientData?.hospital_number 

@@ -6,7 +6,8 @@ import {
   sanitizeTextForPDF,
   PDF_MARGINS,
   PDF_FONT_SIZES,
-  PDF_COLORS
+  PDF_COLORS,
+  addFooter
 } from '../../utils/pdfUtils';
 
 interface WoundCareAssessmentFormProps {
@@ -345,6 +346,9 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
       });
     });
 
+    // Add professional footer with page numbers and timestamp
+    addFooter(doc);
+
     // Save
     doc.save(`UNTH_WoundProgressReport_${patientId}_${new Date().toISOString().split('T')[0]}.pdf`);
   };
@@ -489,6 +493,9 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
       doc.setFontSize(6);
       doc.text('Cut along dashed lines to separate individual 10cm reference lines • Place beside wound • Photo from directly above', pageWidth / 2, instructY + 4, { align: 'center' });
     }
+
+    // Add professional footer with page numbers and timestamp
+    addFooter(doc);
 
     // Save
     doc.save('UNTH_Wound_Measurement_Reference_Template.pdf');

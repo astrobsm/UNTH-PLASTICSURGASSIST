@@ -4,7 +4,8 @@ import {
   sanitizeTextForPDF,
   PDF_MARGINS,
   PDF_FONT_SIZES,
-  PDF_COLORS
+  PDF_COLORS,
+  addFooter
 } from '../utils/pdfUtils';
 
 // WACS Curriculum Topics Database
@@ -1338,17 +1339,8 @@ Apply these algorithms systematically in your clinical practice.`
       yPos += 6;
     });
 
-    // Footer on each page
-    const totalPages = doc.getNumberOfPages();
-    for (let i = 1; i <= totalPages; i++) {
-      doc.setPage(i);
-      doc.setFillColor(14, 159, 110);
-      doc.rect(0, pageHeight - 10, pageWidth, 10, 'F');
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(8);
-      doc.text('PLASTIC AND RECONSTRUCTIVE SURGERY UNIT - CME Program', pageWidth / 2, pageHeight - 5, { align: 'center' });
-      doc.text(`Page ${i} of ${totalPages}`, pageWidth - margin, pageHeight - 5, { align: 'right' });
-    }
+    // Add professional footer with page numbers and timestamp
+    addFooter(doc, 'CME Program - Study Materials');
 
     // Save and return blob URL
     const pdfBlob = doc.output('blob');

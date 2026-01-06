@@ -16,7 +16,8 @@ import {
   sanitizeTextForPDF,
   PDF_MARGINS,
   PDF_FONT_SIZES,
-  PDF_COLORS
+  PDF_COLORS,
+  addFooter
 } from '../utils/pdfUtils';
 import { useAuthStore } from '../store/authStore';
 
@@ -81,6 +82,9 @@ const PaperworkPage: React.FC = () => {
       pdf.text(line, PDF_MARGINS.left, yPos);
       yPos += 5;
     });
+
+    // Add professional footer with page numbers and timestamp
+    addFooter(pdf);
 
     // Save
     const filename = doc.type + '_' + doc.hospital_number + '_' + format(new Date(), 'yyyy-MM-dd') + '.pdf';

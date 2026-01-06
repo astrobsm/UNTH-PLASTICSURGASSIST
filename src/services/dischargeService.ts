@@ -4,7 +4,8 @@ import {
   createPDF,
   sanitizeTextForPDF,
   PDF_MARGINS,
-  PDF_FONT_SIZES
+  PDF_FONT_SIZES,
+  addFooter
 } from '../utils/pdfUtils';
 
 export interface Discharge {
@@ -496,6 +497,9 @@ class DischargeService {
     pdf.text('Date Generated: ', PDF_MARGINS.left, yPos);
     pdf.setFont('helvetica', 'normal');
     pdf.text(format(new Date(), 'dd/MM/yyyy HH:mm'), PDF_MARGINS.left + 35, yPos);
+
+    // Add professional footer with page numbers and timestamp
+    addFooter(pdf);
 
     // Save with patient name
     const fileName = 'Discharge_Summary_' + discharge.patient_name.replace(/\s+/g, '_') + '_' + format(discharge.discharge_date, 'yyyyMMdd') + '.pdf';

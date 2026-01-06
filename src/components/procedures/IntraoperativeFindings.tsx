@@ -5,7 +5,8 @@ import {
   sanitizeTextForPDF,
   PDF_MARGINS,
   PDF_FONT_SIZES,
-  PDF_COLORS
+  PDF_COLORS,
+  addFooter
 } from '../../utils/pdfUtils';
 
 interface IntraoperativeFindingsFormProps {
@@ -799,14 +800,8 @@ export const IntraoperativeFindingsForm: React.FC<IntraoperativeFindingsFormProp
       yPosition += 5;
     });
 
-    // Footer
-    doc.setFillColor(14, 159, 110);
-    doc.rect(0, pageHeight - 15, pageWidth, 15, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`Auto-Generated Postoperative Care Plan | Generated: ${new Date().toLocaleString('en-NG')}`, pageWidth / 2, pageHeight - 9, { align: 'center' });
-    doc.text('PLASTIC AND RECONSTRUCTIVE SURGERY UNIT | This is a comprehensive care guide - individualize based on patient needs', pageWidth / 2, pageHeight - 4, { align: 'center' });
+    // Add professional footer with page numbers and timestamp
+    addFooter(doc);
 
     // Save PDF
     const fileName = `UNTH_PostopNote_${procedureId}_${new Date().toISOString().split('T')[0]}.pdf`;

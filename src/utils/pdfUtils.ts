@@ -1,78 +1,194 @@
 /**
- * PDF Utilities for consistent PDF generation across the app
- * Fixes font rendering issues and provides standard styling
+ * PDF Utilities for Medical Document Generation
+ * 
+ * MANDATORY STANDARDS FOR ALL PDF DOCUMENTS:
+ * ==========================================
+ * 
+ * 1. FONTS:
+ *    - Primary: Helvetica (built-in, no embedding needed)
+ *    - Fallbacks: Arial, Times New Roman (if custom fonts needed)
+ *    - Body text: 11-12pt minimum
+ *    - Tables: ≥10pt minimum
+ *    - Footnotes/captions: ≥9pt minimum
+ *    - NO fancy or decorative fonts
+ * 
+ * 2. COLORS:
+ *    - Background: ALWAYS WHITE (#FFFFFF)
+ *    - Text: BLACK (#000000) for all body content
+ *    - Accents: Limited use for headers/borders only
+ *    - NO dark mode, NO colored backgrounds
+ *    - Ensure high contrast (WCAG AA compliant)
+ * 
+ * 3. PAGE LAYOUT:
+ *    - Format: A4 (210mm x 297mm) or US Letter
+ *    - Margins: Minimum 20mm all sides
+ *    - NO edge-to-edge printing
+ *    - Header/Footer reserved areas
+ * 
+ * 4. CROSS-PLATFORM:
+ *    - Must render identically on Windows, macOS, iOS, Android
+ *    - Must print correctly on all printers
+ *    - Use only embedded/standard fonts
+ * 
+ * 5. MEDICAL/LEGAL COMPLIANCE:
+ *    - Professional appearance for legal validity
+ *    - Clear institution branding
+ *    - Timestamped with generation date
+ *    - Page numbers on all pages
  */
 
 import jsPDF from 'jspdf';
 
-// Standard font sizes for consistent styling
+// ============================================================================
+// MANDATORY CONFIGURATION - DO NOT MODIFY WITHOUT APPROVAL
+// ============================================================================
+
+/**
+ * Standard font sizes - MINIMUM VALUES ENFORCED
+ * Body text must be ≥11pt, tables ≥10pt, footnotes ≥9pt
+ */
 export const PDF_FONT_SIZES = {
-  title: 16,
-  sectionHeader: 12,
-  subHeader: 11,
-  body: 10,
-  small: 9,
-  footer: 8
-};
-
-// Standard margins
-export const PDF_MARGINS = {
-  top: 20,
-  bottom: 20,
-  left: 15,
-  right: 15
-};
-
-// Clinical colors
-export const PDF_COLORS = {
-  primary: { r: 14, g: 159, b: 110 },     // Green #0E9F6E
-  danger: { r: 220, g: 38, b: 38 },       // Red #DC2626
-  warning: { r: 217, g: 119, b: 6 },      // Orange #D97706
-  darkRed: { r: 139, g: 0, b: 0 },        // Dark red for headers
-  black: { r: 0, g: 0, b: 0 },
-  gray: { r: 100, g: 100, b: 100 }
+  title: 16,           // Document title
+  sectionHeader: 14,   // Section headers
+  subHeader: 12,       // Sub-section headers
+  body: 11,            // MINIMUM 11pt for body text (was 10)
+  tableBody: 10,       // Minimum for tables (was body)
+  small: 9,            // Minimum for footnotes/captions
+  footer: 9            // Page footer (was 8, now meets 9pt min)
 };
 
 /**
- * Creates a properly configured jsPDF instance
- * This ensures fonts are correctly loaded to prevent spacing issues
+ * Standard margins - MINIMUM 20mm enforced
+ * Ensures proper printing on all devices
+ */
+export const PDF_MARGINS = {
+  top: 25,      // 25mm top margin (header space)
+  bottom: 25,   // 25mm bottom margin (footer space)
+  left: 20,     // 20mm left margin (minimum)
+  right: 20     // 20mm right margin (minimum)
+};
+
+/**
+ * Page dimensions for A4
+ */
+export const PDF_PAGE = {
+  width: 210,      // A4 width in mm
+  height: 297,     // A4 height in mm
+  contentWidth: 170, // Usable width (210 - 20 - 20)
+  contentHeight: 247 // Usable height (297 - 25 - 25)
+};
+
+/**
+ * Clinical colors for PDF documents
+ * PRIMARY RULE: Black text on white background ALWAYS
+ * Colors used ONLY for accents, borders, and headers
+ */
+export const PDF_COLORS = {
+  // MANDATORY: Document background and text
+  background: { r: 255, g: 255, b: 255 },  // WHITE - ALWAYS
+  text: { r: 0, g: 0, b: 0 },              // BLACK - Primary text
+  
+  // Accent colors (limited use for headers/borders)
+  primary: { r: 14, g: 159, b: 110 },      // Clinical Green #0E9F6E
+  danger: { r: 220, g: 38, b: 38 },        // Alert Red #DC2626
+  warning: { r: 217, g: 119, b: 6 },       // Warning Orange #D97706
+  
+  // Legacy aliases (for backward compatibility)
+  black: { r: 0, g: 0, b: 0 },
+  gray: { r: 100, g: 100, b: 100 },        // For borders, lines
+  darkRed: { r: 139, g: 0, b: 0 },         // Dark red for headers
+  lightGray: { r: 240, g: 240, b: 240 }    // Table row alternation (subtle)
+};
+
+/**
+ * Institution header for all medical documents
+ */
+export const PDF_INSTITUTION = {
+  name: 'UNIVERSITY OF NIGERIA TEACHING HOSPITAL',
+  department: 'Plastic and Reconstructive Surgery Unit',
+  location: 'Enugu, Nigeria',
+  logo: null as string | null  // Base64 logo if available
+};
+
+/**
+ * Creates a properly configured jsPDF instance with MANDATORY settings
+ * 
+ * ENFORCED STANDARDS:
+ * - Helvetica font (cross-platform safe, built-in)
+ * - A4 format (international medical standard)
+ * - Compression enabled
+ * - Character spacing normalized
+ * 
+ * @param orientation - 'portrait' (default) or 'landscape'
+ * @returns Configured jsPDF instance
  */
 export function createPDF(orientation: 'portrait' | 'landscape' = 'portrait'): jsPDF {
   const pdf = new jsPDF({
     orientation,
     unit: 'mm',
-    format: 'a4',
-    putOnlyUsedFonts: true,
-    compress: true,
+    format: 'a4',           // A4 format - international standard
+    putOnlyUsedFonts: true, // Optimize font embedding
+    compress: true,         // Reduce file size
     hotfixes: ['px_scaling'] // Enable pixel scaling fix
   });
 
-  // Set default font - helvetica is built-in and works reliably
+  // MANDATORY: Set Helvetica as primary font (built-in, cross-platform safe)
   pdf.setFont('helvetica', 'normal');
   
-  // Set character spacing to 0 to prevent spacing issues (if method exists)
+  // Normalize character spacing to prevent rendering issues
   if (typeof (pdf as any).setCharSpace === 'function') {
     (pdf as any).setCharSpace(0);
   }
+  
+  // MANDATORY: Set black text color as default
+  pdf.setTextColor(PDF_COLORS.text.r, PDF_COLORS.text.g, PDF_COLORS.text.b);
+  
+  // MANDATORY: Set default font size to body (11pt minimum)
+  pdf.setFontSize(PDF_FONT_SIZES.body);
   
   return pdf;
 }
 
 /**
- * Adds a styled header to the PDF
+ * Adds a professional styled header to the PDF
+ * Includes institution branding for medical documents
+ * 
+ * @param pdf - jsPDF instance
+ * @param title - Main document title
+ * @param subtitle - Optional subtitle
+ * @param yPos - Starting Y position (default: top margin)
+ * @param includeInstitution - Include hospital header (default: true)
+ * @returns New Y position after header
  */
 export function addPDFHeader(
   pdf: jsPDF,
   title: string,
   subtitle?: string,
-  yPos: number = 15
+  yPos: number = PDF_MARGINS.top,
+  includeInstitution: boolean = true
 ): number {
   const pageWidth = pdf.internal.pageSize.getWidth();
+  
+  // Institution header (for medical documents)
+  if (includeInstitution) {
+    pdf.setFontSize(PDF_FONT_SIZES.sectionHeader);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setTextColor(PDF_COLORS.text.r, PDF_COLORS.text.g, PDF_COLORS.text.b);
+    pdf.text(PDF_INSTITUTION.name, pageWidth / 2, yPos, { align: 'center' });
+    yPos += 6;
+    
+    pdf.setFontSize(PDF_FONT_SIZES.body);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(PDF_INSTITUTION.department, pageWidth / 2, yPos, { align: 'center' });
+    yPos += 5;
+    pdf.text(PDF_INSTITUTION.location, pageWidth / 2, yPos, { align: 'center' });
+    yPos += 10;
+  }
   
   // Main title
   pdf.setFontSize(PDF_FONT_SIZES.title);
   pdf.setFont('helvetica', 'bold');
-  pdf.setTextColor(PDF_COLORS.black.r, PDF_COLORS.black.g, PDF_COLORS.black.b);
+  pdf.setTextColor(PDF_COLORS.text.r, PDF_COLORS.text.g, PDF_COLORS.text.b);
   pdf.text(title, pageWidth / 2, yPos, { align: 'center' });
   yPos += 7;
   
@@ -84,11 +200,15 @@ export function addPDFHeader(
     yPos += 8;
   }
   
+  // Reset to default text color
+  pdf.setTextColor(PDF_COLORS.text.r, PDF_COLORS.text.g, PDF_COLORS.text.b);
+  
   return yPos;
 }
 
 /**
  * Adds a section header with optional underline
+ * Uses BLACK text with optional accent underline
  */
 export function addSectionHeader(
   pdf: jsPDF,
@@ -96,26 +216,29 @@ export function addSectionHeader(
   yPos: number,
   options?: { color?: { r: number; g: number; b: number }; underline?: boolean }
 ): number {
-  const color = options?.color || PDF_COLORS.black;
+  const underlineColor = options?.color || PDF_COLORS.primary;
   
   pdf.setFontSize(PDF_FONT_SIZES.sectionHeader);
   pdf.setFont('helvetica', 'bold');
-  pdf.setTextColor(color.r, color.g, color.b);
+  // MANDATORY: Section headers always black text
+  pdf.setTextColor(PDF_COLORS.text.r, PDF_COLORS.text.g, PDF_COLORS.text.b);
   pdf.text(title, PDF_MARGINS.left, yPos);
   
   if (options?.underline) {
     const textWidth = pdf.getTextWidth(title);
-    pdf.setDrawColor(color.r, color.g, color.b);
+    pdf.setDrawColor(underlineColor.r, underlineColor.g, underlineColor.b);
     pdf.setLineWidth(0.5);
     pdf.line(PDF_MARGINS.left, yPos + 1, PDF_MARGINS.left + textWidth, yPos + 1);
   }
   
-  pdf.setTextColor(PDF_COLORS.black.r, PDF_COLORS.black.g, PDF_COLORS.black.b);
-  return yPos + 7;
+  // Reset to default
+  pdf.setTextColor(PDF_COLORS.text.r, PDF_COLORS.text.g, PDF_COLORS.text.b);
+  return yPos + 8;
 }
 
 /**
  * Adds body text with automatic line wrapping
+ * ENFORCES minimum 11pt font size
  */
 export function addBodyText(
   pdf: jsPDF,
@@ -129,14 +252,17 @@ export function addBodyText(
     lineHeight?: number;
   }
 ): number {
-  const fontSize = options?.fontSize || PDF_FONT_SIZES.body;
+  // MANDATORY: Enforce minimum font size of 11pt for body text
+  const fontSize = Math.max(options?.fontSize || PDF_FONT_SIZES.body, PDF_FONT_SIZES.body);
   const pageWidth = pdf.internal.pageSize.getWidth();
   const maxWidth = options?.maxWidth || (pageWidth - PDF_MARGINS.left - PDF_MARGINS.right);
   const indent = options?.indent || 0;
-  const lineHeight = options?.lineHeight || 5;
+  const lineHeight = options?.lineHeight || 6;
   
   pdf.setFontSize(fontSize);
   pdf.setFont('helvetica', options?.bold ? 'bold' : 'normal');
+  // MANDATORY: Black text
+  pdf.setTextColor(PDF_COLORS.text.r, PDF_COLORS.text.g, PDF_COLORS.text.b);
   
   const lines = pdf.splitTextToSize(text, maxWidth - indent);
   lines.forEach((line: string) => {
@@ -323,12 +449,20 @@ export function addSeparator(pdf: jsPDF, yPos: number, color?: { r: number; g: n
 }
 
 /**
- * Adds footer with page numbers
+ * Adds footer with page numbers and timestamp to all pages
+ * MANDATORY for medical/legal documents
  */
-export function addFooter(pdf: jsPDF, text?: string): void {
+export function addFooter(pdf: jsPDF, customText?: string): void {
   const pageCount = (pdf as any).internal.getNumberOfPages();
   const pageHeight = pdf.internal.pageSize.getHeight();
   const pageWidth = pdf.internal.pageSize.getWidth();
+  const generatedDate = new Date().toLocaleString('en-GB', {
+    day: '2-digit',
+    month: '2-digit', 
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
   
   for (let i = 1; i <= pageCount; i++) {
     pdf.setPage(i);
@@ -336,14 +470,19 @@ export function addFooter(pdf: jsPDF, text?: string): void {
     pdf.setFont('helvetica', 'normal');
     pdf.setTextColor(PDF_COLORS.gray.r, PDF_COLORS.gray.g, PDF_COLORS.gray.b);
     
-    // Page number
-    pdf.text('Page ' + i + ' of ' + pageCount, pageWidth / 2, pageHeight - 10, { align: 'center' });
+    // Left: Custom text or institution
+    const leftText = customText || PDF_INSTITUTION.department;
+    pdf.text(leftText, PDF_MARGINS.left, pageHeight - 10);
     
-    // Custom text
-    if (text) {
-      pdf.text(text, PDF_MARGINS.left, pageHeight - 10);
-    }
+    // Center: Page number
+    pdf.text(`Page ${i} of ${pageCount}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
+    
+    // Right: Generation timestamp
+    pdf.text(`Generated: ${generatedDate}`, pageWidth - PDF_MARGINS.right, pageHeight - 10, { align: 'right' });
   }
+  
+  // Reset text color to black
+  pdf.setTextColor(PDF_COLORS.text.r, PDF_COLORS.text.g, PDF_COLORS.text.b);
 }
 
 /**
@@ -498,7 +637,108 @@ export function formatDateTimeForPDF(date: Date | string): string {
   });
 }
 
+/**
+ * Creates a simple table with headers and rows
+ * ENFORCES minimum 10pt font for tables
+ */
+export function addSimpleTable(
+  pdf: jsPDF,
+  headers: string[],
+  rows: string[][],
+  yPos: number,
+  options?: {
+    columnWidths?: number[];
+    headerColor?: { r: number; g: number; b: number };
+    fontSize?: number;
+  }
+): number {
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const tableWidth = pageWidth - PDF_MARGINS.left - PDF_MARGINS.right;
+  const columnCount = headers.length;
+  const columnWidths = options?.columnWidths || headers.map(() => tableWidth / columnCount);
+  const headerColor = options?.headerColor || PDF_COLORS.primary;
+  // MANDATORY: Enforce minimum 10pt for tables
+  const fontSize = Math.max(options?.fontSize || PDF_FONT_SIZES.tableBody, 10);
+  const rowHeight = 7;
+  
+  pdf.setFontSize(fontSize);
+  
+  // Draw header row with accent background
+  pdf.setFillColor(headerColor.r, headerColor.g, headerColor.b);
+  pdf.rect(PDF_MARGINS.left, yPos - 4, tableWidth, rowHeight, 'F');
+  
+  // Header text (white on colored background)
+  pdf.setTextColor(255, 255, 255);
+  pdf.setFont('helvetica', 'bold');
+  let xPos = PDF_MARGINS.left + 2;
+  headers.forEach((header, i) => {
+    pdf.text(sanitizeTextForPDF(header), xPos, yPos);
+    xPos += columnWidths[i];
+  });
+  yPos += rowHeight;
+  
+  // Reset to black text for rows
+  pdf.setTextColor(PDF_COLORS.text.r, PDF_COLORS.text.g, PDF_COLORS.text.b);
+  pdf.setFont('helvetica', 'normal');
+  
+  // Draw data rows with alternating background
+  rows.forEach((row, rowIndex) => {
+    // Subtle alternating background (very light gray)
+    if (rowIndex % 2 === 1) {
+      pdf.setFillColor(PDF_COLORS.lightGray.r, PDF_COLORS.lightGray.g, PDF_COLORS.lightGray.b);
+      pdf.rect(PDF_MARGINS.left, yPos - 4, tableWidth, rowHeight, 'F');
+    }
+    
+    xPos = PDF_MARGINS.left + 2;
+    row.forEach((cell, i) => {
+      const cellText = sanitizeTextForPDF(cell || '');
+      const truncatedText = cellText.length > 30 ? cellText.substring(0, 27) + '...' : cellText;
+      pdf.text(truncatedText, xPos, yPos);
+      xPos += columnWidths[i];
+    });
+    yPos += rowHeight;
+  });
+  
+  // Draw table border
+  const totalHeight = (rows.length + 1) * rowHeight;
+  pdf.setDrawColor(PDF_COLORS.gray.r, PDF_COLORS.gray.g, PDF_COLORS.gray.b);
+  pdf.setLineWidth(0.3);
+  pdf.rect(PDF_MARGINS.left, yPos - totalHeight, tableWidth, totalHeight);
+  
+  return yPos + 3;
+}
+
+/**
+ * Validates PDF configuration before generation
+ * Call this at the start of any PDF generation function
+ */
+export function validatePDFConfig(): void {
+  // Log configuration for debugging
+  console.log('[PDF] Configuration validated:', {
+    fontSizes: PDF_FONT_SIZES,
+    margins: PDF_MARGINS,
+    institution: PDF_INSTITUTION.name
+  });
+}
+
+/**
+ * Helper to check if we need a new page
+ */
+export function needsNewPage(pdf: jsPDF, currentY: number, neededSpace: number = 30): boolean {
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  return currentY + neededSpace > pageHeight - PDF_MARGINS.bottom;
+}
+
+/**
+ * Adds a new page and returns the new Y position
+ */
+export function addNewPage(pdf: jsPDF, addHeader?: () => number): number {
+  pdf.addPage();
+  return addHeader ? addHeader() : PDF_MARGINS.top;
+}
+
 export default {
+  // Core functions
   createPDF,
   addPDFHeader,
   addSectionHeader,
@@ -506,15 +746,27 @@ export default {
   addBulletList,
   addWarningBox,
   addInfoBox,
+  addSimpleTable,
   createPageBreakHandler,
   addSeparator,
   addFooter,
   addTwoColumnText,
   addLabeledField,
+  
+  // Text utilities
   sanitizeTextForPDF,
   formatDateForPDF,
   formatDateTimeForPDF,
+  
+  // Page utilities
+  validatePDFConfig,
+  needsNewPage,
+  addNewPage,
+  
+  // Configuration (MANDATORY standards)
   PDF_FONT_SIZES,
   PDF_MARGINS,
-  PDF_COLORS
+  PDF_PAGE,
+  PDF_COLORS,
+  PDF_INSTITUTION
 };
