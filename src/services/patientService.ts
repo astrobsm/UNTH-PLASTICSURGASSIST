@@ -74,17 +74,21 @@ class PatientService {
         return patient;
       }
     } catch (error) {
-      // Only log if it's an unexpected error, not a 404 or network error
+      // Only log if it's an unexpected error, not a 404/500 or network error
+      // These are common when patient exists locally but not on server
       const errorMessage = error instanceof Error ? error.message : String(error);
-      if (!errorMessage.includes('404') && !errorMessage.includes('not found')) {
+      if (!errorMessage.includes('404') && !errorMessage.includes('not found') && !errorMessage.includes('500') && !errorMessage.includes('Internal server error')) {
         console.error('Error fetching patient from API:', errorMessage);
       }
     }
     
     // Fallback to IndexedDB
-    const localPatient = await db.patients.get(
-      typeof id === 'string' ? parseInt(id, 10) || id : Number(id)
-    );
+    // Handle both UUID strings and numeric IDs
+    const lookupId = typeof id === 'string' 
+      ? (id.includes('-') ? id : (parseInt(id, 10) || id)) 
+      : Number(id);
+    
+    const localPatient = await db.patients.get(lookupId);
     
     return localPatient ? normalizePatientData(localPatient) : localPatient;
   }
