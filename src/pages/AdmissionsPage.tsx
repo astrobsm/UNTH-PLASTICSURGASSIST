@@ -395,17 +395,49 @@ export default function AdmissionsPage() {
                       required
                     >
                       <option value="">-- Select Patient --</option>
-                      {patients.map((patient) => (
-                        <option key={patient.id} value={patient.id}>
-                          {patient.first_name} {patient.last_name} ({patient.hospital_number})
-                        </option>
-                      ))}
+                      {patients.map((patient) => {
+                        // Calculate age from date of birth
+                        let displayAge = 'N/A';
+                        if (patient.date_of_birth || patient.dob) {
+                          const birthDate = new Date(patient.date_of_birth || patient.dob);
+                          const today = new Date();
+                          let age = today.getFullYear() - birthDate.getFullYear();
+                          const monthDiff = today.getMonth() - birthDate.getMonth();
+                          if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+                            age--;
+                          }
+                          displayAge = age >= 0 ? `${age}y` : 'N/A';
+                        }
+                        
+                        // Get full name
+                        const fullName = `${patient.first_name || ''} ${patient.last_name || ''}`.trim() || 'Unknown';
+                        const hospitalNum = patient.hospital_number || patient.id || 'N/A';
+                        const phone = patient.phone || 'N/A';
+                        
+                        return (
+                          <option key={patient.id} value={patient.id}>
+                            {fullName} • {displayAge} • #{hospitalNum} • 📞 {phone}
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
                   {selectedPatient && (
                     <div className="bg-white p-3 rounded border border-gray-200">
-                      <p className="text-sm"><strong>Age:</strong> {selectedPatient.age || 'N/A'}</p>
-                      <p className="text-sm"><strong>Gender:</strong> {selectedPatient.gender || 'N/A'}</p>
+                      <p className="text-sm">
+                        <strong>Age:</strong> {(() => {
+                          if (!selectedPatient.date_of_birth && !selectedPatient.dob) return 'N/A';
+                          const birthDate = new Date(selectedPatient.date_of_birth || selectedPatient.dob);
+                          const today = new Date();
+                          let age = today.getFullYear() - birthDate.getFullYear();
+                          const monthDiff = today.getMonth() - birthDate.getMonth();
+                          if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+                            age--;
+                          }
+                          return age >= 0 ? `${age} years` : 'N/A';
+                        })()}
+                      </p>
+                      <p className="text-sm"><strong>Gender:</strong> {selectedPatient.sex || selectedPatient.gender || 'N/A'}</p>
                       <p className="text-sm"><strong>Phone:</strong> {selectedPatient.phone || 'N/A'}</p>
                     </div>
                   )}
