@@ -2535,18 +2535,6 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Middle Name
-          </label>
-          <input
-            type="text"
-            value={formData.middle_name || ''}
-            onChange={(e) => handleInputChange('middle_name', e.target.value)}
-            className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
             Date of Birth *
           </label>
           <input
@@ -2600,55 +2588,6 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
             onChange={(e) => handleInputChange('phone', e.target.value)}
             className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
             placeholder="+234 80X XXX XXXX"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Email
-          </label>
-          <input
-            type="email"
-            value={formData.email || ''}
-            onChange={(e) => handleInputChange('email', e.target.value)}
-            className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
-          />
-        </div>
-
-        <div className="md:col-span-2">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Address *
-          </label>
-          <textarea
-            required
-            value={formData.address || ''}
-            onChange={(e) => handleInputChange('address', e.target.value)}
-            rows={2}
-            className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            State of Origin
-          </label>
-          <input
-            type="text"
-            value={formData.state_of_origin || ''}
-            onChange={(e) => handleInputChange('state_of_origin', e.target.value)}
-            className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            LGA
-          </label>
-          <input
-            type="text"
-            value={formData.lga || ''}
-            onChange={(e) => handleInputChange('lga', e.target.value)}
-            className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
           />
         </div>
       </div>
@@ -3859,7 +3798,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
           <div className="mt-4 flex items-center justify-between">
             {/* Step indicators - scrollable on mobile */}
             <div className="flex space-x-2 sm:space-x-4 overflow-x-auto">
-              {[1, 2, 3, 4].map(step => (
+              {[1, 2].map(step => (
                 <div
                   key={step}
                   className={`flex-shrink-0 flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium transition-colors ${
@@ -3875,16 +3814,14 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
               ))}
             </div>
             <span className="text-xs sm:text-sm text-gray-500 whitespace-nowrap ml-2">
-              Step {currentStep} of 4
+              Step {currentStep} of 2
             </span>
           </div>
         </div>
 
         <form onSubmit={handleSubmit} className="p-4 sm:p-6">
           {currentStep === 1 && renderStep1()}
-          {currentStep === 2 && renderStep2()}
-          {currentStep === 3 && renderStep3()}
-          {currentStep === 4 && renderStep4()}
+          {currentStep === 2 && renderStep4()}
 
           {/* Mobile-friendly button layout */}
           <div className="flex flex-col-reverse sm:flex-row sm:justify-between gap-3 mt-6 sm:mt-8 pt-4 sm:pt-6 border-t border-gray-200">
@@ -3913,7 +3850,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
             </div>
 
             <div className="w-full sm:w-auto">
-              {currentStep < 4 ? (
+              {currentStep < 2 ? (
                 <button
                   type="button"
                   onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
