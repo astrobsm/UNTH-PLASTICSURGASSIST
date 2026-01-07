@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { adminService } from '../services/adminService';
 import { apiClient } from '../services/apiClient';
+import { patientService } from '../services/patientService';
+import { syncService } from '../db/syncService';
 import { 
   Users, 
   Settings, 
@@ -48,6 +50,7 @@ import { AISettingsPanel } from '../components/AISettingsPanel';
 import BulkUserImport from '../components/BulkUserImport';
 import { db } from '../db/database';
 import { resetDatabase } from '../utils/dbReset';
+import toast from 'react-hot-toast';
 
 type AdminTab = 'dashboard' | 'user-approvals' | 'users' | 'bulk-import' | 'system' | 'database' | 'security' | 'analytics' | 'settings';
 
@@ -289,6 +292,26 @@ export default function Admin() {
       } catch (error) {
         alert('Failed to clear database: ' + error);
       }
+    }
+  };
+
+  const handleSyncLocalData = async () => {
+    const loadingToast = toast.loading('Syncing local data to server...');
+    try {
+      // Queue all unsynced patients
+      await patientService.syncLocalChanges();
+      
+      // Get sync queue count
+      const queueCount = await db.sync_queue.count();
+      
+      if (queueCount === 0) {
+        toast.success('No pending changes to sync', { id: loadingToast });
+      } else {
+        toast.success(`Successfully queued ${queueCount} items for sync`, { id: loadingToast });
+      }
+    } catch (error) {
+      console.error('Sync error:', error);
+      toast.error('Failed to sync local data', { id: loadingToast });
     }
   };
 
@@ -671,6 +694,13 @@ export default function Admin() {
                   >
                     <RefreshCw className="h-4 w-4" />
                     <span>Refresh System Status</span>
+                  </button>
+                  <button
+                    onClick={handleSyncLocalData}
+                    className="w-full flex items-center justify-center space-x-2 py-2 px-4 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                  >
+                    <Wifi className="h-4 w-4" />
+                    <span>Sync Local Data</span>
                   </button>
                   <button
                     onClick={() => setShowBackupModal(true)}
