@@ -18,6 +18,8 @@ import TreatmentPlanningPage from './pages/TreatmentPlanningPage';
 import PatientSummariesPage from './pages/PatientSummariesPage';
 import PaperworkPage from './pages/PaperworkPage';
 import MDTPage from './pages/MDTPage';
+import { syncService } from './db/syncService';
+import { patientService } from './services/patientService';
 import AdmissionsPage from './pages/AdmissionsPage';
 import DischargesPage from './pages/DischargesPage';
 import AdmissionDischargePage from './pages/AdmissionDischargePage';
@@ -55,6 +57,13 @@ function App() {
     // Request notification permissions for MCQ reminders
     if (user) {
       notificationService.requestNotificationPermission();
+      
+      // Sync any unsynced local data when user logs in
+      if (navigator.onLine) {
+        patientService.syncLocalChanges().catch(err => {
+          console.error('Failed to sync local changes:', err);
+        });
+      }
     }
 
     return () => {

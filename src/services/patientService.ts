@@ -5,6 +5,7 @@
 
 import { apiClient } from './apiClient';
 import { db } from '../db/database';
+import { syncService } from '../db/syncService';
 
 /**
  * Normalize patient data to ensure arrays are always arrays
@@ -118,6 +119,9 @@ class PatientService {
         updated_at: new Date()
       });
       
+      // Queue for sync when online
+      await syncService.queueAction('create', 'patients', localId, patientData);
+      
       return { ...patientData, id: localId, synced: false };
     }
   }
@@ -140,10 +144,15 @@ class PatientService {
       console.error('Error updating patient via API:', error);
       
       // Update IndexedDB only (will sync later)
-      await db.patients.update(
-        typeof id === 'string' ? id : Number(id),
-        { ...patientData, synced: false, updated_at: new Date() }
-      );
+      const localId = typeof id === 'string' ? (id.includes('-') ? id : parseInt(id, 10)) : Number(id);
+      await db.patients.update(localId, { 
+        ...patientData, 
+        synced: false, 
+        updated_at: new Date() 
+      });
+      
+      // Queue for sync when online
+      await syncService.queueAction('update', 'patients', localId as number, patientData);
       
       return { ...patientData, id, synced: false };
     }
@@ -158,20 +167,25 @@ class PatientService {
       await apiClient.deletePatient(String(id));
       
       // Update local cache (soft delete)
-      await db.patients.update(
-        typeof id === 'string' ? id : Number(id),
-        { deleted: true, synced: true }
-      );
+      const localId = typeof id === 'string' ? id : Number(id);
+      await db.patients.update(localId, { 
+        deleted: true, 
+        synced: true 
+      });
       
       return true;
     } catch (error) {
       console.error('Error deleting patient via API:', error);
       
       // Mark as deleted locally (will sync later)
-      await db.patients.update(
-        typeof id === 'string' ? id : Number(id),
-        { deleted: true, synced: false }
-      );
+      const localId = typeof id === 'string' ? (id.includes('-') ? id : parseInt(id, 10)) : Number(id);
+      await db.patients.update(localId, { 
+        deleted: true, 
+        synced: false 
+      });
+      
+      // Queue for sync when online
+      await syncService.queueAction('delete', 'patients', localId as number, {});
       
       return false;
     }
@@ -187,27 +201,25 @@ class PatientService {
         .filter(p => !p.synced && !p.deleted)
         .toArray();
       
-      console.log(`Syncing ${unsyncedPatients.length} local patients to server`);
+      console.log(`Found ${unsyncedPatients.length} unsynced patients. Queueing for sync...`);
       
+      // Queue each patient for sync
       for (const patient of unsyncedPatients) {
-        try {
-          // Check if patient exists on server
-          if (patient.id) {
-            await apiClient.updatePatient(String(patient.id), patient);
-          } else {
-            await apiClient.createPatient(patient);
-          }
-          
-          // Mark as synced
-          await db.patients.update(patient.id!, { synced: true });
-        } catch (error) {
-          console.error(`Failed to sync patient ${patient.id}:`, error);
+        if (patient.id) {
+          // Determine if it's a create or update based on whether it has a serverId
+          const action = patient.serverId ? 'update' : 'create';
+          await syncService.queueAction(action, 'patients', patient.id, patient);
         }
+      }
+      
+      // Trigger sync immediately if online
+      if (navigator.onLine) {
+        await syncService.syncAll();
       }
       
       return true;
     } catch (error) {
-      console.error('Error syncing local changes:', error);
+      console.error('Error queueing local changes for sync:', error);
       return false;
     }
   }
