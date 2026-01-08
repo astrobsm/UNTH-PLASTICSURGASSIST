@@ -20,6 +20,130 @@ function generatePassword(length = 12) {
   return password.split('').sort(() => Math.random() - 0.5).join('');
 }
 
+/**
+ * Auto-assign patients to a newly created/approved medical staff member
+ * Distributes patients evenly by assigning unassigned or least-loaded patients
+ */
+async function assignPatientsToNewUser(userId, userRole, userName) {
+  try {
+    // Only assign patients to medical staff roles
+    const medicalRoles = ['consultant', 'senior_registrar', 'registrar', 'house_officer'];
+    if (!medicalRoles.includes(userRole)) {
+      console.log(`User role ${userRole} does not require patient assignment`);
+      return { assigned: 0, message: 'Not a medical staff role' };
+    }
+
+    // Get all active patients
+    const patientsResult = await query(
+      `SELECT id, hospital_number, first_name, last_name 
+       FROM patients 
+       WHERE deleted IS NOT TRUE 
+       ORDER BY created_at DESC 
+       LIMIT 100`
+    );
+
+    if (patientsResult.rows.length === 0) {
+      console.log('No patients available for assignment');
+      return { assigned: 0, message: 'No patients available' };
+    }
+
+    // Create patient_assignments table if it doesn't exist
+    await query(`
+      CREATE TABLE IF NOT EXISTS patient_assignments (
+        id SERIAL PRIMARY KEY,
+        patient_id VARCHAR(255) NOT NULL,
+        hospital_number VARCHAR(100),
+        consultant_id VARCHAR(50),
+        senior_registrar_id VARCHAR(50),
+        registrar_id VARCHAR(50),
+        house_officer_id VARCHAR(50),
+        admission_type VARCHAR(50),
+        assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        is_active BOOLEAN DEFAULT TRUE,
+        UNIQUE(patient_id)
+      )
+    `);
+
+    let assignedCount = 0;
+    const roleColumnMap = {
+      'consultant': 'consultant_id',
+      'senior_registrar': 'senior_registrar_id',
+      'registrar': 'registrar_id',
+      'house_officer': 'house_officer_id'
+    };
+
+    const roleColumn = roleColumnMap[userRole];
+    if (!roleColumn) {
+      console.log(`Unknown role: ${userRole}`);
+      return { assigned: 0, message: 'Unknown role' };
+    }
+
+    // Get all active staff of the same role
+    const staffResult = await query(
+      `SELECT id FROM users 
+       WHERE role = $1 AND is_active = TRUE AND is_approved = TRUE`,
+      [userRole]
+    );
+
+    const totalStaff = staffResult.rows.length;
+    if (totalStaff === 0) {
+      console.log(`No active staff found for role ${userRole}`);
+      return { assigned: 0, message: 'No active staff' };
+    }
+
+    // Calculate how many patients this new user should get
+    // Distribute evenly among all staff (including the new one)
+    const targetPatientsPerStaff = Math.ceil(patientsResult.rows.length / totalStaff);
+
+    for (const patient of patientsResult.rows) {
+      if (assignedCount >= targetPatientsPerStaff) {
+        break; // Stop when we've assigned enough patients to this user
+      }
+
+      try {
+        // Check if patient already has an assignment for this role
+        const existingAssignment = await query(
+          `SELECT id, ${roleColumn} FROM patient_assignments WHERE patient_id = $1`,
+          [patient.id]
+        );
+
+        if (existingAssignment.rows.length > 0) {
+          const existing = existingAssignment.rows[0];
+          // If this role is not yet assigned, assign the new user
+          if (!existing[roleColumn]) {
+            await query(
+              `UPDATE patient_assignments 
+               SET ${roleColumn} = $1 
+               WHERE patient_id = $2`,
+              [userId, patient.id]
+            );
+            assignedCount++;
+            console.log(`✅ Assigned patient ${patient.hospital_number} to ${userName} (${userRole})`);
+          }
+        } else {
+          // Create new assignment with this user for their role
+          await query(
+            `INSERT INTO patient_assignments (patient_id, hospital_number, ${roleColumn}, is_active) 
+             VALUES ($1, $2, $3, TRUE)`,
+            [patient.id, patient.hospital_number, userId]
+          );
+          assignedCount++;
+          console.log(`✅ Created new assignment for patient ${patient.hospital_number} with ${userName} (${userRole})`);
+        }
+      } catch (error) {
+        console.error(`Failed to assign patient ${patient.id}:`, error);
+        continue;
+      }
+    }
+
+    console.log(`📊 Assigned ${assignedCount} patients to ${userName} (${userRole})`);
+    return { assigned: assignedCount, message: `Successfully assigned ${assignedCount} patients` };
+  } catch (error) {
+    console.error('Error in assignPatientsToNewUser:', error);
+    return { assigned: 0, error: error.message };
+  }
+}
+
 export default async function handler(req, res) {
   try {
     if (cors(req, res)) return;
@@ -148,6 +272,13 @@ async function createUser(data, currentUser, res) {
 
   const createdUser = result.rows[0];
 
+  // Auto-assign patients to the new medical staff member
+  const assignmentResult = await assignPatientsToNewUser(
+    createdUser.id.toString(),
+    createdUser.role,
+    createdUser.full_name
+  );
+
   return res.status(201).json({ 
     user: createdUser,
     credentials: {
@@ -158,9 +289,10 @@ async function createUser(data, currentUser, res) {
       role: role,
       mustChangePassword: mustChangePassword
     },
+    patientAssignment: assignmentResult,
     message: mustChangePassword 
-      ? 'User created successfully. Share the temporary password with the user. They must change it on first login.'
-      : 'Admin user created successfully.'
+      ? `User created successfully. ${assignmentResult.assigned} patients assigned. Share the temporary password with the user. They must change it on first login.`
+      : `Admin user created successfully. ${assignmentResult.assigned} patients assigned.`
   });
 }
 
@@ -228,7 +360,20 @@ async function approveUser(id, currentUser, res) {
     return res.status(404).json({ error: 'User not found' });
   }
 
-  return res.status(200).json({ user: result.rows[0], message: 'User approved successfully' });
+  const approvedUser = result.rows[0];
+
+  // Auto-assign patients to the newly approved medical staff member
+  const assignmentResult = await assignPatientsToNewUser(
+    approvedUser.id.toString(),
+    approvedUser.role,
+    approvedUser.full_name
+  );
+
+  return res.status(200).json({ 
+    user: approvedUser, 
+    patientAssignment: assignmentResult,
+    message: `User approved successfully. ${assignmentResult.assigned} patients assigned.`
+  });
 }
 
 async function changePassword(id, data, currentUser, res) {
@@ -335,12 +480,20 @@ async function bulkImportUsers(data, currentUser, res) {
 
       const createdUser = result.rows[0];
       
+      // Auto-assign patients to the new medical staff member
+      const assignmentResult = await assignPatientsToNewUser(
+        createdUser.id.toString(),
+        createdUser.role,
+        createdUser.full_name
+      );
+      
       results.success.push({
         id: createdUser.id,
         username: createdUser.username,
         email: createdUser.email,
         fullName: createdUser.full_name,
-        role: createdUser.role
+        role: createdUser.role,
+        patientsAssigned: assignmentResult.assigned
       });
 
       results.credentials.push({

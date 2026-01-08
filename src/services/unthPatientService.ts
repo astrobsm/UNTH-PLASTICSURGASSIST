@@ -2,6 +2,7 @@ import { aiService } from './aiService';
 import { db } from '../db/database';
 import { apiClient } from './apiClient';
 import { v4 as uuidv4 } from 'uuid';
+import { patientAssignmentService } from './patientAssignmentService';
 
 // Helper for authenticated fetch requests
 const authenticatedFetch = async (url: string, options: RequestInit = {}): Promise<Response> => {
@@ -285,6 +286,22 @@ class UNTHPatientService {
 
       // Validate and save patient data
       const patientId = await this.savePatientRegistration(registrationData);
+
+      // Automatically assign patient to medical team (consultant, senior registrar, registrar, house officer)
+      try {
+        const patientName = `${registrationData.first_name} ${registrationData.last_name}`.trim();
+        await patientAssignmentService.autoAssignPatient(
+          patientId,
+          patientName,
+          registrationData.hospital_number,
+          registrationData.admission_type,
+          undefined // specialization - can be added later if needed
+        );
+        console.log(`✅ Patient ${patientName} auto-assigned to medical team`);
+      } catch (assignmentError) {
+        console.error('Failed to auto-assign patient to team:', assignmentError);
+        // Don't fail registration if assignment fails
+      }
 
       // Generate AI-powered admission summary only for inpatients (and non-elective admissions)
       if (registrationData.patient_type === 'inpatient' && registrationData.admission_type !== 'elective') {
