@@ -2357,7 +2357,7 @@ export default function PatientEducation() {
     doc.setFontSize(10);
     doc.setFont('helvetica', 'italic');
     doc.setTextColor(100, 100, 100);
-    doc.text(`Category: ${topic.category}`, margin, yPos);
+    doc.text(clean(`Category: ${topic.category}`), margin, yPos);
     yPos += 15;
 
     doc.setTextColor(0, 0, 0);
@@ -2365,7 +2365,7 @@ export default function PatientEducation() {
     // Introduction
     doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
-    const introLines = doc.splitTextToSize(topic.content.introduction, maxWidth);
+    const introLines = doc.splitTextToSize(clean(topic.content.introduction), maxWidth);
     introLines.forEach((line: string) => {
       if (yPos > pageHeight - margin) {
         doc.addPage();
@@ -2387,7 +2387,7 @@ export default function PatientEducation() {
       doc.setFontSize(12);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(14, 159, 110);
-      doc.text(section.title, margin, yPos);
+      doc.text(clean(section.title), margin, yPos);
       yPos += 8;
       doc.setTextColor(0, 0, 0);
 
@@ -2395,7 +2395,7 @@ export default function PatientEducation() {
       doc.setFontSize(10);
       doc.setFont('helvetica', 'normal');
       section.points.forEach((point) => {
-        const bulletPoint = `• ${point}`;
+        const bulletPoint = clean(`• ${point}`);
         const lines = doc.splitTextToSize(bulletPoint, maxWidth - 5);
         lines.forEach((line: string) => {
           if (yPos > pageHeight - margin) {
@@ -2432,7 +2432,7 @@ export default function PatientEducation() {
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(0, 0, 0);
     topic.content.keyPoints.forEach((point) => {
-      doc.text(`✓ ${point}`, margin + 5, yPos);
+      doc.text(clean(`✓ ${point}`), margin + 5, yPos);
       yPos += 5;
     });
     yPos += 10;
@@ -2452,7 +2452,7 @@ export default function PatientEducation() {
     doc.setFont('helvetica', 'italic');
     doc.setTextColor(100, 100, 100);
     topic.content.references.forEach((ref) => {
-      const lines = doc.splitTextToSize(ref, maxWidth);
+      const lines = doc.splitTextToSize(clean(ref), maxWidth);
       lines.forEach((line: string) => {
         doc.text(line, margin + 3, yPos);
         yPos += 4;
