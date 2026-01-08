@@ -11,6 +11,7 @@ import {
   sharePDFViaWhatsApp
 } from '../utils/pdfUtils';
 import { patientService } from '../services/patientService';
+import { calculateAge } from '../utils/dateUtils';
 
 interface EducationTopic {
   id: string;
@@ -2311,7 +2312,7 @@ export default function PatientEducation() {
     // Patient Information Box
     doc.setFillColor(240, 253, 244);
     doc.setDrawColor(PDF_COLORS.primary.r, PDF_COLORS.primary.g, PDF_COLORS.primary.b);
-    doc.rect(margin, yPos, maxWidth, 25, 'FD');
+    doc.rect(margin, yPos, maxWidth, 31, 'FD');
     
     doc.setFontSize(PDF_FONT_SIZES.body);
     doc.setFont('helvetica', 'bold');
@@ -2320,9 +2321,15 @@ export default function PatientEducation() {
     doc.setFont('helvetica', 'normal');
     doc.text('Name: ' + clean(patient.full_name), margin + 3, yPos + 11);
     doc.text('Hospital Number: ' + clean(patient.hospital_number), margin + 3, yPos + 17);
-    doc.text('Date: ' + new Date().toLocaleDateString(), margin + 3, yPos + 23);
     
-    yPos += 35;
+    // Calculate and display age
+    const patientAge = calculateAge(patient.date_of_birth || (patient as any).dob);
+    const ageText = patientAge !== null ? `${patientAge} years` : 'N/A';
+    doc.text('Age: ' + ageText, margin + 3, yPos + 23);
+    
+    doc.text('Date: ' + new Date().toLocaleDateString(), margin + 3, yPos + 29);
+    
+    yPos += 41;
 
     // Title
     doc.setFontSize(PDF_FONT_SIZES.title);
