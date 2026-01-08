@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { MEDICATION_DATABASE } from '../data/medicationDatabase';
+import { patientActivityService } from '../services/patientActivityService';
 
 interface PrescriptionModalProps {
   isOpen: boolean;
@@ -105,6 +106,17 @@ export const PrescriptionModal: React.FC<PrescriptionModalProps> = ({
       const existing = JSON.parse(localStorage.getItem('prescriptions') || '[]');
       existing.push(prescriptionData);
       localStorage.setItem('prescriptions', JSON.stringify(existing));
+
+      // Log activity
+      await patientActivityService.logPrescription(
+        Number(patientId),
+        patientId,
+        user?.id?.toString() || 'unknown',
+        user?.name || 'Unknown',
+        user?.role || 'unknown',
+        prescriptions,
+        'created'
+      );
 
       alert(`${prescriptions.length} prescription(s) saved successfully!`);
       onSuccess();

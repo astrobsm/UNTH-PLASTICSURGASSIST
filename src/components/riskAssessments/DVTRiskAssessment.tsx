@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { DVTRiskAssessment, riskAssessmentService, ActionPlanItem } from '../../services/riskAssessmentService';
+import { patientActivityService } from '../../services/patientActivityService';
+import { useAuthStore } from '../../store/authStore';
 import { AlertTriangle, CheckCircle, Clock, User, Calendar, Activity } from 'lucide-react';
 
 interface DVTRiskAssessmentProps {
   patientId: string;
+  hospitalNumber: string;
   existingAssessment?: DVTRiskAssessment;
   onSave?: (assessment: DVTRiskAssessment) => void;
   onCancel?: () => void;
@@ -12,11 +15,13 @@ interface DVTRiskAssessmentProps {
 
 export const DVTRiskAssessmentForm: React.FC<DVTRiskAssessmentProps> = ({
   patientId,
+  hospitalNumber,
   existingAssessment,
   onSave,
   onCancel,
   readOnly = false
 }) => {
+  const { user } = useAuthStore();
   const [assessment, setAssessment] = useState<Partial<DVTRiskAssessment>>({
     patient_id: patientId,
     assessment_type: 'dvt',
@@ -175,6 +180,19 @@ export const DVTRiskAssessmentForm: React.FC<DVTRiskAssessmentProps> = ({
         created_at: assessment.created_at || new Date(),
         updated_at: new Date()
       } as DVTRiskAssessment;
+
+      // Log activity
+      await patientActivityService.logRiskAssessment(
+        Number(patientId),
+        hospitalNumber,
+        user?.id?.toString() || 'unknown',
+        user?.name || 'Unknown',
+        user?.role || 'unknown',
+        'DVT',
+        calculatedRisk.riskLevel,
+        calculatedRisk.score,
+        existingAssessment ? 'updated' : 'created'
+      );
 
       onSave?.(completeAssessment);
     } catch (error) {

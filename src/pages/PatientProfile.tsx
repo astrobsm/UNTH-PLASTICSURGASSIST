@@ -13,6 +13,7 @@ import { PressureSoreRiskAssessmentForm } from '../components/riskAssessments/Pr
 import { NutritionalRiskAssessmentForm } from '../components/riskAssessments/NutritionalRiskAssessment';
 import { ProgressNoteModal } from '../components/ProgressNoteModal';
 import { PrescriptionModal } from '../components/PrescriptionModal';
+import { PatientActivityTimeline } from '../components/PatientActivityTimeline';
 import { medicalTeamService, TeamMember } from '../services/medicalTeamService';
 
 export const PatientProfile: React.FC = () => {
@@ -97,6 +98,7 @@ export const PatientProfile: React.FC = () => {
     { id: 'transfer', name: 'Transfer', icon: '🔄' },
     { id: 'progress', name: 'Progress', icon: '📈' },
     { id: 'plans', name: 'Upcoming Plans', icon: '📅' },
+    { id: 'activity', name: 'Activity Log', icon: '📝' },
     { id: 'discharge', name: 'Discharge', icon: '🚪' }
   ];
 
@@ -106,7 +108,7 @@ export const PatientProfile: React.FC = () => {
         return <PatientSummaryView patientId={id!} />;
       
       case 'risk-assessment':
-        return <RiskAssessmentView patientId={id!} />;
+        return <RiskAssessmentView patientId={id!} hospitalNumber={patient?.hospital_number || id!} />;
       
       case 'transfer':
         return (
@@ -136,6 +138,14 @@ export const PatientProfile: React.FC = () => {
           <div className="space-y-6">
             <UpcomingPlansView plans={upcomingPlans} />
           </div>
+        );
+      
+      case 'activity':
+        return (
+          <PatientActivityTimeline 
+            patientId={Number(id!)}
+            hospitalNumber={patient?.hospital_number || id!}
+          />
         );
       
       case 'discharge':
@@ -378,7 +388,7 @@ export const PatientProfile: React.FC = () => {
 };
 
 // Helper Components
-const RiskAssessmentView: React.FC<{ patientId: string }> = ({ patientId }) => {
+const RiskAssessmentView: React.FC<{ patientId: string; hospitalNumber: string }> = ({ patientId, hospitalNumber }) => {
   const [activeAssessment, setActiveAssessment] = useState<'summary' | 'dvt' | 'pressure' | 'nutrition'>('summary');
 
   const assessmentTabs = [
@@ -396,6 +406,7 @@ const RiskAssessmentView: React.FC<{ patientId: string }> = ({ patientId }) => {
         return (
           <DVTRiskAssessmentForm 
             patientId={patientId}
+            hospitalNumber={hospitalNumber}
             onSave={(assessment) => {
               console.log('DVT assessment saved:', assessment);
               setActiveAssessment('summary');

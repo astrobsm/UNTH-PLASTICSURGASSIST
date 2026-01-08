@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuthStore } from '../store/authStore';
+import { patientActivityService } from '../services/patientActivityService';
 
 interface ProgressNoteModalProps {
   isOpen: boolean;
@@ -65,6 +66,17 @@ export const ProgressNoteModal: React.FC<ProgressNoteModalProps> = ({
       const existingNotes = JSON.parse(localStorage.getItem('progressNotes') || '[]');
       existingNotes.push(progressNote);
       localStorage.setItem('progressNotes', JSON.stringify(existingNotes));
+
+      // Log activity
+      await patientActivityService.logProgressNote(
+        Number(patientId),
+        patientId,
+        user?.id?.toString() || 'unknown',
+        user?.name || 'Unknown',
+        user?.role || 'unknown',
+        'SOAP',
+        `S: ${note.subjective.substring(0, 100)}...`
+      );
 
       alert('Progress note saved successfully!');
       onSuccess();
