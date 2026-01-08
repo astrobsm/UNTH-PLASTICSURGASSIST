@@ -3,6 +3,7 @@ import { db } from '../db/database';
 import { patientService } from '../services/patientService';
 import { admissionService, Admission, AdmissionStatistics } from '../services/admissionService';
 import { patientAssignmentService } from '../services/patientAssignmentService';
+import { calculateAge, calculateAndFormatAge } from '../utils/dateUtils';
 
 interface Ward {
   name: string;
@@ -87,17 +88,9 @@ export default function AdmissionsPage() {
   const [examinationFindings, setExaminationFindings] = useState('');
   const [initialManagementPlan, setInitialManagementPlan] = useState('');
 
-  // Helper function to calculate patient age
+  // Helper function to calculate patient age in real-time from date of birth
   const getPatientAge = (): number | null => {
-    if (!selectedPatient?.date_of_birth) return null;
-    const birthDate = new Date(selectedPatient.date_of_birth);
-    const today = new Date();
-    let age = today.getFullYear() - birthDate.getFullYear();
-    const monthDiff = today.getMonth() - birthDate.getMonth();
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-      age--;
-    }
-    return age;
+    return calculateAge(selectedPatient?.date_of_birth || selectedPatient?.dob);
   };
 
   // Check if BP should be optional (children under 10)
@@ -397,17 +390,7 @@ export default function AdmissionsPage() {
                       <option value="">-- Select Patient --</option>
                       {patients.map((patient) => {
                         // Calculate age from date of birth
-                        let displayAge = 'N/A';
-                        if (patient.date_of_birth || patient.dob) {
-                          const birthDate = new Date(patient.date_of_birth || patient.dob);
-                          const today = new Date();
-                          let age = today.getFullYear() - birthDate.getFullYear();
-                          const monthDiff = today.getMonth() - birthDate.getMonth();
-                          if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-                            age--;
-                          }
-                          displayAge = age >= 0 ? `${age}y` : 'N/A';
-                        }
+                        const displayAge = calculateAndFormatAge(patient.date_of_birth || patient.dob);
                         
                         // Get full name
                         const fullName = `${patient.first_name || ''} ${patient.last_name || ''}`.trim() || 'Unknown';
@@ -426,15 +409,8 @@ export default function AdmissionsPage() {
                     <div className="bg-white p-3 rounded border border-gray-200">
                       <p className="text-sm">
                         <strong>Age:</strong> {(() => {
-                          if (!selectedPatient.date_of_birth && !selectedPatient.dob) return 'N/A';
-                          const birthDate = new Date(selectedPatient.date_of_birth || selectedPatient.dob);
-                          const today = new Date();
-                          let age = today.getFullYear() - birthDate.getFullYear();
-                          const monthDiff = today.getMonth() - birthDate.getMonth();
-                          if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-                            age--;
-                          }
-                          return age >= 0 ? `${age} years` : 'N/A';
+                          const age = calculateAge(selectedPatient.date_of_birth || selectedPatient.dob);
+                          return age !== null && age >= 0 ? `${age} years` : 'N/A';
                         })()}
                       </p>
                       <p className="text-sm"><strong>Gender:</strong> {selectedPatient.sex || selectedPatient.gender || 'N/A'}</p>

@@ -4,6 +4,7 @@ import { db } from '../db/database';
 import { patientService } from '../services/patientService';
 import { admissionService, Admission } from '../services/admissionService';
 import { dischargeService, Discharge, DischargeInstructionsData, DischargeMedication } from '../services/dischargeService';
+import { calculateAge } from '../utils/dateUtils';
 
 const DISCHARGE_STATUSES = [
   { value: 'improved', label: 'Improved' },
@@ -109,10 +110,12 @@ export default function DischargesPage() {
       const patient = await patientService.getPatient(selectedAdmission.patient_id);
       if (!patient) throw new Error('Patient not found');
 
+      const patientAge = calculateAge(patient.date_of_birth || patient.dob) || 0;
+
       const instructionsData: DischargeInstructionsData = {
         patient_name: selectedAdmission.patient_name,
-        age: patient.age || 0,
-        gender: patient.gender || 'Unknown',
+        age: patientAge,
+        gender: patient.gender || patient.sex || 'Unknown',
         hospital_number: selectedAdmission.hospital_number,
         admission_date: selectedAdmission.admission_date,
         discharge_date: new Date().toISOString().split('T')[0],
@@ -164,6 +167,8 @@ export default function DischargesPage() {
       const patient = await patientService.getPatient(selectedAdmission.patient_id);
       if (!patient) throw new Error('Patient not found');
 
+      const patientAge = calculateAge(patient.date_of_birth || patient.dob) || 0;
+
       const admissionDate = new Date(selectedAdmission.admission_date);
       const dischargeDate = new Date();
       const lengthOfStay = Math.ceil((dischargeDate.getTime() - admissionDate.getTime()) / (1000 * 60 * 60 * 24));
@@ -173,8 +178,8 @@ export default function DischargesPage() {
         patient_id: selectedAdmission.patient_id,
         patient_name: selectedAdmission.patient_name,
         hospital_number: selectedAdmission.hospital_number,
-        age: patient.age || 0,
-        gender: patient.gender || 'Unknown',
+        age: patientAge,
+        gender: patient.gender || patient.sex || 'Unknown',
         admission_date: selectedAdmission.admission_date,
         discharge_date: dischargeDate.toISOString().split('T')[0],
         discharge_time: dischargeDate.toTimeString().split(' ')[0],

@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { db } from '../db/database';
 import { patientService } from '../services/patientService';
+import { calculateAge } from '../utils/dateUtils';
 import {
   bloodTransfusionService,
   BloodTransfusion,
@@ -474,10 +475,8 @@ export default function BloodTransfusionForm({
       transfusion: formData as BloodTransfusion,
       patientDetails: {
         name: selectedPatient ? `${selectedPatient.first_name} ${selectedPatient.last_name}` : formData.patient_name || 'Unknown',
-        age: selectedPatient?.date_of_birth ? 
-          Math.floor((new Date().getTime() - new Date(selectedPatient.date_of_birth).getTime()) / (365.25 * 24 * 60 * 60 * 1000)) : 
-          undefined,
-        gender: selectedPatient?.gender,
+        age: calculateAge(selectedPatient?.date_of_birth || selectedPatient?.dob),
+        gender: selectedPatient?.gender || selectedPatient?.sex,
         ward: selectedPatient?.ward_id || 'N/A',
         bed_number: selectedPatient?.bed_number,
         diagnosis: formData.clinical_status
@@ -602,9 +601,7 @@ export default function BloodTransfusionForm({
 
   // Generate Consent Form PDF
   const generateConsentFormPDF = () => {
-    const patientAge = selectedPatient?.date_of_birth 
-      ? Math.floor((new Date().getTime() - new Date(selectedPatient.date_of_birth).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
-      : undefined;
+    const patientAge = calculateAge(selectedPatient?.date_of_birth || selectedPatient?.dob);
 
     transfusionPdfService.generateConsentFormPDF({
       name: selectedPatient ? `${selectedPatient.first_name} ${selectedPatient.last_name}` : formData.patient_name,
