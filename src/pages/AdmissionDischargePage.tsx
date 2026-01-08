@@ -138,6 +138,7 @@ export default function AdmissionDischargePage() {
                     // Pass selected admission to discharge tab
                   }}
                   onRefresh={loadData}
+                  navigate={navigate}
                 />
               )}
               
@@ -187,9 +188,10 @@ interface ActivePatientsTabProps {
   setSearchTerm: (term: string) => void;
   onDischarge: (admission: Admission) => void;
   onRefresh: () => void;
+  navigate: (path: string) => void;
 }
 
-function ActivePatientsTab({ admissions, searchTerm, setSearchTerm, onDischarge, onRefresh }: ActivePatientsTabProps) {
+function ActivePatientsTab({ admissions, searchTerm, setSearchTerm, onDischarge, onRefresh, navigate }: ActivePatientsTabProps) {
   return (
     <div>
       {/* Search Bar */}
