@@ -2462,10 +2462,7 @@ export default function PatientEducation() {
     // Add professional footer with page numbers and timestamp
     addFooter(doc);
 
-    // Save with patient name in filename
-    const patientName = patient.full_name || 
-      `${patient.first_name || ''} ${patient.last_name || ''}`.trim() ||
-      'Unknown_Patient';
+    // Save with patient name in filename (reuse patientName from earlier)
     const sanitizedPatientName = patientName.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
     const sanitizedTopicName = (topic.title || 'Education_Material').replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
     const filename = `${sanitizedPatientName}_${sanitizedTopicName}_${new Date().toISOString().split('T')[0]}.pdf`;
