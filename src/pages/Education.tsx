@@ -14,7 +14,8 @@ import {
   Key,
   Lightbulb,
   Calendar,
-  Download
+  Download,
+  AlertCircle
 } from 'lucide-react';
 import { cmeService } from '../services/cmeService';
 import { aiService, CMETopic, TestSession, CMEProgress, CMECertificate } from '../services/aiService';
@@ -32,6 +33,7 @@ const Education: React.FC = () => {
   const [showResults, setShowResults] = useState(false);
   const [apiKey, setApiKey] = useState('');
   const [recommendations, setRecommendations] = useState<string[]>([]);
+  const [aiConfigured, setAiConfigured] = useState(false);
 
   const currentUserId = 'demo-user'; // In real app, get from auth store
 
@@ -42,6 +44,10 @@ const Education: React.FC = () => {
   const loadData = async () => {
     try {
       setLoading(true);
+      
+      // Check AI configuration status
+      const isReady = await aiService.isReady();
+      setAiConfigured(isReady);
       
       // Initialize demo data
       await cmeService.initializeDemoData();
@@ -120,19 +126,31 @@ const Education: React.FC = () => {
   };
 
   const generateWeeklyTopic = async () => {
-    if (!aiService.isReady()) {
-      alert('Please configure OpenAI API key first');
-      return;
-    }
-    
     try {
       setLoading(true);
+      
+      // Check if AI service is ready
+      const ready = await aiService.isReady();
+      if (!ready) {
+        alert('⚠️ AI Service Not Configured\n\nPlease configure your OpenAI API key in Admin Settings to generate educational content.');
+        setLoading(false);
+        return;
+      }
+      
       const newTopic = await cmeService.generateWeeklyTopic();
       setTopics(prev => [newTopic, ...prev]);
-      alert('New weekly topic generated successfully!');
-    } catch (error) {
+      alert('✅ New weekly topic generated successfully!');
+    } catch (error: any) {
       console.error('Error generating weekly topic:', error);
-      alert('Failed to generate weekly topic. Please try again.');
+      
+      // Provide helpful error messages
+      if (error?.message?.includes('AI service not configured')) {
+        alert('⚠️ AI Service Not Configured\n\nPlease set your OpenAI API key in Admin Settings → AI Configuration.');
+      } else if (error?.message?.includes('API key')) {
+        alert('⚠️ Invalid API Key\n\nPlease check your OpenAI API key in Admin Settings.');
+      } else {
+        alert(`❌ Failed to generate weekly topic\n\n${error?.message || 'Please try again or contact support.'}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -172,6 +190,29 @@ const Education: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* AI Configuration Warning Banner */}
+      {!aiConfigured && (
+        <div className="bg-amber-50 border-l-4 border-amber-400 p-4 rounded-md">
+          <div className="flex items-start">
+            <AlertCircle className="h-5 w-5 text-amber-400 mt-0.5 mr-3 flex-shrink-0" />
+            <div className="flex-1">
+              <h3 className="text-sm font-medium text-amber-800">
+                AI Service Not Configured
+              </h3>
+              <p className="mt-1 text-sm text-amber-700">
+                To generate personalized educational content and weekly CME topics, please configure your OpenAI API key in the Settings tab below.
+              </p>
+              <button
+                onClick={() => setActiveTab('settings')}
+                className="mt-3 text-sm font-medium text-amber-800 hover:text-amber-900 underline"
+              >
+                Go to Settings →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -183,15 +224,19 @@ const Education: React.FC = () => {
           </p>
         </div>
         <div className="flex items-center space-x-4">
-          {aiService.isReady() && (
-            <button
-              onClick={generateWeeklyTopic}
-              className="flex items-center space-x-2 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600"
-            >
-              <Brain className="h-4 w-4" />
-              <span>Generate Weekly Topic</span>
-            </button>
-          )}
+          <button
+            onClick={generateWeeklyTopic}
+            disabled={loading}
+            className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
+              aiConfigured
+                ? 'bg-primary-500 text-white hover:bg-primary-600'
+                : 'bg-gray-300 text-gray-600 cursor-not-allowed'
+            }`}
+            title={!aiConfigured ? 'Please configure AI settings first' : ''}
+          >
+            <Brain className="h-4 w-4" />
+            <span>Generate Weekly Topic</span>
+          </button>
         </div>
       </div>
 
