@@ -30,9 +30,14 @@ export const PatientProfile: React.FC = () => {
   useEffect(() => {
     if (id) {
       loadPatientData();
-      loadMedicalTeam();
     }
   }, [id]);
+
+  useEffect(() => {
+    if (patient) {
+      loadMedicalTeam();
+    }
+  }, [patient]);
 
   const loadPatientData = async () => {
     if (!id) return;
@@ -56,11 +61,19 @@ export const PatientProfile: React.FC = () => {
   };
 
   const loadMedicalTeam = async () => {
-    if (!id) return;
+    if (!id || !patient) return;
     
     try {
       // Get assigned medical team for this patient
-      const team = await medicalTeamService.getPatientMedicalTeam(Number(id));
+      let team = await medicalTeamService.getPatientMedicalTeam(Number(id));
+      
+      // If no team assigned, auto-assign one
+      if (team.length === 0) {
+        console.log('No team assigned, auto-assigning medical team...');
+        await medicalTeamService.assignTeamToPatient(Number(id), patient.hospital_number);
+        team = await medicalTeamService.getPatientMedicalTeam(Number(id));
+      }
+      
       setMedicalTeam(team);
     } catch (error) {
       console.error('Error loading medical team:', error);
