@@ -58,6 +58,8 @@ class ChatService {
   private maxReconnectAttempts: number = 5;
   private reconnectDelay: number = 1000;
   private messageQueue: ChatMessage[] = [];
+  private apiAvailable: boolean = true; // Track if API endpoints exist
+  private apiChecked: boolean = false;  // Track if we've checked API availability
 
   constructor() {
     this.initializeEventListeners();
@@ -468,6 +470,11 @@ class ChatService {
    * Get chat rooms for current user
    */
   async getRooms(): Promise<ChatRoom[]> {
+    // If API is known to be unavailable, skip the call
+    if (this.apiChecked && !this.apiAvailable) {
+      return [];
+    }
+
     try {
       const response = await fetch('/api/chat/rooms', {
         headers: {
@@ -475,10 +482,26 @@ class ChatService {
         },
       });
 
+      // If endpoint doesn't exist (404), mark API as unavailable and don't retry
+      if (response.status === 404) {
+        this.apiAvailable = false;
+        this.apiChecked = true;
+        console.warn('💬 Chat API not available - using offline mode');
+        return [];
+      }
+
+      this.apiChecked = true;
       if (!response.ok) throw new Error('Failed to fetch rooms');
       return await response.json();
     } catch (error) {
-      console.error('Error fetching rooms:', error);
+      // Mark API as unavailable on network errors
+      this.apiAvailable = false;
+      this.apiChecked = true;
+      
+      // Only log once, not repeatedly
+      if (!this.apiChecked) {
+        console.warn('💬 Chat service offline - using local data only');
+      }
       return [];
     }
   }
@@ -487,6 +510,11 @@ class ChatService {
    * Get messages for a room
    */
   async getMessages(roomId: string, limit: number = 50, before?: string): Promise<ChatMessage[]> {
+    // If API is known to be unavailable, skip the call
+    if (this.apiChecked && !this.apiAvailable) {
+      return [];
+    }
+
     try {
       const params = new URLSearchParams({ limit: limit.toString() });
       if (before) params.append('before', before);
@@ -497,10 +525,20 @@ class ChatService {
         },
       });
 
+      // If endpoint doesn't exist (404), mark API as unavailable and don't retry
+      if (response.status === 404) {
+        this.apiAvailable = false;
+        this.apiChecked = true;
+        return [];
+      }
+
       if (!response.ok) throw new Error('Failed to fetch messages');
       return await response.json();
     } catch (error) {
-      console.error('Error fetching messages:', error);
+      // Mark API as unavailable on errors
+      this.apiAvailable = false;
+      this.apiChecked = true;
+      // Silent fail - endpoint doesn't exist yet
       return [];
     }
   }
