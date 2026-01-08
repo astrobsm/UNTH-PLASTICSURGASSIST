@@ -11,7 +11,8 @@ import {
   Pill,
   LogOut,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  TestTube
 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import { db } from '../db/database';
@@ -26,6 +27,8 @@ import {
   DischargeTimeline
 } from '../services/treatmentPlanningService';
 import { useAuthStore } from '../store/authStore';
+import { InvestigationOrderingModal } from '../components/InvestigationOrderingModal';
+import { MedicationOrderingModal } from '../components/MedicationOrderingModal';
 
 export default function TreatmentPlanningEnhanced() {
   const { user } = useAuthStore();
@@ -98,6 +101,12 @@ export default function TreatmentPlanningEnhanced() {
     criteria_met: [] as string[],
     pending_requirements: [] as string[]
   });
+
+  // Investigation and Medication Ordering Modals
+  const [showInvestigationOrderingModal, setShowInvestigationOrderingModal] = useState(false);
+  const [showMedicationOrderingModal, setShowMedicationOrderingModal] = useState(false);
+  const [orderedInvestigations, setOrderedInvestigations] = useState<any[]>([]);
+  const [orderedMedications, setOrderedMedications] = useState<any[]>([]);
 
   useEffect(() => {
     loadPatients();
@@ -463,6 +472,16 @@ export default function TreatmentPlanningEnhanced() {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
+                    setShowInvestigationOrderingModal(true);
+                  }}
+                  className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm flex items-center gap-1"
+                >
+                  <TestTube className="w-4 h-4" />
+                  Order & Track
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
                     setShowLabModal(true);
                   }}
                   className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-sm"
@@ -584,6 +603,16 @@ export default function TreatmentPlanningEnhanced() {
                 <h3 className="font-semibold text-gray-900">Medications ({selectedPlan.medications?.length || 0})</h3>
               </div>
               <div className="flex items-center gap-2">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowMedicationOrderingModal(true);
+                  }}
+                  className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm flex items-center gap-1"
+                >
+                  <Pill className="w-4 h-4" />
+                  Order Medications
+                </button>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -1146,6 +1175,45 @@ export default function TreatmentPlanningEnhanced() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Investigation Ordering Modal */}
+      {showInvestigationOrderingModal && selectedPlan && patients.find(p => p.id === selectedPatient) && (
+        <InvestigationOrderingModal
+          patientId={selectedPatient}
+          patientName={(() => {
+            const patient = patients.find(p => p.id === selectedPatient);
+            return patient ? `${patient.first_name} ${patient.last_name}` : 'Unknown Patient';
+          })()}
+          patientGender={(() => {
+            const patient = patients.find(p => p.id === selectedPatient);
+            return patient?.sex as 'male' | 'female' || 'male';
+          })()}
+          source="treatment_plan"
+          existingInvestigations={orderedInvestigations}
+          onSave={(investigations) => {
+            setOrderedInvestigations(investigations);
+            // TODO: Save to treatment plan
+          }}
+          onClose={() => setShowInvestigationOrderingModal(false)}
+        />
+      )}
+
+      {/* Medication Ordering Modal */}
+      {showMedicationOrderingModal && selectedPlan && patients.find(p => p.id === selectedPatient) && (
+        <MedicationOrderingModal
+          patientId={selectedPatient}
+          patientName={(() => {
+            const patient = patients.find(p => p.id === selectedPatient);
+            return patient ? `${patient.first_name} ${patient.last_name}` : 'Unknown Patient';
+          })()}
+          existingMedications={orderedMedications}
+          onSave={(medications) => {
+            setOrderedMedications(medications);
+            // TODO: Save to treatment plan
+          }}
+          onClose={() => setShowMedicationOrderingModal(false)}
+        />
       )}
     </div>
   );

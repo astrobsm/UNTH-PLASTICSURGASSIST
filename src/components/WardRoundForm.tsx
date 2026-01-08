@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Save, User, Calendar, FileText, Activity, AlertCircle, TrendingUp, Pill, Stethoscope, ClipboardList, Users, Edit3, Camera, Image, Upload, Trash2, FileSearch, Loader2 } from 'lucide-react';
+import { X, Save, User, Calendar, FileText, Activity, AlertCircle, TrendingUp, Pill, Stethoscope, ClipboardList, Users, Edit3, Camera, Image, Upload, Trash2, FileSearch, Loader2, TestTube } from 'lucide-react';
 import { wardRoundsService, WardRound, ROUND_TYPES, RoundType, ClinicalImage } from '../services/wardRoundsService';
 import { db } from '../db/database';
 import { format } from 'date-fns';
 import { useAuthStore } from '../store/authStore';
 import { TreatmentPlanModificationPanel } from './TreatmentPlanModificationPanel';
+import { InvestigationOrderingModal } from './InvestigationOrderingModal';
+import { MedicationOrderingModal } from './MedicationOrderingModal';
 import Tesseract from 'tesseract.js';
 
 interface WardRoundFormProps {
@@ -27,6 +29,12 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
   const { user: authUser } = useAuthStore();
   const [patientTreatmentPlan, setPatientTreatmentPlan] = useState<any>(null);
   const [showTreatmentPlanModification, setShowTreatmentPlanModification] = useState(false);
+  
+  // Investigation and Medication Ordering Modals
+  const [showInvestigationModal, setShowInvestigationModal] = useState(false);
+  const [showMedicationModal, setShowMedicationModal] = useState(false);
+  const [orderedInvestigations, setOrderedInvestigations] = useState<any[]>([]);
+  const [orderedMedications, setOrderedMedications] = useState<any[]>([]);
   
   // Clinical Images state
   const [clinicalImages, setClinicalImages] = useState<ClinicalImage[]>([]);
@@ -1050,7 +1058,84 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
                 </div>
 
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-3">Investigations Ordered</h3>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                    <TestTube className="w-5 h-5 text-green-600" />
+                    Investigations Ordered
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setShowInvestigationModal(true)}
+                    className="w-full px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium flex items-center justify-center gap-2"
+                  >
+                    <TestTube className="w-5 h-5" />
+                    Order & Track Investigations ({orderedInvestigations.length})
+                  </button>
+                  
+                  {/* Investigation Summary */}
+                  {orderedInvestigations.length > 0 && (
+                    <div className="mt-3 space-y-2">
+                      {orderedInvestigations.map((inv: any, index: number) => (
+                        <div key={index} className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <span className="font-medium text-blue-900">{inv.test_name}</span>
+                              <span className="ml-2 text-xs px-2 py-1 rounded bg-blue-100 text-blue-700">
+                                {inv.priority?.toUpperCase()}
+                              </span>
+                            </div>
+                            <span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-700">
+                              {inv.status}
+                            </span>
+                          </div>
+                          {inv.results && inv.results.length > 0 && (
+                            <div className="mt-2 text-sm text-gray-700">
+                              <span className="font-medium">Results: </span>
+                              {inv.results.length} parameter(s) recorded
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                    <Pill className="w-5 h-5 text-green-600" />
+                    Medications Ordered
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setShowMedicationModal(true)}
+                    className="w-full px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium flex items-center justify-center gap-2"
+                  >
+                    <Pill className="w-5 h-5" />
+                    Order Medications ({orderedMedications.length})
+                  </button>
+                  
+                  {/* Medication Summary */}
+                  {orderedMedications.length > 0 && (
+                    <div className="mt-3 space-y-2">
+                      {orderedMedications.map((med: any, index: number) => (
+                        <div key={index} className="bg-green-50 border border-green-200 rounded-lg p-3">
+                          <div className="font-medium text-green-900">{med.medication_name}</div>
+                          <div className="text-sm text-gray-700 mt-1">
+                            {med.dosage} {med.route?.toUpperCase()} {med.frequency}
+                            {med.duration && <span className="ml-2">for {med.duration}</span>}
+                          </div>
+                          {med.indication && (
+                            <div className="text-xs text-gray-600 mt-1">
+                              <span className="font-medium">Indication:</span> {med.indication}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3">Investigations Ordered (Legacy)</h3>
                   <div className="flex gap-2 mb-2">
                     <input
                       type="text"
@@ -1349,6 +1434,47 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
           </div>
         </form>
       </div>
+
+      {/* Investigation Ordering Modal */}
+      {showInvestigationModal && selectedPatient && (
+        <InvestigationOrderingModal
+          patientId={selectedPatient.id}
+          patientName={`${selectedPatient.first_name} ${selectedPatient.last_name}`}
+          patientGender={selectedPatient.sex as 'male' | 'female'}
+          source="ward_round"
+          existingInvestigations={orderedInvestigations}
+          onSave={(investigations) => {
+            setOrderedInvestigations(investigations);
+            setFormData(prev => ({
+              ...prev,
+              investigations_ordered: [...prev.investigations_ordered, ...investigations.map(inv => inv.test_name)]
+            }));
+          }}
+          onClose={() => setShowInvestigationModal(false)}
+        />
+      )}
+
+      {/* Medication Ordering Modal */}
+      {showMedicationModal && selectedPatient && (
+        <MedicationOrderingModal
+          patientId={selectedPatient.id}
+          patientName={`${selectedPatient.first_name} ${selectedPatient.last_name}`}
+          existingMedications={orderedMedications}
+          onSave={(medications) => {
+            setOrderedMedications(medications);
+            setFormData(prev => ({
+              ...prev,
+              new_medications: [...prev.new_medications, ...medications.map(med => ({
+                name: med.medication_name,
+                dose: med.dosage,
+                frequency: med.frequency,
+                route: med.route
+              }))]
+            }));
+          }}
+          onClose={() => setShowMedicationModal(false)}
+        />
+      )}
     </div>
   );
 };
