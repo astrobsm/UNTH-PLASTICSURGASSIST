@@ -353,6 +353,29 @@ export const PatientProfile: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Modals */}
+      <ProgressNoteModal
+        isOpen={showProgressNoteModal}
+        onClose={() => setShowProgressNoteModal(false)}
+        patientId={id!}
+        patientName={`${patient.first_name} ${patient.last_name}`}
+        onSuccess={() => {
+          console.log('Progress note saved');
+          loadPatientData();
+        }}
+      />
+
+      <PrescriptionModal
+        isOpen={showPrescriptionModal}
+        onClose={() => setShowPrescriptionModal(false)}
+        patientId={id!}
+        patientName={`${patient.first_name} ${patient.last_name}`}
+        onSuccess={() => {
+          console.log('Prescription saved');
+          loadPatientData();
+        }}
+      />
     </div>
   );
 };
@@ -458,29 +481,6 @@ const RiskAssessmentView: React.FC<{ patientId: string }> = ({ patientId }) => {
       <div className="min-h-96">
         {renderAssessmentContent()}
       </div>
-
-      {/* Modals */}
-      <ProgressNoteModal
-        isOpen={showProgressNoteModal}
-        onClose={() => setShowProgressNoteModal(false)}
-        patientId={id!}
-        patientName={`${patient.first_name} ${patient.last_name}`}
-        onSuccess={() => {
-          console.log('Progress note saved');
-          loadPatientData();
-        }}
-      />
-
-      <PrescriptionModal
-        isOpen={showPrescriptionModal}
-        onClose={() => setShowPrescriptionModal(false)}
-        patientId={id!}
-        patientName={`${patient.first_name} ${patient.last_name}`}
-        onSuccess={() => {
-          console.log('Prescription saved');
-          loadPatientData();
-        }}
-      />
     </div>
   );
 };
