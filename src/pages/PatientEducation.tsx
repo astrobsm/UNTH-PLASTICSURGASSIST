@@ -32,10 +32,15 @@ interface EducationTopic {
 interface Patient {
   id: string;
   hospital_number: string;
-  full_name: string;
-  date_of_birth: string;
-  gender: string;
-  phone: string;
+  full_name?: string;
+  first_name?: string;
+  last_name?: string;
+  middle_name?: string;
+  date_of_birth?: string;
+  dob?: string;
+  gender?: string;
+  sex?: string;
+  phone?: string;
 }
 
 export default function PatientEducation() {
@@ -67,10 +72,15 @@ export default function PatientEducation() {
     }
   };
 
-  const filteredPatients = patients.filter(patient =>
-    (patient.full_name || '').toLowerCase().includes(patientSearchTerm.toLowerCase()) ||
-    (patient.hospital_number || '').toLowerCase().includes(patientSearchTerm.toLowerCase())
-  );
+  const filteredPatients = patients.filter(patient => {
+    const searchLower = patientSearchTerm.toLowerCase();
+    const fullName = patient.full_name || 
+      `${patient.first_name || ''} ${patient.last_name || ''}`.trim();
+    return (
+      fullName.toLowerCase().includes(searchLower) ||
+      (patient.hospital_number || '').toLowerCase().includes(searchLower)
+    );
+  });
 
   const educationTopics: EducationTopic[] = [
     {
@@ -2319,11 +2329,17 @@ export default function PatientEducation() {
     doc.text('Patient Information:', margin + 3, yPos + 5);
     
     doc.setFont('helvetica', 'normal');
-    doc.text('Name: ' + clean(patient.full_name), margin + 3, yPos + 11);
+    
+    // Handle different name formats
+    const patientName = patient.full_name || 
+      `${patient.first_name || ''} ${patient.middle_name || ''} ${patient.last_name || ''}`.trim() ||
+      'N/A';
+    
+    doc.text('Name: ' + clean(patientName), margin + 3, yPos + 11);
     doc.text('Hospital Number: ' + clean(patient.hospital_number), margin + 3, yPos + 17);
     
-    // Calculate and display age
-    const patientAge = calculateAge(patient.date_of_birth || (patient as any).dob);
+    // Calculate and display age from date of birth
+    const patientAge = calculateAge(patient.date_of_birth || patient.dob);
     const ageText = patientAge !== null ? `${patientAge} years` : 'N/A';
     doc.text('Age: ' + ageText, margin + 3, yPos + 23);
     
@@ -2447,7 +2463,10 @@ export default function PatientEducation() {
     addFooter(doc);
 
     // Save with patient name in filename
-    const sanitizedPatientName = (patient.full_name || 'Unknown_Patient').replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+    const patientName = patient.full_name || 
+      `${patient.first_name || ''} ${patient.last_name || ''}`.trim() ||
+      'Unknown_Patient';
+    const sanitizedPatientName = patientName.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
     const sanitizedTopicName = (topic.title || 'Education_Material').replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
     const filename = `${sanitizedPatientName}_${sanitizedTopicName}_${new Date().toISOString().split('T')[0]}.pdf`;
     
@@ -2455,7 +2474,10 @@ export default function PatientEducation() {
     if (shareAction === 'whatsapp') {
       setIsSharing(true);
       try {
-        const message = `Patient Education: ${topic.title || 'Education Material'} for ${patient.full_name || 'Patient'} (${patient.hospital_number || ''})`;
+        const patientDisplayName = patient.full_name || 
+          `${patient.first_name || ''} ${patient.last_name || ''}`.trim() ||
+          'Patient';
+        const message = `Patient Education: ${topic.title || 'Education Material'} for ${patientDisplayName} (${patient.hospital_number || ''})`;
         await sharePDFViaWhatsApp(doc, filename, message);
       } catch (error) {
         console.error('Failed to share via WhatsApp:', error);
@@ -2711,12 +2733,14 @@ export default function PatientEducation() {
                           <User className="w-5 h-5" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="font-semibold text-gray-900">{patient.full_name}</div>
+                          <div className="font-semibold text-gray-900">
+                            {patient.full_name || `${patient.first_name || ''} ${patient.last_name || ''}`.trim() || 'Unknown Patient'}
+                          </div>
                           <div className="text-sm text-gray-600 mt-1">
                             <span className="font-medium">Hospital #:</span> {patient.hospital_number}
                           </div>
                           <div className="flex gap-4 mt-1 text-xs text-gray-500">
-                            <span>{patient.gender}</span>
+                            <span>{patient.gender || patient.sex || 'N/A'}</span>
                             {patient.phone && <span>📞 {patient.phone}</span>}
                           </div>
                         </div>
