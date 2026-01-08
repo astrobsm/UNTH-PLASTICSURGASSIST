@@ -102,13 +102,45 @@ async function getPatient(id, res) {
 
 async function createPatient(data, user, res) {
   const {
-    hospitalNumber, firstName, lastName, dateOfBirth, gender,
-    phone, email, address, bloodGroup, allergies, medicalHistory,
-    emergencyContactName, emergencyContactPhone
+    hospitalNumber, hospital_number,
+    firstName, first_name,
+    lastName, last_name,
+    dateOfBirth, date_of_birth,
+    gender, sex,
+    phone,
+    email,
+    address,
+    bloodGroup, blood_group,
+    allergies,
+    medicalHistory, medical_history, chronic_conditions,
+    emergencyContactName, emergency_contact_name,
+    emergencyContactPhone, emergency_contact_phone
   } = data;
 
-  if (!firstName || !lastName) {
-    return res.status(400).json({ error: 'First name and last name are required' });
+  // Handle both camelCase and snake_case
+  const patientData = {
+    hospital_number: hospitalNumber || hospital_number,
+    first_name: firstName || first_name,
+    last_name: lastName || last_name,
+    date_of_birth: dateOfBirth || date_of_birth,
+    gender: gender || sex,
+    phone: phone || '',
+    email: email || '',
+    address: address || '',
+    blood_group: bloodGroup || blood_group || '',
+    allergies: Array.isArray(allergies) ? allergies.join(', ') : (allergies || ''),
+    medical_history: Array.isArray(medicalHistory || medical_history || chronic_conditions) 
+      ? (medicalHistory || medical_history || chronic_conditions).join(', ') 
+      : (medicalHistory || medical_history || chronic_conditions || ''),
+    emergency_contact_name: emergencyContactName || emergency_contact_name || '',
+    emergency_contact_phone: emergencyContactPhone || emergency_contact_phone || ''
+  };
+
+  if (!patientData.first_name || !patientData.last_name) {
+    return res.status(400).json({ 
+      error: 'First name and last name are required',
+      received: data 
+    });
   }
 
   const result = await query(
@@ -119,9 +151,20 @@ async function createPatient(data, user, res) {
     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
     RETURNING *`,
     [
-      hospitalNumber, firstName, lastName, dateOfBirth, gender,
-      phone, email, address, bloodGroup, allergies, medicalHistory,
-      emergencyContactName, emergencyContactPhone, user.id
+      patientData.hospital_number,
+      patientData.first_name,
+      patientData.last_name,
+      patientData.date_of_birth || null,
+      patientData.gender,
+      patientData.phone,
+      patientData.email,
+      patientData.address,
+      patientData.blood_group,
+      patientData.allergies,
+      patientData.medical_history,
+      patientData.emergency_contact_name,
+      patientData.emergency_contact_phone,
+      user.id
     ]
   );
 
@@ -135,18 +178,28 @@ async function updatePatient(id, data, res) {
 
   const fieldMap = {
     hospitalNumber: 'hospital_number',
+    hospital_number: 'hospital_number',
     firstName: 'first_name',
+    first_name: 'first_name',
     lastName: 'last_name',
+    last_name: 'last_name',
     dateOfBirth: 'date_of_birth',
+    date_of_birth: 'date_of_birth',
     gender: 'gender',
+    sex: 'gender',
     phone: 'phone',
     email: 'email',
     address: 'address',
     bloodGroup: 'blood_group',
+    blood_group: 'blood_group',
     allergies: 'allergies',
     medicalHistory: 'medical_history',
+    medical_history: 'medical_history',
+    chronic_conditions: 'medical_history',
     emergencyContactName: 'emergency_contact_name',
-    emergencyContactPhone: 'emergency_contact_phone'
+    emergency_contact_name: 'emergency_contact_name',
+    emergencyContactPhone: 'emergency_contact_phone',
+    emergency_contact_phone: 'emergency_contact_phone'
   };
 
   for (const [key, dbField] of Object.entries(fieldMap)) {

@@ -11,12 +11,31 @@ export default async function handler(req, res) {
   }
 
   try {
+    // Extract patient ID from URL path if present
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const pathParts = url.pathname.replace('/api/sync/patients', '').split('/').filter(Boolean);
+    const patientId = pathParts[0];
+
     if (req.method === 'GET') {
       return await getPatients(res);
     }
     
     if (req.method === 'POST') {
       return await createPatient(req.body, auth.user, res);
+    }
+
+    if (req.method === 'PUT' || req.method === 'PATCH') {
+      if (!patientId) {
+        return res.status(400).json({ error: 'Patient ID required for update' });
+      }
+      return await updatePatient(patientId, req.body, res);
+    }
+
+    if (req.method === 'DELETE') {
+      if (!patientId) {
+        return res.status(400).json({ error: 'Patient ID required for delete' });
+      }
+      return await deletePatient(patientId, res);
     }
 
     return res.status(405).json({ error: 'Method not allowed' });
@@ -50,13 +69,13 @@ async function createPatient(data, user, res) {
     first_name, firstName,
     last_name, lastName,
     date_of_birth, dateOfBirth,
-    gender,
+    gender, sex,
     phone,
     email,
     address,
     blood_group, bloodGroup,
     allergies,
-    medical_history, medicalHistory,
+    medical_history, medicalHistory, chronic_conditions,
     emergency_contact_name, emergencyContactName,
     emergency_contact_phone, emergencyContactPhone
   } = data;
@@ -67,18 +86,26 @@ async function createPatient(data, user, res) {
     first_name: first_name || firstName,
     last_name: last_name || lastName,
     date_of_birth: date_of_birth || dateOfBirth,
-    gender,
-    phone,
-    email,
-    address,
-    blood_group: blood_group || bloodGroup,
-    allergies: Array.isArray(allergies) ? allergies.join(', ') : allergies,
-    medical_history: Array.isArray(medical_history || medicalHistory) 
-      ? (medical_history || medicalHistory).join(', ') 
-      : (medical_history || medicalHistory),
-    emergency_contact_name: emergency_contact_name || emergencyContactName,
-    emergency_contact_phone: emergency_contact_phone || emergencyContactPhone
+    gender: gender || sex,
+    phone: phone || '',
+    email: email || '',
+    address: address || '',
+    blood_group: blood_group || bloodGroup || '',
+    allergies: Array.isArray(allergies) ? allergies.join(', ') : (allergies || ''),
+    medical_history: Array.isArray(medical_history || medicalHistory || chronic_conditions) 
+      ? (medical_history || medicalHistory || chronic_conditions).join(', ') 
+      : (medical_history || medicalHistory || chronic_conditions || ''),
+    emergency_contact_name: emergency_contact_name || emergencyContactName || '',
+    emergency_contact_phone: emergency_contact_phone || emergencyContactPhone || ''
   };
+
+  // Validate required fields
+  if (!patientData.first_name || !patientData.last_name) {
+    return res.status(400).json({ 
+      error: 'First name and last name are required',
+      received: data 
+    });
+  }
 
   const result = await query(
     `INSERT INTO patients (
@@ -106,4 +133,82 @@ async function createPatient(data, user, res) {
   );
 
   res.status(201).json({ patient: result.rows[0] });
+}
+
+async function updatePatient(id, data, res) {
+  const fields = [];
+  const values = [];
+  let paramCount = 1;
+
+  const fieldMap = {
+    hospital_number: 'hospital_number',
+    hospitalNumber: 'hospital_number',
+    first_name: 'first_name',
+    firstName: 'first_name',
+    last_name: 'last_name',
+    lastName: 'last_name',
+    date_of_birth: 'date_of_birth',
+    dateOfBirth: 'date_of_birth',
+    gender: 'gender',
+    sex: 'gender',
+    phone: 'phone',
+    email: 'email',
+    address: 'address',
+    blood_group: 'blood_group',
+    bloodGroup: 'blood_group',
+    allergies: 'allergies',
+    medical_history: 'medical_history',
+    medicalHistory: 'medical_history',
+    chronic_conditions: 'medical_history',
+    emergency_contact_name: 'emergency_contact_name',
+    emergencyContactName: 'emergency_contact_name',
+    emergency_contact_phone: 'emergency_contact_phone',
+    emergencyContactPhone: 'emergency_contact_phone'
+  };
+
+  for (const [key, dbField] of Object.entries(fieldMap)) {
+    if (data[key] !== undefined) {
+      // Only add if not already added (avoid duplicates from both formats)
+      if (!fields.some(f => f.startsWith(dbField))) {
+        fields.push(`${dbField} = $${paramCount}`);
+        let value = data[key];
+        
+        // Handle arrays
+        if (Array.isArray(value)) {
+          value = value.join(', ');
+        }
+        
+        values.push(value);
+        paramCount++;
+      }
+    }
+  }
+
+  if (fields.length === 0) {
+    return res.status(400).json({ error: 'No fields to update' });
+  }
+
+  fields.push(`updated_at = NOW()`);
+  values.push(id);
+
+  const result = await query(
+    `UPDATE patients SET ${fields.join(', ')} WHERE id = $${paramCount} RETURNING *`,
+    values
+  );
+
+  if (result.rows.length === 0) {
+    return res.status(404).json({ error: 'Patient not found' });
+  }
+
+  res.status(200).json({ patient: result.rows[0] });
+}
+
+async function deletePatient(id, res) {
+  const result = await query('DELETE FROM patients WHERE id = $1 RETURNING id', [id]);
+  
+  if (result.rows.length === 0) {
+    return res.status(404).json({ error: 'Patient not found' });
+  }
+
+  res.status(200).json({ message: 'Patient deleted successfully' });
 }
