@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { patientService } from '../services/patientService';
 import { 
   admissionDischargeService, 
@@ -42,6 +43,7 @@ const CLINICS = ['Outpatient Clinic', 'Hand Clinic', 'Burns Clinic', 'Wound Clin
 // ============= MAIN COMPONENT =============
 
 export default function AdmissionDischargePage() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'active' | 'admit' | 'discharge' | 'history' | 'stats'>('active');
   const [patients, setPatients] = useState<any[]>([]);
   const [activeAdmissions, setActiveAdmissions] = useState<Admission[]>([]);
@@ -273,7 +275,12 @@ function ActivePatientsTab({ admissions, searchTerm, setSearchTerm, onDischarge,
                     </td>
                     <td className="px-4 py-3 text-sm">
                       <div className="flex gap-2">
-                        <button className="text-blue-600 hover:text-blue-800">View</button>
+                        <button 
+                          onClick={() => navigate(`/patients/${admission.patient_id}`)}
+                          className="text-blue-600 hover:text-blue-800"
+                        >
+                          View
+                        </button>
                         <button 
                           onClick={() => onDischarge(admission)}
                           className="text-green-600 hover:text-green-800"
