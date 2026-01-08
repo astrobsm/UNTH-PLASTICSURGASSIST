@@ -23,12 +23,17 @@ export const PatientProfile: React.FC = () => {
   const [activeRiskAssessment, setActiveRiskAssessment] = useState<'summary' | 'dvt' | 'pressure' | 'nutrition'>('summary');
   const [showProgressNoteModal, setShowProgressNoteModal] = useState(false);
   const [showPrescriptionModal, setShowPrescriptionModal] = useState(false);
+  const [medicalTeam, setMedicalTeam] = useState<any[]>([]);
 
   useEffect(() => {
     if (id) {
       loadPatientData();
     }
   }, [id]);
+
+  useEffect(() => {
+    loadMedicalTeam();
+  }, []);
 
   const loadPatientData = async () => {
     if (!id) return;
@@ -48,6 +53,37 @@ export const PatientProfile: React.FC = () => {
       console.error('Error loading patient data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadMedicalTeam = async () => {
+    try {
+      // Get all users from database
+      const users = await db.users.toArray();
+      
+      // Define role priorities and colors
+      const roleConfig: Record<string, { priority: number; color: string; label: string }> = {
+        'consultant': { priority: 1, color: 'bg-green-600', label: 'Consultant' },
+        'senior_registrar': { priority: 2, color: 'bg-blue-600', label: 'Senior Registrar' },
+        'registrar': { priority: 3, color: 'bg-indigo-600', label: 'Registrar' },
+        'house_officer': { priority: 4, color: 'bg-purple-600', label: 'House Officer' },
+        'nurse': { priority: 5, color: 'bg-pink-600', label: 'Nurse' },
+      };
+
+      // Filter and sort users by role
+      const team = users
+        .filter(user => roleConfig[user.role])
+        .sort((a, b) => (roleConfig[a.role]?.priority || 999) - (roleConfig[b.role]?.priority || 999))
+        .slice(0, 5) // Limit to 5 team members
+        .map(user => ({
+          ...user,
+          roleLabel: roleConfig[user.role]?.label || user.role,
+          color: roleConfig[user.role]?.color || 'bg-gray-600'
+        }));
+
+      setMedicalTeam(team);
+    } catch (error) {
+      console.error('Error loading medical team:', error);
     }
   };
 
@@ -231,53 +267,35 @@ export const PatientProfile: React.FC = () => {
                 <h3 className="text-lg font-semibold text-gray-900">Medical Team</h3>
               </div>
               <div className="p-4 space-y-3">
-                {/* Consultant */}
-                <div className="flex items-start space-x-3">
-                  <div className="w-10 h-10 bg-green-600 rounded-full flex items-center justify-center text-white text-sm font-semibold flex-shrink-0">
-                    DO
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900">Dr Okwesili</p>
-                    <p className="text-xs text-gray-500">Consultant Plastic Surgeon</p>
-                    <p className="text-xs text-green-600 mt-1">📞 +234 801 234 5678</p>
-                  </div>
-                </div>
-
-                {/* Senior Registrar */}
-                <div className="flex items-start space-x-3">
-                  <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white text-sm font-semibold flex-shrink-0">
-                    DN
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900">Dr Nnadi</p>
-                    <p className="text-xs text-gray-500">Senior Registrar</p>
-                    <p className="text-xs text-blue-600 mt-1">📞 +234 802 345 6789</p>
-                  </div>
-                </div>
-
-                {/* House Officer */}
-                <div className="flex items-start space-x-3">
-                  <div className="w-10 h-10 bg-purple-600 rounded-full flex items-center justify-center text-white text-sm font-semibold flex-shrink-0">
-                    DE
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900">Dr Eze C.B</p>
-                    <p className="text-xs text-gray-500">House Officer</p>
-                    <p className="text-xs text-purple-600 mt-1">📞 +234 803 456 7890</p>
-                  </div>
-                </div>
-
-                {/* Ward Nurse */}
-                <div className="flex items-start space-x-3">
-                  <div className="w-10 h-10 bg-pink-600 rounded-full flex items-center justify-center text-white text-sm font-semibold flex-shrink-0">
-                    NA
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900">Nurse Ada</p>
-                    <p className="text-xs text-gray-500">Ward Nurse</p>
-                    <p className="text-xs text-pink-600 mt-1">📞 +234 804 567 8901</p>
-                  </div>
-                </div>
+                {medicalTeam.length === 0 ? (
+                  <p className="text-sm text-gray-500">No assigned medical team</p>
+                ) : (
+                  medicalTeam.map((member, index) => {
+                    const initials = member.name
+                      .split(' ')
+                      .map((n: string) => n[0])
+                      .join('')
+                      .toUpperCase()
+                      .slice(0, 2);
+                    
+                    return (
+                      <div key={member.id || index} className="flex items-start space-x-3">
+                        <div className={`w-10 h-10 ${member.color} rounded-full flex items-center justify-center text-white text-sm font-semibold flex-shrink-0`}>
+                          {initials}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900">{member.name}</p>
+                          <p className="text-xs text-gray-500">{member.roleLabel}</p>
+                          {member.phone && (
+                            <p className={`text-xs mt-1 ${member.color.replace('bg-', 'text-')}`}>
+                              📞 {member.phone}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
               </div>
             </div>
 
