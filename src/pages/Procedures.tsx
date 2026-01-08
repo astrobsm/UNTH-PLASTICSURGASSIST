@@ -11,6 +11,7 @@ export const Procedures: React.FC = () => {
   const [selectedPatientId, setSelectedPatientId] = useState<string>('');
   const [selectedProcedureId, setSelectedProcedureId] = useState<string>('');
   const [patients, setPatients] = useState<any[]>([]);
+  const [showNewProcedureModal, setShowNewProcedureModal] = useState(false);
 
   useEffect(() => {
     loadPatients();
@@ -117,7 +118,10 @@ export const Procedures: React.FC = () => {
                   ))}
                 </select>
                 
-                <button className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">
+                <button 
+                  onClick={() => setShowNewProcedureModal(true)}
+                  className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                >
                   + New Procedure
                 </button>
               </div>
@@ -188,6 +192,199 @@ export const Procedures: React.FC = () => {
           <div className="lg:col-span-3">
             {renderModuleContent()}
           </div>
+        </div>
+      </div>
+
+      {/* New Procedure Modal */}
+      {showNewProcedureModal && <NewProcedureModal onClose={() => setShowNewProcedureModal(false)} />}
+    </div>
+  );
+};
+
+// New Procedure Modal Component
+const NewProcedureModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+  const [formData, setFormData] = useState({
+    patient_id: '',
+    procedure_type: '',
+    procedure_name: '',
+    scheduled_date: '',
+    scheduled_time: '',
+    operating_room: '',
+    surgeon: '',
+    anesthesia_type: '',
+    estimated_duration: '',
+    urgency: 'elective' as 'elective' | 'urgent' | 'emergency',
+    notes: ''
+  });
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      // Save procedure logic here
+      console.log('New procedure created:', formData);
+      onClose();
+    } catch (error) {
+      console.error('Error creating procedure:', error);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Schedule New Procedure</h3>
+          
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Procedure Type</label>
+              <select
+                required
+                value={formData.procedure_type}
+                onChange={(e) => setFormData({ ...formData, procedure_type: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+              >
+                <option value="">Select type...</option>
+                <option value="reconstructive">Reconstructive Surgery</option>
+                <option value="aesthetic">Aesthetic/Cosmetic Surgery</option>
+                <option value="hand">Hand Surgery</option>
+                <option value="craniofacial">Craniofacial Surgery</option>
+                <option value="burn">Burn Surgery</option>
+                <option value="microsurgery">Microsurgery</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Procedure Name</label>
+              <input
+                type="text"
+                required
+                value={formData.procedure_name}
+                onChange={(e) => setFormData({ ...formData, procedure_name: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                placeholder="e.g., Breast Reconstruction, Rhinoplasty"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Scheduled Date</label>
+                <input
+                  type="date"
+                  required
+                  value={formData.scheduled_date}
+                  onChange={(e) => setFormData({ ...formData, scheduled_date: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Scheduled Time</label>
+                <input
+                  type="time"
+                  required
+                  value={formData.scheduled_time}
+                  onChange={(e) => setFormData({ ...formData, scheduled_time: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Operating Room</label>
+                <input
+                  type="text"
+                  required
+                  value={formData.operating_room}
+                  onChange={(e) => setFormData({ ...formData, operating_room: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                  placeholder="e.g., OR 1, OR 2"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Estimated Duration (hours)</label>
+                <input
+                  type="number"
+                  step="0.5"
+                  required
+                  value={formData.estimated_duration}
+                  onChange={(e) => setFormData({ ...formData, estimated_duration: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                  placeholder="e.g., 2.5"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Surgeon</label>
+              <input
+                type="text"
+                required
+                value={formData.surgeon}
+                onChange={(e) => setFormData({ ...formData, surgeon: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                placeholder="Primary surgeon name"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Anesthesia Type</label>
+              <select
+                required
+                value={formData.anesthesia_type}
+                onChange={(e) => setFormData({ ...formData, anesthesia_type: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+              >
+                <option value="">Select anesthesia type...</option>
+                <option value="general">General Anesthesia</option>
+                <option value="regional">Regional Anesthesia</option>
+                <option value="local">Local Anesthesia</option>
+                <option value="sedation">Conscious Sedation</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Urgency</label>
+              <select
+                value={formData.urgency}
+                onChange={(e) => setFormData({ ...formData, urgency: e.target.value as any })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+              >
+                <option value="elective">Elective</option>
+                <option value="urgent">Urgent</option>
+                <option value="emergency">Emergency</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+              <textarea
+                value={formData.notes}
+                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                placeholder="Additional notes or special requirements..."
+              />
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 text-white bg-green-600 rounded-md hover:bg-green-700"
+              >
+                Schedule Procedure
+              </button>
+            </div>
+          </form>
         </div>
       </div>
     </div>

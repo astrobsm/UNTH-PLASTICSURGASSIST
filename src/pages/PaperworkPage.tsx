@@ -2,6 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { FileText, Download, Plus, Send, Edit, Trash2 } from 'lucide-react';
 import { db } from '../db/database';
 import { patientService } from '../services/patientService';
+import { admissionService } from '../services/admissionService';
+import { calculateAge } from '../utils/dateUtils';
+import { treatmentPlanningService } from '../services/treatmentPlanningService';
+import { labService } from '../services/labService';
 import {
   paperworkService,
   PaperworkDocument,
@@ -105,6 +109,8 @@ const PaperworkPage: React.FC = () => {
       specific_question: '',
       urgency: 'routine'
     });
+    const [selectedPatient, setSelectedPatient] = useState<any>(null);
+    const [loadingData, setLoadingData] = useState(false);
 
     const handleSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
@@ -117,15 +123,73 @@ const PaperworkPage: React.FC = () => {
       }
     };
 
-    const handlePatientSelect = (patientId: string) => {
+    const handlePatientSelect = async (patientId: string) => {
       const patient = patients.find(p => p.id === parseInt(patientId));
       if (patient) {
-        setFormData({
-          ...formData,
-          patient_id: patientId,
-          patient_name: `${patient.first_name} ${patient.last_name}`,
-          hospital_number: patient.hospital_number
-        });
+        setSelectedPatient(patient);
+        setLoadingData(true);
+
+        try {
+          // Fetch current medications from active treatment plan
+          const treatmentPlans = await treatmentPlanningService.getPatientTreatmentPlans(patientId);
+          const activePlan = treatmentPlans.find(p => p.status === 'active');
+          let medicationsText = '';
+          if (activePlan && activePlan.medications && activePlan.medications.length > 0) {
+            medicationsText = activePlan.medications
+              .filter(med => med.status === 'active')
+              .map(med => `${med.medication_name} ${med.dosage} ${med.route} ${med.frequency}`)
+              .join('\n');
+          }
+
+          // Fetch examination findings from active admission
+          const patientAdmissions = await admissionService.getPatientAdmissions(parseInt(patientId));
+          const activeAdmission = patientAdmissions.find(a => a.status === 'active');
+          let examinationText = '';
+          if (activeAdmission && activeAdmission.examination_findings) {
+            examinationText = activeAdmission.examination_findings;
+          }
+
+          // Fetch recent lab investigations
+          const labInvestigations = await labService.getLabInvestigations(patientId);
+          let investigationsText = '';
+          if (labInvestigations && labInvestigations.length > 0) {
+            // Get most recent completed investigations (last 5)
+            const recentLabs = labInvestigations
+              .filter(lab => lab.status === 'completed')
+              .sort((a, b) => new Date(b.request_date).getTime() - new Date(a.request_date).getTime())
+              .slice(0, 5);
+            
+            if (recentLabs.length > 0) {
+              investigationsText = recentLabs
+                .map(lab => {
+                  const date = format(new Date(lab.request_date), 'dd/MM/yyyy');
+                  const tests = lab.tests.map(t => t.test_name).join(', ');
+                  return `${date}: ${tests}`;
+                })
+                .join('\n');
+            }
+          }
+
+          setFormData({
+            ...formData,
+            patient_id: patientId,
+            patient_name: `${patient.first_name} ${patient.last_name}`,
+            hospital_number: patient.hospital_number,
+            current_medications: medicationsText || 'No active medications recorded',
+            examination_findings: examinationText || '',
+            investigations: investigationsText || 'No recent investigations available'
+          });
+        } catch (error) {
+          console.error('Error fetching patient data:', error);
+          setFormData({
+            ...formData,
+            patient_id: patientId,
+            patient_name: `${patient.first_name} ${patient.last_name}`,
+            hospital_number: patient.hospital_number
+          });
+        } finally {
+          setLoadingData(false);
+        }
       }
     };
 
@@ -137,15 +201,33 @@ const PaperworkPage: React.FC = () => {
             required
             onChange={(e) => handlePatientSelect(e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+            disabled={loadingData}
           >
             <option value="">Select patient...</option>
-            {patients.map(p => (
-              <option key={p.id} value={p.id}>
-                {p.first_name} {p.last_name} ({p.hospital_number})
-              </option>
-            ))}
+            {patients.map(p => {
+              const patientName = p.full_name || `${p.first_name || ''} ${p.last_name || ''}`.trim();
+              return (
+                <option key={p.id} value={p.id}>
+                  {patientName} ({p.hospital_number})
+                </option>
+              );
+            })}
           </select>
         </div>
+
+        {selectedPatient && (
+          <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
+            <div className="text-sm font-semibold text-blue-800 mb-1">Patient Information</div>
+            <div className="text-sm text-blue-700">
+              <div><strong>Name:</strong> {formData.patient_name}</div>
+              <div><strong>Hospital Number:</strong> {formData.hospital_number}</div>
+              {selectedPatient && (
+                <div><strong>Age:</strong> {calculateAge(selectedPatient.date_of_birth || selectedPatient.dob) || 'N/A'} years</div>
+              )}
+            </div>
+            {loadingData && <div className="text-sm text-blue-600 mt-2">Loading patient data...</div>}
+          </div>
+        )}
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Consulting Department</label>
@@ -279,6 +361,8 @@ const PaperworkPage: React.FC = () => {
       discharge_condition: ''
     });
     const [procedureInput, setProcedureInput] = useState('');
+    const [selectedPatient, setSelectedPatient] = useState<any>(null);
+    const [loadingAdmission, setLoadingAdmission] = useState(false);
 
     const handleSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
@@ -291,15 +375,56 @@ const PaperworkPage: React.FC = () => {
       }
     };
 
-    const handlePatientSelect = (patientId: string) => {
+    const handlePatientSelect = async (patientId: string) => {
       const patient = patients.find(p => p.id === parseInt(patientId));
       if (patient) {
-        setFormData({
-          ...formData,
-          patient_id: patientId,
-          patient_name: `${patient.first_name} ${patient.last_name}`,
-          hospital_number: patient.hospital_number
-        });
+        setSelectedPatient(patient);
+        setLoadingAdmission(true);
+        
+        // Fetch patient's active admission
+        try {
+          const patientAdmissions = await admissionService.getPatientAdmissions(parseInt(patientId));
+          const activeAdmission = patientAdmissions.find(a => a.status === 'active');
+          
+          if (activeAdmission) {
+            // Auto-populate from admission record
+            const patientName = patient.full_name || `${patient.first_name || ''} ${patient.last_name || ''}`.trim();
+            const patientAge = calculateAge(patient.date_of_birth || patient.dob);
+            
+            setFormData({
+              ...formData,
+              patient_id: patientId,
+              patient_name: patientName,
+              hospital_number: patient.hospital_number,
+              admission_date: activeAdmission.admission_date,
+              admission_diagnosis: activeAdmission.provisional_diagnosis || '',
+              final_diagnosis: activeAdmission.provisional_diagnosis || '',
+              hospital_course: activeAdmission.examination_findings || activeAdmission.initial_management_plan || '',
+              procedures_performed: [] // Will be added manually
+            });
+          } else {
+            // No active admission, just set patient info
+            const patientName = patient.full_name || `${patient.first_name || ''} ${patient.last_name || ''}`.trim();
+            setFormData({
+              ...formData,
+              patient_id: patientId,
+              patient_name: patientName,
+              hospital_number: patient.hospital_number
+            });
+          }
+        } catch (error) {
+          console.error('Error fetching admission data:', error);
+          // Fallback to just patient info
+          const patientName = patient.full_name || `${patient.first_name || ''} ${patient.last_name || ''}`.trim();
+          setFormData({
+            ...formData,
+            patient_id: patientId,
+            patient_name: patientName,
+            hospital_number: patient.hospital_number
+          });
+        } finally {
+          setLoadingAdmission(false);
+        }
       }
     };
 
@@ -321,15 +446,33 @@ const PaperworkPage: React.FC = () => {
             required
             onChange={(e) => handlePatientSelect(e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+            disabled={loadingAdmission}
           >
             <option value="">Select patient...</option>
-            {patients.map(p => (
-              <option key={p.id} value={p.id}>
-                {p.first_name} {p.last_name} ({p.hospital_number})
-              </option>
-            ))}
+            {patients.map(p => {
+              const patientName = p.full_name || `${p.first_name || ''} ${p.last_name || ''}`.trim();
+              return (
+                <option key={p.id} value={p.id}>
+                  {patientName} ({p.hospital_number})
+                </option>
+              );
+            })}
           </select>
         </div>
+
+        {selectedPatient && (
+          <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
+            <div className="text-sm font-semibold text-blue-800 mb-1">Patient Information</div>
+            <div className="text-sm text-blue-700">
+              <div><strong>Name:</strong> {formData.patient_name}</div>
+              <div><strong>Hospital Number:</strong> {formData.hospital_number}</div>
+              {selectedPatient && (
+                <div><strong>Age:</strong> {calculateAge(selectedPatient.date_of_birth || selectedPatient.dob) || 'N/A'} years</div>
+              )}
+            </div>
+            {loadingAdmission && <div className="text-sm text-blue-600 mt-2">Loading admission data...</div>}
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-4">
           <div>
@@ -498,6 +641,8 @@ const PaperworkPage: React.FC = () => {
       restrictions: '',
       additional_notes: ''
     });
+    const [selectedPatient, setSelectedPatient] = useState<any>(null);
+    const [loadingData, setLoadingData] = useState(false);
 
     const handleSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
@@ -510,15 +655,96 @@ const PaperworkPage: React.FC = () => {
       }
     };
 
-    const handlePatientSelect = (patientId: string) => {
+    const handlePatientSelect = async (patientId: string) => {
       const patient = patients.find(p => p.id === parseInt(patientId));
       if (patient) {
-        setFormData({
-          ...formData,
-          patient_id: patientId,
-          patient_name: `${patient.first_name} ${patient.last_name}`,
-          hospital_number: patient.hospital_number
-        });
+        setSelectedPatient(patient);
+        setLoadingData(true);
+
+        try {
+          // Fetch diagnosis from active admission
+          const patientAdmissions = await admissionService.getPatientAdmissions(parseInt(patientId));
+          const activeAdmission = patientAdmissions.find(a => a.status === 'active');
+          let diagnosisText = '';
+          if (activeAdmission) {
+            diagnosisText = activeAdmission.provisional_diagnosis || activeAdmission.final_diagnosis || '';
+          }
+
+          // Fetch treatment given from active treatment plan
+          const treatmentPlans = await treatmentPlanningService.getPatientTreatmentPlans(patientId);
+          const activePlan = treatmentPlans.find(p => p.status === 'active');
+          let treatmentText = '';
+          if (activePlan) {
+            // Combine medications and procedures
+            const medications = activePlan.medications?.filter(m => m.status === 'active')
+              .map(m => `${m.medication_name} ${m.dosage} ${m.route} ${m.frequency}`).join('\n') || '';
+            const procedures = activePlan.procedures?.map(p => p.procedure_name).join(', ') || '';
+            treatmentText = [medications, procedures].filter(t => t).join('\n\n');
+          }
+
+          // Fetch current status and prognosis from most recent ward round
+          const wardRounds = await db.ward_rounds
+            .where('patient_id')
+            .equals(patientId)
+            .toArray();
+          
+          let currentStatusText = '';
+          let prognosisText = '';
+          let restrictionsText = '';
+          
+          if (wardRounds && wardRounds.length > 0) {
+            // Get most recent ward round
+            const recentRound = wardRounds.sort((a, b) => 
+              new Date(b.round_date).getTime() - new Date(a.round_date).getTime()
+            )[0];
+            
+            if (recentRound) {
+              // Current status from progress status and clinical notes
+              const progressMap = {
+                'improved': 'Patient is showing improvement',
+                'stable': 'Patient condition is stable',
+                'deteriorating': 'Patient condition is deteriorating',
+                'critical': 'Patient is in critical condition'
+              };
+              currentStatusText = `${progressMap[recentRound.progress_status] || ''}. ${recentRound.clinical_notes || ''}`;
+              
+              // Prognosis from follow-up plan and discharge planning
+              prognosisText = recentRound.discharge_planning || recentRound.follow_up_plan || '';
+              
+              // Restrictions from new orders or medication changes
+              if (recentRound.new_orders) {
+                restrictionsText = recentRound.new_orders;
+              }
+            }
+          }
+
+          // If no restrictions from ward rounds, check treatment plan for activity restrictions
+          if (!restrictionsText && activePlan && activePlan.activity_restrictions) {
+            restrictionsText = activePlan.activity_restrictions;
+          }
+
+          setFormData({
+            ...formData,
+            patient_id: patientId,
+            patient_name: `${patient.first_name} ${patient.last_name}`,
+            hospital_number: patient.hospital_number,
+            diagnosis: diagnosisText || '',
+            treatment_given: treatmentText || '',
+            current_status: currentStatusText || '',
+            prognosis: prognosisText || '',
+            restrictions: restrictionsText || ''
+          });
+        } catch (error) {
+          console.error('Error fetching patient data:', error);
+          setFormData({
+            ...formData,
+            patient_id: patientId,
+            patient_name: `${patient.first_name} ${patient.last_name}`,
+            hospital_number: patient.hospital_number
+          });
+        } finally {
+          setLoadingData(false);
+        }
       }
     };
 
@@ -530,15 +756,33 @@ const PaperworkPage: React.FC = () => {
             required
             onChange={(e) => handlePatientSelect(e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+            disabled={loadingData}
           >
             <option value="">Select patient...</option>
-            {patients.map(p => (
-              <option key={p.id} value={p.id}>
-                {p.first_name} {p.last_name} ({p.hospital_number})
-              </option>
-            ))}
+            {patients.map(p => {
+              const patientName = p.full_name || `${p.first_name || ''} ${p.last_name || ''}`.trim();
+              return (
+                <option key={p.id} value={p.id}>
+                  {patientName} ({p.hospital_number})
+                </option>
+              );
+            })}
           </select>
         </div>
+
+        {selectedPatient && (
+          <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
+            <div className="text-sm font-semibold text-blue-800 mb-1">Patient Information</div>
+            <div className="text-sm text-blue-700">
+              <div><strong>Name:</strong> {formData.patient_name}</div>
+              <div><strong>Hospital Number:</strong> {formData.hospital_number}</div>
+              {selectedPatient && (
+                <div><strong>Age:</strong> {calculateAge(selectedPatient.date_of_birth || selectedPatient.dob) || 'N/A'} years</div>
+              )}
+            </div>
+            {loadingData && <div className="text-sm text-blue-600 mt-2">Loading patient data...</div>}
+          </div>
+        )}
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Report Type</label>

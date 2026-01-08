@@ -84,7 +84,8 @@ const MDTPage: React.FC = () => {
         mdtService.getPatientMeetings(selectedPatient.patient_id),
         mdtService.getPatientContactHistory(selectedPatient.patient_id)
       ]);
-      // Update state if needed
+      setUpcomingMeetings(meetings);
+      setContactLogs(contacts);
     } catch (error) {
       console.error('Error loading patient data:', error);
     }
@@ -384,6 +385,395 @@ const MDTPage: React.FC = () => {
     );
   };
 
+  const ScheduleMeetingModal = () => {
+    const [formData, setFormData] = useState({
+      meeting_title: '',
+      meeting_date: '',
+      meeting_time: '',
+      location: '',
+      meeting_type: 'routine' as 'routine' | 'urgent' | 'emergency',
+      agenda: '',
+      selected_specialties: [] as string[]
+    });
+
+    const handleSubmit = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!selectedPatient) return;
+
+      try {
+        const attendingSpecialties = formData.selected_specialties.map(specId => {
+          const specialty = selectedPatient.specialties?.find((s: any) => s.id === specId);
+          return {
+            specialty_id: specId,
+            specialty_name: specialty?.specialty_name || '',
+            consultant_name: specialty?.consultant_name || '',
+            attendance_status: 'invited' as const
+          };
+        });
+
+        await mdtService.scheduleMeeting({
+          patient_id: selectedPatient.patient_id,
+          patient_name: selectedPatient.patient_name,
+          hospital_number: selectedPatient.hospital_number,
+          meeting_title: formData.meeting_title,
+          meeting_date: new Date(formData.meeting_date),
+          meeting_time: formData.meeting_time,
+          location: formData.location,
+          meeting_type: formData.meeting_type,
+          status: 'scheduled',
+          agenda: formData.agenda,
+          attending_specialties: attendingSpecialties,
+          created_by: user?.email || 'Unknown'
+        });
+
+        setShowScheduleMeeting(false);
+        loadData();
+      } catch (error) {
+        console.error('Error scheduling meeting:', error);
+      }
+    };
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Schedule MDT Meeting</h3>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Meeting Title</label>
+                <input
+                  type="text"
+                  required
+                  value={formData.meeting_title}
+                  onChange={(e) => setFormData({ ...formData, meeting_title: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                  placeholder="e.g., MDT Review - Complex Case Discussion"
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div className="col-span-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                  <input
+                    type="date"
+                    required
+                    value={formData.meeting_date}
+                    onChange={(e) => setFormData({ ...formData, meeting_date: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                  />
+                </div>
+
+                <div className="col-span-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Time</label>
+                  <input
+                    type="time"
+                    required
+                    value={formData.meeting_time}
+                    onChange={(e) => setFormData({ ...formData, meeting_time: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                  />
+                </div>
+
+                <div className="col-span-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                  <select
+                    value={formData.meeting_type}
+                    onChange={(e) => setFormData({ ...formData, meeting_type: e.target.value as any })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                  >
+                    <option value="routine">Routine</option>
+                    <option value="urgent">Urgent</option>
+                    <option value="emergency">Emergency</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+                <input
+                  type="text"
+                  required
+                  value={formData.location}
+                  onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                  placeholder="Meeting room or virtual link"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Attending Specialties</label>
+                <div className="space-y-2 max-h-40 overflow-y-auto border border-gray-200 rounded-md p-3">
+                  {selectedPatient?.specialties?.map((spec: any) => (
+                    <label key={spec.id} className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={formData.selected_specialties.includes(spec.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setFormData({
+                              ...formData,
+                              selected_specialties: [...formData.selected_specialties, spec.id]
+                            });
+                          } else {
+                            setFormData({
+                              ...formData,
+                              selected_specialties: formData.selected_specialties.filter(id => id !== spec.id)
+                            });
+                          }
+                        }}
+                        className="rounded border-gray-300 text-green-600 focus:ring-green-500"
+                      />
+                      <span className="text-sm text-gray-900">{spec.specialty_name} - {spec.consultant_name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Agenda</label>
+                <textarea
+                  required
+                  value={formData.agenda}
+                  onChange={(e) => setFormData({ ...formData, agenda: e.target.value })}
+                  rows={4}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                  placeholder="Meeting objectives and discussion points..."
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowScheduleMeeting(false)}
+                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-white bg-green-600 rounded-md hover:bg-green-700"
+                >
+                  Schedule Meeting
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const LogContactModal = () => {
+    const [formData, setFormData] = useState({
+      specialty_id: selectedSpecialty?.id || '',
+      contact_type: 'phone' as 'phone' | 'email' | 'in_person' | 'referral',
+      contact_date: format(new Date(), 'yyyy-MM-dd'),
+      contact_time: format(new Date(), 'HH:mm'),
+      contacted_person: selectedSpecialty?.consultant_name || '',
+      reason: '',
+      discussion_summary: '',
+      outcome: '',
+      follow_up_required: false,
+      follow_up_date: ''
+    });
+
+    const handleSubmit = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!selectedPatient) return;
+
+      try {
+        const specialty = selectedPatient.specialties?.find((s: any) => s.id === formData.specialty_id);
+        
+        await mdtService.logContact({
+          patient_id: selectedPatient.patient_id,
+          patient_name: selectedPatient.patient_name,
+          hospital_number: selectedPatient.hospital_number,
+          specialty_id: formData.specialty_id,
+          specialty_name: specialty?.specialty_name || '',
+          contact_type: formData.contact_type,
+          contact_date: new Date(formData.contact_date),
+          contact_time: formData.contact_time,
+          contacted_person: formData.contacted_person,
+          reason: formData.reason,
+          discussion_summary: formData.discussion_summary,
+          outcome: formData.outcome,
+          follow_up_required: formData.follow_up_required,
+          follow_up_date: formData.follow_up_date ? new Date(formData.follow_up_date) : undefined,
+          created_by: user?.email || 'Unknown'
+        });
+
+        setShowLogContact(false);
+        setSelectedSpecialty(null);
+        loadPatientData();
+      } catch (error) {
+        console.error('Error logging contact:', error);
+      }
+    };
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Log Contact</h3>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Specialty</label>
+                <select
+                  required
+                  value={formData.specialty_id}
+                  onChange={(e) => {
+                    const spec = selectedPatient?.specialties?.find((s: any) => s.id === e.target.value);
+                    setFormData({
+                      ...formData,
+                      specialty_id: e.target.value,
+                      contacted_person: spec?.consultant_name || ''
+                    });
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                >
+                  <option value="">Select specialty...</option>
+                  {selectedPatient?.specialties?.map((spec: any) => (
+                    <option key={spec.id} value={spec.id}>
+                      {spec.specialty_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Contact Type</label>
+                  <select
+                    value={formData.contact_type}
+                    onChange={(e) => setFormData({ ...formData, contact_type: e.target.value as any })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                  >
+                    <option value="phone">Phone Call</option>
+                    <option value="email">Email</option>
+                    <option value="in_person">In Person</option>
+                    <option value="referral">Referral Letter</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Person Contacted</label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.contacted_person}
+                    onChange={(e) => setFormData({ ...formData, contacted_person: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Contact Date</label>
+                  <input
+                    type="date"
+                    required
+                    value={formData.contact_date}
+                    onChange={(e) => setFormData({ ...formData, contact_date: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Contact Time</label>
+                  <input
+                    type="time"
+                    required
+                    value={formData.contact_time}
+                    onChange={(e) => setFormData({ ...formData, contact_time: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Reason for Contact</label>
+                <input
+                  type="text"
+                  required
+                  value={formData.reason}
+                  onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                  placeholder="Brief reason for contacting this specialty"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Discussion Summary</label>
+                <textarea
+                  required
+                  value={formData.discussion_summary}
+                  onChange={(e) => setFormData({ ...formData, discussion_summary: e.target.value })}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                  placeholder="What was discussed..."
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Outcome/Decision</label>
+                <textarea
+                  required
+                  value={formData.outcome}
+                  onChange={(e) => setFormData({ ...formData, outcome: e.target.value })}
+                  rows={2}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                  placeholder="What was decided or recommended..."
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={formData.follow_up_required}
+                  onChange={(e) => setFormData({ ...formData, follow_up_required: e.target.checked })}
+                  className="rounded border-gray-300 text-green-600 focus:ring-green-500"
+                />
+                <label className="text-sm font-medium text-gray-700">Follow-up required</label>
+              </div>
+
+              {formData.follow_up_required && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Follow-up Date</label>
+                  <input
+                    type="date"
+                    value={formData.follow_up_date}
+                    onChange={(e) => setFormData({ ...formData, follow_up_date: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                  />
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowLogContact(false);
+                    setSelectedSpecialty(null);
+                  }}
+                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-white bg-green-600 rounded-md hover:bg-green-700"
+                >
+                  Log Contact
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -627,16 +1017,201 @@ const MDTPage: React.FC = () => {
             )}
 
             {activeTab === 'meetings' && (
-              <div className="text-center py-12">
-                <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                <p className="text-gray-600">MDT meeting scheduling coming soon</p>
+              <div className="space-y-4">
+                <div className="flex justify-end mb-4">
+                  <button
+                    onClick={() => setShowScheduleMeeting(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                  >
+                    <Calendar className="w-4 h-4" />
+                    Schedule Meeting
+                  </button>
+                </div>
+
+                {upcomingMeetings.length > 0 ? (
+                  upcomingMeetings.map((meeting) => (
+                    <div key={meeting.id} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-start justify-between mb-3">
+                        <div>
+                          <h4 className="font-semibold text-gray-900">{meeting.meeting_title}</h4>
+                          <div className="flex items-center gap-3 mt-1 text-sm text-gray-600">
+                            <span className="flex items-center gap-1">
+                              <Calendar className="w-4 h-4" />
+                              {format(new Date(meeting.meeting_date), 'MMM dd, yyyy')}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-4 h-4" />
+                              {meeting.meeting_time}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <MapPin className="w-4 h-4" />
+                              {meeting.location}
+                            </span>
+                          </div>
+                        </div>
+                        <span className={`px-2 py-1 text-xs font-medium rounded ${
+                          meeting.status === 'scheduled' ? 'bg-blue-100 text-blue-700' :
+                          meeting.status === 'completed' ? 'bg-green-100 text-green-700' :
+                          meeting.status === 'cancelled' ? 'bg-red-100 text-red-700' :
+                          'bg-yellow-100 text-yellow-700'
+                        }`}>
+                          {meeting.status}
+                        </span>
+                      </div>
+
+                      <div className="mb-3">
+                        <p className="text-sm text-gray-600 font-medium mb-1">Agenda:</p>
+                        <p className="text-sm text-gray-700">{meeting.agenda}</p>
+                      </div>
+
+                      <div className="mb-3">
+                        <p className="text-sm text-gray-600 font-medium mb-2">Attending Specialties:</p>
+                        <div className="flex flex-wrap gap-2">
+                          {meeting.attending_specialties.map((spec, idx) => (
+                            <span
+                              key={idx}
+                              className={`px-2 py-1 text-xs rounded ${
+                                spec.attendance_status === 'attended' ? 'bg-green-100 text-green-700' :
+                                spec.attendance_status === 'confirmed' ? 'bg-blue-100 text-blue-700' :
+                                spec.attendance_status === 'declined' ? 'bg-red-100 text-red-700' :
+                                'bg-gray-100 text-gray-700'
+                              }`}
+                            >
+                              {spec.specialty_name} - {spec.attendance_status}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      {meeting.discussion_points && (
+                        <div className="mb-3 pt-3 border-t border-gray-100">
+                          <p className="text-sm text-gray-600 font-medium mb-1">Discussion:</p>
+                          <p className="text-sm text-gray-700">{meeting.discussion_points}</p>
+                        </div>
+                      )}
+
+                      {meeting.decisions_made && (
+                        <div className="mb-3">
+                          <p className="text-sm text-gray-600 font-medium mb-1">Decisions:</p>
+                          <p className="text-sm text-gray-700">{meeting.decisions_made}</p>
+                        </div>
+                      )}
+
+                      {meeting.action_items && meeting.action_items.length > 0 && (
+                        <div>
+                          <p className="text-sm text-gray-600 font-medium mb-2">Action Items:</p>
+                          <div className="space-y-2">
+                            {meeting.action_items.map((action) => (
+                              <div key={action.id} className="flex items-start gap-2 text-sm">
+                                <CheckCircle className={`w-4 h-4 mt-0.5 ${
+                                  action.status === 'completed' ? 'text-green-600' : 'text-gray-400'
+                                }`} />
+                                <div className="flex-1">
+                                  <p className="text-gray-900">{action.action}</p>
+                                  <p className="text-xs text-gray-600">
+                                    Assigned to: {action.assigned_to} ({action.specialty}) - 
+                                    Due: {format(new Date(action.due_date), 'MMM dd, yyyy')}
+                                  </p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-12 bg-gray-50 rounded-lg">
+                    <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                    <p className="text-gray-600 mb-3">No meetings scheduled yet</p>
+                    <button
+                      onClick={() => setShowScheduleMeeting(true)}
+                      className="text-green-600 hover:text-green-700 font-medium"
+                    >
+                      Schedule first meeting
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
             {activeTab === 'contacts' && (
-              <div className="text-center py-12">
-                <MessageSquare className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                <p className="text-gray-600">Contact logging coming soon</p>
+              <div className="space-y-4">
+                <div className="flex justify-end mb-4">
+                  <button
+                    onClick={() => setShowLogContact(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                    Log Contact
+                  </button>
+                </div>
+
+                {contactLogs.length > 0 ? (
+                  contactLogs.map((contact) => (
+                    <div key={contact.id} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-start justify-between mb-3">
+                        <div>
+                          <h4 className="font-semibold text-gray-900">{contact.specialty_name}</h4>
+                          <div className="flex items-center gap-3 mt-1 text-sm text-gray-600">
+                            <span>{format(new Date(contact.contact_date), 'MMM dd, yyyy')} at {contact.contact_time}</span>
+                            <span className="px-2 py-0.5 bg-gray-100 text-gray-700 text-xs rounded">
+                              {contact.contact_type}
+                            </span>
+                          </div>
+                        </div>
+                        {contact.follow_up_required && (
+                          <span className="px-2 py-1 bg-yellow-100 text-yellow-700 text-xs font-medium rounded flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            Follow-up needed
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="space-y-2 text-sm">
+                        <div>
+                          <span className="text-gray-600 font-medium">Contacted:</span>
+                          <span className="text-gray-900 ml-1">{contact.contacted_person}</span>
+                        </div>
+
+                        <div>
+                          <span className="text-gray-600 font-medium">Reason:</span>
+                          <p className="text-gray-900 mt-1">{contact.reason}</p>
+                        </div>
+
+                        <div>
+                          <span className="text-gray-600 font-medium">Discussion:</span>
+                          <p className="text-gray-700 mt-1">{contact.discussion_summary}</p>
+                        </div>
+
+                        <div>
+                          <span className="text-gray-600 font-medium">Outcome:</span>
+                          <p className="text-gray-700 mt-1">{contact.outcome}</p>
+                        </div>
+
+                        {contact.follow_up_required && contact.follow_up_date && (
+                          <div className="pt-2 border-t border-gray-100">
+                            <span className="text-gray-600 font-medium">Follow-up by:</span>
+                            <span className="text-gray-900 ml-1">
+                              {format(new Date(contact.follow_up_date), 'MMM dd, yyyy')}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-12 bg-gray-50 rounded-lg">
+                    <MessageSquare className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                    <p className="text-gray-600 mb-3">No contact logs yet</p>
+                    <button
+                      onClick={() => setShowLogContact(true)}
+                      className="text-green-600 hover:text-green-700 font-medium"
+                    >
+                      Log first contact
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -647,6 +1222,8 @@ const MDTPage: React.FC = () => {
       {showAddPatient && <AddPatientModal />}
       {showAddSpecialty && <AddSpecialtyModal />}
       {showQuickContact && <QuickContactModal />}
+      {showScheduleMeeting && <ScheduleMeetingModal />}
+      {showLogContact && <LogContactModal />}
     </div>
   );
 };
