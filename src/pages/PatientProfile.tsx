@@ -11,6 +11,8 @@ import { RiskAssessmentSummary } from '../components/riskAssessments/RiskAssessm
 import { DVTRiskAssessmentForm } from '../components/riskAssessments/DVTRiskAssessment';
 import { PressureSoreRiskAssessmentForm } from '../components/riskAssessments/PressureSoreRiskAssessment';
 import { NutritionalRiskAssessmentForm } from '../components/riskAssessments/NutritionalRiskAssessment';
+import { ProgressNoteModal } from '../components/ProgressNoteModal';
+import { PrescriptionModal } from '../components/PrescriptionModal';
 
 export const PatientProfile: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -19,6 +21,8 @@ export const PatientProfile: React.FC = () => {
   const [activeTab, setActiveTab] = useState('summary');
   const [upcomingPlans, setUpcomingPlans] = useState<any[]>([]);
   const [activeRiskAssessment, setActiveRiskAssessment] = useState<'summary' | 'dvt' | 'pressure' | 'nutrition'>('summary');
+  const [showProgressNoteModal, setShowProgressNoteModal] = useState(false);
+  const [showPrescriptionModal, setShowPrescriptionModal] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -221,6 +225,62 @@ export const PatientProfile: React.FC = () => {
               </div>
             </div>
 
+            {/* Assigned Medical Team */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+              <div className="px-4 py-3 border-b border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-900">Medical Team</h3>
+              </div>
+              <div className="p-4 space-y-3">
+                {/* Consultant */}
+                <div className="flex items-start space-x-3">
+                  <div className="w-10 h-10 bg-green-600 rounded-full flex items-center justify-center text-white text-sm font-semibold flex-shrink-0">
+                    DO
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900">Dr Okwesili</p>
+                    <p className="text-xs text-gray-500">Consultant Plastic Surgeon</p>
+                    <p className="text-xs text-green-600 mt-1">📞 +234 801 234 5678</p>
+                  </div>
+                </div>
+
+                {/* Senior Registrar */}
+                <div className="flex items-start space-x-3">
+                  <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white text-sm font-semibold flex-shrink-0">
+                    DN
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900">Dr Nnadi</p>
+                    <p className="text-xs text-gray-500">Senior Registrar</p>
+                    <p className="text-xs text-blue-600 mt-1">📞 +234 802 345 6789</p>
+                  </div>
+                </div>
+
+                {/* House Officer */}
+                <div className="flex items-start space-x-3">
+                  <div className="w-10 h-10 bg-purple-600 rounded-full flex items-center justify-center text-white text-sm font-semibold flex-shrink-0">
+                    DE
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900">Dr Eze C.B</p>
+                    <p className="text-xs text-gray-500">House Officer</p>
+                    <p className="text-xs text-purple-600 mt-1">📞 +234 803 456 7890</p>
+                  </div>
+                </div>
+
+                {/* Ward Nurse */}
+                <div className="flex items-start space-x-3">
+                  <div className="w-10 h-10 bg-pink-600 rounded-full flex items-center justify-center text-white text-sm font-semibold flex-shrink-0">
+                    NA
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900">Nurse Ada</p>
+                    <p className="text-xs text-gray-500">Ward Nurse</p>
+                    <p className="text-xs text-pink-600 mt-1">📞 +234 804 567 8901</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Quick Actions */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200">
               <div className="px-4 py-3 border-b border-gray-200">
@@ -229,26 +289,32 @@ export const PatientProfile: React.FC = () => {
               <div className="p-4 space-y-2">
                 <button 
                   onClick={() => setActiveTab('risk-assessment')}
-                  className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded"
+                  className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded transition-colors"
                 >
                   ⚕️ Risk Assessment
                 </button>
                 <button 
                   onClick={() => setActiveTab('transfer')}
-                  className="w-full text-left px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded"
+                  className="w-full text-left px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded transition-colors"
                 >
                   🔄 Transfer Patient
                 </button>
                 <button 
                   onClick={() => setActiveTab('discharge')}
-                  className="w-full text-left px-3 py-2 text-sm text-green-600 hover:bg-green-50 rounded"
+                  className="w-full text-left px-3 py-2 text-sm text-green-600 hover:bg-green-50 rounded transition-colors"
                 >
                   🚪 Plan Discharge
                 </button>
-                <button className="w-full text-left px-3 py-2 text-sm text-purple-600 hover:bg-purple-50 rounded">
+                <button 
+                  onClick={() => setShowProgressNoteModal(true)}
+                  className="w-full text-left px-3 py-2 text-sm text-purple-600 hover:bg-purple-50 rounded transition-colors"
+                >
                   📋 Add Progress Note
                 </button>
-                <button className="w-full text-left px-3 py-2 text-sm text-orange-600 hover:bg-orange-50 rounded">
+                <button 
+                  onClick={() => setShowPrescriptionModal(true)}
+                  className="w-full text-left px-3 py-2 text-sm text-orange-600 hover:bg-orange-50 rounded transition-colors"
+                >
                   💊 Prescribe Medication
                 </button>
               </div>
@@ -392,6 +458,29 @@ const RiskAssessmentView: React.FC<{ patientId: string }> = ({ patientId }) => {
       <div className="min-h-96">
         {renderAssessmentContent()}
       </div>
+
+      {/* Modals */}
+      <ProgressNoteModal
+        isOpen={showProgressNoteModal}
+        onClose={() => setShowProgressNoteModal(false)}
+        patientId={id!}
+        patientName={`${patient.first_name} ${patient.last_name}`}
+        onSuccess={() => {
+          console.log('Progress note saved');
+          loadPatientData();
+        }}
+      />
+
+      <PrescriptionModal
+        isOpen={showPrescriptionModal}
+        onClose={() => setShowPrescriptionModal(false)}
+        patientId={id!}
+        patientName={`${patient.first_name} ${patient.last_name}`}
+        onSuccess={() => {
+          console.log('Prescription saved');
+          loadPatientData();
+        }}
+      />
     </div>
   );
 };
