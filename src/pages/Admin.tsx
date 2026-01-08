@@ -48,6 +48,7 @@ import Layout from '../components/Layout';
 import { UserApprovalManager } from '../components/UserApprovalManager';
 import { AISettingsPanel } from '../components/AISettingsPanel';
 import BulkUserImport from '../components/BulkUserImport';
+import { medicalTeamService } from '../services/medicalTeamService';
 import { db } from '../db/database';
 import { resetDatabase } from '../utils/dbReset';
 import toast from 'react-hot-toast';
@@ -312,6 +313,17 @@ export default function Admin() {
     } catch (error) {
       console.error('Sync error:', error);
       toast.error('Failed to sync local data', { id: loadingToast });
+    }
+  };
+
+  const handleAssignMedicalTeams = async () => {
+    const loadingToast = toast.loading('Assigning medical teams to all patients...');
+    try {
+      await medicalTeamService.assignTeamsToAllPatients();
+      toast.success('Medical teams assigned successfully!', { id: loadingToast });
+    } catch (error) {
+      console.error('Error assigning medical teams:', error);
+      toast.error('Failed to assign medical teams', { id: loadingToast });
     }
   };
 
@@ -767,6 +779,13 @@ export default function Admin() {
             <div className="bg-white rounded-lg border border-gray-200 p-6">
               <h3 className="text-lg font-medium text-gray-900 mb-4">Database Actions</h3>
               <div className="space-y-3">
+                <button
+                  onClick={handleAssignMedicalTeams}
+                  className="w-full flex items-center justify-center space-x-2 py-3 px-4 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+                >
+                  <Users className="h-4 w-4" />
+                  <span>Assign Medical Teams</span>
+                </button>
                 <button
                   onClick={() => setShowBackupModal(true)}
                   className="w-full flex items-center justify-center space-x-2 py-3 px-4 bg-green-600 text-white rounded-lg hover:bg-green-700"

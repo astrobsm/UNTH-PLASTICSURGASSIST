@@ -13,6 +13,7 @@ import { PressureSoreRiskAssessmentForm } from '../components/riskAssessments/Pr
 import { NutritionalRiskAssessmentForm } from '../components/riskAssessments/NutritionalRiskAssessment';
 import { ProgressNoteModal } from '../components/ProgressNoteModal';
 import { PrescriptionModal } from '../components/PrescriptionModal';
+import { medicalTeamService, TeamMember } from '../services/medicalTeamService';
 
 export const PatientProfile: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -23,17 +24,14 @@ export const PatientProfile: React.FC = () => {
   const [activeRiskAssessment, setActiveRiskAssessment] = useState<'summary' | 'dvt' | 'pressure' | 'nutrition'>('summary');
   const [showProgressNoteModal, setShowProgressNoteModal] = useState(false);
   const [showPrescriptionModal, setShowPrescriptionModal] = useState(false);
-  const [medicalTeam, setMedicalTeam] = useState<any[]>([]);
+  const [medicalTeam, setMedicalTeam] = useState<TeamMember[]>([]);
 
   useEffect(() => {
     if (id) {
       loadPatientData();
+      loadMedicalTeam();
     }
   }, [id]);
-
-  useEffect(() => {
-    loadMedicalTeam();
-  }, []);
 
   const loadPatientData = async () => {
     if (!id) return;
@@ -57,30 +55,11 @@ export const PatientProfile: React.FC = () => {
   };
 
   const loadMedicalTeam = async () => {
+    if (!id) return;
+    
     try {
-      // Get all users from database
-      const users = await db.users.toArray();
-      
-      // Define role priorities and colors
-      const roleConfig: Record<string, { priority: number; color: string; label: string }> = {
-        'consultant': { priority: 1, color: 'bg-green-600', label: 'Consultant' },
-        'senior_registrar': { priority: 2, color: 'bg-blue-600', label: 'Senior Registrar' },
-        'registrar': { priority: 3, color: 'bg-indigo-600', label: 'Registrar' },
-        'house_officer': { priority: 4, color: 'bg-purple-600', label: 'House Officer' },
-        'nurse': { priority: 5, color: 'bg-pink-600', label: 'Nurse' },
-      };
-
-      // Filter and sort users by role
-      const team = users
-        .filter(user => roleConfig[user.role])
-        .sort((a, b) => (roleConfig[a.role]?.priority || 999) - (roleConfig[b.role]?.priority || 999))
-        .slice(0, 5) // Limit to 5 team members
-        .map(user => ({
-          ...user,
-          roleLabel: roleConfig[user.role]?.label || user.role,
-          color: roleConfig[user.role]?.color || 'bg-gray-600'
-        }));
-
+      // Get assigned medical team for this patient
+      const team = await medicalTeamService.getPatientMedicalTeam(Number(id));
       setMedicalTeam(team);
     } catch (error) {
       console.error('Error loading medical team:', error);
