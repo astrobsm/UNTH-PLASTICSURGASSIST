@@ -123,8 +123,11 @@ export const Procedures: React.FC = () => {
                 </select>
                 
                 <button 
-                  onClick={() => setShowNewProcedureModal(true)}
-                  className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                  onClick={() => {
+                    console.log('New Procedure button clicked');
+                    setShowNewProcedureModal(true);
+                  }}
+                  className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 cursor-pointer"
                 >
                   + New Procedure
                 </button>
@@ -239,6 +242,7 @@ export const Procedures: React.FC = () => {
 
 // New Procedure Modal Component
 const NewProcedureModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+  console.log('NewProcedureModal rendered');
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState({
     // Basic Info
