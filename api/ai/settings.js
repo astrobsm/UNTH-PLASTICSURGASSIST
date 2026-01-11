@@ -2,17 +2,18 @@
 import { cors, authenticateRequest } from '../_lib/auth.js';
 
 export default async function handler(req, res) {
-  // Handle CORS
   try {
-    if (cors(req, res)) return;
-  } catch (e) {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    if (req.method === 'OPTIONS') {
-      return res.status(200).end();
+    // Handle CORS
+    try {
+      if (cors(req, res)) return;
+    } catch (e) {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      if (req.method === 'OPTIONS') {
+        return res.status(200).end();
+      }
     }
-  }
 
-  const { method } = req;
+    const { method } = req;
 
   if (method === 'GET') {
     // Return default AI settings
@@ -47,4 +48,18 @@ export default async function handler(req, res) {
   }
 
   res.status(405).json({ error: 'Method not allowed' });
+  } catch (error) {
+    console.error('AI Settings API Error:', error);
+    res.status(200).json({
+      enabled: false,
+      provider: 'openai',
+      model: 'gpt-4',
+      features: {
+        cmeGeneration: false,
+        woundAnalysis: false,
+        diagnosisAssist: false
+      },
+      message: 'AI features not configured'
+    });
+  }
 }

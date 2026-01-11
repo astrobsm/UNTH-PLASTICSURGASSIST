@@ -1,5 +1,6 @@
 import { Routes, Route } from 'react-router-dom';
 import { useState, useEffect, lazy, Suspense } from 'react';
+import { useLocation } from 'react-router-dom';
 import Layout from './components/Layout';
 import ErrorBoundary from './components/ErrorBoundary';
 import { syncService } from './db/syncService';
@@ -52,6 +53,7 @@ const PageLoader = () => (
 );
 
 function App() {
+  const location = useLocation();
   const { user, loading, initializeAuth, clearMustChangePassword, logout } = useAuthStore();
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
 
@@ -125,7 +127,7 @@ function App() {
 
   return (
     <ErrorBoundary>
-      <Suspense fallback={<PageLoader />}>
+      <Suspense key={location.pathname} fallback={<PageLoader />}>
         <Routes>
         {/* Video Conference - Full screen without Layout */}
         <Route path="/conference" element={<VideoConference />} />
