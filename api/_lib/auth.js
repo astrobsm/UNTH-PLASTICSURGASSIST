@@ -2,7 +2,10 @@
 
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_key_2024';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error('CRITICAL: JWT_SECRET environment variable must be set');
+}
 
 export function verifyToken(token) {
   try {
@@ -40,8 +43,22 @@ export function authenticateRequest(req) {
 
 // CORS helper for API routes
 export function cors(req, res) {
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  // Define allowed origins
+  const allowedOrigins = [
+    'https://plasticsurgassisstant.vercel.app',
+    'https://plasticsurgassisstant-kklm4akj5.vercel.app',
+    'https://plasticsurgassisstant-8zzrgul48.vercel.app',
+    process.env.NODE_ENV !== 'production' ? 'http://localhost:5173' : null
+  ].filter(Boolean);
+  
+  const origin = req.headers.origin;
+  
+  // Only set CORS headers if origin is allowed
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
+  
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
   res.setHeader(
     'Access-Control-Allow-Headers',

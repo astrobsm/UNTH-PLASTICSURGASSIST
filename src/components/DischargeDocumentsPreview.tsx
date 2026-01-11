@@ -160,7 +160,7 @@ export default function DischargeDocumentsPreview({
         }`}>
           <h4 className="font-semibold">Discharge Assessment</h4>
           <p><strong>WHO Discharge Readiness Score:</strong> {discharge.discharge_readiness_score}/33</p>
-          <p><strong>Discharge Type:</strong> {discharge.discharge_type.replace('_', ' ').toUpperCase()}</p>
+          <p><strong>Discharge Type:</strong> {discharge.discharge_type?.replace('_', ' ').toUpperCase() || 'ROUTINE'}</p>
           <p><strong>Condition at Discharge:</strong> {discharge.condition_at_discharge}</p>
         </div>
 
@@ -433,7 +433,12 @@ export default function DischargeDocumentsPreview({
         const { fontSize = PDF_FONT_SIZES.body, bold = false, color = PDF_COLORS.black } = options;
         doc.setFontSize(fontSize);
         doc.setFont('helvetica', bold ? 'bold' : 'normal');
-        doc.setTextColor(color[0], color[1], color[2]);
+        // Validate color array before calling setTextColor
+        if (color && Array.isArray(color) && color.length === 3) {
+          doc.setTextColor(color[0], color[1], color[2]);
+        } else {
+          doc.setTextColor(0, 0, 0); // Default to black if invalid
+        }
         
         const lines = doc.splitTextToSize(clean(text), pageWidth - 2 * margin);
         lines.forEach((line: string) => {

@@ -5,6 +5,8 @@ import { PostoperativeCareForm } from '../components/procedures/PostoperativeCar
 import { WoundCareAssessmentForm } from '../components/procedures/WoundCareAssessment';
 import { SurgicalFitnessScoreForm } from '../components/procedures/SurgicalFitnessScore';
 import { patientService } from '../services/patientService';
+import { logDataExport } from '../services/auditLoggingService';
+import { useAuthStore } from '../store/authStore';
 
 export const Procedures: React.FC = () => {
   const [activeModule, setActiveModule] = useState('overview');
@@ -12,6 +14,7 @@ export const Procedures: React.FC = () => {
   const [selectedProcedureId, setSelectedProcedureId] = useState<string>('');
   const [patients, setPatients] = useState<any[]>([]);
   const [showNewProcedureModal, setShowNewProcedureModal] = useState(false);
+  const [modalKey, setModalKey] = useState(0);
   const [showActionModal, setShowActionModal] = useState<{
     type: 'intraop' | 'reschedule' | 'cancel' | 'postop-plan' | 'postop-note' | null;
     procedure: any;
@@ -31,69 +34,11 @@ export const Procedures: React.FC = () => {
   };
 
   const modules = [
-    { id: 'overview', name: 'Overview', icon: '📋', description: 'Procedure management dashboard' },
-    { id: 'fitness', name: 'Surgical Fitness Scoring', icon: '📊', description: 'Comprehensive risk scoring system' },
-    { id: 'who-checklist', name: 'WHO Safety Checklist', icon: '✅', description: 'World Health Organization safety protocols' },
-    { id: 'intraop', name: 'Intraoperative Findings', icon: '🏥', description: 'Surgical procedure documentation' },
-    { id: 'postop', name: 'Postoperative Care', icon: '🩺', description: 'Recovery tracking and care plans' },
-    { id: 'wound-care', name: 'Wound Care', icon: '🔬', description: 'Wound assessment and management' }
+    { id: 'overview', name: 'Overview', icon: '📋', description: 'Procedure management dashboard' }
   ];
 
   const renderModuleContent = () => {
-    switch (activeModule) {
-      case 'overview':
-        return <ProcedureOverview />;
-      case 'fitness':
-        return (
-          <SurgicalFitnessScoreForm 
-            patientId={selectedPatientId}
-            onComplete={(scoreId) => {
-              console.log('Fitness scoring completed:', scoreId);
-            }}
-          />
-        );
-      case 'who-checklist':
-        return (
-          <WHOSafetyChecklistForm 
-            procedureId={selectedProcedureId}
-            onComplete={(checklistId) => {
-              console.log('WHO checklist completed:', checklistId);
-            }}
-          />
-        );
-      case 'intraop':
-        return (
-          <IntraoperativeFindingsForm 
-            patientId={selectedPatientId}
-            procedureId={selectedProcedureId}
-            onComplete={(findingsId) => {
-              console.log('Intraoperative findings recorded:', findingsId);
-            }}
-          />
-        );
-      case 'postop':
-        return (
-          <PostoperativeCareForm 
-            patientId={selectedPatientId}
-            procedureId={selectedProcedureId}
-            onComplete={(careId) => {
-              console.log('Postoperative care plan created:', careId);
-            }}
-          />
-        );
-      case 'wound-care':
-        return (
-          <WoundCareAssessmentForm 
-            patientId={selectedPatientId}
-            procedureId={selectedProcedureId}
-            onComplete={(assessmentId) => {
-              console.log('Wound care assessment completed:', assessmentId);
-            }}
-          />
-        );
-      default:
-        return <ProcedureOverview />;
-    }
+    return <ProcedureOverview />;
   };
 
   return (
@@ -123,8 +68,10 @@ export const Procedures: React.FC = () => {
                 </select>
                 
                 <button 
+                  type="button"
                   onClick={() => {
                     console.log('New Procedure button clicked');
+                    setModalKey(prev => prev + 1); // Force new component instance
                     setShowNewProcedureModal(true);
                   }}
                   className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 cursor-pointer"
@@ -203,7 +150,7 @@ export const Procedures: React.FC = () => {
       </div>
 
       {/* New Procedure Modal */}
-      {showNewProcedureModal && <NewProcedureModal onClose={() => setShowNewProcedureModal(false)} />}
+      {showNewProcedureModal && <NewProcedureModal key={modalKey} onClose={() => setShowNewProcedureModal(false)} />}
       
       {/* Action Modals */}
       {showActionModal.type === 'intraop' && (
@@ -242,7 +189,6 @@ export const Procedures: React.FC = () => {
 
 // New Procedure Modal Component
 const NewProcedureModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
-  console.log('NewProcedureModal rendered');
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState({
     // Basic Info
@@ -258,18 +204,18 @@ const NewProcedureModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     urgency: 'elective' as 'elective' | 'urgent' | 'emergency',
     notes: '',
     
-    // Surgical Fitness Scoring
-    age: 0,
-    asa_class: 1,
-    functional_capacity: 10,
-    cardiac_risk_factors: 0,
-    respiratory_risk_factors: 0,
-    renal_function: 100,
+    // Surgical Fitness Scoring (use empty strings for number inputs to avoid NaN)
+    age: '',
+    asa_class: '1',
+    functional_capacity: '10',
+    cardiac_risk_factors: '0',
+    respiratory_risk_factors: '0',
+    renal_function: '100',
     diabetes: false,
     smoking: false,
     obesity: false,
     
-    // Bleeding Risk
+    // Bleeding Risk (use empty strings for number inputs)
     anticoagulant_use: false,
     anticoagulant_type: '',
     antiplatelet_use: false,
@@ -279,8 +225,8 @@ const NewProcedureModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     liver_disease: false,
     renal_impairment: false,
     recent_bleeding: false,
-    platelet_count: 0,
-    inr: 0,
+    platelet_count: '',
+    inr: '',
     
     // DVT Risk (Caprini)
     age_41_60: false,
@@ -392,9 +338,30 @@ const NewProcedureModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Only submit on final step
+    if (currentStep !== 8) {
+      return;
+    }
+    
     try {
       // Save procedure with all assessments
       console.log('New procedure with comprehensive assessment:', formData);
+      
+      // Log audit for HIPAA compliance (when user context is available)
+      const { user } = useAuthStore.getState();
+      if (user && selectedPatientId) {
+        const procedureId = `proc-${Date.now()}`;
+        await logDataExport(
+          user.id,
+          user.name,
+          user.role,
+          'PROCEDURE',
+          procedureId,
+          'CREATE'
+        );
+      }
+      
       onClose();
     } catch (error) {
       console.error('Error creating procedure:', error);
@@ -1321,27 +1288,6 @@ const ProcedureOverview: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Important Notice */}
-      <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg">
-        <div className="flex">
-          <div className="flex-shrink-0">
-            <svg className="h-5 w-5 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-            </svg>
-          </div>
-          <div className="ml-3">
-            <h3 className="text-sm font-medium text-blue-800">Preoperative Assessments</h3>
-            <div className="mt-2 text-sm text-blue-700">
-              <p>
-                Comprehensive preoperative assessments (including bleeding risk, DVT risk, cardiac risk, and pressure sore assessments) 
-                are now managed through the <strong>Scheduling → Surgery Booking</strong> module. 
-                Click "Complete Preop Assessment" when booking a surgery to access the full assessment form.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Current Procedures */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
         <div className="px-6 py-4 border-b border-gray-200">

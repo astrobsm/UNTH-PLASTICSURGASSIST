@@ -31,10 +31,13 @@ import {
 } from '../services/labService';
 import { db } from '../db/database';
 import { patientService } from '../services/patientService';
+import { logDataExport } from '../services/auditLoggingService';
+import { useAuthStore } from '../store/authStore';
 
 type LabTab = 'investigations' | 'results' | 'upload' | 'trends' | 'requests' | 'gfr';
 
 export default function Labs() {
+  const { user } = useAuthStore();
   const [activeTab, setActiveTab] = useState<LabTab>('investigations');
   const [investigations, setInvestigations] = useState<LabInvestigation[]>([]);
   const [results, setResults] = useState<LabResult[]>([]);
@@ -779,6 +782,18 @@ const TrendsSection = ({ selectedPatient }: any) => {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
+
+      // Log audit for HIPAA compliance
+      if (user) {
+        await logDataExport(
+          user.id,
+          user.name,
+          user.role,
+          'LAB',
+          `${selectedPatient}-${selectedTest}`,
+          'PDF'
+        );
+      }
     } catch (error) {
       console.error('Error exporting PDF:', error);
       alert('Failed to export trend report. Please try again.');

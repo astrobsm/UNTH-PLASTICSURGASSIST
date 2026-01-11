@@ -123,7 +123,8 @@ export default function BulkUserImport() {
       setImportResult({
         success: result?.success || [],
         failed: result?.failed || [],
-        credentials: result?.credentials || []
+        credentials: result?.credentials || [],
+        message: result?.message || 'Import completed'
       });
 
       // Clear the form on success

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { unthPatientService, PatientRegistration, Ward } from '../services/unthPatientService';
 import { riskAssessmentService } from '../services/riskAssessmentService';
 import { useAuthStore } from '../store/authStore';
+import { validateHospitalNumber, validatePhoneNumber, validateAge } from '../utils/validation';
 import {
   createPDF,
   sanitizeTextForPDF,

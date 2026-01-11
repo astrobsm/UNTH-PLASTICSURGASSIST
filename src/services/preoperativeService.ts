@@ -1,5 +1,6 @@
 import { db } from '../db/database';
 import { apiClient } from './apiClient';
+import { syncService } from '../db/syncService';
 
 // Helper for authenticated fetch requests
 const authenticatedFetch = async (url: string, options: RequestInit = {}): Promise<Response> => {
@@ -819,8 +820,19 @@ Date: ${new Date().toLocaleDateString()}
    */
   async saveAssessment(assessment: PreoperativeAssessment): Promise<string> {
     try {
-      const id = await db.preoperative_assessments.add(assessment as any);
-      return String(id);
+      // Try to sync to server first
+      try {
+        const saved = await apiClient.createPreoperativeAssessment(assessment);
+        console.log('✅ Preoperative assessment synced to server:', saved.id);
+        await db.preoperative_assessments.add({ ...assessment, id: saved.id, synced: true } as any);
+        return saved.id;
+      } catch (syncError) {
+        console.warn('⚠️ Failed to sync preoperative assessment to server, saving locally', syncError);
+        const localId = await db.preoperative_assessments.add({ ...assessment, synced: false } as any);
+        await syncService.queueAction('create', 'preoperative_assessments', localId as any, assessment);
+        console.log('📱 Preoperative assessment saved locally, will sync when online:', localId);
+        return String(localId);
+      }
     } catch (error) {
       console.error('Error saving assessment:', error);
       throw new Error('Failed to save pre-operative assessment');

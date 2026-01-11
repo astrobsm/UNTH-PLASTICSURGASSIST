@@ -384,20 +384,20 @@ export default function TreatmentPlanningEnhanced() {
           {/* Reviews Section */}
           <div className="bg-white rounded-lg shadow">
             <div
-              className="p-4 flex justify-between items-center cursor-pointer hover:bg-gray-50"
+              className="p-4 flex flex-wrap justify-between items-center cursor-pointer hover:bg-gray-50 gap-2"
               onClick={() => toggleSection('reviews')}
             >
               <div className="flex items-center gap-2">
                 <User className="w-5 h-5 text-blue-600" />
                 <h3 className="font-semibold text-gray-900">Reviews ({selectedPlan.reviews?.length || 0})</h3>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-shrink-0 relative z-10">
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     setShowReviewModal(true);
                   }}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm"
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm whitespace-nowrap shadow-sm"
                 >
                   Add Review
                 </button>
@@ -461,20 +461,20 @@ export default function TreatmentPlanningEnhanced() {
           {/* Lab Works Section */}
           <div className="bg-white rounded-lg shadow">
             <div
-              className="p-4 flex justify-between items-center cursor-pointer hover:bg-gray-50"
+              className="p-4 flex flex-wrap justify-between items-center cursor-pointer hover:bg-gray-50 gap-2"
               onClick={() => toggleSection('labs')}
             >
               <div className="flex items-center gap-2">
                 <Activity className="w-5 h-5 text-purple-600" />
                 <h3 className="font-semibold text-gray-900">Lab Works ({selectedPlan.lab_works?.length || 0})</h3>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-shrink-0 relative z-10">
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     setShowInvestigationOrderingModal(true);
                   }}
-                  className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm flex items-center gap-1"
+                  className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm flex items-center gap-1 whitespace-nowrap shadow-sm"
                 >
                   <TestTube className="w-4 h-4" />
                   Order & Track
@@ -484,7 +484,7 @@ export default function TreatmentPlanningEnhanced() {
                     e.stopPropagation();
                     setShowLabModal(true);
                   }}
-                  className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-sm"
+                  className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-sm whitespace-nowrap shadow-sm"
                 >
                   Add Lab
                 </button>
@@ -519,20 +519,20 @@ export default function TreatmentPlanningEnhanced() {
           {/* Procedures Section */}
           <div className="bg-white rounded-lg shadow">
             <div
-              className="p-4 flex justify-between items-center cursor-pointer hover:bg-gray-50"
+              className="p-4 flex flex-wrap justify-between items-center cursor-pointer hover:bg-gray-50 gap-2"
               onClick={() => toggleSection('procedures')}
             >
               <div className="flex items-center gap-2">
                 <FileText className="w-5 h-5 text-orange-600" />
                 <h3 className="font-semibold text-gray-900">Procedures ({selectedPlan.procedures?.length || 0})</h3>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-shrink-0 relative z-10">
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     setShowProcedureModal(true);
                   }}
-                  className="bg-orange-600 hover:bg-orange-700 text-white px-3 py-1 rounded text-sm"
+                  className="bg-orange-600 hover:bg-orange-700 text-white px-3 py-1 rounded text-sm whitespace-nowrap shadow-sm"
                 >
                   Add Procedure
                 </button>
@@ -595,20 +595,20 @@ export default function TreatmentPlanningEnhanced() {
           {/* Medications Section */}
           <div className="bg-white rounded-lg shadow">
             <div
-              className="p-4 flex justify-between items-center cursor-pointer hover:bg-gray-50"
+              className="p-4 flex flex-wrap justify-between items-center cursor-pointer hover:bg-gray-50 gap-2"
               onClick={() => toggleSection('medications')}
             >
               <div className="flex items-center gap-2">
                 <Pill className="w-5 h-5 text-pink-600" />
                 <h3 className="font-semibold text-gray-900">Medications ({selectedPlan.medications?.length || 0})</h3>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-shrink-0 relative z-10">
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     setShowMedicationOrderingModal(true);
                   }}
-                  className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm flex items-center gap-1"
+                  className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm flex items-center gap-1 whitespace-nowrap shadow-sm"
                 >
                   <Pill className="w-4 h-4" />
                   Order Medications
@@ -618,7 +618,7 @@ export default function TreatmentPlanningEnhanced() {
                     e.stopPropagation();
                     setShowMedicationModal(true);
                   }}
-                  className="bg-pink-600 hover:bg-pink-700 text-white px-3 py-1 rounded text-sm"
+                  className="bg-pink-600 hover:bg-pink-700 text-white px-3 py-1 rounded text-sm whitespace-nowrap shadow-sm"
                 >
                   Add Medication
                 </button>

@@ -1,6 +1,8 @@
 import { db } from '../db/database';
 import html2canvas from 'html2canvas';
 import { format, addDays, startOfWeek, endOfWeek } from 'date-fns';
+import { apiClient } from './apiClient';
+import { syncService } from '../db/syncService';
 import {
   createPDF,
   sanitizeTextForPDF,
@@ -301,8 +303,19 @@ class SchedulingService {
       updated_at: now
     };
 
-    await db.surgery_bookings.add(newBooking);
-    return id;
+    // Try to sync to server first
+    try {
+      const saved = await apiClient.createSurgery(newBooking);
+      console.log('✅ Surgery booking synced to server:', saved.id);
+      await db.surgery_bookings.add({ ...newBooking, id: saved.id, synced: true });
+      return saved.id;
+    } catch (error) {
+      console.warn('⚠️ Failed to sync surgery booking to server, saving locally', error);
+      await db.surgery_bookings.add({ ...newBooking, synced: false });
+      await syncService.queueAction('create', 'surgeries', id, newBooking);
+      console.log('📱 Surgery booking saved locally, will sync when online:', id);
+      return id;
+    }
   }
 
   async getSurgeryBookings(date?: Date): Promise<SurgeryBooking[]> {

@@ -271,7 +271,7 @@ export default function CMEArticleViewer({ articleId, userId, onClose }: CMEArti
         {/* Article Content */}
         <div
           className="prose max-w-none mb-8"
-          dangerouslySetInnerHTML={{ __html: article.content }}
+          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(article.content) }}
         />
 
         {/* Clinical Pearls */}

@@ -168,30 +168,41 @@ async function handlePost(req, res, userId, userRole) {
   const { action } = req.query;
   const body = req.body;
 
-  switch (action) {
+  // If no action specified, treat direct POST as 'create' for sync compatibility
+  const actualAction = action || 'create';
+
+  switch (actualAction) {
     case 'create':
       const {
-        patientId,
-        admissionId,
-        dischargeDate,
-        primaryDiagnosis,
-        secondaryDiagnoses,
-        admissionDate,
-        hospitalCourse,
-        procedures,
+        patient_id: patientId,
+        admission_id: admissionId,
+        discharge_date: dischargeDate,
+        admission_date: admissionDate,
+        patient_name: patientName,
+        hospital_number: hospitalNumber,
+        age,
+        gender,
+        primary_diagnosis: primaryDiagnosis,
+        secondary_diagnoses: secondaryDiagnoses,
+        comorbidities,
+        hospital_course: hospitalCourse,
+        procedures_performed: procedures,
         investigations,
-        dischargeMedications,
-        followUpInstructions,
-        followUpDate,
-        followUpClinic,
-        dietaryAdvice,
-        activityRestrictions,
-        woundCareInstructions,
-        warningSymptoms,
-        emergencyContact,
+        discharge_medications: dischargeMedications,
+        follow_up_instructions: followUpInstructions,
+        follow_up_date: followUpDate,
+        follow_up_clinic: followUpClinic,
+        dietary_advice: dietaryAdvice,
+        activity_restrictions: activityRestrictions,
+        wound_care_instructions: woundCareInstructions,
+        warning_symptoms: warningSymptoms,
+        emergency_contact: emergencyContact,
         referrals,
-        conditionOnDischarge,
-        dischargeType,
+        condition_at_discharge: conditionOnDischarge,
+        discharge_type: dischargeType,
+        discharge_readiness_score,
+        discharging_doctor,
+        discharging_consultant,
         notes,
         status: summaryStatus = 'draft'
       } = body;
@@ -217,19 +228,25 @@ async function handlePost(req, res, userId, userRole) {
       const newSummary = await query(
         `INSERT INTO discharge_summaries 
          (patient_id, admission_id, prepared_by, discharge_date, admission_date,
-          primary_diagnosis, secondary_diagnoses, hospital_course, procedures,
-          investigations, discharge_medications, follow_up_instructions,
+          patient_name, hospital_number, age, gender,
+          primary_diagnosis, secondary_diagnoses, comorbidities, hospital_course, 
+          procedures_performed, investigations, discharge_medications, follow_up_instructions,
           follow_up_date, follow_up_clinic, dietary_advice, activity_restrictions,
           wound_care_instructions, warning_symptoms, emergency_contact,
-          referrals, condition_on_discharge, discharge_type, notes, status)
-         VALUES ($1, $2, $3, $4::date, $5::date, $6, $7, $8, $9, $10, $11, $12,
-                 $13::date, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
+          referrals, condition_at_discharge, discharge_type, discharge_readiness_score,
+          discharging_doctor, discharging_consultant, notes, status)
+         VALUES ($1, $2, $3, $4::date, $5::date, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+                 $15, $16, $17, $18::date, $19, $20, $21, $22, $23, $24, $25, $26, $27,
+                 $28, $29, $30, $31, $32)
          RETURNING *`,
         [
           patientId, admissionId, userId,
           dischargeDate || new Date().toISOString().split('T')[0],
-          admissionDate, primaryDiagnosis,
+          admissionDate,
+          patientName, hospitalNumber, age, gender,
+          primaryDiagnosis,
           JSON.stringify(secondaryDiagnoses || []),
+          JSON.stringify(comorbidities || []),
           hospitalCourse,
           JSON.stringify(procedures || []),
           JSON.stringify(investigations || []),
@@ -239,8 +256,10 @@ async function handlePost(req, res, userId, userRole) {
           JSON.stringify(warningSymptoms || []),
           emergencyContact,
           JSON.stringify(referrals || []),
-          conditionOnDischarge, dischargeType || 'routine', notes,
-          summaryStatus
+          conditionOnDischarge, dischargeType || 'routine',
+          discharge_readiness_score || 0,
+          discharging_doctor, discharging_consultant,
+          notes, summaryStatus
         ]
       );
       
@@ -250,7 +269,7 @@ async function handlePost(req, res, userId, userRole) {
         summaryId: newSummary.rows[0].id 
       });
       
-      return res.status(201).json({ summary: newSummary.rows[0] });
+      return res.status(201).json({ discharge: newSummary.rows[0], id: newSummary.rows[0].id });
 
     case 'submit-for-approval':
       const { summaryId } = body;

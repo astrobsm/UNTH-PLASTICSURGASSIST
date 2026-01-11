@@ -9,7 +9,7 @@ import { jsPDF } from 'jspdf';
 import { format } from 'date-fns';
 import { 
   createPDF, 
-  addDocumentHeader, 
+  addPDFHeader, 
   addFooter, 
   PDF_MARGINS, 
   PDF_FONT_SIZES, 
@@ -88,7 +88,7 @@ export const dopplerRequestService = {
   /**
    * Generate a comprehensive Doppler Ultrasound Request PDF
    */
-  generateDopplerRequestPDF(data: DopplerRequestData): jsPDF {
+  generateDopplerRequestPDF(data: DopplerRequestData): any {
     const pdf = createPDF('portrait');
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();

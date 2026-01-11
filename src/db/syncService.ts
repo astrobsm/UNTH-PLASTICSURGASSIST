@@ -149,14 +149,124 @@ class SyncService {
       case 'patients':
         await this.syncPatient(action, local_id, data);
         break;
+      case 'admissions':
+        await this.syncAdmission(action, local_id, data);
+        break;
+      case 'discharges':
+        await this.syncDischarge(action, local_id, data);
+        break;
       case 'treatment_plans':
         await this.syncTreatmentPlan(action, local_id, data);
         break;
       case 'plan_steps':
         await this.syncPlanStep(action, local_id, data);
         break;
+      case 'progress_notes':
+        await this.syncProgressNote(action, local_id, data);
+        break;
+      case 'prescriptions':
+        await this.syncPrescription(action, local_id, data);
+        break;
+      case 'lab_investigations':
+        await this.syncLabInvestigation(action, local_id, data);
+        break;
+      case 'lab_results':
+        await this.syncLabResult(action, local_id, data);
+        break;
+      case 'risk_assessments':
+        await this.syncRiskAssessment(action, local_id, data);
+        break;
+      case 'preoperative_assessments':
+        await this.syncPreoperativeAssessment(action, local_id, data);
+        break;
+      case 'surgeries':
+        await this.syncSurgery(action, local_id, data);
+        break;
+      case 'patient_transfers':
+        await this.syncPatientTransfer(action, local_id, data);
+        break;
       default:
         throw new Error(`Unknown table: ${table}`);
+    }
+  }
+
+  private async syncAdmission(action: string, localId: number, data: any): Promise<void> {
+    const admission = await db.admissions.get(localId);
+    if (!admission) return;
+
+    switch (action) {
+      case 'create':
+        // Transform snake_case to camelCase for backend
+        const backendData = {
+          patientId: admission.patient_id,
+          admissionDate: admission.admission_date,
+          ward: admission.ward_location,
+          bedNumber: admission.bed_number,
+          admittingDiagnosis: admission.provisional_diagnosis || admission.reasons_for_admission,
+          notes: admission.presenting_complaint || '',
+          status: admission.status || 'active'
+        };
+        console.log('🔄 Syncing admission to server:', backendData);
+        const response = await this.apiCall('POST', '/admissions', backendData);
+        await db.admissions.update(localId, {
+          id: response.admission.id,
+          synced: true
+        });
+        console.log('✅ Admission synced to server:', response.admission.id);
+        break;
+
+      case 'update':
+        if (admission.id) {
+          const updateData = {
+            ward: admission.ward_location,
+            bedNumber: admission.bed_number,
+            admittingDiagnosis: admission.provisional_diagnosis,
+            notes: admission.presenting_complaint,
+            status: admission.status
+          };
+          await this.apiCall('PUT', `/admissions/${admission.id}`, updateData);
+          await db.admissions.update(localId, { synced: true });
+          console.log('✅ Admission updated on server:', admission.id);
+        }
+        break;
+
+      case 'delete':
+        if (admission.id) {
+          await this.apiCall('DELETE', `/admissions/${admission.id}`, {});
+          await db.admissions.delete(localId);
+        }
+        break;
+    }
+  }
+
+  private async syncDischarge(action: string, localId: number, data: any): Promise<void> {
+    const discharge = await db.discharges.get(localId);
+    if (!discharge) return;
+
+    switch (action) {
+      case 'create':
+        const response = await this.apiCall('POST', '/discharge-summaries', discharge);
+        await db.discharges.update(localId, {
+          id: response.id,
+          synced: true
+        });
+        console.log('✅ Discharge synced to server:', response.id);
+        break;
+
+      case 'update':
+        if (discharge.id) {
+          await this.apiCall('PUT', `/discharge-summaries/${discharge.id}`, discharge);
+          await db.discharges.update(localId, { synced: true });
+          console.log('✅ Discharge updated on server:', discharge.id);
+        }
+        break;
+
+      case 'delete':
+        if (discharge.id) {
+          await this.apiCall('DELETE', `/discharge-summaries/${discharge.id}`, {});
+          await db.discharges.delete(localId);
+        }
+        break;
     }
   }
 
@@ -304,7 +414,110 @@ class SyncService {
     }
   }
 
-  // Real API call using the apiClient
+  private async syncProgressNote(action: string, localId: number, data: any): Promise<void> {
+    const note = await db.progress_notes?.get(localId);
+    if (!note) return;
+
+    if (action === 'create') {
+      const response = await this.apiCall('POST', '/progress-notes', note);
+      await db.progress_notes.update(localId, { id: response.id, synced: true });
+      console.log('✅ Progress note synced to server:', response.id);
+    }
+  }
+
+  private async syncPrescription(action: string, localId: number, data: any): Promise<void> {
+    const prescription = await db.prescriptions?.get(localId);
+    if (!prescription) return;
+
+    if (action === 'create') {
+      const response = await this.apiCall('POST', '/prescriptions', prescription);
+      await db.prescriptions.update(localId, { id: response.id, synced: true });
+      console.log('✅ Prescription synced to server:', response.id);
+    }
+  }
+
+  private async syncLabInvestigation(action: string, localId: number, data: any): Promise<void> {
+    const investigation = await db.lab_investigations?.get(localId);
+    if (!investigation) return;
+
+    switch (action) {
+      case 'create':
+        const response = await this.apiCall('POST', '/lab-orders', investigation);
+        await db.lab_investigations.update(localId, { id: response.id, synced: true });
+        console.log('✅ Lab investigation synced to server:', response.id);
+        break;
+      case 'update':
+        if (investigation.id) {
+          await this.apiCall('PUT', `/lab-orders/${investigation.id}`, investigation);
+          await db.lab_investigations.update(localId, { synced: true });
+        }
+        break;
+    }
+  }
+
+  private async syncLabResult(action: string, localId: number, data: any): Promise<void> {
+    const result = await db.lab_results?.get(localId);
+    if (!result) return;
+
+    if (action === 'create') {
+      const response = await this.apiCall('POST', '/lab-results', result);
+      await db.lab_results.update(localId, { id: response.id, synced: true });
+      console.log('✅ Lab result synced to server:', response.id);
+    }
+  }
+
+  private async syncRiskAssessment(action: string, localId: number, data: any): Promise<void> {
+    const assessment = await db.risk_assessments?.get(localId);
+    if (!assessment) return;
+
+    if (action === 'create') {
+      const response = await this.apiCall('POST', '/risk-assessments', assessment);
+      await db.risk_assessments.update(localId, { id: response.id, synced: true });
+      console.log('✅ Risk assessment synced to server:', response.id);
+    }
+  }
+
+  private async syncPreoperativeAssessment(action: string, localId: number, data: any): Promise<void> {
+    const assessment = await db.preoperative_assessments?.get(localId);
+    if (!assessment) return;
+
+    if (action === 'create') {
+      const response = await this.apiCall('POST', '/preoperative-assessments', assessment);
+      await db.preoperative_assessments.update(localId, { id: response.id, synced: true });
+      console.log('✅ Preoperative assessment synced to server:', response.id);
+    }
+  }
+
+  private async syncSurgery(action: string, localId: number, data: any): Promise<void> {
+    const surgery = await db.surgeries?.get(localId);
+    if (!surgery) return;
+
+    switch (action) {
+      case 'create':
+        const response = await this.apiCall('POST', '/surgeries', surgery);
+        await db.surgeries.update(localId, { id: response.id, synced: true });
+        console.log('✅ Surgery synced to server:', response.id);
+        break;
+      case 'update':
+        if (surgery.id) {
+          await this.apiCall('PUT', `/surgeries/${surgery.id}`, surgery);
+          await db.surgeries.update(localId, { synced: true });
+        }
+        break;
+    }
+  }
+
+  private async syncPatientTransfer(action: string, localId: number, data: any): Promise<void> {
+    const transfer = await db.patient_transfers?.get(localId);
+    if (!transfer) return;
+
+    if (action === 'create') {
+      const response = await this.apiCall('POST', '/patient-transfers', transfer);
+      await db.patient_transfers.update(localId, { id: response.id, synced: true });
+      console.log('✅ Patient transfer synced to server:', response.id);
+    }
+  }
+
   private async apiCall(method: string, endpoint: string, data?: any): Promise<any> {
     const token = apiClient.getToken();
     const baseUrl = getApiBaseUrl();

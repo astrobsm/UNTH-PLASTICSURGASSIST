@@ -46,7 +46,6 @@ const navigation = [
   { name: 'Paperwork', href: '/paperwork', icon: FolderOpen },
   { name: 'MDT', href: '/mdt', icon: UserCog },
   { name: 'Procedures', href: '/procedures', icon: Stethoscope },
-  { name: 'Scheduling', href: '/scheduling', icon: Calendar },
   { name: 'Blood Transfusion', href: '/blood-transfusion', icon: Droplet },
   { name: 'Ward Rounds', href: '/ward-rounds', icon: Activity },
   { name: 'Limb Salvage', href: '/limb-salvage', icon: Footprints },

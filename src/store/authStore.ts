@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { userManagementService } from '../services/userManagementService';
 import { apiClient } from '../services/apiClient';
+import { encrypt, decrypt, initializeEncryption, clearEncryption } from '../utils/encryption';
 
 export interface User {
   id: string;
@@ -63,6 +64,10 @@ export const useAuthStore = create<AuthState>()(
             mustChangePassword: response.user.mustChangePassword || false
           };
 
+          // Initialize encryption with password and encrypt user data
+          await initializeEncryption(password);
+          const encryptedUser = await encrypt(JSON.stringify(user));
+          
           set({ user, token: response.token });
           set({ loading: false });
         } catch (error) {
@@ -72,6 +77,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
+        clearEncryption();
         set({ user: null, token: null, loading: false });
         apiClient.logout();
       },
@@ -88,9 +94,16 @@ export const useAuthStore = create<AuthState>()(
           // Check if we have stored auth data
           const state = get();
           if (state.token && state.user) {
-            // Token exists, validate it's still valid
-            // In production, this would validate with backend
-            set({ loading: false });
+            // Validate token with backend
+            try {
+              await apiClient.getCurrentUser();
+              set({ loading: false });
+            } catch (error) {
+              // Token invalid or expired, clear it
+              console.warn('Token validation failed, logging out');
+              set({ user: null, token: null, loading: false });
+              apiClient.logout();
+            }
           } else {
             set({ loading: false });
           }

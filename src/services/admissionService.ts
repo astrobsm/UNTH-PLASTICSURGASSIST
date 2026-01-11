@@ -1,4 +1,6 @@
 import { db } from '../db/database';
+import { apiClient } from './apiClient';
+import { syncService } from '../db/syncService';
 
 export interface Admission {
   id?: number;
@@ -62,8 +64,30 @@ class AdmissionService {
       updated_at: now
     };
 
-    const id = await db.admissions.add(admission);
-    return id;
+    try {
+      // Try to save to API first
+      const savedAdmission = await apiClient.createAdmission(admission);
+      
+      if (savedAdmission && savedAdmission.id) {
+        // Save to local DB with server ID
+        const localId = await db.admissions.add({
+          ...admission,
+          id: savedAdmission.id,
+          synced: true
+        } as any);
+        return savedAdmission.id;
+      }
+    } catch (error) {
+      console.warn('Failed to sync admission to server, saving locally:', error);
+    }
+
+    // Fallback: save locally only
+    const localId = await db.admissions.add({ ...admission, synced: false } as any);
+    
+    // Queue for sync
+    await syncService.queueAction('create', 'admissions', localId, admission);
+    
+    return localId;
   }
 
   // Get admission by ID

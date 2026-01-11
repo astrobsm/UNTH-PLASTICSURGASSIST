@@ -2,6 +2,28 @@
 import { query } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
 
+// Transform database row to frontend format
+function transformAdmission(row) {
+  return {
+    id: row.id,
+    patient_id: row.patient_id,
+    patient_name: row.first_name && row.last_name 
+      ? `${row.first_name} ${row.last_name}` 
+      : null,
+    hospital_number: row.hospital_number,
+    admission_date: row.admission_date,
+    ward_location: row.ward,
+    bed_number: row.bed_number,
+    provisional_diagnosis: row.admitting_diagnosis,
+    presenting_complaint: row.notes,
+    reasons_for_admission: row.admitting_diagnosis,
+    status: row.status,
+    created_by: row.created_by,
+    created_at: row.created_at,
+    updated_at: row.updated_at
+  };
+}
+
 export default async function handler(req, res) {
   if (cors(req, res)) return;
 
@@ -73,7 +95,10 @@ async function getAllAdmissions(searchParams, res) {
 
   const result = await query(queryStr, params);
 
-  res.status(200).json({ admissions: result.rows });
+  // Transform all rows to frontend format
+  const transformedAdmissions = result.rows.map(transformAdmission);
+
+  res.status(200).json({ admissions: transformedAdmissions });
 }
 
 async function getAdmission(id, res) {
@@ -89,13 +114,16 @@ async function getAdmission(id, res) {
     return res.status(404).json({ error: 'Admission not found' });
   }
 
-  res.status(200).json({ admission: result.rows[0] });
+  // Transform to frontend format
+  const transformedAdmission = transformAdmission(result.rows[0]);
+
+  res.status(200).json({ admission: transformedAdmission });
 }
 
 async function createAdmission(data, user, res) {
   const {
     patientId, admissionDate, ward, bedNumber,
-    admittingDiagnosis, notes, status = 'admitted'
+    admittingDiagnosis, notes, status = 'active'
   } = data;
 
   if (!patientId || !admissionDate) {
@@ -111,7 +139,23 @@ async function createAdmission(data, user, res) {
     [patientId, admissionDate, ward, bedNumber, admittingDiagnosis, notes, status, user.id]
   );
 
-  res.status(201).json({ admission: result.rows[0] });
+  // Get patient info for transformation
+  const patientResult = await query(
+    'SELECT first_name, last_name, hospital_number FROM patients WHERE id = $1',
+    [patientId]
+  );
+
+  const admissionWithPatient = {
+    ...result.rows[0],
+    first_name: patientResult.rows[0]?.first_name,
+    last_name: patientResult.rows[0]?.last_name,
+    hospital_number: patientResult.rows[0]?.hospital_number
+  };
+
+  // Transform to frontend format
+  const transformedAdmission = transformAdmission(admissionWithPatient);
+
+  res.status(201).json({ admission: transformedAdmission });
 }
 
 async function updateAdmission(id, data, res) {
@@ -153,7 +197,25 @@ async function updateAdmission(id, data, res) {
     return res.status(404).json({ error: 'Admission not found' });
   }
 
-  res.status(200).json({ admission: result.rows[0] });
+  // Get patient info for transformation
+  const patientResult = await query(
+    `SELECT first_name, last_name, hospital_number FROM patients WHERE id = (
+      SELECT patient_id FROM admissions WHERE id = $1
+    )`,
+    [id]
+  );
+
+  const admissionWithPatient = {
+    ...result.rows[0],
+    first_name: patientResult.rows[0]?.first_name,
+    last_name: patientResult.rows[0]?.last_name,
+    hospital_number: patientResult.rows[0]?.hospital_number
+  };
+
+  // Transform to frontend format
+  const transformedAdmission = transformAdmission(admissionWithPatient);
+
+  res.status(200).json({ admission: transformedAdmission });
 }
 
 async function deleteAdmission(id, res) {

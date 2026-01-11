@@ -1,5 +1,7 @@
 import { aiService } from './aiService';
 import { db } from '../db/database';
+import { apiClient } from './apiClient';
+import { syncService } from '../db/syncService';
 
 // Base interfaces for risk assessments
 export interface BaseRiskAssessment {
@@ -522,8 +524,19 @@ class RiskAssessmentService {
         updated_at: new Date()
       };
       
-      const id = await db.dvt_assessments.add(assessmentWithTimestamps);
-      return id.toString();
+      // Try to sync to server first
+      try {
+        const saved = await apiClient.createRiskAssessment(assessmentWithTimestamps);
+        console.log('✅ DVT risk assessment synced to server:', saved.id);
+        await db.dvt_assessments.add({ ...assessmentWithTimestamps, id: saved.id, synced: true });
+        return saved.id;
+      } catch (syncError) {
+        console.warn('⚠️ Failed to sync DVT assessment to server, saving locally', syncError);
+        const id = await db.dvt_assessments.add({ ...assessmentWithTimestamps, synced: false });
+        await syncService.queueAction('create', 'risk_assessments', id as any, assessmentWithTimestamps);
+        console.log('📱 DVT assessment saved locally, will sync when online:', id);
+        return id.toString();
+      }
     } catch (error) {
       console.error('Error saving DVT assessment:', error);
       throw new Error('Failed to save DVT assessment');
@@ -541,8 +554,19 @@ class RiskAssessmentService {
         updated_at: new Date()
       };
       
-      const id = await db.pressure_sore_assessments.add(assessmentWithTimestamps);
-      return id.toString();
+      // Try to sync to server first
+      try {
+        const saved = await apiClient.createRiskAssessment(assessmentWithTimestamps);
+        console.log('✅ Pressure sore risk assessment synced to server:', saved.id);
+        await db.pressure_sore_assessments.add({ ...assessmentWithTimestamps, id: saved.id, synced: true });
+        return saved.id;
+      } catch (syncError) {
+        console.warn('⚠️ Failed to sync pressure sore assessment to server, saving locally', syncError);
+        const id = await db.pressure_sore_assessments.add({ ...assessmentWithTimestamps, synced: false });
+        await syncService.queueAction('create', 'risk_assessments', id as any, assessmentWithTimestamps);
+        console.log('📱 Pressure sore assessment saved locally, will sync when online:', id);
+        return id.toString();
+      }
     } catch (error) {
       console.error('Error saving pressure sore assessment:', error);
       throw new Error('Failed to save pressure sore assessment');
@@ -560,8 +584,19 @@ class RiskAssessmentService {
         updated_at: new Date()
       };
       
-      const id = await db.nutritional_assessments.add(assessmentWithTimestamps);
-      return id.toString();
+      // Try to sync to server first
+      try {
+        const saved = await apiClient.createRiskAssessment(assessmentWithTimestamps);
+        console.log('✅ Nutritional risk assessment synced to server:', saved.id);
+        await db.nutritional_assessments.add({ ...assessmentWithTimestamps, id: saved.id, synced: true });
+        return saved.id;
+      } catch (syncError) {
+        console.warn('⚠️ Failed to sync nutritional assessment to server, saving locally', syncError);
+        const id = await db.nutritional_assessments.add({ ...assessmentWithTimestamps, synced: false });
+        await syncService.queueAction('create', 'risk_assessments', id as any, assessmentWithTimestamps);
+        console.log('📱 Nutritional assessment saved locally, will sync when online:', id);
+        return id.toString();
+      }
     } catch (error) {
       console.error('Error saving nutritional assessment:', error);
       throw new Error('Failed to save nutritional assessment');

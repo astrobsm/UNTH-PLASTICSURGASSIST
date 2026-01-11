@@ -316,6 +316,256 @@ class ApiClient {
     });
   }
 
+  // Admission management
+  async createAdmission(admissionData: any) {
+    // Transform frontend format to backend format
+    const backendData = {
+      patientId: admissionData.patient_id,
+      admissionDate: admissionData.admission_date,
+      ward: admissionData.ward_location,
+      bedNumber: admissionData.bed_number,
+      admittingDiagnosis: admissionData.provisional_diagnosis || admissionData.reasons_for_admission,
+      notes: admissionData.presenting_complaint || '',
+      status: 'active' // Always use 'active' for new admissions
+    };
+    
+    console.log('📤 Sending admission to server:', backendData);
+    const data = await this.request('/admissions', {
+      method: 'POST',
+      body: JSON.stringify(backendData)
+    });
+    console.log('✅ Server created admission:', data.admission);
+    return data.admission;
+  }
+
+  async getAdmissions(since?: string) {
+    const query = since ? `?since=${since}` : '';
+    const data = await this.request(`/admissions${query}`);
+    return data.admissions || [];
+  }
+
+  async getAdmission(id: string) {
+    const data = await this.request(`/admissions/${id}`);
+    return data.admission;
+  }
+
+  async updateAdmission(id: string, admissionData: any) {
+    const data = await this.request(`/admissions/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(admissionData)
+    });
+    return data.admission;
+  }
+
+  // Discharge management
+  async createDischarge(dischargeData: any) {
+    const data = await this.request('/discharge-summaries', {
+      method: 'POST',
+      body: JSON.stringify(dischargeData)
+    });
+    return data.discharge;
+  }
+
+  async getDischarges(since?: string) {
+    const query = since ? `?since=${since}` : '';
+    const data = await this.request(`/discharge-summaries${query}`);
+    return data.discharges || [];
+  }
+
+  // Treatment plans
+  async getTreatmentPlans(patientId?: string, since?: string) {
+    let query = '';
+    if (patientId) query += `?patientId=${patientId}`;
+    if (since) query += (query ? '&' : '?') + `since=${since}`;
+    const data = await this.request(`/treatment-plans${query}`);
+    return data.plans || [];
+  }
+
+  async createTreatmentPlan(planData: any) {
+    // Transform snake_case to camelCase for backend
+    const transformedData = {
+      patientId: planData.patient_id,
+      diagnosis: planData.diagnosis,
+      treatmentType: planData.treatment_type || 'comprehensive',
+      description: planData.title || planData.description,
+      objectives: planData.objectives || [],
+      procedures: planData.planned_procedures || planData.procedures || [],
+      medications: planData.planned_medications || planData.medications || [],
+      followUpSchedule: planData.planned_reviews || planData.reviews || [],
+      notes: planData.notes || '',
+      status: planData.status || 'active'
+    };
+
+    console.log('🔄 Sending treatment plan to API:', transformedData);
+    
+    const data = await this.request('/treatment-plans', {
+      method: 'POST',
+      body: JSON.stringify(transformedData)
+    });
+    return data.treatmentPlan;
+  }
+
+  async updateTreatmentPlan(id: string, planData: any) {
+    const data = await this.request(`/treatment-plans/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(planData)
+    });
+    return data.plan;
+  }
+
+  // Progress notes
+  async createProgressNote(noteData: any) {
+    const data = await this.request('/progress-notes', {
+      method: 'POST',
+      body: JSON.stringify(noteData)
+    });
+    return data.note;
+  }
+
+  async getProgressNotes(patientId?: string, since?: string) {
+    let query = '';
+    if (patientId) query += `?patientId=${patientId}`;
+    if (since) query += (query ? '&' : '?') + `since=${since}`;
+    const data = await this.request(`/progress-notes${query}`);
+    return data.notes || [];
+  }
+
+  // Prescriptions
+  async createPrescription(prescriptionData: any) {
+    const data = await this.request('/prescriptions', {
+      method: 'POST',
+      body: JSON.stringify(prescriptionData)
+    });
+    return data.prescription;
+  }
+
+  async getPrescriptions(patientId?: string, since?: string) {
+    let query = '';
+    if (patientId) query += `?patientId=${patientId}`;
+    if (since) query += (query ? '&' : '?') + `since=${since}`;
+    const data = await this.request(`/prescriptions${query}`);
+    return data.prescriptions || [];
+  }
+
+  // Lab investigations
+  async createLabInvestigation(labData: any) {
+    const data = await this.request('/lab-orders', {
+      method: 'POST',
+      body: JSON.stringify(labData)
+    });
+    return data.investigation;
+  }
+
+  async getLabInvestigations(patientId?: string, since?: string) {
+    let query = '';
+    if (patientId) query += `?patientId=${patientId}`;
+    if (since) query += (query ? '&' : '?') + `since=${since}`;
+    const data = await this.request(`/lab-orders${query}`);
+    return data.investigations || [];
+  }
+
+  async updateLabInvestigation(id: string, labData: any) {
+    const data = await this.request(`/lab-orders/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(labData)
+    });
+    return data.investigation;
+  }
+
+  // Lab results
+  async createLabResult(resultData: any) {
+    const data = await this.request('/lab-results', {
+      method: 'POST',
+      body: JSON.stringify(resultData)
+    });
+    return data.result;
+  }
+
+  async getLabResults(investigationId?: string, since?: string) {
+    let query = '';
+    if (investigationId) query += `?investigationId=${investigationId}`;
+    if (since) query += (query ? '&' : '?') + `since=${since}`;
+    const data = await this.request(`/lab-results${query}`);
+    return data.results || [];
+  }
+
+  // Risk assessments
+  async createRiskAssessment(assessmentData: any) {
+    const data = await this.request('/risk-assessments', {
+      method: 'POST',
+      body: JSON.stringify(assessmentData)
+    });
+    return data.assessment;
+  }
+
+  async getRiskAssessments(patientId?: string, type?: string, since?: string) {
+    let query = '';
+    if (patientId) query += `?patientId=${patientId}`;
+    if (type) query += (query ? '&' : '?') + `type=${type}`;
+    if (since) query += (query ? '&' : '?') + `since=${since}`;
+    const data = await this.request(`/risk-assessments${query}`);
+    return data.assessments || [];
+  }
+
+  // Preoperative assessments
+  async createPreoperativeAssessment(assessmentData: any) {
+    const data = await this.request('/preoperative-assessments', {
+      method: 'POST',
+      body: JSON.stringify(assessmentData)
+    });
+    return data.assessment;
+  }
+
+  async getPreoperativeAssessments(patientId?: string, since?: string) {
+    let query = '';
+    if (patientId) query += `?patientId=${patientId}`;
+    if (since) query += (query ? '&' : '?') + `since=${since}`;
+    const data = await this.request(`/preoperative-assessments${query}`);
+    return data.assessments || [];
+  }
+
+  // Surgeries
+  async createSurgery(surgeryData: any) {
+    const data = await this.request('/surgeries', {
+      method: 'POST',
+      body: JSON.stringify(surgeryData)
+    });
+    return data.surgery;
+  }
+
+  async getSurgeries(patientId?: string, since?: string) {
+    let query = '';
+    if (patientId) query += `?patientId=${patientId}`;
+    if (since) query += (query ? '&' : '?') + `since=${since}`;
+    const data = await this.request(`/surgeries${query}`);
+    return data.surgeries || [];
+  }
+
+  async updateSurgery(id: string, surgeryData: any) {
+    const data = await this.request(`/surgeries/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(surgeryData)
+    });
+    return data.surgery;
+  }
+
+  // Patient transfers
+  async createPatientTransfer(transferData: any) {
+    const data = await this.request('/patient-transfers', {
+      method: 'POST',
+      body: JSON.stringify(transferData)
+    });
+    return data.transfer;
+  }
+
+  async getPatientTransfers(patientId?: string, since?: string) {
+    let query = '';
+    if (patientId) query += `?patientId=${patientId}`;
+    if (since) query += (query ? '&' : '?') + `since=${since}`;
+    const data = await this.request(`/patient-transfers${query}`);
+    return data.transfers || [];
+  }
+
   // Health check
   async healthCheck() {
     return this.request('/health');

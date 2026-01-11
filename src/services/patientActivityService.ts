@@ -1,4 +1,5 @@
 import { db } from '../db/database';
+import { logger } from '../utils/logger';
 
 export interface PatientActivity {
   id?: number;
@@ -30,7 +31,7 @@ class PatientActivityService {
       };
 
       await db.activity_logs.add(activityRecord);
-      console.log(`✅ Logged activity: ${activity.activity_type} - ${activity.action} for patient ${activity.hospital_number}`);
+      logger.log(`✅ Logged activity: ${activity.activity_type} - ${activity.action} for patient ${activity.hospital_number}`);
     } catch (error) {
       console.error('Error logging patient activity:', error);
       // Don't throw - activity logging should not break the main flow

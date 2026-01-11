@@ -2,6 +2,8 @@ import { db } from '../db/database';
 import { format, addDays, differenceInDays, isBefore, isAfter } from 'date-fns';
 import toast from 'react-hot-toast';
 import { notificationService } from './notificationService';
+import { apiClient } from './apiClient';
+import { syncService } from '../db/syncService';
 
 // Enhanced Treatment Planning Interfaces
 
@@ -384,8 +386,31 @@ class TreatmentPlanningService {
       updated_at: new Date()
     };
 
-    await db.treatment_plans.add(plan as any);
-    return plan.id;
+    console.log('📋 Creating treatment plan:', plan);
+
+    // Try to sync to server first
+    try {
+      const saved = await apiClient.createTreatmentPlan(plan);
+      console.log('✅ Treatment plan synced to server:', saved);
+      const savedId = saved.id || saved.plan_id || plan.id;
+      await db.treatment_plans.add({ ...plan, id: savedId, synced: true } as any);
+      toast.success('Treatment plan created successfully');
+      return savedId;
+    } catch (error: any) {
+      console.warn('⚠️ Failed to sync treatment plan to server, saving locally', error);
+      
+      // Check if patient is synced
+      const patient = await db.patients.get({ id: plan.patient_id } as any);
+      if (patient && !patient.synced) {
+        toast.error('Cannot sync treatment plan: patient not synced yet. Please wait for patient to sync first.');
+      }
+      
+      const localId = await db.treatment_plans.add({ ...plan, synced: false } as any);
+      await syncService.queueAction('create', 'treatment_plans', localId as any, plan);
+      console.log('📱 Treatment plan saved locally, will sync when online:', localId);
+      toast.success('Treatment plan saved locally, will sync when online');
+      return plan.id;
+    }
   }
 
   // Add review to plan

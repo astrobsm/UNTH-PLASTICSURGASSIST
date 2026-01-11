@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { patientActivityService } from '../services/patientActivityService';
+import { apiClient } from '../services/apiClient';
+import { syncService } from '../db/syncService';
+import { db } from '../db/database';
 
 interface ProgressNoteModalProps {
   isOpen: boolean;
@@ -62,10 +65,31 @@ export const ProgressNoteModal: React.FC<ProgressNoteModalProps> = ({
         updated_at: new Date()
       };
 
-      // Save to localStorage for now (will be synced to server)
-      const existingNotes = JSON.parse(localStorage.getItem('progressNotes') || '[]');
-      existingNotes.push(progressNote);
-      localStorage.setItem('progressNotes', JSON.stringify(existingNotes));
+      // Try to sync to server first
+      try {
+        const savedNote = await apiClient.createProgressNote(progressNote);
+        console.log('✅ Progress note synced to server:', savedNote.id);
+        
+        // Save to IndexedDB with server ID
+        if (db.progress_notes) {
+          await db.progress_notes.add({ ...progressNote, id: savedNote.id, synced: true });
+        }
+      } catch (error) {
+        console.warn('⚠️ Failed to sync progress note to server, saving locally', error);
+        
+        // Fallback: save locally and queue for sync
+        if (db.progress_notes) {
+          const localId = await db.progress_notes.add({ ...progressNote, synced: false });
+          await syncService.queueAction('create', 'progress_notes', localId, progressNote);
+          console.log('📱 Progress note saved locally, will sync when online:', localId);
+        } else {
+          // Ultimate fallback to localStorage if db table doesn't exist
+          const existingNotes = JSON.parse(localStorage.getItem('progressNotes') || '[]');
+          existingNotes.push(progressNote);
+          localStorage.setItem('progressNotes', JSON.stringify(existingNotes));
+          console.log('📱 Progress note saved to localStorage (fallback)');
+        }
+      }
 
       // Log activity
       await patientActivityService.logProgressNote(

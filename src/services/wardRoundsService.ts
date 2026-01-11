@@ -98,14 +98,27 @@ class WardRoundsService {
       const id = crypto.randomUUID();
       const now = new Date();
       
+      // Ensure round_date is a Date object
+      const roundDate = round.round_date instanceof Date 
+        ? round.round_date 
+        : new Date(round.round_date);
+      
       const roundData = {
         ...round,
+        round_date: roundDate,
         id,
         created_at: now,
         updated_at: now,
         synced: false
       };
 
+      console.log('Creating ward round in DB:', {
+        id,
+        patient_id: roundData.patient_id,
+        round_date: roundData.round_date,
+        reviewing_doctor: roundData.reviewing_doctor
+      });
+      
       await db.ward_rounds.add(roundData);
       
       // Log activity for analytics
@@ -116,9 +129,10 @@ class WardRoundsService {
         details: `Round completed for ${round.patient_name || 'patient'}`
       });
 
+      console.log('✅ Ward round created successfully with ID:', id);
       return id;
     } catch (error) {
-      console.error('Failed to create ward round:', error);
+      console.error('❌ Failed to create ward round:', error);
       throw error;
     }
   }

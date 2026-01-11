@@ -2,6 +2,10 @@ import React, { useState } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { MEDICATION_DATABASE } from '../data/medicationDatabase';
 import { patientActivityService } from '../services/patientActivityService';
+import { apiClient } from '../services/apiClient';
+import { syncService } from '../db/syncService';
+import { db } from '../db/database';
+import { logPrescriptionAction } from '../services/auditLoggingService';
 
 interface PrescriptionModalProps {
   isOpen: boolean;
@@ -102,10 +106,35 @@ export const PrescriptionModal: React.FC<PrescriptionModalProps> = ({
         updated_at: new Date()
       };
 
-      // Save to localStorage for now
-      const existing = JSON.parse(localStorage.getItem('prescriptions') || '[]');
-      existing.push(prescriptionData);
-      localStorage.setItem('prescriptions', JSON.stringify(existing));
+      // Try to sync to server first
+      let prescriptionId: string = '';
+      try {
+        const savedPrescription = await apiClient.createPrescription(prescriptionData);
+        prescriptionId = savedPrescription.id;
+        console.log('✅ Prescription synced to server:', prescriptionId);
+        
+        // Save to IndexedDB with server ID
+        if (db.prescriptions) {
+          await db.prescriptions.add({ ...prescriptionData, id: prescriptionId, synced: true });
+        }
+      } catch (error) {
+        console.warn('⚠️ Failed to sync prescription to server, saving locally', error);
+        
+        // Fallback: save locally and queue for sync
+        if (db.prescriptions) {
+          const localId = await db.prescriptions.add({ ...prescriptionData, synced: false });
+          prescriptionId = localId.toString();
+          await syncService.queueAction('create', 'prescriptions', localId, prescriptionData);
+          console.log('📱 Prescription saved locally, will sync when online:', localId);
+        } else {
+          // Ultimate fallback to localStorage if db table doesn't exist
+          const existing = JSON.parse(localStorage.getItem('prescriptions') || '[]');
+          existing.push(prescriptionData);
+          localStorage.setItem('prescriptions', JSON.stringify(existing));
+          prescriptionId = `local-${Date.now()}`;
+          console.log('📱 Prescription saved to localStorage (fallback)');
+        }
+      }
 
       // Log activity
       await patientActivityService.logPrescription(
@@ -117,6 +146,19 @@ export const PrescriptionModal: React.FC<PrescriptionModalProps> = ({
         prescriptions,
         'created'
       );
+
+      // Log audit for HIPAA compliance
+      if (user) {
+        await logPrescriptionAction(
+          user.id,
+          user.name,
+          user.role,
+          prescriptionId,
+          patientId,
+          'CREATE',
+          `Created ${prescriptions.length} prescription(s) for ${patientName}`
+        );
+      }
 
       alert(`${prescriptions.length} prescription(s) saved successfully!`);
       onSuccess();

@@ -213,7 +213,7 @@ export default function Dashboard() {
               <ClipboardCheck className="h-4 w-4 mr-2 flex-shrink-0" />
               <span className="truncate">Create Treatment Plan</span>
             </Link>
-            <Link to="/scheduling" className="btn-secondary w-full justify-start">
+            <Link to="/procedures" className="btn-secondary w-full justify-start">
               <Calendar className="h-4 w-4 mr-2 flex-shrink-0" />
               <span className="truncate">Schedule Surgery</span>
             </Link>

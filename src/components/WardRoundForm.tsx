@@ -4,6 +4,7 @@ import { wardRoundsService, WardRound, ROUND_TYPES, RoundType, ClinicalImage } f
 import { db } from '../db/database';
 import { format } from 'date-fns';
 import { useAuthStore } from '../store/authStore';
+import { apiClient } from '../services/apiClient';
 import { TreatmentPlanModificationPanel } from './TreatmentPlanModificationPanel';
 import { InvestigationOrderingModal } from './InvestigationOrderingModal';
 import { MedicationOrderingModal } from './MedicationOrderingModal';
@@ -46,6 +47,7 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
   const [formData, setFormData] = useState({
     patient_id: initialPatientId || '',
     reviewer_id: '',
+    reviewing_doctor: authUser?.name || '',
     round_date: format(new Date(), 'yyyy-MM-dd'),
     round_time: format(new Date(), 'HH:mm'),
     
@@ -53,6 +55,11 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
     round_type: 'house_officers_round' as RoundType,
     doctor_role: 'house_officer' as 'consultant' | 'senior_registrar' | 'registrar' | 'house_officer',
     accompanying_team: [] as string[],
+    
+    // Required Clinical Assessment Fields
+    chief_complaint: '',
+    clinical_notes: '',
+    examination_findings: '',
     
     // Subjective Assessment
     subjective_complaints: '',
@@ -76,8 +83,15 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
     
     // Clinical Assessment
     clinical_impression: '',
-    progress_status: 'stable',
+    progress_status: 'stable' as 'improved' | 'stable' | 'deteriorating' | 'critical',
     complications: '',
+    
+    // Required Boolean Fields
+    recent_labs_reviewed: false,
+    treatment_plan_updated: false,
+    medications_changed: false,
+    wound_assessment_done: false,
+    consultation_requested: false,
     
     // Management Plan
     continue_medications: [] as string[],
@@ -92,7 +106,8 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
     activity_orders: '',
     nursing_instructions: '',
     
-    // Follow-up
+    // Required Follow-up Field
+    follow_up_plan: '',
     next_review_date: '',
     discharge_plan: '',
     consultant_notified: false,
@@ -128,7 +143,16 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
     const user = await db.users.where('id').equals(localStorage.getItem('userId') || '').first();
     setCurrentUser(user);
     if (user) {
-      setFormData(prev => ({ ...prev, reviewer_id: user.id }));
+      setFormData(prev => ({ 
+        ...prev, 
+        reviewer_id: user.id,
+        reviewing_doctor: user.name || authUser?.name || ''
+      }));
+    } else if (authUser) {
+      setFormData(prev => ({
+        ...prev,
+        reviewing_doctor: authUser.name || authUser.email || ''
+      }));
     }
   };
 
@@ -142,21 +166,31 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
     setSelectedPatient(patient);
     setFormData(prev => ({ ...prev, patient_id: patientId }));
     
-    // Load patient's treatment plan
+    // Load patient's treatment plan - only if authenticated
     try {
-      const response = await fetch(`/api/treatment-plans?patient_id=${patientId}`);
-      if (response.ok) {
-        const data = await response.json();
-        if (data.treatmentPlans && data.treatmentPlans.length > 0) {
-          // Get the most recent active plan
-          const activePlan = data.treatmentPlans.find((p: any) => p.status === 'active') || data.treatmentPlans[0];
-          setPatientTreatmentPlan(activePlan);
-        } else {
-          setPatientTreatmentPlan(null);
-        }
+      const token = apiClient.getToken();
+      if (!token) {
+        console.log('⚠️ No auth token available yet, skipping treatment plan fetch');
+        setPatientTreatmentPlan(null);
+        return;
       }
-    } catch (error) {
-      console.error('Error loading treatment plan:', error);
+
+      const data = await apiClient.getTreatmentPlans(patientId);
+      if (data && data.length > 0) {
+        // Get the most recent active plan
+        const activePlan = data.find((p: any) => p.status === 'active') || data[0];
+        setPatientTreatmentPlan(activePlan);
+        console.log('✅ Treatment plan loaded successfully');
+      } else {
+        setPatientTreatmentPlan(null);
+      }
+    } catch (error: any) {
+      // Silently handle auth errors - treatment plan is optional for ward rounds
+      if (error.message?.includes('No token') || error.message?.includes('401')) {
+        console.log('ℹ️ Treatment plan unavailable (not authenticated yet)');
+      } else {
+        console.error('Error loading treatment plan:', error);
+      }
       setPatientTreatmentPlan(null);
     }
   };
@@ -178,10 +212,69 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
     e.preventDefault();
     
     try {
+      // Ensure all required fields are present
       const wardRoundData: Partial<WardRound> = {
-        ...formData,
-        round_date: new Date(formData.round_date).toISOString()
+        patient_id: formData.patient_id,
+        patient_name: selectedPatient ? `${selectedPatient.first_name} ${selectedPatient.last_name}` : '',
+        hospital_number: selectedPatient?.hospital_number || '',
+        round_date: new Date(formData.round_date),
+        round_time: formData.round_time,
+        round_type: formData.round_type,
+        reviewing_doctor: formData.reviewing_doctor || authUser?.name || currentUser?.name || 'Unknown',
+        doctor_role: formData.doctor_role,
+        accompanying_team: formData.accompanying_team,
+        
+        // Required clinical fields
+        chief_complaint: formData.chief_complaint || formData.subjective_complaints || 'No complaints',
+        clinical_notes: formData.clinical_notes || formData.clinical_impression || 'No additional notes',
+        examination_findings: formData.examination_findings || formData.general_appearance || 'No specific findings',
+        
+        // Vitals
+        temperature: formData.temperature ? parseFloat(formData.temperature) : undefined,
+        pulse: formData.pulse ? parseFloat(formData.pulse) : undefined,
+        bp_systolic: formData.blood_pressure ? parseInt(formData.blood_pressure.split('/')[0]) : undefined,
+        bp_diastolic: formData.blood_pressure ? parseInt(formData.blood_pressure.split('/')[1]) : undefined,
+        respiratory_rate: formData.respiratory_rate ? parseFloat(formData.respiratory_rate) : undefined,
+        spo2: formData.spo2 ? parseFloat(formData.spo2) : undefined,
+        
+        // Required boolean fields
+        recent_labs_reviewed: formData.recent_labs_reviewed || false,
+        treatment_plan_updated: formData.treatment_plan_updated || false,
+        medications_changed: formData.medications_changed || (formData.new_medications.length > 0 || formData.stop_medications.length > 0),
+        wound_assessment_done: formData.wound_assessment_done || !!formData.wound_status,
+        consultation_requested: formData.consultation_requested || false,
+        
+        // Progress and planning
+        progress_status: formData.progress_status,
+        complications: formData.complications,
+        follow_up_plan: formData.follow_up_plan || formData.discharge_plan || 'Continue current management',
+        next_review_date: formData.next_review_date ? new Date(formData.next_review_date) : undefined,
+        discharge_planning: formData.discharge_plan,
+        
+        // Clinical images
+        clinical_images: clinicalImages,
+        ocr_extracted_text: formData.ocr_extracted_text,
+        
+        // Medication changes
+        medication_changes: formData.new_medications.length > 0 
+          ? `New: ${formData.new_medications.map(m => `${m.name} ${m.dose} ${m.route} ${m.frequency}`).join(', ')}`
+          : undefined,
+        
+        // Lab notes
+        lab_notes: formData.investigations_ordered.length > 0 
+          ? `Investigations ordered: ${formData.investigations_ordered.join(', ')}`
+          : undefined,
+        
+        // Wound notes
+        wound_notes: formData.wound_status,
+        
+        // Additional fields
+        new_orders: formData.procedures_planned.length > 0 
+          ? formData.procedures_planned.join(', ')
+          : undefined
       };
+
+      console.log('Submitting ward round data:', wardRoundData);
 
       if (wardRoundId) {
         await wardRoundsService.updateWardRound(wardRoundId, wardRoundData);
@@ -193,7 +286,7 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
       onClose();
     } catch (error) {
       console.error('Error saving ward round:', error);
-      alert('Error saving ward round. Please try again.');
+      alert(`Error saving ward round: ${error instanceof Error ? error.message : 'Please try again.'}`);
     }
   };
 

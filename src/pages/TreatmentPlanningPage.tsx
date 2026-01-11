@@ -340,7 +340,170 @@ const TreatmentPlanningPage: React.FC = () => {
               </div>
             )}
 
-            {/* Add similar sections for other tabs */}
+            {activeTab === 'labs' && (
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold text-gray-900">Lab Work</h3>
+                  <button
+                    onClick={() => setShowAddLab(true)}
+                    className="flex items-center gap-1 px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Lab
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  {selectedPlan.lab_works?.map(lab => (
+                    <div key={lab.id} className="p-4 rounded-lg border border-gray-200 bg-gray-50">
+                      <div className="font-medium text-gray-900">{lab.test_name}</div>
+                      <div className="text-sm text-gray-600 mt-1">
+                        Frequency: {lab.frequency} | Start: {format(new Date(lab.start_date), 'MMM d, yyyy')}
+                      </div>
+                      {lab.notes && <p className="text-sm text-gray-600 mt-2">{lab.notes}</p>}
+                    </div>
+                  ))}
+                  {(!selectedPlan.lab_works || selectedPlan.lab_works.length === 0) && (
+                    <p className="text-center text-gray-500 py-8">No lab work ordered</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'procedures' && (
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold text-gray-900">Planned Procedures</h3>
+                  <button
+                    onClick={() => setShowAddProcedure(true)}
+                    className="flex items-center gap-1 px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Procedure
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  {selectedPlan.procedures?.map(procedure => (
+                    <div
+                      key={procedure.id}
+                      className={`p-4 rounded-lg border ${
+                        procedure.status === 'overdue'
+                          ? 'border-red-200 bg-red-50'
+                          : procedure.status === 'completed'
+                          ? 'border-green-200 bg-green-50'
+                          : 'border-gray-200 bg-gray-50'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <div className="font-medium text-gray-900">{procedure.procedure_name}</div>
+                          <div className="text-sm text-gray-600 mt-1">
+                            Planned: {format(new Date(procedure.planned_date), 'MMM d, yyyy')}
+                            {procedure.surgeon && ` | Surgeon: ${procedure.surgeon}`}
+                          </div>
+                        </div>
+                        <span
+                          className={`px-2 py-1 text-xs font-medium rounded ${
+                            procedure.status === 'completed'
+                              ? 'bg-green-100 text-green-700'
+                              : procedure.status === 'overdue'
+                              ? 'bg-red-100 text-red-700'
+                              : 'bg-yellow-100 text-yellow-700'
+                          }`}
+                        >
+                          {procedure.status}
+                        </span>
+                      </div>
+                      {procedure.notes && <p className="text-sm text-gray-600">{procedure.notes}</p>}
+                    </div>
+                  ))}
+                  {(!selectedPlan.procedures || selectedPlan.procedures.length === 0) && (
+                    <p className="text-center text-gray-500 py-8">No procedures planned</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'medications' && (
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold text-gray-900">Medications</h3>
+                  <button
+                    onClick={() => setShowAddMedication(true)}
+                    className="flex items-center gap-1 px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Medication
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  {selectedPlan.medications?.map(med => (
+                    <div key={med.id} className="p-4 rounded-lg border border-gray-200 bg-gray-50">
+                      <div className="font-medium text-gray-900">{med.medication_name}</div>
+                      <div className="text-sm text-gray-600 mt-1">
+                        {med.dosage} {med.route} {med.frequency}
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        Start: {format(new Date(med.start_date), 'MMM d, yyyy')}
+                        {med.end_date && ` | End: ${format(new Date(med.end_date), 'MMM d, yyyy')}`}
+                      </div>
+                      <span
+                        className={`inline-block mt-2 px-2 py-1 text-xs font-medium rounded ${
+                          med.status === 'active'
+                            ? 'bg-blue-100 text-blue-700'
+                            : 'bg-gray-100 text-gray-700'
+                        }`}
+                      >
+                        {med.status}
+                      </span>
+                    </div>
+                  ))}
+                  {(!selectedPlan.medications || selectedPlan.medications.length === 0) && (
+                    <p className="text-center text-gray-500 py-8">No medications prescribed</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'discharge' && (
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold text-gray-900">Discharge Planning</h3>
+                  <button
+                    onClick={() => setShowSetDischarge(true)}
+                    className="flex items-center gap-1 px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Set Discharge
+                  </button>
+                </div>
+                <div className="space-y-4">
+                  {selectedPlan.discharge_plan && (
+                    <div className="p-4 rounded-lg border border-gray-200 bg-gray-50">
+                      <div className="font-medium text-gray-900 mb-2">Discharge Information</div>
+                      {selectedPlan.discharge_plan.planned_date && (
+                        <p className="text-sm text-gray-600">
+                          <span className="font-medium">Planned Date:</span>{' '}
+                          {format(new Date(selectedPlan.discharge_plan.planned_date), 'MMM d, yyyy')}
+                        </p>
+                      )}
+                      {selectedPlan.discharge_plan.discharge_criteria && (
+                        <div className="mt-3">
+                          <p className="text-sm font-medium text-gray-700 mb-1">Discharge Criteria:</p>
+                          <ul className="list-disc list-inside text-sm text-gray-600">
+                            {selectedPlan.discharge_plan.discharge_criteria.map((criteria: string, idx: number) => (
+                              <li key={idx}>{criteria}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {!selectedPlan.discharge_plan && (
+                    <p className="text-center text-gray-500 py-8">No discharge plan set</p>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

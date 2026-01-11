@@ -147,8 +147,10 @@ export default function WardRounds() {
   if (showForm) {
     return (
       <WardRoundForm
-        round={selectedRound}
+        patientId={selectedRound?.patient_id}
+        wardRoundId={selectedRound?.id}
         onClose={handleCloseForm}
+        onSave={handleCloseForm}
       />
     );
   }

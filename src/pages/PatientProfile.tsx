@@ -15,9 +15,12 @@ import { ProgressNoteModal } from '../components/ProgressNoteModal';
 import { PrescriptionModal } from '../components/PrescriptionModal';
 import { PatientActivityTimeline } from '../components/PatientActivityTimeline';
 import { medicalTeamService, TeamMember } from '../services/medicalTeamService';
+import { logPatientAccess } from '../services/auditLoggingService';
+import { useAuthStore } from '../store/authStore';
 
 export const PatientProfile: React.FC = () => {
   const { id } = useParams<{ id: string }>();
+  const { user } = useAuthStore();
   const [patient, setPatient] = useState<Patient | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('summary');
@@ -38,6 +41,21 @@ export const PatientProfile: React.FC = () => {
       loadMedicalTeam();
     }
   }, [patient]);
+
+  // Log patient access for HIPAA compliance
+  useEffect(() => {
+    if (patient && user) {
+      const patientName = `${patient.first_name || ''} ${patient.last_name || ''}`.trim();
+      logPatientAccess(
+        user.id,
+        user.name,
+        user.role,
+        patient.hospital_number,
+        patientName,
+        'VIEW'
+      );
+    }
+  }, [patient, user]);
 
   const loadPatientData = async () => {
     if (!id) return;

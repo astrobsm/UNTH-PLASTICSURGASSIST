@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Plus, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useAuthStore } from '../store/authStore';
+import { db } from '../db/database';
 import {
   PlannedMedication,
   PlannedInvestigation,
@@ -24,6 +25,38 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
 }) => {
   const { user } = useAuthStore();
   const [currentStep, setCurrentStep] = useState(1);
+  const [users, setUsers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  
+  // Fetch users on component mount
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const allUsers = await db.approved_users.toArray();
+        setUsers(allUsers);
+        
+        // Auto-assign medical team based on available users
+        const seniorRegistrars = allUsers.filter(u => u.role === 'senior_registrar');
+        const registrars = allUsers.filter(u => u.role === 'registrar');
+        const houseOfficers = allUsers.filter(u => u.role === 'house_officer');
+        
+        if (seniorRegistrars.length > 0 || registrars.length > 0 || houseOfficers.length > 0) {
+          setMedicalTeam({
+            senior_registrar: seniorRegistrars[0]?.email || '',
+            registrar: registrars[0]?.email || '',
+            house_officer: houseOfficers[0]?.email || '',
+            assigned_date: new Date()
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching users:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchUsers();
+  }, []);
   
   // Basic Information
   const [basicInfo, setBasicInfo] = useState({
@@ -360,38 +393,56 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
               <div className="grid grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Senior Registrar *</label>
-                  <input
-                    type="text"
+                  <select
                     required
                     value={medicalTeam.senior_registrar}
                     onChange={(e) => setMedicalTeam({ ...medicalTeam, senior_registrar: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-                    placeholder="Dr. Name"
-                  />
+                    disabled={loading}
+                  >
+                    <option value="">Select Senior Registrar...</option>
+                    {users.filter(u => u.role === 'senior_registrar').map(u => (
+                      <option key={u.id} value={u.email}>
+                        {u.name || u.email}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Registrar *</label>
-                  <input
-                    type="text"
+                  <select
                     required
                     value={medicalTeam.registrar}
                     onChange={(e) => setMedicalTeam({ ...medicalTeam, registrar: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-                    placeholder="Dr. Name"
-                  />
+                    disabled={loading}
+                  >
+                    <option value="">Select Registrar...</option>
+                    {users.filter(u => u.role === 'registrar').map(u => (
+                      <option key={u.id} value={u.email}>
+                        {u.name || u.email}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">House Officer *</label>
-                  <input
-                    type="text"
+                  <select
                     required
                     value={medicalTeam.house_officer}
                     onChange={(e) => setMedicalTeam({ ...medicalTeam, house_officer: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-                    placeholder="Dr. Name"
-                  />
+                    disabled={loading}
+                  >
+                    <option value="">Select House Officer...</option>
+                    {users.filter(u => u.role === 'house_officer').map(u => (
+                      <option key={u.id} value={u.email}>
+                        {u.name || u.email}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 

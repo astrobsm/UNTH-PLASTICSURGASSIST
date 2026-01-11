@@ -1,4 +1,7 @@
 import { db } from '../db/database';
+import { apiClient } from './apiClient';
+import { syncService } from '../db/syncService';
+import { pushNotificationService } from './pushNotificationService';
 import { format } from 'date-fns';
 import {
   createPDF,
@@ -261,8 +264,48 @@ class AdmissionDischargeService {
       created_at: now,
       updated_at: now
     };
-    const id = await db.admissions.add(admission);
-    return id as number;
+
+    try {
+      // Try to save to API first
+      const savedAdmission = await apiClient.createAdmission(admission);
+      
+      if (savedAdmission && savedAdmission.id) {
+        // Save to local DB with server ID
+        await db.admissions.add({
+          ...admission,
+          id: savedAdmission.id,
+          synced: true
+        } as any);
+        logger.log('✅ Admission synced to server:', savedAdmission.id);
+        
+        // Send notification to all users with voice announcement
+        await pushNotificationService.notifyPatientAdmitted(
+          admissionData.patient_name,
+          admissionData.hospital_number,
+          admissionData.ward_location
+        );
+        
+        return savedAdmission.id;
+      }
+    } catch (error) {
+      logger.warn('⚠️ Failed to sync admission to server, saving locally:', error);
+    }
+
+    // Fallback: save locally only
+    const localId = await db.admissions.add({ ...admission, synced: false } as any);
+    logger.log('📱 Admission saved locally, will sync when online:', localId);
+    
+    // Queue for sync
+    await syncService.queueAction('create', 'admissions', localId as number, admission);
+    
+    // Send notification even for local-only save
+    await pushNotificationService.notifyPatientAdmitted(
+      admissionData.patient_name,
+      admissionData.hospital_number,
+      admissionData.ward_location
+    );
+    
+    return localId as number;
   }
 
   async getAdmission(id: number): Promise<Admission | undefined> {
@@ -270,13 +313,60 @@ class AdmissionDischargeService {
   }
 
   async getActiveAdmissions(): Promise<Admission[]> {
+    console.log('🔍 getActiveAdmissions: Starting...');
+    
+    try {
+      // Try to fetch from server first
+      console.log('📡 Attempting to fetch admissions from server...');
+      const serverAdmissions = await apiClient.getAdmissions();
+      console.log('📦 Server response:', serverAdmissions);
+      
+      if (serverAdmissions && Array.isArray(serverAdmissions)) {
+        console.log(`📥 Received ${serverAdmissions.length} admissions from server`);
+        
+        // Merge with local database
+        for (const admission of serverAdmissions) {
+          await db.admissions.put({ ...admission, synced: true });
+        }
+        console.log(`✅ Synced ${serverAdmissions.length} admissions from server to local DB`);
+      } else {
+        console.warn('⚠️ Server response is not an array:', typeof serverAdmissions);
+      }
+    } catch (error) {
+      console.warn('⚠️ Could not fetch admissions from server, using local data:', error);
+    }
+
+    // Return from local DB (now includes server data if available)
+    console.log('💾 Fetching all admissions from local DB...');
     const admissions = await db.admissions.toArray();
-    return admissions
+    console.log(`💾 Found ${admissions.length} total admissions in local DB`);
+    
+    if (admissions.length > 0) {
+      console.log('📋 Sample admission:', admissions[0]);
+      console.log('📊 Admission statuses:', admissions.map(a => ({ id: a.id, status: a.status })));
+    }
+    
+    const activeAdmissions = admissions
       .filter(a => a.status === 'active')
       .sort((a, b) => new Date(b.admission_date).getTime() - new Date(a.admission_date).getTime());
+    
+    console.log(`✅ Returning ${activeAdmissions.length} active admissions`);
+    return activeAdmissions;
   }
 
   async getPatientAdmissions(patientId: number): Promise<Admission[]> {
+    try {
+      // Try to fetch latest from server
+      const serverAdmissions = await apiClient.getAdmissions();
+      if (serverAdmissions && Array.isArray(serverAdmissions)) {
+        for (const admission of serverAdmissions) {
+          await db.admissions.put({ ...admission, synced: true });
+        }
+      }
+    } catch (error) {
+      console.warn('⚠️ Could not fetch patient admissions from server');
+    }
+
     const admissions = await db.admissions.toArray();
     return admissions
       .filter(a => a.patient_id === patientId)
@@ -303,6 +393,32 @@ class AdmissionDischargeService {
     return admissions
       .filter(a => a.ward_location === ward && a.status === 'active')
       .sort((a, b) => new Date(b.admission_date).getTime() - new Date(a.admission_date).getTime());
+  }
+
+  // ============= SYNC METHODS =============
+
+  async syncUnsyncedAdmissions(): Promise<void> {
+    console.log('🔄 Syncing unsynced admissions...');
+    
+    // Get all unsynced admissions
+    const unsyncedAdmissions = await db.admissions
+      .filter(a => a.synced === false)
+      .toArray();
+    
+    console.log(`📊 Found ${unsyncedAdmissions.length} unsynced admissions`);
+    
+    for (const admission of unsyncedAdmissions) {
+      try {
+        // Queue for sync via syncService
+        await syncService.queueAction('create', 'admissions', admission.id!, admission);
+        console.log(`✅ Queued admission ${admission.id} for sync`);
+      } catch (error) {
+        console.error(`❌ Failed to queue admission ${admission.id}:`, error);
+      }
+    }
+    
+    // Note: syncService will automatically process queue on next sync cycle
+    console.log('✅ Admissions queued for background sync');
   }
 
   // ============= WHO DISCHARGE SCORING =============
@@ -481,9 +597,40 @@ class AdmissionDischargeService {
       updated_at: now
     };
 
-    const id = await db.discharges.add(discharge);
+    try {
+      // Try to save to API first
+      const savedDischarge = await apiClient.createDischarge(discharge);
+      
+      if (savedDischarge && savedDischarge.id) {
+        // Save to local DB with server ID
+        await db.discharges.add({
+          ...discharge,
+          id: savedDischarge.id,
+          synced: true
+        } as any);
 
-    // Update admission status
+        // Update admission status
+        if (dischargeData.admission_id) {
+          await db.admissions.update(dischargeData.admission_id, {
+            status: dischargeData.discharge_type === 'deceased' ? 'deceased' : 
+                    dischargeData.discharge_type === 'transfer' ? 'transferred' : 'discharged',
+            discharge_date: dischargeData.discharge_date,
+            updated_at: now
+          });
+        }
+
+        console.log('✅ Discharge synced to server:', savedDischarge.id);
+        return savedDischarge.id;
+      }
+    } catch (error) {
+      console.warn('⚠️ Failed to sync discharge to server, saving locally:', error);
+    }
+
+    // Fallback: save locally only
+    const localId = await db.discharges.add({ ...discharge, synced: false } as any);
+    console.log('📱 Discharge saved locally, will sync when online:', localId);
+
+    // Update admission status locally
     if (dischargeData.admission_id) {
       await db.admissions.update(dischargeData.admission_id, {
         status: dischargeData.discharge_type === 'deceased' ? 'deceased' : 
@@ -493,7 +640,10 @@ class AdmissionDischargeService {
       });
     }
 
-    return id as number;
+    // Queue for sync
+    await syncService.queueAction('create', 'discharges', localId as number, discharge);
+
+    return localId as number;
   }
 
   async getDischarge(id: number): Promise<Discharge | undefined> {

@@ -98,7 +98,7 @@ class ChatService {
     
     // Skip WebSocket connection on Vercel (serverless doesn't support WebSockets)
     if (this.isServerless()) {
-      console.log('Chat: WebSocket disabled on serverless platform (using offline mode)');
+      logger.log('Chat: WebSocket disabled on serverless platform (using offline mode)');
       this.emit('connection-status', { connected: false, reason: 'serverless' });
       return;
     }

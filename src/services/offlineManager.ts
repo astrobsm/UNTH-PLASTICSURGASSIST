@@ -5,6 +5,7 @@
 
 import { db } from '../db/database';
 import { apiClient } from './apiClient';
+import { logger } from '../utils/logger';
 import toast from 'react-hot-toast';
 
 // Sync queue item interface
@@ -35,7 +36,7 @@ const ENTITY_TABLES: Record<string, string> = {
   'treatment-plans': 'treatment_plans',
   'plan-steps': 'plan_steps',
   admissions: 'admissions',
-  discharges: 'discharges',
+  discharges: 'discharge-summaries',
   prescriptions: 'prescriptions',
   'wound-care': 'wound_care',
   'lab-orders': 'lab_investigations',
@@ -103,7 +104,7 @@ class OfflineManager {
   // Handle coming online
   private async handleOnline() {
     this.isOnline = true;
-    console.log('🌐 Back online - starting sync...');
+    logger.log('🌐 Back online - starting sync...');
     toast.success('Back online! Syncing data...', { id: 'network-status', duration: 3000 });
     
     // Trigger sync
@@ -114,7 +115,7 @@ class OfflineManager {
   // Handle going offline
   private handleOffline() {
     this.isOnline = false;
-    console.log('📴 Gone offline - all changes will be saved locally');
+    logger.log('📴 Gone offline - all changes will be saved locally');
     toast.error('You are offline. Changes will sync when reconnected.', { 
       id: 'network-status', 
       duration: 5000 

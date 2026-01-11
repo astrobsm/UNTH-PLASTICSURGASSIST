@@ -1,5 +1,7 @@
 import { db } from '../db/database';
 import { aiService } from './aiService';
+import { apiClient } from './apiClient';
+import { syncService } from '../db/syncService';
 
 // Lab Investigation Interfaces
 export interface LabInvestigation {
@@ -331,8 +333,19 @@ class LabService {
       updated_at: now
     };
 
-    await db.lab_investigations.add(newInvestigation);
-    return id;
+    // Try to sync to server first
+    try {
+      const saved = await apiClient.createLabInvestigation(newInvestigation);
+      console.log('✅ Lab investigation synced to server:', saved.id);
+      await db.lab_investigations.add({ ...newInvestigation, id: saved.id, synced: true } as any);
+      return saved.id;
+    } catch (error) {
+      console.warn('⚠️ Failed to sync lab investigation to server, saving locally', error);
+      const localId = await db.lab_investigations.add({ ...newInvestigation, synced: false } as any);
+      await syncService.queueAction('create', 'lab_investigations', localId as any, newInvestigation);
+      console.log('📱 Lab investigation saved locally, will sync when online:', localId);
+      return id;
+    }
   }
 
   async getLabInvestigations(patientId?: string): Promise<LabInvestigation[]> {

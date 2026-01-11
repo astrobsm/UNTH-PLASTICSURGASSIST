@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { Stethoscope, UserPlus, LogIn, X } from 'lucide-react';
 import { userManagementService } from '../services/userManagementService';
+import { loginRateLimiter } from '../utils/rateLimiter';
+import { validateEmail, validatePassword } from '../utils/validation';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -29,10 +31,38 @@ export default function Login() {
     setLoading(true);
     setError('');
     
+    // Validate email format
+    const emailValidation = validateEmail(email);
+    if (!emailValidation.isValid) {
+      setError(emailValidation.error || 'Invalid email format');
+      setLoading(false);
+      return;
+    }
+    
+    // Check rate limit before attempting login
+    const rateLimitKey = email.toLowerCase();
+    if (loginRateLimiter.isRateLimited(rateLimitKey)) {
+      const resetTime = loginRateLimiter.getResetTimeFormatted(rateLimitKey);
+      setError(`Too many login attempts. Please try again in ${resetTime}.`);
+      setLoading(false);
+      return;
+    }
+    
     try {
+      // Record attempt
+      loginRateLimiter.attempt(rateLimitKey);
+      
       await login(email, password);
+      
+      // Clear rate limit on successful login
+      loginRateLimiter.clear(rateLimitKey);
     } catch (error: any) {
-      setError(error.message || 'Login failed. Please check your credentials.');
+      // Show remaining attempts
+      const remaining = loginRateLimiter.getRemainingAttempts(rateLimitKey);
+      const attemptText = remaining > 0 
+        ? ` (${remaining} attempt${remaining === 1 ? '' : 's'} remaining)` 
+        : '';
+      setError((error.message || 'Login failed. Please check your credentials.') + attemptText);
     } finally {
       setLoading(false);
     }
@@ -44,13 +74,20 @@ export default function Login() {
     setSuccessMessage('');
 
     // Validation
+    const emailValidation = validateEmail(regData.email);
+    if (!emailValidation.isValid) {
+      setError(emailValidation.error || 'Invalid email format');
+      return;
+    }
+
     if (regData.password !== regData.confirmPassword) {
       setError('Passwords do not match');
       return;
     }
 
-    if (regData.password.length < 6) {
-      setError('Password must be at least 6 characters');
+    const passwordValidation = validatePassword(regData.password);
+    if (!passwordValidation.isValid) {
+      setError(passwordValidation.error || 'Password does not meet requirements');
       return;
     }
 

@@ -717,7 +717,7 @@ const MCQEducation: React.FC = () => {
               Performance Analysis
             </h3>
             <div className="prose max-w-none">
-              <div dangerouslySetInnerHTML={{ __html: currentSession.aiRecommendations.replace(/\n/g, '<br/>') }} />
+              <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(currentSession.aiRecommendations.replace(/\n/g, '<br/>')) }} />
             </div>
           </div>
         )}

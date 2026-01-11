@@ -59,6 +59,11 @@ export default function AdmissionDischargePage() {
   const loadData = async () => {
     setLoading(true);
     try {
+      // First, sync any unsynced admissions
+      console.log('🔄 Checking for unsynced admissions...');
+      await admissionDischargeService.syncUnsyncedAdmissions();
+      
+      // Then load all data
       const [patientsData, admissionsData, dischargesData, statsData] = await Promise.all([
         patientService.getAllPatients(),
         admissionDischargeService.getActiveAdmissions(),
@@ -69,6 +74,7 @@ export default function AdmissionDischargePage() {
       setActiveAdmissions(admissionsData);
       setDischarges(dischargesData);
       setStatistics(statsData);
+      console.log('✅ Data loaded successfully');
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -272,7 +278,7 @@ function ActivePatientsTab({ admissions, searchTerm, setSearchTerm, onDischarge,
                         admission.route_of_admission === 'consult_transfer' ? 'bg-purple-100 text-purple-700' :
                         'bg-blue-100 text-blue-700'
                       }`}>
-                        {admission.route_of_admission.replace('_', ' ')}
+                        {(admission.route_of_admission || 'clinic').replace('_', ' ')}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-sm">
@@ -929,7 +935,7 @@ function DischargeHistoryTab({ discharges, onRefresh }: DischargeHistoryTabProps
                       discharge.discharge_type === 'against_medical_advice' ? 'bg-red-100 text-red-700' :
                       'bg-gray-100 text-gray-700'
                     }`}>
-                      {discharge.discharge_type.replace('_', ' ')}
+                      {(discharge.discharge_type || 'normal').replace('_', ' ')}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-sm">{discharge.length_of_stay_days}d</td>

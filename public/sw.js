@@ -283,17 +283,20 @@ self.addEventListener('push', (event) => {
   if (!event.data) return;
   
   try {
-    const data = event.data.json();
-    const { notification } = data;
+    const payload = event.data.json();
+    console.log('📦 Push notification payload:', payload);
     
     const options = {
-      body: notification.body || 'New notification',
-      icon: notification.icon || '/logo.png',
-      badge: '/logo.png',
-      tag: `clinical-${notification.data?.type || 'info'}-${Date.now()}`,
-      requireInteraction: notification.data?.type === 'urgent',
-      vibrate: notification.data?.type === 'urgent' ? [200, 100, 200] : [100],
-      data: notification.data,
+      body: payload.body || 'New notification',
+      icon: payload.icon || '/icons/icon-192x192.png',
+      badge: payload.badge || '/icons/badge-72x72.png',
+      tag: payload.tag || `notification-${Date.now()}`,
+      requireInteraction: payload.requireInteraction || true,
+      vibrate: payload.vibrate || [200, 100, 200],
+      data: {
+        ...payload.data,
+        voiceMessage: payload.voiceMessage
+      },
       actions: [
         { action: 'view', title: 'View' },
         { action: 'dismiss', title: 'Dismiss' }
@@ -301,7 +304,21 @@ self.addEventListener('push', (event) => {
     };
     
     event.waitUntil(
-      self.registration.showNotification(notification.title || 'PS Assistant', options)
+      (async () => {
+        // Show notification
+        await self.registration.showNotification(payload.title || 'PS Assistant', options);
+        
+        // Play voice announcement if available
+        if (payload.voiceMessage && self.speechSynthesis) {
+          const utterance = new SpeechSynthesisUtterance(payload.voiceMessage);
+          utterance.lang = 'en-US';
+          utterance.rate = 1.0;
+          utterance.pitch = 1.0;
+          utterance.volume = 1.0;
+          self.speechSynthesis.speak(utterance);
+          console.log('🔊 Voice announcement played:', payload.voiceMessage);
+        }
+      })()
     );
   } catch (error) {
     console.error('Push notification error:', error);

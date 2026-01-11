@@ -6,6 +6,7 @@
 import { apiClient } from './apiClient';
 import { db } from '../db/database';
 import { syncService } from '../db/syncService';
+import { pushNotificationService } from './pushNotificationService';
 
 /**
  * Normalize patient data to ensure arrays are always arrays
@@ -105,6 +106,12 @@ class PatientService {
       // Update local cache
       if (savedPatient) {
         await db.patients.put({ ...savedPatient, synced: true });
+        
+        // Send notification to all users with voice announcement
+        await pushNotificationService.notifyPatientRegistered(
+          `${savedPatient.first_name} ${savedPatient.last_name}`,
+          savedPatient.hospital_number
+        );
       }
       
       return savedPatient;
@@ -121,6 +128,12 @@ class PatientService {
       
       // Queue for sync when online
       await syncService.queueAction('create', 'patients', localId, patientData);
+      
+      // Send notification even for local-only save
+      await pushNotificationService.notifyPatientRegistered(
+        `${patientData.first_name} ${patientData.last_name}`,
+        patientData.hospital_number
+      );
       
       return { ...patientData, id: localId, synced: false };
     }
