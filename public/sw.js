@@ -1,5 +1,5 @@
 // Enhanced Service Worker with Full Offline Support
-// Plastic Surgeon Assistant PWA - Version 3.0
+// Plastic Surgeon Assistant PWA - Version 4.0
 importScripts('https://storage.googleapis.com/workbox-cdn/releases/7.0.0/workbox-sw.js');
 
 const { precacheAndRoute, cleanupOutdatedCaches } = workbox.precaching;
@@ -10,7 +10,7 @@ const { ExpirationPlugin } = workbox.expiration;
 const { CacheableResponsePlugin } = workbox.cacheableResponse;
 
 // Cache version - increment to force cache update
-const CACHE_VERSION = 'v3';
+const CACHE_VERSION = 'v4-2026-01-12';
 const APP_SHELL_CACHE = `app-shell-${CACHE_VERSION}`;
 const API_CACHE = `api-cache-${CACHE_VERSION}`;
 const STATIC_CACHE = `static-cache-${CACHE_VERSION}`;

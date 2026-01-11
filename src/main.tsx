@@ -9,6 +9,11 @@ import { cmeArticleScheduler } from './services/cmeArticleScheduler';
 import { mcqGenerationService } from './services/mcqGenerationService';
 import { offlineManager } from './services/offlineManager';
 
+// Log app version for debugging
+const APP_VERSION = '4.0.2';
+console.log(`🚀 Plastic Surgeon Assistant v${APP_VERSION}`);
+console.log(`📅 Build: ${new Date().toISOString()}`);
+
 // Service Worker Registration for PWA Offline Support
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
@@ -27,10 +32,12 @@ if ('serviceWorker' in navigator) {
           newWorker.addEventListener('statechange', () => {
             if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
               // New content is available, show update notification
-              console.log('🔄 New version available! Refresh to update.');
-              if (window.confirm('A new version is available. Reload to update?')) {
+              console.log('🔄 New version available! Please refresh.');
+              // Auto-reload after 2 seconds
+              setTimeout(() => {
+                console.log('♻️ Auto-reloading for update...');
                 window.location.reload();
-              }
+              }, 2000);
             }
           });
         }
