@@ -72,20 +72,28 @@ console.log('🔌 Offline Manager initialized');
 
 // Start services after load
 window.addEventListener('load', () => {
-  // Start CME Article Scheduler
-  cmeArticleScheduler.start();
-  console.log('CME Article Scheduler started');
+  try {
+    // Start CME Article Scheduler
+    cmeArticleScheduler.start();
+    console.log('CME Article Scheduler started');
+  } catch (error) {
+    console.error('Error starting CME Article Scheduler:', error);
+  }
 
   // Initialize WACS topics and start MCQ test notification scheduler
   mcqGenerationService.initializeWACSTopics().then(() => {
     console.log('WACS topics initialized');
     
-    // Start weekly test notification scheduler (Tuesday 9:30 AM)
-    mcqGenerationService.startWeeklyTestNotificationScheduler();
-    console.log('MCQ Test Notification Scheduler started');
-    
-    // Auto-schedule next week's test if none exists
-    mcqGenerationService.autoScheduleNextWeekTest();
+    try {
+      // Start weekly test notification scheduler (Tuesday 9:30 AM)
+      mcqGenerationService.startWeeklyTestNotificationScheduler();
+      console.log('MCQ Test Notification Scheduler started');
+      
+      // Auto-schedule next week's test if none exists
+      mcqGenerationService.autoScheduleNextWeekTest();
+    } catch (error) {
+      console.error('Error starting MCQ scheduler:', error);
+    }
   }).catch(error => {
     console.error('Error initializing WACS topics:', error);
   });
@@ -98,6 +106,12 @@ const queryClient = new QueryClient({
       staleTime: 5 * 60 * 1000, // 5 minutes
     },
   },
+});
+
+// Global error handler for uncaught promises
+window.addEventListener('unhandledrejection', (event) => {
+  console.error('Unhandled promise rejection:', event.reason);
+  event.preventDefault(); // Prevent React error #426
 });
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
