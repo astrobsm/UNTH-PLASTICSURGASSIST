@@ -108,7 +108,11 @@ function App() {
   }
 
   if (!user) {
-    return <Login />;
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <Login />
+      </Suspense>
+    );
   }
 
   // Check if user must change password (for bulk imported users on first login)
@@ -127,7 +131,7 @@ function App() {
 
   return (
     <ErrorBoundary>
-      <Suspense key={location.pathname} fallback={<PageLoader />}>
+      <Suspense fallback={<PageLoader />}>
         <Routes>
         {/* Video Conference - Full screen without Layout */}
         <Route path="/conference" element={<VideoConference />} />
