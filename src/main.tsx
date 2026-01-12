@@ -77,35 +77,6 @@ if ('serviceWorker' in navigator) {
 // Initialize offline manager
 console.log('🔌 Offline Manager initialized');
 
-// Start services after load
-window.addEventListener('load', () => {
-  try {
-    // Start CME Article Scheduler
-    cmeArticleScheduler.start();
-    console.log('CME Article Scheduler started');
-  } catch (error) {
-    console.error('Error starting CME Article Scheduler:', error);
-  }
-
-  // Initialize WACS topics and start MCQ test notification scheduler
-  mcqGenerationService.initializeWACSTopics().then(() => {
-    console.log('WACS topics initialized');
-    
-    try {
-      // Start weekly test notification scheduler (Tuesday 9:30 AM)
-      mcqGenerationService.startWeeklyTestNotificationScheduler();
-      console.log('MCQ Test Notification Scheduler started');
-      
-      // Auto-schedule next week's test if none exists
-      mcqGenerationService.autoScheduleNextWeekTest();
-    } catch (error) {
-      console.error('Error starting MCQ scheduler:', error);
-    }
-  }).catch(error => {
-    console.error('Error initializing WACS topics:', error);
-  });
-});
-
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -121,6 +92,7 @@ window.addEventListener('unhandledrejection', (event) => {
   event.preventDefault(); // Prevent React error #426
 });
 
+// Render React app first
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
@@ -153,3 +125,32 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     </QueryClientProvider>
   </React.StrictMode>,
 );
+
+// Start services AFTER React has mounted (prevents error #426)
+setTimeout(() => {
+  try {
+    // Start CME Article Scheduler
+    cmeArticleScheduler.start();
+    console.log('CME Article Scheduler started');
+  } catch (error) {
+    console.error('Error starting CME Article Scheduler:', error);
+  }
+
+  // Initialize WACS topics and start MCQ test notification scheduler
+  mcqGenerationService.initializeWACSTopics().then(() => {
+    console.log('WACS topics initialized');
+    
+    try {
+      // Start weekly test notification scheduler (Tuesday 9:30 AM)
+      mcqGenerationService.startWeeklyTestNotificationScheduler();
+      console.log('MCQ Test Notification Scheduler started');
+      
+      // Auto-schedule next week's test if none exists
+      mcqGenerationService.autoScheduleNextWeekTest();
+    } catch (error) {
+      console.error('Error starting MCQ scheduler:', error);
+    }
+  }).catch(error => {
+    console.error('Error initializing WACS topics:', error);
+  });
+}, 100); // Delay 100ms to ensure React is fully mounted
