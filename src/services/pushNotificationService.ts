@@ -55,9 +55,10 @@ class PushNotificationService {
       
       if (!subscription) {
         // Create new subscription
+        const applicationServerKey = this.urlBase64ToUint8Array(this.vapidPublicKey);
         subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
-          applicationServerKey: this.urlBase64ToUint8Array(this.vapidPublicKey)
+          applicationServerKey: applicationServerKey as BufferSource
         });
         console.log('✅ Push notification subscription created');
       }
@@ -124,9 +125,8 @@ class PushNotificationService {
           badge: options.badge || '/icons/badge-72x72.png',
           tag: options.tag || 'default',
           data: options.data,
-          vibrate: [200, 100, 200],
           requireInteraction: true
-        });
+        } as NotificationOptions);
 
         // Play voice announcement
         if (options.voiceMessage) {
