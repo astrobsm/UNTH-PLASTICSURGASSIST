@@ -130,8 +130,8 @@ function App() {
   }
 
   return (
-    <ErrorBoundary>
-      <Suspense fallback={<PageLoader />}>
+    <Suspense fallback={<PageLoader />}>
+      <ErrorBoundary>
         <Routes>
         {/* Video Conference - Full screen without Layout */}
         <Route path="/conference" element={<VideoConference />} />
@@ -183,8 +183,8 @@ function App() {
           </Layout>
         } />
         </Routes>
-      </Suspense>
-    </ErrorBoundary>
+      </ErrorBoundary>
+    </Suspense>
   );
 }
 
