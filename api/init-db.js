@@ -524,17 +524,28 @@ async function createDefaultUsers() {
   const existing = await query('SELECT id FROM users WHERE username = $1', ['admin']);
   
   if (existing.rows.length === 0) {
-    const passwordHash = await bcrypt.hash('admin123', 10);
+    const passwordHash = await bcrypt.hash('Admin@123!', 10);
     
     await query(
       `INSERT INTO users (username, password_hash, email, full_name, role, is_approved, is_active)
        VALUES ($1, $2, $3, $4, $5, true, true)`,
-      ['admin', passwordHash, 'admin@plasticsurg.local', 'System Administrator', 'admin']
+      ['admin', passwordHash, 'admin@hospital.com', 'System Administrator', 'admin']
     );
     
-    console.log('✅ Default admin user created (username: admin, password: admin123)');
+    console.log('✅ Default admin user created');
+    console.log('   Email: admin@hospital.com');
+    console.log('   Password: Admin@123!');
   } else {
     console.log('ℹ️ Admin user already exists');
+    // Update existing admin with new email and password
+    const passwordHash = await bcrypt.hash('Admin@123!', 10);
+    await query(
+      `UPDATE users SET email = $1, password_hash = $2 WHERE username = $3`,
+      ['admin@hospital.com', passwordHash, 'admin']
+    );
+    console.log('✅ Admin user updated with new credentials');
+    console.log('   Email: admin@hospital.com');
+    console.log('   Password: Admin@123!');
   }
 }
 
