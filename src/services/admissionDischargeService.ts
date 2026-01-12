@@ -2,6 +2,7 @@ import { db } from '../db/database';
 import { apiClient } from './apiClient';
 import { syncService } from '../db/syncService';
 import { pushNotificationService } from './pushNotificationService';
+import { logger } from '../utils/logger';
 import { format } from 'date-fns';
 import {
   createPDF,

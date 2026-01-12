@@ -1,5 +1,6 @@
 // Push Notification Service with Voice Announcements
 import { db } from '../db/database';
+import { logger } from '../utils/logger';
 
 interface PushSubscriptionData {
   id?: number;

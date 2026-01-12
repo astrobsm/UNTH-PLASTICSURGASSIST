@@ -5,6 +5,7 @@
 
 import { apiClient } from './apiClient';
 import { db } from '../db/database';
+import { logger } from '../utils/logger';
 
 export interface ChatMessage {
   id: string;

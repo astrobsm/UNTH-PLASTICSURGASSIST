@@ -1,5 +1,6 @@
 import { db } from '../db/database';
 import { logger } from '../utils/logger';
+import { logger } from '../utils/logger';
 
 export interface PatientActivity {
   id?: number;
