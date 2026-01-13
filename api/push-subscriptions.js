@@ -34,6 +34,9 @@ async function saveSubscription(data, user, res) {
     return res.status(400).json({ error: 'Endpoint and keys are required' });
   }
 
+  // Ensure table exists
+  await ensurePushSubscriptionsTable();
+
   // Check if subscription already exists
   const existingResult = await query(
     'SELECT id FROM push_subscriptions WHERE user_id = $1 AND endpoint = $2',
@@ -62,7 +65,23 @@ async function saveSubscription(data, user, res) {
   }
 }
 
+async function ensurePushSubscriptionsTable() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      endpoint TEXT NOT NULL,
+      keys JSONB NOT NULL,
+      is_active BOOLEAN DEFAULT TRUE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id, endpoint)
+    )
+  `);
+}
+
 async function getAllSubscriptions(res) {
+  await ensurePushSubscriptionsTable();
   const result = await query(
     'SELECT * FROM push_subscriptions WHERE is_active = true ORDER BY created_at DESC'
   );

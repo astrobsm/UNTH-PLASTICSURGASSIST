@@ -46,22 +46,47 @@ export default async function handler(req, res) {
 }
 
 async function getPatients(res) {
-  const result = await query(
-    `SELECT id, hospital_number, first_name, last_name, date_of_birth, gender, 
-            phone, email, address, blood_group, allergies, medical_history,
-            primary_diagnosis, secondary_diagnoses, ward, bed_number,
-            emergency_contact_name, emergency_contact_phone,
-            created_at, updated_at
-     FROM patients 
-     ORDER BY updated_at DESC 
-     LIMIT 500`
-  );
-  
-  // Return as { patients: [...] } for frontend compatibility
-  res.status(200).json({ 
-    patients: result.rows,
-    serverTime: new Date().toISOString()
-  });
+  // Try with all columns first, fallback to basic columns if any are missing
+  try {
+    const result = await query(
+      `SELECT id, hospital_number, first_name, last_name, date_of_birth, gender, 
+              phone, email, address, blood_group, allergies, medical_history,
+              primary_diagnosis, secondary_diagnoses, ward, bed_number,
+              emergency_contact_name, emergency_contact_phone,
+              created_at, updated_at
+       FROM patients 
+       ORDER BY updated_at DESC 
+       LIMIT 500`
+    );
+    
+    return res.status(200).json({ 
+      patients: result.rows,
+      serverTime: new Date().toISOString()
+    });
+  } catch (err) {
+    // If column doesn't exist, try without the new columns
+    if (err.message && (err.message.includes('primary_diagnosis') || 
+        err.message.includes('secondary_diagnoses') || 
+        err.message.includes('column') ||
+        err.message.includes('does not exist'))) {
+      console.log('Some columns missing, using basic query');
+      const result = await query(
+        `SELECT id, hospital_number, first_name, last_name, date_of_birth, gender, 
+                phone, email, address, blood_group, allergies, medical_history,
+                emergency_contact_name, emergency_contact_phone,
+                created_at, updated_at
+         FROM patients 
+         ORDER BY updated_at DESC 
+         LIMIT 500`
+      );
+      
+      return res.status(200).json({ 
+        patients: result.rows,
+        serverTime: new Date().toISOString()
+      });
+    }
+    throw err;
+  }
 }
 
 async function createPatient(data, user, res) {

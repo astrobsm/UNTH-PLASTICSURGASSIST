@@ -489,6 +489,18 @@ async function createTables() {
       processed_at TIMESTAMP
     );
 
+    -- Push Subscriptions table (for web push notifications)
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      endpoint TEXT NOT NULL,
+      keys JSONB NOT NULL,
+      is_active BOOLEAN DEFAULT TRUE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id, endpoint)
+    );
+
     -- Create indexes
     CREATE INDEX IF NOT EXISTS idx_patients_hospital_number ON patients(hospital_number);
     CREATE INDEX IF NOT EXISTS idx_patients_name ON patients(last_name, first_name);

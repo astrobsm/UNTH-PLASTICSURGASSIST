@@ -50,14 +50,19 @@ async function getAllPatients(searchParams, res) {
   const search = searchParams.get('search') || '';
   const offset = (page - 1) * limit;
 
-  let queryStr = `
-    SELECT id, hospital_number, first_name, last_name, date_of_birth, gender, 
+  // Try with all columns first, fallback if columns missing
+  const fullColumns = `id, hospital_number, first_name, last_name, date_of_birth, gender, 
            phone, email, address, blood_group, allergies, medical_history,
            primary_diagnosis, secondary_diagnoses, ward, bed_number,
            emergency_contact_name, emergency_contact_phone,
-           created_at, updated_at
-    FROM patients
-  `;
+           created_at, updated_at`;
+  
+  const basicColumns = `id, hospital_number, first_name, last_name, date_of_birth, gender, 
+           phone, email, address, blood_group, allergies, medical_history,
+           emergency_contact_name, emergency_contact_phone,
+           created_at, updated_at`;
+
+  let queryStr = `SELECT ${fullColumns} FROM patients`;
   const params = [];
 
   if (search) {
@@ -68,7 +73,26 @@ async function getAllPatients(searchParams, res) {
   queryStr += ` ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
   params.push(limit, offset);
 
-  const result = await query(queryStr, params);
+  let result;
+  try {
+    result = await query(queryStr, params);
+  } catch (err) {
+    // Fallback to basic columns if new columns don't exist
+    if (err.message && (err.message.includes('column') || err.message.includes('does not exist'))) {
+      console.log('Some columns missing, using basic query');
+      let basicQuery = `SELECT ${basicColumns} FROM patients`;
+      const basicParams = [];
+      if (search) {
+        basicQuery += ` WHERE first_name ILIKE $1 OR last_name ILIKE $1 OR hospital_number ILIKE $1`;
+        basicParams.push(`%${search}%`);
+      }
+      basicQuery += ` ORDER BY created_at DESC LIMIT $${basicParams.length + 1} OFFSET $${basicParams.length + 2}`;
+      basicParams.push(limit, offset);
+      result = await query(basicQuery, basicParams);
+    } else {
+      throw err;
+    }
+  }
 
   // Get total count
   let countQuery = 'SELECT COUNT(*) FROM patients';
