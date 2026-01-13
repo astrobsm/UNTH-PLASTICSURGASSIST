@@ -89,6 +89,13 @@ class SyncService {
 
   // Sync all pending items
   async syncAll(): Promise<SyncResult> {
+    // Skip if not authenticated
+    const token = apiClient.getToken();
+    if (!token) {
+      console.log('⏳ Sync skipped - waiting for authentication');
+      return { success: false, synced: 0, failed: 0, errors: ['Not authenticated'] };
+    }
+    
     if (this.syncInProgress || !this.isOnline) {
       return { success: false, synced: 0, failed: 0, errors: ['Sync already in progress or offline'] };
     }
@@ -285,7 +292,8 @@ class SyncService {
           phone: patient.phone,
           address: patient.address,
           allergies: patient.allergies,
-          chronic_conditions: patient.comorbidities
+          chronic_conditions: patient.comorbidities,
+          primary_diagnosis: (patient as any).primary_diagnosis || (patient as any).diagnosis || ''
         });
         
         // Update local record with server ID
@@ -522,14 +530,17 @@ class SyncService {
     const token = apiClient.getToken();
     const baseUrl = getApiBaseUrl();
     
+    // Skip API calls if not authenticated
+    if (!token) {
+      console.warn('⚠️ Skipping sync - no auth token available');
+      throw new Error('Not authenticated - will retry after login');
+    }
+    
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
+      'Authorization': `Bearer ${token}`
     };
-    
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
 
     const response = await fetch(`${baseUrl}${endpoint}`, {
       method,
