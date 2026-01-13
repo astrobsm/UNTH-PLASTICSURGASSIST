@@ -49,6 +49,29 @@ class PatientSummaryService {
       .equals(actualPatientId)
       .toArray();
 
+    // Also try with string ID for server-synced records
+    let allTreatmentPlans = treatmentPlans;
+    if (treatmentPlans.length === 0) {
+      const stringIdPlans = await db.treatment_plans
+        .where('patient_id')
+        .equals(String(actualPatientId))
+        .toArray();
+      allTreatmentPlans = stringIdPlans;
+    }
+
+    // Get admissions for diagnosis
+    let admissions = await db.admissions
+      .where('patient_id')
+      .equals(actualPatientId)
+      .toArray();
+    
+    if (admissions.length === 0) {
+      admissions = await db.admissions
+        .where('patient_id')
+        .equals(String(actualPatientId))
+        .toArray();
+    }
+
     // Get procedures from scheduling
     const procedures = await db.surgery_bookings
       .where('patient_id')
@@ -61,13 +84,41 @@ class PatientSummaryService {
       .equals(actualPatientId)
       .toArray();
 
-    // Calculate length of stay (using first treatment plan admission date)
-    const rawAdmissionDate = treatmentPlans[0]?.created_at || patient.created_at;
+    // Calculate length of stay (using first treatment plan admission date or admission record)
+    const rawAdmissionDate = admissions[0]?.admission_date || allTreatmentPlans[0]?.created_at || patient.created_at;
     const admissionDate = typeof rawAdmissionDate === 'string' 
       ? parseISO(rawAdmissionDate) 
       : new Date(rawAdmissionDate);
     const currentDate = new Date();
     const lengthOfStay = differenceInDays(currentDate, admissionDate);
+
+    // Extract diagnosis from multiple sources
+    const diagnosisSources: string[] = [];
+    
+    // From treatment plans
+    allTreatmentPlans.forEach(p => {
+      if (p.diagnosis) diagnosisSources.push(p.diagnosis);
+    });
+    
+    // From admissions
+    admissions.forEach((a: any) => {
+      if (a.admitting_diagnosis) diagnosisSources.push(a.admitting_diagnosis);
+      if (a.diagnosis) diagnosisSources.push(a.diagnosis);
+    });
+    
+    // From patient record itself (if stored there)
+    if ((patient as any).diagnosis) {
+      diagnosisSources.push((patient as any).diagnosis);
+    }
+    if ((patient as any).admitting_diagnosis) {
+      diagnosisSources.push((patient as any).admitting_diagnosis);
+    }
+    
+    // Deduplicate and join
+    const uniqueDiagnoses = [...new Set(diagnosisSources.filter(d => d && d.trim()))];
+    const finalDiagnosis = uniqueDiagnoses.length > 0 
+      ? uniqueDiagnoses.join('; ') 
+      : 'No diagnosis recorded';
 
     // Build AI-powered summary using actual data
     const summary: PatientSummary = {
@@ -79,18 +130,18 @@ class PatientSummaryService {
       current_date: currentDate,
       length_of_stay: lengthOfStay,
       summary: {
-        overview: this.generateOverview(patient, treatmentPlans, lengthOfStay),
-        diagnosis: treatmentPlans.map(p => p.diagnosis).join('; ') || 'No diagnosis recorded',
-        treatment_progress: this.generateTreatmentProgress(treatmentPlans),
+        overview: this.generateOverview(patient, allTreatmentPlans, lengthOfStay),
+        diagnosis: finalDiagnosis,
+        treatment_progress: this.generateTreatmentProgress(allTreatmentPlans),
         procedures_performed: procedures.map(p => {
           const procDate = typeof p.date === 'string' ? parseISO(p.date) : new Date(p.date);
           return `${p.procedure_name} (${format(procDate, 'MMM d, yyyy')})`;
         }),
-        medications: this.extractMedications(treatmentPlans),
+        medications: this.extractMedications(allTreatmentPlans),
         lab_results_summary: this.summarizeLabResults(labResults),
-        complications: this.identifyComplications(treatmentPlans),
-        current_status: this.determineCurrentStatus(treatmentPlans),
-        plan_forward: this.generatePlanForward(treatmentPlans)
+        complications: this.identifyComplications(allTreatmentPlans),
+        current_status: this.determineCurrentStatus(allTreatmentPlans),
+        plan_forward: this.generatePlanForward(allTreatmentPlans)
       },
       generated_by: 'ai',
       generated_at: currentDate
