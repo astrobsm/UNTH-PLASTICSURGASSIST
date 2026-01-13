@@ -45,164 +45,44 @@ const BurnCarePage: React.FC = () => {
     avgTBSA: 0,
   });
 
-  // Mock data for demonstration
+  // Load burn patients from database (empty initially - patients added via admission form)
   useEffect(() => {
-    // In production, this would fetch from API
-    const mockPatients: BurnPatient[] = [
-      {
-        id: '1',
-        patientId: 'P001',
-        admissionDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
-        timeOfBurn: new Date(Date.now() - 2.5 * 24 * 60 * 60 * 1000),
-        mechanism: 'flame',
-        tbsaAssessment: {
-          method: 'lund_browder',
-          totalTBSA: 25,
-          regions: [],
-          assessmentDate: new Date(),
-          assessedBy: 'Dr. Smith'
-        },
-        bauxScore: 55,
-        revisedBauxScore: 72,
-        absiScore: {
-          agePoints: 2,
-          sexPoints: 1,
-          tbsaPoints: 3,
-          fullThicknessPoints: 1,
-          inhalationInjuryPoints: 1,
-          totalScore: 8,
-          mortalityRisk: '70-80%'
-        },
-        inhalationInjury: {
-          suspected: true,
-          confirmed: true,
-          signs: {
-            facialBurn: true,
-            singedNasalHairs: true,
-            carbonaceousSputum: true,
-            hoarseness: false,
-            stridorOrWheezing: false,
-            enclosedSpaceBurn: true,
-            alteredConsciousness: false
-          },
-          bronchoscopyPerformed: true,
-          bronchoscopyGrade: 2,
-          intubated: true,
-          intubationDate: new Date()
-        },
-        age: 30,
-        weight: 70,
-        gender: 'male',
-        resuscitation: burnCareService.calculateParklandFormula(70, 25, new Date(Date.now() - 2.5 * 24 * 60 * 60 * 1000)),
-        monitoring: {
-          vitals: [],
-          urineOutputs: [],
-          fluidBalance: { inputs: [], outputs: [], cumulative24h: 0, cumulative48h: 0, cumulativeTotal: 0 },
-          labs: [],
-          woundAssessments: [],
-          painScores: []
-        },
-        activeAlerts: [
-          {
-            id: 'a1',
-            type: 'low_urine_output',
-            severity: 'critical',
-            message: 'Low urine output: 0.3 mL/kg/hr for 2 consecutive hours',
-            criteria: 'UO < 0.5 mL/kg/hr',
-            suggestedAction: 'Increase crystalloid infusion by 20-30%',
-            createdAt: new Date(),
-            status: 'open'
-          }
-        ],
-        status: 'active',
-        disposition: 'icu',
-        tetanusStatus: 'current',
-        createdAt: new Date(),
-        updatedAt: new Date()
-      },
-      {
-        id: '2',
-        patientId: 'P002',
-        admissionDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
-        timeOfBurn: new Date(Date.now() - 5.2 * 24 * 60 * 60 * 1000),
-        mechanism: 'scald',
-        tbsaAssessment: {
-          method: 'lund_browder',
-          totalTBSA: 12,
-          regions: [],
-          assessmentDate: new Date(),
-          assessedBy: 'Dr. Johnson'
-        },
-        bauxScore: 57,
-        revisedBauxScore: 57,
-        absiScore: {
-          agePoints: 3,
-          sexPoints: 0,
-          tbsaPoints: 2,
-          fullThicknessPoints: 0,
-          inhalationInjuryPoints: 0,
-          totalScore: 5,
-          mortalityRisk: '10-20%'
-        },
-        inhalationInjury: {
-          suspected: false,
-          confirmed: false,
-          signs: {
-            facialBurn: false,
-            singedNasalHairs: false,
-            carbonaceousSputum: false,
-            hoarseness: false,
-            stridorOrWheezing: false,
-            enclosedSpaceBurn: false,
-            alteredConsciousness: false
-          },
-          bronchoscopyPerformed: false,
-          intubated: false
-        },
-        age: 45,
-        weight: 65,
-        gender: 'female',
-        resuscitation: burnCareService.calculateParklandFormula(65, 12, new Date(Date.now() - 5.2 * 24 * 60 * 60 * 1000)),
-        monitoring: {
-          vitals: [],
-          urineOutputs: [],
-          fluidBalance: { inputs: [], outputs: [], cumulative24h: 0, cumulative48h: 0, cumulativeTotal: 0 },
-          labs: [],
-          woundAssessments: [],
-          painScores: []
-        },
-        activeAlerts: [],
-        status: 'active',
-        disposition: 'ward',
-        tetanusStatus: 'current',
-        createdAt: new Date(),
-        updatedAt: new Date()
-      }
-    ];
-
-    setPatients(mockPatients);
-    
-    // Calculate stats
-    const activePatients = mockPatients.filter(p => p.status === 'active').length;
-    const icuPatients = mockPatients.filter(p => p.disposition === 'icu').length;
-    const wardPatients = mockPatients.filter(p => p.disposition === 'ward').length;
-    const criticalAlerts = mockPatients.reduce((sum, p) => 
-      sum + p.activeAlerts.filter(a => a.severity === 'critical' && a.status === 'open').length, 0);
-    const avgTBSA = mockPatients.length > 0 
-      ? mockPatients.reduce((sum, p) => sum + p.tbsaAssessment.totalTBSA, 0) / mockPatients.length 
-      : 0;
-
-    setStats({
-      activePatients,
-      icuPatients,
-      wardPatients,
-      criticalAlerts,
-      pendingAssessments: 3,
-      avgTBSA: Math.round(avgTBSA * 10) / 10
-    });
-
-    setLoading(false);
+    loadBurnPatients();
   }, []);
+
+  const loadBurnPatients = async () => {
+    try {
+      setLoading(true);
+      // In a production implementation, this would fetch from an API or IndexedDB
+      // For now, we start with an empty list - patients are added via the admission form
+      const burnPatients: BurnPatient[] = [];
+      
+      setPatients(burnPatients);
+      
+      // Calculate stats from loaded patients
+      const activePatients = burnPatients.filter(p => p.status === 'active').length;
+      const icuPatients = burnPatients.filter(p => p.disposition === 'icu').length;
+      const wardPatients = burnPatients.filter(p => p.disposition === 'ward').length;
+      const criticalAlerts = burnPatients.reduce((sum, p) => 
+        sum + (p.activeAlerts?.filter(a => a.severity === 'critical' && a.status === 'open').length || 0), 0);
+      const avgTBSA = burnPatients.length > 0 
+        ? burnPatients.reduce((sum, p) => sum + p.tbsaAssessment.totalTBSA, 0) / burnPatients.length 
+        : 0;
+
+      setStats({
+        activePatients,
+        icuPatients,
+        wardPatients,
+        criticalAlerts,
+        pendingAssessments: 0,
+        avgTBSA: Math.round(avgTBSA * 10) / 10
+      });
+    } catch (error) {
+      console.error('Error loading burn patients:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredPatients = patients.filter(patient => {
     const matchesSearch = (patient.patientId || '').toLowerCase().includes(searchTerm.toLowerCase());

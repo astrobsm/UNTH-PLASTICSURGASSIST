@@ -19,8 +19,10 @@ import {
 } from 'lucide-react';
 import { cmeService } from '../services/cmeService';
 import { aiService, CMETopic, TestSession, CMEProgress, CMECertificate } from '../services/aiService';
+import { useAuthStore } from '../store/authStore';
 
 const Education: React.FC = () => {
+  const { user } = useAuthStore();
   const [activeTab, setActiveTab] = useState<'topics' | 'test' | 'progress' | 'certificates' | 'settings'>('topics');
   const [topics, setTopics] = useState<CMETopic[]>([]);
   const [selectedTopic, setSelectedTopic] = useState<CMETopic | null>(null);
@@ -35,7 +37,7 @@ const Education: React.FC = () => {
   const [recommendations, setRecommendations] = useState<string[]>([]);
   const [aiConfigured, setAiConfigured] = useState(false);
 
-  const currentUserId = 'demo-user'; // In real app, get from auth store
+  const currentUserId = user?.id || 'anonymous';
 
   useEffect(() => {
     loadData();
@@ -48,9 +50,6 @@ const Education: React.FC = () => {
       // Check AI configuration status
       const isReady = await aiService.isReady();
       setAiConfigured(isReady);
-      
-      // Initialize demo data
-      await cmeService.initializeDemoData();
       
       // Load topics and user data
       const [topicsData, progressData, certificatesData, recs] = await Promise.all([

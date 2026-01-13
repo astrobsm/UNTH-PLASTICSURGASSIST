@@ -5,6 +5,7 @@ import { PostoperativeCareForm } from '../components/procedures/PostoperativeCar
 import { WoundCareAssessmentForm } from '../components/procedures/WoundCareAssessment';
 import { SurgicalFitnessScoreForm } from '../components/procedures/SurgicalFitnessScore';
 import { patientService } from '../services/patientService';
+import { schedulingService, SurgeryBooking } from '../services/schedulingService';
 import { logDataExport } from '../services/auditLoggingService';
 import { useAuthStore } from '../store/authStore';
 
@@ -19,9 +20,16 @@ export const Procedures: React.FC = () => {
     type: 'intraop' | 'reschedule' | 'cancel' | 'postop-plan' | 'postop-note' | null;
     procedure: any;
   }>({ type: null, procedure: null });
+  const [sidebarStats, setSidebarStats] = useState({
+    todaysProcedures: 0,
+    pendingWHO: 0,
+    highRisk: 0,
+    woundCareDue: 0
+  });
 
   useEffect(() => {
     loadPatients();
+    loadSidebarStats();
   }, []);
 
   const loadPatients = async () => {
@@ -30,6 +38,25 @@ export const Procedures: React.FC = () => {
       setPatients(allPatients);
     } catch (error) {
       console.error('Error loading patients:', error);
+    }
+  };
+
+  const loadSidebarStats = async () => {
+    try {
+      const today = new Date();
+      const todaysProcedures = await schedulingService.getSurgeryBookings(today);
+      const activeProcedures = todaysProcedures.filter(p => 
+        p.status === 'scheduled' || p.status === 'confirmed' || p.status === 'in_progress'
+      );
+      
+      setSidebarStats({
+        todaysProcedures: activeProcedures.length,
+        pendingWHO: activeProcedures.filter(p => !p.pre_op_checklist_completed).length,
+        highRisk: 0, // Would need ASA grade tracking in surgery bookings
+        woundCareDue: 0
+      });
+    } catch (error) {
+      console.error('Error loading sidebar stats:', error);
     }
   };
 
@@ -124,19 +151,19 @@ export const Procedures: React.FC = () => {
               <div className="p-4 space-y-3">
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-600">Today's Procedures</span>
-                  <span className="font-semibold text-green-600">5</span>
+                  <span className="font-semibold text-green-600">{sidebarStats.todaysProcedures}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-600">Pending WHO Checklists</span>
-                  <span className="font-semibold text-orange-600">3</span>
+                  <span className="font-semibold text-orange-600">{sidebarStats.pendingWHO}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-600">High Risk Patients</span>
-                  <span className="font-semibold text-red-600">2</span>
+                  <span className="font-semibold text-red-600">{sidebarStats.highRisk}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-600">Wound Care Due</span>
-                  <span className="font-semibold text-blue-600">7</span>
+                  <span className="font-semibold text-blue-600">{sidebarStats.woundCareDue}</span>
                 </div>
               </div>
             </div>
@@ -1258,88 +1285,113 @@ const ProcedureOverview: React.FC = () => {
     type: 'intraop' | 'reschedule' | 'cancel' | 'postop-plan' | 'postop-note' | null;
     procedure: any;
   }>({ type: null, procedure: null });
+  const [procedures, setProcedures] = useState<SurgeryBooking[]>([]);
+  const [stats, setStats] = useState({
+    todaysProcedures: 0,
+    pendingWHOChecklists: 0,
+    highRiskPatients: 0,
+    woundCareDue: 0
+  });
+  const [loading, setLoading] = useState(true);
 
-  const sampleProcedures = [
-    {
-      id: '1',
-      patient_name: 'Jane Smith',
-      procedure_name: 'Abdominoplasty',
-      scheduled_date: '2026-01-08',
-      scheduled_time: '08:30',
-      estimated_completion: '11:30',
-      status: 'in_progress',
-      operating_room: 'OR 3',
-      who_signin_complete: true,
-      timeout_pending: true
-    },
-    {
-      id: '2',
-      patient_name: 'Mary Johnson',
-      procedure_name: 'Breast Reconstruction',
-      scheduled_date: '2026-01-08',
-      scheduled_time: '10:00',
-      estimated_completion: '14:00',
-      status: 'scheduled',
-      operating_room: 'OR 1',
-      preop_complete: true,
-      documentation_pending: true
+  useEffect(() => {
+    loadProceduresAndStats();
+  }, []);
+
+  const loadProceduresAndStats = async () => {
+    try {
+      setLoading(true);
+      // Get today's procedures
+      const today = new Date();
+      const allProcedures = await schedulingService.getSurgeryBookings(today);
+      
+      // Filter for today's active/scheduled procedures
+      const todaysProcedures = allProcedures.filter(p => 
+        p.status === 'scheduled' || p.status === 'confirmed' || p.status === 'in_progress'
+      );
+      
+      setProcedures(todaysProcedures);
+      
+      // Calculate stats from real data
+      const pendingWHO = todaysProcedures.filter(p => !p.pre_op_checklist_completed).length;
+      const highRisk = 0; // Would need ASA grade tracking
+      
+      setStats({
+        todaysProcedures: todaysProcedures.length,
+        pendingWHOChecklists: pendingWHO,
+        highRiskPatients: highRisk,
+        woundCareDue: 0 // Would need separate wound care tracking
+      });
+    } catch (error) {
+      console.error('Error loading procedures:', error);
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
 
   return (
     <div className="space-y-6">
       {/* Current Procedures */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
         <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">Current Procedures</h3>
+          <h3 className="text-lg font-semibold text-gray-900">Today's Procedures</h3>
         </div>
         
         <div className="p-6">
-          <div className="space-y-4">
-            {/* Active Procedure Cards */}
-            {sampleProcedures.map(procedure => (
-              <div key={procedure.id} className="border border-gray-200 rounded-lg p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <h4 className="font-semibold text-gray-900">{procedure.procedure_name} - {procedure.patient_name}</h4>
-                    <p className="text-sm text-gray-600">
-                      {procedure.status === 'in_progress' ? 'Started' : 'Scheduled'}: {procedure.scheduled_time} | 
-                      Estimated completion: {procedure.estimated_completion}
-                    </p>
-                    <div className="flex items-center space-x-4 mt-2">
-                      {procedure.who_signin_complete && (
-                        <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">✅ WHO Sign-in Complete</span>
-                      )}
-                      {procedure.timeout_pending && (
-                        <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded-full">⏳ Time-out Pending</span>
-                      )}
-                      {procedure.preop_complete && (
-                        <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">🔍 Preop Complete</span>
-                      )}
-                      {procedure.documentation_pending && (
-                        <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full">📋 Documentation Pending</span>
-                      )}
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
+              <span className="ml-2 text-gray-600">Loading procedures...</span>
+            </div>
+          ) : procedures.length === 0 ? (
+            <div className="text-center py-8">
+              <div className="text-4xl mb-4">📋</div>
+              <h4 className="text-lg font-medium text-gray-700 mb-2">No Procedures Scheduled Today</h4>
+              <p className="text-gray-500 mb-4">Schedule a new surgical procedure using the button above.</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Active Procedure Cards */}
+              {procedures.map(procedure => (
+                <div key={procedure.id} className="border border-gray-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-gray-900">{procedure.procedure_name} - {procedure.patient_name || 'Patient'}</h4>
+                      <p className="text-sm text-gray-600">
+                        {procedure.status === 'in_progress' ? 'Started' : 'Scheduled'}: {procedure.start_time} | 
+                        Duration: {procedure.estimated_duration_minutes} min
+                      </p>
+                      <div className="flex items-center space-x-4 mt-2">
+                        {procedure.pre_op_checklist_completed && (
+                          <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">✅ Pre-op Checklist Complete</span>
+                        )}
+                        {!procedure.pre_op_checklist_completed && (
+                          <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded-full">⏳ WHO Checklist Pending</span>
+                        )}
+                        {procedure.consent_obtained && (
+                          <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">✅ Consent Obtained</span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="text-right">
-                      <span className={`text-lg font-semibold ${procedure.status === 'in_progress' ? 'text-green-600' : 'text-blue-600'}`}>
-                        {procedure.status === 'in_progress' ? 'In Progress' : 'Scheduled'}
-                      </span>
-                      <p className="text-sm text-gray-500">{procedure.operating_room}</p>
-                    </div>
-                    
-                    {/* Actions Dropdown */}
-                    <div className="relative">
-                      <button
-                        onClick={() => setShowActionsDropdown(showActionsDropdown === procedure.id ? null : procedure.id)}
-                        className="px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 flex items-center gap-2"
-                      >
-                        Actions
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </button>
+                    <div className="flex items-center gap-4">
+                      <div className="text-right">
+                        <span className={`text-lg font-semibold ${procedure.status === 'in_progress' ? 'text-green-600' : 'text-blue-600'}`}>
+                          {procedure.status === 'in_progress' ? 'In Progress' : procedure.status === 'confirmed' ? 'Confirmed' : 'Scheduled'}
+                        </span>
+                        <p className="text-sm text-gray-500">Theatre {procedure.theatre_number}</p>
+                      </div>
+                      
+                      {/* Actions Dropdown */}
+                      <div className="relative">
+                        <button
+                          onClick={() => setShowActionsDropdown(showActionsDropdown === procedure.id ? null : procedure.id)}
+                          className="px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 flex items-center gap-2"
+                        >
+                          Actions
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </button>
                       
                       {showActionsDropdown === procedure.id && (
                         <div className="absolute right-0 mt-2 w-72 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
@@ -1421,7 +1473,8 @@ const ProcedureOverview: React.FC = () => {
                 </div>
               </div>
             ))}
-          </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1466,7 +1519,7 @@ const ProcedureOverview: React.FC = () => {
             </div>
             <div className="ml-4">
               <h4 className="font-semibold text-gray-900">Preoperative</h4>
-              <p className="text-sm text-gray-600">5 pending assessments</p>
+              <p className="text-sm text-gray-600">{stats.todaysProcedures} scheduled today</p>
             </div>
           </div>
         </div>
@@ -1478,7 +1531,7 @@ const ProcedureOverview: React.FC = () => {
             </div>
             <div className="ml-4">
               <h4 className="font-semibold text-gray-900">WHO Checklists</h4>
-              <p className="text-sm text-gray-600">3 incomplete</p>
+              <p className="text-sm text-gray-600">{stats.pendingWHOChecklists} pending</p>
             </div>
           </div>
         </div>
@@ -1490,7 +1543,7 @@ const ProcedureOverview: React.FC = () => {
             </div>
             <div className="ml-4">
               <h4 className="font-semibold text-gray-900">Wound Care</h4>
-              <p className="text-sm text-gray-600">12 active assessments</p>
+              <p className="text-sm text-gray-600">{stats.woundCareDue} assessments due</p>
             </div>
           </div>
         </div>
@@ -1502,7 +1555,7 @@ const ProcedureOverview: React.FC = () => {
             </div>
             <div className="ml-4">
               <h4 className="font-semibold text-gray-900">Fitness Scoring</h4>
-              <p className="text-sm text-gray-600">2 high-risk patients</p>
+              <p className="text-sm text-gray-600">{stats.highRiskPatients} high-risk patients</p>
             </div>
           </div>
         </div>
@@ -1514,7 +1567,7 @@ const ProcedureOverview: React.FC = () => {
             </div>
             <div className="ml-4">
               <h4 className="font-semibold text-gray-900">Intraoperative</h4>
-              <p className="text-sm text-gray-600">1 active procedure</p>
+              <p className="text-sm text-gray-600">{procedures.filter(p => p.status === 'in_progress').length} active</p>
             </div>
           </div>
         </div>
@@ -1526,7 +1579,7 @@ const ProcedureOverview: React.FC = () => {
             </div>
             <div className="ml-4">
               <h4 className="font-semibold text-gray-900">Postoperative</h4>
-              <p className="text-sm text-gray-600">8 patients in recovery</p>
+              <p className="text-sm text-gray-600">{procedures.filter(p => p.status === 'completed').length} completed today</p>
             </div>
           </div>
         </div>
@@ -1539,28 +1592,27 @@ const ProcedureOverview: React.FC = () => {
         </div>
         
         <div className="p-6">
-          <div className="space-y-3">
-            <div className="flex items-center space-x-3">
-              <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-              <span className="text-sm text-gray-700">WHO Safety Checklist completed for John Doe - Rhinoplasty</span>
-              <span className="text-xs text-gray-500">2 minutes ago</span>
+          {procedures.length === 0 ? (
+            <div className="text-center py-4">
+              <p className="text-gray-500">No recent activity. Schedule procedures to see activity updates here.</p>
             </div>
-            <div className="flex items-center space-x-3">
-              <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
-              <span className="text-sm text-gray-700">Preoperative assessment completed for Sarah Wilson</span>
-              <span className="text-xs text-gray-500">15 minutes ago</span>
+          ) : (
+            <div className="space-y-3">
+              {procedures.slice(0, 5).map((procedure, index) => (
+                <div key={procedure.id} className="flex items-center space-x-3">
+                  <span className={`w-2 h-2 rounded-full ${
+                    procedure.status === 'completed' ? 'bg-green-500' :
+                    procedure.status === 'in_progress' ? 'bg-blue-500' :
+                    procedure.status === 'confirmed' ? 'bg-orange-500' : 'bg-gray-400'
+                  }`}></span>
+                  <span className="text-sm text-gray-700">
+                    {procedure.procedure_name} - {procedure.patient_name || 'Patient'} ({procedure.status})
+                  </span>
+                  <span className="text-xs text-gray-500">{procedure.start_time}</span>
+                </div>
+              ))}
             </div>
-            <div className="flex items-center space-x-3">
-              <span className="w-2 h-2 bg-orange-500 rounded-full"></span>
-              <span className="text-sm text-gray-700">Wound care assessment due for Michael Brown</span>
-              <span className="text-xs text-gray-500">1 hour ago</span>
-            </div>
-            <div className="flex items-center space-x-3">
-              <span className="w-2 h-2 bg-purple-500 rounded-full"></span>
-              <span className="text-sm text-gray-700">High surgical fitness score alert for Patient #0034</span>
-              <span className="text-xs text-gray-500">2 hours ago</span>
-            </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

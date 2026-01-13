@@ -50,6 +50,7 @@ import { AISettingsPanel } from '../components/AISettingsPanel';
 import BulkUserImport from '../components/BulkUserImport';
 import TeamAnalytics from '../components/TeamAnalytics';
 import { medicalTeamService } from '../services/medicalTeamService';
+import { getRecentAuditLogs, AuditLog as AuditLogType } from '../services/auditLoggingService';
 import { db } from '../db/database';
 import { resetDatabase } from '../utils/dbReset';
 import toast from 'react-hot-toast';
@@ -190,46 +191,26 @@ export default function Admin() {
   };
 
   const loadAuditLogs = async () => {
-    // Mock audit logs - in real app would come from API
-    const mockLogs: AuditLog[] = [
-      {
-        id: '1',
-        userId: '2',
-        userName: 'Dr. John Smith',
-        action: 'CREATE',
-        resource: 'patient',
-        details: 'Created new patient record: John Doe',
-        timestamp: new Date(),
-        ipAddress: '192.168.1.100',
-        userAgent: 'Mozilla/5.0...',
+    try {
+      const logs = await getRecentAuditLogs(50);
+      // Transform to the component's expected format
+      const formattedLogs: AuditLog[] = logs.map((log, index) => ({
+        id: String(log.id || index),
+        userId: log.user_id,
+        userName: log.user_name,
+        action: log.action,
+        resource: log.resource_type.toLowerCase(),
+        details: log.details || '',
+        timestamp: new Date(log.timestamp),
+        ipAddress: log.ip_address || 'N/A',
+        userAgent: 'N/A',
         success: true
-      },
-      {
-        id: '2',
-        userId: '3',
-        userName: 'Dr. Sarah Jones',
-        action: 'UPDATE',
-        resource: 'procedure',
-        details: 'Updated surgical checklist for patient ID: 123',
-        timestamp: new Date(Date.now() - 30 * 60 * 1000),
-        ipAddress: '192.168.1.101',
-        userAgent: 'Mozilla/5.0...',
-        success: true
-      },
-      {
-        id: '3',
-        userId: '1',
-        userName: 'System Administrator',
-        action: 'LOGIN',
-        resource: 'system',
-        details: 'Administrative login',
-        timestamp: new Date(Date.now() - 60 * 60 * 1000),
-        ipAddress: '192.168.1.50',
-        userAgent: 'Mozilla/5.0...',
-        success: true
-      }
-    ];
-    setAuditLogs(mockLogs);
+      }));
+      setAuditLogs(formattedLogs);
+    } catch (error) {
+      console.error('Error loading audit logs:', error);
+      setAuditLogs([]);
+    }
   };
 
   const handleCreateUser = () => {

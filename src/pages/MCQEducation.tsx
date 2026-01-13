@@ -68,7 +68,7 @@ const MCQEducation: React.FC = () => {
   const userLevel = user?.role === 'house_officer' ? 'house_officer' : 
                     user?.role === 'junior_registrar' ? 'junior_resident' : 
                     user?.role === 'senior_registrar' ? 'senior_resident' : 'consultant';
-  const isAdmin = user?.role === 'admin' || user?.role === 'consultant' || true; // Always show for demo
+  const isAdmin = user?.role === 'admin' || user?.role === 'consultant';
 
   useEffect(() => {
     console.log('MCQ Education - User:', user);
@@ -104,7 +104,7 @@ const MCQEducation: React.FC = () => {
     try {
       const [upcomingData, historyData, articlesData] = await Promise.all([
         mcqGenerationService.getUpcomingTests(userLevel),
-        mcqGenerationService.getUserTestHistory(user?.id || 'demo-user'),
+        mcqGenerationService.getUserTestHistory(user?.id || 'anonymous'),
         cmeWACSService.getAllArticles()
       ]);
 
@@ -188,7 +188,7 @@ const MCQEducation: React.FC = () => {
   const handleStartTest = async (schedule: MCQTestSchedule) => {
     try {
       const session = await mcqGenerationService.startMCQTest(
-        user?.id || 'demo-user',
+        user?.id || 'anonymous',
         userLevel,
         schedule.id
       );

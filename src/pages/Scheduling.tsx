@@ -1402,15 +1402,12 @@ const SurgerySection = ({
                     ))}
                   </select>
                   {patients.length === 0 && (
-                    <p className="text-xs text-gray-500 mt-1">No patients found. You can register a patient in Patients page, or add sample data.</p>
+                    <p className="text-xs text-gray-500 mt-1">No patients found. Register a patient in the Patients page first.</p>
                   )}
                   <div className="mt-2 flex items-center space-x-2">
                     <input id="manualEntry" type="checkbox" checked={manualEntry} onChange={(e) => setManualEntry(e.target.checked)} className="rounded text-green-600 focus:ring-green-500" />
                     <label htmlFor="manualEntry" className="text-sm text-gray-700">Enter patient details manually</label>
                   </div>
-                  {patients.length === 0 && (
-                    <button type="button" onClick={() => window.open('/add-test-patients.html', '_blank')} className="mt-2 text-blue-600 hover:underline text-sm">Open Add Test Patients</button>
-                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">PT-Number</label>

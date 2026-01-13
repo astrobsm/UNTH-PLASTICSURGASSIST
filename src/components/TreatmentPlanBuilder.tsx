@@ -82,16 +82,6 @@ export default function TreatmentPlanBuilder({ planId }: TreatmentPlanBuilderPro
     }
   };
 
-  const createDemoData = async () => {
-    try {
-      await offlineDataService.createDemoData();
-      await loadData();
-      await loadSyncStatus();
-    } catch (error) {
-      console.error('Failed to create demo data:', error);
-    }
-  };
-
   const createTreatmentPlan = async () => {
     if (!selectedPatient) {
       toast.error('Please select a patient first');
@@ -224,16 +214,16 @@ export default function TreatmentPlanBuilder({ planId }: TreatmentPlanBuilderPro
         </div>
       </div>
 
-      {/* Demo Data Button */}
+      {/* Empty State - Direct to Patients Page */}
       {patients.length === 0 && !plan && (
         <div className="card p-6 text-center">
-          <h3 className="text-lg font-semibold mb-4">No Data Available</h3>
+          <h3 className="text-lg font-semibold mb-4">No Patients Found</h3>
           <p className="text-clinical mb-4">
-            Create demo data to test the offline functionality
+            Register a patient first to create a treatment plan.
           </p>
-          <button onClick={createDemoData} className="btn-primary">
-            Create Demo Data
-          </button>
+          <a href="/patients" className="btn-primary inline-block">
+            Go to Patients Page
+          </a>
         </div>
       )}
 
