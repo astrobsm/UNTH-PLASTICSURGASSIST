@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { unthPatientService, PatientSummary } from '../services/unthPatientService';
+import { patientService } from '../services/patientService';
+import { db } from '../db/database';
 
 interface PatientSummaryViewProps {
   patientId: string;
@@ -13,58 +15,142 @@ export const PatientSummaryView: React.FC<PatientSummaryViewProps> = ({
   const [summaries, setSummaries] = useState<PatientSummary[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedSummary, setSelectedSummary] = useState<PatientSummary | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     loadSummaries();
   }, [patientId, summaryType]);
 
   const loadSummaries = async () => {
-    // In a real implementation, this would fetch from the database
-    // For now, we'll use mock data
-    const mockSummaries: PatientSummary[] = [
-      {
-        id: '1',
-        patient_id: patientId,
-        summary_type: 'admission',
-        generated_by: 'ai',
-        content: `Patient admitted with acute appendicitis. Initial presentation with right lower quadrant pain, fever, and elevated white cell count. Physical examination revealed McBurney's point tenderness and positive Rovsing's sign. CT scan confirmed acute appendicitis with no signs of perforation.`,
-        key_points: [
-          'Acute appendicitis confirmed on CT',
-          'No signs of perforation',
-          'Classic presentation with RLQ pain',
-          'Elevated WBC count'
-        ],
-        current_problems: [
-          'Acute appendicitis',
-          'Abdominal pain',
-          'Risk of complications'
-        ],
-        medications: [
-          'IV Ceftriaxone 1g BD',
-          'IV Metronidazole 500mg TDS',
-          'IV Tramadol 100mg TDS PRN pain'
-        ],
-        investigations_pending: [
-          'Pre-operative workup',
-          'Blood grouping and cross-matching',
-          'ECG',
-          'Chest X-ray'
-        ],
-        plan: [
-          'Emergency appendectomy',
-          'Continue IV antibiotics',
-          'Monitor vital signs',
-          'NBM for surgery'
-        ],
-        generated_at: new Date('2024-01-15T08:30:00'),
-        generated_by_user: 'ai-system',
-        ai_confidence: 92
+    setIsLoading(true);
+    try {
+      // Fetch patient data
+      const patient = await patientService.getPatient(patientId);
+      
+      // Try to fetch existing summaries from local DB
+      const existingSummaries = await db.patient_summaries
+        ?.where('patient_id')
+        .equals(patientId)
+        .toArray() || [];
+      
+      if (existingSummaries.length > 0) {
+        // Convert stored dates back to Date objects
+        const formattedSummaries = existingSummaries.map(s => ({
+          ...s,
+          generated_at: new Date(s.generated_at)
+        }));
+        setSummaries(formattedSummaries);
+        setSelectedSummary(formattedSummaries[0]);
+      } else if (patient) {
+        // Generate initial summary from actual patient data
+        const patientSummary = await generateSummaryFromPatientData(patient, summaryType);
+        setSummaries([patientSummary]);
+        setSelectedSummary(patientSummary);
+      } else {
+        setSummaries([]);
+        setSelectedSummary(null);
       }
-    ];
-    setSummaries(mockSummaries);
-    if (mockSummaries.length > 0) {
-      setSelectedSummary(mockSummaries[0]);
+    } catch (error) {
+      console.error('Error loading summaries:', error);
+      setSummaries([]);
+    } finally {
+      setIsLoading(false);
     }
+  };
+
+  const generateSummaryFromPatientData = async (patient: any, type: PatientSummary['summary_type']): Promise<PatientSummary> => {
+    // Get related data for the patient
+    const admissions = await db.admissions?.where('patient_id').equals(patient.id).toArray() || [];
+    const treatmentPlans = await db.treatment_plans?.where('patient_id').equals(patient.id).toArray() || [];
+    const latestAdmission = admissions.sort((a, b) => 
+      new Date(b.admission_date || b.created_at).getTime() - new Date(a.admission_date || a.created_at).getTime()
+    )[0];
+    
+    // Build content from actual patient data
+    const patientName = `${patient.first_name} ${patient.last_name}`;
+    const diagnosis = patient.primary_diagnosis || latestAdmission?.provisional_diagnosis || latestAdmission?.admitting_diagnosis || 'Not specified';
+    const allergies = Array.isArray(patient.allergies) ? patient.allergies : (patient.allergies ? [patient.allergies] : []);
+    const ward = latestAdmission?.ward_location || latestAdmission?.ward || patient.ward || 'Not assigned';
+    
+    let content = `Patient ${patientName}`;
+    if (patient.hospital_number) content += ` (${patient.hospital_number})`;
+    if (latestAdmission) {
+      content += ` admitted to ${ward}`;
+      if (latestAdmission.admission_date) {
+        content += ` on ${new Date(latestAdmission.admission_date).toLocaleDateString()}`;
+      }
+    }
+    content += `. Primary Diagnosis: ${diagnosis}.`;
+    
+    if (latestAdmission?.presenting_complaint) {
+      content += ` Presenting complaint: ${latestAdmission.presenting_complaint}.`;
+    }
+    if (patient.medical_history) {
+      content += ` Medical history: ${patient.medical_history}.`;
+    }
+    
+    // Build key points from actual data
+    const keyPoints: string[] = [];
+    if (diagnosis && diagnosis !== 'Not specified') keyPoints.push(`Diagnosis: ${diagnosis}`);
+    if (ward !== 'Not assigned') keyPoints.push(`Location: ${ward}`);
+    if (patient.blood_group) keyPoints.push(`Blood Group: ${patient.blood_group}`);
+    if (allergies.length > 0) keyPoints.push(`Allergies: ${allergies.join(', ')}`);
+    
+    // Current problems from treatment plans
+    const currentProblems: string[] = [];
+    if (diagnosis && diagnosis !== 'Not specified') currentProblems.push(diagnosis);
+    treatmentPlans.forEach(tp => {
+      if (tp.diagnosis && !currentProblems.includes(tp.diagnosis)) {
+        currentProblems.push(tp.diagnosis);
+      }
+    });
+    
+    // Medications from treatment plans or prescriptions
+    const medications: string[] = [];
+    const prescriptions = await db.prescriptions?.where('patient_id').equals(patient.id).toArray() || [];
+    prescriptions.filter(p => p.status === 'active').forEach(p => {
+      medications.push(`${p.medication_name} ${p.dosage || ''} ${p.frequency || ''}`.trim());
+    });
+    
+    // Build plan from treatment plans
+    const plan: string[] = [];
+    treatmentPlans.forEach(tp => {
+      if (tp.procedures && Array.isArray(tp.procedures)) {
+        tp.procedures.forEach((proc: any) => {
+          if (proc.procedure_name || proc.name) {
+            plan.push(proc.procedure_name || proc.name);
+          }
+        });
+      }
+    });
+    if (plan.length === 0) {
+      plan.push('Continue monitoring', 'Review treatment response');
+    }
+    
+    const summary: PatientSummary = {
+      id: `summary-${Date.now()}`,
+      patient_id: patientId,
+      summary_type: type,
+      generated_by: 'system',
+      content,
+      key_points: keyPoints.length > 0 ? keyPoints : ['Patient data loaded from database'],
+      current_problems: currentProblems.length > 0 ? currentProblems : ['No active problems documented'],
+      medications: medications.length > 0 ? medications : ['No active medications'],
+      investigations_pending: [],
+      plan: plan,
+      generated_at: new Date(),
+      generated_by_user: 'system',
+      ai_confidence: undefined
+    };
+    
+    // Save to local DB for future retrieval
+    try {
+      await db.patient_summaries?.add(summary as any);
+    } catch (e) {
+      console.warn('Could not save summary to local DB:', e);
+    }
+    
+    return summary;
   };
 
   const generateNewSummary = async () => {
