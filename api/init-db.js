@@ -82,6 +82,8 @@ async function createTables() {
       blood_group VARCHAR(10),
       allergies TEXT,
       medical_history TEXT,
+      primary_diagnosis TEXT,
+      secondary_diagnoses JSONB DEFAULT '[]',
       ward VARCHAR(100),
       bed_number VARCHAR(50),
       emergency_contact_name VARCHAR(255),
@@ -90,6 +92,17 @@ async function createTables() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
+    
+    -- Add diagnosis columns if they don't exist (for existing databases)
+    DO $$ 
+    BEGIN 
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'patients' AND column_name = 'primary_diagnosis') THEN
+        ALTER TABLE patients ADD COLUMN primary_diagnosis TEXT;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'patients' AND column_name = 'secondary_diagnoses') THEN
+        ALTER TABLE patients ADD COLUMN secondary_diagnoses JSONB DEFAULT '[]';
+      END IF;
+    END $$;
 
     -- Treatment Plans table
     CREATE TABLE IF NOT EXISTS treatment_plans (

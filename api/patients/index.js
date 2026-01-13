@@ -114,7 +114,9 @@ async function createPatient(data, user, res) {
     allergies,
     medicalHistory, medical_history, chronic_conditions,
     emergencyContactName, emergency_contact_name,
-    emergencyContactPhone, emergency_contact_phone
+    emergencyContactPhone, emergency_contact_phone,
+    primary_diagnosis, primaryDiagnosis, diagnosis,
+    secondary_diagnoses, secondaryDiagnoses
   } = data;
 
   // Handle both camelCase and snake_case
@@ -132,6 +134,8 @@ async function createPatient(data, user, res) {
     medical_history: Array.isArray(medicalHistory || medical_history || chronic_conditions) 
       ? (medicalHistory || medical_history || chronic_conditions).join(', ') 
       : (medicalHistory || medical_history || chronic_conditions || ''),
+    primary_diagnosis: primary_diagnosis || primaryDiagnosis || diagnosis || '',
+    secondary_diagnoses: secondary_diagnoses || secondaryDiagnoses || [],
     emergency_contact_name: emergencyContactName || emergency_contact_name || '',
     emergency_contact_phone: emergencyContactPhone || emergency_contact_phone || ''
   };
@@ -147,8 +151,9 @@ async function createPatient(data, user, res) {
     `INSERT INTO patients (
       hospital_number, first_name, last_name, date_of_birth, gender,
       phone, email, address, blood_group, allergies, medical_history,
+      primary_diagnosis, secondary_diagnoses,
       emergency_contact_name, emergency_contact_phone, created_by
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
     RETURNING *`,
     [
       patientData.hospital_number,
@@ -162,6 +167,8 @@ async function createPatient(data, user, res) {
       patientData.blood_group,
       patientData.allergies,
       patientData.medical_history,
+      patientData.primary_diagnosis,
+      JSON.stringify(patientData.secondary_diagnoses),
       patientData.emergency_contact_name,
       patientData.emergency_contact_phone,
       user.id

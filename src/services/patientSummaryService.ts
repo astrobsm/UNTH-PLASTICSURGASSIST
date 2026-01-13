@@ -95,6 +95,17 @@ class PatientSummaryService {
     // Extract diagnosis from multiple sources
     const diagnosisSources: string[] = [];
     
+    // From patient record itself (primary_diagnosis field - PRIORITY)
+    if ((patient as any).primary_diagnosis) {
+      diagnosisSources.push((patient as any).primary_diagnosis);
+    }
+    if ((patient as any).diagnosis) {
+      diagnosisSources.push((patient as any).diagnosis);
+    }
+    if ((patient as any).admitting_diagnosis) {
+      diagnosisSources.push((patient as any).admitting_diagnosis);
+    }
+    
     // From treatment plans
     allTreatmentPlans.forEach(p => {
       if (p.diagnosis) diagnosisSources.push(p.diagnosis);
@@ -105,14 +116,6 @@ class PatientSummaryService {
       if (a.admitting_diagnosis) diagnosisSources.push(a.admitting_diagnosis);
       if (a.diagnosis) diagnosisSources.push(a.diagnosis);
     });
-    
-    // From patient record itself (if stored there)
-    if ((patient as any).diagnosis) {
-      diagnosisSources.push((patient as any).diagnosis);
-    }
-    if ((patient as any).admitting_diagnosis) {
-      diagnosisSources.push((patient as any).admitting_diagnosis);
-    }
     
     // Deduplicate and join
     const uniqueDiagnoses = [...new Set(diagnosisSources.filter(d => d && d.trim()))];
