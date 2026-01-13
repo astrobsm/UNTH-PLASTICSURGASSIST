@@ -278,14 +278,15 @@ function ActivePatientsTab({ admissions, searchTerm, setSearchTerm, onDischarge,
                         admission.route_of_admission === 'consult_transfer' ? 'bg-purple-100 text-purple-700' :
                         'bg-blue-100 text-blue-700'
                       }`}>
-                        {(admission.route_of_admission || 'clinic').replace('_', ' ')}
+                        {String(admission.route_of_admission || 'clinic').replace('_', ' ')}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-sm">
                       <div className="flex gap-2">
                         <button 
-                          onClick={() => navigate(`/patients/${admission.patient_id}`)}
+                          onClick={() => admission.patient_id && navigate(`/patients/${admission.patient_id}`)}
                           className="text-blue-600 hover:text-blue-800"
+                          disabled={!admission.patient_id}
                         >
                           View
                         </button>
@@ -935,7 +936,7 @@ function DischargeHistoryTab({ discharges, onRefresh }: DischargeHistoryTabProps
                       discharge.discharge_type === 'against_medical_advice' ? 'bg-red-100 text-red-700' :
                       'bg-gray-100 text-gray-700'
                     }`}>
-                      {(discharge.discharge_type || 'normal').replace('_', ' ')}
+                      {String(discharge.discharge_type || 'normal').replace('_', ' ')}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-sm">{discharge.length_of_stay_days}d</td>
