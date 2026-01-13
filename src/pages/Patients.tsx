@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { db } from '../db/database';
 import { Patient } from '../db/database';
 import { PatientRegistrationForm } from '../components/PatientRegistrationForm';
+import patientService from '../services/patientService';
 
 export const Patients: React.FC = () => {
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -18,16 +19,23 @@ export const Patients: React.FC = () => {
   const loadPatients = async () => {
     try {
       setLoading(true);
-      const patientData = await db.patients
-        .orderBy('created_at')
-        .reverse()
-        .toArray();
+      
+      // Fetch from server API first (includes ALL patients from all users)
+      // This also updates local IndexedDB for offline access
+      let patientData = await patientService.getAllPatients();
       
       // Filter out deleted patients
-      const activePatients = patientData.filter(p => !p.deleted);
+      const activePatients = patientData.filter((p: any) => !p.deleted);
       setPatients(activePatients);
     } catch (error) {
       console.error('Error loading patients:', error);
+      
+      // Fallback to local IndexedDB if API fails
+      const localPatients = await db.patients
+        .orderBy('created_at')
+        .reverse()
+        .toArray();
+      setPatients(localPatients.filter(p => !p.deleted));
     } finally {
       setLoading(false);
     }

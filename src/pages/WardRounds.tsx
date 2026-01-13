@@ -3,6 +3,7 @@ import { Calendar, User, Activity, FileText, Plus, Search, Filter, TrendingUp, C
 import WardRoundForm from '../components/WardRoundForm';
 import { wardRoundsService, WardRound } from '../services/wardRoundsService';
 import { db } from '../db/database';
+import { patientService } from '../services/patientService';
 import { format } from 'date-fns';
 
 interface Patient {
@@ -30,7 +31,7 @@ export default function WardRounds() {
       setLoading(true);
       const [roundsData, patientsData] = await Promise.all([
         wardRoundsService.getAllWardRounds(),
-        db.patients.toArray()
+        patientService.getAllPatients() // Fetch from server API (includes all users' patients)
       ]);
       setRounds(roundsData);
       setPatients(patientsData.map(p => ({

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, Save, User, Calendar, FileText, Activity, AlertCircle, TrendingUp, Pill, Stethoscope, ClipboardList, Users, Edit3, Camera, Image, Upload, Trash2, FileSearch, Loader2, TestTube } from 'lucide-react';
 import { wardRoundsService, WardRound, ROUND_TYPES, RoundType, ClinicalImage } from '../services/wardRoundsService';
 import { db } from '../db/database';
+import { patientService } from '../services/patientService';
 import { format } from 'date-fns';
 import { useAuthStore } from '../store/authStore';
 import { apiClient } from '../services/apiClient';
@@ -157,7 +158,7 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
   };
 
   const loadPatients = async () => {
-    const allPatients = await db.patients.toArray();
+    const allPatients = await patientService.getAllPatients();
     setPatients(allPatients);
   };
 
