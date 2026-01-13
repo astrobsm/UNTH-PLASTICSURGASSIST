@@ -87,7 +87,7 @@ class PushNotificationService {
 
     // Send to server
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('auth_token');
       
       if (!token) {
         console.warn('⚠️ No auth token available, will retry push subscription sync later');
@@ -171,7 +171,7 @@ class PushNotificationService {
   // Send notification to all users (called from backend)
   async broadcastToAllUsers(title: string, body: string, voiceMessage: string, data?: any): Promise<void> {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('auth_token');
       
       if (!token) {
         console.warn('⚠️ No auth token available, skipping broadcast to server');

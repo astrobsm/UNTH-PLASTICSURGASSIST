@@ -96,6 +96,10 @@ class ApiClient {
   }
 
   getToken(): string | null {
+    // Always check localStorage as backup in case this.token wasn't set
+    if (!this.token) {
+      this.token = localStorage.getItem('auth_token');
+    }
     return this.token;
   }
 
