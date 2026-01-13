@@ -311,7 +311,18 @@ async function createTables() {
       tab_switch_count INTEGER DEFAULT 0,
       suspicious_activity BOOLEAN DEFAULT FALSE,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id, level, test_number)
+    );
+    
+    -- Training Progress table (CME topic completions)
+    CREATE TABLE IF NOT EXISTS training_progress (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      topic_id VARCHAR(255) NOT NULL,
+      level VARCHAR(50) DEFAULT 'house_officer',
+      completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id, topic_id)
     );
 
     -- Trainee Rotations table

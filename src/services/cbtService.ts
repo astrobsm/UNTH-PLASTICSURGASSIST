@@ -343,6 +343,61 @@ const STORAGE_KEYS = {
   PROGRESS: 'cbt_progress'
 };
 
+// API helper for server sync
+const syncToServer = async (action: string, data: any): Promise<any> => {
+  try {
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      console.warn('⚠️ No auth token, CBT progress will only be saved locally');
+      return null;
+    }
+    
+    const response = await fetch(`/api/cbt?action=${action}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(data)
+    });
+    
+    if (response.ok) {
+      const result = await response.json();
+      console.log(`✅ CBT ${action} synced to server`);
+      return result;
+    } else {
+      console.warn(`⚠️ Failed to sync CBT ${action}:`, response.status);
+      return null;
+    }
+  } catch (error) {
+    console.warn('⚠️ CBT sync failed (offline?):', error);
+    return null;
+  }
+};
+
+// Fetch progress from server
+const fetchFromServer = async (action: string, params: Record<string, string> = {}): Promise<any> => {
+  try {
+    const token = localStorage.getItem('auth_token');
+    if (!token) return null;
+    
+    const queryString = new URLSearchParams({ action, ...params }).toString();
+    const response = await fetch(`/api/cbt?${queryString}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    
+    if (response.ok) {
+      return await response.json();
+    }
+    return null;
+  } catch (error) {
+    console.warn('⚠️ Failed to fetch CBT data from server:', error);
+    return null;
+  }
+};
+
 // Save attempt to localStorage (works offline)
 const saveAttempt = (attempt: CBTAttempt): void => {
   const attempts = getAttempts();
@@ -448,6 +503,13 @@ class CBTService {
     saveAttempt(attempt);
     localStorage.setItem(STORAGE_KEYS.CURRENT_TEST, JSON.stringify({ test, attempt }));
     
+    // Sync to server
+    syncToServer('start', {
+      testId: test.id,
+      level: test.level,
+      testNumber: test.testNumber
+    });
+    
     return attempt;
   }
   
@@ -475,6 +537,21 @@ class CBTService {
     
     saveAttempt(attempt);
     localStorage.removeItem(STORAGE_KEYS.CURRENT_TEST);
+    
+    // Sync completed test to server
+    syncToServer('submit', {
+      attemptId: attempt.id,
+      testId: test.id,
+      level: attempt.level,
+      testNumber: attempt.testNumber,
+      answers: attempt.answers,
+      score: attempt.score,
+      percentage: attempt.percentage,
+      passed: attempt.passed,
+      tabSwitchCount: attempt.tabSwitchCount,
+      startTime: attempt.startTime,
+      endTime: attempt.endTime
+    });
     
     return attempt;
   }

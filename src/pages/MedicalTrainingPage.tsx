@@ -32,13 +32,44 @@ const MedicalTrainingPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set(['ho-module-1']));
   const [selectedTopic, setSelectedTopic] = useState<CMETopic | null>(null);
-  const [completedTopics, setCompletedTopics] = useState<Set<string>>(new Set());
+  const [completedTopics, setCompletedTopics] = useState<Set<string>>(() => {
+    // Load from localStorage on mount
+    const stored = localStorage.getItem('completed_training_topics');
+    return stored ? new Set(JSON.parse(stored)) : new Set();
+  });
   const [showCBT, setShowCBT] = useState(false);
   const [showPerformance, setShowPerformance] = useState(false);
 
   // Record login on component mount
   useEffect(() => {
     performanceService.recordLogin();
+    
+    // Load completed topics from server
+    const loadFromServer = async () => {
+      try {
+        const token = localStorage.getItem('auth_token');
+        if (!token) return;
+        
+        const response = await fetch('/api/training-progress', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.completedTopics && data.completedTopics.length > 0) {
+            setCompletedTopics(prev => {
+              const merged = new Set([...prev, ...data.completedTopics]);
+              localStorage.setItem('completed_training_topics', JSON.stringify([...merged]));
+              return merged;
+            });
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to load training progress from server:', error);
+      }
+    };
+    
+    loadFromServer();
   }, []);
 
   const modules = useMemo(() => {
@@ -71,8 +102,32 @@ const MedicalTrainingPage: React.FC = () => {
     setSelectedTopic(topic);
   };
 
-  const handleTopicComplete = (topicId: string) => {
-    setCompletedTopics(prev => new Set([...prev, topicId]));
+  const handleTopicComplete = async (topicId: string) => {
+    // Update state
+    setCompletedTopics(prev => {
+      const updated = new Set([...prev, topicId]);
+      // Save to localStorage
+      localStorage.setItem('completed_training_topics', JSON.stringify([...updated]));
+      return updated;
+    });
+    
+    // Sync to server
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (token) {
+        await fetch('/api/training-progress', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ topicId, level: activeTab, completedAt: new Date().toISOString() })
+        });
+        console.log('✅ Training progress synced to server');
+      }
+    } catch (error) {
+      console.warn('⚠️ Failed to sync training progress (will retry later):', error);
+    }
   };
 
   const totalTopics = modules.reduce((sum, m) => sum + m.topics.length, 0);

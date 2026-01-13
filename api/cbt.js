@@ -139,9 +139,73 @@ async function handlePost(req, res, userId) {
 
     case 'submit':
       // Submit test and calculate score
-      const { attemptId: submitAttemptId, answers, tabSwitchCount } = body;
+      const { 
+        attemptId: submitAttemptId, 
+        answers, 
+        tabSwitchCount,
+        testId,
+        level: submitLevel,
+        testNumber,
+        score: clientScore,
+        percentage: clientPercentage,
+        passed: clientPassed,
+        startTime,
+        endTime
+      } = body;
       
-      // Get the attempt and test questions
+      // If we have level/testNumber, create or update a record
+      // This handles the case where frontend generates its own attempt IDs
+      if (submitLevel && testNumber !== undefined) {
+        // Create or update the attempt record directly
+        const upsertResult = await query(
+          `INSERT INTO cbt_attempts 
+           (user_id, level, test_number, start_time, end_time, answers, score, percentage, passed, completed, tab_switch_count, suspicious_activity)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true, $10, $11)
+           ON CONFLICT (user_id, level, test_number) 
+           DO UPDATE SET 
+             end_time = EXCLUDED.end_time,
+             answers = EXCLUDED.answers,
+             score = EXCLUDED.score,
+             percentage = EXCLUDED.percentage,
+             passed = EXCLUDED.passed,
+             completed = true,
+             tab_switch_count = EXCLUDED.tab_switch_count,
+             suspicious_activity = EXCLUDED.suspicious_activity,
+             updated_at = CURRENT_TIMESTAMP
+           RETURNING *`,
+          [
+            userId,
+            submitLevel,
+            testNumber,
+            startTime || new Date().toISOString(),
+            endTime || new Date().toISOString(),
+            JSON.stringify(answers || {}),
+            clientScore || 0,
+            clientPercentage || 0,
+            clientPassed || false,
+            tabSwitchCount || 0,
+            (tabSwitchCount || 0) >= 3
+          ]
+        );
+        
+        // Log activity
+        await logActivity(userId, 'cbt_completed', `Completed CBT test ${testNumber} for ${submitLevel} with ${clientPercentage}% score`, { 
+          score: clientScore, 
+          percentage: clientPercentage, 
+          passed: clientPassed,
+          testNumber,
+          level: submitLevel
+        });
+        
+        return res.status(200).json({ 
+          attempt: upsertResult.rows[0],
+          score: clientScore,
+          percentage: clientPercentage,
+          passed: clientPassed
+        });
+      }
+      
+      // Legacy path: Get the attempt by ID
       const attemptData = await query(
         `SELECT ca.*, ct.questions FROM cbt_attempts ca
          LEFT JOIN cbt_tests ct ON ca.test_id = ct.id
