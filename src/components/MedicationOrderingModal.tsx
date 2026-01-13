@@ -2,6 +2,15 @@
 import React, { useState } from 'react';
 import { X, Plus, Pill, AlertTriangle, Search, Trash2, Info } from 'lucide-react';
 import { format } from 'date-fns';
+import {
+  MEDICATIONS,
+  MEDICATION_CATEGORIES,
+  MEDICATION_FREQUENCIES,
+  MEDICATION_ROUTES,
+  searchMedications,
+  getMedicationsByCategory,
+  getMedicationById
+} from '../data/medications';
 
 interface Medication {
   id: string;

@@ -350,7 +350,7 @@ const NewProcedureModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
       
       // Log audit for HIPAA compliance (when user context is available)
       const { user } = useAuthStore.getState();
-      if (user && selectedPatientId) {
+      if (user && formData.patient_id) {
         const procedureId = `proc-${Date.now()}`;
         await logDataExport(
           user.id,

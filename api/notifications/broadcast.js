@@ -42,23 +42,49 @@ async function broadcastNotification(data, res) {
     return res.status(400).json({ error: 'Title and body are required' });
   }
 
-  // Get all active push subscriptions
-  const result = await query(
-    'SELECT * FROM push_subscriptions WHERE is_active = true'
-  );
+  try {
+    // First, ensure the push_subscriptions table exists
+    await query(`
+      CREATE TABLE IF NOT EXISTS push_subscriptions (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR(255) NOT NULL,
+        endpoint TEXT NOT NULL,
+        keys JSONB NOT NULL,
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
 
-  const subscriptions = result.rows;
-  const notificationPayload = JSON.stringify({
-    title,
-    body,
-    voiceMessage,
-    data: notificationData,
-    icon: '/icons/icon-192x192.png',
-    badge: '/icons/badge-72x72.png',
-    vibrate: [200, 100, 200],
-    tag: notificationData?.type || 'default',
-    requireInteraction: true
-  });
+    // Get all active push subscriptions
+    const result = await query(
+      'SELECT * FROM push_subscriptions WHERE is_active = true'
+    );
+
+    const subscriptions = result.rows || [];
+    
+    // If no subscriptions, return success with 0 sent
+    if (subscriptions.length === 0) {
+      return res.status(200).json({
+        message: 'Broadcast completed - no active subscriptions',
+        totalSubscriptions: 0,
+        successCount: 0,
+        failureCount: 0,
+        results: []
+      });
+    }
+
+    const notificationPayload = JSON.stringify({
+      title,
+      body,
+      voiceMessage,
+      data: notificationData,
+      icon: '/icons/icon-192x192.png',
+      badge: '/icons/badge-72x72.png',
+      vibrate: [200, 100, 200],
+      tag: notificationData?.type || 'default',
+      requireInteraction: true
+    });
 
   // Send push notifications to all subscribers
   const sendPromises = subscriptions.map(async (subscription) => {
@@ -99,4 +125,11 @@ async function broadcastNotification(data, res) {
     failureCount,
     results
   });
+  } catch (error) {
+    console.error('Broadcast notification error:', error);
+    return res.status(500).json({ 
+      error: 'Failed to broadcast notification', 
+      message: error.message 
+    });
+  }
 }

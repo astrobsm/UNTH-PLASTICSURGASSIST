@@ -8,6 +8,15 @@ import {
   ALL_REFERENCE_RANGES,
   ReferenceRange 
 } from '../data/labReferenceValues';
+import {
+  INVESTIGATIONS,
+  INVESTIGATION_CATEGORIES as INVESTIGATIONS_DB_CATEGORIES,
+  INVESTIGATION_PANELS,
+  searchInvestigations,
+  getInvestigationsByCategory,
+  getNormalRangeForPatient,
+  checkCriticalValue
+} from '../data/investigations';
 
 interface Investigation {
   id: string;

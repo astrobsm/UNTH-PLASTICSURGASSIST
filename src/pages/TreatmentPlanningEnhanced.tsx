@@ -468,23 +468,29 @@ export default function TreatmentPlanningEnhanced() {
                 <Activity className="w-5 h-5 text-purple-600" />
                 <h3 className="font-semibold text-gray-900">Lab Works ({selectedPlan.lab_works?.length || 0})</h3>
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0 relative z-10">
+              <div className="flex items-center gap-2 flex-shrink-0 relative z-10 pointer-events-auto">
                 <button
+                  type="button"
                   onClick={(e) => {
                     e.stopPropagation();
+                    e.preventDefault();
+                    console.log('Order & Track clicked');
                     setShowInvestigationOrderingModal(true);
                   }}
-                  className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm flex items-center gap-1 whitespace-nowrap shadow-sm"
+                  className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm flex items-center gap-1 whitespace-nowrap shadow-sm pointer-events-auto"
                 >
                   <TestTube className="w-4 h-4" />
                   Order & Track
                 </button>
                 <button
+                  type="button"
                   onClick={(e) => {
                     e.stopPropagation();
+                    e.preventDefault();
+                    console.log('Add Lab clicked');
                     setShowLabModal(true);
                   }}
-                  className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-sm whitespace-nowrap shadow-sm"
+                  className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-sm whitespace-nowrap shadow-sm pointer-events-auto"
                 >
                   Add Lab
                 </button>
@@ -526,13 +532,16 @@ export default function TreatmentPlanningEnhanced() {
                 <FileText className="w-5 h-5 text-orange-600" />
                 <h3 className="font-semibold text-gray-900">Procedures ({selectedPlan.procedures?.length || 0})</h3>
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0 relative z-10">
+              <div className="flex items-center gap-2 flex-shrink-0 relative z-10 pointer-events-auto">
                 <button
+                  type="button"
                   onClick={(e) => {
                     e.stopPropagation();
+                    e.preventDefault();
+                    console.log('Add Procedure clicked');
                     setShowProcedureModal(true);
                   }}
-                  className="bg-orange-600 hover:bg-orange-700 text-white px-3 py-1 rounded text-sm whitespace-nowrap shadow-sm"
+                  className="bg-orange-600 hover:bg-orange-700 text-white px-3 py-1 rounded text-sm whitespace-nowrap shadow-sm pointer-events-auto"
                 >
                   Add Procedure
                 </button>
@@ -602,23 +611,29 @@ export default function TreatmentPlanningEnhanced() {
                 <Pill className="w-5 h-5 text-pink-600" />
                 <h3 className="font-semibold text-gray-900">Medications ({selectedPlan.medications?.length || 0})</h3>
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0 relative z-10">
+              <div className="flex items-center gap-2 flex-shrink-0 relative z-10 pointer-events-auto">
                 <button
+                  type="button"
                   onClick={(e) => {
                     e.stopPropagation();
+                    e.preventDefault();
+                    console.log('Order Medications clicked');
                     setShowMedicationOrderingModal(true);
                   }}
-                  className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm flex items-center gap-1 whitespace-nowrap shadow-sm"
+                  className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm flex items-center gap-1 whitespace-nowrap shadow-sm pointer-events-auto"
                 >
                   <Pill className="w-4 h-4" />
                   Order Medications
                 </button>
                 <button
+                  type="button"
                   onClick={(e) => {
                     e.stopPropagation();
+                    e.preventDefault();
+                    console.log('Add Medication clicked');
                     setShowMedicationModal(true);
                   }}
-                  className="bg-pink-600 hover:bg-pink-700 text-white px-3 py-1 rounded text-sm whitespace-nowrap shadow-sm"
+                  className="bg-pink-600 hover:bg-pink-700 text-white px-3 py-1 rounded text-sm whitespace-nowrap shadow-sm pointer-events-auto"
                 >
                   Add Medication
                 </button>
