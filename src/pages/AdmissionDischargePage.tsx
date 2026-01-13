@@ -10,6 +10,7 @@ import {
   MDTMedicationReview,
   AdmissionStatistics
 } from '../services/admissionDischargeService';
+import { medicalTeamService, StaffByRole, SuggestedTeam } from '../services/medicalTeamService';
 import WHODischargeAssessment from '../components/WHODischargeAssessment';
 import MDTDischargeMedications from '../components/MDTDischargeMedications';
 import DischargeSummaryForm from '../components/DischargeSummaryForm';
@@ -330,6 +331,16 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
   const [presentingComplaint, setPresentingComplaint] = useState('');
   const [provisionalDiagnosis, setProvisionalDiagnosis] = useState('');
   const [admittingConsultant, setAdmittingConsultant] = useState('');
+  const [additionalNotes, setAdditionalNotes] = useState('');
+  
+  // Medical Team Assignment
+  const [seniorRegistrars, setSeniorRegistrars] = useState<StaffByRole[]>([]);
+  const [registrars, setRegistrars] = useState<StaffByRole[]>([]);
+  const [houseOfficers, setHouseOfficers] = useState<StaffByRole[]>([]);
+  const [selectedSeniorRegistrar, setSelectedSeniorRegistrar] = useState<number | null>(null);
+  const [selectedRegistrar, setSelectedRegistrar] = useState<number | null>(null);
+  const [selectedHouseOfficer, setSelectedHouseOfficer] = useState<number | null>(null);
+  const [loadingTeam, setLoadingTeam] = useState(false);
   
   // Vitals
   const [temperature, setTemperature] = useState('');
@@ -346,6 +357,47 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
   const [examinationFindings, setExaminationFindings] = useState('');
   const [initialManagementPlan, setInitialManagementPlan] = useState('');
 
+  // Load medical team on mount
+  useEffect(() => {
+    loadMedicalTeam();
+  }, []);
+
+  const loadMedicalTeam = async () => {
+    setLoadingTeam(true);
+    try {
+      // Fetch all staff by role
+      const [srData, regData, hoData] = await Promise.all([
+        medicalTeamService.getStaffByRole('senior_registrar'),
+        medicalTeamService.getStaffByRole('registrar'),
+        medicalTeamService.getStaffByRole('house_officer')
+      ]);
+
+      setSeniorRegistrars(srData);
+      setRegistrars(regData);
+      setHouseOfficers(hoData);
+
+      // Get suggested assignments (least loaded staff)
+      const suggestions = await medicalTeamService.getSuggestedTeamAssignment();
+      
+      // Auto-select the suggested staff
+      if (suggestions.senior_registrar) {
+        setSelectedSeniorRegistrar(suggestions.senior_registrar.id);
+      }
+      if (suggestions.registrar) {
+        setSelectedRegistrar(suggestions.registrar.id);
+      }
+      if (suggestions.house_officer) {
+        setSelectedHouseOfficer(suggestions.house_officer.id);
+      }
+
+      console.log('✅ Medical team loaded and auto-assigned');
+    } catch (error) {
+      console.error('Error loading medical team:', error);
+    } finally {
+      setLoadingTeam(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedPatient || !wardLocation || !reasonsForAdmission || !provisionalDiagnosis || !admittingConsultant) {
@@ -353,8 +405,14 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
       return;
     }
 
+    if (!selectedSeniorRegistrar || !selectedRegistrar || !selectedHouseOfficer) {
+      alert('Please assign all medical team members (Senior Registrar, Registrar, House Officer)');
+      return;
+    }
+
     setLoading(true);
     try {
+      // Create admission
       await admissionDischargeService.createAdmission({
         patient_id: selectedPatient.id,
         patient_name: `${selectedPatient.first_name} ${selectedPatient.last_name}`,
@@ -390,7 +448,18 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
         created_by: 'Current User'
       });
 
-      alert('Patient admitted successfully!');
+      // Create medical team assignment
+      await medicalTeamService.createAssignmentWithTeam(
+        selectedPatient.id,
+        selectedPatient.hospital_number,
+        {
+          senior_registrar_id: selectedSeniorRegistrar,
+          registrar_id: selectedRegistrar,
+          house_officer_id: selectedHouseOfficer
+        }
+      );
+
+      alert('Patient admitted successfully with medical team assigned!');
       onSuccess();
     } catch (error) {
       console.error('Error admitting patient:', error);
@@ -487,6 +556,106 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
               ))}
             </select>
           </div>
+        </div>
+      </div>
+
+      {/* Medical Team Assignment */}
+      <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-purple-900">👥 Medical Team Assignment</h3>
+          <button
+            type="button"
+            onClick={loadMedicalTeam}
+            className="text-sm px-3 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200"
+            disabled={loadingTeam}
+          >
+            {loadingTeam ? '⏳ Loading...' : '🔄 Refresh & Auto-Assign'}
+          </button>
+        </div>
+        <p className="text-sm text-purple-700 mb-4">
+          Team members are auto-assigned based on workload balance. You can change the selection if needed.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Senior Registrar */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Senior Registrar <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={selectedSeniorRegistrar || ''}
+              onChange={(e) => setSelectedSeniorRegistrar(e.target.value ? Number(e.target.value) : null)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-purple-500 focus:border-purple-500"
+              required
+            >
+              <option value="">-- Select Senior Registrar --</option>
+              {seniorRegistrars.map((staff) => (
+                <option key={staff.id} value={staff.id}>
+                  {staff.full_name} ({staff.current_patients} patients)
+                </option>
+              ))}
+            </select>
+            {seniorRegistrars.length === 0 && !loadingTeam && (
+              <p className="text-xs text-orange-600 mt-1">No senior registrars available</p>
+            )}
+          </div>
+
+          {/* Registrar */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Registrar <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={selectedRegistrar || ''}
+              onChange={(e) => setSelectedRegistrar(e.target.value ? Number(e.target.value) : null)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-purple-500 focus:border-purple-500"
+              required
+            >
+              <option value="">-- Select Registrar --</option>
+              {registrars.map((staff) => (
+                <option key={staff.id} value={staff.id}>
+                  {staff.full_name} ({staff.current_patients} patients)
+                </option>
+              ))}
+            </select>
+            {registrars.length === 0 && !loadingTeam && (
+              <p className="text-xs text-orange-600 mt-1">No registrars available</p>
+            )}
+          </div>
+
+          {/* House Officer */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              House Officer <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={selectedHouseOfficer || ''}
+              onChange={(e) => setSelectedHouseOfficer(e.target.value ? Number(e.target.value) : null)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-purple-500 focus:border-purple-500"
+              required
+            >
+              <option value="">-- Select House Officer --</option>
+              {houseOfficers.map((staff) => (
+                <option key={staff.id} value={staff.id}>
+                  {staff.full_name} ({staff.current_patients} patients)
+                </option>
+              ))}
+            </select>
+            {houseOfficers.length === 0 && !loadingTeam && (
+              <p className="text-xs text-orange-600 mt-1">No house officers available</p>
+            )}
+          </div>
+        </div>
+
+        {/* Additional Notes */}
+        <div className="mt-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">Additional Notes</label>
+          <textarea
+            value={additionalNotes}
+            onChange={(e) => setAdditionalNotes(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-purple-500 focus:border-purple-500"
+            rows={2}
+            placeholder="Any additional notes about team assignment..."
+          />
         </div>
       </div>
 

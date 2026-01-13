@@ -17,12 +17,35 @@ export interface MedicalTeamAssignment {
 export interface TeamMember {
   id: number;
   name: string;
+  full_name?: string;
   email: string;
   role: string;
   phone?: string;
   roleLabel: string;
   color: string;
   priority: number;
+  current_patients?: number;
+}
+
+export interface StaffByRole {
+  id: number;
+  full_name: string;
+  email: string;
+  role: string;
+  current_patients: number;
+}
+
+export interface SuggestedTeam {
+  senior_registrar: StaffByRole | null;
+  registrar: StaffByRole | null;
+  house_officer: StaffByRole | null;
+}
+
+export interface TeamWorkload {
+  consultant: { staff: StaffByRole[]; totalPatients: number; avgPatients: number };
+  senior_registrar: { staff: StaffByRole[]; totalPatients: number; avgPatients: number };
+  registrar: { staff: StaffByRole[]; totalPatients: number; avgPatients: number };
+  house_officer: { staff: StaffByRole[]; totalPatients: number; avgPatients: number };
 }
 
 class MedicalTeamService {
@@ -274,6 +297,255 @@ class MedicalTeamService {
       console.error('Error removing team assignment:', error);
       throw error;
     }
+  }
+
+  // ============= SERVER-BASED METHODS WITH LOAD BALANCING =============
+
+  /**
+   * Fetch staff by role from server with current workload
+   */
+  async getStaffByRole(role: string): Promise<StaffByRole[]> {
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        console.warn('No auth token, using local data');
+        return this.getLocalStaffByRole(role);
+      }
+
+      const response = await fetch(`/api/medical-team/by-role?role=${role}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log(`✅ Fetched ${data.staff?.length || 0} ${role}s from server`);
+        return data.staff || [];
+      } else {
+        console.warn('Server fetch failed, using local data');
+        return this.getLocalStaffByRole(role);
+      }
+    } catch (error) {
+      console.warn('Error fetching staff by role:', error);
+      return this.getLocalStaffByRole(role);
+    }
+  }
+
+  /**
+   * Get local staff by role (fallback)
+   */
+  private async getLocalStaffByRole(role: string): Promise<StaffByRole[]> {
+    const users = await db.users.toArray();
+    const roleUsers = users.filter(u => u.role === role);
+    
+    // Get patient counts from local assignments
+    const assignments = await db.patient_assignments.toArray();
+    
+    return roleUsers.map(user => {
+      const roleColumn = {
+        'senior_registrar': 'senior_registrar_id',
+        'registrar': 'registrar_id',
+        'house_officer': 'house_officer_id',
+        'consultant': 'consultant_id'
+      }[role] || '';
+      
+      const patientCount = assignments.filter(a => 
+        a.is_active && (a as any)[roleColumn] === user.id
+      ).length;
+
+      return {
+        id: user.id,
+        full_name: user.full_name || user.name || 'Unknown',
+        email: user.email || '',
+        role: user.role,
+        current_patients: patientCount
+      };
+    }).sort((a, b) => a.current_patients - b.current_patients);
+  }
+
+  /**
+   * Get suggested team assignment (least loaded staff for each role)
+   */
+  async getSuggestedTeamAssignment(): Promise<SuggestedTeam> {
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        console.warn('No auth token, using local suggestion');
+        return this.getLocalSuggestedTeam();
+      }
+
+      const response = await fetch('/api/medical-team/suggest-assignment', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ Got team suggestions from server:', data.suggestions);
+        return data.suggestions;
+      } else {
+        console.warn('Server suggestion failed, using local');
+        return this.getLocalSuggestedTeam();
+      }
+    } catch (error) {
+      console.warn('Error getting team suggestions:', error);
+      return this.getLocalSuggestedTeam();
+    }
+  }
+
+  /**
+   * Local fallback for team suggestions
+   */
+  private async getLocalSuggestedTeam(): Promise<SuggestedTeam> {
+    const [seniorRegistrars, registrars, houseOfficers] = await Promise.all([
+      this.getLocalStaffByRole('senior_registrar'),
+      this.getLocalStaffByRole('registrar'),
+      this.getLocalStaffByRole('house_officer')
+    ]);
+
+    return {
+      senior_registrar: seniorRegistrars[0] || null,
+      registrar: registrars[0] || null,
+      house_officer: houseOfficers[0] || null
+    };
+  }
+
+  /**
+   * Get team workload statistics
+   */
+  async getTeamWorkload(): Promise<TeamWorkload | null> {
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) return null;
+
+      const response = await fetch('/api/medical-team/workload', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return data.workload;
+      }
+      return null;
+    } catch (error) {
+      console.warn('Error fetching team workload:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Log a team activity for analytics tracking
+   */
+  async logActivity(
+    patientId: number,
+    activityType: 'ward_round' | 'procedure' | 'prescription' | 'consultation' | 'documentation' | 'admission' | 'discharge',
+    description: string,
+    assignedStaffId?: number,
+    notes?: string
+  ): Promise<boolean> {
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        console.warn('No auth token, skipping activity log');
+        return false;
+      }
+
+      const response = await fetch('/api/medical-team/log-activity', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          patient_id: patientId,
+          activity_type: activityType,
+          description,
+          assigned_staff_id: assignedStaffId,
+          notes
+        })
+      });
+
+      if (response.ok) {
+        console.log(`✅ Logged ${activityType} activity for patient ${patientId}`);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.warn('Error logging activity:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Get team analytics
+   */
+  async getTeamAnalytics(staffId?: number, period: number = 30): Promise<any> {
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) return null;
+
+      let url = `/api/medical-team/analytics?period=${period}`;
+      if (staffId) url += `&staff_id=${staffId}`;
+
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return data.analytics;
+      }
+      return null;
+    } catch (error) {
+      console.warn('Error fetching team analytics:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Create patient assignment with specific team members
+   */
+  async createAssignmentWithTeam(
+    patientId: number,
+    hospitalNumber: string,
+    team: {
+      senior_registrar_id?: number;
+      registrar_id?: number;
+      house_officer_id?: number;
+    }
+  ): Promise<void> {
+    const assignment: MedicalTeamAssignment = {
+      patient_id: patientId,
+      hospital_number: hospitalNumber,
+      senior_registrar_id: team.senior_registrar_id,
+      registrar_id: team.registrar_id,
+      house_officer_id: team.house_officer_id,
+      assigned_at: new Date(),
+      is_active: true
+    };
+
+    // Save locally first
+    await db.patient_assignments.put(assignment);
+    console.log(`✅ Created team assignment for patient ${hospitalNumber}`);
+
+    // Log the admission activity
+    await this.logActivity(
+      patientId,
+      'admission',
+      `Patient ${hospitalNumber} admitted with team assignment`,
+      undefined,
+      `SR: ${team.senior_registrar_id}, Reg: ${team.registrar_id}, HO: ${team.house_officer_id}`
+    );
   }
 }
 
