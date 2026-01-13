@@ -517,8 +517,8 @@ const NewProcedureModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           <label className="block text-sm font-medium text-gray-700 mb-1">Patient Age</label>
           <input
             type="number"
-            value={formData.age}
-            onChange={(e) => setFormData({ ...formData, age: parseInt(e.target.value) })}
+            value={formData.age || ''}
+            onChange={(e) => setFormData({ ...formData, age: e.target.value })}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
           />
         </div>
@@ -526,8 +526,8 @@ const NewProcedureModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">ASA Class</label>
           <select
-            value={formData.asa_class}
-            onChange={(e) => setFormData({ ...formData, asa_class: parseInt(e.target.value) })}
+            value={String(formData.asa_class || 1)}
+            onChange={(e) => setFormData({ ...formData, asa_class: e.target.value })}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
           >
             <option value="1">ASA I - Healthy</option>
@@ -670,8 +670,8 @@ const NewProcedureModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           <label className="block text-sm font-medium text-gray-700 mb-1">Platelet Count (×10⁹/L)</label>
           <input
             type="number"
-            value={formData.platelet_count}
-            onChange={(e) => setFormData({ ...formData, platelet_count: parseFloat(e.target.value) })}
+            value={formData.platelet_count || ''}
+            onChange={(e) => setFormData({ ...formData, platelet_count: e.target.value })}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
             placeholder="Normal: 150-400"
           />
@@ -682,8 +682,8 @@ const NewProcedureModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           <input
             type="number"
             step="0.1"
-            value={formData.inr}
-            onChange={(e) => setFormData({ ...formData, inr: parseFloat(e.target.value) })}
+            value={formData.inr || ''}
+            onChange={(e) => setFormData({ ...formData, inr: e.target.value })}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
             placeholder="Normal: 0.8-1.2"
           />
