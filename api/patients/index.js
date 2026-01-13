@@ -147,35 +147,68 @@ async function createPatient(data, user, res) {
     });
   }
 
-  const result = await query(
-    `INSERT INTO patients (
-      hospital_number, first_name, last_name, date_of_birth, gender,
-      phone, email, address, blood_group, allergies, medical_history,
-      primary_diagnosis, secondary_diagnoses,
-      emergency_contact_name, emergency_contact_phone, created_by
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
-    RETURNING *`,
-    [
-      patientData.hospital_number,
-      patientData.first_name,
-      patientData.last_name,
-      patientData.date_of_birth || null,
-      patientData.gender,
-      patientData.phone,
-      patientData.email,
-      patientData.address,
-      patientData.blood_group,
-      patientData.allergies,
-      patientData.medical_history,
-      patientData.primary_diagnosis,
-      JSON.stringify(patientData.secondary_diagnoses),
-      patientData.emergency_contact_name,
-      patientData.emergency_contact_phone,
-      user.id
-    ]
-  );
-
-  res.status(201).json({ patient: result.rows[0] });
+  // Try with diagnosis columns first, fallback if they don't exist
+  try {
+    const result = await query(
+      `INSERT INTO patients (
+        hospital_number, first_name, last_name, date_of_birth, gender,
+        phone, email, address, blood_group, allergies, medical_history,
+        primary_diagnosis, secondary_diagnoses,
+        emergency_contact_name, emergency_contact_phone, created_by
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+      RETURNING *`,
+      [
+        patientData.hospital_number,
+        patientData.first_name,
+        patientData.last_name,
+        patientData.date_of_birth || null,
+        patientData.gender,
+        patientData.phone,
+        patientData.email,
+        patientData.address,
+        patientData.blood_group,
+        patientData.allergies,
+        patientData.medical_history,
+        patientData.primary_diagnosis,
+        JSON.stringify(patientData.secondary_diagnoses),
+        patientData.emergency_contact_name,
+        patientData.emergency_contact_phone,
+        user.id
+      ]
+    );
+    return res.status(201).json({ patient: result.rows[0] });
+  } catch (err) {
+    // Fallback: diagnosis columns might not exist yet
+    if (err.message && (err.message.includes('primary_diagnosis') || err.message.includes('secondary_diagnoses'))) {
+      console.log('Diagnosis columns not found, inserting without them');
+      const result = await query(
+        `INSERT INTO patients (
+          hospital_number, first_name, last_name, date_of_birth, gender,
+          phone, email, address, blood_group, allergies, medical_history,
+          emergency_contact_name, emergency_contact_phone, created_by
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        RETURNING *`,
+        [
+          patientData.hospital_number,
+          patientData.first_name,
+          patientData.last_name,
+          patientData.date_of_birth || null,
+          patientData.gender,
+          patientData.phone,
+          patientData.email,
+          patientData.address,
+          patientData.blood_group,
+          patientData.allergies,
+          patientData.medical_history,
+          patientData.emergency_contact_name,
+          patientData.emergency_contact_phone,
+          user.id
+        ]
+      );
+      return res.status(201).json({ patient: result.rows[0] });
+    }
+    throw err;
+  }
 }
 
 async function updatePatient(id, data, res) {

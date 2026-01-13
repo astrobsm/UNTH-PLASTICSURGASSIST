@@ -77,7 +77,8 @@ async function createPatient(data, user, res) {
     allergies,
     medical_history, medicalHistory, chronic_conditions,
     emergency_contact_name, emergencyContactName,
-    emergency_contact_phone, emergencyContactPhone
+    emergency_contact_phone, emergencyContactPhone,
+    primary_diagnosis, primaryDiagnosis, diagnosis
   } = data;
 
   // Handle both snake_case and camelCase
@@ -95,6 +96,7 @@ async function createPatient(data, user, res) {
     medical_history: Array.isArray(medical_history || medicalHistory || chronic_conditions) 
       ? (medical_history || medicalHistory || chronic_conditions).join(', ') 
       : (medical_history || medicalHistory || chronic_conditions || ''),
+    primary_diagnosis: primary_diagnosis || primaryDiagnosis || diagnosis || '',
     emergency_contact_name: emergency_contact_name || emergencyContactName || '',
     emergency_contact_phone: emergency_contact_phone || emergencyContactPhone || ''
   };
@@ -107,32 +109,66 @@ async function createPatient(data, user, res) {
     });
   }
 
-  const result = await query(
-    `INSERT INTO patients (
-      hospital_number, first_name, last_name, date_of_birth, gender,
-      phone, email, address, blood_group, allergies, medical_history,
-      emergency_contact_name, emergency_contact_phone, created_by
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-    RETURNING *`,
-    [
-      patientData.hospital_number,
-      patientData.first_name,
-      patientData.last_name,
-      patientData.date_of_birth || null,
-      patientData.gender,
-      patientData.phone,
-      patientData.email,
-      patientData.address,
-      patientData.blood_group,
-      patientData.allergies,
-      patientData.medical_history,
-      patientData.emergency_contact_name,
-      patientData.emergency_contact_phone,
-      user.id
-    ]
-  );
-
-  res.status(201).json({ patient: result.rows[0] });
+  // Try with primary_diagnosis first, fallback to without if column doesn't exist
+  try {
+    const result = await query(
+      `INSERT INTO patients (
+        hospital_number, first_name, last_name, date_of_birth, gender,
+        phone, email, address, blood_group, allergies, medical_history,
+        primary_diagnosis, emergency_contact_name, emergency_contact_phone, created_by
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+      RETURNING *`,
+      [
+        patientData.hospital_number,
+        patientData.first_name,
+        patientData.last_name,
+        patientData.date_of_birth || null,
+        patientData.gender,
+        patientData.phone,
+        patientData.email,
+        patientData.address,
+        patientData.blood_group,
+        patientData.allergies,
+        patientData.medical_history,
+        patientData.primary_diagnosis,
+        patientData.emergency_contact_name,
+        patientData.emergency_contact_phone,
+        user.id
+      ]
+    );
+    return res.status(201).json({ patient: result.rows[0] });
+  } catch (err) {
+    // Fallback: column might not exist yet
+    if (err.message && err.message.includes('primary_diagnosis')) {
+      console.log('primary_diagnosis column not found, inserting without it');
+      const result = await query(
+        `INSERT INTO patients (
+          hospital_number, first_name, last_name, date_of_birth, gender,
+          phone, email, address, blood_group, allergies, medical_history,
+          emergency_contact_name, emergency_contact_phone, created_by
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        RETURNING *`,
+        [
+          patientData.hospital_number,
+          patientData.first_name,
+          patientData.last_name,
+          patientData.date_of_birth || null,
+          patientData.gender,
+          patientData.phone,
+          patientData.email,
+          patientData.address,
+          patientData.blood_group,
+          patientData.allergies,
+          patientData.medical_history,
+          patientData.emergency_contact_name,
+          patientData.emergency_contact_phone,
+          user.id
+        ]
+      );
+      return res.status(201).json({ patient: result.rows[0] });
+    }
+    throw err;
+  }
 }
 
 async function updatePatient(id, data, res) {
