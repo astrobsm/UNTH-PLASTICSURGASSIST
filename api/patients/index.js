@@ -53,6 +53,7 @@ async function getAllPatients(searchParams, res) {
   let queryStr = `
     SELECT id, hospital_number, first_name, last_name, date_of_birth, gender, 
            phone, email, address, blood_group, allergies, medical_history,
+           primary_diagnosis, secondary_diagnoses, ward, bed_number,
            emergency_contact_name, emergency_contact_phone,
            created_at, updated_at
     FROM patients

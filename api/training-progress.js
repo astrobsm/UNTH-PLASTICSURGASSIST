@@ -1,12 +1,12 @@
 // Training Progress API - Tracks CME topic completion and training progress
 import { query } from './_lib/db.js';
-import { cors, verifyToken } from './_lib/auth.js';
+import { cors, authenticateRequest } from './_lib/auth.js';
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
 
   // Verify authentication
-  const authResult = await verifyToken(req);
+  const authResult = authenticateRequest(req);
   if (!authResult.authenticated) {
     return res.status(401).json({ error: 'Unauthorized', message: authResult.error });
   }
@@ -77,7 +77,7 @@ async function saveProgress(req, res, userId) {
   
   // Log activity
   await query(
-    `INSERT INTO activity_log (user_id, action_type, description, metadata, created_at)
+    `INSERT INTO activity_logs (user_id, action_type, description, metadata, created_at)
      VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)`,
     [userId, 'training_completed', `Completed training topic: ${topicId}`, JSON.stringify({ topicId, level })]
   ).catch(() => {}); // Don't fail if activity log fails

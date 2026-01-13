@@ -64,6 +64,9 @@ export const useAuthStore = create<AuthState>()(
             mustChangePassword: response.user.mustChangePassword || false
           };
 
+          // Store userId in localStorage for services that need it
+          localStorage.setItem('userId', String(response.user.id));
+
           // Initialize encryption with password and encrypt user data
           await initializeEncryption(password);
           const encryptedUser = await encrypt(JSON.stringify(user));
@@ -78,6 +81,7 @@ export const useAuthStore = create<AuthState>()(
 
       logout: () => {
         clearEncryption();
+        localStorage.removeItem('userId');
         set({ user: null, token: null, loading: false });
         apiClient.logout();
       },

@@ -1,12 +1,12 @@
 // Discharge Summaries API endpoints
 import { query } from './_lib/db.js';
-import { cors, verifyToken } from './_lib/auth.js';
+import { cors, authenticateRequest } from './_lib/auth.js';
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
 
   // Verify authentication
-  const authResult = await verifyToken(req);
+  const authResult = authenticateRequest(req);
   if (!authResult.authenticated) {
     return res.status(401).json({ error: 'Unauthorized', message: authResult.error });
   }

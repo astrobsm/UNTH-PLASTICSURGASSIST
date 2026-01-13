@@ -1,12 +1,12 @@
 // CBT (Computer-Based Test) API endpoints
 import { query } from './_lib/db.js';
-import { cors, verifyToken, requireAuth } from './_lib/auth.js';
+import { cors, authenticateRequest } from './_lib/auth.js';
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
 
   // Verify authentication
-  const authResult = await verifyToken(req);
+  const authResult = authenticateRequest(req);
   if (!authResult.authenticated) {
     return res.status(401).json({ error: 'Unauthorized', message: authResult.error });
   }
@@ -143,9 +143,9 @@ async function handlePost(req, res, userId) {
         attemptId: submitAttemptId, 
         answers, 
         tabSwitchCount,
-        testId,
+        testId: submitTestId,
         level: submitLevel,
-        testNumber,
+        testNumber: submitTestNumber,
         score: clientScore,
         percentage: clientPercentage,
         passed: clientPassed,
@@ -155,7 +155,7 @@ async function handlePost(req, res, userId) {
       
       // If we have level/testNumber, create or update a record
       // This handles the case where frontend generates its own attempt IDs
-      if (submitLevel && testNumber !== undefined) {
+      if (submitLevel && submitTestNumber !== undefined) {
         // Create or update the attempt record directly
         const upsertResult = await query(
           `INSERT INTO cbt_attempts 
@@ -176,7 +176,7 @@ async function handlePost(req, res, userId) {
           [
             userId,
             submitLevel,
-            testNumber,
+            submitTestNumber,
             startTime || new Date().toISOString(),
             endTime || new Date().toISOString(),
             JSON.stringify(answers || {}),
@@ -189,11 +189,11 @@ async function handlePost(req, res, userId) {
         );
         
         // Log activity
-        await logActivity(userId, 'cbt_completed', `Completed CBT test ${testNumber} for ${submitLevel} with ${clientPercentage}% score`, { 
+        await logActivity(userId, 'cbt_completed', `Completed CBT test ${submitTestNumber} for ${submitLevel} with ${clientPercentage}% score`, { 
           score: clientScore, 
           percentage: clientPercentage, 
           passed: clientPassed,
-          testNumber,
+          testNumber: submitTestNumber,
           level: submitLevel
         });
         
