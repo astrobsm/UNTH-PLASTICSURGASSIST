@@ -2,6 +2,32 @@
  * Date utility functions for the Plastic Surgeon Assistant PWA
  */
 
+import { format as dateFnsFormat, parseISO, isValid } from 'date-fns';
+
+/**
+ * Safe date formatter using date-fns format strings
+ * Handles null, undefined, and invalid dates gracefully
+ * @param dateValue - Date value as string, Date object, or null/undefined
+ * @param formatStr - date-fns format string (e.g., 'MMMM d, yyyy')
+ * @param fallback - Fallback string for invalid dates (default: 'N/A')
+ * @returns Formatted date string or fallback
+ */
+export function safeFormatDate(
+  dateValue: string | Date | undefined | null,
+  formatStr: string,
+  fallback: string = 'N/A'
+): string {
+  if (!dateValue) return fallback;
+  
+  try {
+    const date = typeof dateValue === 'string' ? parseISO(dateValue) : new Date(dateValue);
+    if (!isValid(date)) return fallback;
+    return dateFnsFormat(date, formatStr);
+  } catch {
+    return fallback;
+  }
+}
+
 /**
  * Calculate age in years from date of birth
  * @param dateOfBirth - Date of birth as Date object or string
