@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { patientService } from '../services/patientService';
+import { MedicalTextInput } from '../components/MedicalTextInput';
 import { 
   admissionDischargeService, 
   Admission, 

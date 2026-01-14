@@ -4,6 +4,7 @@ import { IntraoperativeFindingsForm } from '../components/procedures/Intraoperat
 import { PostoperativeCareForm } from '../components/procedures/PostoperativeCare';
 import { WoundCareAssessmentForm } from '../components/procedures/WoundCareAssessment';
 import { SurgicalFitnessScoreForm } from '../components/procedures/SurgicalFitnessScore';
+import { MedicalTextInput } from '../components/MedicalTextInput';
 import { patientService } from '../services/patientService';
 import { schedulingService, SurgeryBooking } from '../services/schedulingService';
 import { logDataExport } from '../services/auditLoggingService';

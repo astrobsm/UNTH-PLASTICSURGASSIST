@@ -9,6 +9,7 @@ import { apiClient } from '../services/apiClient';
 import { TreatmentPlanModificationPanel } from './TreatmentPlanModificationPanel';
 import { InvestigationOrderingModal } from './InvestigationOrderingModal';
 import { MedicationOrderingModal } from './MedicationOrderingModal';
+import { MedicalTextInput } from './MedicalTextInput';
 import Tesseract from 'tesseract.js';
 
 interface WardRoundFormProps {
@@ -643,18 +644,15 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
             {/* Subjective Tab */}
             {activeTab === 'subjective' && (
               <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Patient Complaints
-                  </label>
-                  <textarea
-                    value={formData.subjective_complaints}
-                    onChange={(e) => setFormData({ ...formData, subjective_complaints: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                    rows={3}
-                    placeholder="What is the patient complaining about?"
-                  />
-                </div>
+                <MedicalTextInput
+                  value={formData.subjective_complaints}
+                  onChange={(value) => setFormData({ ...formData, subjective_complaints: value })}
+                  label="Patient Complaints"
+                  placeholder="What is the patient complaining about? (Use voice dictation or type)"
+                  rows={3}
+                  context="progress_notes"
+                  showWordCount
+                />
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -805,57 +803,41 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">Physical Examination</h3>
                   <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        General Appearance
-                      </label>
-                      <textarea
-                        value={formData.general_appearance}
-                        onChange={(e) => setFormData({ ...formData, general_appearance: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                        rows={2}
-                        placeholder="Patient looks well, comfortable, no distress..."
-                      />
-                    </div>
+                    <MedicalTextInput
+                      value={formData.general_appearance}
+                      onChange={(value) => setFormData({ ...formData, general_appearance: value })}
+                      label="General Appearance"
+                      placeholder="Patient looks well, comfortable, no distress..."
+                      rows={2}
+                      context="clinical_notes"
+                    />
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Wound Status
-                      </label>
-                      <textarea
-                        value={formData.wound_status}
-                        onChange={(e) => setFormData({ ...formData, wound_status: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                        rows={2}
-                        placeholder="Wound clean, dry, no signs of infection..."
-                      />
-                    </div>
+                    <MedicalTextInput
+                      value={formData.wound_status}
+                      onChange={(value) => setFormData({ ...formData, wound_status: value })}
+                      label="Wound Status"
+                      placeholder="Wound clean, dry, no signs of infection..."
+                      rows={2}
+                      context="wound_assessment"
+                    />
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Drain Output
-                      </label>
-                      <textarea
-                        value={formData.drain_output}
-                        onChange={(e) => setFormData({ ...formData, drain_output: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                        rows={2}
-                        placeholder="Drain 1: 50ml serosanguinous fluid..."
-                      />
-                    </div>
+                    <MedicalTextInput
+                      value={formData.drain_output}
+                      onChange={(value) => setFormData({ ...formData, drain_output: value })}
+                      label="Drain Output"
+                      placeholder="Drain 1: 50ml serosanguinous fluid..."
+                      rows={2}
+                      context="clinical_notes"
+                    />
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Mobility Status
-                      </label>
-                      <textarea
-                        value={formData.mobility_status}
-                        onChange={(e) => setFormData({ ...formData, mobility_status: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                        rows={2}
-                        placeholder="Ambulating with assistance, ROM exercises..."
-                      />
-                    </div>
+                    <MedicalTextInput
+                      value={formData.mobility_status}
+                      onChange={(value) => setFormData({ ...formData, mobility_status: value })}
+                      label="Mobility Status"
+                      placeholder="Ambulating with assistance, ROM exercises..."
+                      rows={2}
+                      context="clinical_notes"
+                    />
                   </div>
                 </div>
               </div>
@@ -1034,16 +1016,16 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
                 {formData.ocr_extracted_text && (
                   <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
                     <h4 className="font-semibold text-purple-800 mb-2">📝 Combined Extracted Text</h4>
-                    <textarea
+                    <MedicalTextInput
                       value={formData.ocr_extracted_text}
-                      onChange={(e) => setFormData({ ...formData, ocr_extracted_text: e.target.value })}
-                      className="w-full px-3 py-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-sm"
-                      rows={6}
+                      onChange={(value) => setFormData({ ...formData, ocr_extracted_text: value })}
                       placeholder="Text extracted from handwritten notes will appear here..."
+                      rows={6}
+                      context="lab_interpretation"
+                      showOCR={false}
+                      documentType="lab_report"
+                      helperText="You can edit the extracted text or use AI to polish it"
                     />
-                    <p className="text-xs text-purple-600 mt-2">
-                      You can edit the extracted text to correct any OCR errors.
-                    </p>
                   </div>
                 )}
               </div>
@@ -1052,18 +1034,15 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
             {/* Clinical Assessment Tab */}
             {activeTab === 'assessment' && (
               <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Clinical Impression
-                  </label>
-                  <textarea
-                    value={formData.clinical_impression}
-                    onChange={(e) => setFormData({ ...formData, clinical_impression: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                    rows={4}
-                    placeholder="Overall assessment of patient's condition..."
-                  />
-                </div>
+                <MedicalTextInput
+                  value={formData.clinical_impression}
+                  onChange={(value) => setFormData({ ...formData, clinical_impression: value })}
+                  label="Clinical Impression"
+                  placeholder="Overall assessment of patient's condition..."
+                  rows={4}
+                  context="clinical_notes"
+                  showWordCount
+                />
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1081,75 +1060,57 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Complications (if any)
-                  </label>
-                  <textarea
-                    value={formData.complications}
-                    onChange={(e) => setFormData({ ...formData, complications: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                    rows={3}
-                    placeholder="Any complications or concerns..."
-                  />
-                </div>
+                <MedicalTextInput
+                  value={formData.complications}
+                  onChange={(value) => setFormData({ ...formData, complications: value })}
+                  label="Complications (if any)"
+                  placeholder="Any complications or concerns..."
+                  rows={3}
+                  context="clinical_notes"
+                />
               </div>
             )}
 
             {/* Management Plan Tab */}
             {activeTab === 'plan' && (
               <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Treatment Plan Changes
-                  </label>
-                  <textarea
-                    value={formData.treatment_plan_changes}
-                    onChange={(e) => setFormData({ ...formData, treatment_plan_changes: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                    rows={3}
-                    placeholder="Any changes to the treatment plan..."
-                  />
-                </div>
+                <MedicalTextInput
+                  value={formData.treatment_plan_changes}
+                  onChange={(value) => setFormData({ ...formData, treatment_plan_changes: value })}
+                  label="Treatment Plan Changes"
+                  placeholder="Any changes to the treatment plan..."
+                  rows={3}
+                  context="clinical_notes"
+                />
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Dietary Modifications
-                  </label>
-                  <textarea
-                    value={formData.dietary_modifications}
-                    onChange={(e) => setFormData({ ...formData, dietary_modifications: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                    rows={2}
-                    placeholder="Dietary changes or restrictions..."
-                  />
-                </div>
+                <MedicalTextInput
+                  value={formData.dietary_modifications}
+                  onChange={(value) => setFormData({ ...formData, dietary_modifications: value })}
+                  label="Dietary Modifications"
+                  placeholder="Dietary changes or restrictions..."
+                  rows={2}
+                  context="general"
+                  showAIEnhance={false}
+                />
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Activity Orders
-                  </label>
-                  <textarea
-                    value={formData.activity_orders}
-                    onChange={(e) => setFormData({ ...formData, activity_orders: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                    rows={2}
-                    placeholder="Bed rest, ambulation, physiotherapy..."
-                  />
-                </div>
+                <MedicalTextInput
+                  value={formData.activity_orders}
+                  onChange={(value) => setFormData({ ...formData, activity_orders: value })}
+                  label="Activity Orders"
+                  placeholder="Bed rest, ambulation, physiotherapy..."
+                  rows={2}
+                  context="general"
+                  showAIEnhance={false}
+                />
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Nursing Instructions
-                  </label>
-                  <textarea
-                    value={formData.nursing_instructions}
-                    onChange={(e) => setFormData({ ...formData, nursing_instructions: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                    rows={3}
-                    placeholder="Special instructions for nursing staff..."
-                  />
-                </div>
+                <MedicalTextInput
+                  value={formData.nursing_instructions}
+                  onChange={(value) => setFormData({ ...formData, nursing_instructions: value })}
+                  label="Nursing Instructions"
+                  placeholder="Special instructions for nursing staff..."
+                  rows={3}
+                  context="clinical_notes"
+                />
 
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
@@ -1468,18 +1429,14 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
                   />
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Discharge Plan
-                  </label>
-                  <textarea
-                    value={formData.discharge_plan}
-                    onChange={(e) => setFormData({ ...formData, discharge_plan: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                    rows={4}
-                    placeholder="Expected discharge date, discharge criteria, follow-up arrangements..."
-                  />
-                </div>
+                <MedicalTextInput
+                  value={formData.discharge_plan}
+                  onChange={(value) => setFormData({ ...formData, discharge_plan: value })}
+                  label="Discharge Plan"
+                  placeholder="Expected discharge date, discharge criteria, follow-up arrangements..."
+                  rows={4}
+                  context="discharge_summary"
+                />
 
                 <div className="flex items-center">
                   <input
@@ -1493,18 +1450,15 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
                   </label>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Additional Notes
-                  </label>
-                  <textarea
-                    value={formData.notes}
-                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                    rows={4}
-                    placeholder="Any additional notes or observations..."
-                  />
-                </div>
+                <MedicalTextInput
+                  value={formData.notes}
+                  onChange={(value) => setFormData({ ...formData, notes: value })}
+                  label="Additional Notes"
+                  placeholder="Any additional notes or observations..."
+                  rows={4}
+                  context="clinical_notes"
+                  showWordCount
+                />
               </div>
             )}
           </div>
