@@ -20,31 +20,42 @@ export default async function handler(req, res) {
 }
 
 async function handleRegister(req, res) {
-  const { username, password, email, fullName, role = 'house_officer' } = req.body;
+  // Support both naming conventions from different clients
+  const { 
+    username, 
+    password, 
+    email, 
+    fullName, 
+    full_name,
+    role = 'house_officer',
+    department,
+    specialization,
+    license_number,
+    phone
+  } = req.body;
 
-  if (!username || !password || !email || !fullName) {
-    return res.status(400).json({ error: 'All fields are required' });
+  // Use full_name or fullName (frontend sends full_name)
+  const finalFullName = full_name || fullName;
+  // Use email as username if username not provided
+  const finalUsername = username || email;
+
+  if (!password || !email || !finalFullName) {
+    return res.status(400).json({ error: 'Email, password, and full name are required' });
   }
 
-  // Check if username exists
-  const existing = await query('SELECT id FROM users WHERE username = $1', [username]);
+  // Check if username/email exists
+  const existing = await query('SELECT id FROM users WHERE username = $1 OR email = $2', [finalUsername, email]);
   if (existing.rows.length > 0) {
-    return res.status(409).json({ error: 'Username already exists' });
-  }
-
-  // Check if email exists
-  const existingEmail = await query('SELECT id FROM users WHERE email = $1', [email]);
-  if (existingEmail.rows.length > 0) {
-    return res.status(409).json({ error: 'Email already exists' });
+    return res.status(409).json({ error: 'Email already registered' });
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
 
   const result = await query(
-    `INSERT INTO users (username, password_hash, email, full_name, role, is_approved, is_active)
-     VALUES ($1, $2, $3, $4, $5, false, true)
-     RETURNING id, username, email, full_name, role`,
-    [username, passwordHash, email, fullName, role]
+    `INSERT INTO users (username, password_hash, email, full_name, role, department, specialization, license_number, phone, is_approved, is_active)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, false, true)
+     RETURNING id, username, email, full_name, role, department, license_number, phone, is_approved`,
+    [finalUsername, passwordHash, email, finalFullName, role, department || null, specialization || null, license_number || null, phone || null]
   );
 
   res.status(201).json({
