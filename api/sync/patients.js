@@ -135,16 +135,23 @@ async function createPatient(data, user, res) {
     });
   }
 
-  // Try with primary_diagnosis first, fallback to without if column doesn't exist
-  try {
-    const result = await query(
-      `INSERT INTO patients (
+  // Generate hospital number if not provided
+  if (!patientData.hospital_number) {
+    const timestamp = Date.now().toString().slice(-8);
+    patientData.hospital_number = `PS${timestamp}`;
+  }
+
+  // Try with all columns first, then fallback progressively
+  const insertStrategies = [
+    // Strategy 1: Full insert with created_by and primary_diagnosis
+    {
+      sql: `INSERT INTO patients (
         hospital_number, first_name, last_name, date_of_birth, gender,
         phone, email, address, blood_group, allergies, medical_history,
         primary_diagnosis, emergency_contact_name, emergency_contact_phone, created_by
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
       RETURNING *`,
-      [
+      params: [
         patientData.hospital_number,
         patientData.first_name,
         patientData.last_name,
@@ -159,42 +166,82 @@ async function createPatient(data, user, res) {
         patientData.primary_diagnosis,
         patientData.emergency_contact_name,
         patientData.emergency_contact_phone,
-        user.id
+        user?.id || null
       ]
-    );
-    return res.status(201).json({ patient: result.rows[0] });
-  } catch (err) {
-    // Fallback: column might not exist yet
-    if (err.message && err.message.includes('primary_diagnosis')) {
-      console.log('primary_diagnosis column not found, inserting without it');
-      const result = await query(
-        `INSERT INTO patients (
-          hospital_number, first_name, last_name, date_of_birth, gender,
-          phone, email, address, blood_group, allergies, medical_history,
-          emergency_contact_name, emergency_contact_phone, created_by
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-        RETURNING *`,
-        [
-          patientData.hospital_number,
-          patientData.first_name,
-          patientData.last_name,
-          patientData.date_of_birth || null,
-          patientData.gender,
-          patientData.phone,
-          patientData.email,
-          patientData.address,
-          patientData.blood_group,
-          patientData.allergies,
-          patientData.medical_history,
-          patientData.emergency_contact_name,
-          patientData.emergency_contact_phone,
-          user.id
-        ]
-      );
-      return res.status(201).json({ patient: result.rows[0] });
+    },
+    // Strategy 2: Without created_by
+    {
+      sql: `INSERT INTO patients (
+        hospital_number, first_name, last_name, date_of_birth, gender,
+        phone, email, address, blood_group, allergies, medical_history,
+        primary_diagnosis, emergency_contact_name, emergency_contact_phone
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      RETURNING *`,
+      params: [
+        patientData.hospital_number,
+        patientData.first_name,
+        patientData.last_name,
+        patientData.date_of_birth || null,
+        patientData.gender,
+        patientData.phone,
+        patientData.email,
+        patientData.address,
+        patientData.blood_group,
+        patientData.allergies,
+        patientData.medical_history,
+        patientData.primary_diagnosis,
+        patientData.emergency_contact_name,
+        patientData.emergency_contact_phone
+      ]
+    },
+    // Strategy 3: Minimal columns
+    {
+      sql: `INSERT INTO patients (
+        hospital_number, first_name, last_name, date_of_birth, gender,
+        phone, email, address, blood_group, allergies, medical_history,
+        emergency_contact_name, emergency_contact_phone
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      RETURNING *`,
+      params: [
+        patientData.hospital_number,
+        patientData.first_name,
+        patientData.last_name,
+        patientData.date_of_birth || null,
+        patientData.gender,
+        patientData.phone,
+        patientData.email,
+        patientData.address,
+        patientData.blood_group,
+        patientData.allergies,
+        patientData.medical_history,
+        patientData.emergency_contact_name,
+        patientData.emergency_contact_phone
+      ]
     }
-    throw err;
+  ];
+
+  let lastError = null;
+  for (const strategy of insertStrategies) {
+    try {
+      const result = await query(strategy.sql, strategy.params);
+      return res.status(201).json({ patient: result.rows[0] });
+    } catch (err) {
+      lastError = err;
+      console.log(`Insert strategy failed: ${err.message}`);
+      // If it's a column not found error, try next strategy
+      if (err.message && (err.message.includes('column') || err.message.includes('does not exist'))) {
+        continue;
+      }
+      // If it's a duplicate key error, return appropriate response
+      if (err.message && (err.message.includes('duplicate') || err.message.includes('unique'))) {
+        return res.status(409).json({ error: 'Patient with this hospital number already exists' });
+      }
+      // For other errors, throw
+      throw err;
+    }
   }
+  
+  throw lastError || new Error('All insert strategies failed');
 }
 
 async function updatePatient(id, data, res) {
