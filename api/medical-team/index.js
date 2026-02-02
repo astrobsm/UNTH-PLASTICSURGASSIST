@@ -107,28 +107,55 @@ async function getStaffByRole(req, res) {
     return res.status(400).json({ error: 'Invalid role' });
   }
 
-  // Get staff with their current patient count
-  const staffResult = await query(
-    `SELECT u.id, u.full_name, u.email, u.role,
-            COALESCE(pa.patient_count, 0) as current_patients
-     FROM users u
-     LEFT JOIN (
-       SELECT ${roleColumn}::text as user_id, COUNT(*) as patient_count
-       FROM patient_assignments
-       WHERE is_active = TRUE AND ${roleColumn} IS NOT NULL
-       GROUP BY ${roleColumn}
-     ) pa ON u.id::text = pa.user_id
-     WHERE u.role = $1 
-       AND u.is_approved = TRUE 
-       AND u.is_active = TRUE
-     ORDER BY COALESCE(pa.patient_count, 0) ASC, u.full_name`,
-    [role]
-  );
+  try {
+    // Ensure patient_assignments table exists
+    await ensurePatientAssignmentsTable();
 
-  return res.status(200).json({ 
-    staff: staffResult.rows,
-    role
-  });
+    // Get staff with their current patient count
+    const staffResult = await query(
+      `SELECT u.id, u.full_name, u.email, u.role,
+              COALESCE(pa.patient_count, 0) as current_patients
+       FROM users u
+       LEFT JOIN (
+         SELECT ${roleColumn}::text as user_id, COUNT(*) as patient_count
+         FROM patient_assignments
+         WHERE is_active = TRUE AND ${roleColumn} IS NOT NULL
+         GROUP BY ${roleColumn}
+       ) pa ON u.id::text = pa.user_id
+       WHERE u.role = $1 
+         AND u.is_approved = TRUE 
+         AND u.is_active = TRUE
+       ORDER BY COALESCE(pa.patient_count, 0) ASC, u.full_name`,
+      [role]
+    );
+
+    return res.status(200).json({ 
+      staff: staffResult.rows,
+      role
+    });
+  } catch (error) {
+    console.error('getStaffByRole error:', error);
+    // Fallback: just return users with that role without workload
+    try {
+      const fallbackResult = await query(
+        `SELECT id, full_name, email, role, 0 as current_patients
+         FROM users
+         WHERE role = $1 AND is_approved = TRUE AND is_active = TRUE
+         ORDER BY full_name`,
+        [role]
+      );
+      return res.status(200).json({ 
+        staff: fallbackResult.rows,
+        role
+      });
+    } catch (fallbackError) {
+      console.error('getStaffByRole fallback error:', fallbackError);
+      return res.status(500).json({ 
+        error: 'Failed to fetch staff', 
+        message: error.message 
+      });
+    }
+  }
 }
 
 /**

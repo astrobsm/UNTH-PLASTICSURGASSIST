@@ -93,13 +93,20 @@ async function getLabOrder(id, res) {
 }
 
 async function createLabOrder(data, user, res) {
-  const {
-    patientId, testType, testName, priority = 'routine',
-    clinicalNotes, status = 'pending'
-  } = data;
+  // Accept both camelCase and snake_case field names
+  const patientId = data.patientId || data.patient_id;
+  const testType = data.testType || data.test_type || (data.tests && data.tests[0]?.category) || 'general';
+  const testName = data.testName || data.test_name || data.clinical_indication || (data.tests && data.tests.map(t => t.test_name).join(', '));
+  const priority = data.priority || data.urgency || 'routine';
+  const clinicalNotes = data.clinicalNotes || data.clinical_notes || data.clinical_indication || '';
+  const status = data.status || 'pending';
 
-  if (!patientId || !testType) {
-    return res.status(400).json({ error: 'Patient ID and test type are required' });
+  if (!patientId) {
+    return res.status(400).json({ error: 'Patient ID is required' });
+  }
+
+  if (!testName && !testType) {
+    return res.status(400).json({ error: 'Test type or test name is required' });
   }
 
   const result = await query(
