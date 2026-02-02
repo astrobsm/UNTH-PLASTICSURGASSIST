@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Download, ShoppingCart, User, Search, Heart, Scissors, Plus, Minus, Trash2, MessageCircle, Loader2 } from 'lucide-react';
+import { Download, ShoppingCart, User, Search, Heart, Scissors, Plus, Minus, Trash2, MessageCircle, Loader2, Printer } from 'lucide-react';
 import {
   createPDF,
   sanitizeTextForPDF,
@@ -43,7 +43,7 @@ export default function ShoppingList() {
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all');
   const [manualPatientName, setManualPatientName] = useState('');
   const [manualHospitalNumber, setManualHospitalNumber] = useState('');
-  const [shareAction, setShareAction] = useState<'download' | 'whatsapp'>('download');
+  const [shareAction, setShareAction] = useState<'download' | 'whatsapp' | 'thermal'>('download');
   const [isSharing, setIsSharing] = useState(false);
 
   useEffect(() => {
@@ -242,14 +242,142 @@ export default function ShoppingList() {
     setSelectedItems([]);
   };
 
-  const handleDownloadClick = () => {
+  const handleDownloadClick = (format: 'standard' | 'thermal' = 'standard') => {
     if (selectedItems.length === 0) {
       alert('Please select at least one item');
       return;
     }
     setManualPatientName('');
     setManualHospitalNumber('');
+    setShareAction(format === 'thermal' ? 'thermal' : 'download');
     setShowPatientSelector(true);
+  };
+
+  // Generate Thermal Print PDF (80mm width, Font 12, Georgia)
+  const generateThermalPDF = async (patient: Patient | null, manualName?: string, manualHospNum?: string) => {
+    const patientName = patient?.full_name || manualName || 'Unknown Patient';
+    const hospitalNum = patient?.hospital_number || manualHospNum || 'N/A';
+    const clean = (text: string | undefined | null): string => sanitizeTextForPDF(text || '');
+
+    // Create jsPDF for thermal printer (80mm width = ~226 points, using custom format)
+    const { jsPDF } = await import('jspdf');
+    
+    // 80mm = 80 * 2.83465 = ~226.77 points width
+    // Height will be calculated based on content
+    const thermalWidth = 80; // mm
+    const estimatedHeight = 150 + (selectedItems.length * 8); // Estimate height based on items
+    
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: [thermalWidth, estimatedHeight]
+    });
+
+    const margin = 3;
+    const maxWidth = thermalWidth - (margin * 2);
+    let yPos = margin;
+
+    // Set Georgia font (fallback to Times if not available)
+    doc.setFont('times', 'normal'); // Georgia-like serif font
+    
+    // Header - Hospital Name
+    doc.setFontSize(10);
+    doc.setFont('times', 'bold');
+    doc.text('UNTH Plastic Surgery', thermalWidth / 2, yPos, { align: 'center' });
+    yPos += 5;
+    
+    doc.setFontSize(8);
+    doc.setFont('times', 'normal');
+    doc.text('Burns & Reconstructive Unit', thermalWidth / 2, yPos, { align: 'center' });
+    yPos += 6;
+
+    // Divider line
+    doc.setLineWidth(0.3);
+    doc.line(margin, yPos, thermalWidth - margin, yPos);
+    yPos += 4;
+
+    // Title
+    doc.setFontSize(12);
+    doc.setFont('times', 'bold');
+    const categoryTitle = selectedCategory === 'wound_dressing' ? 'WOUND DRESSING' : 
+                          selectedCategory === 'bedside_debridement' ? 'BEDSIDE DEBRIDEMENT' : 
+                          'SURGERY';
+    doc.text(`SHOPPING LIST - ${categoryTitle}`, thermalWidth / 2, yPos, { align: 'center' });
+    yPos += 6;
+
+    // Patient Info
+    doc.setFontSize(10);
+    doc.setFont('times', 'normal');
+    doc.text(`Patient: ${clean(patientName)}`, margin, yPos);
+    yPos += 4;
+    doc.text(`Hosp #: ${clean(hospitalNum)}`, margin, yPos);
+    yPos += 4;
+    doc.text(`Date: ${new Date().toLocaleDateString()}`, margin, yPos);
+    yPos += 4;
+    doc.text(`Time: ${new Date().toLocaleTimeString()}`, margin, yPos);
+    yPos += 5;
+
+    // Divider
+    doc.line(margin, yPos, thermalWidth - margin, yPos);
+    yPos += 4;
+
+    // Items Header
+    doc.setFontSize(10);
+    doc.setFont('times', 'bold');
+    doc.text('ITEMS', margin, yPos);
+    doc.text('QTY', thermalWidth - margin - 10, yPos);
+    yPos += 4;
+
+    doc.setLineWidth(0.2);
+    doc.line(margin, yPos, thermalWidth - margin, yPos);
+    yPos += 3;
+
+    // Items List
+    doc.setFontSize(10);
+    doc.setFont('times', 'normal');
+
+    selectedItems.forEach((item, index) => {
+      // Item name (truncate if too long)
+      const itemName = item.name.length > 28 ? item.name.substring(0, 25) + '...' : item.name;
+      doc.text(`${index + 1}. ${itemName}`, margin, yPos);
+      doc.text(`${item.quantity} ${item.defaultUnit}`, thermalWidth - margin, yPos, { align: 'right' });
+      yPos += 5;
+    });
+
+    // Summary divider
+    yPos += 2;
+    doc.setLineWidth(0.3);
+    doc.line(margin, yPos, thermalWidth - margin, yPos);
+    yPos += 4;
+
+    // Summary
+    doc.setFontSize(10);
+    doc.setFont('times', 'bold');
+    doc.text(`Total Items: ${selectedItems.length}`, margin, yPos);
+    yPos += 4;
+    doc.text(`Total Qty: ${selectedItems.reduce((sum, item) => sum + item.quantity, 0)}`, margin, yPos);
+    yPos += 6;
+
+    // Footer divider
+    doc.setLineWidth(0.3);
+    doc.line(margin, yPos, thermalWidth - margin, yPos);
+    yPos += 4;
+
+    // Footer
+    doc.setFontSize(8);
+    doc.setFont('times', 'normal');
+    doc.text('Drs Okwesili/Nnadi/Eze', thermalWidth / 2, yPos, { align: 'center' });
+    yPos += 4;
+    doc.text('Thank you', thermalWidth / 2, yPos, { align: 'center' });
+
+    // Save
+    const sanitizedPatientName = (patientName || 'Unknown_Patient').replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+    const filename = `Thermal_ShoppingList_${sanitizedPatientName}_${new Date().toISOString().split('T')[0]}.pdf`;
+    doc.save(filename);
+    
+    setShowPatientSelector(false);
+    setPatientSearchTerm('');
+    setShareAction('download');
   };
 
   const generatePDF = async (patient: Patient | null, manualName?: string, manualHospNum?: string) => {
@@ -591,26 +719,37 @@ export default function ShoppingList() {
           </div>
 
           {selectedItems.length > 0 && (
-            <div className="flex gap-2">
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setShareAction('download');
+                    handleDownloadClick('standard');
+                  }}
+                  className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
+                >
+                  <Download className="w-5 h-5" />
+                  Generate PDF
+                </button>
+                <button
+                  onClick={() => {
+                    setShareAction('whatsapp');
+                    handleDownloadClick('standard');
+                  }}
+                  className="flex items-center justify-center gap-2 px-4 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                  title="Share via WhatsApp"
+                >
+                  <MessageCircle className="w-5 h-5" />
+                </button>
+              </div>
+              {/* Thermal Print Button */}
               <button
-                onClick={() => {
-                  setShareAction('download');
-                  handleDownloadClick();
-                }}
-                className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
+                onClick={() => handleDownloadClick('thermal')}
+                className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition-colors font-medium"
+                title="Print on 80mm thermal printer"
               >
-                <Download className="w-5 h-5" />
-                Generate Shopping List
-              </button>
-              <button
-                onClick={() => {
-                  setShareAction('whatsapp');
-                  handleDownloadClick();
-                }}
-                className="flex items-center justify-center gap-2 px-4 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
-                title="Share via WhatsApp"
-              >
-                <MessageCircle className="w-5 h-5" />
+                <Printer className="w-5 h-5" />
+                Thermal Print (80mm)
               </button>
             </div>
           )}
@@ -622,12 +761,16 @@ export default function ShoppingList() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col">
             {/* Header */}
-            <div className="bg-green-600 text-white p-6">
+            <div className={`${shareAction === 'thermal' ? 'bg-gray-700' : 'bg-green-600'} text-white p-6`}>
               <div className="flex items-start justify-between mb-2">
                 <div>
-                  <h2 className="text-xl font-bold mb-1">Select Patient</h2>
-                  <p className="text-green-100 text-sm">
-                    Choose a patient or enter details manually
+                  <h2 className="text-xl font-bold mb-1">
+                    {shareAction === 'thermal' ? '🖨️ Thermal Print - Select Patient' : 'Select Patient'}
+                  </h2>
+                  <p className={`${shareAction === 'thermal' ? 'text-gray-300' : 'text-green-100'} text-sm`}>
+                    {shareAction === 'thermal' 
+                      ? 'PDF optimized for 80mm thermal printers (Font: Georgia, Size: 12)' 
+                      : 'Choose a patient or enter details manually'}
                   </p>
                 </div>
                 <button
@@ -637,13 +780,14 @@ export default function ShoppingList() {
                     setManualPatientName('');
                     setManualHospitalNumber('');
                   }}
-                  className="text-white hover:text-green-100"
+                  className="text-white hover:text-gray-200"
                 >
                   ✕
                 </button>
               </div>
-              <div className="mt-4 text-sm text-green-100">
+              <div className={`mt-4 text-sm ${shareAction === 'thermal' ? 'text-gray-300' : 'text-green-100'}`}>
                 <strong>Items:</strong> {selectedItems.length} selected
+                {shareAction === 'thermal' && <span className="ml-3 px-2 py-1 bg-white/20 rounded text-xs">Thermal 80mm</span>}
               </div>
             </div>
 
@@ -669,15 +813,19 @@ export default function ShoppingList() {
               {manualPatientName && (
                 <button
                   onClick={() => {
-                    generatePDF(null, manualPatientName, manualHospitalNumber);
+                    if (shareAction === 'thermal') {
+                      generateThermalPDF(null, manualPatientName, manualHospitalNumber);
+                    } else {
+                      generatePDF(null, manualPatientName, manualHospitalNumber);
+                    }
                     setShowPatientSelector(false);
                     setManualPatientName('');
                     setManualHospitalNumber('');
                   }}
-                  className="mt-3 w-full flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+                  className={`mt-3 w-full flex items-center justify-center gap-2 px-4 py-2 ${shareAction === 'thermal' ? 'bg-gray-700 hover:bg-gray-800' : 'bg-green-600 hover:bg-green-700'} text-white rounded-lg transition-colors text-sm font-medium`}
                 >
-                  <Download className="w-4 h-4" />
-                  Generate PDF for "{manualPatientName}"
+                  {shareAction === 'thermal' ? <Printer className="w-4 h-4" /> : <Download className="w-4 h-4" />}
+                  {shareAction === 'thermal' ? `Thermal Print for "${manualPatientName}"` : `Generate PDF for "${manualPatientName}"`}
                 </button>
               )}
             </div>
@@ -713,7 +861,11 @@ export default function ShoppingList() {
                     <button
                       key={patient.id}
                       onClick={() => {
-                        generatePDF(patient);
+                        if (shareAction === 'thermal') {
+                          generateThermalPDF(patient);
+                        } else {
+                          generatePDF(patient);
+                        }
                         setShowPatientSelector(false);
                         setPatientSearchTerm('');
                       }}

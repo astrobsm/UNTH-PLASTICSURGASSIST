@@ -44,6 +44,7 @@ const LimbSalvagePage = lazy(() => import('./pages/LimbSalvagePage'));
 const BurnCarePage = lazy(() => import('./pages/BurnCarePage'));
 const MedicalTrainingPage = lazy(() => import('./pages/MedicalTrainingPage'));
 const TreatmentPlanBuilder = lazy(() => import('./components/TreatmentPlanBuilder'));
+const PreoperativePlanningPage = lazy(() => import('./pages/PreoperativePlanningPage'));
 
 // Loading fallback component
 const PageLoader = () => (
@@ -156,6 +157,7 @@ function App() {
               <Route path="/blood-transfusion" element={<BloodTransfusionPage />} />
               <Route path="/ward-rounds" element={<WardRoundsPage />} />
               <Route path="/procedures" element={<Procedures />} />
+              <Route path="/preoperative-planning" element={<PreoperativePlanningPage />} />
               <Route path="/labs" element={<Labs />} />
               <Route path="/patient-education" element={<PatientEducation />} />
               <Route path="/shopping-list" element={<ShoppingList />} />

@@ -12,9 +12,12 @@ import {
   TrendingUp,
   Activity,
   Loader2,
-  Trash2
+  Trash2,
+  ClipboardList,
+  BarChart3
 } from 'lucide-react';
 import { DiabeticFootAssessmentForm } from '../components/limbSalvage/DiabeticFootAssessmentForm';
+import { ConservativeProgressMonitor } from '../components/limbSalvage/ConservativeProgressMonitor';
 import { diabeticFootService, DiabeticFootAssessment, RiskCategory } from '../services/diabeticFootService';
 import { patientService } from '../services/patientService';
 
@@ -30,7 +33,10 @@ interface AssessmentSummary {
   status: 'draft' | 'completed' | 'reviewed';
 }
 
+type TabType = 'assessments' | 'progress';
+
 const LimbSalvagePage: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<TabType>('assessments');
   const [view, setView] = useState<'list' | 'new' | 'detail'>('list');
   const [assessments, setAssessments] = useState<AssessmentSummary[]>([]);
   const [selectedAssessment, setSelectedAssessment] = useState<DiabeticFootAssessment | null>(null);
@@ -177,7 +183,7 @@ const LimbSalvagePage: React.FC = () => {
               <p className="text-gray-500">Comprehensive assessment for limb salvage decision-making</p>
             </div>
           </div>
-          {view === 'list' && (
+          {view === 'list' && activeTab === 'assessments' && (
             <button
               onClick={handleNewAssessment}
               className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
@@ -187,9 +193,53 @@ const LimbSalvagePage: React.FC = () => {
             </button>
           )}
         </div>
+
+        {/* Tabs */}
+        {view === 'list' && (
+          <div className="mt-6 border-b border-gray-200">
+            <nav className="-mb-px flex space-x-8">
+              <button
+                onClick={() => setActiveTab('assessments')}
+                className={`flex items-center py-4 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'assessments'
+                    ? 'border-primary-500 text-primary-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <ClipboardList className="w-5 h-5 mr-2" />
+                Assessments
+              </button>
+              <button
+                onClick={() => setActiveTab('progress')}
+                className={`flex items-center py-4 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'progress'
+                    ? 'border-primary-500 text-primary-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <BarChart3 className="w-5 h-5 mr-2" />
+                Progress Monitoring
+                <span className="ml-2 px-2 py-0.5 bg-orange-100 text-orange-700 text-xs rounded-full">
+                  Conservative Rx
+                </span>
+              </button>
+            </nav>
+          </div>
+        )}
       </div>
 
-      {view === 'list' && (
+      {/* Progress Monitoring Tab */}
+      {view === 'list' && activeTab === 'progress' && (
+        <ConservativeProgressMonitor 
+          onSelectPatient={(patientId) => {
+            setSelectedPatientId(patientId);
+            // Could navigate to patient details or assessment
+          }}
+        />
+      )}
+
+      {/* Assessments Tab */}
+      {view === 'list' && activeTab === 'assessments' && (
         <>
           {/* Loading State */}
           {isLoading ? (

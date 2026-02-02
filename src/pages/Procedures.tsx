@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { WHOSafetyChecklistForm } from '../components/procedures/WHOSafetyChecklist';
 import { IntraoperativeFindingsForm } from '../components/procedures/IntraoperativeFindings';
 import { PostoperativeCareForm } from '../components/procedures/PostoperativeCare';
@@ -11,6 +12,7 @@ import { logDataExport } from '../services/auditLoggingService';
 import { useAuthStore } from '../store/authStore';
 
 export const Procedures: React.FC = () => {
+  const navigate = useNavigate();
   const [activeModule, setActiveModule] = useState('overview');
   const [selectedPatientId, setSelectedPatientId] = useState<string>('');
   const [selectedProcedureId, setSelectedProcedureId] = useState<string>('');
@@ -94,6 +96,14 @@ export const Procedures: React.FC = () => {
                     </option>
                   ))}
                 </select>
+                
+                <button 
+                  type="button"
+                  onClick={() => navigate('/preoperative-planning')}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer"
+                >
+                  📋 Pre-op Planning
+                </button>
                 
                 <button 
                   type="button"
@@ -366,9 +376,11 @@ const NewProcedureModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     
     // Only submit on final step
     if (currentStep !== 8) {
+      console.log('Form submitted but not on step 8, ignoring');
       return;
     }
     
@@ -393,6 +405,7 @@ const NewProcedureModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
       onClose();
     } catch (error) {
       console.error('Error creating procedure:', error);
+      // Don't close on error - let user retry
     }
   };
 
@@ -1224,7 +1237,16 @@ const NewProcedureModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             ))}
           </div>
 
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={handleSubmit} onKeyDown={(e) => {
+            // Prevent form submission on Enter key for all inputs except submit button
+            if (e.key === 'Enter') {
+              const target = e.target as HTMLElement;
+              if (target.tagName !== 'BUTTON' || (target as HTMLButtonElement).type !== 'submit') {
+                e.preventDefault();
+                e.stopPropagation();
+              }
+            }
+          }}>
             {currentStep === 1 && renderStep1()}
             {currentStep === 2 && renderStep2()}
             {currentStep === 3 && renderStep3()}
@@ -1257,7 +1279,11 @@ const NewProcedureModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                 {currentStep < 8 ? (
                   <button
                     type="button"
-                    onClick={() => setCurrentStep(currentStep + 1)}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setCurrentStep(currentStep + 1);
+                    }}
                     className="px-4 py-2 text-white bg-green-600 rounded-md hover:bg-green-700"
                   >
                     Next
