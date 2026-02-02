@@ -31,30 +31,57 @@ class PatientService {
    */
   async getAllPatients() {
     try {
+      // Check if online first
+      if (!navigator.onLine) {
+        console.log('Offline mode - fetching from local IndexedDB');
+        return this.getLocalPatients();
+      }
+
       // Fetch from API (server source of truth)
       const patients = await apiClient.getPatients();
       
+      // Ensure we have an array
+      if (!Array.isArray(patients)) {
+        console.warn('API returned non-array for patients:', patients);
+        return this.getLocalPatients();
+      }
+      
       // Update local IndexedDB for offline access
-      if (patients && patients.length > 0) {
+      if (patients.length > 0) {
         const normalizedPatients = patients.map((p: any) => normalizePatientData({
           ...p,
           synced: true
         }));
         await db.patients.bulkPut(normalizedPatients);
+        console.log(`✅ Synced ${patients.length} patients from server`);
       }
       
       return patients.map(normalizePatientData);
     } catch (error) {
       console.error('Error fetching patients from API:', error);
       
-      // Fallback to IndexedDB if API fails (offline mode)
-      console.log('Falling back to local IndexedDB');
-      const localPatients = await db.patients
-        .filter(p => !p.deleted)
-        .toArray();
-      
-      return localPatients;
+      // Fallback to IndexedDB if API fails
+      return this.getLocalPatients();
     }
+  }
+
+  /**
+   * Get patients from local IndexedDB
+   */
+  private async getLocalPatients() {
+    console.log('📱 Fetching patients from local IndexedDB');
+    const localPatients = await db.patients
+      .filter(p => !p.deleted)
+      .toArray();
+    console.log(`Found ${localPatients.length} local patients`);
+    return localPatients.map(normalizePatientData);
+  }
+
+  /**
+   * Get patient by ID (for components needing quick ID lookup)
+   */
+  async getPatientById(id: string | number) {
+    return this.getPatient(id);
   }
 
   /**

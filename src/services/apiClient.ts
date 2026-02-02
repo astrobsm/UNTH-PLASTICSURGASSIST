@@ -288,15 +288,33 @@ class ApiClient {
 
   // Patient management
   async getPatients(since?: string) {
-    const query = since ? `?since=${since}` : '';
-    const data = await this.request(`/sync/patients${query}`);
-    return data.patients || [];
+    try {
+      const query = since ? `?since=${since}` : '';
+      const data = await this.request(`/sync/patients${query}`);
+      // Handle various response formats
+      if (Array.isArray(data)) {
+        return data;
+      }
+      if (data && Array.isArray(data.patients)) {
+        return data.patients;
+      }
+      console.warn('Unexpected patients response format:', data);
+      return [];
+    } catch (error) {
+      console.error('Error fetching patients:', error);
+      throw error;
+    }
   }
 
   async getPatient(id: string) {
-    // Use /patients endpoint for individual patient, not /sync/patients
-    const data = await this.request(`/patients/${id}`);
-    return data.patient;
+    try {
+      // Use /patients endpoint for individual patient, not /sync/patients
+      const data = await this.request(`/patients/${id}`);
+      return data?.patient || data;
+    } catch (error) {
+      console.error('Error fetching patient:', error);
+      throw error;
+    }
   }
 
   async createPatient(patientData: any) {

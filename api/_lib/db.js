@@ -12,11 +12,16 @@ export function getPool() {
     const connectionString = process.env.DATABASE_URL;
     
     if (!connectionString) {
-      throw new Error('DATABASE_URL environment variable is not set');
+      console.error('❌ DATABASE_URL environment variable is not set');
+      console.error('Please configure DATABASE_URL in Vercel environment variables');
+      console.error('Format: postgresql://user:pass@host:port/database?sslmode=require');
+      throw new Error('DATABASE_URL environment variable is not set. Please configure it in Vercel settings.');
     }
 
     // Detect if using Supabase (connection pooler uses port 6543)
     const isSupabase = connectionString.includes('supabase') || connectionString.includes(':6543');
+    
+    console.log(`🔗 Connecting to ${isSupabase ? 'Supabase' : 'PostgreSQL'} database...`);
     
     pool = new Pool({
       connectionString,
