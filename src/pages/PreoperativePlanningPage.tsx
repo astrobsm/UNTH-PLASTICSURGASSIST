@@ -34,10 +34,14 @@ const PreoperativePlanningPage: React.FC = () => {
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       setFilteredPatients(
-        patients.filter(p => 
-          p.full_name.toLowerCase().includes(query) ||
-          p.hospital_number.toLowerCase().includes(query)
-        )
+        patients.filter(p => {
+          const fullName = p.full_name || `${p.first_name || ''} ${p.last_name || ''}`.trim();
+          const hospitalNumber = p.hospital_number || '';
+          return (
+            fullName.toLowerCase().includes(query) ||
+            hospitalNumber.toLowerCase().includes(query)
+          );
+        })
       );
     } else {
       setFilteredPatients(patients.slice(0, 20)); // Show first 20 by default
@@ -156,33 +160,36 @@ const PreoperativePlanningPage: React.FC = () => {
                 <p>No patients found</p>
               </div>
             ) : (
-              filteredPatients.map((patient) => (
-                <button
-                  key={patient.id}
-                  onClick={() => handlePatientSelect(patient.id)}
-                  className="w-full p-4 hover:bg-gray-50 text-left transition-colors flex items-center justify-between"
-                >
-                  <div className="flex items-center space-x-4">
-                    <div className="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center">
-                      <User className="w-6 h-6 text-primary-600" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-gray-900">{patient.full_name}</h3>
-                      <div className="flex items-center space-x-4 text-sm text-gray-500">
-                        <span>#{patient.hospital_number}</span>
-                        <span className="flex items-center">
-                          <Calendar className="w-3 h-3 mr-1" />
-                          {calculateAge(patient.date_of_birth)} years
-                        </span>
-                        <span className="capitalize">{patient.gender}</span>
+              filteredPatients.map((patient) => {
+                const displayName = patient.full_name || `${patient.first_name || ''} ${patient.last_name || ''}`.trim() || 'Unknown';
+                return (
+                  <button
+                    key={patient.id}
+                    onClick={() => handlePatientSelect(patient.id)}
+                    className="w-full p-4 hover:bg-gray-50 text-left transition-colors flex items-center justify-between"
+                  >
+                    <div className="flex items-center space-x-4">
+                      <div className="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center">
+                        <User className="w-6 h-6 text-primary-600" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-gray-900">{displayName}</h3>
+                        <div className="flex items-center space-x-4 text-sm text-gray-500">
+                          <span>#{patient.hospital_number || 'N/A'}</span>
+                          <span className="flex items-center">
+                            <Calendar className="w-3 h-3 mr-1" />
+                            {patient.date_of_birth ? `${calculateAge(patient.date_of_birth)} years` : 'N/A'}
+                          </span>
+                          <span className="capitalize">{patient.gender || 'N/A'}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div className="text-primary-600">
-                    <ArrowLeft className="w-5 h-5 transform rotate-180" />
-                  </div>
-                </button>
-              ))
+                    <div className="text-primary-600">
+                      <ArrowLeft className="w-5 h-5 transform rotate-180" />
+                    </div>
+                  </button>
+                );
+              })
             )}
           </div>
         </div>

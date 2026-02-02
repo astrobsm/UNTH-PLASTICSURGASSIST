@@ -9,13 +9,23 @@ import { syncService } from '../db/syncService';
 import { pushNotificationService } from './pushNotificationService';
 
 /**
- * Normalize patient data to ensure arrays are always arrays
+ * Normalize patient data to ensure arrays are always arrays and computed fields exist
  */
 function normalizePatientData(patient: any) {
   if (!patient) return patient;
   
+  // Ensure full_name is always set
+  const firstName = patient.first_name || patient.firstName || '';
+  const lastName = patient.last_name || patient.lastName || '';
+  const fullName = patient.full_name || patient.fullName || `${firstName} ${lastName}`.trim() || 'Unknown';
+  
   return {
     ...patient,
+    full_name: fullName,
+    first_name: firstName,
+    last_name: lastName,
+    hospital_number: patient.hospital_number || patient.hospitalNumber || '',
+    gender: patient.gender || patient.sex || '',
     allergies: Array.isArray(patient.allergies) 
       ? patient.allergies 
       : (patient.allergies ? [patient.allergies] : []),
