@@ -104,11 +104,14 @@ class ApiClient {
   }
 
   async request<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
+    // Ensure token is loaded from localStorage
+    const token = this.getToken();
+    
     // Check if this is a protected endpoint that requires authentication
-    const isProtectedEndpoint = !endpoint.includes('/auth') && !endpoint.includes('/health');
+    const isProtectedEndpoint = !endpoint.includes('/auth') && !endpoint.includes('/health') && !endpoint.includes('/diagnostics');
     
     // If it's a protected endpoint and we don't have a token, throw immediately
-    if (isProtectedEndpoint && !this.token) {
+    if (isProtectedEndpoint && !token) {
       throw new Error('No token provided');
     }
 
@@ -118,8 +121,8 @@ class ApiClient {
       ...(options.headers || {})
     };
 
-    if (this.token) {
-      (headers as Record<string, string>)['Authorization'] = `Bearer ${this.token}`;
+    if (token) {
+      (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
     }
 
     const fetchOptions: RequestInit = {

@@ -45,20 +45,22 @@ export function authenticateRequest(req) {
 
 // CORS helper for API routes
 export function cors(req, res) {
-  // Define allowed origins
-  const allowedOrigins = [
-    'https://plasticsurgassisstant.vercel.app',
-    'https://plasticsurgassisstant-kklm4akj5.vercel.app',
-    'https://plasticsurgassisstant-8zzrgul48.vercel.app',
-    process.env.NODE_ENV !== 'production' ? 'http://localhost:5173' : null
-  ].filter(Boolean);
-  
   const origin = req.headers.origin;
   
-  // Only set CORS headers if origin is allowed
-  if (allowedOrigins.includes(origin)) {
+  // Allow all Vercel preview deployments and the main domain
+  const isAllowedOrigin = (
+    origin === 'https://plasticsurgassisstant.vercel.app' ||
+    (origin && origin.startsWith('https://plasticsurgassisstant-') && origin.endsWith('.vercel.app')) ||
+    (process.env.NODE_ENV !== 'production' && origin === 'http://localhost:5173')
+  );
+  
+  // Set CORS headers if origin is allowed
+  if (isAllowedOrigin) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Credentials', 'true');
+  } else if (!origin) {
+    // Allow requests with no origin (e.g., same-origin requests, curl, etc.)
+    res.setHeader('Access-Control-Allow-Origin', '*');
   }
   
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
