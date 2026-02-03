@@ -52,7 +52,7 @@ import TeamAnalytics from '../components/TeamAnalytics';
 import { medicalTeamService } from '../services/medicalTeamService';
 import { getRecentAuditLogs, AuditLog as AuditLogType } from '../services/auditLoggingService';
 import { db } from '../db/database';
-import { resetDatabase, fullDatabaseRecovery } from '../utils/dbReset';
+import { resetDatabase, fullDatabaseRecovery, triggerEmergencyRecovery } from '../utils/dbReset';
 import toast from 'react-hot-toast';
 
 type AdminTab = 'dashboard' | 'user-approvals' | 'users' | 'bulk-import' | 'team-analytics' | 'system' | 'database' | 'security' | 'analytics' | 'settings';
@@ -735,6 +735,16 @@ export default function Admin() {
                     <AlertTriangle className="h-4 w-4" />
                     <span>Fix Corrupted Database</span>
                   </button>
+                  <button
+                    onClick={triggerEmergencyRecovery}
+                    className="w-full flex items-center justify-center space-x-2 py-2 px-4 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+                  >
+                    <AlertTriangle className="h-4 w-4" />
+                    <span>Emergency Recovery (Severe)</span>
+                  </button>
+                  <p className="text-xs text-gray-500 mt-2">
+                    If buttons don't work, visit: <a href="/?recover=true" className="text-blue-600 underline">/?recover=true</a>
+                  </p>
                 </div>
               </div>
             </div>

@@ -87,8 +87,42 @@ const queryClient = new QueryClient({
 });
 
 // Global error handler for uncaught promises
+let indexedDBErrorCount = 0;
+const MAX_INDEXEDDB_ERRORS = 5;
+
 window.addEventListener('unhandledrejection', (event) => {
   console.error('Unhandled promise rejection:', event.reason);
+  
+  // Detect IndexedDB corruption errors
+  const errorMessage = event.reason?.message || String(event.reason);
+  const isIndexedDBError = 
+    errorMessage.includes('Internal error opening backing store') ||
+    errorMessage.includes('DatabaseClosedError') ||
+    errorMessage.includes('UnknownError') ||
+    (event.reason?.name === 'DatabaseClosedError');
+  
+  if (isIndexedDBError) {
+    indexedDBErrorCount++;
+    console.error(`🚨 IndexedDB error detected (${indexedDBErrorCount}/${MAX_INDEXEDDB_ERRORS})`);
+    
+    // After several errors, show recovery prompt
+    if (indexedDBErrorCount >= MAX_INDEXEDDB_ERRORS) {
+      // Only show once
+      indexedDBErrorCount = -9999;
+      
+      const shouldRecover = confirm(
+        '⚠️ Database Corruption Detected\\n\\n' +
+        'The local database appears to be corrupted. This can happen after browser updates or storage issues.\\n\\n' +
+        'Click OK to automatically fix this issue.\\n' +
+        'Click Cancel to try manually (Admin → Fix Corrupted Database).'
+      );
+      
+      if (shouldRecover) {
+        window.location.href = window.location.origin + '?recover=true';
+      }
+    }
+  }
+  
   event.preventDefault(); // Prevent React error #426
 });
 
