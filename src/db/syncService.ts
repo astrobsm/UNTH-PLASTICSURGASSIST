@@ -187,13 +187,22 @@ class SyncService {
         await this.syncPreoperativeAssessment(action, local_id, data);
         break;
       case 'surgeries':
+      case 'surgery_bookings': // Handle both table names
         await this.syncSurgery(action, local_id, data);
+        break;
+      case 'wound_care':
+      case 'wound_care_records': // Handle both table names
+        await this.syncWoundCare(action, local_id, data);
+        break;
+      case 'ward_rounds':
+        await this.syncWardRound(action, local_id, data);
         break;
       case 'patient_transfers':
         await this.syncPatientTransfer(action, local_id, data);
         break;
       default:
-        throw new Error(`Unknown table: ${table}`);
+        console.warn(`Unknown table for sync: ${table}`);
+        // Don't throw, just skip unknown tables
     }
   }
 
@@ -497,19 +506,59 @@ class SyncService {
   }
 
   private async syncSurgery(action: string, localId: number, data: any): Promise<void> {
-    const surgery = await db.surgeries?.get(localId);
+    // Note: IndexedDB table is 'surgery_bookings' but sync uses 'surgeries' API
+    const surgery = await db.surgery_bookings?.get(localId);
     if (!surgery) return;
 
     switch (action) {
       case 'create':
         const response = await this.apiCall('POST', '/surgeries', surgery);
-        await db.surgeries.update(localId, { id: response.id, synced: true });
+        await db.surgery_bookings.update(localId, { id: response.id, synced: true });
         console.log('✅ Surgery synced to server:', response.id);
         break;
       case 'update':
         if (surgery.id) {
           await this.apiCall('PUT', `/surgeries/${surgery.id}`, surgery);
-          await db.surgeries.update(localId, { synced: true });
+          await db.surgery_bookings.update(localId, { synced: true });
+        }
+        break;
+    }
+  }
+
+  private async syncWoundCare(action: string, localId: number, data: any): Promise<void> {
+    // Note: IndexedDB table is 'wound_care' but API uses 'wound_care_records'
+    const woundCare = await db.wound_care?.get(localId);
+    if (!woundCare) return;
+
+    switch (action) {
+      case 'create':
+        const response = await this.apiCall('POST', '/wound-care', woundCare);
+        await db.wound_care.update(localId, { id: response.id || response.woundCareRecord?.id, synced: true });
+        console.log('✅ Wound care synced to server:', response.id);
+        break;
+      case 'update':
+        if (woundCare.id) {
+          await this.apiCall('PUT', `/wound-care/${woundCare.id}`, woundCare);
+          await db.wound_care.update(localId, { synced: true });
+        }
+        break;
+    }
+  }
+
+  private async syncWardRound(action: string, localId: number, data: any): Promise<void> {
+    const wardRound = await db.ward_rounds?.get(localId);
+    if (!wardRound) return;
+
+    switch (action) {
+      case 'create':
+        const response = await this.apiCall('POST', '/ward-rounds', wardRound);
+        await db.ward_rounds.update(localId, { id: response.id || response.wardRound?.id, synced: true });
+        console.log('✅ Ward round synced to server:', response.id);
+        break;
+      case 'update':
+        if (wardRound.id) {
+          await this.apiCall('PUT', `/ward-rounds/${wardRound.id}`, wardRound);
+          await db.ward_rounds.update(localId, { synced: true });
         }
         break;
     }

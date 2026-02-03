@@ -29,7 +29,7 @@ export default async function handler(req, res) {
         if (action === 'patients') {
           return await getSyncPatients(res);
         }
-        if (action === 'surgeries') {
+        if (action === 'surgeries' || action === 'surgery-bookings') {
           return await getSyncEntity('surgeries', res);
         }
         if (action === 'admissions') {
@@ -37,6 +37,21 @@ export default async function handler(req, res) {
         }
         if (action === 'treatment-plans') {
           return await getSyncEntity('treatment_plans', res);
+        }
+        if (action === 'lab-orders' || action === 'lab-investigations') {
+          return await getSyncEntity('lab_orders', res);
+        }
+        if (action === 'prescriptions') {
+          return await getSyncEntity('prescriptions', res);
+        }
+        if (action === 'wound-care') {
+          return await getSyncEntity('wound_care_records', res);
+        }
+        if (action === 'ward-rounds') {
+          return await getSyncEntity('ward_rounds', res);
+        }
+        if (action === 'discharges' || action === 'discharge-summaries') {
+          return await getSyncEntity('discharge_summaries', res);
         }
         return await getSyncStatus(auth.user, res);
       default:
@@ -118,15 +133,21 @@ async function handlePull(data, user, res) {
   
   const updates = {};
   
-  // Define entities to sync
+  // Define entities to sync - table names must match init-db.js
   const entityConfigs = {
     patients: { table: 'patients', userField: null },
     surgeries: { table: 'surgeries', userField: null },
-    treatmentPlans: { table: 'treatment_plans', userField: null },
+    surgery_bookings: { table: 'surgeries', userField: null }, // Frontend uses surgery_bookings
+    treatment_plans: { table: 'treatment_plans', userField: null },
+    treatmentPlans: { table: 'treatment_plans', userField: null }, // Alias for camelCase
     admissions: { table: 'admissions', userField: null },
+    lab_investigations: { table: 'lab_orders', userField: null }, // Frontend uses lab_investigations
     labOrders: { table: 'lab_orders', userField: null },
     prescriptions: { table: 'prescriptions', userField: null },
-    woundCare: { table: 'wound_care_records', userField: null }
+    wound_care: { table: 'wound_care_records', userField: null }, // Frontend uses wound_care
+    woundCare: { table: 'wound_care_records', userField: null },
+    ward_rounds: { table: 'ward_rounds', userField: null },
+    discharges: { table: 'discharge_summaries', userField: null }
   };
 
   for (const [entityName, config] of Object.entries(entityConfigs)) {
@@ -155,12 +176,17 @@ async function handleFullSync(data, user, res) {
   // Full sync: push then pull
   const pushResult = data.changes ? await processChanges(data.changes, user) : { processed: 0 };
   
+  // Note: Table names must match init-db.js created tables
   const pullResult = await query(`
     SELECT 
       (SELECT json_agg(row_to_json(p)) FROM patients p) as patients,
       (SELECT json_agg(row_to_json(s)) FROM surgeries s) as surgeries,
       (SELECT json_agg(row_to_json(tp)) FROM treatment_plans tp) as treatment_plans,
-      (SELECT json_agg(row_to_json(a)) FROM admissions a) as admissions
+      (SELECT json_agg(row_to_json(a)) FROM admissions a) as admissions,
+      (SELECT json_agg(row_to_json(lo)) FROM lab_orders lo) as lab_investigations,
+      (SELECT json_agg(row_to_json(p)) FROM prescriptions p) as prescriptions,
+      (SELECT json_agg(row_to_json(wcr)) FROM wound_care_records wcr) as wound_care,
+      (SELECT json_agg(row_to_json(wr)) FROM ward_rounds wr) as ward_rounds
   `);
 
   res.status(200).json({

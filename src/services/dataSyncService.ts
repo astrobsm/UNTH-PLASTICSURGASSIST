@@ -21,17 +21,14 @@ import { logger } from '../utils/logger';
 import toast from 'react-hot-toast';
 
 // Entity types that need cross-device sync
+// NOTE: Only include entities that have corresponding backend API endpoints
 export type SyncableEntity = 
   | 'patients'
   | 'admissions'
   | 'discharges'
   | 'treatment_plans'
   | 'prescriptions'
-  | 'progress_notes'
   | 'lab_investigations'
-  | 'lab_results'
-  | 'risk_assessments'
-  | 'preoperative_assessments'
   | 'surgeries'
   | 'ward_rounds'
   | 'wound_care';
@@ -71,35 +68,27 @@ class DataSyncService {
   private lastFullSyncTime: Date | null = null;
   private entitySyncStatus: Map<SyncableEntity, EntitySyncStatus> = new Map();
 
-  // Entity to API endpoint mapping
+  // Entity to API endpoint mapping - only entities with backend APIs
   private readonly entityEndpoints: Record<SyncableEntity, string> = {
     patients: '/sync/patients',
     admissions: '/admissions',
     discharges: '/discharge-summaries',
     treatment_plans: '/treatment-plans',
     prescriptions: '/prescriptions',
-    progress_notes: '/progress-notes',
     lab_investigations: '/lab-orders',
-    lab_results: '/lab-results',
-    risk_assessments: '/risk-assessments',
-    preoperative_assessments: '/preoperative-assessments',
     surgeries: '/surgeries',
     ward_rounds: '/ward-rounds',
     wound_care: '/wound-care'
   };
 
-  // Entity to DB table mapping
+  // Entity to IndexedDB table mapping
   private readonly entityTables: Record<SyncableEntity, string> = {
     patients: 'patients',
     admissions: 'admissions',
     discharges: 'discharges',
     treatment_plans: 'treatment_plans',
     prescriptions: 'prescriptions',
-    progress_notes: 'progress_notes',
     lab_investigations: 'lab_investigations',
-    lab_results: 'lab_results',
-    risk_assessments: 'dvt_assessments', // Primary risk assessment table
-    preoperative_assessments: 'preoperative_assessments',
     surgeries: 'surgery_bookings',
     ward_rounds: 'ward_rounds',
     wound_care: 'wound_care'
@@ -123,8 +112,7 @@ class DataSyncService {
   private initializeEntityStatus(): void {
     const entities: SyncableEntity[] = [
       'patients', 'admissions', 'discharges', 'treatment_plans',
-      'prescriptions', 'progress_notes', 'lab_investigations', 'lab_results',
-      'risk_assessments', 'preoperative_assessments', 'surgeries', 'ward_rounds', 'wound_care'
+      'prescriptions', 'lab_investigations', 'surgeries', 'ward_rounds', 'wound_care'
     ];
 
     entities.forEach(entity => {
@@ -397,11 +385,7 @@ class DataSyncService {
       'discharges',
       'treatment_plans',
       'prescriptions',
-      'progress_notes',
       'lab_investigations',
-      'lab_results',
-      'risk_assessments',
-      'preoperative_assessments',
       'surgeries',
       'ward_rounds',
       'wound_care'
@@ -509,10 +493,18 @@ class DataSyncService {
         return response;
       }
       
-      // Check for common response wrappers
-      const possibleKeys = ['patients', 'admissions', 'discharges', 'plans', 'prescriptions', 
-                          'notes', 'investigations', 'results', 'assessments', 'surgeries', 
-                          'rounds', 'records', 'data', 'items'];
+      // Check for common response wrappers - exact keys from API responses
+      const possibleKeys = [
+        'patients', 'admissions', 'discharges', 'plans', 'prescriptions', 
+        'notes', 'investigations', 'results', 'assessments', 'surgeries', 
+        'rounds', 'records', 'data', 'items',
+        // Exact API response keys
+        'labOrders', 'labOrder', 'lab_orders', 'lab_investigations',
+        'wardRounds', 'wardRound', 'ward_rounds',
+        'woundCareRecords', 'woundCareRecord', 'wound_care', 'wound_care_records',
+        'treatment_plans', 'treatmentPlans', 'treatmentPlan',
+        'surgery_bookings', 'surgeryBookings', 'surgery'
+      ];
       
       for (const key of possibleKeys) {
         if (response[key] && Array.isArray(response[key])) {
