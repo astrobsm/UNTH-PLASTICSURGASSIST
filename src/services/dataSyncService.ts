@@ -323,6 +323,9 @@ class DataSyncService {
 
       // Step 3: Sync MDT data specifically
       try {
+        // Push local MDT data first (for initial population of server)
+        await mdtService.pushToServer();
+        // Then pull any updates from server
         await mdtService.syncFromServer();
       } catch (mdtError) {
         logger.warn('MDT sync failed:', mdtError);
