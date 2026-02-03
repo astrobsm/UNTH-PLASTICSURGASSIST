@@ -33,6 +33,18 @@
           
           async function emergencyRecovery() {
             try {
+              // Step 0: Try to message service worker to self-destruct
+              status.textContent = 'Stopping service worker...';
+              progress.style.width = '10%';
+              if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                try {
+                  navigator.serviceWorker.controller.postMessage({ type: 'EMERGENCY_UNREGISTER' });
+                  await new Promise(resolve => setTimeout(resolve, 500));
+                } catch (e) {
+                  console.warn('Could not message service worker:', e);
+                }
+              }
+              
               // Step 1: Unregister service workers
               status.textContent = 'Unregistering service workers...';
               progress.style.width = '20%';
@@ -53,24 +65,28 @@
                 }
               }
               
-              // Step 3: Delete ALL IndexedDB databases
+              // Step 3: Delete ALL IndexedDB databases (including all workbox variants)
               status.textContent = 'Deleting databases...';
               progress.style.width = '60%';
               var databasesToDelete = [
                 'PlasticSurgeonDB',
                 'workbox-expiration',
                 'workbox-precache-v2',
+                'workbox-precache',
                 'workbox-background-sync',
+                'workbox-runtime-cache',
+                'keyval-store',
                 'firebase-heartbeat-database',
-                'firebase-installations-database'
+                'firebase-installations-database',
+                'firebaseLocalStorageDb'
               ];
               
               for (var dbName of databasesToDelete) {
                 await new Promise(function(resolve) {
                   var req = indexedDB.deleteDatabase(dbName);
-                  req.onsuccess = resolve;
-                  req.onerror = resolve;
-                  req.onblocked = resolve;
+                  req.onsuccess = function() { console.log('Deleted:', dbName); resolve(); };
+                  req.onerror = function() { console.warn('Error deleting:', dbName); resolve(); };
+                  req.onblocked = function() { console.warn('Blocked:', dbName); resolve(); };
                   setTimeout(resolve, 1000); // Timeout safety
                 });
               }
@@ -78,21 +94,21 @@
               // Step 4: Clear storage
               status.textContent = 'Clearing storage...';
               progress.style.width = '80%';
-              localStorage.clear();
-              sessionStorage.clear();
+              try { localStorage.clear(); } catch(e) {}
+              try { sessionStorage.clear(); } catch(e) {}
               
               // Step 5: Complete
               status.textContent = 'Recovery complete! Redirecting...';
               progress.style.width = '100%';
               
-              // Remove recover param and reload
+              // Remove recover param and reload with cache bypass
               setTimeout(function() {
-                window.location.href = window.location.origin + window.location.pathname;
-              }, 1000);
+                window.location.href = window.location.origin + window.location.pathname + '?t=' + Date.now();
+              }, 1500);
               
             } catch (error) {
               console.error('Recovery error:', error);
-              status.textContent = 'Recovery failed. Try: ' + error.message;
+              status.textContent = 'Error: ' + error.message + '. Please clear browser data manually.';
               status.style.color = '#DC2626';
             }
           }

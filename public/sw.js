@@ -1,25 +1,79 @@
 // Enhanced Service Worker with Full Offline Support
 // Plastic Surgeon Assistant PWA - Version 4.0
-importScripts('https://storage.googleapis.com/workbox-cdn/releases/7.0.0/workbox-sw.js');
 
-const { precacheAndRoute, cleanupOutdatedCaches } = workbox.precaching;
-const { registerRoute } = workbox.routing;
-const { NetworkFirst, CacheFirst, StaleWhileRevalidate, NetworkOnly } = workbox.strategies;
-const { BackgroundSyncPlugin } = workbox.backgroundSync;
-const { ExpirationPlugin } = workbox.expiration;
-const { CacheableResponsePlugin } = workbox.cacheableResponse;
+// ============================================
+// INDEXEDDB CORRUPTION DETECTION - MUST BE FIRST
+// ============================================
 
-// Cache version - increment to force cache update
-const CACHE_VERSION = 'v4-2026-01-12';
-const APP_SHELL_CACHE = `app-shell-${CACHE_VERSION}`;
-const API_CACHE = `api-cache-${CACHE_VERSION}`;
-const STATIC_CACHE = `static-cache-${CACHE_VERSION}`;
-const IMAGE_CACHE = `images-cache-${CACHE_VERSION}`;
-const FONT_CACHE = `fonts-cache-${CACHE_VERSION}`;
+// Check for ?recover=true in the initial request - unregister self
+self.addEventListener('install', (event) => {
+  console.log('Service Worker installing...');
+  self.skipWaiting();
+});
 
-// Precache app shell and critical assets
-precacheAndRoute(self.__WB_MANIFEST || []);
-cleanupOutdatedCaches();
+self.addEventListener('activate', (event) => {
+  console.log('Service Worker activating...');
+  event.waitUntil(self.clients.claim());
+});
+
+// Handle messages from the main app
+self.addEventListener('message', async (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+  
+  // Emergency unregister command
+  if (event.data && event.data.type === 'EMERGENCY_UNREGISTER') {
+    console.log('🚨 Emergency unregister requested');
+    // Clear all caches
+    const cacheNames = await caches.keys();
+    await Promise.all(cacheNames.map(name => caches.delete(name)));
+    // Unregister self
+    await self.registration.unregister();
+    // Notify client
+    event.source.postMessage({ type: 'UNREGISTERED' });
+  }
+});
+
+// Wrap Workbox import in try-catch to handle IndexedDB errors
+let workboxAvailable = false;
+try {
+  importScripts('https://storage.googleapis.com/workbox-cdn/releases/7.0.0/workbox-sw.js');
+  workboxAvailable = true;
+} catch (e) {
+  console.error('Failed to load Workbox:', e);
+}
+
+// If Workbox failed to load, provide minimal fetch handler
+if (!workboxAvailable || !self.workbox) {
+  console.warn('Workbox not available - using network-only mode');
+  self.addEventListener('fetch', (event) => {
+    event.respondWith(fetch(event.request));
+  });
+} else {
+  // Normal Workbox setup
+  const { precacheAndRoute, cleanupOutdatedCaches } = workbox.precaching;
+  const { registerRoute } = workbox.routing;
+  const { NetworkFirst, CacheFirst, StaleWhileRevalidate, NetworkOnly } = workbox.strategies;
+  const { BackgroundSyncPlugin } = workbox.backgroundSync;
+  const { ExpirationPlugin } = workbox.expiration;
+  const { CacheableResponsePlugin } = workbox.cacheableResponse;
+
+  // Cache version - increment to force cache update
+  const CACHE_VERSION = 'v4-2026-02-03';
+  const APP_SHELL_CACHE = `app-shell-${CACHE_VERSION}`;
+  const API_CACHE = `api-cache-${CACHE_VERSION}`;
+  const STATIC_CACHE = `static-cache-${CACHE_VERSION}`;
+  const IMAGE_CACHE = `images-cache-${CACHE_VERSION}`;
+  const FONT_CACHE = `fonts-cache-${CACHE_VERSION}`;
+
+  // Wrap precache in try-catch to handle IndexedDB errors
+  try {
+    precacheAndRoute(self.__WB_MANIFEST || []);
+    cleanupOutdatedCaches();
+  } catch (e) {
+    console.error('Precache failed (IndexedDB may be corrupted):', e);
+  }
 
 // ============================================
 // BACKGROUND SYNC FOR OFFLINE MUTATIONS
@@ -468,4 +522,6 @@ self.addEventListener('message', (event) => {
   }
 });
 
-console.log('🏥 Plastic Surgeon Assistant Service Worker loaded - Version 3.0');
+console.log('🏥 Plastic Surgeon Assistant Service Worker loaded - Version 4.0');
+
+} // End of Workbox else block
