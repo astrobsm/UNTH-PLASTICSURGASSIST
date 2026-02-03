@@ -10,9 +10,8 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  // Check for record count action
-  const url = new URL(req.url, `http://${req.headers.host}`);
-  const action = url.searchParams.get('action');
+  // Check for record count action using req.query (Vercel standard)
+  const action = req.query?.action;
 
   if (action === 'counts') {
     return await getRecordCounts(res);
