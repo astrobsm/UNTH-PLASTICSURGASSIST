@@ -19,6 +19,7 @@ import { apiClient } from './apiClient';
 import { syncService } from '../db/syncService';
 import { logger } from '../utils/logger';
 import toast from 'react-hot-toast';
+import { mdtService } from './mdtService';
 
 // Entity types that need cross-device sync
 // NOTE: Only include entities that have corresponding backend API endpoints
@@ -31,7 +32,10 @@ export type SyncableEntity =
   | 'lab_investigations'
   | 'surgeries'
   | 'ward_rounds'
-  | 'wound_care';
+  | 'wound_care'
+  | 'mdt_patient_teams'
+  | 'mdt_meetings'
+  | 'mdt_contact_logs';
 
 // Sync status for each entity
 interface EntitySyncStatus {
@@ -78,7 +82,10 @@ class DataSyncService {
     lab_investigations: '/lab-orders',
     surgeries: '/surgeries',
     ward_rounds: '/ward-rounds',
-    wound_care: '/wound-care'
+    wound_care: '/wound-care',
+    mdt_patient_teams: '/mdt-patient-teams',
+    mdt_meetings: '/mdt-meetings',
+    mdt_contact_logs: '/mdt-contact-logs'
   };
 
   // Entity to IndexedDB table mapping
@@ -91,7 +98,10 @@ class DataSyncService {
     lab_investigations: 'lab_investigations',
     surgeries: 'surgery_bookings',
     ward_rounds: 'ward_rounds',
-    wound_care: 'wound_care'
+    wound_care: 'wound_care',
+    mdt_patient_teams: 'mdt_patient_teams',
+    mdt_meetings: 'mdt_meetings',
+    mdt_contact_logs: 'mdt_contact_logs'
   };
 
   constructor() {
@@ -112,7 +122,8 @@ class DataSyncService {
   private initializeEntityStatus(): void {
     const entities: SyncableEntity[] = [
       'patients', 'admissions', 'discharges', 'treatment_plans',
-      'prescriptions', 'lab_investigations', 'surgeries', 'ward_rounds', 'wound_care'
+      'prescriptions', 'lab_investigations', 'surgeries', 'ward_rounds', 'wound_care',
+      'mdt_patient_teams', 'mdt_meetings', 'mdt_contact_logs'
     ];
 
     entities.forEach(entity => {
@@ -309,6 +320,13 @@ class DataSyncService {
       const pullResult = await this.pullAllFromCloud();
       result.pulled = pullResult.pulled;
       result.errors.push(...pullResult.errors);
+
+      // Step 3: Sync MDT data specifically
+      try {
+        await mdtService.syncFromServer();
+      } catch (mdtError) {
+        logger.warn('MDT sync failed:', mdtError);
+      }
 
       this.lastFullSyncTime = new Date();
       this.saveSyncState();

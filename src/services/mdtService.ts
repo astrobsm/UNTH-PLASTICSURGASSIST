@@ -1,5 +1,25 @@
 import { db } from '../db/database';
 import { format } from 'date-fns';
+import { API_BASE_URL, getAuthHeaders } from './authService';
+
+// Helper to sync MDT data to server
+async function syncToServer(endpoint: string, method: string, data?: any): Promise<any> {
+  try {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      method,
+      headers: getAuthHeaders(),
+      body: data ? JSON.stringify(data) : undefined
+    });
+    if (!response.ok) {
+      console.warn(`MDT sync failed: ${response.status}`);
+      return null;
+    }
+    return await response.json();
+  } catch (error) {
+    console.warn('MDT sync error (will retry later):', error);
+    return null;
+  }
+}
 
 export interface MDTSpecialty {
   id: string;
@@ -94,7 +114,23 @@ class MDTService {
       updated_at: new Date()
     };
 
+    // Save locally first
     await db.mdt_patient_teams.add(team as any);
+    
+    // Sync to server (async, don't block)
+    syncToServer('/mdt/patient-teams', 'POST', {
+      patient_id: patientId,
+      patient_name: patientName,
+      hospital_number: hospitalNumber,
+      primary_specialty: 'Plastic Surgery',
+      specialties: []
+    }).then(serverTeam => {
+      if (serverTeam?.id) {
+        // Update local record with server ID
+        db.mdt_patient_teams.update(team.id, { server_id: serverTeam.id });
+      }
+    });
+    
     return team;
   }
 
@@ -315,6 +351,76 @@ class MDTService {
       pendingFollowUps: followUps.length,
       activeSpecialties
     };
+  }
+
+  // Sync MDT data from server
+  async syncFromServer(): Promise<void> {
+    try {
+      // Fetch all MDT data from server
+      const [teamsRes, meetingsRes, contactsRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/mdt-patient-teams`, { headers: getAuthHeaders() }),
+        fetch(`${API_BASE_URL}/mdt-meetings`, { headers: getAuthHeaders() }),
+        fetch(`${API_BASE_URL}/mdt-contact-logs`, { headers: getAuthHeaders() })
+      ]);
+
+      if (teamsRes.ok) {
+        const teams = await teamsRes.json();
+        if (Array.isArray(teams)) {
+          for (const team of teams) {
+            // Check if exists locally by patient_id
+            const existing = await db.mdt_patient_teams
+              .where('patient_id')
+              .equals(team.patient_id?.toString())
+              .first();
+            
+            if (existing) {
+              await db.mdt_patient_teams.update(existing.id, {
+                ...team,
+                id: existing.id,
+                server_id: team.id
+              });
+            } else {
+              await db.mdt_patient_teams.put({
+                ...team,
+                id: team.id || `mdt_team_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                server_id: team.id
+              });
+            }
+          }
+          console.log(`✅ Synced ${teams.length} MDT patient teams from server`);
+        }
+      }
+
+      if (meetingsRes.ok) {
+        const meetings = await meetingsRes.json();
+        if (Array.isArray(meetings)) {
+          for (const meeting of meetings) {
+            await db.mdt_meetings.put({
+              ...meeting,
+              id: meeting.id || `mdt_meeting_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+              server_id: meeting.id
+            });
+          }
+          console.log(`✅ Synced ${meetings.length} MDT meetings from server`);
+        }
+      }
+
+      if (contactsRes.ok) {
+        const contacts = await contactsRes.json();
+        if (Array.isArray(contacts)) {
+          for (const contact of contacts) {
+            await db.mdt_contact_logs.put({
+              ...contact,
+              id: contact.id || `mdt_contact_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+              server_id: contact.id
+            });
+          }
+          console.log(`✅ Synced ${contacts.length} MDT contact logs from server`);
+        }
+      }
+    } catch (error) {
+      console.error('MDT sync from server error:', error);
+    }
   }
 }
 

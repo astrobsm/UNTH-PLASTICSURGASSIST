@@ -501,6 +501,64 @@ async function createTables() {
       UNIQUE(user_id, endpoint)
     );
 
+    -- MDT Patient Teams table (Multidisciplinary Team)
+    CREATE TABLE IF NOT EXISTS mdt_patient_teams (
+      id SERIAL PRIMARY KEY,
+      patient_id INTEGER REFERENCES patients(id) ON DELETE CASCADE,
+      patient_name VARCHAR(255),
+      hospital_number VARCHAR(100),
+      primary_specialty VARCHAR(255) DEFAULT 'Plastic Surgery',
+      is_active BOOLEAN DEFAULT TRUE,
+      specialties JSONB DEFAULT '[]',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- MDT Meetings table
+    CREATE TABLE IF NOT EXISTS mdt_meetings (
+      id SERIAL PRIMARY KEY,
+      patient_id INTEGER REFERENCES patients(id) ON DELETE CASCADE,
+      patient_name VARCHAR(255),
+      hospital_number VARCHAR(100),
+      meeting_title VARCHAR(255),
+      meeting_date DATE NOT NULL,
+      meeting_time VARCHAR(20),
+      location VARCHAR(255),
+      meeting_type VARCHAR(50) DEFAULT 'routine',
+      status VARCHAR(50) DEFAULT 'scheduled',
+      agenda TEXT,
+      attending_specialties JSONB DEFAULT '[]',
+      discussion_points TEXT,
+      decisions_made TEXT,
+      action_items JSONB DEFAULT '[]',
+      next_meeting_date DATE,
+      created_by VARCHAR(255),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- MDT Contact Logs table
+    CREATE TABLE IF NOT EXISTS mdt_contact_logs (
+      id SERIAL PRIMARY KEY,
+      patient_id INTEGER REFERENCES patients(id) ON DELETE CASCADE,
+      patient_name VARCHAR(255),
+      hospital_number VARCHAR(100),
+      specialty_id VARCHAR(100),
+      specialty_name VARCHAR(255),
+      contact_type VARCHAR(50),
+      contact_date DATE NOT NULL,
+      contact_time VARCHAR(20),
+      contacted_person VARCHAR(255),
+      reason TEXT,
+      discussion_summary TEXT,
+      outcome TEXT,
+      follow_up_required BOOLEAN DEFAULT FALSE,
+      follow_up_date DATE,
+      created_by VARCHAR(255),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
     -- Create indexes
     CREATE INDEX IF NOT EXISTS idx_patients_hospital_number ON patients(hospital_number);
     CREATE INDEX IF NOT EXISTS idx_patients_name ON patients(last_name, first_name);
@@ -546,6 +604,15 @@ async function createTables() {
     -- Discharge Indexes
     CREATE INDEX IF NOT EXISTS idx_discharge_patient ON discharge_summaries(patient_id);
     CREATE INDEX IF NOT EXISTS idx_discharge_admission ON discharge_summaries(admission_id);
+    
+    -- MDT Indexes
+    CREATE INDEX IF NOT EXISTS idx_mdt_teams_patient ON mdt_patient_teams(patient_id);
+    CREATE INDEX IF NOT EXISTS idx_mdt_teams_active ON mdt_patient_teams(is_active);
+    CREATE INDEX IF NOT EXISTS idx_mdt_meetings_patient ON mdt_meetings(patient_id);
+    CREATE INDEX IF NOT EXISTS idx_mdt_meetings_date ON mdt_meetings(meeting_date);
+    CREATE INDEX IF NOT EXISTS idx_mdt_meetings_status ON mdt_meetings(status);
+    CREATE INDEX IF NOT EXISTS idx_mdt_contacts_patient ON mdt_contact_logs(patient_id);
+    CREATE INDEX IF NOT EXISTS idx_mdt_contacts_date ON mdt_contact_logs(contact_date);
   `;
 
   await query(schema);

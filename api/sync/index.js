@@ -53,6 +53,16 @@ export default async function handler(req, res) {
         if (action === 'discharges' || action === 'discharge-summaries') {
           return await getSyncEntity('discharge_summaries', res);
         }
+        // MDT tables
+        if (action === 'mdt-patient-teams' || action === 'mdt_patient_teams') {
+          return await getSyncEntity('mdt_patient_teams', res);
+        }
+        if (action === 'mdt-meetings' || action === 'mdt_meetings') {
+          return await getSyncEntity('mdt_meetings', res);
+        }
+        if (action === 'mdt-contact-logs' || action === 'mdt_contact_logs') {
+          return await getSyncEntity('mdt_contact_logs', res);
+        }
         return await getSyncStatus(auth.user, res);
       default:
         res.status(405).json({ error: 'Method not allowed' });
@@ -147,7 +157,11 @@ async function handlePull(data, user, res) {
     wound_care: { table: 'wound_care_records', userField: null }, // Frontend uses wound_care
     woundCare: { table: 'wound_care_records', userField: null },
     ward_rounds: { table: 'ward_rounds', userField: null },
-    discharges: { table: 'discharge_summaries', userField: null }
+    discharges: { table: 'discharge_summaries', userField: null },
+    // MDT tables
+    mdt_patient_teams: { table: 'mdt_patient_teams', userField: null },
+    mdt_meetings: { table: 'mdt_meetings', userField: null },
+    mdt_contact_logs: { table: 'mdt_contact_logs', userField: null }
   };
 
   for (const [entityName, config] of Object.entries(entityConfigs)) {
