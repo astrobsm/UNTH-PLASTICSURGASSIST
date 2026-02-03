@@ -52,7 +52,7 @@ import TeamAnalytics from '../components/TeamAnalytics';
 import { medicalTeamService } from '../services/medicalTeamService';
 import { getRecentAuditLogs, AuditLog as AuditLogType } from '../services/auditLoggingService';
 import { db } from '../db/database';
-import { resetDatabase } from '../utils/dbReset';
+import { resetDatabase, fullDatabaseRecovery } from '../utils/dbReset';
 import toast from 'react-hot-toast';
 
 type AdminTab = 'dashboard' | 'user-approvals' | 'users' | 'bulk-import' | 'team-analytics' | 'system' | 'database' | 'security' | 'analytics' | 'settings';
@@ -274,6 +274,18 @@ export default function Admin() {
         await resetDatabase();
       } catch (error) {
         alert('Failed to clear database: ' + error);
+      }
+    }
+  };
+
+  const handleFullRecovery = async () => {
+    if (confirm('This will clear all local data, caches, and service workers to fix database corruption. Your server data will be re-synced after reload. Continue?')) {
+      const loadingToast = toast.loading('Performing full database recovery...');
+      try {
+        await fullDatabaseRecovery();
+      } catch (error) {
+        toast.dismiss(loadingToast);
+        toast.error('Recovery failed: ' + error);
       }
     }
   };
@@ -715,6 +727,13 @@ export default function Admin() {
                   >
                     <Trash2 className="h-4 w-4" />
                     <span>Clear Database</span>
+                  </button>
+                  <button
+                    onClick={handleFullRecovery}
+                    className="w-full flex items-center justify-center space-x-2 py-2 px-4 bg-orange-600 text-white rounded-lg hover:bg-orange-700"
+                  >
+                    <AlertTriangle className="h-4 w-4" />
+                    <span>Fix Corrupted Database</span>
                   </button>
                 </div>
               </div>

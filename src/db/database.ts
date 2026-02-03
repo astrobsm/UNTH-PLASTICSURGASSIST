@@ -7,6 +7,44 @@ import { ClinicalTopic, GeneratedMCQ, MCQTestSchedule, MCQTestSession, StudyMate
 import { EducationalTopic, WeeklyContent, TopicSchedule, UserProgress } from '../services/topicManagementService';
 import { PendingUser, ApprovedUser } from '../services/userManagementService';
 
+// Database recovery utility
+export async function recoverDatabase(): Promise<boolean> {
+  try {
+    console.log('🔧 Attempting database recovery...');
+    
+    // Try to delete the corrupted database
+    await Dexie.delete('PlasticSurgeonDB');
+    console.log('✅ Old database deleted successfully');
+    
+    // Clear any cached data
+    if ('caches' in window) {
+      const cacheKeys = await caches.keys();
+      await Promise.all(cacheKeys.map(key => caches.delete(key)));
+      console.log('✅ Caches cleared');
+    }
+    
+    // Reload to reinitialize
+    window.location.reload();
+    return true;
+  } catch (error) {
+    console.error('❌ Database recovery failed:', error);
+    return false;
+  }
+}
+
+// Check if database is healthy
+export async function checkDatabaseHealth(): Promise<boolean> {
+  try {
+    const testDb = new Dexie('PlasticSurgeonDB');
+    await testDb.open();
+    await testDb.close();
+    return true;
+  } catch (error) {
+    console.error('❌ Database health check failed:', error);
+    return false;
+  }
+}
+
 // Define the data structures for offline storage
 export interface Patient {
   id?: number;
@@ -1102,5 +1140,27 @@ export class PlasticSurgeonDB extends Dexie {
   }
 }
 
-// Create the database instance
+// Create the database instance with error recovery
 export const db = new PlasticSurgeonDB();
+
+// Handle database open errors
+db.open().catch(async (error) => {
+  console.error('❌ Failed to open database:', error);
+  
+  // Check if it's a corruption error
+  if (error.name === 'UnknownError' || 
+      error.message?.includes('Internal error') ||
+      error.message?.includes('backing store')) {
+    console.warn('🔧 Database appears corrupted. Attempting recovery...');
+    
+    // Show user a message
+    const shouldRecover = window.confirm(
+      'The local database appears to be corrupted. Would you like to reset it? ' +
+      'Your data on the server will be preserved and re-synced.'
+    );
+    
+    if (shouldRecover) {
+      await recoverDatabase();
+    }
+  }
+});
