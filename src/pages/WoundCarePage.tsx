@@ -668,43 +668,156 @@ const WoundCarePage: React.FC = () => {
     doc.save(filename);
   };
 
-  // Print Rulers helper
+  // Print Rulers helper - Full A4 page with 10cm ruler grid
   const printRulers = async () => {
     const { jsPDF } = await import('jspdf');
+    
+    // A4 dimensions in mm: 210 x 297 (portrait)
     const doc = new jsPDF({
-      orientation: 'landscape',
+      orientation: 'portrait',
       unit: 'mm',
       format: 'a4'
     });
 
-    // Draw cm ruler
-    doc.setFontSize(10);
-    doc.text('WOUND MEASUREMENT RULER (cm)', 20, 15);
+    const pageWidth = 210;
+    const pageHeight = 297;
+    const margin = 10;
+    const rulerLength = 100; // 10cm = 100mm
+    const gridSpacing = 10; // 1cm grid lines
     
-    for (let i = 0; i <= 15; i++) {
-      const x = 20 + (i * 10);
-      doc.setLineWidth(0.5);
-      doc.line(x, 25, x, 45);
-      doc.setFontSize(8);
-      doc.text(`${i}`, x - 1, 50);
-      
-      // Half marks
-      if (i < 15) {
-        doc.setLineWidth(0.2);
-        doc.line(x + 5, 30, x + 5, 40);
+    // Title
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('WOUND MEASUREMENT RULER GRID', pageWidth / 2, 15, { align: 'center' });
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Print at 100% scale (no scaling). Each ruler = 10cm. Grid squares = 1cm x 1cm', pageWidth / 2, 22, { align: 'center' });
+
+    // Draw ruler grid covering the page
+    const startY = 30;
+    const endY = pageHeight - 15;
+    const startX = margin;
+    const endX = pageWidth - margin;
+    
+    // Calculate number of 10cm rulers that fit
+    const numHorizontalRulers = Math.floor((endX - startX) / rulerLength);
+    const numVerticalRulers = Math.floor((endY - startY) / rulerLength);
+
+    // Draw the main grid area
+    doc.setDrawColor(200, 200, 200);
+    doc.setLineWidth(0.1);
+
+    // Draw 1cm grid lines across entire printable area
+    const gridWidth = numHorizontalRulers * rulerLength;
+    const gridHeight = numVerticalRulers * rulerLength;
+    
+    // Vertical grid lines (every 1cm)
+    for (let x = 0; x <= gridWidth; x += gridSpacing) {
+      const lineX = startX + x;
+      if (x % 100 === 0) {
+        // 10cm marks - thicker
+        doc.setDrawColor(0, 0, 0);
+        doc.setLineWidth(0.5);
+      } else if (x % 50 === 0) {
+        // 5cm marks - medium
+        doc.setDrawColor(100, 100, 100);
+        doc.setLineWidth(0.3);
+      } else {
+        // 1cm marks - thin
+        doc.setDrawColor(180, 180, 180);
+        doc.setLineWidth(0.15);
+      }
+      doc.line(lineX, startY, lineX, startY + gridHeight);
+    }
+
+    // Horizontal grid lines (every 1cm)
+    for (let y = 0; y <= gridHeight; y += gridSpacing) {
+      const lineY = startY + y;
+      if (y % 100 === 0) {
+        // 10cm marks - thicker
+        doc.setDrawColor(0, 0, 0);
+        doc.setLineWidth(0.5);
+      } else if (y % 50 === 0) {
+        // 5cm marks - medium
+        doc.setDrawColor(100, 100, 100);
+        doc.setLineWidth(0.3);
+      } else {
+        // 1cm marks - thin
+        doc.setDrawColor(180, 180, 180);
+        doc.setLineWidth(0.15);
+      }
+      doc.line(startX, lineY, startX + gridWidth, lineY);
+    }
+
+    // Draw cm labels on left edge (vertical ruler)
+    doc.setFontSize(6);
+    doc.setTextColor(0, 0, 0);
+    for (let cm = 0; cm <= gridHeight / 10; cm++) {
+      const y = startY + (cm * 10);
+      if (cm % 10 === 0) {
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'bold');
+      } else {
+        doc.setFontSize(6);
+        doc.setFont('helvetica', 'normal');
+      }
+      doc.text(`${cm}`, startX - 4, y + 1, { align: 'right' });
+    }
+
+    // Draw cm labels on top edge (horizontal ruler)
+    for (let cm = 0; cm <= gridWidth / 10; cm++) {
+      const x = startX + (cm * 10);
+      if (cm % 10 === 0) {
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'bold');
+      } else {
+        doc.setFontSize(6);
+        doc.setFont('helvetica', 'normal');
+      }
+      doc.text(`${cm}`, x, startY - 2, { align: 'center' });
+    }
+
+    // Draw bold border around entire grid
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.8);
+    doc.rect(startX, startY, gridWidth, gridHeight);
+
+    // Add 10cm section markers with letters
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    const sectionLabels = ['A', 'B', 'C', 'D', 'E', 'F'];
+    let labelIdx = 0;
+    for (let row = 0; row < numVerticalRulers; row++) {
+      for (let col = 0; col < numHorizontalRulers; col++) {
+        if (labelIdx < sectionLabels.length * 2) {
+          const sectionX = startX + (col * rulerLength) + 50;
+          const sectionY = startY + (row * rulerLength) + 50;
+          doc.setTextColor(220, 220, 220);
+          doc.text(`${sectionLabels[labelIdx % sectionLabels.length]}${Math.floor(labelIdx / sectionLabels.length) + 1}`, sectionX, sectionY, { align: 'center' });
+          labelIdx++;
+        }
       }
     }
+
+    // Footer instructions
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    const footerY = startY + gridHeight + 8;
+    doc.text('Instructions:', startX, footerY);
+    doc.text('1. Print at 100% scale (actual size, no fit-to-page)', startX, footerY + 5);
+    doc.text('2. Cut along the bold outer border', startX, footerY + 10);
+    doc.text('3. Place ruler next to wound and photograph for AI measurement calibration', startX, footerY + 15);
     
-    // Horizontal ruler line
+    // Add verification square (exactly 1cm x 1cm)
+    doc.setDrawColor(0, 0, 0);
     doc.setLineWidth(0.5);
-    doc.line(20, 35, 170, 35);
+    doc.rect(pageWidth - 25, footerY, 10, 10);
+    doc.setFontSize(6);
+    doc.text('Verify:', pageWidth - 25, footerY - 2);
+    doc.text('1cm', pageWidth - 20, footerY + 6, { align: 'center' });
 
-    // Instructions
-    doc.setFontSize(10);
-    doc.text('Instructions: Print at 100% scale. Place ruler next to wound and photograph.', 20, 70);
-    doc.text('Ensure ruler is visible in frame for AI measurement calibration.', 20, 80);
-
-    doc.save('Wound_Measurement_Rulers.pdf');
+    doc.save('Wound_Measurement_Ruler_Grid_A4.pdf');
   };
 
   // ============================================
