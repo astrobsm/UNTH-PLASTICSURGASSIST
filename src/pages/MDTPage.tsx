@@ -13,7 +13,8 @@ import {
   Edit,
   FileText,
   AlertCircle,
-  MapPin
+  MapPin,
+  RefreshCw
 } from 'lucide-react';
 import { db } from '../db/database';
 import { patientService } from '../services/patientService';
@@ -36,6 +37,7 @@ const MDTPage: React.FC = () => {
   const [contactLogs, setContactLogs] = useState<MDTContactLog[]>([]);
   const [statistics, setStatistics] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [activeTab, setActiveTab] = useState<'team' | 'meetings' | 'contacts'>('team');
   
   // Modal states
@@ -88,6 +90,24 @@ const MDTPage: React.FC = () => {
       setContactLogs(contacts);
     } catch (error) {
       console.error('Error loading patient data:', error);
+    }
+  };
+
+  const handleForceSync = async () => {
+    setSyncing(true);
+    try {
+      // First push local changes to server
+      await mdtService.pushToServer();
+      // Then pull latest from server
+      await mdtService.syncFromServer();
+      // Reload the data
+      await loadData();
+      alert('MDT data synced successfully!');
+    } catch (error) {
+      console.error('Error syncing MDT data:', error);
+      alert('Sync failed. Please try again.');
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -788,13 +808,23 @@ const MDTPage: React.FC = () => {
       <div className="mb-6">
         <div className="flex items-center justify-between mb-2">
           <h1 className="text-2xl font-bold text-gray-900">Multidisciplinary Team (MDT)</h1>
-          <button
-            onClick={() => setShowAddPatient(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
-          >
-            <Plus className="w-5 h-5" />
-            Add Patient to MDT
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleForceSync}
+              disabled={syncing}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+            >
+              <RefreshCw className={`w-5 h-5 ${syncing ? 'animate-spin' : ''}`} />
+              {syncing ? 'Syncing...' : 'Force Sync'}
+            </button>
+            <button
+              onClick={() => setShowAddPatient(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+            >
+              <Plus className="w-5 h-5" />
+              Add Patient to MDT
+            </button>
+          </div>
         </div>
         <p className="text-gray-600">Manage patients with multiple specialty involvement</p>
       </div>
