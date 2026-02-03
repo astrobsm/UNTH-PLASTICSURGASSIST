@@ -1,6 +1,20 @@
 import { db } from '../db/database';
 import { format } from 'date-fns';
-import { API_BASE_URL, getAuthHeaders } from './authService';
+
+// API Base URL - handles all environments
+const API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL 
+  || ((import.meta as any).env?.PROD 
+    ? '/api'  // Production fallback: use relative path
+    : 'http://localhost:3001/api');  // Development: direct to backend
+
+// Get auth headers from localStorage
+function getAuthHeaders(): HeadersInit {
+  const token = localStorage.getItem('auth_token');
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+  };
+}
 
 // Helper to sync MDT data to server
 async function syncToServer(endpoint: string, method: string, data?: any): Promise<any> {
