@@ -324,24 +324,34 @@ export default function ShoppingList() {
     // Items Header
     doc.setFontSize(10);
     doc.setFont('times', 'bold');
-    doc.text('ITEMS', margin, yPos);
+    doc.text('☐', margin + 1, yPos);
+    doc.text('ITEM DESCRIPTION', margin + 8, yPos);
     doc.text('QTY', thermalWidth - margin - 10, yPos);
+    doc.text('✓', thermalWidth - margin - 2, yPos);
     yPos += 4;
 
     doc.setLineWidth(0.2);
     doc.line(margin, yPos, thermalWidth - margin, yPos);
     yPos += 3;
 
-    // Items List
+    // Items List with checkboxes
     doc.setFontSize(10);
     doc.setFont('times', 'normal');
 
     selectedItems.forEach((item, index) => {
+      // Draw checkbox (empty square) at the beginning
+      doc.setLineWidth(0.4);
+      doc.rect(margin, yPos - 3.5, 4, 4); // Checkbox 4mm x 4mm
+      
       // Item name (truncate if too long)
-      const itemName = item.name.length > 28 ? item.name.substring(0, 25) + '...' : item.name;
-      doc.text(`${index + 1}. ${itemName}`, margin, yPos);
-      doc.text(`${item.quantity} ${item.defaultUnit}`, thermalWidth - margin, yPos, { align: 'right' });
-      yPos += 5;
+      const itemName = item.name.length > 22 ? item.name.substring(0, 19) + '...' : item.name;
+      doc.text(`${index + 1}. ${itemName}`, margin + 6, yPos);
+      doc.text(`${item.quantity}`, thermalWidth - margin - 12, yPos);
+      
+      // Draw availability checkbox at the end
+      doc.rect(thermalWidth - margin - 5, yPos - 3.5, 4, 4);
+      
+      yPos += 6;
     });
 
     // Summary divider
@@ -356,7 +366,13 @@ export default function ShoppingList() {
     doc.text(`Total Items: ${selectedItems.length}`, margin, yPos);
     yPos += 4;
     doc.text(`Total Qty: ${selectedItems.reduce((sum, item) => sum + item.quantity, 0)}`, margin, yPos);
-    yPos += 6;
+    yPos += 5;
+
+    // Availability check instruction
+    doc.setFontSize(8);
+    doc.setFont('times', 'italic');
+    doc.text('☐ = Tick if available before surgery', margin, yPos);
+    yPos += 5;
 
     // Footer divider
     doc.setLineWidth(0.3);
