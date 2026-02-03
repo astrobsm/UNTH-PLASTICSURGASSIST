@@ -504,7 +504,7 @@ async function createTables() {
     -- MDT Patient Teams table (Multidisciplinary Team)
     CREATE TABLE IF NOT EXISTS mdt_patient_teams (
       id SERIAL PRIMARY KEY,
-      patient_id INTEGER REFERENCES patients(id) ON DELETE CASCADE,
+      patient_id INTEGER REFERENCES patients(id) ON DELETE CASCADE UNIQUE,
       patient_name VARCHAR(255),
       hospital_number VARCHAR(100),
       primary_specialty VARCHAR(255) DEFAULT 'Plastic Surgery',
