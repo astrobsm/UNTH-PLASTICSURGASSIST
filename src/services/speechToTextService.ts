@@ -119,7 +119,10 @@ class SpeechToTextService {
   private recognition: any = null;
   private isListening: boolean = false;
   private currentTranscript: string = '';
+  private finalizedTranscript: string = '';  // Track what's been finalized
+  private lastFinalIndex: number = 0;        // Track last finalized result index
   private options: SpeechToTextOptions = {};
+  private sessionId: number = 0;             // Track unique session
 
   constructor() {
     this.initializeRecognition();
@@ -156,6 +159,9 @@ class SpeechToTextService {
 
     this.options = options;
     this.currentTranscript = '';
+    this.finalizedTranscript = '';
+    this.lastFinalIndex = 0;
+    this.sessionId = Date.now();
 
     // Configure recognition
     this.recognition.lang = options.language || 'en-US';
@@ -166,34 +172,44 @@ class SpeechToTextService {
     // Set up event handlers
     this.recognition.onstart = () => {
       this.isListening = true;
-      console.log('🎤 Speech recognition started');
+      console.log('🎤 Speech recognition started (session:', this.sessionId, ')');
       this.options.onStart?.();
     };
 
     this.recognition.onresult = (event: any) => {
-      let interimTranscript = '';
-      let finalTranscript = '';
-
-      for (let i = event.resultIndex; i < event.results.length; i++) {
+      // Build the complete transcript from all results
+      let fullTranscript = '';
+      let currentInterim = '';
+      
+      // Process all results from the beginning to ensure we don't lose anything
+      for (let i = 0; i < event.results.length; i++) {
         const result = event.results[i];
         const transcript = result[0].transcript;
-        const confidence = result[0].confidence;
-
+        
         if (result.isFinal) {
-          finalTranscript += transcript;
-          this.currentTranscript += this.correctMedicalTerms(transcript);
+          // Add finalized text with medical corrections
+          fullTranscript += this.correctMedicalTerms(transcript);
         } else {
-          interimTranscript += transcript;
+          // Current interim (only the latest non-final)
+          currentInterim = transcript;
         }
-
-        this.options.onResult?.({
-          transcript: result.isFinal 
-            ? this.correctMedicalTerms(transcript) 
-            : transcript,
-          confidence: confidence || 0.9,
-          isFinal: result.isFinal
-        });
       }
+      
+      // Store the finalized transcript
+      this.finalizedTranscript = fullTranscript;
+      this.currentTranscript = fullTranscript + (currentInterim ? ' ' + currentInterim : '');
+      
+      // Send the result
+      // For isFinal, send the complete finalized transcript
+      // For interim, send what's being spoken now
+      const latestResult = event.results[event.results.length - 1];
+      const isFinal = latestResult.isFinal;
+      
+      this.options.onResult?.({
+        transcript: isFinal ? this.finalizedTranscript : this.currentTranscript,
+        confidence: latestResult[0].confidence || 0.9,
+        isFinal: isFinal
+      });
     };
 
     this.recognition.onerror = (event: any) => {

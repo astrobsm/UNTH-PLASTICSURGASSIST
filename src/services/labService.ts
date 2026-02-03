@@ -2,6 +2,7 @@ import { db } from '../db/database';
 import { aiService } from './aiService';
 import { apiClient } from './apiClient';
 import { syncService } from '../db/syncService';
+import toast from 'react-hot-toast';
 
 // Lab Investigation Interfaces
 export interface LabInvestigation {
@@ -349,6 +350,59 @@ class LabService {
   }
 
   async getLabInvestigations(patientId?: string): Promise<LabInvestigation[]> {
+    // Try to fetch from server first for cross-device sync
+    try {
+      if (navigator.onLine && apiClient.getToken()) {
+        const endpoint = patientId ? `/lab-orders?patientId=${patientId}` : '/lab-orders';
+        const response = await apiClient.request(endpoint);
+        
+        // Handle different response structures
+        const serverData = response?.labOrders || response?.data || response || [];
+        
+        if (Array.isArray(serverData) && serverData.length > 0) {
+          console.log(`📥 Syncing ${serverData.length} lab orders from server...`);
+          
+          // Sync server data to local DB
+          for (const serverItem of serverData) {
+            try {
+              // Transform server data to local format
+              const localFormat: LabInvestigation = {
+                id: serverItem.id?.toString() || `lab_inv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                patient_id: serverItem.patient_id?.toString() || '',
+                patient_name: serverItem.first_name && serverItem.last_name 
+                  ? `${serverItem.first_name} ${serverItem.last_name}`
+                  : serverItem.patient_name || 'Unknown Patient',
+                request_date: new Date(serverItem.ordered_at || serverItem.request_date || serverItem.created_at),
+                requested_by: serverItem.ordered_by_name || serverItem.requested_by || 'Unknown',
+                urgency: serverItem.priority || serverItem.urgency || 'routine',
+                clinical_indication: serverItem.clinical_notes || serverItem.clinical_indication || '',
+                tests: this.parseTests(serverItem),
+                status: serverItem.status || 'pending',
+                collection_date: serverItem.collection_date ? new Date(serverItem.collection_date) : undefined,
+                collection_notes: serverItem.collection_notes,
+                special_instructions: serverItem.special_instructions,
+                created_at: new Date(serverItem.created_at || Date.now()),
+                updated_at: new Date(serverItem.updated_at || Date.now())
+              };
+
+              // Check if exists locally and update/insert
+              const existingLocal = await db.lab_investigations.get(localFormat.id);
+              if (existingLocal) {
+                await db.lab_investigations.put({ ...localFormat, synced: true });
+              } else {
+                await db.lab_investigations.add({ ...localFormat, synced: true } as any);
+              }
+            } catch (itemErr) {
+              console.warn('Failed to sync lab order:', itemErr);
+            }
+          }
+        }
+      }
+    } catch (syncError) {
+      console.warn('Failed to sync lab orders from server (will use local data):', syncError);
+    }
+
+    // Return local data (now synced with server)
     if (patientId) {
       return await db.lab_investigations
         .where('patient_id')
@@ -361,6 +415,31 @@ class LabService {
       .orderBy('request_date')
       .reverse()
       .toArray();
+  }
+
+  // Helper to parse tests from server response
+  private parseTests(serverItem: any): LabTest[] {
+    // If tests are already in array format
+    if (Array.isArray(serverItem.tests)) {
+      return serverItem.tests;
+    }
+    
+    // Parse from test_name/test_type if single test
+    if (serverItem.test_name || serverItem.test_type) {
+      const testNames = (serverItem.test_name || '').split(',').map((t: string) => t.trim()).filter(Boolean);
+      return testNames.map((name: string, index: number) => ({
+        id: `test_${serverItem.id}_${index}`,
+        test_code: name.substring(0, 4).toUpperCase(),
+        test_name: name,
+        category: (serverItem.test_type || 'biochemistry') as LabCategory,
+        sample_type: 'blood' as const,
+        fasting_required: false,
+        status: serverItem.status || 'pending',
+        priority: index + 1
+      }));
+    }
+    
+    return [];
   }
 
   async updateInvestigationStatus(id: string, status: LabInvestigation['status']): Promise<void> {

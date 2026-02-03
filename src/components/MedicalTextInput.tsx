@@ -94,6 +94,8 @@ export const MedicalTextInput: React.FC<MedicalTextInputProps> = ({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const baseTextRef = useRef<string>('');
+  const lastFinalTranscriptRef = useRef<string>('');
 
   // Check speech recognition support
   useEffect(() => {
@@ -101,18 +103,29 @@ export const MedicalTextInput: React.FC<MedicalTextInputProps> = ({
     setIsSpeechSupported(!!SpeechRecognition);
   }, []);
 
-  // Speech recognition handlers
+  // Speech recognition handlers - IMPROVED to prevent text wiping and repetition
   const handleSpeechResult = useCallback((result: SpeechRecognitionResult) => {
     if (result.isFinal) {
-      const newValue = value 
-        ? `${value} ${result.transcript}`.trim()
-        : result.transcript;
-      onChange(newValue);
+      // The service now sends the COMPLETE finalized transcript
+      // We combine with the base text that existed before speech started
+      const baseText = baseTextRef.current.trim();
+      const newSpeechText = result.transcript.trim();
+      
+      // Only update if we have new content and it's different from last
+      if (newSpeechText && newSpeechText !== lastFinalTranscriptRef.current) {
+        lastFinalTranscriptRef.current = newSpeechText;
+        
+        const newValue = baseText 
+          ? `${baseText} ${newSpeechText}`
+          : newSpeechText;
+        onChange(newValue);
+      }
       setInterimTranscript('');
     } else {
+      // Show interim results as preview
       setInterimTranscript(result.transcript);
     }
-  }, [value, onChange]);
+  }, [onChange]);
 
   const handleSpeechError = useCallback((error: string) => {
     setInputError(error);
@@ -134,6 +147,9 @@ export const MedicalTextInput: React.FC<MedicalTextInputProps> = ({
     } else {
       setInputError(null);
       setOriginalValue(value);
+      // Store the current text as base for this speech session
+      baseTextRef.current = value;
+      lastFinalTranscriptRef.current = '';
       
       try {
         speechToTextService.startListening({

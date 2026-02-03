@@ -33,6 +33,8 @@ import { db } from '../db/database';
 import { patientService } from '../services/patientService';
 import { logDataExport } from '../services/auditLoggingService';
 import { useAuthStore } from '../store/authStore';
+import { dataSyncService } from '../services/dataSyncService';
+import toast from 'react-hot-toast';
 
 type LabTab = 'investigations' | 'results' | 'upload' | 'trends' | 'requests' | 'gfr';
 
@@ -47,15 +49,44 @@ export default function Labs() {
   const [searchQuery, setSearchQuery] = useState('');
   const [labStats, setLabStats] = useState<any>(null);
   const [patients, setPatients] = useState<any[]>([]);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
     loadPatients();
+    // Trigger sync on component mount
+    handleSync();
   }, []);
 
   useEffect(() => {
     loadLabData();
     loadLabStatistics();
   }, [selectedPatient]);
+
+  // Set up periodic sync every 30 seconds for real-time cross-device updates
+  useEffect(() => {
+    const syncInterval = setInterval(() => {
+      if (navigator.onLine && !isSyncing) {
+        loadLabData();
+      }
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(syncInterval);
+  }, [selectedPatient, isSyncing]);
+
+  const handleSync = async () => {
+    if (isSyncing) return;
+    setIsSyncing(true);
+    try {
+      await dataSyncService.performFullSync();
+      await loadLabData();
+      await loadLabStatistics();
+      toast.success('Data synced successfully!', { duration: 2000 });
+    } catch (error) {
+      console.error('Sync failed:', error);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const loadPatients = async () => {
     try {
@@ -152,6 +183,24 @@ export default function Labs() {
                   </option>
                 ))}
               </select>
+              {/* Sync Button for Cross-Device Sync */}
+              <button
+                onClick={handleSync}
+                disabled={isSyncing}
+                className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-colors ${
+                  isSyncing
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : 'bg-green-600 text-white hover:bg-green-700'
+                }`}
+                title="Sync data across devices"
+              >
+                {isSyncing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+                <span className="hidden sm:inline">{isSyncing ? 'Syncing...' : 'Sync'}</span>
+              </button>
             </div>
           </div>
         </div>
@@ -259,6 +308,8 @@ export default function Labs() {
 
 // Investigations Section Component
 const InvestigationsSection = ({ investigations, onRefresh, searchQuery }: any) => {
+  const [selectedInvestigation, setSelectedInvestigation] = useState<LabInvestigation | null>(null);
+  
   const filteredInvestigations = investigations.filter((inv: LabInvestigation) =>
     inv.patient_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     inv.clinical_indication.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -311,7 +362,11 @@ const InvestigationsSection = ({ investigations, onRefresh, searchQuery }: any) 
                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${getUrgencyColor(investigation.urgency)}`}>
                   {investigation.urgency.toUpperCase()}
                 </span>
-                <button className="p-2 text-gray-600 hover:text-blue-600 transition-colors">
+                <button 
+                  onClick={() => setSelectedInvestigation(investigation)}
+                  className="p-2 text-gray-600 hover:text-blue-600 transition-colors"
+                  title="View Investigation Details"
+                >
                   <Eye className="h-4 w-4" />
                 </button>
               </div>
@@ -366,6 +421,180 @@ const InvestigationsSection = ({ investigations, onRefresh, searchQuery }: any) 
             </div>
           </div>
         ))}
+      </div>
+      
+      {/* Investigation Detail Modal */}
+      {selectedInvestigation && (
+        <InvestigationDetailModal
+          investigation={selectedInvestigation}
+          onClose={() => setSelectedInvestigation(null)}
+        />
+      )}
+    </div>
+  );
+};
+
+// Investigation Detail Modal Component
+const InvestigationDetailModal = ({ investigation, onClose }: { investigation: LabInvestigation; onClose: () => void }) => {
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'completed': return 'bg-green-100 text-green-800';
+      case 'processing': return 'bg-blue-100 text-blue-800';
+      case 'collected': return 'bg-yellow-100 text-yellow-800';
+      case 'cancelled': return 'bg-red-100 text-red-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getUrgencyColor = (urgency: string) => {
+    switch (urgency) {
+      case 'stat': return 'bg-red-100 text-red-800';
+      case 'urgent': return 'bg-orange-100 text-orange-800';
+      default: return 'bg-green-100 text-green-800';
+    }
+  };
+
+  const getTestStatusIcon = (status: string) => {
+    switch (status) {
+      case 'completed': return <CheckCircle className="h-4 w-4 text-green-600" />;
+      case 'processing': return <Clock className="h-4 w-4 text-blue-600" />;
+      case 'collected': return <TestTube className="h-4 w-4 text-yellow-600" />;
+      default: return <Clock className="h-4 w-4 text-gray-400" />;
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        {/* Header */}
+        <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <TestTube className="h-6 w-6 text-green-600" />
+            <h2 className="text-xl font-bold text-gray-900">Investigation Details</h2>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 space-y-6">
+          {/* Patient & Request Info */}
+          <div className="bg-gray-50 rounded-lg p-4">
+            <h3 className="font-semibold text-gray-900 mb-3 flex items-center space-x-2">
+              <FileText className="h-5 w-5 text-gray-600" />
+              <span>Patient Information</span>
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <span className="text-sm text-gray-500">Patient Name</span>
+                <p className="font-medium text-gray-900">{investigation.patient_name}</p>
+              </div>
+              <div>
+                <span className="text-sm text-gray-500">Request Date</span>
+                <p className="font-medium text-gray-900">{format(new Date(investigation.request_date), 'MMM d, yyyy')}</p>
+              </div>
+              <div>
+                <span className="text-sm text-gray-500">Requested By</span>
+                <p className="font-medium text-gray-900">{investigation.requested_by}</p>
+              </div>
+              <div>
+                <span className="text-sm text-gray-500">Status</span>
+                <p className={`inline-block px-2 py-1 rounded text-sm font-medium ${getStatusColor(investigation.status)}`}>
+                  {investigation.status.toUpperCase()}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Clinical Details */}
+          <div className="bg-blue-50 rounded-lg p-4">
+            <h3 className="font-semibold text-gray-900 mb-3 flex items-center space-x-2">
+              <Brain className="h-5 w-5 text-blue-600" />
+              <span>Clinical Details</span>
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <span className="text-sm text-gray-500">Urgency</span>
+                <p className={`inline-block px-2 py-1 rounded text-sm font-medium ${getUrgencyColor(investigation.urgency)}`}>
+                  {investigation.urgency.toUpperCase()}
+                </p>
+              </div>
+              <div>
+                <span className="text-sm text-gray-500">Collection Date</span>
+                <p className="font-medium text-gray-900">
+                  {investigation.collection_date 
+                    ? format(new Date(investigation.collection_date), 'MMM d, yyyy')
+                    : 'Not collected yet'}
+                </p>
+              </div>
+              <div className="col-span-2">
+                <span className="text-sm text-gray-500">Clinical Indication</span>
+                <p className="font-medium text-gray-900">{investigation.clinical_indication || 'N/A'}</p>
+              </div>
+              {investigation.special_instructions && (
+                <div className="col-span-2">
+                  <span className="text-sm text-gray-500">Special Instructions</span>
+                  <p className="font-medium text-gray-900">{investigation.special_instructions}</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Tests List */}
+          <div>
+            <h3 className="font-semibold text-gray-900 mb-3 flex items-center space-x-2">
+              <TestTube className="h-5 w-5 text-green-600" />
+              <span>Ordered Tests ({investigation.tests?.length || 0})</span>
+            </h3>
+            <div className="space-y-2">
+              {investigation.tests && investigation.tests.length > 0 ? (
+                investigation.tests.map((test: LabTest) => (
+                  <div key={test.id} className="border border-gray-200 rounded-lg p-3 flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      {getTestStatusIcon(test.status)}
+                      <div>
+                        <p className="font-medium text-gray-900">{test.test_name}</p>
+                        <p className="text-sm text-gray-500">
+                          {test.category} • {test.sample_type}
+                          {test.fasting_required && ' • Fasting Required'}
+                        </p>
+                      </div>
+                    </div>
+                    <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(test.status)}`}>
+                      {test.status.toUpperCase()}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <p className="text-gray-500 text-center py-4">No tests found for this investigation</p>
+              )}
+            </div>
+          </div>
+
+          {/* Collection Notes */}
+          {investigation.collection_notes && (
+            <div className="bg-yellow-50 rounded-lg p-4">
+              <h3 className="font-semibold text-gray-900 mb-2">Collection Notes</h3>
+              <p className="text-gray-700">{investigation.collection_notes}</p>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="sticky bottom-0 bg-gray-50 border-t px-6 py-4 flex justify-end">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+          >
+            Close
+          </button>
+        </div>
       </div>
     </div>
   );

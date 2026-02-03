@@ -479,7 +479,7 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify(labData)
     });
-    return data.investigation;
+    return data.labOrder || data.investigation || data;
   }
 
   async getLabInvestigations(patientId?: string, since?: string) {
@@ -487,7 +487,7 @@ class ApiClient {
     if (patientId) query += `?patientId=${patientId}`;
     if (since) query += (query ? '&' : '?') + `since=${since}`;
     const data = await this.request(`/lab-orders${query}`);
-    return data.investigations || [];
+    return data.labOrders || data.investigations || [];
   }
 
   async updateLabInvestigation(id: string, labData: any) {
@@ -495,7 +495,7 @@ class ApiClient {
       method: 'PUT',
       body: JSON.stringify(labData)
     });
-    return data.investigation;
+    return data.labOrder || data.investigation || data;
   }
 
   // Lab results
