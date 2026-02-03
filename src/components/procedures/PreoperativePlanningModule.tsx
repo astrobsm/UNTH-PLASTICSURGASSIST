@@ -621,106 +621,159 @@ export const PreoperativePlanningModule: React.FC<PreoperativePlanningModuleProp
     // 80mm = ~226 points width
     const thermalWidth = 80;
     const investigations = formData.generatedInvestigations;
-    const estimatedHeight = 120 + (investigations.length * 8);
     
-    const doc = new jsPDF({
-      orientation: 'portrait',
-      unit: 'mm',
-      format: [thermalWidth, estimatedHeight]
-    });
-
-    const margin = 3;
-    let yPos = margin;
-
-    // Set Georgia-like font (Times is closest available)
-    doc.setFont('times', 'normal');
-    
-    // Header
-    doc.setFontSize(10);
-    doc.setFont('times', 'bold');
-    doc.text('UNTH LABORATORY REQUEST', thermalWidth / 2, yPos, { align: 'center' });
-    yPos += 5;
-    
-    doc.setFontSize(8);
-    doc.setFont('times', 'normal');
-    doc.text('Plastic & Reconstructive Surgery', thermalWidth / 2, yPos, { align: 'center' });
-    yPos += 5;
-
-    // Divider
-    doc.setLineWidth(0.3);
-    doc.line(margin, yPos, thermalWidth - margin, yPos);
-    yPos += 4;
-
-    // Patient Info
-    doc.setFontSize(10);
-    doc.setFont('times', 'bold');
-    doc.text('PATIENT DETAILS', margin, yPos);
-    yPos += 4;
-    
-    doc.setFont('times', 'normal');
-    doc.text(`Name: ${patient?.full_name || 'N/A'}`, margin, yPos);
-    yPos += 4;
-    doc.text(`Hosp #: ${patient?.hospital_number || 'N/A'}`, margin, yPos);
-    yPos += 4;
-    doc.text(`Date: ${new Date().toLocaleDateString()}`, margin, yPos);
-    yPos += 4;
-    doc.text(`Time: ${new Date().toLocaleTimeString()}`, margin, yPos);
-    yPos += 5;
-
-    // Procedure Info
-    doc.setFont('times', 'bold');
-    doc.text(`Procedure: ${formData.procedureName || formData.procedureType}`, margin, yPos);
-    yPos += 4;
-    doc.setFont('times', 'normal');
-    doc.text(`Priority: ${formData.urgency.toUpperCase()}`, margin, yPos);
-    yPos += 5;
-
-    // Divider
-    doc.line(margin, yPos, thermalWidth - margin, yPos);
-    yPos += 4;
-
-    // Investigations
-    doc.setFontSize(10);
-    doc.setFont('times', 'bold');
-    doc.text('INVESTIGATIONS REQUIRED', margin, yPos);
-    yPos += 5;
-
-    doc.setFontSize(9);
-    doc.setFont('times', 'normal');
-
-    // Group by category
+    // Group by category first
     const byCategory = investigations.reduce((acc, inv) => {
       if (!acc[inv.category]) acc[inv.category] = [];
       acc[inv.category].push(inv);
       return acc;
     }, {} as Record<string, Investigation[]>);
 
-    Object.entries(byCategory).forEach(([category, invs]) => {
-      doc.setFont('times', 'bold');
-      doc.text(`[${category}]`, margin, yPos);
-      yPos += 4;
-      
-      doc.setFont('times', 'normal');
-      invs.forEach((inv, idx) => {
-        const priority = inv.priority === 'stat' ? '!!' : inv.priority === 'urgent' ? '!' : '';
-        doc.text(`${idx + 1}. ${inv.name} ${priority}`, margin + 2, yPos);
-        yPos += 4;
-      });
-      yPos += 2;
+    const categories = Object.keys(byCategory);
+    
+    // Calculate page height for each category (enough for header + patient details + investigations)
+    const getPageHeight = (numInvestigations: number) => {
+      return Math.max(100, 80 + (numInvestigations * 6));
+    };
+
+    // Create first page
+    const firstCategory = categories[0];
+    const firstPageHeight = getPageHeight(byCategory[firstCategory]?.length || 0);
+    
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: [thermalWidth, firstPageHeight]
     });
 
-    // Footer
-    yPos += 2;
-    doc.line(margin, yPos, thermalWidth - margin, yPos);
-    yPos += 4;
-    
-    doc.setFontSize(8);
-    doc.text(`Requested by: ${formData.assessedBy}`, margin, yPos);
-    yPos += 4;
-    doc.text('!! = STAT  ! = Urgent', margin, yPos);
-    yPos += 4;
-    doc.setFont('times', 'bold');
-    doc.text('PRE-OPERATIVE ASSESSMENT', thermalWidth / 2, yPos, { align: 'center' });
+    const margin = 3;
+
+    // Helper function to add patient header on each page
+    const addPatientHeader = (category: string, pageHeight: number) => {
+      let yPos = margin;
+      
+      // Set Georgia-like font (Times is closest available)
+      doc.setFont('times', 'normal');
+      
+      // Header
+      doc.setFontSize(10);
+      doc.setFont('times', 'bold');
+      doc.text('UNTH LABORATORY REQUEST', thermalWidth / 2, yPos, { align: 'center' });
+      yPos += 5;
+      
+      doc.setFontSize(8);
+      doc.setFont('times', 'normal');
+      doc.text('Plastic & Reconstructive Surgery', thermalWidth / 2, yPos, { align: 'center' });
+      yPos += 4;
+
+      // Divider
+      doc.setLineWidth(0.3);
+      doc.line(margin, yPos, thermalWidth - margin, yPos);
+      yPos += 4;
+
+      // Patient Info Section
+      doc.setFontSize(9);
+      doc.setFont('times', 'bold');
+      doc.text('PATIENT DETAILS', margin, yPos);
+      yPos += 4;
+      
+      doc.setFontSize(10);
+      doc.setFont('times', 'normal');
+      const patientName = patient?.full_name || `${patient?.first_name || ''} ${patient?.last_name || ''}`.trim() || 'N/A';
+      doc.text(`Name: ${patientName}`, margin, yPos);
+      yPos += 4;
+      doc.text(`Hospital #: ${patient?.hospital_number || 'N/A'}`, margin, yPos);
+      yPos += 4;
+      
+      const age = patient?.date_of_birth ? calculateAge(patient.date_of_birth) : 'N/A';
+      const gender = patient?.gender ? patient.gender.charAt(0).toUpperCase() + patient.gender.slice(1) : 'N/A';
+      doc.text(`Age/Sex: ${age} years / ${gender}`, margin, yPos);
+      yPos += 4;
+      
+      doc.text(`Date: ${new Date().toLocaleDateString()}`, margin, yPos);
+      yPos += 4;
+      doc.text(`Time: ${new Date().toLocaleTimeString()}`, margin, yPos);
+      yPos += 4;
+
+      // Procedure Info
+      doc.setFont('times', 'bold');
+      const procName = formData.procedureName || formData.procedureType || 'N/A';
+      const truncatedProc = procName.length > 30 ? procName.substring(0, 27) + '...' : procName;
+      doc.text(`Procedure: ${truncatedProc}`, margin, yPos);
+      yPos += 4;
+      doc.setFont('times', 'normal');
+      doc.text(`Priority: ${formData.urgency.toUpperCase()}`, margin, yPos);
+      yPos += 4;
+
+      // Divider
+      doc.line(margin, yPos, thermalWidth - margin, yPos);
+      yPos += 4;
+
+      // Category Header
+      doc.setFontSize(12);
+      doc.setFont('times', 'bold');
+      doc.text(`[ ${category.toUpperCase()} ]`, thermalWidth / 2, yPos, { align: 'center' });
+      yPos += 6;
+
+      return yPos;
+    };
+
+    // Helper function to add footer on each page
+    const addPageFooter = (yPos: number) => {
+      doc.setLineWidth(0.3);
+      doc.line(margin, yPos, thermalWidth - margin, yPos);
+      yPos += 4;
+      
+      doc.setFontSize(8);
+      doc.setFont('times', 'normal');
+      doc.text(`Requested by: ${formData.assessedBy}`, margin, yPos);
+      yPos += 4;
+      doc.text('!! = STAT  ! = Urgent', margin, yPos);
+      yPos += 4;
+      doc.setFont('times', 'bold');
+      doc.text('PRE-OPERATIVE ASSESSMENT', thermalWidth / 2, yPos, { align: 'center' });
+    };
+
+    // Helper function to calculate age
+    const calculateAge = (dob: string): number => {
+      const birthDate = new Date(dob);
+      const today = new Date();
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const monthDiff = today.getMonth() - birthDate.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+      }
+      return age;
+    };
+
+    // Generate pages for each category
+    categories.forEach((category, pageIndex) => {
+      const invs = byCategory[category];
+      const pageHeight = getPageHeight(invs.length);
+      
+      if (pageIndex > 0) {
+        // Add new page for subsequent categories
+        doc.addPage([thermalWidth, pageHeight]);
+      }
+      
+      // Add patient header
+      let yPos = addPatientHeader(category, pageHeight);
+
+      // List investigations for this category
+      doc.setFontSize(10);
+      doc.setFont('times', 'normal');
+      
+      invs.forEach((inv, idx) => {
+        const priority = inv.priority === 'stat' ? ' !!' : inv.priority === 'urgent' ? ' !' : '';
+        doc.text(`${idx + 1}. ${inv.name}${priority}`, margin + 2, yPos);
+        yPos += 5;
+      });
+
+      yPos += 3;
+
+      // Add footer
+      addPageFooter(yPos);
+    });
 
     // Save
     const filename = `LabRequest_${patient?.hospital_number || 'patient'}_${new Date().toISOString().split('T')[0]}.pdf`;
