@@ -63,6 +63,34 @@ export default async function handler(req, res) {
         if (action === 'mdt-contact-logs' || action === 'mdt_contact_logs') {
           return await getSyncEntity('mdt_contact_logs', res);
         }
+        // Clinical assessment tables
+        if (action === 'blood-transfusions' || action === 'blood_transfusions') {
+          return await getSyncEntity('blood_transfusions', res);
+        }
+        if (action === 'burn-patients' || action === 'burn_patients') {
+          return await getSyncEntity('burn_patients', res);
+        }
+        if (action === 'diabetic-foot-assessments' || action === 'diabetic_foot_assessments') {
+          return await getSyncEntity('diabetic_foot_assessments', res);
+        }
+        if (action === 'preoperative-assessments' || action === 'preoperative_assessments') {
+          return await getSyncEntity('preoperative_assessments', res);
+        }
+        if (action === 'dvt-assessments' || action === 'dvt_assessments') {
+          return await getSyncEntity('dvt_assessments', res);
+        }
+        if (action === 'pressure-sore-assessments' || action === 'pressure_sore_assessments') {
+          return await getSyncEntity('pressure_sore_assessments', res);
+        }
+        if (action === 'nutritional-assessments' || action === 'nutritional_assessments') {
+          return await getSyncEntity('nutritional_assessments', res);
+        }
+        if (action === 'procedures') {
+          return await getSyncEntity('procedures', res);
+        }
+        if (action === 'who-safety-checklists' || action === 'who_safety_checklists') {
+          return await getSyncEntity('who_safety_checklists', res);
+        }
         return await getSyncStatus(auth.user, res);
       default:
         res.status(405).json({ error: 'Method not allowed' });
@@ -181,6 +209,65 @@ async function handlePush(data, user, res) {
           continue;
         }
       }
+
+      // Handle clinical assessment entities with upsert
+      const clinicalEntities = [
+        'blood_transfusions', 'burn_patients', 'diabetic_foot_assessments',
+        'preoperative_assessments', 'dvt_assessments', 'pressure_sore_assessments',
+        'nutritional_assessments', 'procedures', 'who_safety_checklists'
+      ];
+      
+      if (clinicalEntities.includes(entityType) && payload) {
+        try {
+          // Build dynamic upsert query
+          const columns = Object.keys(payload).filter(k => k !== 'id' && k !== 'serverId' && k !== 'synced');
+          const values = columns.map(k => {
+            const v = payload[k];
+            return typeof v === 'object' ? JSON.stringify(v) : v;
+          });
+          const placeholders = columns.map((_, i) => `$${i + 1}`).join(', ');
+          
+          // Check if record exists by patient_id or id
+          const existingId = payload.serverId || payload.id;
+          let existing = null;
+          if (existingId) {
+            existing = await query(`SELECT id FROM ${entityType} WHERE id = $1`, [existingId]);
+          } else if (payload.patient_id) {
+            // For some entities, check by patient_id + date
+            const dateField = entityType.includes('assessment') ? 'assessment_date' : 
+                             entityType === 'blood_transfusions' ? 'transfusion_date' :
+                             entityType === 'burn_patients' ? 'admission_date' :
+                             entityType === 'procedures' ? 'procedure_date' : 'checklist_date';
+            if (payload[dateField]) {
+              existing = await query(
+                `SELECT id FROM ${entityType} WHERE patient_id = $1 AND ${dateField} = $2`,
+                [payload.patient_id, payload[dateField]]
+              );
+            }
+          }
+          
+          if (existing && existing.rows.length > 0) {
+            // Update
+            const setClause = columns.map((col, i) => `${col} = $${i + 1}`).join(', ');
+            await query(
+              `UPDATE ${entityType} SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = $${columns.length + 1}`,
+              [...values, existing.rows[0].id]
+            );
+          } else {
+            // Insert
+            await query(
+              `INSERT INTO ${entityType} (${columns.join(', ')}) VALUES (${placeholders})`,
+              values
+            );
+          }
+          results.push({ entityId, status: 'synced' });
+          continue;
+        } catch (err) {
+          console.error(`Error syncing ${entityType}:`, err);
+          results.push({ entityId, status: 'error', message: err.message });
+          continue;
+        }
+      }
       
       // Queue other changes for processing
       await query(
@@ -223,10 +310,26 @@ async function handlePull(data, user, res) {
     woundCare: { table: 'wound_care_records', userField: null },
     ward_rounds: { table: 'ward_rounds', userField: null },
     discharges: { table: 'discharge_summaries', userField: null },
+    discharge_summaries: { table: 'discharge_summaries', userField: null },
     // MDT tables
     mdt_patient_teams: { table: 'mdt_patient_teams', userField: null },
     mdt_meetings: { table: 'mdt_meetings', userField: null },
-    mdt_contact_logs: { table: 'mdt_contact_logs', userField: null }
+    mdt_contact_logs: { table: 'mdt_contact_logs', userField: null },
+    // Clinical assessment tables
+    blood_transfusions: { table: 'blood_transfusions', userField: null },
+    burn_patients: { table: 'burn_patients', userField: null },
+    diabetic_foot_assessments: { table: 'diabetic_foot_assessments', userField: null },
+    preoperative_assessments: { table: 'preoperative_assessments', userField: null },
+    dvt_assessments: { table: 'dvt_assessments', userField: null },
+    pressure_sore_assessments: { table: 'pressure_sore_assessments', userField: null },
+    nutritional_assessments: { table: 'nutritional_assessments', userField: null },
+    procedures: { table: 'procedures', userField: null },
+    who_safety_checklists: { table: 'who_safety_checklists', userField: null },
+    // CBT/Education tables
+    cbt_tests: { table: 'cbt_tests', userField: null },
+    cbt_attempts: { table: 'cbt_attempts', userField: 'user_id' },
+    activity_logs: { table: 'activity_logs', userField: 'user_id' },
+    duty_assignments: { table: 'duty_assignments', userField: 'user_id' }
   };
 
   for (const [entityName, config] of Object.entries(entityConfigs)) {

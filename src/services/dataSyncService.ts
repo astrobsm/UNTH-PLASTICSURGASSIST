@@ -35,7 +35,16 @@ export type SyncableEntity =
   | 'wound_care'
   | 'mdt_patient_teams'
   | 'mdt_meetings'
-  | 'mdt_contact_logs';
+  | 'mdt_contact_logs'
+  | 'blood_transfusions'
+  | 'burn_patients'
+  | 'diabetic_foot_assessments'
+  | 'preoperative_assessments'
+  | 'dvt_assessments'
+  | 'pressure_sore_assessments'
+  | 'nutritional_assessments'
+  | 'procedures'
+  | 'who_safety_checklists';
 
 // Sync status for each entity
 interface EntitySyncStatus {
@@ -85,7 +94,16 @@ class DataSyncService {
     wound_care: '/wound-care',
     mdt_patient_teams: '/sync/mdt-patient-teams',
     mdt_meetings: '/sync/mdt-meetings',
-    mdt_contact_logs: '/sync/mdt-contact-logs'
+    mdt_contact_logs: '/sync/mdt-contact-logs',
+    blood_transfusions: '/sync/blood-transfusions',
+    burn_patients: '/sync/burn-patients',
+    diabetic_foot_assessments: '/sync/diabetic-foot-assessments',
+    preoperative_assessments: '/sync/preoperative-assessments',
+    dvt_assessments: '/sync/dvt-assessments',
+    pressure_sore_assessments: '/sync/pressure-sore-assessments',
+    nutritional_assessments: '/sync/nutritional-assessments',
+    procedures: '/sync/procedures',
+    who_safety_checklists: '/sync/who-safety-checklists'
   };
 
   // Entity to IndexedDB table mapping
@@ -101,7 +119,16 @@ class DataSyncService {
     wound_care: 'wound_care',
     mdt_patient_teams: 'mdt_patient_teams',
     mdt_meetings: 'mdt_meetings',
-    mdt_contact_logs: 'mdt_contact_logs'
+    mdt_contact_logs: 'mdt_contact_logs',
+    blood_transfusions: 'blood_transfusions',
+    burn_patients: 'burn_patients',
+    diabetic_foot_assessments: 'diabetic_foot_assessments',
+    preoperative_assessments: 'preoperative_assessments',
+    dvt_assessments: 'dvt_assessments',
+    pressure_sore_assessments: 'pressure_sore_assessments',
+    nutritional_assessments: 'nutritional_assessments',
+    procedures: 'procedures',
+    who_safety_checklists: 'who_safety_checklists'
   };
 
   constructor() {
@@ -123,7 +150,10 @@ class DataSyncService {
     const entities: SyncableEntity[] = [
       'patients', 'admissions', 'discharges', 'treatment_plans',
       'prescriptions', 'lab_investigations', 'surgeries', 'ward_rounds', 'wound_care',
-      'mdt_patient_teams', 'mdt_meetings', 'mdt_contact_logs'
+      'mdt_patient_teams', 'mdt_meetings', 'mdt_contact_logs',
+      'blood_transfusions', 'burn_patients', 'diabetic_foot_assessments',
+      'preoperative_assessments', 'dvt_assessments', 'pressure_sore_assessments',
+      'nutritional_assessments', 'procedures', 'who_safety_checklists'
     ];
 
     entities.forEach(entity => {

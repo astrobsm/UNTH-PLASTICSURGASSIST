@@ -613,6 +613,251 @@ async function createTables() {
     CREATE INDEX IF NOT EXISTS idx_mdt_meetings_status ON mdt_meetings(status);
     CREATE INDEX IF NOT EXISTS idx_mdt_contacts_patient ON mdt_contact_logs(patient_id);
     CREATE INDEX IF NOT EXISTS idx_mdt_contacts_date ON mdt_contact_logs(contact_date);
+
+    -- Blood Transfusion Records table
+    CREATE TABLE IF NOT EXISTS blood_transfusions (
+      id SERIAL PRIMARY KEY,
+      patient_id INTEGER REFERENCES patients(id) ON DELETE CASCADE,
+      hospital_number VARCHAR(100),
+      patient_name VARCHAR(255),
+      transfusion_date DATE NOT NULL,
+      blood_product VARCHAR(100) NOT NULL,
+      blood_group VARCHAR(20),
+      units INTEGER DEFAULT 1,
+      indication TEXT,
+      pre_transfusion_hb DECIMAL(5,2),
+      post_transfusion_hb DECIMAL(5,2),
+      status VARCHAR(50) DEFAULT 'pending',
+      adverse_reactions TEXT,
+      administered_by VARCHAR(255),
+      verified_by VARCHAR(255),
+      notes TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Burn Patients table
+    CREATE TABLE IF NOT EXISTS burn_patients (
+      id SERIAL PRIMARY KEY,
+      patient_id INTEGER REFERENCES patients(id) ON DELETE CASCADE,
+      hospital_number VARCHAR(100),
+      patient_name VARCHAR(255),
+      admission_date DATE NOT NULL,
+      burn_date DATE,
+      mechanism VARCHAR(255),
+      tbsa_percentage DECIMAL(5,2) NOT NULL,
+      burn_depth VARCHAR(100),
+      burn_areas JSONB DEFAULT '[]',
+      inhalation_injury BOOLEAN DEFAULT FALSE,
+      baux_score INTEGER,
+      fluid_requirements JSONB DEFAULT '{}',
+      disposition VARCHAR(100),
+      status VARCHAR(50) DEFAULT 'admitted',
+      notes TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Diabetic Foot Assessments table (Limb Salvage)
+    CREATE TABLE IF NOT EXISTS diabetic_foot_assessments (
+      id SERIAL PRIMARY KEY,
+      patient_id INTEGER REFERENCES patients(id) ON DELETE CASCADE,
+      hospital_number VARCHAR(100),
+      patient_name VARCHAR(255),
+      assessment_date DATE NOT NULL,
+      affected_limb VARCHAR(50),
+      wagner_grade INTEGER,
+      texas_stage VARCHAR(10),
+      wifi_wound INTEGER,
+      wifi_ischemia INTEGER,
+      wifi_infection INTEGER,
+      wifi_score INTEGER,
+      abi_left DECIMAL(4,2),
+      abi_right DECIMAL(4,2),
+      tbi_left DECIMAL(4,2),
+      tbi_right DECIMAL(4,2),
+      risk_category VARCHAR(50),
+      treatment_plan TEXT,
+      amputation_risk VARCHAR(50),
+      status VARCHAR(50) DEFAULT 'active',
+      assessed_by VARCHAR(255),
+      notes TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Preoperative Assessments table
+    CREATE TABLE IF NOT EXISTS preoperative_assessments (
+      id SERIAL PRIMARY KEY,
+      patient_id INTEGER REFERENCES patients(id) ON DELETE CASCADE,
+      surgery_id INTEGER REFERENCES surgeries(id),
+      hospital_number VARCHAR(100),
+      patient_name VARCHAR(255),
+      assessment_date DATE NOT NULL,
+      asa_class INTEGER,
+      mallampati_score INTEGER,
+      airway_assessment JSONB DEFAULT '{}',
+      cardiovascular JSONB DEFAULT '{}',
+      respiratory JSONB DEFAULT '{}',
+      renal JSONB DEFAULT '{}',
+      hepatic JSONB DEFAULT '{}',
+      endocrine JSONB DEFAULT '{}',
+      hematologic JSONB DEFAULT '{}',
+      current_medications JSONB DEFAULT '[]',
+      allergies TEXT,
+      fasting_status TEXT,
+      consent_obtained BOOLEAN DEFAULT FALSE,
+      blood_available BOOLEAN DEFAULT FALSE,
+      icu_bed_reserved BOOLEAN DEFAULT FALSE,
+      fitness_for_surgery VARCHAR(50),
+      anesthesia_plan TEXT,
+      assessed_by VARCHAR(255),
+      notes TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- DVT Risk Assessments table
+    CREATE TABLE IF NOT EXISTS dvt_assessments (
+      id SERIAL PRIMARY KEY,
+      patient_id INTEGER REFERENCES patients(id) ON DELETE CASCADE,
+      hospital_number VARCHAR(100),
+      patient_name VARCHAR(255),
+      assessment_date DATE NOT NULL,
+      assessment_type VARCHAR(50) DEFAULT 'caprini',
+      risk_factors JSONB DEFAULT '[]',
+      score INTEGER DEFAULT 0,
+      risk_level VARCHAR(50),
+      prophylaxis_recommended TEXT,
+      prophylaxis_given BOOLEAN DEFAULT FALSE,
+      contraindications TEXT,
+      assessed_by VARCHAR(255),
+      status VARCHAR(50) DEFAULT 'active',
+      notes TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Pressure Sore Assessments table (Braden Scale)
+    CREATE TABLE IF NOT EXISTS pressure_sore_assessments (
+      id SERIAL PRIMARY KEY,
+      patient_id INTEGER REFERENCES patients(id) ON DELETE CASCADE,
+      hospital_number VARCHAR(100),
+      patient_name VARCHAR(255),
+      assessment_date DATE NOT NULL,
+      assessment_type VARCHAR(50) DEFAULT 'braden',
+      sensory_perception INTEGER,
+      moisture INTEGER,
+      activity INTEGER,
+      mobility INTEGER,
+      nutrition INTEGER,
+      friction_shear INTEGER,
+      score INTEGER DEFAULT 0,
+      risk_level VARCHAR(50),
+      prevention_measures JSONB DEFAULT '[]',
+      existing_ulcers JSONB DEFAULT '[]',
+      assessed_by VARCHAR(255),
+      status VARCHAR(50) DEFAULT 'active',
+      notes TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Nutritional Assessments table
+    CREATE TABLE IF NOT EXISTS nutritional_assessments (
+      id SERIAL PRIMARY KEY,
+      patient_id INTEGER REFERENCES patients(id) ON DELETE CASCADE,
+      hospital_number VARCHAR(100),
+      patient_name VARCHAR(255),
+      assessment_date DATE NOT NULL,
+      assessment_type VARCHAR(50) DEFAULT 'must',
+      bmi DECIMAL(5,2),
+      weight_loss_percentage DECIMAL(5,2),
+      acute_illness_effect BOOLEAN DEFAULT FALSE,
+      score INTEGER DEFAULT 0,
+      risk_level VARCHAR(50),
+      nutritional_plan TEXT,
+      dietitian_referral BOOLEAN DEFAULT FALSE,
+      supplements_prescribed JSONB DEFAULT '[]',
+      assessed_by VARCHAR(255),
+      status VARCHAR(50) DEFAULT 'active',
+      notes TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Procedures table (for surgical procedures tracking)
+    CREATE TABLE IF NOT EXISTS procedures (
+      id SERIAL PRIMARY KEY,
+      patient_id INTEGER REFERENCES patients(id) ON DELETE CASCADE,
+      surgery_id INTEGER REFERENCES surgeries(id),
+      hospital_number VARCHAR(100),
+      patient_name VARCHAR(255),
+      procedure_name VARCHAR(255) NOT NULL,
+      procedure_code VARCHAR(50),
+      procedure_type VARCHAR(100),
+      procedure_date DATE NOT NULL,
+      surgeon VARCHAR(255),
+      assistant VARCHAR(255),
+      anesthetist VARCHAR(255),
+      anesthesia_type VARCHAR(100),
+      duration_minutes INTEGER,
+      blood_loss_ml INTEGER,
+      findings TEXT,
+      complications TEXT,
+      implants_used JSONB DEFAULT '[]',
+      status VARCHAR(50) DEFAULT 'completed',
+      notes TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- WHO Safety Checklists table
+    CREATE TABLE IF NOT EXISTS who_safety_checklists (
+      id SERIAL PRIMARY KEY,
+      patient_id INTEGER REFERENCES patients(id) ON DELETE CASCADE,
+      surgery_id INTEGER REFERENCES surgeries(id),
+      procedure_id INTEGER REFERENCES procedures(id),
+      hospital_number VARCHAR(100),
+      patient_name VARCHAR(255),
+      procedure_name VARCHAR(255),
+      checklist_date DATE NOT NULL,
+      sign_in JSONB DEFAULT '{}',
+      time_out JSONB DEFAULT '{}',
+      sign_out JSONB DEFAULT '{}',
+      sign_in_completed BOOLEAN DEFAULT FALSE,
+      sign_in_by VARCHAR(255),
+      sign_in_at TIMESTAMP,
+      time_out_completed BOOLEAN DEFAULT FALSE,
+      time_out_by VARCHAR(255),
+      time_out_at TIMESTAMP,
+      sign_out_completed BOOLEAN DEFAULT FALSE,
+      sign_out_by VARCHAR(255),
+      sign_out_at TIMESTAMP,
+      overall_completion DECIMAL(5,2) DEFAULT 0,
+      issues_identified JSONB DEFAULT '[]',
+      status VARCHAR(50) DEFAULT 'in_progress',
+      notes TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Clinical indexes for new tables
+    CREATE INDEX IF NOT EXISTS idx_transfusions_patient ON blood_transfusions(patient_id);
+    CREATE INDEX IF NOT EXISTS idx_transfusions_date ON blood_transfusions(transfusion_date);
+    CREATE INDEX IF NOT EXISTS idx_burns_patient ON burn_patients(patient_id);
+    CREATE INDEX IF NOT EXISTS idx_burns_status ON burn_patients(status);
+    CREATE INDEX IF NOT EXISTS idx_diabetic_foot_patient ON diabetic_foot_assessments(patient_id);
+    CREATE INDEX IF NOT EXISTS idx_diabetic_foot_date ON diabetic_foot_assessments(assessment_date);
+    CREATE INDEX IF NOT EXISTS idx_preop_patient ON preoperative_assessments(patient_id);
+    CREATE INDEX IF NOT EXISTS idx_preop_surgery ON preoperative_assessments(surgery_id);
+    CREATE INDEX IF NOT EXISTS idx_dvt_patient ON dvt_assessments(patient_id);
+    CREATE INDEX IF NOT EXISTS idx_pressure_patient ON pressure_sore_assessments(patient_id);
+    CREATE INDEX IF NOT EXISTS idx_nutrition_patient ON nutritional_assessments(patient_id);
+    CREATE INDEX IF NOT EXISTS idx_procedures_patient ON procedures(patient_id);
+    CREATE INDEX IF NOT EXISTS idx_procedures_date ON procedures(procedure_date);
+    CREATE INDEX IF NOT EXISTS idx_who_checklist_patient ON who_safety_checklists(patient_id);
+    CREATE INDEX IF NOT EXISTS idx_who_checklist_surgery ON who_safety_checklists(surgery_id);
   `;
 
   await query(schema);
