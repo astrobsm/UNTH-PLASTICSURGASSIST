@@ -117,7 +117,72 @@ async function handlePush(data, user, res) {
     const { entityType, entityId, action, payload } = change;
     
     try {
-      // Queue the change for processing
+      // Handle MDT entities directly for immediate sync
+      if (entityType === 'mdt_patient_teams' && payload) {
+        const { patient_id, patient_name, hospital_number, primary_specialty, specialties } = payload;
+        if (patient_id) {
+          // Check if exists
+          const existing = await query('SELECT id FROM mdt_patient_teams WHERE patient_id = $1', [patient_id]);
+          if (existing.rows.length > 0) {
+            await query(
+              `UPDATE mdt_patient_teams SET patient_name = $1, hospital_number = $2, 
+               primary_specialty = $3, specialties = $4, updated_at = CURRENT_TIMESTAMP 
+               WHERE patient_id = $5`,
+              [patient_name, hospital_number, primary_specialty || 'Plastic Surgery', 
+               JSON.stringify(specialties || []), patient_id]
+            );
+          } else {
+            await query(
+              `INSERT INTO mdt_patient_teams (patient_id, patient_name, hospital_number, 
+               primary_specialty, specialties, is_active) VALUES ($1, $2, $3, $4, $5, true)`,
+              [patient_id, patient_name, hospital_number, primary_specialty || 'Plastic Surgery', 
+               JSON.stringify(specialties || [])]
+            );
+          }
+          results.push({ entityId, status: 'synced' });
+          continue;
+        }
+      }
+      
+      if (entityType === 'mdt_meetings' && payload) {
+        const { patient_id, meeting_date, meeting_title } = payload;
+        if (patient_id && meeting_date) {
+          await query(
+            `INSERT INTO mdt_meetings (patient_id, patient_name, hospital_number, meeting_title, 
+             meeting_date, meeting_time, location, meeting_type, status, agenda, 
+             attending_specialties, created_by) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+            [patient_id, payload.patient_name, payload.hospital_number, meeting_title,
+             meeting_date, payload.meeting_time, payload.location, payload.meeting_type || 'routine',
+             payload.status || 'scheduled', payload.agenda, 
+             JSON.stringify(payload.attending_specialties || []), payload.created_by]
+          );
+          results.push({ entityId, status: 'synced' });
+          continue;
+        }
+      }
+      
+      if (entityType === 'mdt_contact_logs' && payload) {
+        const { patient_id, contact_date, specialty_id } = payload;
+        if (patient_id && contact_date) {
+          await query(
+            `INSERT INTO mdt_contact_logs (patient_id, patient_name, hospital_number, 
+             specialty_id, specialty_name, contact_type, contact_date, contact_time, 
+             contacted_person, reason, discussion_summary, outcome, follow_up_required, 
+             follow_up_date, created_by) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+            [patient_id, payload.patient_name, payload.hospital_number, specialty_id,
+             payload.specialty_name, payload.contact_type, contact_date, payload.contact_time,
+             payload.contacted_person, payload.reason, payload.discussion_summary, 
+             payload.outcome, payload.follow_up_required || false, payload.follow_up_date,
+             payload.created_by]
+          );
+          results.push({ entityId, status: 'synced' });
+          continue;
+        }
+      }
+      
+      // Queue other changes for processing
       await query(
         `INSERT INTO sync_queue (user_id, entity_type, entity_id, action, data, status)
          VALUES ($1, $2, $3, $4, $5, 'pending')`,

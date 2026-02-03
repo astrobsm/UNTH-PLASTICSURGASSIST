@@ -83,9 +83,9 @@ class DataSyncService {
     surgeries: '/surgeries',
     ward_rounds: '/ward-rounds',
     wound_care: '/wound-care',
-    mdt_patient_teams: '/mdt-patient-teams',
-    mdt_meetings: '/mdt-meetings',
-    mdt_contact_logs: '/mdt-contact-logs'
+    mdt_patient_teams: '/sync/mdt-patient-teams',
+    mdt_meetings: '/sync/mdt-meetings',
+    mdt_contact_logs: '/sync/mdt-contact-logs'
   };
 
   // Entity to IndexedDB table mapping

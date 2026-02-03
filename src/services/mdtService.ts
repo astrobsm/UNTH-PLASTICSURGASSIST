@@ -356,16 +356,26 @@ class MDTService {
   // Sync MDT data from server
   async syncFromServer(): Promise<void> {
     try {
-      // Fetch all MDT data from server
-      const [teamsRes, meetingsRes, contactsRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/mdt-patient-teams`, { headers: getAuthHeaders() }),
-        fetch(`${API_BASE_URL}/mdt-meetings`, { headers: getAuthHeaders() }),
-        fetch(`${API_BASE_URL}/mdt-contact-logs`, { headers: getAuthHeaders() })
-      ]);
+      // Fetch all MDT data from server using sync/pull endpoint
+      const headers = getAuthHeaders();
+      const body = JSON.stringify({
+        since: '2020-01-01',
+        entities: ['mdt_patient_teams', 'mdt_meetings', 'mdt_contact_logs']
+      });
+      
+      const pullRes = await fetch(`${API_BASE_URL}/sync/pull`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body
+      });
 
-      if (teamsRes.ok) {
-        const teams = await teamsRes.json();
-        if (Array.isArray(teams)) {
+      if (pullRes.ok) {
+        const data = await pullRes.json();
+        const updates = data.updates || {};
+        
+        // Process MDT Patient Teams
+        const teams = updates.mdt_patient_teams || [];
+        if (Array.isArray(teams) && teams.length > 0) {
           for (const team of teams) {
             // Check if exists locally by patient_id
             const existing = await db.mdt_patient_teams
@@ -389,11 +399,10 @@ class MDTService {
           }
           console.log(`✅ Synced ${teams.length} MDT patient teams from server`);
         }
-      }
 
-      if (meetingsRes.ok) {
-        const meetings = await meetingsRes.json();
-        if (Array.isArray(meetings)) {
+        // Process MDT Meetings
+        const meetings = updates.mdt_meetings || [];
+        if (Array.isArray(meetings) && meetings.length > 0) {
           for (const meeting of meetings) {
             await db.mdt_meetings.put({
               ...meeting,
@@ -403,11 +412,10 @@ class MDTService {
           }
           console.log(`✅ Synced ${meetings.length} MDT meetings from server`);
         }
-      }
 
-      if (contactsRes.ok) {
-        const contacts = await contactsRes.json();
-        if (Array.isArray(contacts)) {
+        // Process MDT Contact Logs
+        const contacts = updates.mdt_contact_logs || [];
+        if (Array.isArray(contacts) && contacts.length > 0) {
           for (const contact of contacts) {
             await db.mdt_contact_logs.put({
               ...contact,
@@ -420,6 +428,66 @@ class MDTService {
       }
     } catch (error) {
       console.error('MDT sync from server error:', error);
+    }
+  }
+
+  // Push all local MDT data to server
+  async pushToServer(): Promise<void> {
+    try {
+      const headers = getAuthHeaders();
+      
+      // Get all local MDT data
+      const [teams, meetings, contacts] = await Promise.all([
+        db.mdt_patient_teams.toArray(),
+        db.mdt_meetings.toArray(),
+        db.mdt_contact_logs.toArray()
+      ]);
+
+      // Push to server via sync/push endpoint
+      const changes: any[] = [];
+      
+      teams.forEach(team => {
+        changes.push({
+          entityType: 'mdt_patient_teams',
+          entityId: team.id,
+          action: 'upsert',
+          payload: team
+        });
+      });
+      
+      meetings.forEach(meeting => {
+        changes.push({
+          entityType: 'mdt_meetings',
+          entityId: meeting.id,
+          action: 'upsert',
+          payload: meeting
+        });
+      });
+      
+      contacts.forEach(contact => {
+        changes.push({
+          entityType: 'mdt_contact_logs',
+          entityId: contact.id,
+          action: 'upsert',
+          payload: contact
+        });
+      });
+
+      if (changes.length > 0) {
+        const response = await fetch(`${API_BASE_URL}/sync/push`, {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ changes })
+        });
+        
+        if (response.ok) {
+          console.log(`✅ Pushed ${changes.length} MDT records to server`);
+        } else {
+          console.warn('MDT push failed:', await response.text());
+        }
+      }
+    } catch (error) {
+      console.error('MDT push to server error:', error);
     }
   }
 }
