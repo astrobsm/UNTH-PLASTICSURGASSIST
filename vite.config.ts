@@ -61,50 +61,35 @@ export default defineConfig({
         skipWaiting: true,
         // Claim clients immediately
         clientsClaim: true,
-        // Runtime caching strategies
+        // Source map for debugging
+        sourcemap: true,
+        // Disable IndexedDB-based expiration to avoid corruption issues
+        disableDevLogs: true,
+        // Runtime caching strategies - simplified to avoid IndexedDB issues
         runtimeCaching: [
-          // API GET requests - Network First with cache fallback
+          // API GET requests - Network Only (avoid IndexedDB caching issues)
           {
             urlPattern: /^(https?:\/\/[^\/]+)?\/api\/.*$/i,
-            handler: 'NetworkFirst',
-            method: 'GET',
-            options: {
-              cacheName: 'api-cache-v3',
-              networkTimeoutSeconds: 5,
-              expiration: {
-                maxEntries: 200,
-                maxAgeSeconds: 7 * 24 * 60 * 60 // 7 days
-              },
-              cacheableResponse: {
-                statuses: [0, 200]
-              }
-            }
+            handler: 'NetworkOnly',
+            method: 'GET'
           },
-          // Images - Cache First
+          // Images - Cache First (simple cache, no IndexedDB expiration)
           {
             urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp|ico)$/i,
             handler: 'CacheFirst',
             options: {
-              cacheName: 'images-cache-v3',
-              expiration: {
-                maxEntries: 100,
-                maxAgeSeconds: 60 * 24 * 60 * 60 // 60 days
-              },
+              cacheName: 'images-cache-v5',
               cacheableResponse: {
                 statuses: [0, 200]
               }
             }
           },
-          // Fonts - Cache First (long-term cache)
+          // Fonts - Cache First (simple cache, no IndexedDB expiration)
           {
             urlPattern: /\.(?:woff|woff2|ttf|eot)$/i,
             handler: 'CacheFirst',
             options: {
-              cacheName: 'fonts-cache-v3',
-              expiration: {
-                maxEntries: 30,
-                maxAgeSeconds: 365 * 24 * 60 * 60 // 1 year
-              },
+              cacheName: 'fonts-cache-v5',
               cacheableResponse: {
                 statuses: [0, 200]
               }
@@ -115,23 +100,15 @@ export default defineConfig({
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
             handler: 'StaleWhileRevalidate',
             options: {
-              cacheName: 'google-fonts-stylesheets',
-              expiration: {
-                maxEntries: 10,
-                maxAgeSeconds: 60 * 60 * 24 * 365 // 1 year
-              }
+              cacheName: 'google-fonts-stylesheets-v5'
             }
           },
-          // Google Fonts files - Cache First
+          // Google Fonts files - Cache First (no IndexedDB expiration)
           {
             urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
             handler: 'CacheFirst',
             options: {
-              cacheName: 'google-fonts-webfonts',
-              expiration: {
-                maxEntries: 30,
-                maxAgeSeconds: 60 * 60 * 24 * 365 // 1 year
-              },
+              cacheName: 'google-fonts-webfonts-v5',
               cacheableResponse: {
                 statuses: [0, 200]
               }
