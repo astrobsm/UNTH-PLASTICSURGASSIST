@@ -458,8 +458,9 @@ class DataSyncService {
               mergedCount++;
             }
           } else {
-            // New item from server
-            await table.add({ ...serverItem, synced: true, created_at: new Date(), updated_at: new Date() });
+            // New item from server - use put() to preserve server ID
+            // (add() ignores the id with auto-increment tables)
+            await table.put({ ...serverItem, synced: true, created_at: new Date(), updated_at: new Date() });
             mergedCount++;
           }
         } catch (itemError) {

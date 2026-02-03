@@ -365,9 +365,12 @@ class LabService {
           // Sync server data to local DB
           for (const serverItem of serverData) {
             try {
+              // Use server's numeric ID directly (IndexedDB uses ++id which is numeric)
+              const serverId = typeof serverItem.id === 'number' ? serverItem.id : parseInt(serverItem.id, 10);
+              
               // Transform server data to local format
               const localFormat: LabInvestigation = {
-                id: serverItem.id?.toString() || `lab_inv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                id: serverId.toString(), // Keep as string for interface compatibility
                 patient_id: serverItem.patient_id?.toString() || '',
                 patient_name: serverItem.first_name && serverItem.last_name 
                   ? `${serverItem.first_name} ${serverItem.last_name}`
@@ -385,12 +388,26 @@ class LabService {
                 updated_at: new Date(serverItem.updated_at || Date.now())
               };
 
-              // Check if exists locally and update/insert
-              const existingLocal = await db.lab_investigations.get(localFormat.id);
+              // Check if exists locally using BOTH numeric and string ID (for compatibility)
+              let existingLocal = await db.lab_investigations.get(serverId);
+              if (!existingLocal) {
+                existingLocal = await db.lab_investigations.get(serverId.toString());
+              }
+              
               if (existingLocal) {
-                await db.lab_investigations.put({ ...localFormat, synced: true });
+                // Update existing record - use numeric ID for IndexedDB
+                await db.lab_investigations.update(existingLocal.id || serverId, { 
+                  ...localFormat, 
+                  id: existingLocal.id || serverId, // Keep original local ID type
+                  synced: true 
+                });
               } else {
-                await db.lab_investigations.add({ ...localFormat, synced: true } as any);
+                // Insert new record with server's ID
+                await db.lab_investigations.put({ 
+                  ...localFormat, 
+                  id: serverId, // Use numeric ID for IndexedDB
+                  synced: true 
+                } as any);
               }
             } catch (itemErr) {
               console.warn('Failed to sync lab order:', itemErr);

@@ -1,4 +1,6 @@
 // Diagnostic endpoint to check environment and connectivity
+import { query } from './_lib/db.js';
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -6,6 +8,14 @@ export default async function handler(req, res) {
   
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
+  }
+
+  // Check for record count action
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  const action = url.searchParams.get('action');
+
+  if (action === 'counts') {
+    return await getRecordCounts(res);
   }
 
   const diagnostics = {
@@ -69,4 +79,41 @@ export default async function handler(req, res) {
   }
 
   res.status(200).json(diagnostics);
+}
+
+// Get record counts from all main tables
+async function getRecordCounts(res) {
+  try {
+    const countQuery = `
+      SELECT 
+        (SELECT COUNT(*) FROM patients) as patients,
+        (SELECT COUNT(*) FROM treatment_plans) as treatment_plans,
+        (SELECT COUNT(*) FROM admissions) as admissions,
+        (SELECT COUNT(*) FROM lab_orders) as lab_orders,
+        (SELECT COUNT(*) FROM prescriptions) as prescriptions,
+        (SELECT COUNT(*) FROM wound_care_records) as wound_care_records,
+        (SELECT COUNT(*) FROM ward_rounds) as ward_rounds,
+        (SELECT COUNT(*) FROM surgeries) as surgeries,
+        (SELECT COUNT(*) FROM discharge_summaries) as discharge_summaries,
+        (SELECT COUNT(*) FROM users) as users
+    `;
+    
+    const result = await query(countQuery);
+    
+    return res.status(200).json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      counts: result.rows[0],
+      tableMapping: {
+        lab_orders: 'Server table (maps to lab_investigations in IndexedDB)',
+        surgeries: 'Server table (maps to surgery_bookings in IndexedDB)',
+        wound_care_records: 'Server table (maps to wound_care in IndexedDB)'
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
 }
