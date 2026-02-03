@@ -135,8 +135,10 @@ async function handleGet(req, res, userId, userRole) {
     default:
       // Get recent discharge summaries
       let listQuery = `
-        SELECT ds.*, p.full_name as patient_name, p.hospital_number,
-               u.full_name as prepared_by_name
+        SELECT ds.*, 
+               COALESCE(p.full_name, p.first_name || ' ' || p.last_name) as patient_name, 
+               p.hospital_number,
+               COALESCE(u.full_name, u.username) as prepared_by_name
         FROM discharge_summaries ds
         LEFT JOIN patients p ON ds.patient_id = p.id
         LEFT JOIN users u ON ds.prepared_by = u.id

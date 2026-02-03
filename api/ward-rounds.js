@@ -144,8 +144,10 @@ async function handleGet(req, res, userId, userRole) {
     default:
       // Get recent ward rounds
       let listQuery = `
-        SELECT wr.*, p.full_name as patient_name, p.hospital_number, p.ward,
-               u.full_name as documented_by_name
+        SELECT wr.*, 
+               COALESCE(p.full_name, p.first_name || ' ' || p.last_name) as patient_name, 
+               p.hospital_number,
+               COALESCE(u.full_name, u.username) as documented_by_name
         FROM ward_rounds wr
         LEFT JOIN patients p ON wr.patient_id = p.id
         LEFT JOIN users u ON wr.user_id = u.id

@@ -586,25 +586,47 @@ class DataSyncService {
 
   /**
    * Find a local item by server ID or matching unique fields
+   * Uses filter() instead of where() to avoid index requirements
    */
   private async findLocalItem(table: any, serverItem: any): Promise<any | null> {
     try {
-      // Try by id first
+      // Try by id first (primary key, always works)
       if (serverItem.id) {
         const byId = await table.get(serverItem.id);
         if (byId) return byId;
       }
 
-      // Try by serverId
+      // Try by serverId using filter (no index required)
       if (serverItem.id) {
-        const byServerId = await table.where('serverId').equals(serverItem.id).first();
-        if (byServerId) return byServerId;
+        try {
+          const allItems = await table.toArray();
+          const byServerId = allItems.find((item: any) => item.serverId === serverItem.id);
+          if (byServerId) return byServerId;
+        } catch (e) {
+          // Ignore filter errors
+        }
       }
 
-      // Try by hospital_number for patients
+      // Try by hospital_number using filter (no index required)
       if (serverItem.hospital_number) {
-        const byHospitalNumber = await table.where('hospital_number').equals(serverItem.hospital_number).first();
-        if (byHospitalNumber) return byHospitalNumber;
+        try {
+          const allItems = await table.toArray();
+          const byHospitalNumber = allItems.find((item: any) => item.hospital_number === serverItem.hospital_number);
+          if (byHospitalNumber) return byHospitalNumber;
+        } catch (e) {
+          // Ignore filter errors
+        }
+      }
+
+      // Try by patient_id for clinical entities
+      if (serverItem.patient_id) {
+        try {
+          const allItems = await table.toArray();
+          const byPatientId = allItems.find((item: any) => item.patient_id === serverItem.patient_id);
+          if (byPatientId) return byPatientId;
+        } catch (e) {
+          // Ignore filter errors
+        }
       }
 
       return null;
