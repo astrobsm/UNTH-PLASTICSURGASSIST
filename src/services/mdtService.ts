@@ -391,24 +391,30 @@ class MDTService {
         const teams = updates.mdt_patient_teams || [];
         if (Array.isArray(teams) && teams.length > 0) {
           for (const team of teams) {
-            // Check if exists locally by patient_id
-            const existing = await db.mdt_patient_teams
-              .where('patient_id')
-              .equals(team.patient_id?.toString())
-              .first();
-            
-            if (existing) {
-              await db.mdt_patient_teams.update(existing.id, {
-                ...team,
-                id: existing.id,
-                server_id: team.id
-              });
-            } else {
-              await db.mdt_patient_teams.put({
-                ...team,
-                id: team.id || `mdt_team_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                server_id: team.id
-              });
+            try {
+              // Use filter instead of where to avoid index issues
+              const allTeams = await db.mdt_patient_teams.toArray();
+              const existing = allTeams.find(t => 
+                t.patient_id === team.patient_id || 
+                t.patient_id === String(team.patient_id) ||
+                t.server_id === team.id
+              );
+              
+              if (existing) {
+                await db.mdt_patient_teams.update(existing.id, {
+                  ...team,
+                  id: existing.id,
+                  server_id: team.id
+                });
+              } else {
+                await db.mdt_patient_teams.put({
+                  ...team,
+                  id: team.id || `mdt_team_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                  server_id: team.id
+                });
+              }
+            } catch (e) {
+              console.warn('Error processing MDT team:', e);
             }
           }
           console.log(`✅ Synced ${teams.length} MDT patient teams from server`);
