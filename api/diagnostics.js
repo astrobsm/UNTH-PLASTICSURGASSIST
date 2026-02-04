@@ -94,15 +94,22 @@ async function getRecordCounts(res) {
         (SELECT COUNT(*) FROM ward_rounds) as ward_rounds,
         (SELECT COUNT(*) FROM surgeries) as surgeries,
         (SELECT COUNT(*) FROM discharge_summaries) as discharge_summaries,
-        (SELECT COUNT(*) FROM users) as users
+        (SELECT COUNT(*) FROM users) as users,
+        (SELECT COUNT(*) FROM mdt_patient_teams) as mdt_patient_teams,
+        (SELECT COUNT(*) FROM mdt_meetings) as mdt_meetings,
+        (SELECT COUNT(*) FROM mdt_contact_logs) as mdt_contact_logs
     `;
     
     const result = await query(countQuery);
+    
+    // Also get MDT details
+    const mdtDetails = await query(`SELECT id, patient_id, patient_name, hospital_number, is_active, created_at FROM mdt_patient_teams ORDER BY created_at DESC LIMIT 10`);
     
     return res.status(200).json({
       success: true,
       timestamp: new Date().toISOString(),
       counts: result.rows[0],
+      mdt_details: mdtDetails.rows,
       tableMapping: {
         lab_orders: 'Server table (maps to lab_investigations in IndexedDB)',
         surgeries: 'Server table (maps to surgery_bookings in IndexedDB)',
