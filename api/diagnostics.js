@@ -16,6 +16,10 @@ export default async function handler(req, res) {
   if (action === 'counts') {
     return await getRecordCounts(res);
   }
+  
+  if (action === 'mdt') {
+    return await getMDTDebug(res);
+  }
 
   const diagnostics = {
     timestamp: new Date().toISOString(),
@@ -120,6 +124,49 @@ async function getRecordCounts(res) {
     return res.status(500).json({
       success: false,
       error: error.message
+    });
+  }
+}
+// Get detailed MDT debug info
+async function getMDTDebug(res) {
+  try {
+    // Check if MDT tables exist
+    const tableCheck = await query(`
+      SELECT table_name FROM information_schema.tables 
+      WHERE table_schema = 'public' AND table_name LIKE 'mdt%'
+    `);
+    
+    // Get MDT counts
+    const counts = await query(`
+      SELECT 
+        (SELECT COUNT(*) FROM mdt_patient_teams) as mdt_teams,
+        (SELECT COUNT(*) FROM mdt_meetings) as mdt_meetings,
+        (SELECT COUNT(*) FROM mdt_contact_logs) as mdt_contacts
+    `);
+    
+    // Get all MDT patient teams
+    const teams = await query(`SELECT * FROM mdt_patient_teams ORDER BY created_at DESC`);
+    
+    // Get patients to check if patient_id exists
+    const patients = await query(`SELECT id, hospital_number, first_name, last_name FROM patients ORDER BY id`);
+    
+    return res.status(200).json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      mdt_tables: tableCheck.rows.map(r => r.table_name),
+      counts: counts.rows[0],
+      mdt_patient_teams: teams.rows,
+      patients: patients.rows,
+      debug_info: {
+        message: 'If mdt_patient_teams is empty but patient exists in IndexedDB, the push failed',
+        check: 'Verify patient_id in IndexedDB matches a patient.id in PostgreSQL'
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      error: error.message,
+      stack: error.stack
     });
   }
 }
