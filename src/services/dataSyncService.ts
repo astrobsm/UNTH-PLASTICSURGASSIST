@@ -255,6 +255,14 @@ class DataSyncService {
         } else {
           // Still pull from server to get updates from other devices
           await this.pullAllFromCloud();
+          
+          // Always sync MDT data to keep it in sync across devices
+          try {
+            await mdtService.pushToServer();
+            await mdtService.syncFromServer();
+          } catch (mdtError) {
+            console.warn('MDT periodic sync failed:', mdtError);
+          }
         }
       }
     }, 2 * 60 * 1000); // Every 2 minutes

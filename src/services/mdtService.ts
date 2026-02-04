@@ -131,19 +131,16 @@ class MDTService {
     // Save locally first
     await db.mdt_patient_teams.add(team as any);
     
-    // Sync to server (async, don't block)
-    syncToServer('/mdt/patient-teams', 'POST', {
-      patient_id: patientId,
-      patient_name: patientName,
-      hospital_number: hospitalNumber,
-      primary_specialty: 'Plastic Surgery',
-      specialties: []
-    }).then(serverTeam => {
-      if (serverTeam?.id) {
-        // Update local record with server ID
-        db.mdt_patient_teams.update(team.id, { server_id: serverTeam.id });
+    // Immediately sync to server using the proper push method
+    // This ensures cross-device sync happens right away
+    setTimeout(async () => {
+      try {
+        await this.pushToServer();
+        console.log('✅ MDT patient team synced to server immediately');
+      } catch (error) {
+        console.warn('MDT immediate sync failed, will retry on periodic sync:', error);
       }
-    });
+    }, 500);
     
     return team;
   }
