@@ -406,8 +406,8 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
       return;
     }
 
-    if (!selectedSeniorRegistrar || !selectedRegistrar || !selectedHouseOfficer) {
-      alert('Please assign all medical team members (Senior Registrar, Registrar, House Officer)');
+    if (!selectedHouseOfficer) {
+      alert('Please assign at least a House Officer to the patient');
       return;
     }
 
@@ -577,16 +577,15 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
           Team members are auto-assigned based on workload balance. You can change the selection if needed.
         </p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Senior Registrar */}
+          {/* Senior Registrar (Optional) */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Senior Registrar <span className="text-red-500">*</span>
+              Senior Registrar <span className="text-gray-400 text-xs">(optional)</span>
             </label>
             <select
               value={selectedSeniorRegistrar || ''}
               onChange={(e) => setSelectedSeniorRegistrar(e.target.value ? Number(e.target.value) : null)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-purple-500 focus:border-purple-500"
-              required
             >
               <option value="">-- Select Senior Registrar --</option>
               {seniorRegistrars.map((staff) => (
@@ -600,16 +599,15 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
             )}
           </div>
 
-          {/* Registrar */}
+          {/* Registrar (Optional) */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Registrar <span className="text-red-500">*</span>
+              Registrar <span className="text-gray-400 text-xs">(optional)</span>
             </label>
             <select
               value={selectedRegistrar || ''}
               onChange={(e) => setSelectedRegistrar(e.target.value ? Number(e.target.value) : null)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-purple-500 focus:border-purple-500"
-              required
             >
               <option value="">-- Select Registrar --</option>
               {registrars.map((staff) => (
