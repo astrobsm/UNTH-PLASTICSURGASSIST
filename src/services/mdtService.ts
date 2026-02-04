@@ -392,24 +392,33 @@ class MDTService {
         if (Array.isArray(teams) && teams.length > 0) {
           for (const team of teams) {
             try {
+              // Normalize patient_id to string for consistency
+              const normalizedTeam = {
+                ...team,
+                patient_id: String(team.patient_id),
+                specialties: typeof team.specialties === 'string' 
+                  ? JSON.parse(team.specialties) 
+                  : (team.specialties || [])
+              };
+              
               // Use filter instead of where to avoid index issues
               const allTeams = await db.mdt_patient_teams.toArray();
               const existing = allTeams.find(t => 
-                t.patient_id === team.patient_id || 
-                t.patient_id === String(team.patient_id) ||
+                t.patient_id === normalizedTeam.patient_id || 
+                String(t.patient_id) === normalizedTeam.patient_id ||
                 t.server_id === team.id
               );
               
               if (existing) {
                 await db.mdt_patient_teams.update(existing.id, {
-                  ...team,
+                  ...normalizedTeam,
                   id: existing.id,
                   server_id: team.id
                 });
               } else {
                 await db.mdt_patient_teams.put({
-                  ...team,
-                  id: team.id || `mdt_team_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                  ...normalizedTeam,
+                  id: `mdt_team_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                   server_id: team.id
                 });
               }
