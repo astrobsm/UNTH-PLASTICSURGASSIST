@@ -97,15 +97,32 @@ const MDTPage: React.FC = () => {
     setSyncing(true);
     try {
       // First push local changes to server
-      await mdtService.pushToServer();
+      console.log('[MDT SYNC] Starting push to server...');
+      const pushResult = await mdtService.pushToServer();
+      console.log('[MDT SYNC] Push result:', pushResult);
+      
+      // Check for errors
+      if (pushResult?.results) {
+        const errors = pushResult.results.filter((r: any) => r.status === 'error');
+        if (errors.length > 0) {
+          const errorMsg = errors.map((e: any) => `${e.error || 'Unknown error'}`).join('\n');
+          alert(`Some records failed to sync:\n${errorMsg}\n\nCheck console for details.`);
+        }
+      }
+      
       // Then pull latest from server
+      console.log('[MDT SYNC] Starting pull from server...');
       await mdtService.syncFromServer();
+      
       // Reload the data
       await loadData();
-      alert('MDT data synced successfully!');
+      
+      if (!pushResult?.results?.some((r: any) => r.status === 'error')) {
+        alert('MDT data synced successfully!');
+      }
     } catch (error) {
       console.error('Error syncing MDT data:', error);
-      alert('Sync failed. Please try again.');
+      alert(`Sync failed: ${error}`);
     } finally {
       setSyncing(false);
     }

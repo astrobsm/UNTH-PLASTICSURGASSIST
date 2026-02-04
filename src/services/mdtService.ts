@@ -472,6 +472,13 @@ class MDTService {
         db.mdt_contact_logs.toArray()
       ]);
 
+      console.log(`[MDT PUSH] Found ${teams.length} teams, ${meetings.length} meetings, ${contacts.length} contacts in IndexedDB`);
+      
+      // Log team details for debugging
+      teams.forEach(team => {
+        console.log(`[MDT PUSH] Team: patient_id=${team.patient_id}, name=${team.patient_name}, hospital=${team.hospital_number}`);
+      });
+
       // Push to server via sync/push endpoint
       const changes: any[] = [];
       
@@ -503,20 +510,36 @@ class MDTService {
       });
 
       if (changes.length > 0) {
+        console.log(`[MDT PUSH] Sending ${changes.length} changes to server...`);
         const response = await fetch(`${API_BASE_URL}/sync/push`, {
           method: 'POST',
           headers: { ...headers, 'Content-Type': 'application/json' },
           body: JSON.stringify({ changes })
         });
         
+        const responseData = await response.json();
+        console.log(`[MDT PUSH] Server response:`, responseData);
+        
         if (response.ok) {
           console.log(`✅ Pushed ${changes.length} MDT records to server`);
+          // Check for any errors in the results
+          if (responseData.results) {
+            const errors = responseData.results.filter((r: any) => r.status === 'error');
+            if (errors.length > 0) {
+              console.warn('[MDT PUSH] Some records failed:', errors);
+            }
+          }
         } else {
-          console.warn('MDT push failed:', await response.text());
+          console.warn('[MDT PUSH] Push failed:', responseData);
         }
+        
+        return responseData;
+      } else {
+        console.log('[MDT PUSH] No changes to push');
       }
     } catch (error) {
-      console.error('MDT push to server error:', error);
+      console.error('[MDT PUSH] Error:', error);
+      throw error;
     }
   }
 }

@@ -139,29 +139,42 @@ async function handlePush(data, user, res) {
     return res.status(400).json({ error: 'Changes array is required' });
   }
 
+  console.log(`[SYNC PUSH] Received ${changes.length} changes from user ${user.id}`);
   const results = [];
   
   for (const change of changes) {
     const { entityType, entityId, action, payload } = change;
+    console.log(`[SYNC PUSH] Processing ${entityType}: ${entityId}`);
     
     try {
       // Handle MDT entities directly for immediate sync
       if (entityType === 'mdt_patient_teams' && payload) {
         const { patient_id, patient_name, hospital_number, primary_specialty, specialties } = payload;
+        console.log(`[MDT PUSH] patient_id=${patient_id}, name=${patient_name}, hospital=${hospital_number}`);
+        
         if (patient_id) {
           // Convert patient_id to integer (it may come as string from frontend)
           const patientIdInt = parseInt(patient_id, 10);
           if (isNaN(patientIdInt)) {
-            console.warn(`Invalid patient_id for MDT team: ${patient_id}`);
-            results.push({ entityId, status: 'error', error: 'Invalid patient_id' });
+            console.warn(`[MDT PUSH] Invalid patient_id: ${patient_id} (type: ${typeof patient_id})`);
+            results.push({ entityId, status: 'error', error: `Invalid patient_id: ${patient_id}`, debug: { patient_id, type: typeof patient_id } });
             continue;
           }
           
           // Check if patient exists
           const patientExists = await query('SELECT id FROM patients WHERE id = $1', [patientIdInt]);
+          console.log(`[MDT PUSH] Patient ${patientIdInt} exists: ${patientExists.rows.length > 0}`);
+          
           if (patientExists.rows.length === 0) {
-            console.warn(`Patient not found for MDT team: ${patientIdInt}`);
-            results.push({ entityId, status: 'error', error: 'Patient not found' });
+            // List available patients for debugging
+            const allPatients = await query('SELECT id, hospital_number FROM patients LIMIT 20');
+            console.warn(`[MDT PUSH] Patient not found: ${patientIdInt}. Available: ${JSON.stringify(allPatients.rows)}`);
+            results.push({ 
+              entityId, 
+              status: 'error', 
+              error: `Patient ID ${patientIdInt} not found in database`,
+              availablePatients: allPatients.rows
+            });
             continue;
           }
           
@@ -185,7 +198,7 @@ async function handlePush(data, user, res) {
             );
             console.log(`✅ Inserted MDT team for patient ${patientIdInt}`);
           }
-          results.push({ entityId, status: 'synced' });
+          results.push({ entityId, status: 'synced', patientId: patientIdInt });
           continue;
         }
       }
