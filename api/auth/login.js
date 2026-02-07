@@ -27,9 +27,12 @@ async function handleLogin(req, res) {
     return res.status(400).json({ error: 'Username/email and password are required' });
   }
 
-  // Try to find user by email (schema uses 'password' not 'password_hash')
+  // Try to find user by email - check both password columns, handle NULL is_approved
   const result = await query(
-    `SELECT id, email, password, role, full_name, is_approved, is_active
+    `SELECT id, email, COALESCE(password_hash, password) as password_value, 
+            role, full_name, first_name, last_name, 
+            COALESCE(is_approved, true) as is_approved, 
+            COALESCE(is_active, true) as is_active
      FROM users WHERE email = $1`,
     [loginId]
   );
@@ -48,23 +51,32 @@ async function handleLogin(req, res) {
     return res.status(403).json({ error: 'Account pending approval' });
   }
 
-  const validPassword = await bcrypt.compare(password, user.password);
+  // Check password
+  if (!user.password_value) {
+    return res.status(401).json({ error: 'Password not set. Please reset your password.' });
+  }
+
+  const validPassword = await bcrypt.compare(password, user.password_value);
   if (!validPassword) {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
 
-  // Update last login (ignore if column doesn't exist)
+  // Update last login
   try {
     await query('UPDATE users SET updated_at = NOW() WHERE id = $1', [user.id]);
   } catch (e) {
-    // Ignore - last_login column may not exist
+    // Ignore
   }
+
+  // Build full name from available fields
+  const fullName = user.full_name || 
+    (user.first_name && user.last_name ? `${user.first_name} ${user.last_name}` : user.email);
 
   const token = signToken({
     id: user.id,
     email: user.email,
     role: user.role,
-    fullName: user.full_name
+    fullName: fullName
   });
 
   res.status(200).json({
@@ -73,7 +85,7 @@ async function handleLogin(req, res) {
       id: user.id,
       email: user.email,
       role: user.role,
-      fullName: user.full_name
+      fullName: fullName
     }
   });
 }
