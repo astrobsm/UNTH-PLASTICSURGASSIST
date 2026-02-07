@@ -36,15 +36,13 @@ async function handleRegister(req, res) {
 
   // Use full_name or fullName (frontend sends full_name)
   const finalFullName = full_name || fullName;
-  // Use email as username if username not provided
-  const finalUsername = username || email;
 
   if (!password || !email || !finalFullName) {
     return res.status(400).json({ error: 'Email, password, and full name are required' });
   }
 
-  // Check if username/email exists
-  const existing = await query('SELECT id FROM users WHERE username = $1 OR email = $2', [finalUsername, email]);
+  // Check if email exists
+  const existing = await query('SELECT id FROM users WHERE email = $1', [email]);
   if (existing.rows.length > 0) {
     return res.status(409).json({ error: 'Email already registered' });
   }
@@ -52,10 +50,10 @@ async function handleRegister(req, res) {
   const passwordHash = await bcrypt.hash(password, 10);
 
   const result = await query(
-    `INSERT INTO users (username, password_hash, email, full_name, role, department, specialization, license_number, phone, is_approved, is_active)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, false, true)
-     RETURNING id, username, email, full_name, role, department, license_number, phone, is_approved`,
-    [finalUsername, passwordHash, email, finalFullName, role, department || null, specialization || null, license_number || null, phone || null]
+    `INSERT INTO users (email, password, full_name, role, department, specialization, license_number, phone, is_approved, is_active)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false, true)
+     RETURNING id, email, full_name, role, department, license_number, phone, is_approved`,
+    [email, passwordHash, finalFullName, role, department || null, specialization || null, license_number || null, phone || null]
   );
 
   res.status(201).json({

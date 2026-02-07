@@ -27,10 +27,10 @@ async function handleLogin(req, res) {
     return res.status(400).json({ error: 'Username/email and password are required' });
   }
 
-  // Try to find user by username OR email (include must_change_password)
+  // Try to find user by email (schema uses 'password' not 'password_hash')
   const result = await query(
-    `SELECT id, username, password_hash, role, full_name, email, is_approved, is_active, COALESCE(must_change_password, FALSE) as must_change_password 
-     FROM users WHERE username = $1 OR email = $1`,
+    `SELECT id, email, password, role, full_name, is_approved, is_active
+     FROM users WHERE email = $1`,
     [loginId]
   );
 
@@ -48,17 +48,21 @@ async function handleLogin(req, res) {
     return res.status(403).json({ error: 'Account pending approval' });
   }
 
-  const validPassword = await bcrypt.compare(password, user.password_hash);
+  const validPassword = await bcrypt.compare(password, user.password);
   if (!validPassword) {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
 
-  // Update last login
-  await query('UPDATE users SET last_login = NOW() WHERE id = $1', [user.id]);
+  // Update last login (ignore if column doesn't exist)
+  try {
+    await query('UPDATE users SET updated_at = NOW() WHERE id = $1', [user.id]);
+  } catch (e) {
+    // Ignore - last_login column may not exist
+  }
 
   const token = signToken({
     id: user.id,
-    username: user.username,
+    email: user.email,
     role: user.role,
     fullName: user.full_name
   });
@@ -67,11 +71,9 @@ async function handleLogin(req, res) {
     token,
     user: {
       id: user.id,
-      username: user.username,
-      role: user.role,
-      fullName: user.full_name,
       email: user.email,
-      mustChangePassword: user.must_change_password
+      role: user.role,
+      fullName: user.full_name
     }
   });
 }
