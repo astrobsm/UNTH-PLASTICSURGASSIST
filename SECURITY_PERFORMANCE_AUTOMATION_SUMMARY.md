@@ -457,7 +457,7 @@ vercel env ls
 - [JWT_SECRET Setup Guide](JWT_SECRET_SETUP_GUIDE.md) - Vercel environment variable configuration
 - [Security Enhancements Summary](SECURITY_ENHANCEMENTS_SUMMARY.md) - Previous session fixes
 - [Test Results](TEST_RESULTS.md) - Historical test outcomes
-- [Deployment Guide](DIGITAL_OCEAN_DEPLOYMENT_GUIDE.md) - Full deployment process
+- [Deployment Guide](VERCEL_DEPLOYMENT_GUIDE.md) - Full deployment process
 
 ## Support
 

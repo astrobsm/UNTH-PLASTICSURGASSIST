@@ -265,7 +265,9 @@ export default function ShoppingList() {
     // 80mm = 80 * 2.83465 = ~226.77 points width
     // Height will be calculated based on content
     const thermalWidth = 80; // mm
-    const estimatedHeight = 150 + (selectedItems.length * 8); // Estimate height based on items
+    const margin = 2; // Smaller margin for thermal paper
+    const maxTextWidth = thermalWidth - (margin * 2) - 22; // Leave space for qty and checkbox columns
+    const estimatedHeight = 150 + (selectedItems.length * 10); // Estimate height based on items
     
     const doc = new jsPDF({
       orientation: 'portrait',
@@ -273,117 +275,174 @@ export default function ShoppingList() {
       format: [thermalWidth, estimatedHeight]
     });
 
-    const margin = 3;
-    const maxWidth = thermalWidth - (margin * 2);
     let yPos = margin;
+
+    // Helper function to wrap text within available width
+    const wrapText = (text: string, maxWidth: number, fontSize: number): string[] => {
+      doc.setFontSize(fontSize);
+      const words = text.split(' ');
+      const lines: string[] = [];
+      let currentLine = '';
+      
+      words.forEach(word => {
+        const testLine = currentLine ? `${currentLine} ${word}` : word;
+        const testWidth = doc.getTextWidth(testLine);
+        
+        if (testWidth <= maxWidth) {
+          currentLine = testLine;
+        } else {
+          if (currentLine) {
+            lines.push(currentLine);
+          }
+          // If single word is too long, truncate it
+          if (doc.getTextWidth(word) > maxWidth) {
+            let truncated = word;
+            while (doc.getTextWidth(truncated + '...') > maxWidth && truncated.length > 3) {
+              truncated = truncated.slice(0, -1);
+            }
+            currentLine = truncated + '...';
+          } else {
+            currentLine = word;
+          }
+        }
+      });
+      
+      if (currentLine) {
+        lines.push(currentLine);
+      }
+      
+      return lines.length > 0 ? lines : [''];
+    };
 
     // Set Georgia font (fallback to Times if not available)
     doc.setFont('times', 'normal'); // Georgia-like serif font
     
     // Header - Hospital Name
-    doc.setFontSize(10);
+    doc.setFontSize(9);
     doc.setFont('times', 'bold');
     doc.text('UNTH Plastic Surgery', thermalWidth / 2, yPos, { align: 'center' });
-    yPos += 5;
+    yPos += 4;
     
-    doc.setFontSize(8);
+    doc.setFontSize(7);
     doc.setFont('times', 'normal');
     doc.text('Burns & Reconstructive Unit', thermalWidth / 2, yPos, { align: 'center' });
-    yPos += 6;
+    yPos += 5;
 
     // Divider line
     doc.setLineWidth(0.3);
     doc.line(margin, yPos, thermalWidth - margin, yPos);
-    yPos += 4;
+    yPos += 3;
 
     // Title
-    doc.setFontSize(12);
+    doc.setFontSize(10);
     doc.setFont('times', 'bold');
     const categoryTitle = selectedCategory === 'wound_dressing' ? 'WOUND DRESSING' : 
                           selectedCategory === 'bedside_debridement' ? 'BEDSIDE DEBRIDEMENT' : 
                           'SURGERY';
     doc.text(`SHOPPING LIST - ${categoryTitle}`, thermalWidth / 2, yPos, { align: 'center' });
-    yPos += 6;
+    yPos += 5;
 
     // Patient Info
-    doc.setFontSize(10);
+    doc.setFontSize(8);
     doc.setFont('times', 'normal');
-    doc.text(`Patient: ${clean(patientName)}`, margin, yPos);
-    yPos += 4;
+    const patientNameClean = clean(patientName);
+    const patientNameLines = wrapText(`Patient: ${patientNameClean}`, thermalWidth - (margin * 2), 8);
+    patientNameLines.forEach(line => {
+      doc.text(line, margin, yPos);
+      yPos += 3;
+    });
     doc.text(`Hosp #: ${clean(hospitalNum)}`, margin, yPos);
-    yPos += 4;
+    yPos += 3;
     doc.text(`Date: ${new Date().toLocaleDateString()}`, margin, yPos);
     yPos += 4;
-    doc.text(`Time: ${new Date().toLocaleTimeString()}`, margin, yPos);
-    yPos += 5;
 
     // Divider
     doc.line(margin, yPos, thermalWidth - margin, yPos);
-    yPos += 4;
+    yPos += 3;
+
+    // Column positions for 80mm thermal paper
+    const checkboxCol = margin; // 2mm
+    const numCol = margin + 5; // After checkbox
+    const nameCol = margin + 10; // After number
+    const qtyCol = thermalWidth - margin - 12; // Before right edge
+    const tickCol = thermalWidth - margin - 5; // Right edge
 
     // Items Header
-    doc.setFontSize(10);
+    doc.setFontSize(8);
     doc.setFont('times', 'bold');
-    doc.text('☐', margin + 1, yPos);
-    doc.text('ITEM DESCRIPTION', margin + 8, yPos);
-    doc.text('QTY', thermalWidth - margin - 10, yPos);
-    doc.text('✓', thermalWidth - margin - 2, yPos);
-    yPos += 4;
+    doc.text('#', numCol, yPos);
+    doc.text('ITEM', nameCol, yPos);
+    doc.text('Q', qtyCol, yPos);
+    doc.text('OK', tickCol, yPos);
+    yPos += 3;
 
     doc.setLineWidth(0.2);
     doc.line(margin, yPos, thermalWidth - margin, yPos);
-    yPos += 3;
+    yPos += 2;
 
     // Items List with checkboxes
-    doc.setFontSize(10);
+    doc.setFontSize(8);
     doc.setFont('times', 'normal');
 
     selectedItems.forEach((item, index) => {
       // Draw checkbox (empty square) at the beginning
-      doc.setLineWidth(0.4);
-      doc.rect(margin, yPos - 3.5, 4, 4); // Checkbox 4mm x 4mm
+      doc.setLineWidth(0.3);
+      doc.rect(checkboxCol, yPos - 2.5, 3, 3); // Checkbox 3mm x 3mm
       
-      // Item name (truncate if too long)
-      const itemName = item.name.length > 22 ? item.name.substring(0, 19) + '...' : item.name;
-      doc.text(`${index + 1}. ${itemName}`, margin + 6, yPos);
-      doc.text(`${item.quantity}`, thermalWidth - margin - 12, yPos);
+      // Item number
+      doc.text(`${index + 1}`, numCol, yPos);
+      
+      // Wrap item name to fit within available space (maxTextWidth)
+      const nameLines = wrapText(item.name, maxTextWidth, 8);
+      
+      // First line with qty and checkbox
+      doc.text(nameLines[0], nameCol, yPos);
+      doc.text(`${item.quantity}`, qtyCol, yPos);
       
       // Draw availability checkbox at the end
-      doc.rect(thermalWidth - margin - 5, yPos - 3.5, 4, 4);
+      doc.rect(tickCol, yPos - 2.5, 3, 3);
       
-      yPos += 6;
+      yPos += 4;
+      
+      // Additional lines for wrapped text (if any)
+      for (let i = 1; i < nameLines.length; i++) {
+        doc.text(nameLines[i], nameCol, yPos);
+        yPos += 3;
+      }
+      
+      // Add small gap between items
+      yPos += 1;
     });
 
     // Summary divider
-    yPos += 2;
+    yPos += 1;
     doc.setLineWidth(0.3);
     doc.line(margin, yPos, thermalWidth - margin, yPos);
-    yPos += 4;
+    yPos += 3;
 
     // Summary
-    doc.setFontSize(10);
+    doc.setFontSize(9);
     doc.setFont('times', 'bold');
-    doc.text(`Total Items: ${selectedItems.length}`, margin, yPos);
+    doc.text(`Total: ${selectedItems.length} items`, margin, yPos);
+    doc.text(`Qty: ${selectedItems.reduce((sum, item) => sum + item.quantity, 0)}`, thermalWidth / 2, yPos);
     yPos += 4;
-    doc.text(`Total Qty: ${selectedItems.reduce((sum, item) => sum + item.quantity, 0)}`, margin, yPos);
-    yPos += 5;
 
     // Availability check instruction
-    doc.setFontSize(8);
+    doc.setFontSize(7);
     doc.setFont('times', 'italic');
-    doc.text('☐ = Tick if available before surgery', margin, yPos);
-    yPos += 5;
+    doc.text('Tick OK column if item available', margin, yPos);
+    yPos += 4;
 
     // Footer divider
     doc.setLineWidth(0.3);
     doc.line(margin, yPos, thermalWidth - margin, yPos);
-    yPos += 4;
+    yPos += 3;
 
     // Footer
-    doc.setFontSize(8);
+    doc.setFontSize(7);
     doc.setFont('times', 'normal');
     doc.text('Drs Okwesili/Nnadi/Eze', thermalWidth / 2, yPos, { align: 'center' });
-    yPos += 4;
+    yPos += 3;
     doc.text('Thank you', thermalWidth / 2, yPos, { align: 'center' });
 
     // Save

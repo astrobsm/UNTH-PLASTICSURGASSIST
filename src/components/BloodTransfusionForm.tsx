@@ -32,6 +32,7 @@ import {
 } from '../services/bloodTransfusionService';
 import { transfusionPdfService, TransfusionOrderData, TransfusionMonitoringEntry } from '../services/transfusionPdfService';
 import TransfusionChartUpload from './TransfusionChartUpload';
+import TransfusionVitalsChart from './TransfusionVitalsChart';
 import { format } from 'date-fns';
 
 // Helper component to display vitals
@@ -1355,6 +1356,15 @@ export default function BloodTransfusionForm({
                   <VitalsDisplay vitals={formData.post_transfusion_vitals} />
                 </div>
               )}
+              
+              {/* Vitals Trend Chart */}
+              {(formData.pre_transfusion_vitals || (formData.during_transfusion_vitals && formData.during_transfusion_vitals.length > 0) || formData.post_transfusion_vitals) && (
+                <TransfusionVitalsChart
+                  preVitals={formData.pre_transfusion_vitals}
+                  duringVitals={formData.during_transfusion_vitals}
+                  postVitals={formData.post_transfusion_vitals}
+                />
+              )}
             </div>
           )}
 
@@ -1488,6 +1498,160 @@ export default function BloodTransfusionForm({
                     <AlertCircle className="h-4 w-4" />
                     <span>Record Complication</span>
                   </button>
+                </div>
+              </div>
+              
+              {/* Transfusion Reaction Recommendations Reference Guide */}
+              <div className="bg-white border border-gray-300 rounded-lg p-4">
+                <h4 className="font-bold text-gray-900 mb-4 flex items-center">
+                  <FileText className="h-5 w-5 mr-2 text-blue-600" />
+                  Transfusion Reaction Management Guide
+                </h4>
+                
+                <div className="space-y-4">
+                  {/* Immediate Actions */}
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                    <h5 className="font-semibold text-red-900 mb-2">⚠️ IMMEDIATE ACTIONS (All Reactions)</h5>
+                    <ol className="list-decimal list-inside text-sm text-red-800 space-y-1">
+                      <li><strong>STOP THE TRANSFUSION IMMEDIATELY</strong></li>
+                      <li>Keep IV line open with normal saline</li>
+                      <li>Check patient identification against blood bag</li>
+                      <li>Record vital signs</li>
+                      <li>Notify blood bank and attending physician</li>
+                      <li>Save blood bag and tubing for investigation</li>
+                      <li>Send fresh blood sample for investigation</li>
+                    </ol>
+                  </div>
+                  
+                  {/* Reaction-Specific Management */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Febrile Non-Hemolytic */}
+                    <div className="border border-orange-200 rounded-lg p-3 bg-orange-50">
+                      <h6 className="font-semibold text-orange-900 mb-2">🌡️ Febrile Non-Hemolytic Reaction</h6>
+                      <p className="text-xs text-orange-700 mb-2"><em>Temperature rise ≥1°C with no other cause</em></p>
+                      <ul className="text-sm text-orange-800 list-disc list-inside space-y-1">
+                        <li>Paracetamol 1g PO/IV</li>
+                        <li>Monitor closely for 30 mins</li>
+                        <li>May restart transfusion slowly if stable</li>
+                        <li>Use leukocyte-reduced products for future transfusions</li>
+                      </ul>
+                    </div>
+                    
+                    {/* Allergic Reaction */}
+                    <div className="border border-yellow-200 rounded-lg p-3 bg-yellow-50">
+                      <h6 className="font-semibold text-yellow-900 mb-2">🤧 Allergic Reaction (Mild-Moderate)</h6>
+                      <p className="text-xs text-yellow-700 mb-2"><em>Urticaria, pruritus, localized swelling</em></p>
+                      <ul className="text-sm text-yellow-800 list-disc list-inside space-y-1">
+                        <li>Chlorpheniramine 10mg IV/IM</li>
+                        <li>Or Diphenhydramine 25-50mg IV</li>
+                        <li>Monitor for 30 minutes</li>
+                        <li>May restart slowly if symptoms resolve</li>
+                        <li>Pre-medicate for future transfusions</li>
+                      </ul>
+                    </div>
+                    
+                    {/* Anaphylaxis */}
+                    <div className="border border-red-300 rounded-lg p-3 bg-red-100">
+                      <h6 className="font-semibold text-red-900 mb-2">🚨 ANAPHYLAXIS</h6>
+                      <p className="text-xs text-red-700 mb-2"><em>Hypotension, bronchospasm, stridor, angioedema</em></p>
+                      <ul className="text-sm text-red-800 list-disc list-inside space-y-1">
+                        <li><strong>Adrenaline 0.5mg (0.5ml of 1:1000) IM</strong> - repeat in 5 mins if needed</li>
+                        <li>High-flow oxygen</li>
+                        <li>IV fluid bolus (NS or RL)</li>
+                        <li>Hydrocortisone 200mg IV</li>
+                        <li>Chlorpheniramine 10mg IV</li>
+                        <li>Nebulized salbutamol if bronchospasm</li>
+                        <li><strong>Call for senior help/resuscitation team</strong></li>
+                      </ul>
+                    </div>
+                    
+                    {/* Acute Hemolytic */}
+                    <div className="border border-red-300 rounded-lg p-3 bg-red-100">
+                      <h6 className="font-semibold text-red-900 mb-2">🩸 Acute Hemolytic Reaction</h6>
+                      <p className="text-xs text-red-700 mb-2"><em>Fever, chills, flank pain, dark urine, DIC</em></p>
+                      <ul className="text-sm text-red-800 list-disc list-inside space-y-1">
+                        <li><strong>STOP transfusion immediately</strong></li>
+                        <li>Aggressive IV fluids (maintain UO &gt;100ml/hr)</li>
+                        <li>Furosemide 40-80mg IV if adequate BP</li>
+                        <li>Monitor for DIC, renal failure</li>
+                        <li>May need ICU admission</li>
+                        <li>Send samples: DCT, repeat cross-match, bilirubin, LDH, haptoglobin</li>
+                      </ul>
+                    </div>
+                    
+                    {/* TRALI */}
+                    <div className="border border-purple-200 rounded-lg p-3 bg-purple-50">
+                      <h6 className="font-semibold text-purple-900 mb-2">🫁 TRALI</h6>
+                      <p className="text-xs text-purple-700 mb-2"><em>Acute respiratory distress within 6 hours</em></p>
+                      <ul className="text-sm text-purple-800 list-disc list-inside space-y-1">
+                        <li>Stop transfusion immediately</li>
+                        <li>High-flow oxygen/ventilatory support</li>
+                        <li>CXR (bilateral infiltrates)</li>
+                        <li>ICU admission for severe cases</li>
+                        <li>Supportive care (no diuretics - not cardiogenic)</li>
+                        <li>Usually resolves in 48-96 hours</li>
+                      </ul>
+                    </div>
+                    
+                    {/* TACO */}
+                    <div className="border border-blue-200 rounded-lg p-3 bg-blue-50">
+                      <h6 className="font-semibold text-blue-900 mb-2">💧 TACO (Circulatory Overload)</h6>
+                      <p className="text-xs text-blue-700 mb-2"><em>Dyspnea, orthopnea, raised JVP, hypertension</em></p>
+                      <ul className="text-sm text-blue-800 list-disc list-inside space-y-1">
+                        <li>Stop/slow transfusion</li>
+                        <li>Sit patient upright</li>
+                        <li>Furosemide 40-80mg IV</li>
+                        <li>Oxygen therapy</li>
+                        <li>Monitor fluid balance strictly</li>
+                        <li>Slower transfusion rate for future units</li>
+                      </ul>
+                    </div>
+                    
+                    {/* Bacterial Contamination */}
+                    <div className="border border-gray-300 rounded-lg p-3 bg-gray-50">
+                      <h6 className="font-semibold text-gray-900 mb-2">🦠 Bacterial Contamination/Sepsis</h6>
+                      <p className="text-xs text-gray-700 mb-2"><em>High fever, rigors, hypotension (rapid onset)</em></p>
+                      <ul className="text-sm text-gray-800 list-disc list-inside space-y-1">
+                        <li>Stop transfusion immediately</li>
+                        <li>Blood cultures from patient and bag</li>
+                        <li>Broad-spectrum antibiotics STAT</li>
+                        <li>Aggressive fluid resuscitation</li>
+                        <li>Vasopressors if needed</li>
+                        <li>ICU admission</li>
+                      </ul>
+                    </div>
+                  </div>
+                  
+                  {/* Post-Reaction Investigation */}
+                  <div className="bg-gray-100 border border-gray-300 rounded-lg p-4">
+                    <h5 className="font-semibold text-gray-900 mb-2">📋 Post-Reaction Investigation Samples</h5>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                      <div>
+                        <p className="font-medium">Blood Bank:</p>
+                        <ul className="list-disc list-inside text-gray-700">
+                          <li>EDTA sample</li>
+                          <li>Clotted sample</li>
+                          <li>Blood bag + tubing</li>
+                        </ul>
+                      </div>
+                      <div>
+                        <p className="font-medium">Laboratory:</p>
+                        <ul className="list-disc list-inside text-gray-700">
+                          <li>FBC, U&E, LFT</li>
+                          <li>Coagulation screen</li>
+                          <li>LDH, Bilirubin</li>
+                          <li>Haptoglobin</li>
+                        </ul>
+                      </div>
+                      <div>
+                        <p className="font-medium">Microbiology:</p>
+                        <ul className="list-disc list-inside text-gray-700">
+                          <li>Blood culture (patient)</li>
+                          <li>Blood culture (bag)</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

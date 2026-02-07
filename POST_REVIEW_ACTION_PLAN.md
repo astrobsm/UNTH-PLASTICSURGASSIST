@@ -294,7 +294,7 @@ const Component = lazy(() => import('./Component'));
 
 ### Documentation:
 - Full Review: `COMPREHENSIVE_REVIEW_REPORT.md`
-- Deployment Guide: `DIGITAL_OCEAN_DEPLOYMENT_GUIDE.md`
+- Deployment Guide: `VERCEL_DEPLOYMENT_GUIDE.md`
 - Testing Guide: `AUTHENTICATION_TESTING_CHECKLIST.md`
 
 ### Tools Created:

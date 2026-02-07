@@ -12,7 +12,8 @@ import {
   LogOut,
   ChevronDown,
   ChevronUp,
-  TestTube
+  TestTube,
+  RefreshCw
 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import { db } from '../db/database';
@@ -29,6 +30,8 @@ import {
 import { useAuthStore } from '../store/authStore';
 import { InvestigationOrderingModal } from '../components/InvestigationOrderingModal';
 import { MedicationOrderingModal } from '../components/MedicationOrderingModal';
+import { dataSyncService } from '../services/dataSyncService';
+import toast from 'react-hot-toast';
 
 export default function TreatmentPlanningEnhanced() {
   const { user } = useAuthStore();
@@ -37,6 +40,8 @@ export default function TreatmentPlanningEnhanced() {
   const [treatmentPlans, setTreatmentPlans] = useState<EnhancedTreatmentPlan[]>([]);
   const [selectedPlan, setSelectedPlan] = useState<EnhancedTreatmentPlan | null>(null);
   const [showNewPlanModal, setShowNewPlanModal] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
   const [expandedSections, setExpandedSections] = useState({
     reviews: true,
     labs: true,
@@ -110,6 +115,8 @@ export default function TreatmentPlanningEnhanced() {
 
   useEffect(() => {
     loadPatients();
+    // Trigger initial sync on component mount
+    handleSync();
   }, []);
 
   useEffect(() => {
@@ -117,6 +124,65 @@ export default function TreatmentPlanningEnhanced() {
       loadTreatmentPlans();
     }
   }, [selectedPatient]);
+
+  // Real-time sync: Refresh every 30 seconds when online
+  useEffect(() => {
+    const syncInterval = setInterval(() => {
+      if (navigator.onLine && !isSyncing && selectedPatient) {
+        loadTreatmentPlans();
+      }
+    }, 30000); // 30 seconds
+
+    // Also refresh when tab becomes visible
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && navigator.onLine && selectedPatient) {
+        handleSync();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(syncInterval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [selectedPatient, isSyncing]);
+
+  // Sync data with server
+  const handleSync = async () => {
+    if (isSyncing) return;
+    setIsSyncing(true);
+    try {
+      await dataSyncService.performFullSync();
+      if (selectedPatient) {
+        await loadTreatmentPlans();
+      }
+      setLastSyncTime(new Date());
+      // Silent sync - don't show toast for automatic syncs
+    } catch (error) {
+      console.error('Sync failed:', error);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // Manual sync with toast notification
+  const handleManualSync = async () => {
+    if (isSyncing) return;
+    setIsSyncing(true);
+    try {
+      await dataSyncService.performFullSync();
+      if (selectedPatient) {
+        await loadTreatmentPlans();
+      }
+      setLastSyncTime(new Date());
+      toast.success('Data synced successfully!', { duration: 2000 });
+    } catch (error) {
+      console.error('Sync failed:', error);
+      toast.error('Sync failed. Please try again.', { duration: 3000 });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const loadPatients = async () => {
     const allPatients = await patientService.getAllPatients();
@@ -305,14 +371,35 @@ export default function TreatmentPlanningEnhanced() {
   return (
     <div className="p-6">
       <div className="mb-6 flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-900">Enhanced Treatment Planning</h1>
-        <button
-          onClick={() => setShowNewPlanModal(true)}
-          className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
-        >
-          <Plus className="w-5 h-5" />
-          New Treatment Plan
-        </button>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Enhanced Treatment Planning</h1>
+          {lastSyncTime && (
+            <p className="text-sm text-gray-500 mt-1">
+              Last synced: {format(lastSyncTime, 'HH:mm:ss')}
+            </p>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleManualSync}
+            disabled={isSyncing}
+            className={`px-4 py-2 rounded-lg flex items-center gap-2 ${
+              isSyncing 
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
+                : 'bg-blue-600 hover:bg-blue-700 text-white'
+            }`}
+          >
+            <RefreshCw className={`w-5 h-5 ${isSyncing ? 'animate-spin' : ''}`} />
+            {isSyncing ? 'Syncing...' : 'Sync'}
+          </button>
+          <button
+            onClick={() => setShowNewPlanModal(true)}
+            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+          >
+            <Plus className="w-5 h-5" />
+            New Treatment Plan
+          </button>
+        </div>
       </div>
 
       {/* Patient Selection */}

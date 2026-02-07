@@ -1,508 +1,213 @@
 # PostgreSQL Database Deployment Guide
-## Digital Ocean Managed PostgreSQL Integration
+## Supabase PostgreSQL Integration
 
-This guide will help you set up a robust PostgreSQL database for the Plastic Surgeon Assistant application.
+This guide will help you set up a robust PostgreSQL database for the Plastic Surgeon Assistant application using Supabase and deploy to Vercel.
 
 ---
 
 ## 📋 Table of Contents
 
-1. [Create PostgreSQL Database on Digital Ocean](#step-1-create-postgresql-database)
-2. [Configure Connection](#step-2-configure-connection)
+1. [Supabase Database Setup](#step-1-supabase-database-setup)
+2. [Configure Vercel Environment](#step-2-configure-vercel-environment)
 3. [Initialize Database Schema](#step-3-initialize-schema)
-4. [Deploy Backend](#step-4-deploy-backend)
-5. [Test Integration](#step-5-test-integration)
-6. [Migration from MySQL](#step-6-migration-optional)
+4. [Test Integration](#step-4-test-integration)
+5. [Troubleshooting](#troubleshooting)
 
 ---
 
-## Step 1: Create PostgreSQL Database
+## Step 1: Supabase Database Setup
 
-### 1.1 Navigate to Digital Ocean Databases
+### 1.1 Database Connection Details
 
-1. Go to https://cloud.digitalocean.com/databases
-2. Click **"Create Database Cluster"**
-3. Select **PostgreSQL** as database engine
-4. Choose version: **PostgreSQL 15** (recommended)
+Your Supabase PostgreSQL database is hosted at:
 
-### 1.2 Configure Database Cluster
+**Connection String:**
+```
+postgresql://postgres:[YOUR-PASSWORD]@db.mgblgewvpzcaimqaeqcp.supabase.co:5432/postgres
+```
 
-**Basic Configuration:**
-- **Data Center Region**: Frankfurt 1 (or closest to your droplet)
-- **Database Cluster Name**: `plasticsurg-db`
-- **Node Plan**: 
-  - Development: Basic ($15/month - 1GB RAM, 10GB Disk, 1 vCPU)
-  - Production: Basic ($25/month - 2GB RAM, 25GB Disk, 1 vCPU)
-
-**Advanced Settings:**
-- **Trusted Sources**: Add your droplet IP (164.90.225.181)
-- **Connection Pools**: Enable for better performance
-- **Automatic Backups**: Daily (included)
-
-### 1.3 Create Database
-
-After cluster is created:
-1. Click on **"Users & Databases"** tab
-2. Create a new database: `plasticsurg_app`
-3. Create a new user: `plasticsurg_user` with strong password
-
----
-
-## Step 2: Configure Connection
-
-### 2.1 Get Connection Details
-
-From Digital Ocean dashboard, copy:
-- **Host**: `your-db-cluster-do-user-xxxxx-0.x.db.ondigitalocean.com`
-- **Port**: `25060`
-- **User**: `plasticsurg_user`
-- **Password**: `[generated password]`
-- **Database**: `plasticsurg_app`
+**Connection Parameters:**
+- **Host**: `db.mgblgewvpzcaimqaeqcp.supabase.co`
+- **Port**: `5432`
+- **User**: `postgres`
+- **Password**: `[Your Supabase database password]`
+- **Database**: `postgres`
 - **SSL Mode**: Required
 
-### 2.2 Update Backend .env File
+### 1.2 Find Your Password
 
-SSH into your droplet:
+1. Go to https://supabase.com/dashboard
+2. Select your project
+3. Navigate to **Settings** → **Database**
+4. Your database password is shown (or you can reset it)
+
+---
+
+## Step 2: Configure Vercel Environment
+
+### 2.1 Set Environment Variables
+
+1. Go to https://vercel.com/dashboard
+2. Select your project: **plasticsurgassisstant**
+3. Click **Settings** → **Environment Variables**
+4. Add the following variables:
+
+| Variable | Value | Environment |
+|----------|-------|-------------|
+| `DATABASE_URL` | `postgresql://postgres:[PASSWORD]@db.mgblgewvpzcaimqaeqcp.supabase.co:5432/postgres` | Production |
+| `JWT_SECRET` | `[Your secure random string]` | Production |
+
+### 2.2 Generate JWT Secret
+
+Run this command to generate a secure JWT secret:
 ```bash
-ssh root@164.90.225.181
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
-
-Edit the backend .env file:
-```bash
-nano /var/www/plasticsurg_assisstant/server/.env
-```
-
-Update with PostgreSQL connection string:
-```env
-# PostgreSQL Database URL
-DATABASE_URL=postgresql://plasticsurg_user:[PASSWORD]@[HOST]:25060/plasticsurg_app?sslmode=require
-
-# JWT Secret
-JWT_SECRET=plastic_surgery_assistant_secret_key_2024
-
-# Server Port
-PORT=3001
-```
-
-**Example**:
-```env
-DATABASE_URL=postgresql://plasticsurg_user:AVNS_xxxxxxxxx@plasticsurg-db-do-user-12345-0.c.db.ondigitalocean.com:25060/plasticsurg_app?sslmode=require
-JWT_SECRET=plastic_surgery_assistant_secret_key_2024
-PORT=3001
-```
-
-Save and exit (Ctrl+X, Y, Enter)
 
 ---
 
 ## Step 3: Initialize Schema
 
-### 3.1 Upload Database Files
+### 3.1 Using Supabase SQL Editor
 
-From your local machine:
+1. Go to https://supabase.com/dashboard
+2. Select your project
+3. Navigate to **SQL Editor**
+4. Create a new query and paste the contents of `server/db/schema.sql`
+5. Click **Run** to execute
 
-```powershell
-# Upload schema file
-scp C:\Users\USER\PLASTIC-SURGASSISSTANT\server\db\schema.sql root@164.90.225.181:/var/www/plasticsurg_assisstant/server/db/
+### 3.2 Initialize Seed Data
 
-# Upload seed file
-scp C:\Users\USER\PLASTIC-SURGASSISSTANT\server\db\seed.sql root@164.90.225.181:/var/www/plasticsurg_assisstant/server/db/
+After schema is created:
+1. Create a new query in SQL Editor
+2. Paste the contents of `server/db/seed.sql`
+3. Click **Run** to execute
+
+### 3.3 Verify Tables
+
+Check that tables were created:
+```sql
+SELECT table_name 
+FROM information_schema.tables 
+WHERE table_schema = 'public' 
+ORDER BY table_name;
 ```
 
-### 3.2 Install PostgreSQL Client on Droplet
-
-```bash
-ssh root@164.90.225.181
-apt-get update
-apt-get install -y postgresql-client
-```
-
-### 3.3 Run Schema Migration
-
-Replace placeholders with your actual connection details:
-
-```bash
-# Set connection string
-export PGPASSWORD='your_password_here'
-
-# Run schema creation
-psql -h your-db-host.db.ondigitalocean.com \
-     -p 25060 \
-     -U plasticsurg_user \
-     -d plasticsurg_app \
-     -f /var/www/plasticsurg_assisstant/server/db/schema.sql
-
-# Run seed data
-psql -h your-db-host.db.ondigitalocean.com \
-     -p 25060 \
-     -U plasticsurg_user \
-     -d plasticsurg_app \
-     -f /var/www/plasticsurg_assisstant/server/db/seed.sql
-
-# Clear password from environment
-unset PGPASSWORD
-```
-
-### 3.4 Verify Tables Created
-
-```bash
-export PGPASSWORD='your_password_here'
-
-psql -h your-db-host.db.ondigitalocean.com \
-     -p 25060 \
-     -U plasticsurg_user \
-     -d plasticsurg_app \
-     -c "\dt"
-
-unset PGPASSWORD
-```
-
-You should see all tables listed.
+Expected tables include:
+- `users`
+- `patients`
+- `treatment_plans`
+- `treatment_plan_steps`
+- `lab_investigations`
+- `prescriptions`
+- `surgery_bookings`
+- And more...
 
 ---
 
-## Step 4: Deploy Backend
+## Step 4: Test Integration
 
-### 4.1 Upload New Backend Files
-
-From your local machine:
-
-```powershell
-# Upload new PostgreSQL backend
-scp C:\Users\USER\PLASTIC-SURGASSISSTANT\server\index-postgres.js root@164.90.225.181:/var/www/plasticsurg_assisstant/server/
-
-# Upload sync routes
-scp C:\Users\USER\PLASTIC-SURGASSISSTANT\server\syncRoutes.js root@164.90.225.181:/var/www/plasticsurg_assisstant/server/
-
-# Upload updated package.json
-scp C:\Users\USER\PLASTIC-SURGASSISSTANT\server\package.json root@164.90.225.181:/var/www/plasticsurg_assisstant/server/
-```
-
-### 4.2 Install PostgreSQL Driver
+### 4.1 Test API Health
 
 ```bash
-ssh root@164.90.225.181
-cd /var/www/plasticsurg_assisstant/server
-npm install pg node-fetch
-```
-
-### 4.3 Backup Current Backend
-
-```bash
-mv /var/www/plasticsurg_assisstant/server/index.js /var/www/plasticsurg_assisstant/server/index-mysql-backup.js
-```
-
-### 4.4 Activate PostgreSQL Backend
-
-```bash
-mv /var/www/plasticsurg_assisstant/server/index-postgres.js /var/www/plasticsurg_assisstant/server/index.js
-```
-
-### 4.5 Restart Backend Service
-
-```bash
-pm2 restart backend
-pm2 logs backend --lines 50
-```
-
-Look for:
-```
-✅ Connected to PostgreSQL database
-📊 PostgreSQL version: PostgreSQL 15.x
-✅ Database schema initialized
-✅ Seed data inserted
-✅ Default users verified
-🚀 Backend server running on port 3001
-```
-
----
-
-## Step 5: Test Integration
-
-### 5.1 Test Health Check
-
-```bash
-curl http://localhost:3001/api/health
+curl https://plasticsurgassisstant.vercel.app/api/health
 ```
 
 Expected response:
 ```json
 {
   "status": "healthy",
-  "database": "connected",
-  "timestamp": "2025-11-16T..."
+  "database": "connected"
 }
 ```
 
-### 5.2 Test Login
+### 4.2 Test Authentication
 
 ```bash
-curl -X POST http://localhost:3001/api/login \
+curl -X POST https://plasticsurgassisstant.vercel.app/api/login \
   -H "Content-Type: application/json" \
-  -d '{
-    "email": "admin@unth.edu.ng",
-    "password": "Admin@123"
-  }'
+  -d '{"email":"admin@unth.edu.ng","password":"Admin@123"}'
 ```
 
-Should return:
-```json
-{
-  "token": "eyJhbGciOiJIUzI1NiIs...",
-  "user": {
-    "id": "admin-001",
-    "email": "admin@unth.edu.ng",
-    "full_name": "System Administrator",
-    "role": "super_admin"
-  },
-  "message": "Login successful"
-}
-```
+### 4.3 Default Credentials
 
-### 5.3 Test Frontend Connection
+After running seed.sql, you can login with:
 
-1. Open browser: http://164.90.225.181
-2. Login with:
-   - Email: `admin@unth.edu.ng`
-   - Password: `Admin@123`
-3. Navigate to Patients page
-4. Register a test patient
-5. Check browser console for sync logs
+| Role | Email | Password |
+|------|-------|----------|
+| Admin | admin@unth.edu.ng | Admin@123 |
+| Consultant | doctor@unth.edu.ng | Doctor@123 |
+
+**⚠️ Change these passwords immediately after first login!**
 
 ---
 
-## Step 6: Migration from MySQL (Optional)
+## Troubleshooting
 
-If you have existing data in MySQL that needs to be migrated:
+### Cannot Connect to Database
 
-### 6.1 Export MySQL Data
+1. **Check DATABASE_URL format:**
+   ```
+   postgresql://postgres:[PASSWORD]@db.mgblgewvpzcaimqaeqcp.supabase.co:5432/postgres
+   ```
 
-```bash
-# Export patients
-mysql -h mysql-host -u user -p database -e "SELECT * FROM patients" --batch --raw > patients.csv
+2. **Verify password has no special characters that need encoding:**
+   - Replace `@` with `%40`
+   - Replace `#` with `%23`
+   - Replace `?` with `%3F`
 
-# Export users (excluding passwords for security)
-mysql -h mysql-host -u user -p database -e "SELECT id, email, full_name, role FROM users" --batch --raw > users.csv
-```
+3. **Check Supabase project is running:**
+   - Go to Supabase Dashboard
+   - Verify project status is "Active"
 
-### 6.2 Import to PostgreSQL
+### Tables Not Created
 
-```bash
-# Create temporary import table
-psql -h pg-host -U pg-user -d pg-database -c "CREATE TABLE temp_import (...);"
+1. Check for SQL errors in Supabase SQL Editor
+2. Verify you're running queries in the correct database
+3. Check the `public` schema is selected
 
-# Copy data
-\copy temp_import FROM 'patients.csv' WITH CSV HEADER
+### Authentication Fails
 
-# Migrate with transformations
-INSERT INTO patients SELECT ... FROM temp_import;
-```
-
-### 6.3 Verify Migration
-
-```bash
-# Check record counts
-psql -h pg-host -U pg-user -d pg-database -c "SELECT COUNT(*) FROM patients;"
-```
+1. Verify JWT_SECRET is set in Vercel
+2. Check DATABASE_URL is correct
+3. Verify seed.sql was run to create default users
 
 ---
 
-## 📊 Database Schema Overview
+## Database Architecture
 
-The PostgreSQL database includes **26 tables**:
+### Key Tables
 
-### Core Tables
-- `users` - User accounts and authentication
-- `ai_settings` - AI/OpenAI configuration
+| Table | Purpose |
+|-------|---------|
+| `users` | Authentication and user profiles |
+| `patients` | Patient demographics and medical records |
+| `treatment_plans` | Treatment planning and protocols |
+| `treatment_plan_steps` | Individual steps in treatment plans |
+| `lab_investigations` | Laboratory test orders and results |
+| `surgery_bookings` | Scheduled surgeries |
+| `prescriptions` | Medication orders |
+| `surgical_checklists` | WHO-style safety checklists |
+| `audit_logs` | Compliance and activity tracking |
 
-### Patient Management
-- `patients` - Patient demographics and medical info
-- `patient_admissions` - Hospital admissions records
+### Security Features
 
-### Treatment Planning
-- `treatment_plans` - Treatment plan headers
-- `treatment_plan_steps` - Individual treatment steps
-
-### Surgical Procedures
-- `surgery_bookings` - Surgery scheduling
-- `surgical_checklists` - WHO-style safety checklists
-- `surgical_consumables` - Inventory items
-- `consumable_usage` - Usage tracking
-
-### Laboratory
-- `lab_investigations` - Lab orders and results
-
-### Prescriptions
-- `prescriptions` - Prescription headers
-- `prescription_items` - Individual medications
-
-### Wound Care
-- `wound_care_records` - Wound assessment and treatment
-
-### CME/Education
-- `cme_topics` - Educational content
-- `mcq_questions` - Assessment questions
-- `user_assessments` - User test results
-
-### MDT (Multidisciplinary Team)
-- `mdt_meetings` - Meeting scheduling
-- `mdt_cases` - Patient case discussions
-
-### Audit
-- `audit_logs` - Complete audit trail
+- **SSL/TLS**: All connections encrypted
+- **Row Level Security**: Available via Supabase policies
+- **Connection Pooling**: Handled by Supabase automatically
+- **Automatic Backups**: Daily backups included
 
 ---
 
-## 🔒 Security Best Practices
+## Additional Resources
 
-### Database Security
-
-1. **Connection Pooling**: Limited to 20 connections
-2. **SSL Required**: All connections use TLS encryption
-3. **Trusted Sources**: Only your droplet IP can connect
-4. **Strong Passwords**: Generated by Digital Ocean
-5. **Regular Backups**: Daily automated backups
-
-### Application Security
-
-1. **JWT Authentication**: 24-hour token expiration
-2. **Password Hashing**: bcrypt with salt rounds 10
-3. **RBAC**: Role-based access control
-4. **Soft Deletes**: Data never permanently deleted
-5. **Audit Logging**: All actions tracked
+- [Supabase Documentation](https://supabase.com/docs)
+- [Vercel Environment Variables](https://vercel.com/docs/environment-variables)
+- [PostgreSQL Documentation](https://www.postgresql.org/docs/)
 
 ---
 
-## 🚀 Performance Optimization
-
-### Indexes Created
-
-All tables have optimized indexes on:
-- Primary keys (UUID)
-- Foreign keys
-- Frequently queried fields (status, dates, names)
-- Deleted flag for soft deletes
-
-### Triggers
-
-Auto-update `updated_at` timestamp on every update
-
-### Connection Pool
-
-- Max connections: 20
-- Idle timeout: 30 seconds
-- Connection timeout: 5 seconds
-
----
-
-## 📈 Monitoring
-
-### Check Database Status
-
-```bash
-# Connection count
-psql -h host -U user -d db -c "SELECT count(*) FROM pg_stat_activity;"
-
-# Active queries
-psql -h host -U user -d db -c "SELECT * FROM pg_stat_activity WHERE state = 'active';"
-
-# Database size
-psql -h host -U user -d db -c "SELECT pg_size_pretty(pg_database_size('plasticsurg_app'));"
-
-# Table sizes
-psql -h host -U user -d db -c "SELECT schemaname, tablename, pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) AS size FROM pg_tables WHERE schemaname = 'public' ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC;"
-```
-
-### PM2 Monitoring
-
-```bash
-pm2 status
-pm2 logs backend --lines 100
-pm2 monit
-```
-
----
-
-## 🐛 Troubleshooting
-
-### Connection Issues
-
-**Problem**: "Connection refused"
-```bash
-# Check if PostgreSQL is accessible
-telnet your-db-host 25060
-
-# Check firewall rules in Digital Ocean
-# Ensure droplet IP is in trusted sources
-```
-
-**Problem**: "SSL connection required"
-```bash
-# Ensure DATABASE_URL includes sslmode=require
-# Check SSL certificates are valid
-```
-
-### Schema Issues
-
-**Problem**: "Table already exists"
-```bash
-# This is normal if running schema.sql multiple times
-# Script uses "CREATE TABLE IF NOT EXISTS"
-```
-
-**Problem**: "Default users not created"
-```bash
-# Manually create admin user
-psql -h host -U user -d db
-INSERT INTO users (id, email, password, full_name, role, department, is_approved, is_active)
-VALUES ('admin-001', 'admin@unth.edu.ng', '$2b$10$...', 'System Administrator', 'super_admin', 'Administration', true, true);
-```
-
-### Backend Issues
-
-**Problem**: "Cannot find module 'pg'"
-```bash
-cd /var/www/plasticsurg_assisstant/server
-npm install pg
-pm2 restart backend
-```
-
-**Problem**: "Database connection error"
-```bash
-# Check .env file
-cat /var/www/plasticsurg_assisstant/server/.env
-
-# Test connection manually
-export PGPASSWORD='password'
-psql -h host -U user -d db -c "SELECT 1;"
-```
-
----
-
-## 📚 Next Steps
-
-1. ✅ **Database Created** - PostgreSQL cluster running
-2. ✅ **Schema Initialized** - All 26 tables created
-3. ✅ **Backend Deployed** - Node.js connected to PostgreSQL
-4. ✅ **Users Created** - Admin and sample consultant
-5. 🔄 **Frontend Sync** - Configure IndexedDB → PostgreSQL sync
-6. 🔄 **Test Workflows** - Register patients, create treatments
-7. 🔄 **Production Ready** - Monitor, backup, optimize
-
----
-
-## 💡 Support
-
-For issues or questions:
-- Check PM2 logs: `pm2 logs backend`
-- Check PostgreSQL logs in Digital Ocean dashboard
-- Review connection string format
-- Ensure firewall rules allow connections
-- Verify SSL certificates
-
----
-
-**Created**: November 16, 2025  
-**Version**: 1.0  
-**Database**: PostgreSQL 15  
-**Framework**: Node.js + Express + pg
+**Status**: ✅ Ready for Deployment  
+**Database**: PostgreSQL 15 (Supabase)  
+**Backend**: Vercel Serverless Functions  
+**Connection**: Direct Connection (port 5432)

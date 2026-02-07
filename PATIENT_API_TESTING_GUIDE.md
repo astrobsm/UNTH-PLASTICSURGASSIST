@@ -50,7 +50,7 @@ Modified `savePatientRegistration()` method to:
 ### Test 1: Patient Registration on Device A
 
 1. **Login to the application:**
-   - URL: http://164.90.225.181
+   - URL: https://plasticsurgassisstant.vercel.app
    - Email: UNTHadmin@gmail.com
    - Password: blackvelvet
 
@@ -73,7 +73,7 @@ Modified `savePatientRegistration()` method to:
 ### Test 2: Cross-Device Verification on Device B
 
 1. **Open application on different device/browser:**
-   - Same URL: http://164.90.225.181
+   - Same URL: https://plasticsurgassisstant.vercel.app
    - Login with same credentials (UNTHadmin@gmail.com / blackvelvet)
 
 2. **Check patient list:**
@@ -103,20 +103,15 @@ Modified `savePatientRegistration()` method to:
 
 ## Database Verification
 
-### Check PostgreSQL Directly
+### Check PostgreSQL via Supabase
 
-```bash
-# SSH into server
-ssh root@164.90.225.181
+1. Go to https://supabase.com/dashboard
+2. Select your project
+3. Navigate to **Table Editor** or **SQL Editor**
+4. Run the following query:
 
-# Connect to PostgreSQL (credentials in server/.env file)
-PGPASSWORD='<password_from_env>' psql \
-  -h <host_from_env> \
-  -p 25060 \
-  -U doadmin \
-  -d plasticsurg
-
-# Query patients
+```sql
+-- Query patients
 SELECT id, hospital_number, first_name, last_name, created_at, synced 
 FROM patients 
 WHERE deleted = false 

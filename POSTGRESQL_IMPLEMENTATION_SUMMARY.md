@@ -2,7 +2,7 @@
 
 ## 🎯 What Was Accomplished
 
-I've created a **complete PostgreSQL database infrastructure** for your Plastic Surgeon Assistant application with robust integration to Digital Ocean managed database services.
+I've created a **complete PostgreSQL database infrastructure** for your Plastic Surgeon Assistant application with robust integration to Supabase managed database services.
 
 ---
 
@@ -51,7 +51,7 @@ I've created a **complete PostgreSQL database infrastructure** for your Plastic 
 
 ### 6. **Deployment Guide** (`POSTGRESQL_DEPLOYMENT_GUIDE.md`)
 - Step-by-step setup instructions
-- Digital Ocean database creation
+- Supabase database connection
 - Connection configuration
 - Schema migration commands
 - Backend deployment
@@ -134,7 +134,7 @@ I've created a **complete PostgreSQL database infrastructure** for your Plastic 
 - JWT token authentication (24-hour expiration)
 - bcrypt password hashing (10 salt rounds)
 - Role-based access control (RBAC)
-- IP whitelisting (Digital Ocean trusted sources)
+- IP whitelisting (Supabase trusted sources)
 
 ### 5. **Scalability**
 - UUID primary keys (distributed system ready)
@@ -199,57 +199,26 @@ I've created a **complete PostgreSQL database infrastructure** for your Plastic 
 
 ## 🚀 Deployment Steps (Quick Reference)
 
-### 1. Create PostgreSQL Database
+### 1. Database Configuration
+The app uses Supabase PostgreSQL. Configure the DATABASE_URL in your Vercel Dashboard:
 ```
-1. Go to Digital Ocean → Databases
-2. Create PostgreSQL 15 cluster
-3. Name: plasticsurg-db
-4. Create database: plasticsurg_app
-5. Create user: plasticsurg_user
-6. Add trusted source: 164.90.225.181
+DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@db.mgblgewvpzcaimqaeqcp.supabase.co:5432/postgres
 ```
 
-### 2. Upload Files
-```powershell
-scp server\db\schema.sql root@164.90.225.181:/var/www/plasticsurg_assisstant/server/db/
-scp server\db\seed.sql root@164.90.225.181:/var/www/plasticsurg_assisstant/server/db/
-scp server\index-postgres.js root@164.90.225.181:/var/www/plasticsurg_assisstant/server/
-scp server\syncRoutes.js root@164.90.225.181:/var/www/plasticsurg_assisstant/server/
-scp server\package.json root@164.90.225.181:/var/www/plasticsurg_assisstant/server/
-```
+### 2. Deploy to Vercel
+Push to your GitHub repository and Vercel will automatically deploy.
 
-### 3. Configure Connection
+### 3. Initialize Database
+Connect to your Supabase database and run the schema:
 ```bash
-ssh root@164.90.225.181
-nano /var/www/plasticsurg_assisstant/server/.env
-```
-Update DATABASE_URL with PostgreSQL connection string
-
-### 4. Install Dependencies
-```bash
-cd /var/www/plasticsurg_assisstant/server
-npm install pg node-fetch
+# Using Supabase SQL Editor or psql
+psql -h db.mgblgewvpzcaimqaeqcp.supabase.co -p 5432 -U postgres -d postgres -f server/db/schema.sql
+psql -h db.mgblgewvpzcaimqaeqcp.supabase.co -p 5432 -U postgres -d postgres -f server/db/seed.sql
 ```
 
-### 5. Initialize Database
+### 4. Test
 ```bash
-export PGPASSWORD='your_password'
-psql -h your-host -p 25060 -U plasticsurg_user -d plasticsurg_app -f server/db/schema.sql
-psql -h your-host -p 25060 -U plasticsurg_user -d plasticsurg_app -f server/db/seed.sql
-```
-
-### 6. Deploy Backend
-```bash
-mv server/index.js server/index-mysql-backup.js
-mv server/index-postgres.js server/index.js
-pm2 restart backend
-pm2 logs backend
-```
-
-### 7. Test
-```bash
-curl http://localhost:3001/api/health
-curl -X POST http://localhost:3001/api/login -H "Content-Type: application/json" -d '{"email":"admin@unth.edu.ng","password":"Admin@123"}'
+curl https://plasticsurgassisstant.vercel.app/api/health
 ```
 
 ---
@@ -258,21 +227,20 @@ curl -X POST http://localhost:3001/api/login -H "Content-Type: application/json"
 
 ### ✅ Immediate Actions
 
-1. **Create Digital Ocean PostgreSQL Database**
-   - Follow Step 1 in deployment guide
-   - Choose appropriate plan ($15-$25/month)
-   - Save connection credentials
+1. **Configure Supabase PostgreSQL Database**
+   - Database is already created at: db.mgblgewvpzcaimqaeqcp.supabase.co
+   - Use Supabase dashboard for SQL management
 
-2. **Update .env File**
-   - Copy PostgreSQL connection string
-   - Update DATABASE_URL in server/.env
+2. **Update Vercel Environment Variables**
+   - Go to Vercel Dashboard → Project Settings → Environment Variables
+   - Set DATABASE_URL to your Supabase connection string
 
-3. **Upload Files**
-   - Use the scp commands above
-   - Or use the DEPLOY.bat script (needs updating)
+3. **Deploy to Vercel**
+   - Push changes to GitHub
+   - Vercel automatically deploys
 
 4. **Run Schema Migration**
-   - Execute schema.sql and seed.sql
+   - Execute schema.sql and seed.sql via Supabase SQL Editor
    - Verify tables created
 
 5. **Deploy Backend**
@@ -413,29 +381,28 @@ curl -X POST http://localhost:3001/api/login -H "Content-Type: application/json"
 - ✅ Data analytics potential
 - ✅ Compliance auditing
 
-### Digital Ocean Managed Benefits
+### Supabase Managed Benefits
 - ✅ Automated backups
 - ✅ Automatic failover
 - ✅ Version updates handled
 - ✅ Monitoring dashboard
 - ✅ Scaling on demand
-- ✅ 99.95% uptime SLA
+- ✅ Free tier available
+- ✅ Real-time capabilities
 
 ---
 
 ## 🎓 Next Steps
 
 ### Phase 1: Database Setup (Today)
-- [ ] Create Digital Ocean PostgreSQL cluster
-- [ ] Configure connection and trusted sources
-- [ ] Run schema migration
+- [ ] Configure Supabase PostgreSQL connection
+- [ ] Run schema migration via Supabase SQL Editor
 - [ ] Verify tables created
 
 ### Phase 2: Backend Deployment (Today)
-- [ ] Upload new backend files
-- [ ] Update .env configuration
-- [ ] Install pg dependency
-- [ ] Restart backend service
+- [ ] Update Vercel environment variables
+- [ ] Push to GitHub
+- [ ] Verify automatic Vercel deployment
 - [ ] Test authentication
 
 ### Phase 3: Testing (This Week)
@@ -461,7 +428,7 @@ curl -X POST http://localhost:3001/api/login -H "Content-Type: application/json"
 **"Cannot connect to database"**
 - Check DATABASE_URL format
 - Verify SSL mode is required
-- Check trusted sources in Digital Ocean
+- Check Supabase connection settings
 - Test connection with psql command
 
 **"Table already exists"**
@@ -469,20 +436,16 @@ curl -X POST http://localhost:3001/api/login -H "Content-Type: application/json"
 - Uses `IF NOT EXISTS` clause
 - Safe to ignore
 
-**"Module 'pg' not found"**
-- Run `npm install pg` in server directory
-- Restart PM2 process
-
 **"Authentication failed"**
 - Verify DATABASE_URL credentials
-- Check user permissions in Digital Ocean
+- Check user permissions in Supabase
 - Ensure user has access to database
 
 ### Getting Help
 
-1. Check `pm2 logs backend`
+1. Check Vercel function logs
 2. Review POSTGRESQL_DEPLOYMENT_GUIDE.md
-3. Check Digital Ocean database logs
+3. Check Supabase database logs
 4. Test connection with psql manually
 
 ---
@@ -498,8 +461,8 @@ For any questions or issues during deployment, refer to:
 
 **Status**: ✅ Ready for Deployment  
 **Created**: November 16, 2025  
-**Database**: PostgreSQL 15  
-**Backend**: Node.js + Express + pg  
+**Database**: PostgreSQL 15 (Supabase)  
+**Backend**: Node.js + Express + pg (Vercel Serverless)  
 **Total Tables**: 26  
 **Total Endpoints**: 25+  
 **Lines of Code**: 2000+

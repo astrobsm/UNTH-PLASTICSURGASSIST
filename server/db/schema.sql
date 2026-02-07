@@ -1,6 +1,6 @@
 -- =====================================================
 -- PLASTIC SURGEON ASSISTANT - PostgreSQL Database Schema
--- Digital Ocean Managed PostgreSQL
+-- Supabase PostgreSQL
 -- =====================================================
 
 -- Enable UUID extension

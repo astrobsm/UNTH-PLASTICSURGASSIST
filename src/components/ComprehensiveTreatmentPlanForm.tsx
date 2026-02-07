@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Plus, Trash2 } from 'lucide-react';
+import { X, Plus, Trash2, AlertTriangle, Info, FileDown, Printer } from 'lucide-react';
 import { format } from 'date-fns';
 import { useAuthStore } from '../store/authStore';
 import { db } from '../db/database';
@@ -11,6 +11,8 @@ import {
   MedicalTeamAssignment,
   DischargePlanning
 } from '../services/treatmentPlanningService';
+import { medicationDosingService, GFRDosingRecommendation } from '../services/medicationDosingService';
+import { investigationPdfService } from '../services/investigationPdfService';
 
 interface ComprehensiveTreatmentPlanFormProps {
   onClose: () => void;
@@ -28,26 +30,59 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // Fetch users on component mount
+  // Fair round-robin assignment - get least loaded staff member
+  const getLeastLoadedStaff = (staffList: any[], existingPlans: any[]) => {
+    if (staffList.length === 0) return null;
+    
+    // Count current assignments for each staff member
+    const assignmentCounts = staffList.map(staff => {
+      const count = existingPlans.filter(plan => {
+        const team = plan.medical_team;
+        if (!team) return false;
+        return team.senior_registrar === staff.email || 
+               team.registrar === staff.email || 
+               team.house_officer === staff.email;
+      }).length;
+      return { staff, count };
+    });
+    
+    // Sort by count (ascending) and return the least loaded
+    assignmentCounts.sort((a, b) => a.count - b.count);
+    return assignmentCounts[0]?.staff || null;
+  };
+  
+  // Fetch users on component mount and auto-assign fairly
   useEffect(() => {
-    const fetchUsers = async () => {
+    const fetchUsersAndAutoAssign = async () => {
       try {
         const allUsers = await db.approved_users.toArray();
         setUsers(allUsers);
         
-        // Auto-assign medical team based on available users
+        // Get existing treatment plans for fair distribution
+        const existingPlans = await db.treatment_plans.toArray();
+        
+        // Auto-assign medical team based on fair distribution (least loaded)
         const seniorRegistrars = allUsers.filter(u => u.role === 'senior_registrar');
         const registrars = allUsers.filter(u => u.role === 'registrar');
         const houseOfficers = allUsers.filter(u => u.role === 'house_officer');
         
-        if (seniorRegistrars.length > 0 || registrars.length > 0 || houseOfficers.length > 0) {
-          setMedicalTeam({
-            senior_registrar: seniorRegistrars[0]?.email || '',
-            registrar: registrars[0]?.email || '',
-            house_officer: houseOfficers[0]?.email || '',
-            assigned_date: new Date()
-          });
-        }
+        // Get the least loaded staff member for each role
+        const selectedSeniorRegistrar = getLeastLoadedStaff(seniorRegistrars, existingPlans);
+        const selectedRegistrar = getLeastLoadedStaff(registrars, existingPlans);
+        const selectedHouseOfficer = getLeastLoadedStaff(houseOfficers, existingPlans);
+        
+        setMedicalTeam({
+          senior_registrar: selectedSeniorRegistrar?.email || '',
+          registrar: selectedRegistrar?.email || '',
+          house_officer: selectedHouseOfficer?.email || '',
+          assigned_date: new Date()
+        });
+        
+        console.log('✅ Auto-assigned medical team fairly:', {
+          seniorRegistrar: selectedSeniorRegistrar?.name || 'None available',
+          registrar: selectedRegistrar?.name || 'None available',
+          houseOfficer: selectedHouseOfficer?.name || 'None available'
+        });
       } catch (error) {
         console.error('Error fetching users:', error);
       } finally {
@@ -55,7 +90,7 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
       }
     };
     
-    fetchUsers();
+    fetchUsersAndAutoAssign();
   }, []);
   
   // Basic Information
@@ -85,6 +120,49 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
     start_date: format(new Date(), 'yyyy-MM-dd'),
     notes: ''
   });
+  
+  // GFR-based dosing
+  const [patientGFR, setPatientGFR] = useState<number | ''>('');
+  const [gfrRecommendation, setGfrRecommendation] = useState<GFRDosingRecommendation | null>(null);
+  
+  // Auto-fill dosing based on medication name and GFR
+  const handleMedicationChange = (medicationName: string) => {
+    setNewMed({ ...newMed, medication_name: medicationName });
+    
+    if (medicationName && patientGFR && typeof patientGFR === 'number') {
+      const recommendation = medicationDosingService.getDosingRecommendation(
+        medicationName,
+        patientGFR,
+        newMed.dosage,
+        newMed.frequency
+      );
+      setGfrRecommendation(recommendation);
+      
+      // Auto-fill adjusted dose and frequency if available
+      if (recommendation.adjustedDose && !recommendation.contraindicated) {
+        setNewMed(prev => ({
+          ...prev,
+          medication_name: medicationName,
+          dosage: recommendation.adjustedDose,
+          frequency: recommendation.adjustedFrequency,
+          notes: recommendation.notes || prev.notes
+        }));
+      }
+    } else {
+      setGfrRecommendation(null);
+    }
+  };
+  
+  // Update recommendation when GFR changes
+  useEffect(() => {
+    if (newMed.medication_name && patientGFR && typeof patientGFR === 'number') {
+      const recommendation = medicationDosingService.getDosingRecommendation(
+        newMed.medication_name,
+        patientGFR
+      );
+      setGfrRecommendation(recommendation);
+    }
+  }, [patientGFR]);
 
   // Investigations
   const [investigations, setInvestigations] = useState<Omit<PlannedInvestigation, 'id' | 'scheduled_dates' | 'results'>[]>([]);
@@ -250,6 +328,44 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
     setNewCriterion('');
   };
 
+  // Download Investigation Request PDF
+  const downloadInvestigationPDF = (thermal: boolean = true) => {
+    if (investigations.length === 0) {
+      alert('Please add at least one investigation before downloading the request form.');
+      return;
+    }
+
+    const patient = patients.find(p => p.id === parseInt(basicInfo.patient_id));
+    if (!patient) {
+      alert('Please select a patient first.');
+      return;
+    }
+
+    const patientData = {
+      patient_id: patient.id?.toString() || '',
+      patient_name: `${patient.first_name} ${patient.last_name}`,
+      ward: patient.ward || 'Not specified',
+      consultant: patient.assigned_consultant || 'Not assigned',
+      hospital_number: patient.hospital_number || patient.id?.toString() || ''
+    };
+
+    const investigationsForPdf = investigations.map(inv => ({
+      investigation_name: inv.investigation_name,
+      investigation_type: inv.investigation_type,
+      frequency: inv.frequency,
+      repeat_count: inv.repeat_count,
+      target_value: inv.target_value,
+      notes: inv.notes || '',
+      urgency: 'routine' as const
+    }));
+
+    if (thermal) {
+      investigationPdfService.generateThermalInvestigationRequestPDF(patientData, investigationsForPdf);
+    } else {
+      investigationPdfService.generateInvestigationRequestPDF(patientData, investigationsForPdf);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -389,60 +505,73 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
               </div>
 
               <h3 className="text-lg font-semibold text-gray-900 mt-6">Medical Team Assignment</h3>
+              <p className="text-sm text-gray-500 mb-2">Team members are auto-assigned fairly based on current workload. All fields are optional.</p>
               
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Senior Registrar *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Senior Registrar <span className="text-gray-400 text-xs">(optional)</span>
+                  </label>
                   <select
-                    required
                     value={medicalTeam.senior_registrar}
                     onChange={(e) => setMedicalTeam({ ...medicalTeam, senior_registrar: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
                     disabled={loading}
                   >
-                    <option value="">Select Senior Registrar...</option>
+                    <option value="">-- None available --</option>
                     {users.filter(u => u.role === 'senior_registrar').map(u => (
                       <option key={u.id} value={u.email}>
                         {u.name || u.email}
                       </option>
                     ))}
                   </select>
+                  {users.filter(u => u.role === 'senior_registrar').length === 0 && (
+                    <p className="text-xs text-amber-600 mt-1">No senior registrars in database</p>
+                  )}
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Registrar *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Registrar <span className="text-gray-400 text-xs">(optional)</span>
+                  </label>
                   <select
-                    required
                     value={medicalTeam.registrar}
                     onChange={(e) => setMedicalTeam({ ...medicalTeam, registrar: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
                     disabled={loading}
                   >
-                    <option value="">Select Registrar...</option>
+                    <option value="">-- None available --</option>
                     {users.filter(u => u.role === 'registrar').map(u => (
                       <option key={u.id} value={u.email}>
                         {u.name || u.email}
                       </option>
                     ))}
                   </select>
+                  {users.filter(u => u.role === 'registrar').length === 0 && (
+                    <p className="text-xs text-amber-600 mt-1">No registrars in database</p>
+                  )}
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">House Officer *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    House Officer <span className="text-gray-400 text-xs">(optional)</span>
+                  </label>
                   <select
-                    required
                     value={medicalTeam.house_officer}
                     onChange={(e) => setMedicalTeam({ ...medicalTeam, house_officer: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
                     disabled={loading}
                   >
-                    <option value="">Select House Officer...</option>
+                    <option value="">-- None available --</option>
                     {users.filter(u => u.role === 'house_officer').map(u => (
                       <option key={u.id} value={u.email}>
                         {u.name || u.email}
                       </option>
                     ))}
                   </select>
+                  {users.filter(u => u.role === 'house_officer').length === 0 && (
+                    <p className="text-xs text-amber-600 mt-1">No house officers in database</p>
+                  )}
                 </div>
               </div>
 
@@ -464,6 +593,43 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
             <div className="space-y-6">
               <h3 className="text-lg font-semibold text-gray-900">Medications</h3>
               
+              {/* GFR Input for Dosing Guidance */}
+              <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
+                <div className="flex items-center gap-2 mb-2">
+                  <Info className="w-5 h-5 text-blue-600" />
+                  <h4 className="font-medium text-blue-900">GFR-Based Dosing Guidance</h4>
+                </div>
+                <p className="text-sm text-blue-700 mb-3">
+                  Enter the patient's eGFR to get automatic dosing adjustments for renal impairment.
+                </p>
+                <div className="flex items-center gap-3">
+                  <label className="text-sm font-medium text-gray-700">Patient eGFR:</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="150"
+                    value={patientGFR}
+                    onChange={(e) => setPatientGFR(e.target.value ? parseInt(e.target.value) : '')}
+                    className="w-24 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="e.g., 45"
+                  />
+                  <span className="text-sm text-gray-500">mL/min/1.73m²</span>
+                  {patientGFR && typeof patientGFR === 'number' && (
+                    <span className={`text-sm px-2 py-1 rounded ${
+                      patientGFR >= 90 ? 'bg-green-100 text-green-800' :
+                      patientGFR >= 60 ? 'bg-yellow-100 text-yellow-800' :
+                      patientGFR >= 30 ? 'bg-orange-100 text-orange-800' :
+                      'bg-red-100 text-red-800'
+                    }`}>
+                      {patientGFR >= 90 ? 'Normal' :
+                       patientGFR >= 60 ? 'Mild decrease' :
+                       patientGFR >= 30 ? 'Moderate (CKD 3)' :
+                       patientGFR >= 15 ? 'Severe (CKD 4)' : 'Kidney failure (CKD 5)'}
+                    </span>
+                  )}
+                </div>
+              </div>
+              
               <div className="bg-gray-50 p-4 rounded-lg space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -471,10 +637,16 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
                     <input
                       type="text"
                       value={newMed.medication_name}
-                      onChange={(e) => setNewMed({ ...newMed, medication_name: e.target.value })}
+                      onChange={(e) => handleMedicationChange(e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
                       placeholder="e.g., Paracetamol"
+                      list="medication-suggestions"
                     />
+                    <datalist id="medication-suggestions">
+                      {medicationDosingService.getAvailableMedicationsWithGFRDosing().map(med => (
+                        <option key={med} value={med} />
+                      ))}
+                    </datalist>
                   </div>
 
                   <div>
@@ -483,12 +655,46 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
                       type="text"
                       value={newMed.dosage}
                       onChange={(e) => setNewMed({ ...newMed, dosage: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                      className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 ${
+                        gfrRecommendation?.contraindicated ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                      }`}
                       placeholder="e.g., 1g, 500mg"
                     />
                   </div>
-
-                  <div>
+                  
+                {/* GFR Recommendation Alert */}
+                {gfrRecommendation && patientGFR && (
+                  <div className={`col-span-2 p-3 rounded-lg ${
+                    gfrRecommendation.contraindicated 
+                      ? 'bg-red-50 border border-red-200' 
+                      : gfrRecommendation.requiresMonitoring 
+                        ? 'bg-amber-50 border border-amber-200'
+                        : 'bg-green-50 border border-green-200'
+                  }`}>
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className={`w-5 h-5 flex-shrink-0 ${
+                        gfrRecommendation.contraindicated ? 'text-red-600' : 
+                        gfrRecommendation.requiresMonitoring ? 'text-amber-600' : 'text-green-600'
+                      }`} />
+                      <div>
+                        <p className={`font-medium ${
+                          gfrRecommendation.contraindicated ? 'text-red-900' : 
+                          gfrRecommendation.requiresMonitoring ? 'text-amber-900' : 'text-green-900'
+                        }`}>
+                          {gfrRecommendation.contraindicated 
+                            ? '⚠️ Medication contraindicated in this GFR range'
+                            : `GFR-Adjusted Dose: ${gfrRecommendation.adjustedDose} ${gfrRecommendation.adjustedFrequency}`}
+                        </p>
+                        {gfrRecommendation.notes && (
+                          <p className="text-sm mt-1 text-gray-700">{gfrRecommendation.notes}</p>
+                        )}
+                        {gfrRecommendation.requiresMonitoring && !gfrRecommendation.contraindicated && (
+                          <p className="text-sm mt-1 text-amber-700">⚡ Requires monitoring in renal impairment</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}                  <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Route</label>
                     <select
                       value={newMed.route}
@@ -688,6 +894,26 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
                       </button>
                     </div>
                   ))}
+                  
+                  {/* Download Investigation Request Form Buttons */}
+                  <div className="flex gap-3 mt-4 pt-4 border-t border-gray-200">
+                    <button
+                      type="button"
+                      onClick={() => downloadInvestigationPDF(true)}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                    >
+                      <Printer className="w-4 h-4" />
+                      Print Thermal (80mm)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => downloadInvestigationPDF(false)}
+                      className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+                    >
+                      <FileDown className="w-4 h-4" />
+                      Download A4 PDF
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

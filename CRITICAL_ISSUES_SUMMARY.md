@@ -21,7 +21,7 @@
   - `src/pages/DischargesPage.tsx`
   - `src/components/AISettingsPanel.tsx`
 
-**Result:** Frontend rebuilt and deployed to http://164.90.225.181
+**Result:** Frontend rebuilt and deployed to https://plasticsurgassisstant.vercel.app
 
 ---
 
@@ -37,7 +37,7 @@
 
 **Possible Causes:**
 1. **Missing icons** - The manifest references logo.png, icon-192.png, icon-512.png but these files may not exist in the `public/` folder
-2. **HTTPS requirement** - PWAs require HTTPS (except localhost). The app is running on HTTP (164.90.225.181)
+2. **HTTPS requirement** - PWAs require HTTPS (except localhost). The app is deployed on Vercel with HTTPS enabled
 3. **Service Worker not registering** properly
 
 **Solution Steps:**
@@ -48,13 +48,9 @@
 # Need files: public/logo.png, public/icon-192.png, public/icon-512.png
 ```
 
-2. **Enable HTTPS on the server:**
-```bash
-# Install certbot and get Let's Encrypt SSL certificate
-ssh root@164.90.225.181
-apt install certbot python3-certbot-nginx
-# You'll need a domain name - PWAs don't work well with IP addresses
-```
+2. **HTTPS is enabled on Vercel:**
+- Vercel automatically provides HTTPS for all deployments
+- PWA installation should work correctly on https://plasticsurgassisstant.vercel.app
 
 3. **Test PWA criteria:**
 - Open Chrome DevTools → Application → Manifest (check for errors)
@@ -315,13 +311,12 @@ patients?.forEach(patient => {/* code */})
 **Admin Credentials:**
 - Email: UNTHadmin@gmail.com
 - Password: blackvelvet
-- Server: http://164.90.225.181
+- App URL: https://plasticsurgassisstant.vercel.app
 
-**To complete the patient synchronization fix**, run these commands on your local machine:
+**To complete the patient synchronization fix**, push changes to GitHub:
 
-1. Add the patient endpoints to the backend
-2. Update the patient service
-3. Test locally first
-4. Deploy to server
+1. Patient endpoints are implemented in /api folder
+2. Vercel automatically deploys on push
+3. Database is hosted on Supabase
 
 Would you like me to implement the patient API endpoints now?

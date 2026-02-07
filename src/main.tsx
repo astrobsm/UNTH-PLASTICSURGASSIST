@@ -8,6 +8,8 @@ import './index.css';
 import { cmeArticleScheduler } from './services/cmeArticleScheduler';
 import { mcqGenerationService } from './services/mcqGenerationService';
 import { offlineManager } from './services/offlineManager';
+import { medicationDosingService } from './services/medicationDosingService';
+import { reviewNotificationService } from './services/reviewNotificationService';
 
 // Log app version for debugging
 const APP_VERSION = '4.0.2';
@@ -168,6 +170,23 @@ setTimeout(() => {
     console.log('CME Article Scheduler started');
   } catch (error) {
     console.error('Error starting CME Article Scheduler:', error);
+  }
+  
+  try {
+    // Start Medication End Date Monitoring
+    medicationDosingService.startMedicationMonitoring();
+    console.log('Medication end date monitoring started');
+  } catch (error) {
+    console.error('Error starting Medication monitoring:', error);
+  }
+  
+  try {
+    // Start Review Notification Monitoring
+    reviewNotificationService.startMonitoring();
+    reviewNotificationService.cleanupOldNotificationMarkers();
+    console.log('Review notification monitoring started');
+  } catch (error) {
+    console.error('Error starting Review notification monitoring:', error);
   }
 
   // Initialize WACS topics and start MCQ test notification scheduler
