@@ -9,7 +9,9 @@ let pool = null;
 
 export function getPool() {
   if (!pool) {
-    const connectionString = process.env.DATABASE_URL;
+    // Use environment variable or fallback to hardcoded connection string
+    const connectionString = process.env.DATABASE_URL || 
+      'postgresql://postgres.mgblgewvpzcaimqaeqcp:VMBaD8okNXl2K9pV@aws-1-eu-central-1.pooler.supabase.com:5432/postgres';
     
     if (!connectionString) {
       console.error('❌ DATABASE_URL environment variable is not set');
