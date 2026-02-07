@@ -27,16 +27,15 @@ This guide walks you through deploying the app to Vercel (free tier) with Supaba
 ### 1.2 Get Database Connection String
 
 1. In your Supabase project dashboard, go to **Settings** (gear icon) → **Database**
-2. Scroll down to **"Connection string"**
-3. Click the **"URI"** tab
-4. Select **"Transaction pooler"** (recommended for serverless/Vercel)
-5. Copy the connection string - it looks like:
+2. Scroll down to **"Connection pooling"** section
+3. Click **"Connection string"** and select **"Transaction"** mode
+4. Copy the connection string - it looks like:
    ```
-   postgresql://postgres.[project-ref]:[YOUR-PASSWORD]@aws-0-[region].pooler.supabase.com:6543/postgres
+   postgresql://postgres.[project-ref]:[YOUR-PASSWORD]@aws-1-[region].pooler.supabase.com:5432/postgres
    ```
-6. Replace `[YOUR-PASSWORD]` with the password you created in step 1.1
+5. Replace `[YOUR-PASSWORD]` with the password you created in step 1.1
 
-> **Important**: Use the **Transaction pooler** connection (port `6543`) for Vercel serverless functions. This handles connection pooling automatically.
+> **Important**: Use the **Transaction pooler** connection for Vercel serverless functions. This handles connection pooling automatically and works well with serverless environments.
 
 ---
 
