@@ -212,7 +212,7 @@ async function getAllUsers(currentUser, res) {
 
   const result = await query(
     `SELECT id, username, email, full_name, role, is_approved, is_active, created_at, last_login
-     FROM users ORDER BY created_at DESC`
+     FROM users WHERE (app_id = 'psa' OR app_id IS NULL) ORDER BY created_at DESC`
   );
 
   return res.status(200).json({ users: result.rows });
@@ -243,8 +243,8 @@ async function createUser(data, currentUser, res) {
     return res.status(400).json({ error: 'Email and full name are required' });
   }
 
-  // Check if email already exists
-  const existingEmail = await query('SELECT id FROM users WHERE email = $1', [email]);
+  // Check if email already exists within this app
+  const existingEmail = await query("SELECT id FROM users WHERE email = $1 AND (app_id = 'psa' OR app_id IS NULL)", [email]);
   if (existingEmail.rows.length > 0) {
     return res.status(409).json({ error: 'Email already exists' });
   }
@@ -253,7 +253,7 @@ async function createUser(data, currentUser, res) {
   let username = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
   
   // Check if username already exists
-  const existingUsername = await query('SELECT id FROM users WHERE username = $1', [username]);
+  const existingUsername = await query("SELECT id FROM users WHERE username = $1 AND (app_id = 'psa' OR app_id IS NULL)", [username]);
   if (existingUsername.rows.length > 0) {
     username = `${username}${Math.floor(Math.random() * 1000)}`;
   }
@@ -264,8 +264,8 @@ async function createUser(data, currentUser, res) {
   const mustChangePassword = role !== 'admin';
 
   const result = await query(
-    `INSERT INTO users (username, password_hash, email, full_name, role, is_approved, is_active, must_change_password)
-     VALUES ($1, $2, $3, $4, $5, true, true, $6)
+    `INSERT INTO users (username, password_hash, email, full_name, role, is_approved, is_active, must_change_password, app_id)
+     VALUES ($1, $2, $3, $4, $5, true, true, $6, 'psa')
      RETURNING id, username, email, full_name, role, is_approved, is_active`,
     [username, passwordHash, email, fullName, role, mustChangePassword]
   );
@@ -456,12 +456,12 @@ async function bulkImportUsers(data, currentUser, res) {
 
       let username = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
       
-      const existingUsername = await query('SELECT id FROM users WHERE username = $1', [username]);
+      const existingUsername = await query("SELECT id FROM users WHERE username = $1 AND (app_id = 'psa' OR app_id IS NULL)", [username]);
       if (existingUsername.rows.length > 0) {
         username = `${username}${Math.floor(Math.random() * 1000)}`;
       }
 
-      const existingEmail = await query('SELECT id FROM users WHERE email = $1', [email]);
+      const existingEmail = await query("SELECT id FROM users WHERE email = $1 AND (app_id = 'psa' OR app_id IS NULL)", [email]);
       if (existingEmail.rows.length > 0) {
         results.failed.push({ email, fullName, error: 'Email already exists' });
         continue;
@@ -472,8 +472,8 @@ async function bulkImportUsers(data, currentUser, res) {
       const mustChangePassword = role !== 'admin';
 
       const result = await query(
-        `INSERT INTO users (username, password_hash, email, full_name, role, is_approved, is_active, must_change_password)
-         VALUES ($1, $2, $3, $4, $5, true, true, $6)
+        `INSERT INTO users (username, password_hash, email, full_name, role, is_approved, is_active, must_change_password, app_id)
+         VALUES ($1, $2, $3, $4, $5, true, true, $6, 'psa')
          RETURNING id, username, email, full_name, role`,
         [username, passwordHash, email, fullName, role, mustChangePassword]
       );

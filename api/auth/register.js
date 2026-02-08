@@ -41,8 +41,8 @@ async function handleRegister(req, res) {
     return res.status(400).json({ error: 'Email, password, and full name are required' });
   }
 
-  // Check if email exists
-  const existing = await query('SELECT id FROM users WHERE email = $1', [email]);
+  // Check if email exists within this app
+  const existing = await query("SELECT id FROM users WHERE email = $1 AND (app_id = 'psa' OR app_id IS NULL)", [email]);
   if (existing.rows.length > 0) {
     return res.status(409).json({ error: 'Email already registered' });
   }
@@ -50,8 +50,8 @@ async function handleRegister(req, res) {
   const passwordHash = await bcrypt.hash(password, 10);
 
   const result = await query(
-    `INSERT INTO users (email, password_hash, full_name, role, department, specialization, license_number, phone, is_approved, is_active)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false, true)
+    `INSERT INTO users (email, password_hash, full_name, role, department, specialization, license_number, phone, is_approved, is_active, app_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false, true, 'psa')
      RETURNING id, email, full_name, role, department, license_number, phone, is_approved`,
     [email, passwordHash, finalFullName, role, department || null, specialization || null, license_number || null, phone || null]
   );

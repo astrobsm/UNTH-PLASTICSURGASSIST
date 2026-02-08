@@ -27,13 +27,13 @@ async function handleLogin(req, res) {
     return res.status(400).json({ error: 'Username/email and password are required' });
   }
 
-  // Try to find user by email - check both password columns, handle NULL is_approved
+  // Try to find user by email - filter by app_id='psa' to isolate from other apps sharing this DB
   const result = await query(
     `SELECT id, email, COALESCE(password_hash, password) as password_value, 
             role, full_name, first_name, last_name, 
             COALESCE(is_approved, true) as is_approved, 
             COALESCE(is_active, true) as is_active
-     FROM users WHERE email = $1`,
+     FROM users WHERE email = $1 AND (app_id = 'psa' OR app_id IS NULL)`,
     [loginId]
   );
 
