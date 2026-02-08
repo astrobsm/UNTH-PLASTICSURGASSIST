@@ -128,7 +128,8 @@ class ApiClient {
     const fetchOptions: RequestInit = {
       ...options,
       headers,
-      credentials: 'include' as RequestCredentials, // Important for CORS with cookies
+      // Using Bearer token auth - no need for credentials:include
+      // credentials: 'include' would conflict with Access-Control-Allow-Origin: *
     };
 
     try {
