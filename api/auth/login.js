@@ -56,7 +56,31 @@ async function handleLogin(req, res) {
     return res.status(401).json({ error: 'Password not set. Please reset your password.' });
   }
 
-  const validPassword = await bcrypt.compare(password, user.password_value);
+  let validPassword = false;
+  const isBcryptHash = user.password_value.startsWith('$2a$') || user.password_value.startsWith('$2b$');
+
+  if (isBcryptHash) {
+    // Password is already hashed — compare with bcrypt
+    validPassword = await bcrypt.compare(password, user.password_value);
+  } else {
+    // Password is stored as plaintext — direct comparison
+    validPassword = (password === user.password_value);
+
+    // Auto-hash the plaintext password for security
+    if (validPassword) {
+      try {
+        const hashedPassword = await bcrypt.hash(password, 12);
+        await query(
+          'UPDATE users SET password_hash = $1, password = NULL WHERE id = $2',
+          [hashedPassword, user.id]
+        );
+        console.log(`Auto-hashed plaintext password for user ${user.email}`);
+      } catch (hashErr) {
+        console.error('Failed to auto-hash password:', hashErr.message);
+      }
+    }
+  }
+
   if (!validPassword) {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
