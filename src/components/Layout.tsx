@@ -30,7 +30,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Menu,
-  X
+  X,
+  Syringe
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import SyncStatusIndicator from './SyncStatusIndicator';
@@ -54,6 +55,7 @@ const navigation = [
   { name: 'Limb Salvage', href: '/limb-salvage', icon: Footprints },
   { name: 'Burn Care', href: '/burn-care', icon: Flame },
   { name: 'Wound Care', href: '/wound-care', icon: HeartPulse },
+  { name: 'Keloid Care', href: '/keloid-care', icon: Syringe },
   { name: 'Medical Training', href: '/medical-training', icon: BookOpen },
   { name: 'Labs', href: '/labs', icon: FlaskConical },
   { name: 'Patient Education', href: '/patient-education', icon: BookOpenCheck },
