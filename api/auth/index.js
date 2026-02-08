@@ -20,8 +20,10 @@ export default async function handler(req, res) {
 }
 
 async function handleLogin(req, res) {
-  const { username, email, password } = req.body;
+  const { username, email, password } = req.body || {};
   const loginId = username || email; // Accept either username or email
+
+  console.log('Login attempt:', { loginId, hasPassword: !!password, bodyType: typeof req.body, bodyKeys: req.body ? Object.keys(req.body) : 'no body' });
 
   if (!loginId || !password) {
     return res.status(400).json({ error: 'Username/email and password are required' });
@@ -38,10 +40,12 @@ async function handleLogin(req, res) {
   );
 
   if (result.rows.length === 0) {
-    return res.status(401).json({ error: 'Invalid credentials' });
+    console.log('Login failed: no user found for', loginId, 'with app_id psa or null');
+    return res.status(401).json({ error: 'Invalid credentials', debug: { userFound: false, email: loginId } });
   }
 
   const user = result.rows[0];
+  console.log('User found:', { id: user.id, email: user.email, role: user.role, hasPassword: !!user.password_value, isBcrypt: user.password_value ? user.password_value.startsWith('$2') : false });
 
   if (!user.is_active) {
     return res.status(403).json({ error: 'Account is disabled' });
@@ -82,7 +86,8 @@ async function handleLogin(req, res) {
   }
 
   if (!validPassword) {
-    return res.status(401).json({ error: 'Invalid credentials' });
+    console.log('Login failed: password mismatch for', user.email, '| isBcrypt:', isBcryptHash);
+    return res.status(401).json({ error: 'Invalid credentials', debug: { userFound: true, passwordMatch: false } });
   }
 
   // Update last login
