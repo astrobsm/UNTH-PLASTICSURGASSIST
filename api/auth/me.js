@@ -17,7 +17,7 @@ export default async function handler(req, res) {
     }
 
     const result = await query(
-      `SELECT id, username, email, full_name, role, is_approved, is_active, created_at, last_login
+      `SELECT id, email, full_name, role, is_approved, is_active, created_at, updated_at
        FROM users WHERE id = $1`,
       [auth.user.id]
     );

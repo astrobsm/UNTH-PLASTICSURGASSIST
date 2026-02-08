@@ -50,11 +50,13 @@ async function getPatients(res) {
   try {
     const result = await query(
       `SELECT id, hospital_number, first_name, last_name, date_of_birth, gender, 
-              phone, email, address, blood_group, allergies, medical_history,
-              primary_diagnosis, secondary_diagnoses, ward, bed_number,
+              phone, email, address, blood_group, allergies, 
+              chronic_conditions, comorbidities, current_medications,
+              ward, care_type,
               emergency_contact_name, emergency_contact_phone,
               created_at, updated_at
        FROM patients 
+       WHERE deleted IS NOT TRUE
        ORDER BY updated_at DESC 
        LIMIT 500`
     );
@@ -64,18 +66,16 @@ async function getPatients(res) {
       serverTime: new Date().toISOString()
     });
   } catch (err) {
-    // If column doesn't exist, try without the new columns
-    if (err.message && (err.message.includes('primary_diagnosis') || 
-        err.message.includes('secondary_diagnoses') || 
-        err.message.includes('column') ||
-        err.message.includes('does not exist'))) {
+    // If column doesn't exist, try with minimal columns
+    if (err.message && err.message.includes('does not exist')) {
       console.log('Some columns missing, using basic query');
       const result = await query(
         `SELECT id, hospital_number, first_name, last_name, date_of_birth, gender, 
-                phone, email, address, blood_group, allergies, medical_history,
+                phone, email, address, blood_group, allergies,
                 emergency_contact_name, emergency_contact_phone,
                 created_at, updated_at
          FROM patients 
+         WHERE deleted IS NOT TRUE
          ORDER BY updated_at DESC 
          LIMIT 500`
       );

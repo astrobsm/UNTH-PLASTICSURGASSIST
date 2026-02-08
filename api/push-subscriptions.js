@@ -69,7 +69,7 @@ async function ensurePushSubscriptionsTable() {
   await query(`
     CREATE TABLE IF NOT EXISTS push_subscriptions (
       id SERIAL PRIMARY KEY,
-      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL,
       endpoint TEXT NOT NULL,
       keys JSONB NOT NULL,
       is_active BOOLEAN DEFAULT TRUE,
