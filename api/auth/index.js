@@ -1,4 +1,4 @@
-// Login endpoint for Vercel serverless
+// Login endpoint for Vercel serverless - v2.1
 import bcrypt from 'bcryptjs';
 import { query } from '../_lib/db.js';
 import { signToken, cors } from '../_lib/auth.js';
