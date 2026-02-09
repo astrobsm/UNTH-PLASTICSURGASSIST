@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0E9F6E">
+  <title>PS Assistant — Offline</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 50%, #f0f9ff 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+    }
+    .card {
+      background: white;
+      border-radius: 1rem;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.08);
+      max-width: 400px;
+      width: 100%;
+      text-align: center;
+      padding: 2.5rem 2rem;
+    }
+    .icon {
+      width: 64px; height: 64px;
+      margin: 0 auto 1.5rem;
+      background: #fef3c7;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .icon svg { width: 32px; height: 32px; color: #d97706; }
+    h1 { color: #1f2937; font-size: 1.4rem; margin-bottom: 0.5rem; }
+    p { color: #6b7280; font-size: 0.9rem; line-height: 1.5; margin-bottom: 1.5rem; }
+    .tip { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 0.5rem; padding: 0.75rem 1rem; text-align: left; margin-bottom: 1.5rem; }
+    .tip strong { color: #15803d; font-size: 0.85rem; }
+    .tip ul { margin-top: 0.4rem; padding-left: 1.2rem; }
+    .tip li { color: #4b5563; font-size: 0.8rem; margin-bottom: 0.25rem; }
+    button {
+      background: #0E9F6E; color: white;
+      border: none; border-radius: 0.5rem;
+      padding: 0.75rem 2rem; font-size: 0.9rem; font-weight: 600;
+      cursor: pointer; transition: background 0.2s;
+    }
+    button:hover { background: #059669; }
+    .brand { margin-top: 1.5rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem; }
+    .brand img { width: 24px; height: 24px; border-radius: 6px; }
+    .brand span { color: #9ca3af; font-size: 0.75rem; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M18.364 5.636a9 9 0 010 12.728M5.636 18.364a9 9 0 010-12.728M8.464 15.536a5 5 0 010-7.072M15.536 8.464a5 5 0 010 7.072M12 12h.01"/>
+      </svg>
+    </div>
+    <h1>You're Offline</h1>
+    <p>It looks like you've lost your internet connection. Don't worry — your data is safe.</p>
+    <div class="tip">
+      <strong>What you can still do:</strong>
+      <ul>
+        <li>View cached patient records</li>
+        <li>Fill in assessments & checklists</li>
+        <li>Create treatment plans (saves locally)</li>
+        <li>Access downloaded education material</li>
+      </ul>
+    </div>
+    <button onclick="window.location.reload()">Try Again</button>
+    <div class="brand">
+      <img src="/logo.png" alt="PSA">
+      <span>Plastic Surgeon Assistant</span>
+    </div>
+  </div>
+</body>
+</html>

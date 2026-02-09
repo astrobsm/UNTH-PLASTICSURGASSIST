@@ -9,6 +9,7 @@ import ForcePasswordChange from './components/ForcePasswordChange';
 import { useAuthStore } from './store/authStore';
 import { PWAInstallPrompt } from './components/PWAInstallPrompt';
 import { OfflineIndicator } from './components/OfflineIndicator';
+import { SWUpdateBanner } from './components/SWUpdateBanner';
 import { notificationService } from './services/notificationBackgroundService';
 import { pushNotificationService } from './services/pushNotificationService';
 import { initializeCSRFToken } from './utils/csrf';
@@ -144,6 +145,7 @@ function App() {
         {/* All other routes with Layout */}
         <Route path="/*" element={
           <Layout>
+            <SWUpdateBanner />
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/patients" element={<Patients />} />

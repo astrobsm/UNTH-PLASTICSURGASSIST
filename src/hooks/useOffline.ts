@@ -1,6 +1,6 @@
 /**
- * useOffline Hook - React hook for offline-first functionality
- * Provides reactive offline status, sync management, and data fetching
+ * useOffline Hook — React hook for offline-first functionality
+ * Provides reactive offline status, sync management, storage usage, and data fetching
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -8,10 +8,15 @@ import { offlineManager, OfflineStatus } from '../services/offlineManager';
 import { offlineGet, offlinePost, offlinePut, offlineDelete, forceSync } from '../services/offlineFetch';
 import toast from 'react-hot-toast';
 
+export interface StorageUsage {
+  usage: number;
+  quota: number;
+  percentage: number;
+  persistent: boolean;
+}
+
 export interface UseOfflineOptions {
-  // Auto-sync when coming online
   autoSync?: boolean;
-  // Show toast notifications
   showToasts?: boolean;
 }
 
@@ -22,6 +27,7 @@ export interface UseOfflineReturn {
   isSyncing: boolean;
   pendingCount: number;
   lastSyncTime: Date | null;
+  storageUsage: StorageUsage | null;
   
   // Actions
   sync: () => Promise<void>;
@@ -47,31 +53,46 @@ export function useOffline(options: UseOfflineOptions = {}): UseOfflineReturn {
     syncInProgress: false,
   });
 
+  const [storageUsage, setStorageUsage] = useState<StorageUsage | null>(null);
   const previousOnline = useRef(navigator.onLine);
 
   // Subscribe to offline status changes
   useEffect(() => {
     const unsubscribe = offlineManager.onStatusChange((newStatus) => {
-      // Check if we just came back online
-      if (!previousOnline.current && newStatus.isOnline && autoSync) {
-        // Auto-sync is handled by offlineManager
-      }
-      
       previousOnline.current = newStatus.isOnline;
       setStatus(newStatus);
     });
 
-    return () => {
-      unsubscribe();
-    };
+    return () => { unsubscribe(); };
   }, [autoSync]);
+
+  // Periodically check storage usage
+  useEffect(() => {
+    const checkStorage = async () => {
+      if (navigator.storage && navigator.storage.estimate) {
+        try {
+          const estimate = await navigator.storage.estimate();
+          const persistent = await navigator.storage.persisted?.() ?? false;
+          setStorageUsage({
+            usage: estimate.usage ?? 0,
+            quota: estimate.quota ?? 0,
+            percentage: estimate.quota ? ((estimate.usage ?? 0) / estimate.quota) * 100 : 0,
+            persistent,
+          });
+        } catch {
+          // Storage API not available
+        }
+      }
+    };
+    checkStorage();
+    const interval = setInterval(checkStorage, 60_000); // Every minute
+    return () => clearInterval(interval);
+  }, []);
 
   // Manual sync
   const sync = useCallback(async () => {
     if (!status.isOnline) {
-      if (showToasts) {
-        toast.error('Cannot sync while offline');
-      }
+      if (showToasts) toast.error('Cannot sync while offline');
       return;
     }
 
@@ -84,9 +105,7 @@ export function useOffline(options: UseOfflineOptions = {}): UseOfflineReturn {
         toast.error(`Failed to sync ${result.failed} changes`);
       }
     } catch (error) {
-      if (showToasts) {
-        toast.error('Sync failed');
-      }
+      if (showToasts) toast.error('Sync failed');
       console.error('Sync error:', error);
     }
   }, [status.isOnline, showToasts]);
@@ -95,13 +114,9 @@ export function useOffline(options: UseOfflineOptions = {}): UseOfflineReturn {
   const clearCache = useCallback(async () => {
     try {
       await offlineManager.clearCache();
-      if (showToasts) {
-        toast.success('Cache cleared');
-      }
+      if (showToasts) toast.success('Cache cleared');
     } catch (error) {
-      if (showToasts) {
-        toast.error('Failed to clear cache');
-      }
+      if (showToasts) toast.error('Failed to clear cache');
       console.error('Clear cache error:', error);
     }
   }, [showToasts]);
@@ -129,6 +144,7 @@ export function useOffline(options: UseOfflineOptions = {}): UseOfflineReturn {
     isSyncing: status.syncInProgress,
     pendingCount: status.pendingCount,
     lastSyncTime: status.lastSyncTime,
+    storageUsage,
     sync,
     clearCache,
     fetchData,

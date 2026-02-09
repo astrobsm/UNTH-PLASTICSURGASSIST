@@ -11,91 +11,139 @@ import { offlineManager } from './services/offlineManager';
 import { medicationDosingService } from './services/medicationDosingService';
 import { reviewNotificationService } from './services/reviewNotificationService';
 
-// Log app version for debugging
-const APP_VERSION = '4.0.2';
+// ─── App Version ─────────────────────────────────────────────
+const APP_VERSION = '5.0.0';
 console.log(`🚀 Plastic Surgeon Assistant v${APP_VERSION}`);
 console.log(`📅 Build: ${new Date().toISOString()}`);
 
-// Service Worker Registration for PWA Offline Support
+// ─── Service Worker Registration (vite-plugin-pwa injectManifest) ──
+let swRegistration: ServiceWorkerRegistration | null = null;
+let swUpdateAvailable = false;
+
+// Broadcast channel for SW update events
+const swUpdateListeners = new Set<(available: boolean) => void>();
+export function onSWUpdate(listener: (available: boolean) => void) {
+  swUpdateListeners.add(listener);
+  // Immediately notify if already available
+  if (swUpdateAvailable) listener(true);
+  return () => swUpdateListeners.delete(listener);
+}
+export function getSWRegistration() { return swRegistration; }
+
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      // Register the service worker
-      const registration = await navigator.serviceWorker.register('/sw.js', {
-        scope: '/',
-      });
-      
-      console.log('✅ Service Worker registered successfully:', registration.scope);
-      
-      // Handle updates
+      const registration = await navigator.serviceWorker.register(
+        import.meta.env.DEV ? '/dev-sw.js?dev-sw' : '/sw.js',
+        { type: import.meta.env.DEV ? 'module' : 'classic', scope: '/' }
+      );
+      swRegistration = registration;
+      console.log('✅ Service Worker registered:', registration.scope);
+
+      // ── Handle updates ──
       registration.addEventListener('updatefound', () => {
         const newWorker = registration.installing;
-        if (newWorker) {
-          newWorker.addEventListener('statechange', () => {
-            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              // New content is available, show update notification
-              console.log('🔄 New version available! Please refresh.');
-              // Auto-reload after 2 seconds
-              setTimeout(() => {
-                console.log('♻️ Auto-reloading for update...');
-                window.location.reload();
-              }, 2000);
-            }
-          });
-        }
+        if (!newWorker) return;
+
+        newWorker.addEventListener('statechange', () => {
+          if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+            // New SW is installed but waiting to activate
+            swUpdateAvailable = true;
+            swUpdateListeners.forEach(l => l(true));
+            console.log('🔄 New version available — user will be prompted to update');
+          }
+        });
       });
 
-      // Request background sync permission if available
+      // ── Background Sync ──
       if ('sync' in registration) {
         console.log('📡 Background Sync available');
       }
 
-      // Request periodic background sync if available
+      // ── Periodic Background Sync ──
       if ('periodicSync' in registration) {
         try {
           await (registration as any).periodicSync.register('clinical-data-sync', {
             minInterval: 60 * 60 * 1000, // 1 hour
           });
           console.log('⏰ Periodic Background Sync registered');
-        } catch (error) {
+        } catch {
           console.log('Periodic Background Sync not available');
         }
       }
+
+      // ── Check for update every 30 minutes ──
+      setInterval(() => { registration.update(); }, 30 * 60 * 1000);
+
     } catch (error) {
       console.error('❌ Service Worker registration failed:', error);
     }
   });
 
-  // Listen for service worker messages
+  // ── Listen for messages from SW ──
   navigator.serviceWorker.addEventListener('message', (event) => {
-    console.log('📨 Message from Service Worker:', event.data);
-    
-    if (event.data.type === 'SYNC_COMPLETE') {
-      console.log('✅ Background sync completed');
+    const { type, synced, failed } = event.data || {};
+
+    switch (type) {
+      case 'SYNC_COMPLETE':
+      case 'BACKGROUND_SYNC_COMPLETE':
+        console.log(`✅ Background sync: ${synced ?? '?'} synced, ${failed ?? 0} failed`);
+        // Trigger offlineManager to update pending count
+        offlineManager.forceSync().catch(() => {});
+        break;
+      case 'PERIODIC_SYNC_TRIGGER':
+        console.log('⏰ Periodic sync trigger received');
+        offlineManager.forceSync().catch(() => {});
+        break;
     }
   });
 }
 
-// Initialize offline manager
+// Allow SW to skip waiting (called from update banner)
+export function activateNewSW() {
+  if (swRegistration?.waiting) {
+    swRegistration.waiting.postMessage({ type: 'SKIP_WAITING' });
+    // Reload once new SW takes over
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      window.location.reload();
+    });
+  }
+}
+
+// ─── Initialize offline manager ──────────────────────────────
 console.log('🔌 Offline Manager initialized');
 
+// ─── Request persistent storage ──────────────────────────────
+if (navigator.storage && navigator.storage.persist) {
+  navigator.storage.persist().then(persistent => {
+    console.log(persistent ? '💾 Storage: persistent (data will not be evicted)' : '⚠️ Storage: best-effort');
+  });
+}
+
+// ─── React Query Client ──────────────────────────────────────
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 1,
-      staleTime: 5 * 60 * 1000, // 5 minutes
+      staleTime: 5 * 60 * 1000,
+      // Keep data in cache when offline
+      gcTime: 30 * 60 * 1000,
+      refetchOnWindowFocus: false, // Don't refetch when user switches back
+      networkMode: 'offlineFirst', // Always return cached data first
+    },
+    mutations: {
+      networkMode: 'offlineFirst',
     },
   },
 });
 
-// Global error handler for uncaught promises
+// ─── Global error handler ────────────────────────────────────
 let indexedDBErrorCount = 0;
 const MAX_INDEXEDDB_ERRORS = 5;
 
 window.addEventListener('unhandledrejection', (event) => {
   console.error('Unhandled promise rejection:', event.reason);
   
-  // Detect IndexedDB corruption errors
   const errorMessage = event.reason?.message || String(event.reason);
   const isIndexedDBError = 
     errorMessage.includes('Internal error opening backing store') ||
@@ -107,15 +155,13 @@ window.addEventListener('unhandledrejection', (event) => {
     indexedDBErrorCount++;
     console.error(`🚨 IndexedDB error detected (${indexedDBErrorCount}/${MAX_INDEXEDDB_ERRORS})`);
     
-    // After several errors, show recovery prompt
     if (indexedDBErrorCount >= MAX_INDEXEDDB_ERRORS) {
-      // Only show once
       indexedDBErrorCount = -9999;
       
       const shouldRecover = confirm(
-        '⚠️ Database Corruption Detected\\n\\n' +
-        'The local database appears to be corrupted. This can happen after browser updates or storage issues.\\n\\n' +
-        'Click OK to automatically fix this issue.\\n' +
+        '⚠️ Database Corruption Detected\n\n' +
+        'The local database appears to be corrupted.\n\n' +
+        'Click OK to automatically fix this issue.\n' +
         'Click Cancel to try manually (Admin → Fix Corrupted Database).'
       );
       
@@ -125,10 +171,10 @@ window.addEventListener('unhandledrejection', (event) => {
     }
   }
   
-  event.preventDefault(); // Prevent React error #426
+  event.preventDefault();
 });
 
-// Render React app first
+// ─── Render React App ────────────────────────────────────────
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
@@ -162,10 +208,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   </React.StrictMode>,
 );
 
-// Start services AFTER React has mounted (prevents error #426)
+// ─── Start background services AFTER React mounts ───────────
 setTimeout(() => {
   try {
-    // Start CME Article Scheduler
     cmeArticleScheduler.start();
     console.log('CME Article Scheduler started');
   } catch (error) {
@@ -173,7 +218,6 @@ setTimeout(() => {
   }
   
   try {
-    // Start Medication End Date Monitoring
     medicationDosingService.startMedicationMonitoring();
     console.log('Medication end date monitoring started');
   } catch (error) {
@@ -181,7 +225,6 @@ setTimeout(() => {
   }
   
   try {
-    // Start Review Notification Monitoring
     reviewNotificationService.startMonitoring();
     reviewNotificationService.cleanupOldNotificationMarkers();
     console.log('Review notification monitoring started');
@@ -189,16 +232,12 @@ setTimeout(() => {
     console.error('Error starting Review notification monitoring:', error);
   }
 
-  // Initialize WACS topics and start MCQ test notification scheduler
   mcqGenerationService.initializeWACSTopics().then(() => {
     console.log('WACS topics initialized');
     
     try {
-      // Start weekly test notification scheduler (Tuesday 9:30 AM)
       mcqGenerationService.startWeeklyTestNotificationScheduler();
       console.log('MCQ Test Notification Scheduler started');
-      
-      // Auto-schedule next week's test if none exists
       mcqGenerationService.autoScheduleNextWeekTest();
     } catch (error) {
       console.error('Error starting MCQ scheduler:', error);
@@ -206,4 +245,4 @@ setTimeout(() => {
   }).catch(error => {
     console.error('Error initializing WACS topics:', error);
   });
-}, 100); // Delay 100ms to ensure React is fully mounted
+}, 100);

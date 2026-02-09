@@ -683,14 +683,14 @@ export function sanitizeTextForPDF(text: string): string {
   result = result.replace(/[\u{2600}-\u{26FF}]/gu, '');
   result = result.replace(/[\u{2700}-\u{27BF}]/gu, '');
   
-  // Replace problematic bullet characters with standard ones
-  result = result.replace(/[â€¢â—â—‹â—¦â–ªâ–«â– â–¡â—†â—‡â˜…â˜†âœ—âœ˜â†’â†â†‘â†“â‡’â‡â‡‘â‡“]/g, '-');
-  result = result.replace(/[Ã˜]/g, ''); // Remove problematic Ã˜ character
-  result = result.replace(/[ÃžÃ¾]/g, ''); // Remove thorn characters
-  result = result.replace(/[Â¨]/g, ''); // Remove diaeresis
-  result = result.replace(/[â˜â˜‘â˜’]/g, '[ ]'); // Replace checkbox chars with ASCII
-  result = result.replace(/[âœ“âœ”]/g, '[x]'); // Replace checkmark with ASCII
-  
+  // Replace problematic bullet characters with standard ones (Unicode escapes)
+  result = result.replace(/[\u2022\u25CF\u25CB\u25E6\u25AA\u25AB\u25A0\u25A1\u25C6\u25C7\u2605\u2606\u2717\u2718\u2192\u2190\u2191\u2193\u21D2\u21D0\u21D1\u21D3]/g, '-');
+  result = result.replace(/[\u00D8]/g, ''); // Remove O-slash character
+  result = result.replace(/[\u00DE\u00FE]/g, ''); // Remove thorn characters
+  result = result.replace(/[\u00A8]/g, ''); // Remove diaeresis
+  result = result.replace(/[\u2610\u2611\u2612]/g, '[ ]'); // Replace checkbox chars with ASCII
+  result = result.replace(/[\u2713\u2714]/g, '[x]'); // Replace checkmark with ASCII
+
   // Remove additional emoji ranges that cause garbled text
   result = result.replace(/[ðŸ©¸ðŸ›ï¸ðŸš¶ðŸ’§ðŸ§¦ðŸ“‹ðŸ†˜ðŸ©¹ðŸŒ¡ï¸ðŸ”¬ðŸ’‰ðŸ¥ðŸ©º]/gu, '');
   result = result.replace(/[\u{1F600}-\u{1F64F}]/gu, ''); // Emoticons
@@ -698,13 +698,13 @@ export function sanitizeTextForPDF(text: string): string {
   result = result.replace(/[\u{2300}-\u{23FF}]/gu, ''); // Misc technical
   result = result.replace(/[\u{2B00}-\u{2BFF}]/gu, ''); // Misc symbols & arrows
   
-  // Replace problematic quotes with standard ones
-  result = result.replace(/[""â€žâ€Ÿâ€³â€´]/g, '"');
-  result = result.replace(/[''â€šâ€›â€²â€µ]/g, "'");
-  
-  // Replace various dash characters with regular dash
-  result = result.replace(/[â€“â€”â€-â€â€‘â€’âƒ]/g, '-');
-  
+  // Replace problematic quotes with standard ones (Unicode escapes)
+  result = result.replace(/[\u201C\u201D\u201E\u201F\u2033\u2034]/g, '"');
+  result = result.replace(/[\u2018\u2019\u201A\u201B\u2032\u2035]/g, "'");
+
+  // Replace various dash characters with regular dash (Unicode escapes)
+  result = result.replace(/[\u2013\u2014\u2010\u2011\u2012\u2015\u2212]/g, '-');
+
   // Replace degree symbol with text (handle both Â° mojibake and actual °)
   result = result.replace(/Â°/g, ' deg ');
   result = result.replace(/\u00B0/g, ' deg ');
