@@ -28,9 +28,10 @@ async function handleLogin(req, res) {
   }
 
   // Try to find user by email - filter by app_id='psa' to isolate from other apps sharing this DB
+  // Use password_hash only (password column may not exist in all DB schemas)
   const result = await query(
-    `SELECT id, email, COALESCE(password_hash, password) as password_value, 
-            role, full_name, first_name, last_name, 
+    `SELECT id, email, password_hash as password_value, 
+            role, full_name, 
             COALESCE(is_approved, true) as is_approved, 
             COALESCE(is_active, true) as is_active
      FROM users WHERE email = $1 AND (app_id = 'psa' OR app_id IS NULL)`,
@@ -57,12 +58,12 @@ async function handleLogin(req, res) {
   }
 
   let validPassword = false;
-  const isBcryptHash = user.password_value.startsWith('$2a$') || user.password_value.startsWith('$2b$');
+  const isBcryptHash = user.password_value && (user.password_value.startsWith('$2a$') || user.password_value.startsWith('$2b$'));
 
   if (isBcryptHash) {
-    // Password is already hashed — compare with bcrypt
+    // Password is hashed — compare with bcrypt
     validPassword = await bcrypt.compare(password, user.password_value);
-  } else {
+  } else if (user.password_value) {
     // Password is stored as plaintext — direct comparison
     validPassword = (password === user.password_value);
 
@@ -71,7 +72,7 @@ async function handleLogin(req, res) {
       try {
         const hashedPassword = await bcrypt.hash(password, 12);
         await query(
-          'UPDATE users SET password_hash = $1, password = NULL WHERE id = $2',
+          'UPDATE users SET password_hash = $1 WHERE id = $2',
           [hashedPassword, user.id]
         );
         console.log(`Auto-hashed plaintext password for user ${user.email}`);
@@ -93,8 +94,7 @@ async function handleLogin(req, res) {
   }
 
   // Build full name from available fields
-  const fullName = user.full_name || 
-    (user.first_name && user.last_name ? `${user.first_name} ${user.last_name}` : user.email);
+  const fullName = user.full_name || user.email;
 
   const token = signToken({
     id: user.id,

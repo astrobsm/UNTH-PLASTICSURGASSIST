@@ -49,14 +49,13 @@ async function getPatients(res) {
   // Try with all columns first, fallback to basic columns if any are missing
   try {
     const result = await query(
-      `SELECT id, hospital_number, first_name, last_name, date_of_birth, gender, 
+      `SELECT id, hospital_number, first_name, last_name, full_name, date_of_birth, gender, 
               phone, email, address, blood_group, allergies, 
-              chronic_conditions, comorbidities, current_medications,
-              ward, care_type,
+              medical_history, primary_diagnosis, secondary_diagnoses,
+              ward, bed_number,
               emergency_contact_name, emergency_contact_phone,
               created_at, updated_at
        FROM patients 
-       WHERE deleted IS NOT TRUE
        ORDER BY updated_at DESC 
        LIMIT 500`
     );
@@ -72,10 +71,10 @@ async function getPatients(res) {
       const result = await query(
         `SELECT id, hospital_number, first_name, last_name, date_of_birth, gender, 
                 phone, email, address, blood_group, allergies,
+                medical_history,
                 emergency_contact_name, emergency_contact_phone,
                 created_at, updated_at
          FROM patients 
-         WHERE deleted IS NOT TRUE
          ORDER BY updated_at DESC 
          LIMIT 500`
       );

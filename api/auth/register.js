@@ -50,10 +50,10 @@ async function handleRegister(req, res) {
   const passwordHash = await bcrypt.hash(password, 10);
 
   const result = await query(
-    `INSERT INTO users (email, password_hash, full_name, role, department, specialization, license_number, phone, is_approved, is_active, app_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false, true, 'psa')
-     RETURNING id, email, full_name, role, department, license_number, phone, is_approved`,
-    [email, passwordHash, finalFullName, role, department || null, specialization || null, license_number || null, phone || null]
+    `INSERT INTO users (email, password_hash, full_name, role, training_level, is_approved, is_active, app_id)
+     VALUES ($1, $2, $3, $4, $5, false, true, 'psa')
+     RETURNING id, email, full_name, role, is_approved`,
+    [email, passwordHash, finalFullName, role, specialization || null]
   );
 
   res.status(201).json({
