@@ -377,7 +377,7 @@ REMEMBER: Treatment success depends largely on your commitment to the full treat
 // ============================================
 
 class KeloidCareService {
-  private baseUrl = '/api/keloid-care';
+  private baseUrl = '/keloid-care';
 
   // Get all keloid care plans
   async getAllPlans(filters?: { patientId?: number; status?: string }): Promise<KeloidCarePlan[]> {
