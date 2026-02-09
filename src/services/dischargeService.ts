@@ -1,4 +1,4 @@
-import { db } from '../db/database';
+﻿import { db } from '../db/database';
 import { format } from 'date-fns';
 import {
   createPDF,
@@ -154,7 +154,7 @@ class DischargeService {
     if (procedures_performed.length > 0) {
       instructions += `PROCEDURES PERFORMED:\n`;
       procedures_performed.forEach(proc => {
-        instructions += `• ${proc}\n`;
+        instructions += `â€¢ ${proc}\n`;
       });
       instructions += `\n`;
     }
@@ -180,48 +180,48 @@ class DischargeService {
         final_diagnosis.toLowerCase().includes('graft') ||
         procedures_performed.some(p => p.toLowerCase().includes('surgery'))) {
       instructions += `WOUND CARE:\n`;
-      instructions += `• Keep the wound clean and dry\n`;
-      instructions += `• Change dressings as instructed by your healthcare team\n`;
-      instructions += `• Watch for signs of infection (increased redness, swelling, pus, fever)\n`;
-      instructions += `• Do not remove stitches or staples yourself\n`;
-      instructions += `• Avoid soaking the wound in water until healed\n\n`;
+      instructions += `â€¢ Keep the wound clean and dry\n`;
+      instructions += `â€¢ Change dressings as instructed by your healthcare team\n`;
+      instructions += `â€¢ Watch for signs of infection (increased redness, swelling, pus, fever)\n`;
+      instructions += `â€¢ Do not remove stitches or staples yourself\n`;
+      instructions += `â€¢ Avoid soaking the wound in water until healed\n\n`;
     }
 
     // Activity restrictions
     instructions += `ACTIVITY:\n`;
-    instructions += `• Rest adequately and avoid strenuous activities for 2 weeks\n`;
-    instructions += `• Gradually increase activity as tolerated\n`;
-    instructions += `• Avoid heavy lifting (>5kg) for 2-4 weeks\n`;
-    instructions += `• Follow specific activity restrictions given by your doctor\n\n`;
+    instructions += `â€¢ Rest adequately and avoid strenuous activities for 2 weeks\n`;
+    instructions += `â€¢ Gradually increase activity as tolerated\n`;
+    instructions += `â€¢ Avoid heavy lifting (>5kg) for 2-4 weeks\n`;
+    instructions += `â€¢ Follow specific activity restrictions given by your doctor\n\n`;
 
     // Diet
     instructions += `DIET:\n`;
-    instructions += `• Maintain a balanced, nutritious diet\n`;
-    instructions += `• Increase protein intake to promote healing (eggs, fish, lean meat, beans)\n`;
-    instructions += `• Stay well hydrated (8-10 glasses of water daily)\n`;
-    instructions += `• Include fresh fruits and vegetables\n`;
-    instructions += `• Avoid alcohol and smoking\n`;
+    instructions += `â€¢ Maintain a balanced, nutritious diet\n`;
+    instructions += `â€¢ Increase protein intake to promote healing (eggs, fish, lean meat, beans)\n`;
+    instructions += `â€¢ Stay well hydrated (8-10 glasses of water daily)\n`;
+    instructions += `â€¢ Include fresh fruits and vegetables\n`;
+    instructions += `â€¢ Avoid alcohol and smoking\n`;
     if (final_diagnosis.toLowerCase().includes('burn')) {
-      instructions += `• Consider high-calorie diet to support burn healing\n`;
-      instructions += `• Vitamin C and zinc supplements may aid healing\n`;
+      instructions += `â€¢ Consider high-calorie diet to support burn healing\n`;
+      instructions += `â€¢ Vitamin C and zinc supplements may aid healing\n`;
     }
     instructions += `\n`;
 
     // Warning signs
     instructions += `SEEK IMMEDIATE MEDICAL ATTENTION IF YOU EXPERIENCE:\n`;
-    instructions += `• Fever above 38°C (100.4°F)\n`;
-    instructions += `• Increasing pain not relieved by medication\n`;
-    instructions += `• Signs of wound infection (redness, swelling, pus, foul odor)\n`;
-    instructions += `• Excessive bleeding from wound site\n`;
-    instructions += `• Shortness of breath or chest pain\n`;
-    instructions += `• Severe nausea or vomiting\n`;
-    instructions += `• Any other concerning symptoms\n\n`;
+    instructions += `â€¢ Fever above 38Â°C (100.4Â°F)\n`;
+    instructions += `â€¢ Increasing pain not relieved by medication\n`;
+    instructions += `â€¢ Signs of wound infection (redness, swelling, pus, foul odor)\n`;
+    instructions += `â€¢ Excessive bleeding from wound site\n`;
+    instructions += `â€¢ Shortness of breath or chest pain\n`;
+    instructions += `â€¢ Severe nausea or vomiting\n`;
+    instructions += `â€¢ Any other concerning symptoms\n\n`;
 
     // Follow-up
     instructions += `FOLLOW-UP:\n`;
-    instructions += `• Attend all scheduled follow-up appointments\n`;
-    instructions += `• Bring this discharge summary and all medications to your follow-up visit\n`;
-    instructions += `• Contact the clinic if you need to reschedule\n\n`;
+    instructions += `â€¢ Attend all scheduled follow-up appointments\n`;
+    instructions += `â€¢ Bring this discharge summary and all medications to your follow-up visit\n`;
+    instructions += `â€¢ Contact the clinic if you need to reschedule\n\n`;
 
     instructions += `EMERGENCY CONTACT:\n`;
     instructions += `For urgent concerns, contact the Plastic Surgery Unit or visit the nearest emergency department.\n\n`;
@@ -238,38 +238,38 @@ class DischargeService {
 
     if (diagnosisLower.includes('burn')) {
       instructions += `SPECIFIC INSTRUCTIONS FOR BURN CARE:\n`;
-      instructions += `• Keep burn areas moisturized with prescribed creams\n`;
-      instructions += `• Protect healing skin from sun exposure (use SPF 30+ sunscreen)\n`;
-      instructions += `• Perform range of motion exercises to prevent contractures\n`;
-      instructions += `• Use pressure garments as prescribed\n`;
-      instructions += `• Massage healed areas with moisturizer to reduce scarring\n`;
-      instructions += `• Avoid tight clothing over burn areas\n\n`;
+      instructions += `â€¢ Keep burn areas moisturized with prescribed creams\n`;
+      instructions += `â€¢ Protect healing skin from sun exposure (use SPF 30+ sunscreen)\n`;
+      instructions += `â€¢ Perform range of motion exercises to prevent contractures\n`;
+      instructions += `â€¢ Use pressure garments as prescribed\n`;
+      instructions += `â€¢ Massage healed areas with moisturizer to reduce scarring\n`;
+      instructions += `â€¢ Avoid tight clothing over burn areas\n\n`;
     }
 
     if (diagnosisLower.includes('graft') || diagnosisLower.includes('flap')) {
       instructions += `SPECIFIC INSTRUCTIONS FOR GRAFT/FLAP CARE:\n`;
-      instructions += `• Protect the graft site from trauma\n`;
-      instructions += `• Elevate the grafted area when resting\n`;
-      instructions += `• Avoid direct pressure on the graft\n`;
-      instructions += `• Monitor for signs of graft failure (dark color, coolness, loss of sensation)\n`;
-      instructions += `• Keep donor site clean and covered as instructed\n\n`;
+      instructions += `â€¢ Protect the graft site from trauma\n`;
+      instructions += `â€¢ Elevate the grafted area when resting\n`;
+      instructions += `â€¢ Avoid direct pressure on the graft\n`;
+      instructions += `â€¢ Monitor for signs of graft failure (dark color, coolness, loss of sensation)\n`;
+      instructions += `â€¢ Keep donor site clean and covered as instructed\n\n`;
     }
 
     if (diagnosisLower.includes('hand') || diagnosisLower.includes('finger')) {
       instructions += `HAND THERAPY:\n`;
-      instructions += `• Elevate hand above heart level when resting\n`;
-      instructions += `• Perform prescribed hand exercises regularly\n`;
-      instructions += `• Use hand splint as directed\n`;
-      instructions += `• Attend hand therapy sessions as scheduled\n\n`;
+      instructions += `â€¢ Elevate hand above heart level when resting\n`;
+      instructions += `â€¢ Perform prescribed hand exercises regularly\n`;
+      instructions += `â€¢ Use hand splint as directed\n`;
+      instructions += `â€¢ Attend hand therapy sessions as scheduled\n\n`;
     }
 
     if (diagnosisLower.includes('pressure sore') || diagnosisLower.includes('ulcer')) {
       instructions += `PRESSURE ULCER PREVENTION:\n`;
-      instructions += `• Change position every 2 hours if bedridden\n`;
-      instructions += `• Use pressure-relieving cushions and mattresses\n`;
-      instructions += `• Keep skin clean and dry\n`;
-      instructions += `• Maintain good nutrition and hydration\n`;
-      instructions += `• Inspect skin daily for new pressure areas\n\n`;
+      instructions += `â€¢ Change position every 2 hours if bedridden\n`;
+      instructions += `â€¢ Use pressure-relieving cushions and mattresses\n`;
+      instructions += `â€¢ Keep skin clean and dry\n`;
+      instructions += `â€¢ Maintain good nutrition and hydration\n`;
+      instructions += `â€¢ Inspect skin daily for new pressure areas\n\n`;
     }
 
     return instructions;
@@ -296,7 +296,7 @@ class DischargeService {
 
     // Header
     pdf.setFontSize(PDF_FONT_SIZES.title);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.text('PLASTIC AND RECONSTRUCTIVE SURGERY UNIT', pageWidth / 2, yPos, { align: 'center' });
     yPos += 8;
     
@@ -306,12 +306,12 @@ class DischargeService {
 
     // Patient details
     pdf.setFontSize(PDF_FONT_SIZES.subHeader);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.text('PATIENT INFORMATION', PDF_MARGINS.left, yPos);
     yPos += 7;
 
     pdf.setFontSize(PDF_FONT_SIZES.body);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     pdf.text('Name: ' + clean(discharge.patient_name), PDF_MARGINS.left, yPos);
     yPos += 6;
     pdf.text('Hospital Number: ' + clean(discharge.hospital_number), PDF_MARGINS.left, yPos);
@@ -330,11 +330,11 @@ class DischargeService {
     yPos += 5;
 
     // Admission/Discharge dates
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.text('ADMISSION DETAILS', PDF_MARGINS.left, yPos);
     yPos += 7;
 
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     pdf.text('Admission Date: ' + format(discharge.admission_date, 'dd/MM/yyyy'), PDF_MARGINS.left, yPos);
     yPos += 6;
     pdf.text('Discharge Date: ' + format(discharge.discharge_date, 'dd/MM/yyyy') + ' at ' + clean(discharge.discharge_time), PDF_MARGINS.left, yPos);
@@ -343,22 +343,22 @@ class DischargeService {
     yPos += 10;
 
     // Diagnosis
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.text('DIAGNOSIS', PDF_MARGINS.left, yPos);
     yPos += 7;
 
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     pdf.text('Admitting Diagnosis: ' + clean(discharge.admitting_diagnosis), PDF_MARGINS.left, yPos);
     yPos += 6;
     pdf.text('Final Diagnosis: ' + clean(discharge.final_diagnosis), PDF_MARGINS.left, yPos);
     yPos += 10;
 
     // Discharge status
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.text('DISCHARGE STATUS', PDF_MARGINS.left, yPos);
     yPos += 7;
 
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     pdf.text('Status: ' + discharge.discharge_status.replace('_', ' ').toUpperCase(), PDF_MARGINS.left, yPos);
     yPos += 6;
     pdf.text('Destination: ' + discharge.discharge_destination.replace('_', ' ').toUpperCase(), PDF_MARGINS.left, yPos);
@@ -366,11 +366,11 @@ class DischargeService {
 
     // Discharge plans
     if (discharge.discharge_plans) {
-      pdf.setFont('helvetica', 'bold');
+      pdf.setFont('times', 'bold');
       pdf.text('DISCHARGE PLANS', PDF_MARGINS.left, yPos);
       yPos += 7;
 
-      pdf.setFont('helvetica', 'normal');
+      pdf.setFont('times', 'normal');
       const planLines = pdf.splitTextToSize(clean(discharge.discharge_plans), pageWidth - PDF_MARGINS.left - PDF_MARGINS.right);
       planLines.forEach((line: string) => {
         checkPageBreak(6);
@@ -384,19 +384,19 @@ class DischargeService {
 
     // Medications
     if (discharge.medications_on_discharge && discharge.medications_on_discharge.length > 0) {
-      pdf.setFont('helvetica', 'bold');
+      pdf.setFont('times', 'bold');
       pdf.text('MEDICATIONS ON DISCHARGE', PDF_MARGINS.left, yPos);
       yPos += 7;
 
-      pdf.setFont('helvetica', 'normal');
+      pdf.setFont('times', 'normal');
       discharge.medications_on_discharge.forEach((med, index) => {
         checkPageBreak(25);
         
-        pdf.setFont('helvetica', 'bold');
+        pdf.setFont('times', 'bold');
         pdf.text((index + 1) + '. ' + clean(med.medication), PDF_MARGINS.left, yPos);
         yPos += 6;
         
-        pdf.setFont('helvetica', 'normal');
+        pdf.setFont('times', 'normal');
         pdf.text('   Dosage: ' + clean(med.dosage), PDF_MARGINS.left + 5, yPos);
         yPos += 5;
         pdf.text('   Frequency: ' + clean(med.frequency), PDF_MARGINS.left + 5, yPos);
@@ -420,11 +420,11 @@ class DischargeService {
     if (discharge.follow_up_date) {
       checkPageBreak(40);
 
-      pdf.setFont('helvetica', 'bold');
+      pdf.setFont('times', 'bold');
       pdf.text('FOLLOW-UP APPOINTMENT', PDF_MARGINS.left, yPos);
       yPos += 7;
 
-      pdf.setFont('helvetica', 'normal');
+      pdf.setFont('times', 'normal');
       pdf.text('Date: ' + format(discharge.follow_up_date, 'dd/MM/yyyy'), PDF_MARGINS.left, yPos);
       yPos += 6;
       if (discharge.follow_up_clinic) {
@@ -448,7 +448,7 @@ class DischargeService {
       yPos = PDF_MARGINS.top;
 
       pdf.setFontSize(PDF_FONT_SIZES.sectionHeader + 2);
-      pdf.setFont('helvetica', 'bold');
+      pdf.setFont('times', 'bold');
       pdf.text('DETAILED DISCHARGE INSTRUCTIONS', pageWidth / 2, yPos, { align: 'center' });
       yPos += 15;
 
@@ -460,9 +460,9 @@ class DischargeService {
 
         // Check if line is a header (ends with : or is all uppercase)
         if (line.trim().endsWith(':') || (line.trim().toUpperCase() === line.trim() && line.trim().length > 0)) {
-          pdf.setFont('helvetica', 'bold');
+          pdf.setFont('times', 'bold');
         } else {
-          pdf.setFont('helvetica', 'normal');
+          pdf.setFont('times', 'normal');
         }
 
         const splitLines = pdf.splitTextToSize(line || ' ', pageWidth - PDF_MARGINS.left - PDF_MARGINS.right);
@@ -481,22 +481,22 @@ class DischargeService {
     pdf.line(PDF_MARGINS.left, yPos - 5, pageWidth - PDF_MARGINS.right, yPos - 5);
     
     pdf.setFontSize(PDF_FONT_SIZES.body);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.text('Discharging Doctor: ', PDF_MARGINS.left, yPos);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     pdf.text(clean(discharge.discharging_doctor), PDF_MARGINS.left + 40, yPos);
     
     if (discharge.discharging_consultant) {
       yPos += 6;
-      pdf.setFont('helvetica', 'bold');
+      pdf.setFont('times', 'bold');
       pdf.text('Consultant: ', PDF_MARGINS.left, yPos);
-      pdf.setFont('helvetica', 'normal');
+      pdf.setFont('times', 'normal');
       pdf.text(clean(discharge.discharging_consultant), PDF_MARGINS.left + 25, yPos);
     }
     yPos += 6;
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.text('Date Generated: ', PDF_MARGINS.left, yPos);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     pdf.text(format(new Date(), 'dd/MM/yyyy HH:mm'), PDF_MARGINS.left + 35, yPos);
 
     // Add professional footer with page numbers and timestamp

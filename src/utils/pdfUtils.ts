@@ -1,40 +1,33 @@
-/**
+﻿/**
  * PDF Utilities for Medical Document Generation
  * 
  * MANDATORY STANDARDS FOR ALL PDF DOCUMENTS:
  * ==========================================
  * 
  * 1. FONTS:
- *    - Primary: Helvetica (built-in, no embedding needed)
- *    - Fallbacks: Arial, Times New Roman (if custom fonts needed)
- *    - Body text: 11-12pt minimum
- *    - Tables: ≥10pt minimum
- *    - Footnotes/captions: ≥9pt minimum
- *    - NO fancy or decorative fonts
+ *    - Primary: Georgia (mapped to 'times' in jsPDF â€” closest built-in match)
+ *    - Body text: 11pt
+ *    - Tables: 10pt minimum
+ *    - Footnotes: 9pt minimum
  * 
  * 2. COLORS:
- *    - Background: ALWAYS WHITE (#FFFFFF)
- *    - Text: BLACK (#000000) for all body content
+ *    - Background: WHITE (#FFFFFF)
+ *    - Text: BLACK (#000000)
  *    - Accents: Limited use for headers/borders only
- *    - NO dark mode, NO colored backgrounds
- *    - Ensure high contrast (WCAG AA compliant)
  * 
  * 3. PAGE LAYOUT:
- *    - Format: A4 (210mm x 297mm) or US Letter
- *    - Margins: Minimum 20mm all sides
- *    - NO edge-to-edge printing
- *    - Header/Footer reserved areas
+ *    - A4: Narrow margins (10mm sides, 15mm top/bottom)
+ *    - Double-column layout where appropriate
+ *    - Line spacing: 0.5 (tight)
+ *    - NO text overflow beyond margins
  * 
- * 4. CROSS-PLATFORM:
- *    - Must render identically on Windows, macOS, iOS, Android
- *    - Must print correctly on all printers
- *    - Use only embedded/standard fonts
+ * 4. THERMAL PRINT:
+ *    - 80mm roll width, 12pt Georgia (times), no overflow
+ *    - Available as alternative export for all documents
  * 
  * 5. MEDICAL/LEGAL COMPLIANCE:
- *    - Professional appearance for legal validity
- *    - Clear institution branding
- *    - Timestamped with generation date
- *    - Page numbers on all pages
+ *    - Professional appearance, institution branding
+ *    - Timestamped, page-numbered
  */
 
 import jsPDF from 'jspdf';
@@ -45,27 +38,33 @@ import jsPDF from 'jspdf';
 
 /**
  * Standard font sizes - MINIMUM VALUES ENFORCED
- * Body text must be ≥11pt, tables ≥10pt, footnotes ≥9pt
+ * Body text must be â‰¥11pt, tables â‰¥10pt, footnotes â‰¥9pt
  */
 export const PDF_FONT_SIZES = {
   title: 16,           // Document title
-  sectionHeader: 14,   // Section headers
-  subHeader: 12,       // Sub-section headers
-  body: 11,            // MINIMUM 11pt for body text (was 10)
-  tableBody: 10,       // Minimum for tables (was body)
-  small: 9,            // Minimum for footnotes/captions
-  footer: 9            // Page footer (was 8, now meets 9pt min)
+  sectionHeader: 13,   // Section headers
+  subHeader: 11,       // Sub-section headers
+  body: 11,            // Body text â€” Georgia 11pt
+  tableBody: 10,       // Minimum for tables
+  small: 9,            // Footnotes/captions
+  footer: 8            // Page footer
 };
+
+/** Line spacing multiplier (0.5 = tight) */
+export const PDF_LINE_SPACING = 0.5;
+
+/** Default line height in mm for body text at 11pt with 0.5 spacing */
+export const PDF_LINE_HEIGHT = 4.2;
 
 /**
  * Standard margins - MINIMUM 20mm enforced
  * Ensures proper printing on all devices
  */
 export const PDF_MARGINS = {
-  top: 25,      // 25mm top margin (header space)
-  bottom: 25,   // 25mm bottom margin (footer space)
-  left: 20,     // 20mm left margin (minimum)
-  right: 20     // 20mm right margin (minimum)
+  top: 15,      // 15mm top margin (narrow)
+  bottom: 15,   // 15mm bottom margin (narrow)
+  left: 10,     // 10mm left margin (narrow)
+  right: 10     // 10mm right margin (narrow)
 };
 
 /**
@@ -74,8 +73,18 @@ export const PDF_MARGINS = {
 export const PDF_PAGE = {
   width: 210,      // A4 width in mm
   height: 297,     // A4 height in mm
-  contentWidth: 170, // Usable width (210 - 20 - 20)
-  contentHeight: 247 // Usable height (297 - 25 - 25)
+  contentWidth: 190, // Usable width (210 - 10 - 10)
+  contentHeight: 267 // Usable height (297 - 15 - 15)
+};
+
+/** Thermal printer configuration â€” 80mm roll */
+export const PDF_THERMAL = {
+  width: 80,       // 80mm roll width
+  margin: 3,       // 3mm margins
+  contentWidth: 74, // 80 - 3 - 3
+  fontSize: 12,    // 12pt Georgia
+  smallFont: 9,
+  lineHeight: 5,
 };
 
 /**
@@ -114,7 +123,7 @@ export const PDF_INSTITUTION = {
  * Creates a properly configured jsPDF instance with MANDATORY settings
  * 
  * ENFORCED STANDARDS:
- * - Helvetica font (cross-platform safe, built-in)
+ * - times font (cross-platform safe, built-in)
  * - A4 format (international medical standard)
  * - Compression enabled
  * - Character spacing normalized
@@ -126,27 +135,121 @@ export function createPDF(orientation: 'portrait' | 'landscape' = 'portrait'): j
   const pdf = new jsPDF({
     orientation,
     unit: 'mm',
-    format: 'a4',           // A4 format - international standard
-    putOnlyUsedFonts: true, // Optimize font embedding
-    compress: true,         // Reduce file size
-    hotfixes: ['px_scaling'] // Enable pixel scaling fix
+    format: 'a4',
+    putOnlyUsedFonts: true,
+    compress: true,
+    hotfixes: ['px_scaling']
   });
 
-  // MANDATORY: Set Helvetica as primary font (built-in, cross-platform safe)
-  pdf.setFont('helvetica', 'normal');
+  // Georgia font â€” 'times' is the closest built-in match in jsPDF
+  pdf.setFont('times', 'normal');
   
-  // Normalize character spacing to prevent rendering issues
+  // Normalize character spacing to prevent garbled text
   if (typeof (pdf as any).setCharSpace === 'function') {
     (pdf as any).setCharSpace(0);
   }
   
-  // MANDATORY: Set black text color as default
   pdf.setTextColor(PDF_COLORS.text.r, PDF_COLORS.text.g, PDF_COLORS.text.b);
-  
-  // MANDATORY: Set default font size to body (11pt minimum)
   pdf.setFontSize(PDF_FONT_SIZES.body);
   
   return pdf;
+}
+
+/**
+ * Creates a thermal printer PDF (80mm width)
+ * Font: times (Georgia), 12pt, 3mm margins
+ */
+export function createThermalPDF(): jsPDF {
+  const contentHeight = 200; // initial height, will auto-extend
+  const pdf = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: [PDF_THERMAL.width, contentHeight],
+    putOnlyUsedFonts: true,
+    compress: true,
+  });
+
+  pdf.setFont('times', 'normal');
+  if (typeof (pdf as any).setCharSpace === 'function') {
+    (pdf as any).setCharSpace(0);
+  }
+  pdf.setTextColor(0, 0, 0);
+  pdf.setFontSize(PDF_THERMAL.fontSize);
+  
+  return pdf;
+}
+
+/**
+ * Adds thermal header with institution name
+ */
+export function addThermalHeader(pdf: jsPDF, title: string): number {
+  let y = PDF_THERMAL.margin + 4;
+  const m = PDF_THERMAL.margin;
+  const cw = PDF_THERMAL.contentWidth;
+
+  pdf.setFont('times', 'bold');
+  pdf.setFontSize(11);
+  pdf.text(sanitizeTextForPDF(PDF_INSTITUTION.name), m, y, { maxWidth: cw });
+  y += 4;
+  pdf.setFontSize(9);
+  pdf.setFont('times', 'normal');
+  pdf.text(PDF_INSTITUTION.department, m, y, { maxWidth: cw });
+  y += 5;
+
+  // separator
+  pdf.setLineWidth(0.3);
+  pdf.line(m, y, m + cw, y);
+  y += 4;
+
+  // title
+  pdf.setFont('times', 'bold');
+  pdf.setFontSize(PDF_THERMAL.fontSize);
+  pdf.text(sanitizeTextForPDF(title), m, y, { maxWidth: cw });
+  y += 5;
+
+  pdf.setFont('times', 'normal');
+  return y;
+}
+
+/**
+ * Adds text to thermal PDF with automatic wrapping, no overflow
+ */
+export function addThermalText(
+  pdf: jsPDF,
+  text: string,
+  y: number,
+  options?: { bold?: boolean; fontSize?: number; indent?: number }
+): number {
+  const m = PDF_THERMAL.margin + (options?.indent || 0);
+  const maxW = PDF_THERMAL.contentWidth - (options?.indent || 0);
+  const fs = options?.fontSize || PDF_THERMAL.fontSize;
+
+  pdf.setFontSize(fs);
+  pdf.setFont('times', options?.bold ? 'bold' : 'normal');
+
+  const lines = pdf.splitTextToSize(sanitizeTextForPDF(text), maxW);
+  lines.forEach((line: string) => {
+    pdf.text(line, m, y);
+    y += fs * 0.4;
+  });
+  return y;
+}
+
+/**
+ * Finalizes thermal PDF â€” adds footer and adjusts page height to content
+ */
+export function finalizeThermalPDF(pdf: jsPDF, y: number): void {
+  const m = PDF_THERMAL.margin;
+  const cw = PDF_THERMAL.contentWidth;
+  y += 3;
+  pdf.setLineWidth(0.3);
+  pdf.line(m, y, m + cw, y);
+  y += 3;
+  pdf.setFontSize(8);
+  pdf.setFont('times', 'normal');
+  const ts = new Date().toLocaleString('en-GB', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+  pdf.text(ts, m, y);
+  pdf.text(PDF_INSTITUTION.department, m, y + 3, { maxWidth: cw });
 }
 
 /**
@@ -172,32 +275,32 @@ export function addPDFHeader(
   // Institution header (for medical documents)
   if (includeInstitution) {
     pdf.setFontSize(PDF_FONT_SIZES.sectionHeader);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.setTextColor(PDF_COLORS.text.r, PDF_COLORS.text.g, PDF_COLORS.text.b);
-    pdf.text(PDF_INSTITUTION.name, pageWidth / 2, yPos, { align: 'center' });
-    yPos += 6;
+    pdf.text(sanitizeTextForPDF(PDF_INSTITUTION.name), pageWidth / 2, yPos, { align: 'center' });
+    yPos += 5;
     
     pdf.setFontSize(PDF_FONT_SIZES.body);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     pdf.text(PDF_INSTITUTION.department, pageWidth / 2, yPos, { align: 'center' });
-    yPos += 5;
+    yPos += 4;
     pdf.text(PDF_INSTITUTION.location, pageWidth / 2, yPos, { align: 'center' });
-    yPos += 10;
+    yPos += 8;
   }
   
   // Main title
   pdf.setFontSize(PDF_FONT_SIZES.title);
-  pdf.setFont('helvetica', 'bold');
+  pdf.setFont('times', 'bold');
   pdf.setTextColor(PDF_COLORS.text.r, PDF_COLORS.text.g, PDF_COLORS.text.b);
-  pdf.text(title, pageWidth / 2, yPos, { align: 'center' });
-  yPos += 7;
+  pdf.text(sanitizeTextForPDF(title), pageWidth / 2, yPos, { align: 'center' });
+  yPos += 6;
   
   // Subtitle
   if (subtitle) {
     pdf.setFontSize(PDF_FONT_SIZES.body);
-    pdf.setFont('helvetica', 'normal');
-    pdf.text(subtitle, pageWidth / 2, yPos, { align: 'center' });
-    yPos += 8;
+    pdf.setFont('times', 'normal');
+    pdf.text(sanitizeTextForPDF(subtitle), pageWidth / 2, yPos, { align: 'center' });
+    yPos += 6;
   }
   
   // Reset to default text color
@@ -219,10 +322,9 @@ export function addSectionHeader(
   const underlineColor = options?.color || PDF_COLORS.primary;
   
   pdf.setFontSize(PDF_FONT_SIZES.sectionHeader);
-  pdf.setFont('helvetica', 'bold');
-  // MANDATORY: Section headers always black text
+  pdf.setFont('times', 'bold');
   pdf.setTextColor(PDF_COLORS.text.r, PDF_COLORS.text.g, PDF_COLORS.text.b);
-  pdf.text(title, PDF_MARGINS.left, yPos);
+  pdf.text(sanitizeTextForPDF(title), PDF_MARGINS.left, yPos);
   
   if (options?.underline) {
     const textWidth = pdf.getTextWidth(title);
@@ -252,19 +354,18 @@ export function addBodyText(
     lineHeight?: number;
   }
 ): number {
-  // MANDATORY: Enforce minimum font size of 11pt for body text
   const fontSize = Math.max(options?.fontSize || PDF_FONT_SIZES.body, PDF_FONT_SIZES.body);
   const pageWidth = pdf.internal.pageSize.getWidth();
   const maxWidth = options?.maxWidth || (pageWidth - PDF_MARGINS.left - PDF_MARGINS.right);
   const indent = options?.indent || 0;
-  const lineHeight = options?.lineHeight || 6;
+  const lineHeight = options?.lineHeight || PDF_LINE_HEIGHT;
   
   pdf.setFontSize(fontSize);
-  pdf.setFont('helvetica', options?.bold ? 'bold' : 'normal');
-  // MANDATORY: Black text
+  pdf.setFont('times', options?.bold ? 'bold' : 'normal');
   pdf.setTextColor(PDF_COLORS.text.r, PDF_COLORS.text.g, PDF_COLORS.text.b);
   
-  const lines = pdf.splitTextToSize(text, maxWidth - indent);
+  const cleanText = sanitizeTextForPDF(text);
+  const lines = pdf.splitTextToSize(cleanText, maxWidth - indent);
   lines.forEach((line: string) => {
     pdf.text(line, PDF_MARGINS.left + indent, yPos);
     yPos += lineHeight;
@@ -287,14 +388,14 @@ export function addBulletList(
     checkPageBreak?: (neededSpace: number) => boolean;
   }
 ): number {
-  const bulletChar = options?.bulletChar || '•';
+  const bulletChar = '-';
   const fontSize = options?.fontSize || PDF_FONT_SIZES.body;
-  const lineHeight = options?.lineHeight || 5;
+  const lineHeight = options?.lineHeight || PDF_LINE_HEIGHT;
   const pageWidth = pdf.internal.pageSize.getWidth();
-  const maxWidth = pageWidth - PDF_MARGINS.left - PDF_MARGINS.right - 10;
+  const maxWidth = pageWidth - PDF_MARGINS.left - PDF_MARGINS.right - 8;
   
   pdf.setFontSize(fontSize);
-  pdf.setFont('helvetica', 'normal');
+  pdf.setFont('times', 'normal');
   
   items.forEach((item) => {
     if (item.trim()) {
@@ -349,20 +450,20 @@ export function addWarningBox(
   
   // Warning title
   pdf.setFontSize(PDF_FONT_SIZES.subHeader);
-  pdf.setFont('helvetica', 'bold');
+  pdf.setFont('times', 'bold');
   pdf.setTextColor(PDF_COLORS.danger.r, PDF_COLORS.danger.g, PDF_COLORS.danger.b);
-  pdf.text('⚠ ' + title, PDF_MARGINS.left + 3, yPos + 4);
+  pdf.text('[!] ' + sanitizeTextForPDF(title), PDF_MARGINS.left + 3, yPos + 4);
   yPos += 10;
   
   // Warning items
   pdf.setFontSize(PDF_FONT_SIZES.body);
-  pdf.setFont('helvetica', 'normal');
+  pdf.setFont('times', 'normal');
   pdf.setTextColor(PDF_COLORS.black.r, PDF_COLORS.black.g, PDF_COLORS.black.b);
   
   items.forEach((item) => {
     if (item.trim()) {
-      pdf.text('• ' + item, PDF_MARGINS.left + 5, yPos);
-      yPos += 5;
+      pdf.text('- ' + sanitizeTextForPDF(item), PDF_MARGINS.left + 5, yPos);
+      yPos += PDF_LINE_HEIGHT;
     }
   });
   
@@ -392,18 +493,18 @@ export function addInfoBox(
   
   // Title
   pdf.setFontSize(PDF_FONT_SIZES.subHeader);
-  pdf.setFont('helvetica', 'bold');
+  pdf.setFont('times', 'bold');
   pdf.setTextColor(PDF_COLORS.primary.r, PDF_COLORS.primary.g, PDF_COLORS.primary.b);
-  pdf.text(title, PDF_MARGINS.left + 3, yPos + 4);
+  pdf.text(sanitizeTextForPDF(title), PDF_MARGINS.left + 3, yPos + 4);
   yPos += 10;
   
   // Content
   pdf.setFontSize(PDF_FONT_SIZES.body);
-  pdf.setFont('helvetica', 'normal');
+  pdf.setFont('times', 'normal');
   pdf.setTextColor(PDF_COLORS.black.r, PDF_COLORS.black.g, PDF_COLORS.black.b);
   lines.forEach((line: string) => {
     pdf.text(line, PDF_MARGINS.left + 5, yPos);
-    yPos += 5;
+    yPos += PDF_LINE_HEIGHT;
   });
   
   return yPos + 5;
@@ -467,7 +568,7 @@ export function addFooter(pdf: jsPDF, customText?: string): void {
   for (let i = 1; i <= pageCount; i++) {
     pdf.setPage(i);
     pdf.setFontSize(PDF_FONT_SIZES.footer);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     pdf.setTextColor(PDF_COLORS.gray.r, PDF_COLORS.gray.g, PDF_COLORS.gray.b);
     
     // Left: Custom text or institution
@@ -501,15 +602,15 @@ export function addTwoColumnText(
   const col2X = pageWidth / 2;
   
   pdf.setFontSize(PDF_FONT_SIZES.body);
-  pdf.setFont('helvetica', 'bold');
-  pdf.text(leftLabel, col1X, yPos);
-  pdf.text(rightLabel, col2X, yPos);
+  pdf.setFont('times', 'bold');
+  pdf.text(sanitizeTextForPDF(leftLabel), col1X, yPos);
+  pdf.text(sanitizeTextForPDF(rightLabel), col2X, yPos);
   
-  pdf.setFont('helvetica', 'normal');
-  pdf.text(leftValue, col1X + pdf.getTextWidth(leftLabel) + 2, yPos);
-  pdf.text(rightValue, col2X + pdf.getTextWidth(rightLabel) + 2, yPos);
+  pdf.setFont('times', 'normal');
+  pdf.text(sanitizeTextForPDF(leftValue), col1X + pdf.getTextWidth(leftLabel) + 2, yPos);
+  pdf.text(sanitizeTextForPDF(rightValue), col2X + pdf.getTextWidth(rightLabel) + 2, yPos);
   
-  return yPos + 6;
+  return yPos + PDF_LINE_HEIGHT + 1;
 }
 
 /**
@@ -523,13 +624,19 @@ export function addLabeledField(
   options?: { bold?: boolean }
 ): number {
   pdf.setFontSize(PDF_FONT_SIZES.body);
-  pdf.setFont('helvetica', 'bold');
-  pdf.text(label + ':', PDF_MARGINS.left, yPos);
+  pdf.setFont('times', 'bold');
+  pdf.text(sanitizeTextForPDF(label) + ':', PDF_MARGINS.left, yPos);
   
-  pdf.setFont('helvetica', options?.bold ? 'bold' : 'normal');
-  pdf.text(value, PDF_MARGINS.left + pdf.getTextWidth(label + ': '), yPos);
+  pdf.setFont('times', options?.bold ? 'bold' : 'normal');
+  const cleanVal = sanitizeTextForPDF(value);
+  const labelW = pdf.getTextWidth(sanitizeTextForPDF(label) + ': ');
+  const maxValW = pdf.internal.pageSize.getWidth() - PDF_MARGINS.left - PDF_MARGINS.right - labelW;
+  const valLines = pdf.splitTextToSize(cleanVal, maxValW);
+  valLines.forEach((line: string, i: number) => {
+    pdf.text(line, PDF_MARGINS.left + (i === 0 ? labelW : labelW), yPos + (i * PDF_LINE_HEIGHT));
+  });
   
-  return yPos + 6;
+  return yPos + (valLines.length * PDF_LINE_HEIGHT) + 1;
 }
 
 /**
@@ -554,22 +661,22 @@ export function sanitizeTextForPDF(text: string): string {
   result = result.replace(/[\uFE00-\uFE0F]/g, '');
   
   // Replace emojis with text equivalents (jsPDF doesn't handle emojis well)
-  result = result.replace(/⚠️/g, '[!]');
-  result = result.replace(/🚨/g, '[!]');
-  result = result.replace(/📅/g, '');
-  result = result.replace(/✅/g, '[OK]');
-  result = result.replace(/✓/g, '-');
-  result = result.replace(/✔/g, '-');
-  result = result.replace(/❌/g, '[X]');
-  result = result.replace(/💊/g, '');
-  result = result.replace(/🏥/g, '');
-  result = result.replace(/👨‍⚕️/g, '');
-  result = result.replace(/👩‍⚕️/g, '');
-  result = result.replace(/🩺/g, '');
-  result = result.replace(/💉/g, '');
-  result = result.replace(/🩹/g, '');
-  result = result.replace(/🌡️/g, '');
-  result = result.replace(/🔬/g, '');
+  result = result.replace(/âš ï¸/g, '[!]');
+  result = result.replace(/ðŸš¨/g, '[!]');
+  result = result.replace(/ðŸ“…/g, '');
+  result = result.replace(/âœ…/g, '[OK]');
+  result = result.replace(/âœ“/g, '-');
+  result = result.replace(/âœ”/g, '-');
+  result = result.replace(/âŒ/g, '[X]');
+  result = result.replace(/ðŸ’Š/g, '');
+  result = result.replace(/ðŸ¥/g, '');
+  result = result.replace(/ðŸ‘¨â€âš-ï¸/g, '');
+  result = result.replace(/ðŸ‘©â€âš-ï¸/g, '');
+  result = result.replace(/ðŸ©º/g, '');
+  result = result.replace(/ðŸ’‰/g, '');
+  result = result.replace(/ðŸ©¹/g, '');
+  result = result.replace(/ðŸŒ¡ï¸/g, '');
+  result = result.replace(/ðŸ”¬/g, '');
   
   // Remove any remaining emojis (common emoji ranges)
   result = result.replace(/[\u{1F300}-\u{1F9FF}]/gu, '');
@@ -577,26 +684,40 @@ export function sanitizeTextForPDF(text: string): string {
   result = result.replace(/[\u{2700}-\u{27BF}]/gu, '');
   
   // Replace problematic bullet characters with standard ones
-  result = result.replace(/[•●○◦▪▫■□◆◇★☆✗✘→←↑↓⇒⇐⇑⇓]/g, '-');
-  result = result.replace(/[Ø]/g, ''); // Remove problematic Ø character
-  result = result.replace(/[Þþ]/g, ''); // Remove thorn characters
-  result = result.replace(/[¨]/g, ''); // Remove diaeresis
+  result = result.replace(/[â€¢â—â—‹â—¦â–ªâ–«â– â–¡â—†â—‡â˜…â˜†âœ—âœ˜â†’â†â†‘â†“â‡’â‡â‡‘â‡“]/g, '-');
+  result = result.replace(/[Ã˜]/g, ''); // Remove problematic Ã˜ character
+  result = result.replace(/[ÃžÃ¾]/g, ''); // Remove thorn characters
+  result = result.replace(/[Â¨]/g, ''); // Remove diaeresis
+  result = result.replace(/[â˜â˜‘â˜’]/g, '[ ]'); // Replace checkbox chars with ASCII
+  result = result.replace(/[âœ“âœ”]/g, '[x]'); // Replace checkmark with ASCII
+  
+  // Remove additional emoji ranges that cause garbled text
+  result = result.replace(/[ðŸ©¸ðŸ›ï¸ðŸš¶ðŸ’§ðŸ§¦ðŸ“‹ðŸ†˜ðŸ©¹ðŸŒ¡ï¸ðŸ”¬ðŸ’‰ðŸ¥ðŸ©º]/gu, '');
+  result = result.replace(/[\u{1F600}-\u{1F64F}]/gu, ''); // Emoticons
+  result = result.replace(/[\u{1FA70}-\u{1FAFF}]/gu, ''); // Symbols extended
+  result = result.replace(/[\u{2300}-\u{23FF}]/gu, ''); // Misc technical
+  result = result.replace(/[\u{2B00}-\u{2BFF}]/gu, ''); // Misc symbols & arrows
   
   // Replace problematic quotes with standard ones
-  result = result.replace(/[""„‟″‴]/g, '"');
-  result = result.replace(/[''‚‛′‵]/g, "'");
+  result = result.replace(/[""â€žâ€Ÿâ€³â€´]/g, '"');
+  result = result.replace(/[''â€šâ€›â€²â€µ]/g, "'");
   
   // Replace various dash characters with regular dash
-  result = result.replace(/[–—―‐‑‒⁃]/g, '-');
+  result = result.replace(/[â€“â€”â€-â€â€‘â€’âƒ]/g, '-');
   
-  // Replace degree symbol with text
-  result = result.replace(/°/g, ' deg ');
+  // Replace degree symbol with text (handle both Â° mojibake and actual °)
+  result = result.replace(/Â°/g, ' deg ');
+  result = result.replace(/\u00B0/g, ' deg ');
   
   // Remove any control characters except newline and tab
   result = result.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
   
   // Remove non-breaking spaces that cause issues
   result = result.replace(/[\u00A0]/g, ' ');
+  
+  // FINAL SAFETY NET: Remove any remaining non-ASCII characters that jsPDF can't render
+  // This catches anything the specific replacements above missed
+  result = result.replace(/[^\x20-\x7E\n\t\r]/g, '');
   
   // Clean up excessive spacing (multiple spaces to single space)
   result = result.replace(/  +/g, ' ');
@@ -669,7 +790,7 @@ export function addSimpleTable(
   
   // Header text (white on colored background)
   pdf.setTextColor(255, 255, 255);
-  pdf.setFont('helvetica', 'bold');
+  pdf.setFont('times', 'bold');
   let xPos = PDF_MARGINS.left + 2;
   headers.forEach((header, i) => {
     pdf.text(sanitizeTextForPDF(header), xPos, yPos);
@@ -679,7 +800,7 @@ export function addSimpleTable(
   
   // Reset to black text for rows
   pdf.setTextColor(PDF_COLORS.text.r, PDF_COLORS.text.g, PDF_COLORS.text.b);
-  pdf.setFont('helvetica', 'normal');
+  pdf.setFont('times', 'normal');
   
   // Draw data rows with alternating background
   rows.forEach((row, rowIndex) => {
@@ -804,7 +925,7 @@ export async function sharePDFViaWhatsApp(
   
   // Then open WhatsApp with a message
   const encodedMessage = encodeURIComponent(
-    `${message}\n\n📎 The PDF document "${filename}" has been downloaded. Please attach it to this chat.`
+    `${message}\n\nðŸ“Ž The PDF document "${filename}" has been downloaded. Please attach it to this chat.`
   );
   
   // Check if on mobile for WhatsApp app vs WhatsApp Web
@@ -864,7 +985,7 @@ export async function shareToWhatsAppWithPhone(
   
   // Open WhatsApp with optional phone number
   const encodedMessage = encodeURIComponent(
-    `${message}\n\n📎 Please find the attached document: "${filename}"`
+    `${message}\n\nðŸ“Ž Please find the attached document: "${filename}"`
   );
   
   const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -887,6 +1008,45 @@ export async function shareToWhatsAppWithPhone(
   setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
 }
 
+/**
+ * Renders body text in a double-column layout.
+ * Splits text at the midpoint and flows into two columns.
+ */
+export function addDoubleColumnText(
+  pdf: jsPDF,
+  text: string,
+  yPos: number,
+  options?: { fontSize?: number; lineHeight?: number }
+): number {
+  const fontSize = options?.fontSize || PDF_FONT_SIZES.body;
+  const lh = options?.lineHeight || PDF_LINE_HEIGHT;
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const colGap = 6;
+  const colWidth = (pageWidth - PDF_MARGINS.left - PDF_MARGINS.right - colGap) / 2;
+  const col1X = PDF_MARGINS.left;
+  const col2X = PDF_MARGINS.left + colWidth + colGap;
+
+  pdf.setFontSize(fontSize);
+  pdf.setFont('times', 'normal');
+  pdf.setTextColor(PDF_COLORS.text.r, PDF_COLORS.text.g, PDF_COLORS.text.b);
+
+  const cleanText = sanitizeTextForPDF(text);
+  const allLines = pdf.splitTextToSize(cleanText, colWidth);
+  const mid = Math.ceil(allLines.length / 2);
+  const col1Lines = allLines.slice(0, mid);
+  const col2Lines = allLines.slice(mid);
+
+  const startY = yPos;
+  col1Lines.forEach((line: string, i: number) => {
+    pdf.text(line, col1X, startY + i * lh);
+  });
+  col2Lines.forEach((line: string, i: number) => {
+    pdf.text(line, col2X, startY + i * lh);
+  });
+
+  return startY + Math.max(col1Lines.length, col2Lines.length) * lh + 2;
+}
+
 export default {
   // Core functions
   createPDF,
@@ -902,6 +1062,13 @@ export default {
   addFooter,
   addTwoColumnText,
   addLabeledField,
+  addDoubleColumnText,
+  
+  // Thermal print
+  createThermalPDF,
+  addThermalHeader,
+  addThermalText,
+  finalizeThermalPDF,
   
   // Text utilities
   sanitizeTextForPDF,
@@ -919,10 +1086,13 @@ export default {
   sharePDFViaWhatsApp,
   shareToWhatsAppWithPhone,
   
-  // Configuration (MANDATORY standards)
+  // Configuration
   PDF_FONT_SIZES,
   PDF_MARGINS,
   PDF_PAGE,
   PDF_COLORS,
-  PDF_INSTITUTION
+  PDF_INSTITUTION,
+  PDF_THERMAL,
+  PDF_LINE_SPACING,
+  PDF_LINE_HEIGHT
 };

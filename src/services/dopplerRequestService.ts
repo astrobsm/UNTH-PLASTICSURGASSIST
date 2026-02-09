@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Doppler Ultrasound Request Service
  * 
  * Generates PDF request forms for Doppler Ultrasound studies
@@ -97,11 +97,11 @@ export const dopplerRequestService = {
     
     // Header
     pdf.setFontSize(11);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.text('UNIVERSITY OF NIGERIA TEACHING HOSPITAL', pageWidth / 2, yPos, { align: 'center' });
     yPos += 5;
     pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     pdf.text('PLASTIC AND RECONSTRUCTIVE SURGERY UNIT', pageWidth / 2, yPos, { align: 'center' });
     yPos += 5;
     pdf.text('Enugu, Nigeria', pageWidth / 2, yPos, { align: 'center' });
@@ -109,12 +109,12 @@ export const dopplerRequestService = {
     
     // Title
     pdf.setFontSize(14);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.setTextColor(PDF_COLORS.primary.r, PDF_COLORS.primary.g, PDF_COLORS.primary.b);
     pdf.text('DOPPLER ULTRASOUND REQUEST FORM', pageWidth / 2, yPos, { align: 'center' });
     yPos += 4;
     pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'italic');
+    pdf.setFont('times', 'italic');
     pdf.setTextColor(100, 100, 100);
     pdf.text('(Vascular Assessment for Limb Salvage Evaluation)', pageWidth / 2, yPos, { align: 'center' });
     pdf.setTextColor(0, 0, 0);
@@ -130,7 +130,7 @@ export const dopplerRequestService = {
     pdf.setFillColor(urgency.bg[0], urgency.bg[1], urgency.bg[2]);
     pdf.roundedRect(pageWidth - 55, yPos - 5, 40, 8, 2, 2, 'F');
     pdf.setFontSize(9);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.setTextColor(urgency.text[0], urgency.text[1], urgency.text[2]);
     pdf.text(data.urgency.toUpperCase(), pageWidth - 35, yPos, { align: 'center' });
     pdf.setTextColor(0, 0, 0);
@@ -144,7 +144,7 @@ export const dopplerRequestService = {
     
     // Request Date
     pdf.setFontSize(9);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     pdf.text(`Request Date: ${format(data.requestDate, 'dd/MM/yyyy HH:mm')}`, pageWidth - PDF_MARGINS.right, yPos, { align: 'right' });
     yPos += 6;
     
@@ -180,14 +180,14 @@ export const dopplerRequestService = {
     
     // SECTION 4: Examination Type
     pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.setFillColor(240, 240, 240);
     pdf.rect(PDF_MARGINS.left, yPos - 3, pageWidth - PDF_MARGINS.left - PDF_MARGINS.right, 7, 'F');
     pdf.text('EXAMINATION REQUESTED', PDF_MARGINS.left + 2, yPos + 2);
     yPos += 10;
     
     pdf.setFontSize(9);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     const examTypes = [
       { label: 'Arterial Doppler Study', checked: data.examinationType === 'arterial' || data.examinationType === 'both' },
       { label: 'Venous Doppler Study', checked: data.examinationType === 'venous' || data.examinationType === 'both' },
@@ -225,11 +225,11 @@ export const dopplerRequestService = {
     if (data.additionalNotes) {
       yPos += 5;
       pdf.setFontSize(10);
-      pdf.setFont('helvetica', 'bold');
+      pdf.setFont('times', 'bold');
       pdf.text('ADDITIONAL NOTES:', PDF_MARGINS.left, yPos);
       yPos += 5;
       pdf.setFontSize(9);
-      pdf.setFont('helvetica', 'normal');
+      pdf.setFont('times', 'normal');
       const splitNotes = pdf.splitTextToSize(data.additionalNotes, pageWidth - PDF_MARGINS.left - PDF_MARGINS.right);
       pdf.text(splitNotes, PDF_MARGINS.left, yPos);
       yPos += splitNotes.length * 4 + 5;
@@ -258,19 +258,19 @@ export const dopplerRequestService = {
     // For Radiology Use
     yPos += 30;
     pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.setFillColor(230, 230, 250);
     pdf.rect(PDF_MARGINS.left, yPos - 3, pageWidth - PDF_MARGINS.left - PDF_MARGINS.right, 7, 'F');
     pdf.text('FOR RADIOLOGY DEPARTMENT USE ONLY', PDF_MARGINS.left + 2, yPos + 2);
     yPos += 12;
     
     pdf.setFontSize(9);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     pdf.text('Appointment Date: _________________  Time: _____________', PDF_MARGINS.left, yPos);
     yPos += 7;
     pdf.text('Performed By: ___________________________', PDF_MARGINS.left, yPos);
     yPos += 7;
-    pdf.text('Report Attached: ☐ Yes  ☐ No', PDF_MARGINS.left, yPos);
+    pdf.text('Report Attached: â˜ Yes  â˜ No', PDF_MARGINS.left, yPos);
     
     // Add footer
     addFooter(pdf, 'Doppler Ultrasound Request - UNTH Plastic Surgery');
@@ -282,7 +282,7 @@ export const dopplerRequestService = {
     const pageWidth = pdf.internal.pageSize.getWidth();
     
     pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.setFillColor(240, 240, 240);
     pdf.rect(PDF_MARGINS.left, yPos - 3, pageWidth - PDF_MARGINS.left - PDF_MARGINS.right, 7, 'F');
     pdf.text(title, PDF_MARGINS.left + 2, yPos + 2);
@@ -292,15 +292,15 @@ export const dopplerRequestService = {
     const colWidth = (pageWidth - PDF_MARGINS.left - PDF_MARGINS.right) / 2;
     
     for (let i = 0; i < fields.length; i += 2) {
-      pdf.setFont('helvetica', 'bold');
+      pdf.setFont('times', 'bold');
       pdf.text(`${fields[i].label}:`, PDF_MARGINS.left, yPos);
-      pdf.setFont('helvetica', 'normal');
+      pdf.setFont('times', 'normal');
       pdf.text(fields[i].value, PDF_MARGINS.left + 35, yPos);
       
       if (fields[i + 1]) {
-        pdf.setFont('helvetica', 'bold');
+        pdf.setFont('times', 'bold');
         pdf.text(`${fields[i + 1].label}:`, PDF_MARGINS.left + colWidth, yPos);
-        pdf.setFont('helvetica', 'normal');
+        pdf.setFont('times', 'normal');
         pdf.text(fields[i + 1].value, PDF_MARGINS.left + colWidth + 35, yPos);
       }
       yPos += 5;
@@ -313,7 +313,7 @@ export const dopplerRequestService = {
     const pageWidth = pdf.internal.pageSize.getWidth();
     
     pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.setFillColor(240, 240, 240);
     pdf.rect(PDF_MARGINS.left, yPos - 3, pageWidth - PDF_MARGINS.left - PDF_MARGINS.right, 7, 'F');
     pdf.text(title, PDF_MARGINS.left + 2, yPos + 2);
@@ -321,10 +321,10 @@ export const dopplerRequestService = {
     
     pdf.setFontSize(9);
     fields.forEach(field => {
-      pdf.setFont('helvetica', 'bold');
+      pdf.setFont('times', 'bold');
       pdf.text(`${field.label}:`, PDF_MARGINS.left, yPos);
       yPos += 4;
-      pdf.setFont('helvetica', 'normal');
+      pdf.setFont('times', 'normal');
       const splitText = pdf.splitTextToSize(field.value, pageWidth - PDF_MARGINS.left - PDF_MARGINS.right - 5);
       pdf.text(splitText, PDF_MARGINS.left + 5, yPos);
       yPos += splitText.length * 4 + 3;
@@ -337,7 +337,7 @@ export const dopplerRequestService = {
     const pageWidth = pdf.internal.pageSize.getWidth();
     
     pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.setFillColor(255, 240, 240);
     pdf.rect(PDF_MARGINS.left, yPos - 3, pageWidth - PDF_MARGINS.left - PDF_MARGINS.right, 7, 'F');
     pdf.setTextColor(180, 0, 0);
@@ -366,11 +366,11 @@ export const dopplerRequestService = {
     }
     
     pdf.setFontSize(9);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.text('Measurements Required:', PDF_MARGINS.left, yPos);
     yPos += 5;
     
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     const measurements = [
       { label: 'Ankle-Brachial Index (ABI)', checked: arterial.abiRequired },
       { label: 'Toe Pressure / Toe-Brachial Index', checked: arterial.toePressureRequired },
@@ -402,11 +402,11 @@ export const dopplerRequestService = {
     }
     
     yPos += 3;
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.text('Vessels to Assess:', PDF_MARGINS.left, yPos);
     yPos += 5;
     
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     const vessels = [
       { label: 'Common Femoral Artery', checked: arterial.specificVessels?.commonFemoralArtery },
       { label: 'Superficial Femoral Artery', checked: arterial.specificVessels?.superficialFemoralArtery },
@@ -444,7 +444,7 @@ export const dopplerRequestService = {
     const pageWidth = pdf.internal.pageSize.getWidth();
     
     pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.setFillColor(240, 240, 255);
     pdf.rect(PDF_MARGINS.left, yPos - 3, pageWidth - PDF_MARGINS.left - PDF_MARGINS.right, 7, 'F');
     pdf.setTextColor(0, 0, 150);
@@ -470,11 +470,11 @@ export const dopplerRequestService = {
     }
     
     pdf.setFontSize(9);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.text('Assessment Required:', PDF_MARGINS.left, yPos);
     yPos += 5;
     
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     const assessments = [
       { label: 'DVT Screening (Compressibility)', checked: venous.dvtScreening },
       { label: 'Chronic Venous Insufficiency', checked: venous.chronicVenousInsufficiency },
@@ -503,11 +503,11 @@ export const dopplerRequestService = {
     }
     
     yPos += 3;
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.text('Veins to Assess:', PDF_MARGINS.left, yPos);
     yPos += 5;
     
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     const veins = [
       { label: 'Common Femoral Vein', checked: venous.specificVeins?.commonFemoralVein },
       { label: 'Great Saphenous Vein', checked: venous.specificVeins?.greatSaphenousVein },

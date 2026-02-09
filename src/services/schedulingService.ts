@@ -1,4 +1,4 @@
-import { db } from '../db/database';
+﻿import { db } from '../db/database';
 import html2canvas from 'html2canvas';
 import { format, addDays, startOfWeek, endOfWeek } from 'date-fns';
 import { apiClient } from './apiClient';
@@ -306,14 +306,14 @@ class SchedulingService {
     // Try to sync to server first
     try {
       const saved = await apiClient.createSurgery(newBooking);
-      console.log('✅ Surgery booking synced to server:', saved.id);
+      console.log('âœ… Surgery booking synced to server:', saved.id);
       await db.surgery_bookings.add({ ...newBooking, id: saved.id, synced: true });
       return saved.id;
     } catch (error) {
-      console.warn('⚠️ Failed to sync surgery booking to server, saving locally', error);
+      console.warn('âš ï¸ Failed to sync surgery booking to server, saving locally', error);
       await db.surgery_bookings.add({ ...newBooking, synced: false });
       await syncService.queueAction('create', 'surgeries', id, newBooking);
-      console.log('📱 Surgery booking saved locally, will sync when online:', id);
+      console.log('ðŸ“± Surgery booking saved locally, will sync when online:', id);
       return id;
     }
   }
@@ -381,12 +381,12 @@ class SchedulingService {
     
     // Header Section
     pdf.setFontSize(18);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.text('OPERATION LIST', pageWidth / 2, 15, { align: 'center' });
     
     // Date and Theatre Info
     pdf.setFontSize(PDF_FONT_SIZES.body);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     pdf.text('Date: ' + format(operationList.date, 'EEEE, MMMM d, yyyy'), margin, 25);
     pdf.text('Theatre Complex: ' + clean(operationList.theatre_complex), margin, 30);
     pdf.text('Generated: ' + format(operationList.generated_at, 'HH:mm dd/MM/yyyy'), pageWidth - margin - 60, 25);
@@ -409,7 +409,7 @@ class SchedulingService {
       
       // Surgery number and urgency badge
       pdf.setFontSize(PDF_FONT_SIZES.subHeader);
-      pdf.setFont('helvetica', 'bold');
+      pdf.setFont('times', 'bold');
       pdf.text('Case ' + (index + 1), margin, yPosition);
       
       // Urgency badge with color
@@ -428,9 +428,9 @@ class SchedulingService {
       
       // Patient Information Section
       pdf.setFontSize(9);
-      pdf.setFont('helvetica', 'bold');
+      pdf.setFont('times', 'bold');
       pdf.text('PATIENT:', margin, yPosition);
-      pdf.setFont('helvetica', 'normal');
+      pdf.setFont('times', 'normal');
       
       const patientInfo: string[] = [];
       patientInfo.push(surgery.patient_name || 'N/A');
@@ -443,16 +443,16 @@ class SchedulingService {
       yPosition += 5;
       
       // Procedure Information
-      pdf.setFont('helvetica', 'bold');
+      pdf.setFont('times', 'bold');
       pdf.text('PROCEDURE:', margin, yPosition);
-      pdf.setFont('helvetica', 'normal');
+      pdf.setFont('times', 'normal');
       pdf.text(surgery.procedure_name || 'N/A', margin + 25, yPosition);
       
       if (surgery.indication) {
         yPosition += 5;
-        pdf.setFont('helvetica', 'bold');
+        pdf.setFont('times', 'bold');
         pdf.text('INDICATION:', margin, yPosition);
-        pdf.setFont('helvetica', 'normal');
+        pdf.setFont('times', 'normal');
         const indication = surgery.indication.length > 80 ? surgery.indication.substring(0, 77) + '...' : surgery.indication;
         pdf.text(indication, margin + 25, yPosition);
       }
@@ -460,27 +460,27 @@ class SchedulingService {
       yPosition += 6;
       
       // Time and Duration
-      pdf.setFont('helvetica', 'bold');
+      pdf.setFont('times', 'bold');
       pdf.text('TIME:', margin, yPosition);
-      pdf.setFont('helvetica', 'normal');
+      pdf.setFont('times', 'normal');
       pdf.text(`${surgery.start_time} (Est. ${surgery.estimated_duration_minutes} min)`, margin + 15, yPosition);
       
-      pdf.setFont('helvetica', 'bold');
+      pdf.setFont('times', 'bold');
       pdf.text('THEATRE:', margin + 80, yPosition);
-      pdf.setFont('helvetica', 'normal');
+      pdf.setFont('times', 'normal');
       pdf.text(surgery.theatre_number || 'TBD', margin + 95, yPosition);
       
-      pdf.setFont('helvetica', 'bold');
+      pdf.setFont('times', 'bold');
       pdf.text('ANAESTHESIA:', margin + 130, yPosition);
-      pdf.setFont('helvetica', 'normal');
+      pdf.setFont('times', 'normal');
       pdf.text(surgery.anaesthesia_type || 'N/A', margin + 155, yPosition);
       
       yPosition += 6;
       
       // Hierarchical Surgical Team Section
-      pdf.setFont('helvetica', 'bold');
+      pdf.setFont('times', 'bold');
       pdf.text('SURGICAL TEAM:', margin, yPosition);
-      pdf.setFont('helvetica', 'normal');
+      pdf.setFont('times', 'normal');
       
       const hierarchicalTeam: string[] = [];
       
@@ -526,9 +526,9 @@ class SchedulingService {
       
       // Nursing Staff
       if (surgery.scrub_nurse || surgery.circulating_nurse) {
-        pdf.setFont('helvetica', 'bold');
+        pdf.setFont('times', 'bold');
         pdf.text('NURSES:', margin, yPosition);
-        pdf.setFont('helvetica', 'normal');
+        pdf.setFont('times', 'normal');
         const nurses: string[] = [];
         if (surgery.scrub_nurse) nurses.push(`Scrub: ${surgery.scrub_nurse}`);
         if (surgery.circulating_nurse) nurses.push(`Circulating: ${surgery.circulating_nurse}`);
@@ -538,9 +538,9 @@ class SchedulingService {
       
       // Remarks/Special Requirements
       if (surgery.remarks && surgery.remarks.length > 0) {
-        pdf.setFont('helvetica', 'bold');
+        pdf.setFont('times', 'bold');
         pdf.text('REMARKS:', margin, yPosition);
-        pdf.setFont('helvetica', 'normal');
+        pdf.setFont('times', 'normal');
         pdf.text(surgery.remarks.join(', '), margin + 22, yPosition);
         yPosition += 5;
       }
@@ -558,9 +558,9 @@ class SchedulingService {
       }
       
       if (specialItems.length > 0) {
-        pdf.setFont('helvetica', 'bold');
+        pdf.setFont('times', 'bold');
         pdf.text('REQUIREMENTS:', margin, yPosition);
-        pdf.setFont('helvetica', 'normal');
+        pdf.setFont('times', 'normal');
         const reqText = specialItems.join(' | ');
         const reqLines = pdf.splitTextToSize(reqText, pageWidth - margin * 2 - 30);
         pdf.text(reqLines, margin + 32, yPosition);
@@ -577,9 +577,9 @@ class SchedulingService {
       
       if (medicalInfo.length > 0) {
         pdf.setFontSize(8);
-        pdf.setFont('helvetica', 'bold');
+        pdf.setFont('times', 'bold');
         pdf.text('MEDICAL:', margin, yPosition);
-        pdf.setFont('helvetica', 'normal');
+        pdf.setFont('times', 'normal');
         const medText = medicalInfo.join(' | ');
         const medLines = pdf.splitTextToSize(medText, pageWidth - margin * 2 - 20);
         pdf.text(medLines, margin + 18, yPosition);
@@ -589,8 +589,8 @@ class SchedulingService {
       
       // Checklist Status
       const checklistItems: string[] = [];
-      if (surgery.pre_op_checklist_completed) checklistItems.push('✓ Pre-op');
-      if (surgery.consent_obtained) checklistItems.push('✓ Consent');
+      if (surgery.pre_op_checklist_completed) checklistItems.push('âœ“ Pre-op');
+      if (surgery.consent_obtained) checklistItems.push('âœ“ Consent');
       
       if (checklistItems.length > 0) {
         pdf.setFontSize(8);
@@ -603,14 +603,14 @@ class SchedulingService {
       
       // Notes
       if (surgery.notes) {
-        pdf.setFont('helvetica', 'italic');
+        pdf.setFont('times', 'italic');
         pdf.setFontSize(8);
         const notesText = surgery.notes.length > 120 ? surgery.notes.substring(0, 117) + '...' : surgery.notes;
         const notesLines = pdf.splitTextToSize(`Notes: ${notesText}`, pageWidth - margin * 2);
         pdf.text(notesLines, margin, yPosition);
         yPosition += (notesLines.length * 3.5) + 2;
         pdf.setFontSize(9);
-        pdf.setFont('helvetica', 'normal');
+        pdf.setFont('times', 'normal');
       }
       
       // Separator line between surgeries

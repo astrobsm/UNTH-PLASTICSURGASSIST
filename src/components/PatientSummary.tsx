@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { unthPatientService, PatientSummary } from '../services/unthPatientService';
 import { patientService } from '../services/patientService';
 import { db } from '../db/database';
@@ -174,15 +174,15 @@ export const PatientSummaryView: React.FC<PatientSummaryViewProps> = ({
   const getSummaryTypeIcon = (type: string) => {
     switch (type) {
       case 'admission':
-        return '🏥';
+        return 'ðŸ¥';
       case 'progress':
-        return '📊';
+        return 'ðŸ“Š';
       case 'discharge':
-        return '🚪';
+        return 'ðŸšª';
       case 'consultation':
-        return '👩‍⚕️';
+        return 'ðŸ‘©â€âš-ï¸';
       default:
-        return '📄';
+        return 'ðŸ“„';
     }
   };
 
@@ -399,7 +399,7 @@ export const PatientSummaryView: React.FC<PatientSummaryViewProps> = ({
           </div>
         ) : (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
-            <div className="text-gray-400 text-6xl mb-4">📄</div>
+            <div className="text-gray-400 text-6xl mb-4">ðŸ“„</div>
             <h3 className="text-lg font-medium text-gray-900 mb-2">No Summary Selected</h3>
             <p className="text-gray-500">Select a summary from the list or generate a new one</p>
           </div>

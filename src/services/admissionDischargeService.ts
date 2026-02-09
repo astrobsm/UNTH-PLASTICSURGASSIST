@@ -1,4 +1,4 @@
-import { db } from '../db/database';
+﻿import { db } from '../db/database';
 import { apiClient } from './apiClient';
 import { syncService } from '../db/syncService';
 import { pushNotificationService } from './pushNotificationService';
@@ -277,7 +277,7 @@ class AdmissionDischargeService {
           id: savedAdmission.id,
           synced: true
         } as any);
-        logger.log('✅ Admission synced to server:', savedAdmission.id);
+        logger.log('âœ… Admission synced to server:', savedAdmission.id);
         
         // Send notification to all users with voice announcement
         await pushNotificationService.notifyPatientAdmitted(
@@ -289,12 +289,12 @@ class AdmissionDischargeService {
         return savedAdmission.id;
       }
     } catch (error) {
-      logger.warn('⚠️ Failed to sync admission to server, saving locally:', error);
+      logger.warn('âš ï¸ Failed to sync admission to server, saving locally:', error);
     }
 
     // Fallback: save locally only
     const localId = await db.admissions.add({ ...admission, synced: false } as any);
-    logger.log('📱 Admission saved locally, will sync when online:', localId);
+    logger.log('ðŸ“± Admission saved locally, will sync when online:', localId);
     
     // Queue for sync
     await syncService.queueAction('create', 'admissions', localId as number, admission);
@@ -314,44 +314,44 @@ class AdmissionDischargeService {
   }
 
   async getActiveAdmissions(): Promise<Admission[]> {
-    console.log('🔍 getActiveAdmissions: Starting...');
+    console.log('ðŸ” getActiveAdmissions: Starting...');
     
     try {
       // Try to fetch from server first
-      console.log('📡 Attempting to fetch admissions from server...');
+      console.log('ðŸ“¡ Attempting to fetch admissions from server...');
       const serverAdmissions = await apiClient.getAdmissions();
-      console.log('📦 Server response:', serverAdmissions);
+      console.log('ðŸ“¦ Server response:', serverAdmissions);
       
       if (serverAdmissions && Array.isArray(serverAdmissions)) {
-        console.log(`📥 Received ${serverAdmissions.length} admissions from server`);
+        console.log(`ðŸ“¥ Received ${serverAdmissions.length} admissions from server`);
         
         // Merge with local database
         for (const admission of serverAdmissions) {
           await db.admissions.put({ ...admission, synced: true });
         }
-        console.log(`✅ Synced ${serverAdmissions.length} admissions from server to local DB`);
+        console.log(`âœ… Synced ${serverAdmissions.length} admissions from server to local DB`);
       } else {
-        console.warn('⚠️ Server response is not an array:', typeof serverAdmissions);
+        console.warn('âš ï¸ Server response is not an array:', typeof serverAdmissions);
       }
     } catch (error) {
-      console.warn('⚠️ Could not fetch admissions from server, using local data:', error);
+      console.warn('âš ï¸ Could not fetch admissions from server, using local data:', error);
     }
 
     // Return from local DB (now includes server data if available)
-    console.log('💾 Fetching all admissions from local DB...');
+    console.log('ðŸ’¾ Fetching all admissions from local DB...');
     const admissions = await db.admissions.toArray();
-    console.log(`💾 Found ${admissions.length} total admissions in local DB`);
+    console.log(`ðŸ’¾ Found ${admissions.length} total admissions in local DB`);
     
     if (admissions.length > 0) {
-      console.log('📋 Sample admission:', admissions[0]);
-      console.log('📊 Admission statuses:', admissions.map(a => ({ id: a.id, status: a.status })));
+      console.log('ðŸ“‹ Sample admission:', admissions[0]);
+      console.log('ðŸ“Š Admission statuses:', admissions.map(a => ({ id: a.id, status: a.status })));
     }
     
     const activeAdmissions = admissions
       .filter(a => a.status === 'active')
       .sort((a, b) => new Date(b.admission_date).getTime() - new Date(a.admission_date).getTime());
     
-    console.log(`✅ Returning ${activeAdmissions.length} active admissions`);
+    console.log(`âœ… Returning ${activeAdmissions.length} active admissions`);
     return activeAdmissions;
   }
 
@@ -365,7 +365,7 @@ class AdmissionDischargeService {
         }
       }
     } catch (error) {
-      console.warn('⚠️ Could not fetch patient admissions from server');
+      console.warn('âš ï¸ Could not fetch patient admissions from server');
     }
 
     const admissions = await db.admissions.toArray();
@@ -399,27 +399,27 @@ class AdmissionDischargeService {
   // ============= SYNC METHODS =============
 
   async syncUnsyncedAdmissions(): Promise<void> {
-    console.log('🔄 Syncing unsynced admissions...');
+    console.log('ðŸ”„ Syncing unsynced admissions...');
     
     // Get all unsynced admissions
     const unsyncedAdmissions = await db.admissions
       .filter(a => a.synced === false)
       .toArray();
     
-    console.log(`📊 Found ${unsyncedAdmissions.length} unsynced admissions`);
+    console.log(`ðŸ“Š Found ${unsyncedAdmissions.length} unsynced admissions`);
     
     for (const admission of unsyncedAdmissions) {
       try {
         // Queue for sync via syncService
         await syncService.queueAction('create', 'admissions', admission.id!, admission);
-        console.log(`✅ Queued admission ${admission.id} for sync`);
+        console.log(`âœ… Queued admission ${admission.id} for sync`);
       } catch (error) {
-        console.error(`❌ Failed to queue admission ${admission.id}:`, error);
+        console.error(`âŒ Failed to queue admission ${admission.id}:`, error);
       }
     }
     
     // Note: syncService will automatically process queue on next sync cycle
-    console.log('✅ Admissions queued for background sync');
+    console.log('âœ… Admissions queued for background sync');
   }
 
   // ============= WHO DISCHARGE SCORING =============
@@ -620,16 +620,16 @@ class AdmissionDischargeService {
           });
         }
 
-        console.log('✅ Discharge synced to server:', savedDischarge.id);
+        console.log('âœ… Discharge synced to server:', savedDischarge.id);
         return savedDischarge.id;
       }
     } catch (error) {
-      console.warn('⚠️ Failed to sync discharge to server, saving locally:', error);
+      console.warn('âš ï¸ Failed to sync discharge to server, saving locally:', error);
     }
 
     // Fallback: save locally only
     const localId = await db.discharges.add({ ...discharge, synced: false } as any);
-    console.log('📱 Discharge saved locally, will sync when online:', localId);
+    console.log('ðŸ“± Discharge saved locally, will sync when online:', localId);
 
     // Update admission status locally
     if (dischargeData.admission_id) {
@@ -788,7 +788,7 @@ class AdmissionDischargeService {
     if (discharge.secondary_diagnoses?.length) {
       summary += `Secondary Diagnoses:\n`;
       discharge.secondary_diagnoses.forEach(d => {
-        summary += `  • ${d}\n`;
+        summary += `  â€¢ ${d}\n`;
       });
     }
     summary += `\n`;
@@ -797,7 +797,7 @@ class AdmissionDischargeService {
       summary += `PROCEDURES PERFORMED\n`;
       summary += `-`.repeat(30) + `\n`;
       discharge.procedures_performed.forEach(p => {
-        summary += `  • ${p}\n`;
+        summary += `  â€¢ ${p}\n`;
       });
       summary += `\n`;
     }
@@ -827,7 +827,7 @@ class AdmissionDischargeService {
       summary += `FOLLOW-UP APPOINTMENTS\n`;
       summary += `-`.repeat(30) + `\n`;
       discharge.follow_up_appointments.forEach(apt => {
-        summary += `  • ${format(new Date(apt.date), 'dd MMM yyyy')} - ${apt.clinic}\n`;
+        summary += `  â€¢ ${format(new Date(apt.date), 'dd MMM yyyy')} - ${apt.clinic}\n`;
         summary += `    Purpose: ${apt.purpose}\n`;
       });
       summary += `\n`;
@@ -855,21 +855,21 @@ class AdmissionDischargeService {
     report += `Assessed By: ${whoScore.assessed_by}\n\n`;
 
     report += `Clinical Stability:\n`;
-    report += `  • Vital Signs: ${['Unstable', 'Borderline', 'Stable 24h', 'Stable 48h+'][whoScore.vital_signs_stable]}\n`;
-    report += `  • Pain Control: ${['Severe', 'Moderate', 'Mild', 'Minimal/None'][whoScore.pain_controlled]}\n`;
-    report += `  • Oral Intake: ${['NPO', 'Liquids only', 'Soft diet', 'Regular diet'][whoScore.oral_intake_adequate]}\n`;
-    report += `  • Mobility: ${['Bedbound', 'Needs assistance', 'Walks with aid', 'Independent'][whoScore.mobility_status]}\n`;
-    report += `  • Wound Status: ${['Infected', 'Concerning', 'Healing', 'Well-healed'][whoScore.wound_healing_status]}\n\n`;
+    report += `  â€¢ Vital Signs: ${['Unstable', 'Borderline', 'Stable 24h', 'Stable 48h+'][whoScore.vital_signs_stable]}\n`;
+    report += `  â€¢ Pain Control: ${['Severe', 'Moderate', 'Mild', 'Minimal/None'][whoScore.pain_controlled]}\n`;
+    report += `  â€¢ Oral Intake: ${['NPO', 'Liquids only', 'Soft diet', 'Regular diet'][whoScore.oral_intake_adequate]}\n`;
+    report += `  â€¢ Mobility: ${['Bedbound', 'Needs assistance', 'Walks with aid', 'Independent'][whoScore.mobility_status]}\n`;
+    report += `  â€¢ Wound Status: ${['Infected', 'Concerning', 'Healing', 'Well-healed'][whoScore.wound_healing_status]}\n\n`;
 
     report += `Functional Readiness:\n`;
-    report += `  • Self-Care: ${['Dependent', 'Needs help', 'Minimal help', 'Independent'][whoScore.self_care_ability]}\n`;
-    report += `  • Medication Understanding: ${['None', 'Poor', 'Moderate', 'Good'][whoScore.medication_understanding]}\n`;
-    report += `  • Follow-up Arranged: ${['No', 'Pending', 'Partially', 'Complete'][whoScore.follow_up_arranged]}\n\n`;
+    report += `  â€¢ Self-Care: ${['Dependent', 'Needs help', 'Minimal help', 'Independent'][whoScore.self_care_ability]}\n`;
+    report += `  â€¢ Medication Understanding: ${['None', 'Poor', 'Moderate', 'Good'][whoScore.medication_understanding]}\n`;
+    report += `  â€¢ Follow-up Arranged: ${['No', 'Pending', 'Partially', 'Complete'][whoScore.follow_up_arranged]}\n\n`;
 
     report += `Social Support:\n`;
-    report += `  • Caregiver Available: ${['None', 'Occasionally', 'Most times', 'Always'][whoScore.caregiver_available]}\n`;
-    report += `  • Transport: ${['No', 'Uncertain', 'Planned', 'Confirmed'][whoScore.transport_arranged]}\n`;
-    report += `  • Home Environment: ${['Unsafe', 'Concerns', 'Acceptable', 'Safe'][whoScore.home_environment_safe]}\n\n`;
+    report += `  â€¢ Caregiver Available: ${['None', 'Occasionally', 'Most times', 'Always'][whoScore.caregiver_available]}\n`;
+    report += `  â€¢ Transport: ${['No', 'Uncertain', 'Planned', 'Confirmed'][whoScore.transport_arranged]}\n`;
+    report += `  â€¢ Home Environment: ${['Unsafe', 'Concerns', 'Acceptable', 'Safe'][whoScore.home_environment_safe]}\n\n`;
 
     report += `TOTAL SCORE: ${whoScore.total_score}/33\n`;
     report += `RECOMMENDATION: ${whoScore.recommendation.replace(/_/g, ' ').toUpperCase()}\n\n`;
@@ -924,7 +924,7 @@ class AdmissionDischargeService {
       instructions += `ACTIVITY RESTRICTIONS\n`;
       instructions += `-`.repeat(30) + `\n`;
       discharge.activity_restrictions.forEach(r => {
-        instructions += `  • ${r}\n`;
+        instructions += `  â€¢ ${r}\n`;
       });
       instructions += `\n`;
     }
@@ -938,7 +938,7 @@ class AdmissionDischargeService {
     if (discharge.lifestyle_modifications?.length) {
       instructions += `Lifestyle Changes:\n`;
       discharge.lifestyle_modifications.forEach(m => {
-        instructions += `  • ${m}\n`;
+        instructions += `  â€¢ ${m}\n`;
       });
       instructions += `\n`;
     }
@@ -949,11 +949,11 @@ class AdmissionDischargeService {
       instructions += `-`.repeat(30) + `\n`;
       instructions += `Special Considerations:\n`;
       discharge.meal_plan_7_day.special_considerations.forEach(c => {
-        instructions += `  • ${c}\n`;
+        instructions += `  â€¢ ${c}\n`;
       });
       instructions += `\nFoods to Avoid:\n`;
       discharge.meal_plan_7_day.foods_to_avoid.forEach(f => {
-        instructions += `  • ${f}\n`;
+        instructions += `  â€¢ ${f}\n`;
       });
       instructions += `\nHydration: ${discharge.meal_plan_7_day.hydration_goals}\n\n`;
     }
@@ -962,7 +962,7 @@ class AdmissionDischargeService {
     instructions += `WARNING SIGNS - SEEK MEDICAL ATTENTION IF:\n`;
     instructions += `-`.repeat(30) + `\n`;
     const warningSigns = discharge.warning_signs || [
-      'Fever above 38°C (100.4°F)',
+      'Fever above 38Â°C (100.4Â°F)',
       'Increasing pain not controlled by medications',
       'Wound redness, swelling, or discharge',
       'Difficulty breathing',
@@ -971,7 +971,7 @@ class AdmissionDischargeService {
       'Confusion or altered consciousness'
     ];
     warningSigns.forEach(w => {
-      instructions += `  ⚠️ ${w}\n`;
+      instructions += `  âš ï¸ ${w}\n`;
     });
     instructions += `\n`;
 
@@ -980,7 +980,7 @@ class AdmissionDischargeService {
       instructions += `FOLLOW-UP APPOINTMENTS\n`;
       instructions += `-`.repeat(30) + `\n`;
       discharge.follow_up_appointments.forEach(apt => {
-        instructions += `📅 ${format(new Date(apt.date), 'EEEE, dd MMMM yyyy')}\n`;
+        instructions += `ðŸ“… ${format(new Date(apt.date), 'EEEE, dd MMMM yyyy')}\n`;
         instructions += `   Clinic: ${apt.clinic}\n`;
         instructions += `   Purpose: ${apt.purpose}\n`;
         if (apt.special_instructions) instructions += `   Note: ${apt.special_instructions}\n`;
@@ -1010,11 +1010,11 @@ class AdmissionDischargeService {
     const addHeader = (): number => {
       let y = PDF_MARGINS.top;
       pdf.setFontSize(PDF_FONT_SIZES.sectionHeader);
-      pdf.setFont('helvetica', 'bold');
+      pdf.setFont('times', 'bold');
       pdf.text('PLASTIC AND RECONSTRUCTIVE SURGERY UNIT', pageWidth / 2, y, { align: 'center' });
       y += 6;
       pdf.setFontSize(PDF_FONT_SIZES.body);
-      pdf.setFont('helvetica', 'normal');
+      pdf.setFont('times', 'normal');
       pdf.text('University of Nigeria Teaching Hospital, Enugu', pageWidth / 2, y, { align: 'center' });
       y += 10;
       return y;
@@ -1032,14 +1032,14 @@ class AdmissionDischargeService {
     const addSection = (title: string, content: string): void => {
       checkPageBreak(30);
       pdf.setFontSize(PDF_FONT_SIZES.subHeader);
-      pdf.setFont('helvetica', 'bold');
+      pdf.setFont('times', 'bold');
       pdf.setTextColor(PDF_COLORS.primary.r, PDF_COLORS.primary.g, PDF_COLORS.primary.b);
       pdf.text(clean(title), PDF_MARGINS.left, yPos);
       pdf.setTextColor(0, 0, 0);
       yPos += 7;
       
       pdf.setFontSize(PDF_FONT_SIZES.body);
-      pdf.setFont('helvetica', 'normal');
+      pdf.setFont('times', 'normal');
       const cleanContent = clean(content);
       const lines = pdf.splitTextToSize(cleanContent, pageWidth - PDF_MARGINS.left - PDF_MARGINS.right);
       lines.forEach((line: string) => {
@@ -1053,19 +1053,19 @@ class AdmissionDischargeService {
     const addBulletSection = (title: string, items: string[]): void => {
       checkPageBreak(30);
       pdf.setFontSize(PDF_FONT_SIZES.subHeader);
-      pdf.setFont('helvetica', 'bold');
+      pdf.setFont('times', 'bold');
       pdf.setTextColor(PDF_COLORS.primary.r, PDF_COLORS.primary.g, PDF_COLORS.primary.b);
       pdf.text(clean(title), PDF_MARGINS.left, yPos);
       pdf.setTextColor(0, 0, 0);
       yPos += 7;
       
       pdf.setFontSize(PDF_FONT_SIZES.body);
-      pdf.setFont('helvetica', 'normal');
+      pdf.setFont('times', 'normal');
       items.forEach((item) => {
         if (item && item.trim()) {
           checkPageBreak(8);
           const cleanItem = clean(item);
-          const bulletText = '• ' + cleanItem;
+          const bulletText = 'â€¢ ' + cleanItem;
           const lines = pdf.splitTextToSize(bulletText, pageWidth - PDF_MARGINS.left - PDF_MARGINS.right - 5);
           lines.forEach((line: string, idx: number) => {
             pdf.text(idx === 0 ? line : '  ' + line, PDF_MARGINS.left + 3, yPos);
@@ -1079,7 +1079,7 @@ class AdmissionDischargeService {
     // Page 1: Discharge Summary
     yPos = addHeader();
     pdf.setFontSize(PDF_FONT_SIZES.title);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.text('DISCHARGE SUMMARY', pageWidth / 2, yPos, { align: 'center' });
     yPos += 12;
 
@@ -1090,39 +1090,39 @@ class AdmissionDischargeService {
     yPos += 5;
     
     pdf.setFontSize(PDF_FONT_SIZES.body);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.text('Patient: ', PDF_MARGINS.left + 5, yPos);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     pdf.text(clean(discharge.patient_name), PDF_MARGINS.left + 22, yPos);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.text('Hospital No: ', pageWidth / 2, yPos);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     pdf.text(clean(discharge.hospital_number), pageWidth / 2 + 28, yPos);
     yPos += 6;
     
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.text('Age/Gender: ', PDF_MARGINS.left + 5, yPos);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     pdf.text(`${discharge.age || 'N/A'} / ${discharge.gender || 'N/A'}`, PDF_MARGINS.left + 32, yPos);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.text('Ward: ', pageWidth / 2, yPos);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     pdf.text(clean(admission.ward_location), pageWidth / 2 + 15, yPos);
     yPos += 6;
     
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.text('Admission: ', PDF_MARGINS.left + 5, yPos);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     pdf.text(format(new Date(discharge.admission_date), 'dd/MM/yyyy'), PDF_MARGINS.left + 28, yPos);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.text('Discharge: ', pageWidth / 2, yPos);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     pdf.text(format(new Date(discharge.discharge_date), 'dd/MM/yyyy'), pageWidth / 2 + 24, yPos);
     yPos += 6;
     
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.text('Length of Stay: ', PDF_MARGINS.left + 5, yPos);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     pdf.text(`${discharge.length_of_stay_days} days`, PDF_MARGINS.left + 35, yPos);
     yPos += 15;
 
@@ -1141,17 +1141,17 @@ class AdmissionDischargeService {
       yPos = addHeader();
       
       pdf.setFontSize(PDF_FONT_SIZES.title);
-      pdf.setFont('helvetica', 'bold');
+      pdf.setFont('times', 'bold');
       pdf.text('DISCHARGE MEDICATIONS', pageWidth / 2, yPos, { align: 'center' });
       yPos += 12;
 
       discharge.medications_on_discharge.forEach((med, idx) => {
         checkPageBreak(25);
         pdf.setFontSize(PDF_FONT_SIZES.body);
-        pdf.setFont('helvetica', 'bold');
+        pdf.setFont('times', 'bold');
         pdf.text(`${idx + 1}. ${clean(med.medication)}`, PDF_MARGINS.left, yPos);
         yPos += 6;
-        pdf.setFont('helvetica', 'normal');
+        pdf.setFont('times', 'normal');
         pdf.text(`   Dosage: ${clean(med.dosage)}`, PDF_MARGINS.left + 5, yPos);
         yPos += 5;
         pdf.text(`   Frequency: ${clean(med.frequency)}`, PDF_MARGINS.left + 5, yPos);
@@ -1174,7 +1174,7 @@ class AdmissionDischargeService {
     yPos = addHeader();
     
     pdf.setFontSize(PDF_FONT_SIZES.title);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.text('DISCHARGE INSTRUCTIONS', pageWidth / 2, yPos, { align: 'center' });
     yPos += 12;
 
@@ -1192,7 +1192,7 @@ class AdmissionDischargeService {
 
     // Warning Signs Box
     const warningSigns = discharge.warning_signs || [
-      'Fever above 38°C (100.4°F)',
+      'Fever above 38Â°C (100.4Â°F)',
       'Increasing pain not relieved by medication',
       'Wound redness, swelling, or discharge',
       'Difficulty breathing',
@@ -1206,17 +1206,17 @@ class AdmissionDischargeService {
     pdf.rect(PDF_MARGINS.left, yPos - 3, pageWidth - PDF_MARGINS.left - PDF_MARGINS.right, warningBoxHeight);
     
     pdf.setFontSize(PDF_FONT_SIZES.subHeader);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.setTextColor(PDF_COLORS.danger.r, PDF_COLORS.danger.g, PDF_COLORS.danger.b);
     pdf.text('WARNING SIGNS - RETURN IMMEDIATELY IF:', PDF_MARGINS.left + 5, yPos + 5);
     yPos += 12;
     
     pdf.setFontSize(PDF_FONT_SIZES.body);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     pdf.setTextColor(0, 0, 0);
     warningSigns.forEach((sign) => {
       if (sign && sign.trim()) {
-        pdf.text('• ' + clean(sign), PDF_MARGINS.left + 8, yPos);
+        pdf.text('â€¢ ' + clean(sign), PDF_MARGINS.left + 8, yPos);
         yPos += 6;
       }
     });
@@ -1226,17 +1226,17 @@ class AdmissionDischargeService {
     if (discharge.follow_up_appointments?.length) {
       checkPageBreak(30);
       pdf.setFontSize(PDF_FONT_SIZES.subHeader);
-      pdf.setFont('helvetica', 'bold');
+      pdf.setFont('times', 'bold');
       pdf.setTextColor(PDF_COLORS.primary.r, PDF_COLORS.primary.g, PDF_COLORS.primary.b);
       pdf.text('FOLLOW-UP APPOINTMENTS', PDF_MARGINS.left, yPos);
       pdf.setTextColor(0, 0, 0);
       yPos += 8;
       
       pdf.setFontSize(PDF_FONT_SIZES.body);
-      pdf.setFont('helvetica', 'normal');
+      pdf.setFont('times', 'normal');
       discharge.follow_up_appointments.forEach(apt => {
         checkPageBreak(8);
-        const aptText = `• ${format(new Date(apt.date), 'dd MMM yyyy')} - ${clean(apt.clinic)}: ${clean(apt.purpose)}`;
+        const aptText = `â€¢ ${format(new Date(apt.date), 'dd MMM yyyy')} - ${clean(apt.clinic)}: ${clean(apt.purpose)}`;
         pdf.text(aptText, PDF_MARGINS.left + 3, yPos);
         yPos += 6;
       });
@@ -1249,21 +1249,21 @@ class AdmissionDischargeService {
     pdf.line(PDF_MARGINS.left, yPos - 5, pageWidth - PDF_MARGINS.right, yPos - 5);
     
     pdf.setFontSize(PDF_FONT_SIZES.body);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.text('Discharging Doctor: ', PDF_MARGINS.left, yPos);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     pdf.text(clean(discharge.discharging_doctor), PDF_MARGINS.left + 40, yPos);
     yPos += 6;
     
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.text('Consultant: ', PDF_MARGINS.left, yPos);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     pdf.text(clean(discharge.discharging_consultant) || 'N/A', PDF_MARGINS.left + 25, yPos);
     yPos += 6;
     
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.text('Date Generated: ', PDF_MARGINS.left, yPos);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     pdf.text(format(new Date(), 'dd/MM/yyyy HH:mm'), PDF_MARGINS.left + 35, yPos);
 
     // Add page numbers

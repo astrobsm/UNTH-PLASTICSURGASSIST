@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { FileText, Download, Loader, User, Calendar, Activity, AlertCircle, TrendingUp } from 'lucide-react';
+﻿import React, { useState, useEffect } from 'react';
+import { FileText, Download, Loader, User, Calendar, Activity, AlertCircle, TrendingUp, Printer } from 'lucide-react';
 import { db } from '../db/database';
 import { patientService } from '../services/patientService';
 import { patientSummaryService, PatientSummary } from '../services/patientSummaryService';
@@ -82,12 +82,12 @@ const PatientSummariesPage: React.FC = () => {
 
     // Header
     doc.setFontSize(18);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('PATIENT SUMMARY', pageWidth / 2, yPos, { align: 'center' });
     yPos += 10;
 
     doc.setFontSize(PDF_FONT_SIZES.body);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     doc.text('University of Nigeria Teaching Hospital', pageWidth / 2, yPos, { align: 'center' });
     yPos += 5;
     doc.text('Plastic Surgery Unit', pageWidth / 2, yPos, { align: 'center' });
@@ -95,12 +95,12 @@ const PatientSummariesPage: React.FC = () => {
 
     // Patient Information
     doc.setFontSize(PDF_FONT_SIZES.sectionHeader);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('PATIENT INFORMATION', PDF_MARGINS.left, yPos);
     yPos += 7;
 
     doc.setFontSize(PDF_FONT_SIZES.body);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     doc.text('Name: ' + clean(summaryData.patient_name), PDF_MARGINS.left, yPos);
     yPos += 5;
     doc.text('Hospital Number: ' + clean(summaryData.hospital_number), PDF_MARGINS.left, yPos);
@@ -113,19 +113,19 @@ const PatientSummariesPage: React.FC = () => {
     yPos += 10;
 
     // Overview
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('OVERVIEW', PDF_MARGINS.left, yPos);
     yPos += 7;
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     const overviewLines = doc.splitTextToSize(clean(summaryData.summary.overview), pageWidth - PDF_MARGINS.left - PDF_MARGINS.right);
     doc.text(overviewLines, PDF_MARGINS.left, yPos);
     yPos += overviewLines.length * 5 + 5;
 
     // Diagnosis
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('DIAGNOSIS', PDF_MARGINS.left, yPos);
     yPos += 7;
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     const diagnosisLines = doc.splitTextToSize(clean(summaryData.summary.diagnosis), pageWidth - PDF_MARGINS.left - PDF_MARGINS.right);
     doc.text(diagnosisLines, PDF_MARGINS.left, yPos);
     yPos += diagnosisLines.length * 5 + 5;
@@ -137,20 +137,20 @@ const PatientSummariesPage: React.FC = () => {
     }
 
     // Treatment Progress
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('TREATMENT PROGRESS', PDF_MARGINS.left, yPos);
     yPos += 7;
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     const progressLines = doc.splitTextToSize(clean(summaryData.summary.treatment_progress), pageWidth - PDF_MARGINS.left - PDF_MARGINS.right);
     doc.text(progressLines, PDF_MARGINS.left, yPos);
     yPos += progressLines.length * 5 + 5;
 
     // Procedures Performed
     if (summaryData.summary.procedures_performed.length > 0) {
-      doc.setFont('helvetica', 'bold');
+      doc.setFont('times', 'bold');
       doc.text('PROCEDURES PERFORMED', PDF_MARGINS.left, yPos);
       yPos += 7;
-      doc.setFont('helvetica', 'normal');
+      doc.setFont('times', 'normal');
       summaryData.summary.procedures_performed.forEach((proc, idx) => {
         if (yPos > 270) {
           doc.addPage();
@@ -170,10 +170,10 @@ const PatientSummariesPage: React.FC = () => {
 
     // Medications
     if (summaryData.summary.medications.length > 0) {
-      doc.setFont('helvetica', 'bold');
+      doc.setFont('times', 'bold');
       doc.text('CURRENT MEDICATIONS', PDF_MARGINS.left, yPos);
       yPos += 7;
-      doc.setFont('helvetica', 'normal');
+      doc.setFont('times', 'normal');
       summaryData.summary.medications.forEach((med, idx) => {
         if (yPos > 270) {
           doc.addPage();
@@ -186,20 +186,20 @@ const PatientSummariesPage: React.FC = () => {
     }
 
     // Lab Results Summary
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('LABORATORY INVESTIGATIONS', PDF_MARGINS.left, yPos);
     yPos += 7;
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     const labLines = doc.splitTextToSize(clean(summaryData.summary.lab_results_summary), pageWidth - PDF_MARGINS.left - PDF_MARGINS.right);
     doc.text(labLines, PDF_MARGINS.left, yPos);
     yPos += labLines.length * 5 + 5;
 
     // Complications
     if (summaryData.summary.complications.length > 0) {
-      doc.setFont('helvetica', 'bold');
+      doc.setFont('times', 'bold');
       doc.text('COMPLICATIONS/DELAYS', PDF_MARGINS.left, yPos);
       yPos += 7;
-      doc.setFont('helvetica', 'normal');
+      doc.setFont('times', 'normal');
       summaryData.summary.complications.forEach((comp, idx) => {
         if (yPos > 270) {
           doc.addPage();
@@ -212,18 +212,18 @@ const PatientSummariesPage: React.FC = () => {
     }
 
     // Current Status
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('CURRENT STATUS', PDF_MARGINS.left, yPos);
     yPos += 7;
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     doc.text(clean(summaryData.summary.current_status), PDF_MARGINS.left, yPos);
     yPos += 10;
 
     // Plan Forward
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('PLAN FORWARD', PDF_MARGINS.left, yPos);
     yPos += 7;
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     const planLines = doc.splitTextToSize(clean(summaryData.summary.plan_forward), pageWidth - PDF_MARGINS.left - PDF_MARGINS.right);
     doc.text(planLines, PDF_MARGINS.left, yPos);
     yPos += planLines.length * 5 + 10;
@@ -234,7 +234,7 @@ const PatientSummariesPage: React.FC = () => {
       yPos = PDF_MARGINS.top;
     }
     doc.setFontSize(PDF_FONT_SIZES.small);
-    doc.setFont('helvetica', 'italic');
+    doc.setFont('times', 'italic');
     doc.text('This summary was automatically generated and should be reviewed by a qualified healthcare professional.', PDF_MARGINS.left, yPos);
 
     // Add professional footer with page numbers and timestamp
@@ -242,6 +242,82 @@ const PatientSummariesPage: React.FC = () => {
 
     // Save PDF
     doc.save('Patient_Summary_' + clean(summaryData.hospital_number) + '_' + format(new Date(), 'yyyy-MM-dd') + '.pdf');
+  };
+
+  // Thermal 80mm PDF export
+  const exportToThermalPDF = async (summaryData: PatientSummary) => {
+    const { jsPDF } = await import('jspdf');
+    const thermalWidth = 80;
+    const clean = (text: string | undefined | null): string => sanitizeTextForPDF(text || '');
+
+    let estHeight = 150;
+    estHeight += (summaryData.summary.overview?.length || 0) * 0.12;
+    estHeight += (summaryData.summary.diagnosis?.length || 0) * 0.12;
+    estHeight += (summaryData.summary.treatment_progress?.length || 0) * 0.12;
+    estHeight += summaryData.summary.procedures_performed.length * 5;
+    estHeight += summaryData.summary.medications.length * 5;
+    estHeight += summaryData.summary.complications.length * 5;
+    estHeight = Math.max(estHeight, 200);
+
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [thermalWidth, estHeight] });
+    const m = 3;
+    let y = m;
+
+    doc.setFont('times', 'bold');
+    doc.setFontSize(12);
+    doc.text('PATIENT SUMMARY', thermalWidth / 2, y, { align: 'center' });
+    y += 5;
+    doc.setFontSize(8);
+    doc.setFont('times', 'normal');
+    doc.text('UNTH Plastic Surgery Unit', thermalWidth / 2, y, { align: 'center' });
+    y += 4;
+    doc.line(m, y, thermalWidth - m, y);
+    y += 3;
+
+    doc.setFontSize(9);
+    doc.text('Name: ' + clean(summaryData.patient_name), m, y); y += 3.5;
+    doc.text('Hosp #: ' + clean(summaryData.hospital_number), m, y); y += 3.5;
+    doc.text('Admitted: ' + safeFormatDate(summaryData.admission_date, 'dd/MM/yyyy'), m, y); y += 3.5;
+    doc.text('LOS: ' + summaryData.length_of_stay + ' day(s)', m, y); y += 4;
+    doc.line(m, y, thermalWidth - m, y);
+    y += 3;
+
+    const addSection = (title: string, content: string) => {
+      doc.setFontSize(10);
+      doc.setFont('times', 'bold');
+      doc.text(title, m, y); y += 4;
+      doc.setFontSize(9);
+      doc.setFont('times', 'normal');
+      const lines = doc.splitTextToSize(clean(content), thermalWidth - m * 2);
+      lines.forEach((line: string) => { doc.text(line, m, y); y += 3.5; });
+      y += 2;
+    };
+
+    const addList = (title: string, items: string[]) => {
+      if (items.length === 0) return;
+      doc.setFontSize(10);
+      doc.setFont('times', 'bold');
+      doc.text(title, m, y); y += 4;
+      doc.setFontSize(9);
+      doc.setFont('times', 'normal');
+      items.forEach((item, i) => {
+        const lines = doc.splitTextToSize((i + 1) + '. ' + clean(item), thermalWidth - m * 2);
+        lines.forEach((line: string) => { doc.text(line, m, y); y += 3.5; });
+      });
+      y += 2;
+    };
+
+    addSection('OVERVIEW', summaryData.summary.overview);
+    addSection('DIAGNOSIS', summaryData.summary.diagnosis);
+    addSection('TREATMENT', summaryData.summary.treatment_progress);
+    addList('PROCEDURES', summaryData.summary.procedures_performed);
+    addList('MEDICATIONS', summaryData.summary.medications);
+    addSection('LAB RESULTS', summaryData.summary.lab_results_summary);
+    addList('COMPLICATIONS', summaryData.summary.complications);
+    addSection('STATUS', summaryData.summary.current_status);
+    addSection('PLAN', summaryData.summary.plan_forward);
+
+    doc.save('Patient_Summary_Thermal_' + clean(summaryData.hospital_number) + '_' + format(new Date(), 'yyyy-MM-dd') + '.pdf');
   };
 
   return (
@@ -303,13 +379,22 @@ const PatientSummariesPage: React.FC = () => {
                 <h2 className="text-xl font-bold text-gray-900">{summary.patient_name}</h2>
                 <p className="text-gray-600">Hospital Number: {summary.hospital_number}</p>
               </div>
-              <button
-                onClick={() => exportToPDF(summary)}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-              >
-                <Download className="w-4 h-4" />
-                Export PDF
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => exportToPDF(summary)}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                >
+                  <Download className="w-4 h-4" />
+                  Export PDF
+                </button>
+                <button
+                  onClick={() => exportToThermalPDF(summary)}
+                  className="flex items-center gap-2 px-3 py-2 bg-orange-500 text-white rounded-md hover:bg-orange-600"
+                  title="Thermal Print (80mm)"
+                >
+                  <Printer className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           </div>
 
@@ -459,15 +544,28 @@ const PatientSummariesPage: React.FC = () => {
                     Length of stay: {oldSummary.length_of_stay} day(s)
                   </p>
                 </div>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    exportToPDF(oldSummary);
-                  }}
-                  className="text-blue-600 hover:text-blue-700"
-                >
-                  <Download className="w-5 h-5" />
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      exportToPDF(oldSummary);
+                    }}
+                    className="text-blue-600 hover:text-blue-700"
+                    title="Export PDF"
+                  >
+                    <Download className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      exportToThermalPDF(oldSummary);
+                    }}
+                    className="text-orange-500 hover:text-orange-600"
+                    title="Thermal Print (80mm)"
+                  >
+                    <Printer className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
             ))}
           </div>

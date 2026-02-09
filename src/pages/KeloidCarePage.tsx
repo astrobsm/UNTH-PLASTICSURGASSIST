@@ -216,6 +216,17 @@ const KeloidCarePage: React.FC = () => {
     }
   };
 
+  const handleThermalPDF = async () => {
+    if (!selectedPlan) return;
+    try {
+      await keloidPdfService.generateThermalCarePlanPdf(selectedPlan);
+      toast.success('Thermal care plan PDF generated');
+    } catch (error) {
+      console.error('Error generating thermal PDF:', error);
+      toast.error('Failed to generate thermal PDF');
+    }
+  };
+
   // Record injection
   const handleRecordInjection = async (data: Partial<KeloidInjection>) => {
     if (!selectedPlan || !selectedInjection) return;
@@ -376,6 +387,7 @@ const KeloidCarePage: React.FC = () => {
                   onPrint={handlePrintPlan}
                   onShare={handleSharePlan}
                   onDownloadPDF={handleDownloadPDF}
+                  onThermalPDF={handleThermalPDF}
                   onDownloadChecklist={handleDownloadChecklist}
                   onDownloadSchedule={handleDownloadSchedule}
                   onDownloadEducation={handleDownloadEducation}
@@ -446,6 +458,7 @@ interface PlanDetailsProps {
   onPrint: () => void;
   onShare: () => void;
   onDownloadPDF: () => void;
+  onThermalPDF: () => void;
   onDownloadChecklist: () => void;
   onDownloadSchedule: () => void;
   onDownloadEducation: () => void;
@@ -462,6 +475,7 @@ const PlanDetails: React.FC<PlanDetailsProps> = ({
   onPrint,
   onShare,
   onDownloadPDF,
+  onThermalPDF,
   onDownloadChecklist,
   onDownloadSchedule,
   onDownloadEducation,
@@ -563,6 +577,17 @@ const PlanDetails: React.FC<PlanDetailsProps> = ({
                       <div>
                         <p className="font-medium text-gray-900">Patient Education</p>
                         <p className="text-xs text-gray-500">Handout for patient</p>
+                      </div>
+                    </button>
+                    <hr className="my-1 border-gray-200" />
+                    <button
+                      onClick={() => { onThermalPDF(); onTogglePdfMenu(); }}
+                      className="w-full flex items-center gap-3 px-3 py-2 text-left text-sm hover:bg-orange-50 rounded-lg"
+                    >
+                      <Printer className="h-4 w-4 text-orange-500" />
+                      <div>
+                        <p className="font-medium text-gray-900">Thermal Print (80mm)</p>
+                        <p className="text-xs text-gray-500">Compact receipt-style PDF</p>
                       </div>
                     </button>
                   </div>

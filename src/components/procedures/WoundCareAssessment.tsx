@@ -275,7 +275,7 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
     doc.rect(0, 0, pageWidth, 40, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(PDF_FONT_SIZES.title);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('WOUND HEALING PROGRESS REPORT', pageWidth / 2, 15, { align: 'center' });
     doc.setFontSize(PDF_FONT_SIZES.body);
     doc.text('PLASTIC AND RECONSTRUCTIVE SURGERY UNIT', pageWidth / 2, 25, { align: 'center' });
@@ -286,7 +286,7 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
 
     // Patient info
     doc.setFontSize(PDF_FONT_SIZES.subHeader);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('Patient ID: ' + clean(patientId), PDF_MARGINS.left, yPosition);
     yPosition += 7;
     doc.text('Procedure ID: ' + clean(procedureId), PDF_MARGINS.left, yPosition);
@@ -294,7 +294,7 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
 
     // Overall trend
     doc.setFontSize(PDF_FONT_SIZES.sectionHeader);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     const trendColor = report.trend === 'improving' ? PDF_COLORS.primary : report.trend === 'worsening' ? PDF_COLORS.danger : PDF_COLORS.warning;
     doc.setTextColor(trendColor.r, trendColor.g, trendColor.b);
     doc.text('Healing Trend: ' + report.trend.toUpperCase(), PDF_MARGINS.left, yPosition);
@@ -302,7 +302,7 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
 
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(PDF_FONT_SIZES.body);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     doc.text('Area Change: ' + (report.percentageChange > 0 ? '+' : '') + report.percentageChange + '%', PDF_MARGINS.left, yPosition);
     yPosition += 6;
     doc.text('Average Healing Rate: ' + report.averageHealingRate + ' cm²/day', PDF_MARGINS.left, yPosition);
@@ -315,12 +315,12 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
 
     // Measurement history
     doc.setFontSize(11);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('Measurement History:', 15, yPosition);
     yPosition += 8;
 
     doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     assessment.dimension_history!.forEach((measurement, index) => {
       const date = new Date(measurement.date).toLocaleDateString('en-NG');
       doc.text(`${index + 1}. ${date}: Length ${measurement.length} cm × Width ${measurement.width} cm = Area ${measurement.area} cm²`, 20, yPosition);
@@ -332,12 +332,12 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
 
     // Recommendations
     doc.setFontSize(11);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('Clinical Recommendations:', 15, yPosition);
     yPosition += 8;
 
     doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     report.recommendations.forEach(rec => {
       const lines = doc.splitTextToSize(rec, pageWidth - 30);
       lines.forEach((line: string) => {
@@ -351,6 +351,77 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
 
     // Save
     doc.save(`UNTH_WoundProgressReport_${patientId}_${new Date().toISOString().split('T')[0]}.pdf`);
+  };
+
+  // Thermal 80mm wound progress report
+  const generateThermalProgressReport = async () => {
+    if (!assessment.dimension_history || assessment.dimension_history.length < 2) {
+      alert('Need at least 2 measurements to generate a progress report');
+      return;
+    }
+
+    const report = aiWoundMeasurement.generateProgressReport(assessment.dimension_history);
+    const { jsPDF } = await import('jspdf');
+    const thermalWidth = 80;
+    const m = 3;
+    const clean = (text: string | undefined | null): string => sanitizeTextForPDF(text || '');
+
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [thermalWidth, 250] });
+    let y = m;
+
+    doc.setFont('times', 'bold');
+    doc.setFontSize(12);
+    doc.text('WOUND PROGRESS', thermalWidth / 2, y, { align: 'center' });
+    y += 5;
+    doc.setFontSize(8);
+    doc.setFont('times', 'normal');
+    doc.text('UNTH Plastic Surgery', thermalWidth / 2, y, { align: 'center' });
+    y += 4;
+    doc.line(m, y, thermalWidth - m, y);
+    y += 3;
+
+    doc.setFontSize(9);
+    doc.text('Patient ID: ' + clean(patientId), m, y); y += 3.5;
+    doc.text('Procedure: ' + clean(procedureId), m, y); y += 3.5;
+    doc.text('Date: ' + new Date().toLocaleDateString(), m, y); y += 4;
+    doc.line(m, y, thermalWidth - m, y);
+    y += 3;
+
+    doc.setFontSize(10);
+    doc.setFont('times', 'bold');
+    doc.text('Trend: ' + report.trend.toUpperCase(), m, y); y += 4;
+    doc.setFontSize(9);
+    doc.setFont('times', 'normal');
+    doc.text('Area Change: ' + (report.percentageChange > 0 ? '+' : '') + report.percentageChange + '%', m, y); y += 3.5;
+    doc.text('Healing Rate: ' + report.averageHealingRate + ' cm2/day', m, y); y += 3.5;
+    if (report.estimatedHealingTime) {
+      doc.text('Est. Healing: ' + report.estimatedHealingTime + ' days', m, y); y += 3.5;
+    }
+    y += 2;
+
+    // Measurements
+    doc.setFont('times', 'bold');
+    doc.text('MEASUREMENTS', m, y); y += 4;
+    doc.setFont('times', 'normal');
+    assessment.dimension_history.forEach((entry: any) => {
+      const date = entry.date ? new Date(entry.date).toLocaleDateString() : 'N/A';
+      doc.text(date + ': ' + (entry.length || 0) + 'x' + (entry.width || 0) + 'cm', m, y);
+      y += 3.5;
+    });
+
+    // Recommendations
+    if (report.recommendations && report.recommendations.length > 0) {
+      y += 2;
+      doc.setFont('times', 'bold');
+      doc.text('RECOMMENDATIONS', m, y); y += 4;
+      doc.setFont('times', 'normal');
+      report.recommendations.forEach((rec: string) => {
+        const lines = doc.splitTextToSize('- ' + clean(rec), thermalWidth - m * 2);
+        lines.forEach((line: string) => { doc.text(line, m, y); y += 3.5; });
+      });
+    }
+
+    doc.save(`WoundProgress_Thermal_${patientId}_${new Date().toISOString().split('T')[0]}.pdf`);
   };
 
   // Helper functions
@@ -387,7 +458,7 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
     doc.rect(0, 0, pageWidth, 12, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(PDF_FONT_SIZES.body);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('WOUND MEASUREMENT REFERENCE - 10cm Lines', pageWidth / 2, 7, { align: 'center' });
 
     // Minimal footer
@@ -451,12 +522,12 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
         // Label above line
         doc.setTextColor(0, 0, 0);
         doc.setFontSize(8);
-        doc.setFont('helvetica', 'bold');
+        doc.setFont('times', 'bold');
         doc.text('10.0 cm', x + (lineLength / 2), y - 2, { align: 'center' });
         
         // Label below line (line number for reference)
         doc.setFontSize(6);
-        doc.setFont('helvetica', 'normal');
+        doc.setFont('times', 'normal');
         doc.setTextColor(100, 100, 100);
         doc.text(`#${lineNumber}`, x + (lineLength / 2), y + 7, { align: 'center' });
         
@@ -487,9 +558,9 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
       const instructY = startY + (numberOfRows * rowSpacing) + 5;
       doc.setTextColor(0, 0, 0);
       doc.setFontSize(7);
-      doc.setFont('helvetica', 'bold');
+      doc.setFont('times', 'bold');
       doc.text('INSTRUCTIONS:', pageWidth / 2, instructY, { align: 'center' });
-      doc.setFont('helvetica', 'normal');
+      doc.setFont('times', 'normal');
       doc.setFontSize(6);
       doc.text('Cut along dashed lines to separate individual 10cm reference lines • Place beside wound • Photo from directly above', pageWidth / 2, instructY + 4, { align: 'center' });
     }
@@ -554,7 +625,7 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
           <p className="text-xs text-gray-500 mt-1">
             {assessment.wound_nature === 'acute' 
               ? '⚡ Acute wounds heal in expected timeframe' 
-              : '🕐 Chronic wounds persist beyond normal healing time'}
+              : '�-� Chronic wounds persist beyond normal healing time'}
           </p>
         </div>
       </div>
@@ -991,6 +1062,7 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
           </div>
 
           {assessment.dimension_history.length >= 2 && (
+            <>
             <button
               type="button"
               onClick={generateProgressReport}
@@ -999,6 +1071,15 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
               <span>📈</span>
               <span>Generate Healing Progress Report (PDF)</span>
             </button>
+            <button
+              type="button"
+              onClick={generateThermalProgressReport}
+              className="w-full mt-2 px-6 py-2 bg-orange-500 text-white rounded-lg font-semibold hover:bg-orange-600 transition-all shadow-sm flex items-center justify-center space-x-2"
+              title="Thermal Print (80mm)"
+            >
+              <span>Thermal Print (80mm)</span>
+            </button>
+            </>
           )}
         </div>
       )}

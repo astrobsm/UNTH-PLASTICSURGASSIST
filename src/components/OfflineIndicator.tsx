@@ -1,4 +1,4 @@
-/**
+﻿/**
  * OfflineIndicator - Visual indicator for offline status and sync progress
  * Shows connection status, pending sync count, and allows manual sync
  */
@@ -168,7 +168,7 @@ export const OfflineIndicator: React.FC<OfflineIndicatorProps> = ({
             className="text-gray-400 hover:text-gray-600"
           >
             <span className="sr-only">Dismiss</span>
-            ✕
+            âœ-
           </button>
         )}
       </div>

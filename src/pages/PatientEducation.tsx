@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { Download, BookOpen, AlertCircle, Info, FileText, Heart, Activity, User, Search, MessageCircle, Loader2 } from 'lucide-react';
+﻿import { useState, useEffect, useRef } from 'react';
+import { Download, BookOpen, AlertCircle, Info, FileText, Heart, Activity, User, Search, MessageCircle, Loader2, Printer } from 'lucide-react';
 import jsPDF from 'jspdf';
 import {
   createPDF,
@@ -52,7 +52,7 @@ export default function PatientEducation() {
   const [patientSearchTerm, setPatientSearchTerm] = useState('');
   const [loadingPatients, setLoadingPatients] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
-  const [shareAction, setShareAction] = useState<'download' | 'whatsapp'>('download');
+  const [shareAction, setShareAction] = useState<'download' | 'whatsapp' | 'thermal'>('download');
   const lastGeneratedPdfRef = useRef<{ pdf: jsPDF; filename: string } | null>(null);
 
   // Fetch patients on mount
@@ -306,7 +306,7 @@ export default function PatientEducation() {
               'Inability to urinate after 8 hours',
               'Severe nausea or vomiting',
               'Loss of bowel or bladder control',
-              'Fever above 38°C (100.4°F)'
+              'Fever above 38Â°C (100.4Â°F)'
             ]
           }
         ],
@@ -513,7 +513,7 @@ export default function PatientEducation() {
             points: [
               'Foul-smelling drainage from graft or donor site',
               'Increasing redness, warmth, or swelling',
-              'Fever above 38°C (100.4°F)',
+              'Fever above 38Â°C (100.4Â°F)',
               'Graft appears dark, black, or blue',
               'Separation of graft from wound bed',
               'Severe or worsening pain not controlled by medication',
@@ -623,7 +623,7 @@ export default function PatientEducation() {
           {
             title: 'Warning Signs - Seek Medical Attention:',
             points: [
-              'Fever above 38°C (100.4°F)',
+              'Fever above 38Â°C (100.4Â°F)',
               'Increasing redness, warmth, or swelling at incision',
               'Pus or foul-smelling drainage from wound',
               'Wound edges separating or opening',
@@ -1151,7 +1151,7 @@ export default function PatientEducation() {
             points: [
               'Increasing pain, redness, or swelling around wound',
               'Yellow, green, or foul-smelling discharge',
-              'Fever above 38°C (100.4°F)',
+              'Fever above 38Â°C (100.4Â°F)',
               'Wound edges separating or opening',
               'Black or dark tissue appearing in wound',
               'Excessive bleeding that does not stop',
@@ -1919,7 +1919,7 @@ export default function PatientEducation() {
               'Increased redness or warmth around wound',
               'Swelling that is worsening',
               'Yellow, green, or foul-smelling drainage',
-              'Fever above 38°C (100.4°F)',
+              'Fever above 38Â°C (100.4Â°F)',
               'Red streaks spreading from wound',
               'Feeling generally unwell or weak'
             ]
@@ -2035,7 +2035,7 @@ export default function PatientEducation() {
           {
             title: 'Emergency Warning Signs - Return to Hospital If:',
             points: [
-              'Fever above 38°C (100.4°F) that does not resolve',
+              'Fever above 38Â°C (100.4Â°F) that does not resolve',
               'Increasing pain not controlled by medication',
               'Signs of wound infection (redness, swelling, discharge)',
               'Graft or flap appears dark, blue, or black',
@@ -2282,7 +2282,7 @@ export default function PatientEducation() {
 
   const categories = Array.from(new Set(educationTopics.map(t => t.category)));
 
-  const handleDownloadClick = (topic: EducationTopic, action: 'download' | 'whatsapp' = 'download') => {
+  const handleDownloadClick = (topic: EducationTopic, action: 'download' | 'whatsapp' | 'thermal' = 'download') => {
     setShareAction(action);
     setPendingTopicForPDF(topic);
     setShowPatientSelector(true);
@@ -2304,10 +2304,10 @@ export default function PatientEducation() {
     doc.rect(0, 0, pageWidth, 40, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(PDF_FONT_SIZES.title);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('Patient Education Material', pageWidth / 2, 12, { align: 'center' });
     doc.setFontSize(PDF_FONT_SIZES.body);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     doc.text('Burns Plastic and Reconstructive Surgery Unit', pageWidth / 2, 20, { align: 'center' });
     doc.setFontSize(PDF_FONT_SIZES.small);
     doc.text('Drs Okwesili / Nnadi / Eze', pageWidth / 2, 26, { align: 'center' });
@@ -2325,10 +2325,10 @@ export default function PatientEducation() {
     doc.rect(margin, yPos, maxWidth, 31, 'FD');
     
     doc.setFontSize(PDF_FONT_SIZES.body);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('Patient Information:', margin + 3, yPos + 5);
     
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     
     // Handle different name formats
     const patientName = patient.full_name || 
@@ -2349,13 +2349,13 @@ export default function PatientEducation() {
 
     // Title
     doc.setFontSize(PDF_FONT_SIZES.title);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text(clean(topic.title), margin, yPos);
     yPos += 10;
 
     // Category
     doc.setFontSize(10);
-    doc.setFont('helvetica', 'italic');
+    doc.setFont('times', 'italic');
     doc.setTextColor(100, 100, 100);
     doc.text(clean(`Category: ${topic.category}`), margin, yPos);
     yPos += 15;
@@ -2364,7 +2364,7 @@ export default function PatientEducation() {
 
     // Introduction
     doc.setFontSize(11);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     const introLines = doc.splitTextToSize(clean(topic.content.introduction), maxWidth);
     introLines.forEach((line: string) => {
       if (yPos > pageHeight - margin) {
@@ -2385,7 +2385,7 @@ export default function PatientEducation() {
 
       // Section title
       doc.setFontSize(12);
-      doc.setFont('helvetica', 'bold');
+      doc.setFont('times', 'bold');
       doc.setTextColor(14, 159, 110);
       doc.text(clean(section.title), margin, yPos);
       yPos += 8;
@@ -2393,9 +2393,9 @@ export default function PatientEducation() {
 
       // Section points
       doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
+      doc.setFont('times', 'normal');
       section.points.forEach((point) => {
-        const bulletPoint = clean(`• ${point}`);
+        const bulletPoint = clean(`- ${point}`);
         const lines = doc.splitTextToSize(bulletPoint, maxWidth - 5);
         lines.forEach((line: string) => {
           if (yPos > pageHeight - margin) {
@@ -2423,16 +2423,16 @@ export default function PatientEducation() {
     yPos += 6;
 
     doc.setFontSize(11);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.setTextColor(14, 159, 110);
     doc.text('Key Points to Remember:', margin + 3, yPos);
     yPos += 6;
 
     doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     doc.setTextColor(0, 0, 0);
     topic.content.keyPoints.forEach((point) => {
-      doc.text(clean(`✓ ${point}`), margin + 5, yPos);
+      doc.text(clean(`âœ“ ${point}`), margin + 5, yPos);
       yPos += 5;
     });
     yPos += 10;
@@ -2444,12 +2444,12 @@ export default function PatientEducation() {
     }
 
     doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('References:', margin, yPos);
     yPos += 6;
 
     doc.setFontSize(8);
-    doc.setFont('helvetica', 'italic');
+    doc.setFont('times', 'italic');
     doc.setTextColor(100, 100, 100);
     topic.content.references.forEach((ref) => {
       const lines = doc.splitTextToSize(clean(ref), maxWidth);
@@ -2492,6 +2492,118 @@ export default function PatientEducation() {
     setPendingTopicForPDF(null);
     setPatientSearchTerm('');
     setShareAction('download');
+  };
+
+  // Generate Thermal 80mm PDF for patient education
+  const generateThermalPDF = async (topic: EducationTopic, patient: Patient) => {
+    const { jsPDF } = await import('jspdf');
+    const thermalWidth = 80;
+    const clean = (text: string | undefined | null): string => sanitizeTextForPDF(text || '');
+
+    // Estimate height
+    let estHeight = 120;
+    estHeight += (topic.content.introduction?.length || 0) * 0.15;
+    topic.content.sections.forEach(s => {
+      estHeight += 10 + s.points.length * 6;
+    });
+    estHeight += topic.content.keyPoints.length * 5;
+    estHeight = Math.max(estHeight, 200);
+
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [thermalWidth, estHeight] });
+    const margin = 3;
+    let yPos = margin;
+
+    // Header
+    doc.setFont('times', 'bold');
+    doc.setFontSize(12);
+    doc.text('PATIENT EDUCATION', thermalWidth / 2, yPos, { align: 'center' });
+    yPos += 5;
+    doc.setFontSize(8);
+    doc.setFont('times', 'normal');
+    doc.text('UNTH Plastic Surgery Unit', thermalWidth / 2, yPos, { align: 'center' });
+    yPos += 4;
+
+    doc.setLineWidth(0.3);
+    doc.line(margin, yPos, thermalWidth - margin, yPos);
+    yPos += 4;
+
+    // Patient info
+    doc.setFontSize(9);
+    const patientName = patient.full_name ||
+      `${patient.first_name || ''} ${patient.middle_name || ''} ${patient.last_name || ''}`.trim() || 'N/A';
+    doc.text(`Patient: ${clean(patientName)}`, margin, yPos);
+    yPos += 3.5;
+    doc.text(`Hosp #: ${clean(patient.hospital_number)}`, margin, yPos);
+    yPos += 3.5;
+    doc.text(`Date: ${new Date().toLocaleDateString()}`, margin, yPos);
+    yPos += 4;
+
+    doc.line(margin, yPos, thermalWidth - margin, yPos);
+    yPos += 4;
+
+    // Title
+    doc.setFontSize(11);
+    doc.setFont('times', 'bold');
+    const titleLines = doc.splitTextToSize(clean(topic.title), thermalWidth - margin * 2);
+    titleLines.forEach((line: string) => {
+      doc.text(line, margin, yPos);
+      yPos += 4.5;
+    });
+    yPos += 3;
+
+    // Introduction
+    doc.setFontSize(9);
+    doc.setFont('times', 'normal');
+    const introLines = doc.splitTextToSize(clean(topic.content.introduction), thermalWidth - margin * 2);
+    introLines.forEach((line: string) => {
+      doc.text(line, margin, yPos);
+      yPos += 3.5;
+    });
+    yPos += 3;
+
+    // Sections
+    topic.content.sections.forEach((section) => {
+      doc.setFontSize(10);
+      doc.setFont('times', 'bold');
+      doc.text(clean(section.title), margin, yPos);
+      yPos += 4;
+
+      doc.setFontSize(9);
+      doc.setFont('times', 'normal');
+      section.points.forEach((point) => {
+        const lines = doc.splitTextToSize(`- ${clean(point)}`, thermalWidth - margin * 2 - 2);
+        lines.forEach((line: string) => {
+          doc.text(line, margin + 1, yPos);
+          yPos += 3.5;
+        });
+      });
+      yPos += 2;
+    });
+
+    // Key Points
+    doc.line(margin, yPos, thermalWidth - margin, yPos);
+    yPos += 3;
+    doc.setFontSize(10);
+    doc.setFont('times', 'bold');
+    doc.text('KEY POINTS', margin, yPos);
+    yPos += 4;
+    doc.setFontSize(9);
+    doc.setFont('times', 'normal');
+    topic.content.keyPoints.forEach((point) => {
+      const lines = doc.splitTextToSize(`- ${clean(point)}`, thermalWidth - margin * 2);
+      lines.forEach((line: string) => {
+        doc.text(line, margin, yPos);
+        yPos += 3.5;
+      });
+    });
+
+    const sanitizedPatientName = patientName.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+    const sanitizedTopicName = (topic.title || 'Education').replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+    doc.save(`${sanitizedPatientName}_${sanitizedTopicName}_Thermal_${new Date().toISOString().split('T')[0]}.pdf`);
+
+    setShowPatientSelector(false);
+    setPendingTopicForPDF(null);
+    setPatientSearchTerm('');
   };
 
   const selectedTopicData = selectedTopic
@@ -2564,6 +2676,16 @@ export default function PatientEducation() {
               <button
                 onClick={(e) => {
                   e.stopPropagation();
+                  handleDownloadClick(topic, 'thermal');
+                }}
+                className="flex items-center justify-center gap-2 px-3 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors"
+                title="Thermal Print (80mm)"
+              >
+                <Printer className="w-4 h-4" />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
                   handleDownloadClick(topic, 'whatsapp');
                 }}
                 className="flex items-center justify-center gap-2 px-3 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
@@ -2594,7 +2716,7 @@ export default function PatientEducation() {
                   onClick={() => setSelectedTopic(null)}
                   className="text-gray-400 hover:text-gray-600"
                 >
-                  ✕
+                  âœ-
                 </button>
               </div>
             </div>
@@ -2610,7 +2732,7 @@ export default function PatientEducation() {
                   <ul className="space-y-2">
                     {section.points.map((point, pidx) => (
                       <li key={pidx} className="flex gap-2 text-gray-700">
-                        <span className="text-green-600 mt-1">•</span>
+                        <span className="text-green-600 mt-1">â€¢</span>
                         <span>{point}</span>
                       </li>
                     ))}
@@ -2623,7 +2745,7 @@ export default function PatientEducation() {
                 <ul className="space-y-1">
                   {selectedTopicData.content.keyPoints.map((point, idx) => (
                     <li key={idx} className="flex gap-2 text-green-700 text-sm">
-                      <span>✓</span>
+                      <span>âœ“</span>
                       <span>{point}</span>
                     </li>
                   ))}
@@ -2648,6 +2770,14 @@ export default function PatientEducation() {
                 >
                   <Download className="w-5 h-5" />
                   Download as PDF
+                </button>
+                <button
+                  onClick={() => handleDownloadClick(selectedTopicData, 'thermal')}
+                  className="flex items-center justify-center gap-2 px-6 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors"
+                  title="Thermal Print (80mm)"
+                >
+                  <Printer className="w-5 h-5" />
+                  Thermal Print
                 </button>
                 <button
                   onClick={() => handleDownloadClick(selectedTopicData, 'whatsapp')}
@@ -2684,7 +2814,7 @@ export default function PatientEducation() {
                   }}
                   className="text-white hover:text-green-100"
                 >
-                  ✕
+                  âœ-
                 </button>
               </div>
               <div className="mt-4 text-sm text-green-100">
@@ -2722,7 +2852,7 @@ export default function PatientEducation() {
                   {filteredPatients.map((patient) => (
                     <button
                       key={patient.id}
-                      onClick={() => generatePDF(pendingTopicForPDF, patient)}
+                      onClick={() => shareAction === 'thermal' ? generateThermalPDF(pendingTopicForPDF, patient) : generatePDF(pendingTopicForPDF, patient)}
                       className="w-full text-left p-4 bg-white border border-gray-200 rounded-lg hover:border-green-500 hover:bg-green-50 transition-colors"
                     >
                       <div className="flex items-start gap-3">
@@ -2738,7 +2868,7 @@ export default function PatientEducation() {
                           </div>
                           <div className="flex gap-4 mt-1 text-xs text-gray-500">
                             <span>{patient.gender || patient.sex || 'N/A'}</span>
-                            {patient.phone && <span>📞 {patient.phone}</span>}
+                            {patient.phone && <span>ðŸ“ž {patient.phone}</span>}
                           </div>
                         </div>
                       </div>

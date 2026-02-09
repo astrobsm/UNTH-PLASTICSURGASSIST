@@ -1,4 +1,4 @@
-/**
+﻿/**
  * AI-Powered Wound Measurement Service
  * Uses TensorFlow.js and image segmentation for accurate wound dimension measurement
  */
@@ -8,7 +8,7 @@ import * as tf from '@tensorflow/tfjs';
 export interface WoundMeasurementResult {
   length: number; // in cm
   width: number; // in cm
-  area: number; // in cm²
+  area: number; // in cmÂ²
   depth?: number; // in cm (if detectable from image)
   confidence: number; // 0-1 scale
   boundingBox: {
@@ -508,7 +508,7 @@ export class AIWoundMeasurementService {
   ): {
     trend: 'improving' | 'stable' | 'worsening';
     percentageChange: number;
-    averageHealingRate: number; // cm²/day
+    averageHealingRate: number; // cmÂ²/day
     estimatedHealingTime?: number; // days
     recommendations: string[];
   } {
@@ -559,21 +559,21 @@ export class AIWoundMeasurementService {
     // Generate recommendations
     const recommendations: string[] = [];
     if (trend === 'improving') {
-      recommendations.push('✅ Wound is healing well - continue current treatment');
-      recommendations.push(`📈 Healing rate: ${averageHealingRate.toFixed(2)} cm²/day`);
+      recommendations.push('âœ… Wound is healing well - continue current treatment');
+      recommendations.push(`ðŸ“ˆ Healing rate: ${averageHealingRate.toFixed(2)} cmÂ²/day`);
       if (estimatedHealingTime) {
         recommendations.push(
-          `⏱️ Estimated complete healing: ${estimatedHealingTime} days`
+          `â±ï¸ Estimated complete healing: ${estimatedHealingTime} days`
         );
       }
     } else if (trend === 'worsening') {
-      recommendations.push('⚠️ Wound size increasing - reassess treatment plan');
-      recommendations.push('🔍 Consider: infection, poor perfusion, inadequate debridement');
-      recommendations.push('💊 Review: nutrition, glycemic control, pressure relief');
-      recommendations.push('👨‍⚕️ Consider specialist consultation');
+      recommendations.push('âš ï¸ Wound size increasing - reassess treatment plan');
+      recommendations.push('ðŸ” Consider: infection, poor perfusion, inadequate debridement');
+      recommendations.push('ðŸ’Š Review: nutrition, glycemic control, pressure relief');
+      recommendations.push('ðŸ‘¨â€âš-ï¸ Consider specialist consultation');
     } else {
-      recommendations.push('📊 Wound size stable - monitor closely');
-      recommendations.push('🔄 Consider treatment modifications if no improvement in 2 weeks');
+      recommendations.push('ðŸ“Š Wound size stable - monitor closely');
+      recommendations.push('ðŸ”„ Consider treatment modifications if no improvement in 2 weeks');
     }
 
     return {

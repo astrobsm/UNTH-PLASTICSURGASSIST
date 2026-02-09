@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { 
   ClipboardList, 
   AlertTriangle, 
@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { patientService } from '../../services/patientService';
+import { sanitizeTextForPDF } from '../../utils/pdfUtils';
 
 // Types
 interface Patient {
@@ -693,6 +694,9 @@ export const PreoperativePlanning: React.FC<PreoperativePlanningProps> = ({
 
     const margin = 3;
     let yPos = margin;
+    
+    // Helper to sanitize text for PDF
+    const clean = (text: string) => sanitizeTextForPDF(text || '');
 
     // Set Georgia-like font (Times is similar)
     doc.setFont('times', 'normal');
@@ -880,7 +884,7 @@ export const PreoperativePlanning: React.FC<PreoperativePlanningProps> = ({
               onClick={onClose}
               className="text-white hover:text-green-200"
             >
-              ✕
+              âœ-
             </button>
           )}
         </div>
@@ -1157,7 +1161,7 @@ export const PreoperativePlanning: React.FC<PreoperativePlanningProps> = ({
                           ...prev,
                           renal: { ...prev.renal, lastCreatinine: e.target.value }
                         }))}
-                        placeholder="μmol/L"
+                        placeholder="Î¼mol/L"
                         className="w-full px-3 py-2 border rounded"
                       />
                     </div>
@@ -1170,7 +1174,7 @@ export const PreoperativePlanning: React.FC<PreoperativePlanningProps> = ({
                           ...prev,
                           renal: { ...prev.renal, lastEGFR: e.target.value }
                         }))}
-                        placeholder="mL/min/1.73m²"
+                        placeholder="mL/min/1.73mÂ²"
                         className="w-full px-3 py-2 border rounded"
                       />
                     </div>
@@ -1441,9 +1445,9 @@ export const PreoperativePlanning: React.FC<PreoperativePlanningProps> = ({
                   return (
                     <div key={category} className="p-4">
                       <h4 className="font-medium text-gray-700 mb-3 capitalize">
-                        {category === 'laboratory' ? '🧪 Laboratory' :
-                         category === 'cardiac' ? '❤️ Cardiac' :
-                         category === 'imaging' ? '📷 Imaging' : '📋 Other'}
+                        {category === 'laboratory' ? 'ðŸ§ª Laboratory' :
+                         category === 'cardiac' ? 'â¤ï¸ Cardiac' :
+                         category === 'imaging' ? 'ðŸ“· Imaging' : 'ðŸ“‹ Other'}
                       </h4>
                       <div className="space-y-2">
                         {categoryInvestigations.map(inv => (

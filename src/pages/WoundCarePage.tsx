@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Activity,
   Camera,
@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import { patientService } from '../services/patientService';
 import { db } from '../db/database';
+import { sanitizeTextForPDF } from '../utils/pdfUtils';
 
 // ============================================
 // TYPES & INTERFACES
@@ -596,11 +597,11 @@ const WoundCarePage: React.FC = () => {
       
       if (protocolType === 'graft') {
         const warnings = [
-          '• Handle graft site with extreme care',
-          '• Do not apply excessive pressure',
-          '• Monitor for graft failure signs',
+          'â€¢ Handle graft site with extreme care',
+          'â€¢ Do not apply excessive pressure',
+          'â€¢ Monitor for graft failure signs',
           '  (discoloration, separation)',
-          '• Next dressing: Day 7'
+          'â€¢ Next dressing: Day 7'
         ];
         warnings.forEach(w => {
           doc.text(w, margin, yPos);
@@ -608,7 +609,7 @@ const WoundCarePage: React.FC = () => {
         });
       } else {
         // Donor site specific warnings
-        const warnings = DONOR_SITE_WARNINGS.map(w => `⚠️ ${w}`);
+        const warnings = DONOR_SITE_WARNINGS.map(w => `âš ï¸ ${w}`);
         warnings.forEach(w => {
           const lines = doc.splitTextToSize(w, thermalWidth - margin * 2 - 2);
           lines.forEach((line: string) => {
@@ -687,10 +688,10 @@ const WoundCarePage: React.FC = () => {
     
     // Title
     doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('WOUND MEASUREMENT RULER GRID', pageWidth / 2, 15, { align: 'center' });
     doc.setFontSize(8);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     doc.text('Print at 100% scale (no scaling). Each ruler = 10cm. Grid squares = 1cm x 1cm', pageWidth / 2, 22, { align: 'center' });
 
     // Draw ruler grid covering the page
@@ -756,10 +757,10 @@ const WoundCarePage: React.FC = () => {
       const y = startY + (cm * 10);
       if (cm % 10 === 0) {
         doc.setFontSize(8);
-        doc.setFont('helvetica', 'bold');
+        doc.setFont('times', 'bold');
       } else {
         doc.setFontSize(6);
-        doc.setFont('helvetica', 'normal');
+        doc.setFont('times', 'normal');
       }
       doc.text(`${cm}`, startX - 4, y + 1, { align: 'right' });
     }
@@ -769,10 +770,10 @@ const WoundCarePage: React.FC = () => {
       const x = startX + (cm * 10);
       if (cm % 10 === 0) {
         doc.setFontSize(8);
-        doc.setFont('helvetica', 'bold');
+        doc.setFont('times', 'bold');
       } else {
         doc.setFontSize(6);
-        doc.setFont('helvetica', 'normal');
+        doc.setFont('times', 'normal');
       }
       doc.text(`${cm}`, x, startY - 2, { align: 'center' });
     }
@@ -784,7 +785,7 @@ const WoundCarePage: React.FC = () => {
 
     // Add 10cm section markers with letters
     doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     const sectionLabels = ['A', 'B', 'C', 'D', 'E', 'F'];
     let labelIdx = 0;
     for (let row = 0; row < numVerticalRulers; row++) {
@@ -802,7 +803,7 @@ const WoundCarePage: React.FC = () => {
     // Footer instructions
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(8);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     const footerY = startY + gridHeight + 8;
     doc.text('Instructions:', startX, footerY);
     doc.text('1. Print at 100% scale (actual size, no fit-to-page)', startX, footerY + 5);
@@ -1040,7 +1041,7 @@ const WoundCarePage: React.FC = () => {
           </div>
           {formData.length > 0 && formData.width > 0 && (
             <p className="text-sm text-gray-500 mt-2">
-              Area: {calculateArea(formData.length, formData.width)} cm²
+              Area: {calculateArea(formData.length, formData.width)} cmÂ²
             </p>
           )}
         </div>
@@ -1325,7 +1326,7 @@ const WoundCarePage: React.FC = () => {
               </div>
               <div className="bg-gray-50 p-2 rounded-lg">
                 <p className="text-lg font-bold">{assessment.area.toFixed(1)}</p>
-                <p className="text-xs text-gray-500">Area (cm²)</p>
+                <p className="text-xs text-gray-500">Area (cmÂ²)</p>
               </div>
             </div>
           </div>
@@ -1387,14 +1388,14 @@ const WoundCarePage: React.FC = () => {
                 onClick={() => generateThermalProtocolPDF(assessment, 'graft')}
                 className="flex items-center px-3 py-2 bg-white border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-50"
               >
-                🩹 Graft Site
+                ðŸ©¹ Graft Site
                 <Printer className="w-4 h-4 ml-2" />
               </button>
               <button
                 onClick={() => generateThermalProtocolPDF(assessment, 'donor')}
                 className="flex items-center px-3 py-2 bg-white border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-50"
               >
-                🏥 Donor Site
+                ðŸ¥ Donor Site
                 <Printer className="w-4 h-4 ml-2" />
               </button>
             </div>
@@ -1483,7 +1484,7 @@ const WoundCarePage: React.FC = () => {
                       <h3 className="font-semibold">{assessment.patient_name}</h3>
                       <p className="text-sm text-gray-500">{assessment.location} - {assessment.wound_type}</p>
                       <p className="text-xs text-gray-400 mt-1">
-                        {assessment.length} x {assessment.width} cm | Area: {assessment.area} cm²
+                        {assessment.length} x {assessment.width} cm | Area: {assessment.area} cmÂ²
                       </p>
                     </div>
                     <div className="text-right">

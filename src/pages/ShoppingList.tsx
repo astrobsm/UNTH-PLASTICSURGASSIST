@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { Download, ShoppingCart, User, Search, Heart, Scissors, Plus, Minus, Trash2, MessageCircle, Loader2, Printer } from 'lucide-react';
 import {
   createPDF,
@@ -474,10 +474,10 @@ export default function ShoppingList() {
     doc.rect(0, 0, pageWidth, 40, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(PDF_FONT_SIZES.title);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('Surgical Shopping List', pageWidth / 2, 12, { align: 'center' });
     doc.setFontSize(PDF_FONT_SIZES.body);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     doc.text('Burns Plastic and Reconstructive Surgery Unit', pageWidth / 2, 20, { align: 'center' });
     doc.setFontSize(PDF_FONT_SIZES.small);
     doc.text('Drs Okwesili / Nnadi / Eze', pageWidth / 2, 26, { align: 'center' });
@@ -495,10 +495,10 @@ export default function ShoppingList() {
     doc.rect(margin, yPos, maxWidth, 30, 'FD');
     
     doc.setFontSize(PDF_FONT_SIZES.body);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('Patient Information:', margin + 3, yPos + 6);
     
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     doc.text('Name: ' + clean(patientName), margin + 3, yPos + 13);
     doc.text('Hospital Number: ' + clean(hospitalNum), margin + 3, yPos + 19);
     doc.text('Date: ' + new Date().toLocaleDateString(), margin + 3, yPos + 25);
@@ -507,7 +507,7 @@ export default function ShoppingList() {
 
     // Category Title
     doc.setFontSize(PDF_FONT_SIZES.sectionHeader);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.setTextColor(PDF_COLORS.primary.r, PDF_COLORS.primary.g, PDF_COLORS.primary.b);
     const categoryTitle = selectedCategory === 'wound_dressing' ? 'Wound Dressing' : 
                           selectedCategory === 'bedside_debridement' ? 'Bedside Debridement' : 
@@ -520,7 +520,7 @@ export default function ShoppingList() {
     // Table Header
     doc.setFillColor(14, 159, 110);
     doc.setTextColor(255, 255, 255);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.setFontSize(9);
     doc.rect(margin, yPos, maxWidth, 8, 'F');
     doc.text('Item', margin + 2, yPos + 6);
@@ -530,7 +530,7 @@ export default function ShoppingList() {
     yPos += 10;
 
     doc.setTextColor(0, 0, 0);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     doc.setFontSize(8);
 
     // Items
@@ -568,11 +568,11 @@ export default function ShoppingList() {
     doc.rect(margin, yPos, maxWidth, 30, 'FD');
     
     doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.setTextColor(14, 159, 110);
     doc.text('Summary:', margin + 3, yPos + 8);
     
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     doc.setTextColor(0, 0, 0);
     doc.text(`Total Items: ${selectedItems.length}`, margin + 3, yPos + 15);
     doc.text(`Total Quantity: ${selectedItems.reduce((sum, item) => sum + item.quantity, 0)}`, margin + 3, yPos + 22);
@@ -840,7 +840,7 @@ export default function ShoppingList() {
               <div className="flex items-start justify-between mb-2">
                 <div>
                   <h2 className="text-xl font-bold mb-1">
-                    {shareAction === 'thermal' ? '🖨️ Thermal Print - Select Patient' : 'Select Patient'}
+                    {shareAction === 'thermal' ? 'ðŸ–¨ï¸ Thermal Print - Select Patient' : 'Select Patient'}
                   </h2>
                   <p className={`${shareAction === 'thermal' ? 'text-gray-300' : 'text-green-100'} text-sm`}>
                     {shareAction === 'thermal' 
@@ -857,7 +857,7 @@ export default function ShoppingList() {
                   }}
                   className="text-white hover:text-gray-200"
                 >
-                  ✕
+                  âœ-
                 </button>
               </div>
               <div className={`mt-4 text-sm ${shareAction === 'thermal' ? 'text-gray-300' : 'text-green-100'}`}>
@@ -957,7 +957,7 @@ export default function ShoppingList() {
                           </div>
                           <div className="flex gap-4 mt-1 text-xs text-gray-500">
                             <span>{patient.gender}</span>
-                            {patient.phone && <span>📞 {patient.phone}</span>}
+                            {patient.phone && <span>ðŸ“ž {patient.phone}</span>}
                           </div>
                         </div>
                       </div>

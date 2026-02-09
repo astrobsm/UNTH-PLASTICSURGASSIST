@@ -1,4 +1,4 @@
-// Investigation Request Form PDF Service
+﻿// Investigation Request Form PDF Service
 // Generates thermal print PDF for requested investigations
 
 import { createPDF, sanitizeTextForPDF, PDF_COLORS, PDF_FONT_SIZES, PDF_MARGINS } from '../utils/pdfUtils';
@@ -234,10 +234,10 @@ class InvestigationPdfService {
     doc.rect(0, 0, pageWidth, 35, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(PDF_FONT_SIZES.title);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('INVESTIGATION REQUEST FORM', pageWidth / 2, 12, { align: 'center' });
     doc.setFontSize(PDF_FONT_SIZES.body);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     doc.text('Burns Plastic and Reconstructive Surgery Unit', pageWidth / 2, 20, { align: 'center' });
     doc.setFontSize(PDF_FONT_SIZES.small);
     doc.text('University of Nigeria Teaching Hospital, Enugu', pageWidth / 2, 28, { align: 'center' });
@@ -251,11 +251,11 @@ class InvestigationPdfService {
     doc.rect(margin, yPos, maxWidth, 35, 'FD');
     
     doc.setFontSize(PDF_FONT_SIZES.sectionHeader);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('PATIENT INFORMATION', margin + 3, yPos + 6);
     
     doc.setFontSize(PDF_FONT_SIZES.body);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     doc.text(`Name: ${clean(data.patientName)}`, margin + 3, yPos + 14);
     doc.text(`Hospital Number: ${clean(data.hospitalNumber)}`, margin + 100, yPos + 14);
     doc.text(`Age: ${data.patientAge || 'N/A'}`, margin + 3, yPos + 21);
@@ -270,11 +270,11 @@ class InvestigationPdfService {
     doc.rect(margin, yPos, maxWidth, 25, 'FD');
     
     doc.setFontSize(PDF_FONT_SIZES.sectionHeader);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('REQUEST DETAILS', margin + 3, yPos + 6);
     
     doc.setFontSize(PDF_FONT_SIZES.body);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     doc.text(`Date: ${format(data.requestDate, 'dd/MM/yyyy HH:mm')}`, margin + 3, yPos + 14);
     doc.text(`Requested By: ${clean(data.requestedBy)}`, margin + 70, yPos + 14);
     doc.text(`Urgency: ${(data.urgency || 'routine').toUpperCase()}`, margin + 140, yPos + 14);
@@ -286,7 +286,7 @@ class InvestigationPdfService {
 
     // Investigations Table
     doc.setFontSize(PDF_FONT_SIZES.sectionHeader);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('INVESTIGATIONS REQUESTED', margin, yPos);
     yPos += 8;
 
@@ -303,7 +303,7 @@ class InvestigationPdfService {
     yPos += 10;
 
     doc.setTextColor(0, 0, 0);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     doc.setFontSize(8);
 
     // Investigation Rows
@@ -328,12 +328,12 @@ class InvestigationPdfService {
 
     // Summary
     doc.setFontSize(PDF_FONT_SIZES.body);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text(`Total Investigations: ${data.investigations.length}`, margin, yPos);
     yPos += 15;
 
     // Signatures
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     doc.setFontSize(PDF_FONT_SIZES.body);
     doc.text("Requesting Doctor's Signature: ________________________", margin, yPos);
     doc.text('Date: ____________', margin + 130, yPos);

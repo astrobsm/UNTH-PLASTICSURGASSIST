@@ -25,6 +25,7 @@ import {
   X
 } from 'lucide-react';
 import { patientService } from '../../services/patientService';
+import { sanitizeTextForPDF } from '../../utils/pdfUtils';
 
 // Types
 interface PatientData {
@@ -647,6 +648,9 @@ export const PreoperativePlanningModule: React.FC<PreoperativePlanningModuleProp
     });
 
     const margin = 3;
+    
+    // Helper to sanitize text for PDF
+    const clean = (text: string) => sanitizeTextForPDF(text || '');
 
     // Helper function to add patient header on each page
     const addPatientHeader = (category: string, pageHeight: number) => {

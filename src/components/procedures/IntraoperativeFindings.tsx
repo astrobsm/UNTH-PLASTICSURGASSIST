@@ -124,14 +124,14 @@ export const IntraoperativeFindingsForm: React.FC<IntraoperativeFindingsFormProp
     doc.rect(0, 0, pageWidth, 50, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(18);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('UNIVERSITY OF NIGERIA TEACHING HOSPITAL', pageWidth / 2, 15, { align: 'center' });
     doc.setFontSize(PDF_FONT_SIZES.sectionHeader);
     doc.text('ITUKU-OZALLA, ENUGU', pageWidth / 2, 22, { align: 'center' });
     doc.setFontSize(PDF_FONT_SIZES.subHeader);
     doc.text('Department of Plastic & Reconstructive Surgery', pageWidth / 2, 29, { align: 'center' });
     doc.setFontSize(PDF_FONT_SIZES.title);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('POSTOPERATIVE CARE PLAN & MANAGEMENT', pageWidth / 2, 38, { align: 'center' });
     doc.setFontSize(PDF_FONT_SIZES.body);
     doc.text('Generated: ' + new Date().toLocaleDateString('en-NG'), pageWidth / 2, 45, { align: 'center' });
@@ -143,12 +143,12 @@ export const IntraoperativeFindingsForm: React.FC<IntraoperativeFindingsFormProp
     doc.setFillColor(243, 244, 246);
     doc.rect(10, yPosition, pageWidth - 20, 8, 'F');
     doc.setFontSize(PDF_FONT_SIZES.subHeader);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('PATIENT & PROCEDURE INFORMATION', PDF_MARGINS.left, yPosition + 6);
     yPosition += 12;
 
     doc.setFontSize(PDF_FONT_SIZES.small);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     const patientInfo = [
       'Patient ID: ' + clean(patientId),
       'Procedure ID: ' + clean(procedureId),
@@ -181,19 +181,19 @@ export const IntraoperativeFindingsForm: React.FC<IntraoperativeFindingsFormProp
     doc.rect(10, yPosition, pageWidth - 20, 8, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(11);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('📋 OPERATIVE SUMMARY', 15, yPosition + 6);
     yPosition += 12;
     doc.setTextColor(0, 0, 0);
 
     doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     
     if (findings.surgical_findings) {
-      doc.setFont('helvetica', 'bold');
+      doc.setFont('times', 'bold');
       doc.text('Surgical Findings:', 15, yPosition);
       yPosition += 5;
-      doc.setFont('helvetica', 'normal');
+      doc.setFont('times', 'normal');
       const findingsLines = doc.splitTextToSize(findings.surgical_findings, pageWidth - 30);
       findingsLines.forEach((line: string) => {
         if (yPosition > pageHeight - 20) {
@@ -211,10 +211,10 @@ export const IntraoperativeFindingsForm: React.FC<IntraoperativeFindingsFormProp
         doc.addPage();
         yPosition = 20;
       }
-      doc.setFont('helvetica', 'bold');
+      doc.setFont('times', 'bold');
       doc.text('Procedure Steps:', 15, yPosition);
       yPosition += 5;
-      doc.setFont('helvetica', 'normal');
+      doc.setFont('times', 'normal');
       findings.procedure_steps.forEach((step, index) => {
         if (yPosition > pageHeight - 20) {
           doc.addPage();
@@ -231,7 +231,7 @@ export const IntraoperativeFindingsForm: React.FC<IntraoperativeFindingsFormProp
     }
 
     if (findings.blood_loss !== undefined && findings.blood_loss > 0) {
-      doc.setFont('helvetica', 'bold');
+      doc.setFont('times', 'bold');
       doc.text(`Estimated Blood Loss: ${findings.blood_loss} ml`, 15, yPosition);
       yPosition += 6;
     }
@@ -241,12 +241,12 @@ export const IntraoperativeFindingsForm: React.FC<IntraoperativeFindingsFormProp
         doc.addPage();
         yPosition = 20;
       }
-      doc.setFont('helvetica', 'bold');
+      doc.setFont('times', 'bold');
       doc.setTextColor(220, 38, 38);
       doc.text('⚠️ Intraoperative Complications:', 15, yPosition);
       yPosition += 5;
       doc.setTextColor(0, 0, 0);
-      doc.setFont('helvetica', 'normal');
+      doc.setFont('times', 'normal');
       findings.complications.forEach(complication => {
         if (yPosition > pageHeight - 20) {
           doc.addPage();
@@ -271,7 +271,7 @@ export const IntraoperativeFindingsForm: React.FC<IntraoperativeFindingsFormProp
     doc.rect(10, yPosition, pageWidth - 20, 8, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(11);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('🏥 COMPREHENSIVE POSTOPERATIVE CARE PLAN', 15, yPosition + 6);
     yPosition += 14;
     doc.setTextColor(0, 0, 0);
@@ -280,12 +280,12 @@ export const IntraoperativeFindingsForm: React.FC<IntraoperativeFindingsFormProp
     doc.setFillColor(254, 243, 199); // Light yellow
     doc.rect(10, yPosition, pageWidth - 20, 8, 'F');
     doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('⏱️ IMMEDIATE POSTOPERATIVE ORDERS (0-24 Hours)', 15, yPosition + 6);
     yPosition += 12;
 
     doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     const immediateOrders = [
       '✓ Transfer to Post-Anesthesia Care Unit (PACU) / Recovery Room',
       '✓ Continuous monitoring: Vital signs every 15 minutes × 1 hour, then every 30 minutes × 2 hours, then hourly',
@@ -322,21 +322,21 @@ export const IntraoperativeFindingsForm: React.FC<IntraoperativeFindingsFormProp
     doc.rect(10, yPosition, pageWidth - 20, 8, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(11);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('💊 POSTOPERATIVE MEDICATIONS', 15, yPosition + 6);
     yPosition += 12;
     doc.setTextColor(0, 0, 0);
 
     // 1. Intravenous Fluids
     doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.setTextColor(59, 130, 246);
     doc.text('1️⃣ INTRAVENOUS FLUIDS', 15, yPosition);
     yPosition += 6;
     doc.setTextColor(0, 0, 0);
 
     doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     const ivFluids = [
       '💧 Maintenance Fluids:',
       '   • Normal Saline 0.9% or Ringer\'s Lactate',
@@ -372,14 +372,14 @@ export const IntraoperativeFindingsForm: React.FC<IntraoperativeFindingsFormProp
     }
 
     doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.setTextColor(147, 51, 234);
     doc.text('2️⃣ ANTIBIOTICS (Prophylaxis & Treatment)', 15, yPosition);
     yPosition += 6;
     doc.setTextColor(0, 0, 0);
 
     doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     const antibiotics = [
       '🦠 First-Line Regimen (Clean/Clean-Contaminated Surgery):',
       '   • Ceftriaxone 1-2g IV every 12-24 hours',
@@ -420,14 +420,14 @@ export const IntraoperativeFindingsForm: React.FC<IntraoperativeFindingsFormProp
     }
 
     doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.setTextColor(249, 115, 22);
     doc.text('3️⃣ ANALGESICS (Multimodal Pain Management)', 15, yPosition);
     yPosition += 6;
     doc.setTextColor(0, 0, 0);
 
     doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     const analgesics = [
       '💉 Opioid Analgesics (for moderate-severe pain):',
       '   • Tramadol 50-100mg IV/IM every 6-8 hours PRN (max 400mg/day)',
@@ -469,14 +469,14 @@ export const IntraoperativeFindingsForm: React.FC<IntraoperativeFindingsFormProp
     }
 
     doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.setTextColor(14, 159, 110);
     doc.text('4️⃣ ANTI-INFLAMMATORY AGENTS', 15, yPosition);
     yPosition += 6;
     doc.setTextColor(0, 0, 0);
 
     doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     const antiInflammatory = [
       '🔥 NSAIDs (Use with caution - assess bleeding risk):',
       '   • Diclofenac 75mg IM every 12 hours (if no contraindications)',
@@ -511,14 +511,14 @@ export const IntraoperativeFindingsForm: React.FC<IntraoperativeFindingsFormProp
     }
 
     doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.setTextColor(234, 179, 8);
     doc.text('5️⃣ VITAMINS & MINERALS (Wound Healing & Recovery)', 15, yPosition);
     yPosition += 6;
     doc.setTextColor(0, 0, 0);
 
     doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     const vitamins = [
       '💊 Essential Vitamins:',
       '   • Vitamin C (Ascorbic Acid) 500-1000mg PO/IV daily',
@@ -570,14 +570,14 @@ export const IntraoperativeFindingsForm: React.FC<IntraoperativeFindingsFormProp
     }
 
     doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.setTextColor(107, 114, 128);
     doc.text('6️⃣ ADDITIONAL MEDICATIONS', 15, yPosition);
     yPosition += 6;
     doc.setTextColor(0, 0, 0);
 
     doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     const additionalMeds = [
       '🤢 Antiemetics (for nausea/vomiting):',
       '   • Ondansetron 4-8mg IV every 8 hours PRN',
@@ -625,13 +625,13 @@ export const IntraoperativeFindingsForm: React.FC<IntraoperativeFindingsFormProp
     doc.rect(10, yPosition, pageWidth - 20, 8, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(11);
-    doc.setFont('helvetica', 'bold');
-    doc.text('👩‍⚕️ NURSING CARE & MONITORING', 15, yPosition + 6);
+    doc.setFont('times', 'bold');
+    doc.text('👩‍�-️ NURSING CARE & MONITORING', 15, yPosition + 6);
     yPosition += 12;
     doc.setTextColor(0, 0, 0);
 
     doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     const nursingCare = [
       '✅ Vital Signs Monitoring:',
       '   • Every 15 min × 1 hour → Every 30 min × 2 hours → Hourly × 24 hours → Every 4 hours',
@@ -690,13 +690,13 @@ export const IntraoperativeFindingsForm: React.FC<IntraoperativeFindingsFormProp
     doc.rect(10, yPosition, pageWidth - 20, 8, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(11);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('🏠 DISCHARGE CRITERIA', 15, yPosition + 6);
     yPosition += 12;
     doc.setTextColor(0, 0, 0);
 
     doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     const dischargeCriteria = [
       '✓ Vital signs stable and within normal limits',
       '✓ Pain adequately controlled with oral medications',
@@ -732,13 +732,13 @@ export const IntraoperativeFindingsForm: React.FC<IntraoperativeFindingsFormProp
     doc.rect(10, yPosition, pageWidth - 20, 8, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(11);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('⚠️ WARNING SIGNS - SEEK IMMEDIATE MEDICAL ATTENTION', 15, yPosition + 6);
     yPosition += 12;
     doc.setTextColor(0, 0, 0);
 
     doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     const warningSigns = [
       '🚨 Fever >38.5°C or chills',
       '🚨 Severe or worsening pain not relieved by medications',
@@ -772,13 +772,13 @@ export const IntraoperativeFindingsForm: React.FC<IntraoperativeFindingsFormProp
     doc.rect(10, yPosition, pageWidth - 20, 8, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(11);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('📅 FOLLOW-UP PLAN', 15, yPosition + 6);
     yPosition += 12;
     doc.setTextColor(0, 0, 0);
 
     doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     const followUp = [
       '📍 Wound Check: 3-5 days post-discharge (or as instructed)',
       '📍 Suture/Staple Removal: 7-14 days (depending on location)',
@@ -806,6 +806,67 @@ export const IntraoperativeFindingsForm: React.FC<IntraoperativeFindingsFormProp
     // Save PDF
     const fileName = `UNTH_PostopNote_${procedureId}_${new Date().toISOString().split('T')[0]}.pdf`;
     doc.save(fileName);
+  };
+
+  // Thermal 80mm postoperative note
+  const generateThermalPostoperativeNote = async () => {
+    const { jsPDF } = await import('jspdf');
+    const thermalWidth = 80;
+    const m = 3;
+    const clean = (text: string | undefined | null): string => sanitizeTextForPDF(text || '');
+
+    let estHeight = 200;
+    estHeight += (findings.operative_findings?.length || 0) * 0.12;
+    estHeight += (findings.postoperative_instructions?.length || 0) * 0.12;
+    estHeight = Math.max(estHeight, 250);
+
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [thermalWidth, estHeight] });
+    let y = m;
+
+    doc.setFont('times', 'bold');
+    doc.setFontSize(12);
+    doc.text('POSTOP CARE PLAN', thermalWidth / 2, y, { align: 'center' });
+    y += 5;
+    doc.setFontSize(8);
+    doc.setFont('times', 'normal');
+    doc.text('UNTH Plastic Surgery', thermalWidth / 2, y, { align: 'center' });
+    y += 4;
+    doc.line(m, y, thermalWidth - m, y);
+    y += 3;
+
+    doc.setFontSize(9);
+    doc.text('Patient ID: ' + clean(patientId), m, y); y += 3.5;
+    doc.text('Procedure: ' + clean(procedureId), m, y); y += 3.5;
+    doc.text('Date: ' + (clean(findings.procedure_date) || new Date().toLocaleDateString()), m, y); y += 3.5;
+    doc.text('Surgeon: ' + clean(findings.surgical_team?.primary_surgeon), m, y); y += 4;
+    doc.line(m, y, thermalWidth - m, y);
+    y += 3;
+
+    const addThermalSection = (title: string, content: string | undefined) => {
+      if (!content) return;
+      doc.setFontSize(10);
+      doc.setFont('times', 'bold');
+      doc.text(title, m, y); y += 4;
+      doc.setFontSize(9);
+      doc.setFont('times', 'normal');
+      const lines = doc.splitTextToSize(clean(content), thermalWidth - m * 2);
+      lines.forEach((line: string) => { doc.text(line, m, y); y += 3.5; });
+      y += 2;
+    };
+
+    addThermalSection('APPROACH', findings.surgical_approach);
+    addThermalSection('ANESTHESIA', findings.anesthesia_type);
+    addThermalSection('FINDINGS', findings.operative_findings);
+    addThermalSection('WOUND CLOSURE', findings.wound_closure_details);
+    addThermalSection('DRAINS', findings.drains_placed);
+    addThermalSection('EST. BLOOD LOSS', findings.estimated_blood_loss);
+    addThermalSection('POSTOP INSTRUCTIONS', findings.postoperative_instructions);
+
+    if (findings.specimens_sent) {
+      addThermalSection('SPECIMENS', findings.specimens_sent);
+    }
+
+    doc.save(`PostopNote_Thermal_${procedureId}_${new Date().toISOString().split('T')[0]}.pdf`);
   };
 
   const submitFindings = async () => {
@@ -1278,7 +1339,7 @@ X-ray: Hardware placement verified...`}
                   <span>Vitamins & Minerals for Healing</span>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <span className="text-green-600">👩‍⚕️</span>
+                  <span className="text-green-600">👩‍�-️</span>
                   <span>Nursing Care & Monitoring Protocols</span>
                 </div>
                 <div className="flex items-center space-x-2">
@@ -1298,6 +1359,13 @@ X-ray: Hardware placement verified...`}
               <span className="text-xl">🤖</span>
               <span>Generate Postoperative Note & Care Plan (PDF)</span>
               <span className="text-xl">📄</span>
+            </button>
+            <button
+              onClick={generateThermalPostoperativeNote}
+              className="w-full mt-2 bg-orange-500 text-white px-6 py-2 rounded-lg font-semibold hover:bg-orange-600 transition-all duration-200 shadow-sm flex items-center justify-center space-x-2"
+              title="Thermal Print (80mm)"
+            >
+              <span>Thermal Print (80mm)</span>
             </button>
             <p className="text-xs text-gray-500 mt-2 text-center">
               ⚡ Powered by evidence-based clinical protocols | Customized to your surgical findings

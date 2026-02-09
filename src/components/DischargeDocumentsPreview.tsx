@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { format } from 'date-fns';
 import { createPDF, sanitizeTextForPDF, PDF_MARGINS, PDF_FONT_SIZES, PDF_COLORS, addFooter } from '../utils/pdfUtils';
 import { Discharge, admissionDischargeService } from '../services/admissionDischargeService';
@@ -22,11 +22,11 @@ export default function DischargeDocumentsPreview({
   const previewRef = useRef<HTMLDivElement>(null);
 
   const documents: { type: DocumentType; name: string; icon: string }[] = [
-    { type: 'summary', name: 'Discharge Summary', icon: '📋' },
-    { type: 'fitness', name: 'Fitness Report', icon: '✅' },
-    { type: 'instructions', name: 'Discharge Instructions', icon: '📝' },
-    { type: 'meal_plan', name: '7-Day Meal Plan', icon: '🍽️' },
-    { type: 'all', name: 'Complete Package', icon: '📦' }
+    { type: 'summary', name: 'Discharge Summary', icon: 'ðŸ“‹' },
+    { type: 'fitness', name: 'Fitness Report', icon: 'âœ…' },
+    { type: 'instructions', name: 'Discharge Instructions', icon: 'ðŸ“' },
+    { type: 'meal_plan', name: '7-Day Meal Plan', icon: 'ðŸ½ï¸' },
+    { type: 'all', name: 'Complete Package', icon: 'ðŸ“¦' }
   ];
 
   // Hospital header for documents
@@ -111,7 +111,7 @@ export default function DischargeDocumentsPreview({
           <ul className="mt-1">
             {discharge.follow_up_appointments?.map((apt, i) => (
               <li key={i}>
-                📅 {format(new Date(apt.date), 'dd MMM yyyy')} - {apt.clinic}: {apt.purpose}
+                ðŸ“… {format(new Date(apt.date), 'dd MMM yyyy')} - {apt.clinic}: {apt.purpose}
               </li>
             ))}
           </ul>
@@ -221,7 +221,7 @@ export default function DischargeDocumentsPreview({
         {discharge.wound_care_instructions && (
           <div>
             <h4 className="font-semibold text-purple-700 border-b pb-1 flex items-center gap-2">
-              🩹 WOUND CARE
+              ðŸ©¹ WOUND CARE
             </h4>
             <div className="mt-2 whitespace-pre-line bg-gray-50 p-3 rounded">
               {discharge.wound_care_instructions}
@@ -232,7 +232,7 @@ export default function DischargeDocumentsPreview({
         {/* Medications */}
         <div>
           <h4 className="font-semibold text-purple-700 border-b pb-1 flex items-center gap-2">
-            💊 MEDICATIONS
+            ðŸ’Š MEDICATIONS
           </h4>
           <p className="text-xs text-gray-600 mt-1">Take the following medications exactly as prescribed:</p>
           <div className="mt-2 space-y-2">
@@ -252,12 +252,12 @@ export default function DischargeDocumentsPreview({
         {discharge.lifestyle_modifications && discharge.lifestyle_modifications.length > 0 && (
           <div>
             <h4 className="font-semibold text-purple-700 border-b pb-1 flex items-center gap-2">
-              🏃 LIFESTYLE MODIFICATIONS
+              ðŸƒ LIFESTYLE MODIFICATIONS
             </h4>
             <ul className="mt-2 space-y-1">
               {discharge.lifestyle_modifications.map((mod, i) => (
                 <li key={i} className="flex items-start gap-2">
-                  <span className="text-green-600">✓</span>
+                  <span className="text-green-600">âœ“</span>
                   <span>{mod}</span>
                 </li>
               ))}
@@ -269,12 +269,12 @@ export default function DischargeDocumentsPreview({
         {discharge.activity_restrictions && discharge.activity_restrictions.length > 0 && (
           <div>
             <h4 className="font-semibold text-purple-700 border-b pb-1 flex items-center gap-2">
-              🚫 ACTIVITY RESTRICTIONS
+              ðŸš« ACTIVITY RESTRICTIONS
             </h4>
             <ul className="mt-2 space-y-1">
               {discharge.activity_restrictions.map((r, i) => (
                 <li key={i} className="flex items-start gap-2">
-                  <span className="text-red-600">⛔</span>
+                  <span className="text-red-600">â›”</span>
                   <span>{r}</span>
                 </li>
               ))}
@@ -285,12 +285,12 @@ export default function DischargeDocumentsPreview({
         {/* Warning Signs */}
         <div className="bg-red-50 p-3 rounded border border-red-200">
           <h4 className="font-semibold text-red-700 flex items-center gap-2">
-            ⚠️ RETURN TO HOSPITAL IMMEDIATELY IF YOU EXPERIENCE:
+            âš ï¸ RETURN TO HOSPITAL IMMEDIATELY IF YOU EXPERIENCE:
           </h4>
           <ul className="mt-2 space-y-1">
             {discharge.warning_signs?.map((sign, i) => (
               <li key={i} className="flex items-start gap-2">
-                <span className="text-red-600">🚨</span>
+                <span className="text-red-600">ðŸš¨</span>
                 <span>{sign}</span>
               </li>
             ))}
@@ -300,12 +300,12 @@ export default function DischargeDocumentsPreview({
         {/* Follow-up */}
         <div className="bg-blue-50 p-3 rounded border border-blue-200">
           <h4 className="font-semibold text-blue-700 flex items-center gap-2">
-            📅 FOLLOW-UP APPOINTMENTS
+            ðŸ“… FOLLOW-UP APPOINTMENTS
           </h4>
           <div className="mt-2 space-y-2">
             {discharge.follow_up_appointments?.map((apt, i) => (
               <div key={i} className="flex items-center gap-2">
-                <span className="text-blue-600">📌</span>
+                <span className="text-blue-600">ðŸ“Œ</span>
                 <span><strong>{format(new Date(apt.date), 'EEE, dd MMM yyyy')}</strong> at {apt.clinic}</span>
               </div>
             ))}
@@ -338,10 +338,10 @@ export default function DischargeDocumentsPreview({
           {/* Special Considerations */}
           {discharge.meal_plan_7_day.special_considerations.length > 0 && (
             <div className="bg-blue-50 p-3 rounded border border-blue-200">
-              <h4 className="font-semibold text-blue-700">📌 Special Dietary Considerations:</h4>
+              <h4 className="font-semibold text-blue-700">ðŸ“Œ Special Dietary Considerations:</h4>
               <ul className="mt-1">
                 {discharge.meal_plan_7_day.special_considerations.map((c, i) => (
-                  <li key={i}>• {c}</li>
+                  <li key={i}>â€¢ {c}</li>
                 ))}
               </ul>
             </div>
@@ -350,7 +350,7 @@ export default function DischargeDocumentsPreview({
           {/* Foods to Avoid */}
           {discharge.meal_plan_7_day.foods_to_avoid.length > 0 && (
             <div className="bg-red-50 p-3 rounded border border-red-200">
-              <h4 className="font-semibold text-red-700">🚫 Foods to Avoid:</h4>
+              <h4 className="font-semibold text-red-700">ðŸš« Foods to Avoid:</h4>
               <p className="mt-1">{discharge.meal_plan_7_day.foods_to_avoid.join(', ')}</p>
             </div>
           )}
@@ -388,7 +388,7 @@ export default function DischargeDocumentsPreview({
 
           {/* Hydration */}
           <div className="bg-cyan-50 p-3 rounded border border-cyan-200">
-            <h4 className="font-semibold text-cyan-700">💧 Hydration Goals:</h4>
+            <h4 className="font-semibold text-cyan-700">ðŸ’§ Hydration Goals:</h4>
             <p>{discharge.meal_plan_7_day.hydration_goals}</p>
           </div>
         </div>
@@ -412,7 +412,7 @@ export default function DischargeDocumentsPreview({
 
       const addHeader = () => {
         doc.setFontSize(14);
-        doc.setFont('helvetica', 'bold');
+        doc.setFont('times', 'bold');
         doc.setTextColor(PDF_COLORS.primary[0], PDF_COLORS.primary[1], PDF_COLORS.primary[2]);
         doc.text('UNIVERSITY OF NIGERIA TEACHING HOSPITAL', pageWidth / 2, y, { align: 'center' });
         y += 6;
@@ -432,7 +432,7 @@ export default function DischargeDocumentsPreview({
       const addText = (text: string, options: { fontSize?: number; bold?: boolean; color?: number[] } = {}) => {
         const { fontSize = PDF_FONT_SIZES.body, bold = false, color = PDF_COLORS.black } = options;
         doc.setFontSize(fontSize);
-        doc.setFont('helvetica', bold ? 'bold' : 'normal');
+        doc.setFont('times', bold ? 'bold' : 'normal');
         // Validate color array before calling setTextColor
         if (color && Array.isArray(color) && color.length === 3) {
           doc.setTextColor(color[0], color[1], color[2]);
@@ -461,7 +461,7 @@ export default function DischargeDocumentsPreview({
         doc.setFillColor(240, 240, 240);
         doc.rect(margin, y - 4, pageWidth - 2 * margin, 7, 'F');
         doc.setFontSize(PDF_FONT_SIZES.subHeader);
-        doc.setFont('helvetica', 'bold');
+        doc.setFont('times', 'bold');
         doc.setTextColor(PDF_COLORS.primary[0], PDF_COLORS.primary[1], PDF_COLORS.primary[2]);
         doc.text(clean(title), margin + 2, y);
         y += 8;
@@ -472,7 +472,7 @@ export default function DischargeDocumentsPreview({
         addHeader();
         
         doc.setFontSize(PDF_FONT_SIZES.sectionHeader);
-        doc.setFont('helvetica', 'bold');
+        doc.setFont('times', 'bold');
         doc.setTextColor(PDF_COLORS.black[0], PDF_COLORS.black[1], PDF_COLORS.black[2]);
         doc.text('DISCHARGE SUMMARY', pageWidth / 2, y, { align: 'center' });
         y += 10;
@@ -533,7 +533,7 @@ export default function DischargeDocumentsPreview({
         addHeader();
         
         doc.setFontSize(PDF_FONT_SIZES.sectionHeader);
-        doc.setFont('helvetica', 'bold');
+        doc.setFont('times', 'bold');
         doc.text('MEDICAL REPORT OF FITNESS FOR DISCHARGE', pageWidth / 2, y, { align: 'center' });
         y += 10;
 
@@ -581,7 +581,7 @@ export default function DischargeDocumentsPreview({
         addHeader();
         
         doc.setFontSize(PDF_FONT_SIZES.sectionHeader);
-        doc.setFont('helvetica', 'bold');
+        doc.setFont('times', 'bold');
         doc.text('DISCHARGE INSTRUCTIONS', pageWidth / 2, y, { align: 'center' });
         y += 10;
 
@@ -629,7 +629,7 @@ export default function DischargeDocumentsPreview({
         addHeader();
         
         doc.setFontSize(PDF_FONT_SIZES.sectionHeader);
-        doc.setFont('helvetica', 'bold');
+        doc.setFont('times', 'bold');
         doc.text('7-DAY MEAL PLAN', pageWidth / 2, y, { align: 'center' });
         y += 10;
 
@@ -678,6 +678,86 @@ export default function DischargeDocumentsPreview({
     }
   };
 
+  // Thermal 80mm discharge document PDF
+  const generateThermalPDF = async () => {
+    const { jsPDF } = await import('jspdf');
+    const thermalWidth = 80;
+    const m = 3;
+    const clean = (text: string | undefined | null): string => sanitizeTextForPDF(text || '');
+
+    let estHeight = 200;
+    estHeight += (discharge.discharge_instructions?.length || 0) * 0.12;
+    estHeight += (discharge.medications?.length || 0) * 8;
+    estHeight = Math.max(estHeight, 250);
+
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [thermalWidth, estHeight] });
+    let y = m;
+
+    doc.setFont('times', 'bold');
+    doc.setFontSize(12);
+    doc.text('DISCHARGE SUMMARY', thermalWidth / 2, y, { align: 'center' });
+    y += 5;
+    doc.setFontSize(8);
+    doc.setFont('times', 'normal');
+    doc.text('UNTH Plastic Surgery', thermalWidth / 2, y, { align: 'center' });
+    y += 4;
+    doc.line(m, y, thermalWidth - m, y);
+    y += 3;
+
+    doc.setFontSize(9);
+    doc.text('Patient: ' + clean(discharge.patient_name), m, y); y += 3.5;
+    doc.text('Hosp #: ' + clean(discharge.hospital_number), m, y); y += 3.5;
+    if (discharge.admission_date) {
+      doc.text('Admitted: ' + format(new Date(discharge.admission_date), 'dd/MM/yyyy'), m, y); y += 3.5;
+    }
+    doc.text('Discharged: ' + format(new Date(discharge.discharge_date), 'dd/MM/yyyy'), m, y); y += 4;
+    doc.line(m, y, thermalWidth - m, y);
+    y += 3;
+
+    const addSection = (title: string, content: string | undefined) => {
+      if (!content) return;
+      doc.setFontSize(10);
+      doc.setFont('times', 'bold');
+      doc.text(title, m, y); y += 4;
+      doc.setFontSize(9);
+      doc.setFont('times', 'normal');
+      const lines = doc.splitTextToSize(clean(content), thermalWidth - m * 2);
+      lines.forEach((line: string) => { doc.text(line, m, y); y += 3.5; });
+      y += 2;
+    };
+
+    addSection('DIAGNOSIS', discharge.final_diagnosis);
+    addSection('CONDITION', discharge.condition_at_discharge);
+    addSection('INSTRUCTIONS', discharge.discharge_instructions);
+
+    if (discharge.medications && discharge.medications.length > 0) {
+      doc.setFontSize(10);
+      doc.setFont('times', 'bold');
+      doc.text('MEDICATIONS', m, y); y += 4;
+      doc.setFontSize(9);
+      doc.setFont('times', 'normal');
+      discharge.medications.forEach((med: any) => {
+        const medText = typeof med === 'string' ? med : `${med.name || ''} ${med.dosage || ''} ${med.frequency || ''}`;
+        const lines = doc.splitTextToSize('- ' + clean(medText), thermalWidth - m * 2);
+        lines.forEach((line: string) => { doc.text(line, m, y); y += 3.5; });
+      });
+      y += 2;
+    }
+
+    if (discharge.follow_up_appointments && discharge.follow_up_appointments.length > 0) {
+      doc.setFontSize(10);
+      doc.setFont('times', 'bold');
+      doc.text('FOLLOW-UP', m, y); y += 4;
+      doc.setFontSize(9);
+      doc.setFont('times', 'normal');
+      discharge.follow_up_appointments.forEach((appt: any) => {
+        doc.text('- ' + format(new Date(appt.date), 'dd/MM/yyyy') + ' ' + clean(appt.clinic), m, y); y += 3.5;
+      });
+    }
+
+    doc.save(`Discharge_Thermal_${clean(discharge.hospital_number)}_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
+  };
+
   // Share via WhatsApp/Email
   const shareDocument = (method: 'whatsapp' | 'email') => {
     const summary = `
@@ -704,7 +784,7 @@ Follow-up: ${discharge.follow_up_appointments?.map(a => `${format(new Date(a.dat
     <div className="space-y-6">
       {/* Header */}
       <div className="bg-gradient-to-r from-green-500 to-green-600 text-white p-4 rounded-lg">
-        <h3 className="text-xl font-bold">📄 Discharge Documents</h3>
+        <h3 className="text-xl font-bold">ðŸ“„ Discharge Documents</h3>
         <p className="text-green-100 mt-1">Preview and download discharge documents for {discharge.patient_name}</p>
       </div>
 
@@ -722,7 +802,7 @@ Follow-up: ${discharge.follow_up_appointments?.map(a => `${format(new Date(a.dat
           >
             <span>{doc.icon}</span>
             <span className="hidden sm:inline">{doc.name}</span>
-            {downloadedDocs.has(doc.type) && <span className="text-xs">✓</span>}
+            {downloadedDocs.has(doc.type) && <span className="text-xs">âœ“</span>}
           </button>
         ))}
       </div>
@@ -751,19 +831,24 @@ Follow-up: ${discharge.follow_up_appointments?.map(a => `${format(new Date(a.dat
             disabled={isGenerating}
             className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 disabled:opacity-50"
           >
-            {isGenerating ? '⏳ Generating...' : '📥 Download PDF'}
+            {isGenerating ? 'â³ Generating...' : 'ðŸ“¥ Download PDF'}
           </button>
-          <button
-            onClick={() => shareDocument('whatsapp')}
+          <button            onClick={generateThermalPDF}
+            className="px-6 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 flex items-center gap-2"
+            title="Thermal Print (80mm)"
+          >
+            Thermal Print
+          </button>
+          <button            onClick={() => shareDocument('whatsapp')}
             className="px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 flex items-center gap-2"
           >
-            📱 Share via WhatsApp
+            ðŸ“± Share via WhatsApp
           </button>
           <button
             onClick={() => shareDocument('email')}
             className="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center gap-2"
           >
-            ✉️ Share via Email
+            âœ‰ï¸ Share via Email
           </button>
         </div>
       </div>
@@ -774,13 +859,13 @@ Follow-up: ${discharge.follow_up_appointments?.map(a => `${format(new Date(a.dat
           onClick={onBack}
           className="px-6 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
         >
-          ← Back
+          â† Back
         </button>
         <button
           onClick={onComplete}
           className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700"
         >
-          ✅ Complete Discharge
+          âœ… Complete Discharge
         </button>
       </div>
     </div>

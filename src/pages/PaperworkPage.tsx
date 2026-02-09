@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { FileText, Download, Plus, Send, Edit, Trash2 } from 'lucide-react';
+﻿import React, { useState, useEffect } from 'react';
+import { FileText, Download, Plus, Send, Edit, Trash2, Printer } from 'lucide-react';
 import { db } from '../db/database';
 import { patientService } from '../services/patientService';
 import { admissionService } from '../services/admissionService';
@@ -69,13 +69,13 @@ const PaperworkPage: React.FC = () => {
 
     // Header
     pdf.setFontSize(PDF_FONT_SIZES.title);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.text(clean(doc.title).toUpperCase(), pageWidth / 2, yPos, { align: 'center' });
     yPos += 15;
 
     // Content
     pdf.setFontSize(PDF_FONT_SIZES.body);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     const lines = pdf.splitTextToSize(clean(doc.content), pageWidth - PDF_MARGINS.left - PDF_MARGINS.right);
     
     lines.forEach((line: string) => {
@@ -92,6 +92,40 @@ const PaperworkPage: React.FC = () => {
 
     // Save
     const filename = doc.type + '_' + doc.hospital_number + '_' + format(new Date(), 'yyyy-MM-dd') + '.pdf';
+    pdf.save(filename);
+  };
+
+  // Thermal 80mm PDF export
+  const exportToThermalPDF = async (doc: PaperworkDocument) => {
+    const { jsPDF } = await import('jspdf');
+    const thermalWidth = 80;
+    const clean = (text: string | undefined | null): string => sanitizeTextForPDF(text || '');
+
+    const contentLen = (doc.content || '').length;
+    const estHeight = Math.max(100 + contentLen * 0.15, 200);
+
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [thermalWidth, estHeight] });
+    const m = 3;
+    let y = m;
+
+    pdf.setFont('times', 'bold');
+    pdf.setFontSize(12);
+    const titleLines = pdf.splitTextToSize(clean(doc.title).toUpperCase(), thermalWidth - m * 2);
+    titleLines.forEach((line: string) => { pdf.text(line, thermalWidth / 2, y, { align: 'center' }); y += 4.5; });
+    y += 2;
+
+    pdf.setFontSize(8);
+    pdf.setFont('times', 'normal');
+    pdf.text('UNTH Plastic Surgery Unit', thermalWidth / 2, y, { align: 'center' });
+    y += 4;
+    pdf.line(m, y, thermalWidth - m, y);
+    y += 4;
+
+    pdf.setFontSize(9);
+    const lines = pdf.splitTextToSize(clean(doc.content), thermalWidth - m * 2);
+    lines.forEach((line: string) => { pdf.text(line, m, y); y += 3.5; });
+
+    const filename = doc.type + '_Thermal_' + doc.hospital_number + '_' + format(new Date(), 'yyyy-MM-dd') + '.pdf';
     pdf.save(filename);
   };
 
@@ -1004,6 +1038,13 @@ const PaperworkPage: React.FC = () => {
               >
                 <Download className="w-4 h-4" />
               </button>
+              <button
+                onClick={() => exportToThermalPDF(doc)}
+                className="flex items-center justify-center gap-1 px-3 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 text-sm"
+                title="Thermal Print (80mm)"
+              >
+                <Printer className="w-4 h-4" />
+              </button>
             </div>
           </div>
         ))}
@@ -1055,6 +1096,14 @@ const PaperworkPage: React.FC = () => {
                   >
                     <Download className="w-4 h-4" />
                     Export PDF
+                  </button>
+                  <button
+                    onClick={() => exportToThermalPDF(selectedDocument)}
+                    className="flex items-center gap-2 px-3 py-2 bg-orange-500 text-white rounded hover:bg-orange-600"
+                    title="Thermal Print (80mm)"
+                  >
+                    <Printer className="w-4 h-4" />
+                    Thermal
                   </button>
                   <button
                     onClick={() => setSelectedDocument(null)}

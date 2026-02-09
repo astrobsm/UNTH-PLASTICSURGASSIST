@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Transfusion PDF Service
  * Generates downloadable PDFs for transfusion orders and monitoring charts
  */
@@ -93,16 +93,16 @@ class TransfusionPdfService {
 
     // Header
     pdf.setFontSize(PDF_FONT_SIZES.body);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     pdf.text('UNIVERSITY OF NIGERIA TEACHING HOSPITAL - PLASTIC AND RECONSTRUCTIVE SURGERY UNIT', pageWidth / 2, yPos, { align: 'center' });
     yPos += 5;
     pdf.setFontSize(16);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.text('BLOOD TRANSFUSION ORDER FORM', pageWidth / 2, yPos, { align: 'center' });
     yPos += 8;
     
     pdf.setFontSize(9);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     pdf.text(`Date: ${format(data.orderDate, 'dd/MM/yyyy HH:mm')}`, pageWidth - 15, yPos, { align: 'right' });
     yPos += 10;
 
@@ -114,14 +114,14 @@ class TransfusionPdfService {
 
     // Section 1: Patient Information
     pdf.setFontSize(12);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.setTextColor(139, 0, 0);
     pdf.text('SECTION 1: PATIENT INFORMATION', 15, yPos);
     pdf.setTextColor(0, 0, 0);
     yPos += 8;
 
     pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     
     const col1X = 15;
     const col2X = pageWidth / 2;
@@ -143,14 +143,14 @@ class TransfusionPdfService {
 
     // Section 2: Patient Blood Details
     pdf.setFontSize(12);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.setTextColor(139, 0, 0);
     pdf.text('SECTION 2: PATIENT BLOOD DETAILS', 15, yPos);
     pdf.setTextColor(0, 0, 0);
     yPos += 8;
 
     pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     
     pdf.text(`Blood Group: ${data.patientBloodDetails.blood_group}`, col1X, yPos);
     pdf.text(`Rh Factor: ${data.patientBloodDetails.rh_factor || 'N/A'}`, col2X, yPos);
@@ -172,14 +172,14 @@ class TransfusionPdfService {
 
     // Section 3: Indication for Transfusion
     pdf.setFontSize(12);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.setTextColor(139, 0, 0);
     pdf.text('SECTION 3: INDICATION FOR TRANSFUSION', 15, yPos);
     pdf.setTextColor(0, 0, 0);
     yPos += 8;
 
     pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     
     const indicationLines = pdf.splitTextToSize(`Indication: ${data.transfusion.indication}`, pageWidth - 30);
     pdf.text(indicationLines, col1X, yPos);
@@ -194,14 +194,14 @@ class TransfusionPdfService {
 
     // Section 4: Blood Product Details
     pdf.setFontSize(12);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.setTextColor(139, 0, 0);
     pdf.text('SECTION 4: BLOOD PRODUCT DETAILS', 15, yPos);
     pdf.setTextColor(0, 0, 0);
     yPos += 8;
 
     pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     
     const componentNames: Record<string, string> = {
       'whole_blood': 'Whole Blood',
@@ -226,7 +226,7 @@ class TransfusionPdfService {
     // Blood Bag Details Table
     if (data.transfusion.blood_bags && data.transfusion.blood_bags.length > 0) {
       yPos += 5;
-      pdf.setFont('helvetica', 'bold');
+      pdf.setFont('times', 'bold');
       pdf.text('Blood Bag Information:', col1X, yPos);
       yPos += 6;
       
@@ -241,7 +241,7 @@ class TransfusionPdfService {
       pdf.text('Source', 145, yPos + 2);
       yPos += 8;
 
-      pdf.setFont('helvetica', 'normal');
+      pdf.setFont('times', 'normal');
       data.transfusion.blood_bags.forEach((bag: BloodBagDetails) => {
         pdf.text(bag.bag_number, 17, yPos);
         pdf.text(bag.blood_group, 55, yPos);
@@ -261,14 +261,14 @@ class TransfusionPdfService {
 
     // Section 5: Product Source & Screening
     pdf.setFontSize(12);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.setTextColor(139, 0, 0);
     pdf.text('SECTION 5: PRODUCT SOURCE & SCREENING TESTS', 15, yPos);
     pdf.setTextColor(0, 0, 0);
     yPos += 8;
 
     pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     
     const sourceNames: Record<string, string> = {
       'blood_bank': 'Hospital Blood Bank',
@@ -284,12 +284,12 @@ class TransfusionPdfService {
     yPos += 8;
 
     // Screening Tests Table
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.text('Screening Test Results:', col1X, yPos);
     yPos += 6;
 
     pdf.setFontSize(9);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     
     const getStatusColor = (status: string) => {
       if (status === 'negative') return [0, 128, 0];
@@ -325,14 +325,14 @@ class TransfusionPdfService {
 
     // Section 6: Transfusion Rate
     pdf.setFontSize(12);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.setTextColor(139, 0, 0);
     pdf.text('SECTION 6: TRANSFUSION RATE', 15, yPos);
     pdf.setTextColor(0, 0, 0);
     yPos += 8;
 
     pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     
     pdf.text(`Initial Rate (first 15 min): ${data.transfusionRate.initial_rate_ml_per_hour} mL/hour`, col1X, yPos);
     yPos += 6;
@@ -349,14 +349,14 @@ class TransfusionPdfService {
 
     // Section 7: Transfusion Reaction Protocol
     pdf.setFontSize(12);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.setTextColor(139, 0, 0);
     pdf.text('SECTION 7: TRANSFUSION REACTION PROTOCOL', 15, yPos);
     pdf.setTextColor(0, 0, 0);
     yPos += 8;
 
     pdf.setFontSize(9);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     
     const defaultReactionProtocol = [
       '1. STOP the transfusion immediately',
@@ -390,14 +390,14 @@ class TransfusionPdfService {
     }
 
     pdf.setFontSize(12);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.setTextColor(139, 0, 0);
     pdf.text('PRE-TRANSFUSION CHECKLIST', 15, yPos);
     pdf.setTextColor(0, 0, 0);
     yPos += 8;
 
     pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     
     const checklist = [
       { item: 'Informed consent obtained', checked: data.transfusion.consent_obtained },
@@ -467,17 +467,17 @@ class TransfusionPdfService {
 
     // Header
     pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     pdf.text('UNIVERSITY OF NIGERIA TEACHING HOSPITAL - PLASTIC AND RECONSTRUCTIVE SURGERY UNIT', pageWidth / 2, yPos, { align: 'center' });
     yPos += 7;
     pdf.setFontSize(14);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.text('BLOOD TRANSFUSION MONITORING CHART', pageWidth / 2, yPos, { align: 'center' });
     yPos += 10;
 
     // Patient Info Row
     pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     
     const infoY = yPos;
     pdf.text(`Patient Name: ${patientName}`, 15, infoY);
@@ -503,7 +503,7 @@ class TransfusionPdfService {
     pdf.rect(15, tableStartY, pageWidth - 30, 10, 'F');
     
     pdf.setFontSize(8);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     
     let xPos = 17;
     headers.forEach((header, idx) => {
@@ -531,7 +531,7 @@ class TransfusionPdfService {
       'Post-Transfusion',
     ] : monitoringEntries.map(e => e.time);
 
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     
     const drawRow = (time: string, entry?: TransfusionMonitoringEntry) => {
       if (yPos > pageHeight - 20) {
@@ -554,7 +554,7 @@ class TransfusionPdfService {
       if (entry) {
         pdf.text(entry.volume_infused_ml ? `${entry.volume_infused_ml} mL` : '', xPos, yPos + 2);
         xPos += colWidths[1];
-        pdf.text(entry.temperature ? `${entry.temperature}°C` : '', xPos, yPos + 2);
+        pdf.text(entry.temperature ? `${entry.temperature}Â°C` : '', xPos, yPos + 2);
         xPos += colWidths[2];
         pdf.text(entry.pulse ? `${entry.pulse}` : '', xPos, yPos + 2);
         xPos += colWidths[3];
@@ -602,11 +602,11 @@ class TransfusionPdfService {
     }
 
     pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.text('ADVERSE EVENTS / TRANSFUSION REACTIONS:', 15, yPos);
     yPos += 7;
 
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     pdf.setFontSize(9);
     pdf.text('[ ] None observed', 15, yPos);
     pdf.text('[ ] Fever/Chills', 62, yPos);
@@ -621,11 +621,11 @@ class TransfusionPdfService {
     yPos += 10;
 
     // Completion Section
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.text('TRANSFUSION COMPLETION', 15, yPos);
     yPos += 7;
 
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     pdf.text('End Time: ____________', 15, yPos);
     pdf.text('Total Volume Infused: ____________ mL', 80, yPos);
     pdf.text('Total Duration: ____________ hours', 180, yPos);
@@ -665,17 +665,17 @@ class TransfusionPdfService {
 
     // Header
     pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     pdf.text('UNIVERSITY OF NIGERIA TEACHING HOSPITAL - PLASTIC AND RECONSTRUCTIVE SURGERY UNIT', pageWidth / 2, yPos, { align: 'center' });
     yPos += 7;
     pdf.setFontSize(14);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.text('BLOOD TRANSFUSION MONITORING CHART', pageWidth / 2, yPos, { align: 'center' });
     yPos += 10;
 
     // Patient Info Fields (blank)
     pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     
     pdf.text('Patient Name: _________________________________', 15, yPos);
     pdf.text('Hospital No: _________________', 130, yPos);
@@ -694,7 +694,7 @@ class TransfusionPdfService {
     // Monitoring Table
     const tableStartY = yPos;
     const colWidths = [25, 28, 22, 22, 35, 22, 22, 25, 52, 25];
-    const headers = ['Time', 'Vol Infused', 'Temp (°C)', 'Pulse', 'BP (mmHg)', 'RR', 'SpO2 %', 'Urine mL', 'Observations', 'Initials'];
+    const headers = ['Time', 'Vol Infused', 'Temp (Â°C)', 'Pulse', 'BP (mmHg)', 'RR', 'SpO2 %', 'Urine mL', 'Observations', 'Initials'];
     
     // Draw table header
     pdf.setFillColor(139, 0, 0);
@@ -702,7 +702,7 @@ class TransfusionPdfService {
     pdf.rect(15, tableStartY, pageWidth - 30, 10, 'F');
     
     pdf.setFontSize(8);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     
     let xPos = 17;
     headers.forEach((header, idx) => {
@@ -730,7 +730,7 @@ class TransfusionPdfService {
       'Post-transfusion',
     ];
 
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     pdf.setFontSize(8);
 
     intervals.forEach((time, idx) => {
@@ -758,11 +758,11 @@ class TransfusionPdfService {
 
     // Reactions section
     pdf.setFontSize(9);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.text('TRANSFUSION REACTIONS (check if observed):', 15, yPos);
     yPos += 6;
 
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     const reactions = ['None', 'Fever', 'Chills', 'Rash', 'Urticaria', 'Dyspnea', 'Chest pain', 'Back pain', 'Hypotension', 'Tachycardia'];
     xPos = 15;
     reactions.forEach((reaction, idx) => {
@@ -779,9 +779,9 @@ class TransfusionPdfService {
     yPos += 10;
 
     // Completion
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.text('COMPLETION:', 15, yPos);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     pdf.text('End Time: ________', 55, yPos);
     pdf.text('Total Volume: ________ mL', 105, yPos);
     pdf.text('Duration: ________ hrs', 175, yPos);
@@ -823,14 +823,14 @@ class TransfusionPdfService {
 
     // Header
     pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     pdf.text('UNIVERSITY OF NIGERIA TEACHING HOSPITAL', pageWidth / 2, yPos, { align: 'center' });
     yPos += 5;
     pdf.text('ITUKU OZALLA, ENUGU', pageWidth / 2, yPos, { align: 'center' });
     yPos += 8;
     
     pdf.setFontSize(14);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.text('CONSENT FOR BLOOD TRANSFUSION', pageWidth / 2, yPos, { align: 'center' });
     yPos += 8;
     
@@ -842,12 +842,12 @@ class TransfusionPdfService {
 
     // Patient Information Section
     pdf.setFontSize(11);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.text('PATIENT INFORMATION', 15, yPos);
     yPos += 8;
 
     pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     
     const col1X = 15;
     const col2X = pageWidth / 2 + 10;
@@ -891,12 +891,12 @@ class TransfusionPdfService {
 
     // Transfusion Details
     pdf.setFontSize(11);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.text('TRANSFUSION DETAILS', 15, yPos);
     yPos += 8;
 
     pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     
     pdf.text('Blood Component Type:', col1X, yPos);
     pdf.line(col1X + 48, yPos, pageWidth - 15, yPos);
@@ -910,12 +910,12 @@ class TransfusionPdfService {
 
     // Consent Statement
     pdf.setFontSize(11);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.text('CONSENT STATEMENT', 15, yPos);
     yPos += 8;
 
     pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     
     const consentText = [
       'I, the undersigned, hereby confirm that:',
@@ -951,12 +951,12 @@ class TransfusionPdfService {
 
     // Signatures Section
     pdf.setFontSize(11);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.text('SIGNATURES', 15, yPos);
     yPos += 10;
 
     pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
 
     // Patient/Guardian Signature
     pdf.text('Patient/Guardian Signature:', col1X, yPos);
@@ -1001,12 +1001,12 @@ class TransfusionPdfService {
 
     // Refusal Section (if applicable)
     pdf.setFontSize(11);
-    pdf.setFont('helvetica', 'bold');
+    pdf.setFont('times', 'bold');
     pdf.text('REFUSAL OF CONSENT (Complete only if patient refuses)', 15, yPos);
     yPos += 8;
 
     pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'normal');
+    pdf.setFont('times', 'normal');
     
     const refusalText = 'I have been informed of the need for blood transfusion and the risks of refusing. ' +
       'I understand that refusing this transfusion may result in serious harm or death. ' +

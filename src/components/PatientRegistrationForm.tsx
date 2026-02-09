@@ -913,7 +913,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     doc.rect(0, 0, pageWidth, 40, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(20);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('UNIVERSITY OF NIGERIA TEACHING HOSPITAL', pageWidth / 2, 15, { align: 'center' });
     doc.setFontSize(PDF_FONT_SIZES.sectionHeader + 2);
     doc.text('Department of Plastic Surgery', pageWidth / 2, 25, { align: 'center' });
@@ -927,11 +927,11 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     doc.setFillColor(240, 240, 240);
     doc.rect(10, yPosition, pageWidth - 20, 8, 'F');
     doc.setFontSize(PDF_FONT_SIZES.subHeader);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('PATIENT INFORMATION', PDF_MARGINS.left, yPosition + 5.5);
     yPosition += 12;
     
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     doc.setFontSize(PDF_FONT_SIZES.body);
     doc.text('Name: ' + clean((formData as any).surname) + ' ' + clean(formData.first_name) + ' ' + clean((formData as any).other_names), PDF_MARGINS.left, yPosition);
     yPosition += 5;
@@ -946,11 +946,11 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     // Clinical Information Section
     doc.setFillColor(240, 240, 240);
     doc.rect(10, yPosition, pageWidth - 20, 8, 'F');
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('CLINICAL INFORMATION', PDF_MARGINS.left, yPosition + 5.5);
     yPosition += 12;
     
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     doc.text(`Diagnosis: ${riskAssessmentData.clinical.primary_diagnosis || 'N/A'}`, 15, yPosition);
     yPosition += 5;
     const comorbidities = riskAssessmentData.clinical.comorbidities.join(', ') || 'None';
@@ -961,11 +961,11 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     // Nutritional Status
     doc.setFillColor(240, 240, 240);
     doc.rect(10, yPosition, pageWidth - 20, 8, 'F');
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('NUTRITIONAL STATUS', 15, yPosition + 5.5);
     yPosition += 12;
     
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     doc.text(`BMI: ${riskAssessmentData.nutritional.bmi.toFixed(1)} kg/m²`, 15, yPosition);
     doc.text(`Weight: ${riskAssessmentData.nutritional.weight} kg`, 70, yPosition);
     doc.text(`Height: ${riskAssessmentData.nutritional.height} cm`, 120, yPosition);
@@ -978,12 +978,12 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     if (aiRecommendations.nutritional.mealPlan.dailyRequirements) {
       doc.setFillColor(240, 240, 240);
       doc.rect(10, yPosition, pageWidth - 20, 8, 'F');
-      doc.setFont('helvetica', 'bold');
+      doc.setFont('times', 'bold');
       doc.text('DAILY NUTRITIONAL REQUIREMENTS', 15, yPosition + 5.5);
       yPosition += 12;
       
       const req = aiRecommendations.nutritional.mealPlan.dailyRequirements;
-      doc.setFont('helvetica', 'normal');
+      doc.setFont('times', 'normal');
       doc.text(`Calories: ${req.calories} kcal`, 15, yPosition);
       doc.text(`Protein: ${req.protein}g`, 70, yPosition);
       doc.text(`Carbs: ${req.carbs}g`, 120, yPosition);
@@ -1002,13 +1002,13 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
       if (adjustments.length > 0) {
         doc.setFillColor(255, 243, 205);
         doc.rect(10, yPosition, pageWidth - 20, 8, 'F');
-        doc.setFont('helvetica', 'bold');
+        doc.setFont('times', 'bold');
         doc.setTextColor(150, 100, 0);
         doc.text('⚠ SPECIAL DIETARY CONSIDERATIONS', 15, yPosition + 5.5);
         yPosition += 12;
         
         doc.setTextColor(0, 0, 0);
-        doc.setFont('helvetica', 'normal');
+        doc.setFont('times', 'normal');
         adjustments.forEach(adj => {
           const lines = doc.splitTextToSize(`• ${adj}`, pageWidth - 30);
           doc.text(lines, 15, yPosition);
@@ -1030,42 +1030,42 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
       doc.setFillColor(14, 159, 110);
       doc.rect(10, yPosition, pageWidth - 20, 8, 'F');
       doc.setTextColor(255, 255, 255);
-      doc.setFont('helvetica', 'bold');
+      doc.setFont('times', 'bold');
       doc.text(`DAY ${day.day}`, 15, yPosition + 5.5);
       yPosition += 12;
       
       doc.setTextColor(0, 0, 0);
-      doc.setFont('helvetica', 'normal');
+      doc.setFont('times', 'normal');
       doc.setFontSize(9);
       
       // Breakfast
-      doc.setFont('helvetica', 'bold');
+      doc.setFont('times', 'bold');
       doc.text('🌅 BREAKFAST:', 15, yPosition);
-      doc.setFont('helvetica', 'normal');
+      doc.setFont('times', 'normal');
       const breakfastLines = doc.splitTextToSize(day.breakfast, pageWidth - 30);
       doc.text(breakfastLines, 15, yPosition + 4);
       yPosition += (breakfastLines.length * 4) + 6;
       
       // Lunch
-      doc.setFont('helvetica', 'bold');
+      doc.setFont('times', 'bold');
       doc.text('☀️ LUNCH:', 15, yPosition);
-      doc.setFont('helvetica', 'normal');
+      doc.setFont('times', 'normal');
       const lunchLines = doc.splitTextToSize(day.lunch, pageWidth - 30);
       doc.text(lunchLines, 15, yPosition + 4);
       yPosition += (lunchLines.length * 4) + 6;
       
       // Dinner
-      doc.setFont('helvetica', 'bold');
+      doc.setFont('times', 'bold');
       doc.text('🌙 DINNER:', 15, yPosition);
-      doc.setFont('helvetica', 'normal');
+      doc.setFont('times', 'normal');
       const dinnerLines = doc.splitTextToSize(day.dinner, pageWidth - 30);
       doc.text(dinnerLines, 15, yPosition + 4);
       yPosition += (dinnerLines.length * 4) + 6;
       
       // Snacks
-      doc.setFont('helvetica', 'bold');
+      doc.setFont('times', 'bold');
       doc.text('🍎 SNACKS:', 15, yPosition);
-      doc.setFont('helvetica', 'normal');
+      doc.setFont('times', 'normal');
       doc.text(day.snacks.join(', '), 15, yPosition + 4);
       yPosition += 8;
       
@@ -1074,10 +1074,10 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
         doc.setFillColor(254, 242, 242);
         const instructionHeight = day.specialInstructions.length * 4 + 8;
         doc.rect(10, yPosition, pageWidth - 20, instructionHeight, 'F');
-        doc.setFont('helvetica', 'bold');
+        doc.setFont('times', 'bold');
         doc.setTextColor(185, 28, 28);
         doc.text('⚠️ IMPORTANT INSTRUCTIONS:', 15, yPosition + 4);
-        doc.setFont('helvetica', 'normal');
+        doc.setFont('times', 'normal');
         let instrY = yPosition + 8;
         day.specialInstructions.forEach(instruction => {
           doc.text(`• ${instruction}`, 15, instrY);
@@ -1090,10 +1090,10 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
       // Nutritional Info
       doc.setFillColor(249, 250, 251);
       doc.rect(10, yPosition, pageWidth - 20, 10, 'F');
-      doc.setFont('helvetica', 'bold');
+      doc.setFont('times', 'bold');
       doc.setFontSize(8);
       doc.text('NUTRITION:', 15, yPosition + 4);
-      doc.setFont('helvetica', 'normal');
+      doc.setFont('times', 'normal');
       doc.text(
         `${day.nutritionalInfo.calories} cal | ${day.nutritionalInfo.protein}g protein | ${day.nutritionalInfo.carbs}g carbs | ${day.nutritionalInfo.fat}g fat | ${day.nutritionalInfo.fiber}g fiber`,
         15, yPosition + 8
@@ -1159,14 +1159,14 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     doc.rect(0, 0, pageWidth, 45, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(18);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('UNIVERSITY OF NIGERIA TEACHING HOSPITAL', pageWidth / 2, 15, { align: 'center' });
     doc.setFontSize(PDF_FONT_SIZES.sectionHeader);
     doc.text('ITUKU-OZALLA, ENUGU', pageWidth / 2, 22, { align: 'center' });
     doc.setFontSize(10);
     doc.text('Department of Plastic & Reconstructive Surgery', pageWidth / 2, 29, { align: 'center' });
     doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text(details.title, pageWidth / 2, 38, { align: 'center' });
 
     yPosition = 55;
@@ -1178,7 +1178,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
       doc.rect(10, yPosition, pageWidth - 20, 10, 'F');
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(12);
-      doc.setFont('helvetica', 'bold');
+      doc.setFont('times', 'bold');
       doc.text(`⚠️ ${details.urgency} CONSULTATION`, pageWidth / 2, yPosition + 7, { align: 'center' });
       yPosition += 15;
       doc.setTextColor(0, 0, 0);
@@ -1186,30 +1186,30 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
 
     // Date and Reference
     doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     doc.text(`Date: ${new Date().toLocaleDateString('en-NG', { day: 'numeric', month: 'long', year: 'numeric' })}`, 15, yPosition);
     doc.text(`Ref: UNTH/PS/${formData.hospital_number || 'XXXX'}/${new Date().getFullYear()}`, 15, yPosition + 5);
     yPosition += 15;
 
     // Addressee
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('TO:', 15, yPosition);
     yPosition += 5;
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     doc.text(`The Consultant ${details.specialist}`, 15, yPosition);
     doc.text('University of Nigeria Teaching Hospital', 15, yPosition + 5);
     doc.text('Ituku-Ozalla, Enugu', 15, yPosition + 10);
     yPosition += 20;
 
     // Subject Line
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('RE: ', 15, yPosition);
-    doc.setFont('helvetica', 'underline');
+    doc.setFont('times', 'underline');
     doc.text(details.subtitle, 23, yPosition);
     yPosition += 10;
 
     // Salutation
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     doc.text('Dear Colleague,', 15, yPosition);
     yPosition += 10;
 
@@ -1229,13 +1229,13 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     // Patient Demographics
     doc.setFillColor(249, 250, 251);
     doc.rect(10, yPosition, pageWidth - 20, 8, 'F');
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.setFontSize(11);
     doc.text('PATIENT DEMOGRAPHICS', 15, yPosition + 5);
     yPosition += 12;
 
     doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     doc.text(`Name: ${(formData as any).surname || ''} ${(formData as any).other_names || ''}`, 15, yPosition);
     doc.text(`Hospital Number: ${formData.hospital_number || 'N/A'}`, 120, yPosition);
     yPosition += 6;
@@ -1251,11 +1251,11 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     if ((formData as any).diagnosis) {
       doc.setFillColor(249, 250, 251);
       doc.rect(10, yPosition, pageWidth - 20, 8, 'F');
-      doc.setFont('helvetica', 'bold');
+      doc.setFont('times', 'bold');
       doc.text('CLINICAL INFORMATION', 15, yPosition + 5);
       yPosition += 12;
 
-      doc.setFont('helvetica', 'normal');
+      doc.setFont('times', 'normal');
       doc.text(`Primary Diagnosis: ${(formData as any).diagnosis}`, 15, yPosition);
       yPosition += 10;
     }
@@ -1263,19 +1263,19 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     // Risk Assessment Findings
     doc.setFillColor(254, 243, 199);
     doc.rect(10, yPosition, pageWidth - 20, 8, 'F');
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.setFontSize(11);
     doc.text('RISK ASSESSMENT FINDINGS', 15, yPosition + 5);
     yPosition += 12;
 
     doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text(details.score, 15, yPosition);
     doc.text(`Risk Level: ${details.riskLevel}`, 70, yPosition);
     yPosition += 10;
 
     // Assessment Details based on type
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     if (assessmentType === 'dvt') {
       const risk_factors = riskAssessmentData.dvt;
       const activeFactors = [];
@@ -1311,13 +1311,13 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     // Clinical Recommendations
     doc.setFillColor(220, 252, 231);
     doc.rect(10, yPosition, pageWidth - 20, 8, 'F');
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.setFontSize(11);
     doc.text('CLINICAL RECOMMENDATIONS & REASON FOR REFERRAL', 15, yPosition + 5);
     yPosition += 12;
 
     doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     
     if (recommendations.recommendations && recommendations.recommendations.length > 0) {
       recommendations.recommendations.slice(0, 10).forEach((rec: string) => {
@@ -1342,11 +1342,11 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
       yPosition = 20;
     }
 
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('SPECIFIC CONSULTATION REQUEST:', 15, yPosition);
     yPosition += 7;
 
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     const requestTexts = {
       dvt: [
         'Please assess the patient for appropriate VTE prophylaxis regimen',
@@ -1404,12 +1404,12 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     doc.text('Yours sincerely,', 15, yPosition);
     yPosition += 15;
 
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('_______________________________', 15, yPosition);
     yPosition += 6;
     doc.text('Dr. ___________________________', 15, yPosition);
     yPosition += 5;
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     doc.text('Plastic Surgery Registrar', 15, yPosition);
     yPosition += 5;
     doc.text('Department of Plastic & Reconstructive Surgery', 15, yPosition);
@@ -1565,7 +1565,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
             heading: 'Nutrition for Healthy Skin',
             content: [
               '🥩 Protein: Eat meat, fish, eggs, beans (helps heal skin)',
-              '🥕 Vitamin C: Eat fruits and vegetables (oranges, tomatoes, peppers)',
+              '�- Vitamin C: Eat fruits and vegetables (oranges, tomatoes, peppers)',
               '🥛 Zinc: Found in meat, dairy, nuts',
               '💧 Water: Drink plenty of fluids',
               '🍽️ Don\'t skip meals - your body needs nutrition to keep skin healthy'
@@ -1608,7 +1608,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
               '🍚 CARBOHYDRATES: Rice, yam, bread, garri, potatoes',
               '  → Gives you energy',
               '',
-              '🥕 VEGETABLES & FRUITS: Dark leafy greens, oranges, carrots, tomatoes',
+              '�- VEGETABLES & FRUITS: Dark leafy greens, oranges, carrots, tomatoes',
               '  → Provides vitamins for healing',
               '',
               '🥛 DAIRY: Milk, yogurt, cheese',
@@ -1687,7 +1687,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     doc.rect(0, 0, pageWidth, 40, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(16);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('UNIVERSITY OF NIGERIA TEACHING HOSPITAL', pageWidth / 2, 12, { align: 'center' });
     doc.setFontSize(10);
     doc.text('Department of Plastic & Reconstructive Surgery', pageWidth / 2, 19, { align: 'center' });
@@ -1701,9 +1701,9 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
 
     // Patient Name
     doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text(`For: ${(formData as any).surname || ''} ${(formData as any).other_names || ''}`, 15, yPosition);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     doc.text(`Hospital Number: ${formData.hospital_number || 'N/A'}`, 15, yPosition + 5);
     doc.text(`Date: ${new Date().toLocaleDateString('en-NG')}`, 15, yPosition + 10);
     yPosition += 20;
@@ -1712,7 +1712,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     doc.setFillColor(254, 243, 199);
     doc.rect(10, yPosition, pageWidth - 20, 15, 'F');
     doc.setFontSize(10);
-    doc.setFont('helvetica', 'italic');
+    doc.setFont('times', 'italic');
     const intro = doc.splitTextToSize(
       'This guide has been prepared specifically for you by your medical team. Please read it carefully ' +
       'and ask your nurse or doctor if you have any questions. Your family members are encouraged to read this as well.',
@@ -1745,14 +1745,14 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
       }
       
       doc.setFontSize(11);
-      doc.setFont('helvetica', 'bold');
+      doc.setFont('times', 'bold');
       doc.text(section.heading, 15, yPosition + 7);
       yPosition += 14;
       doc.setTextColor(0, 0, 0);
 
       // Section Content
       doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
+      doc.setFont('times', 'normal');
       
       section.content.forEach(paragraph => {
         if (yPosition > pageHeight - 30) {
@@ -1784,10 +1784,10 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     doc.setFillColor(254, 226, 226); // Light red
     doc.rect(10, yPosition, pageWidth - 20, 30, 'F');
     doc.setFontSize(11);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('📞 IMPORTANT CONTACT INFORMATION', 15, yPosition + 7);
     doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     doc.text('If you have ANY concerns or questions:', 15, yPosition + 14);
     doc.text('• Press your call button for the nurse', 15, yPosition + 19);
     doc.text('• Call the ward nurse station', 15, yPosition + 24);
@@ -1819,14 +1819,14 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     doc.rect(0, 0, pageWidth, 50, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(18);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('UNIVERSITY OF NIGERIA TEACHING HOSPITAL', pageWidth / 2, 15, { align: 'center' });
     doc.setFontSize(PDF_FONT_SIZES.sectionHeader);
     doc.text('ITUKU-OZALLA, ENUGU', pageWidth / 2, 22, { align: 'center' });
     doc.setFontSize(PDF_FONT_SIZES.subHeader);
     doc.text('Department of Plastic & Reconstructive Surgery', pageWidth / 2, 29, { align: 'center' });
     doc.setFontSize(PDF_FONT_SIZES.title);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('COMPREHENSIVE CARE PLAN', pageWidth / 2, 38, { align: 'center' });
     doc.setFontSize(PDF_FONT_SIZES.sectionHeader);
     doc.text('Pressure Injury Prevention & Management', pageWidth / 2, 45, { align: 'center' });
@@ -1846,7 +1846,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     doc.rect(10, yPosition, pageWidth - 20, 12, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(PDF_FONT_SIZES.sectionHeader);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     const riskText = recommendations.riskLevel === 'very_high' ? 'CRITICAL RISK' :
                      recommendations.riskLevel === 'high' ? 'HIGH RISK' :
                      recommendations.riskLevel === 'moderate' ? 'MODERATE RISK' : 'LOW RISK';
@@ -1858,12 +1858,12 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     doc.setFillColor(243, 244, 246); // Light gray
     doc.rect(10, yPosition, pageWidth - 20, 8, 'F');
     doc.setFontSize(11);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('PATIENT INFORMATION', 15, yPosition + 6);
     yPosition += 12;
 
     doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     const patientInfo = [
       `Name: ${(formData as any).surname || ''} ${(formData as any).other_names || ''}`,
       `Hospital Number: ${formData.hospital_number || 'N/A'}`,
@@ -1882,12 +1882,12 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
       doc.setFillColor(243, 244, 246);
       doc.rect(10, yPosition, pageWidth - 20, 8, 'F');
       doc.setFontSize(11);
-      doc.setFont('helvetica', 'bold');
+      doc.setFont('times', 'bold');
       doc.text('CLINICAL INFORMATION', 15, yPosition + 6);
       yPosition += 12;
 
       doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
+      doc.setFont('times', 'normal');
       if ((formData as any).primary_diagnosis) {
         doc.text(`Diagnosis: ${(formData as any).primary_diagnosis}`, 15, yPosition);
         yPosition += 5;
@@ -1903,7 +1903,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     doc.setFillColor(254, 249, 195); // Light yellow
     doc.rect(10, yPosition, pageWidth - 20, 8, 'F');
     doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text(`Care Plan Generated: ${new Date().toLocaleDateString('en-NG')} | Valid for: 7 Days | Review: ${new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-NG')}`, pageWidth / 2, yPosition + 6, { align: 'center' });
     yPosition += 15;
 
@@ -1912,13 +1912,13 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     doc.rect(10, yPosition, pageWidth - 20, 8, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(11);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('PRESSURE INJURY RISK ASSESSMENT (BRADEN SCALE)', 15, yPosition + 6);
     yPosition += 12;
     doc.setTextColor(0, 0, 0);
 
     doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     const bradenSubscores = [
       `Sensory Perception: ${riskAssessmentData.pressureSore.sensory_perception}/4`,
       `Moisture: ${riskAssessmentData.pressureSore.moisture}/4`,
@@ -1933,7 +1933,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
       yPosition += 5;
     });
     
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text(`Total Score: ${recommendations.score}/23 (${riskText})`, 15, yPosition);
     yPosition += 8;
 
@@ -1942,14 +1942,14 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     doc.rect(10, yPosition, pageWidth - 20, 8, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(11);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('🤖 CLINICAL RECOMMENDATIONS (AUTO-GENERATED)', 15, yPosition + 6);
     yPosition += 12;
     doc.setTextColor(0, 0, 0);
 
     // Clinical recommendations content
     doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     (recommendations as any).clinical.forEach((rec: string) => {
       if (yPosition > pageHeight - 30) {
         doc.addPage();
@@ -1983,13 +1983,13 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     doc.rect(10, yPosition, pageWidth - 20, 8, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(11);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('⚡ REQUIRED INTERVENTIONS', 15, yPosition + 6);
     yPosition += 12;
     doc.setTextColor(0, 0, 0);
 
     doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     recommendations.interventions.forEach((intervention: string, index: number) => {
       if (yPosition > pageHeight - 20) {
         doc.addPage();
@@ -2015,7 +2015,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     doc.rect(10, yPosition, pageWidth - 20, 8, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(11);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('📊 MONITORING & DOCUMENTATION REQUIREMENTS', 15, yPosition + 6);
     yPosition += 12;
     doc.setTextColor(0, 0, 0);
@@ -2062,7 +2062,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     };
 
     doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     const monitoring = monitoringRequirements[recommendations.riskLevel as keyof typeof monitoringRequirements] || monitoringRequirements.low;
     monitoring.forEach(item => {
       if (yPosition > pageHeight - 20) {
@@ -2089,7 +2089,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
       doc.rect(10, yPosition, pageWidth - 20, 8, 'F');
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(11);
-      doc.setFont('helvetica', 'bold');
+      doc.setFont('times', 'bold');
       doc.text('👥 INTERDISCIPLINARY TEAM CONSULTATIONS', 15, yPosition + 6);
       yPosition += 12;
       doc.setTextColor(0, 0, 0);
@@ -2112,7 +2112,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
       ];
 
       doc.setFontSize(9);
-      doc.setFont('helvetica', 'normal');
+      doc.setFont('times', 'normal');
       teamRequirements.forEach(item => {
         if (yPosition > pageHeight - 20) {
           doc.addPage();
@@ -2138,7 +2138,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     doc.rect(10, yPosition, pageWidth - 20, 8, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(11);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('⚠️ ESCALATION CRITERIA - NOTIFY IMMEDIATELY', 15, yPosition + 6);
     yPosition += 12;
     doc.setTextColor(0, 0, 0);
@@ -2154,7 +2154,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     ];
 
     doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     escalationCriteria.forEach(criterion => {
       if (yPosition > pageHeight - 20) {
         doc.addPage();
@@ -2178,12 +2178,12 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     doc.setFillColor(243, 244, 246);
     doc.rect(10, yPosition, pageWidth - 20, 35, 'F');
     doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
     doc.text('CARE PLAN ACKNOWLEDGEMENT', 15, yPosition + 7);
     yPosition += 12;
     
     doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont('times', 'normal');
     doc.text('This care plan has been reviewed and will be implemented by the clinical team.', 15, yPosition);
     yPosition += 8;
 
@@ -2198,6 +2198,73 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     // Save PDF
     const fileName = `UNTH_CarePlan_PressureSore_${(formData as any).surname || 'Patient'}_${formData.hospital_number || new Date().getTime()}.pdf`;
     doc.save(fileName);
+  };
+
+  // Thermal 80mm patient summary PDF
+  const generateThermalSummaryPDF = async () => {
+    const { jsPDF } = await import('jspdf');
+    const thermalWidth = 80;
+    const m = 3;
+    const clean = (text: string | undefined | null): string => sanitizeTextForPDF(text || '');
+
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [thermalWidth, 300] });
+    let y = m;
+
+    doc.setFont('times', 'bold');
+    doc.setFontSize(12);
+    doc.text('PATIENT SUMMARY', thermalWidth / 2, y, { align: 'center' });
+    y += 5;
+    doc.setFontSize(8);
+    doc.setFont('times', 'normal');
+    doc.text('UNTH Plastic Surgery', thermalWidth / 2, y, { align: 'center' });
+    y += 4;
+    doc.line(m, y, thermalWidth - m, y);
+    y += 3;
+
+    doc.setFontSize(9);
+    const patientName = `${(formData as any).surname || ''} ${formData.first_name || ''} ${(formData as any).other_names || ''}`.trim();
+    doc.text('Name: ' + clean(patientName), m, y); y += 3.5;
+    doc.text('Hosp #: ' + clean(formData.hospital_number), m, y); y += 3.5;
+    doc.text('Sex: ' + clean(formData.sex), m, y); y += 3.5;
+    if (formData.date_of_birth) {
+      doc.text('DOB: ' + new Date(formData.date_of_birth as any).toLocaleDateString(), m, y); y += 3.5;
+    }
+    y += 2;
+    doc.line(m, y, thermalWidth - m, y);
+    y += 3;
+
+    // DVT Risk
+    const dvtScore = riskAssessmentService.calculateDVTScore(riskAssessmentData.dvt);
+    const dvtRisk = riskAssessmentService.getDVTRiskLevel(dvtScore);
+    doc.setFont('times', 'bold');
+    doc.setFontSize(10);
+    doc.text('DVT RISK', m, y); y += 4;
+    doc.setFont('times', 'normal');
+    doc.setFontSize(9);
+    doc.text('Score: ' + dvtScore + ' - ' + dvtRisk.riskLevel, m, y); y += 4;
+
+    // Pressure Sore Risk
+    const psScore = riskAssessmentService.calculatePressureSoreScore(riskAssessmentData.pressureSore);
+    const psRisk = riskAssessmentService.getPressureSoreRiskLevel(psScore);
+    doc.setFont('times', 'bold');
+    doc.setFontSize(10);
+    doc.text('PRESSURE SORE RISK', m, y); y += 4;
+    doc.setFont('times', 'normal');
+    doc.setFontSize(9);
+    doc.text('Score: ' + psScore + ' - ' + psRisk.riskLevel, m, y); y += 4;
+
+    // Nutritional
+    const { height, weight, bmi } = riskAssessmentData.nutritional;
+    doc.setFont('times', 'bold');
+    doc.setFontSize(10);
+    doc.text('NUTRITION', m, y); y += 4;
+    doc.setFont('times', 'normal');
+    doc.setFontSize(9);
+    if (height > 0) doc.text('Height: ' + height + 'cm', m, y), y += 3.5;
+    if (weight > 0) doc.text('Weight: ' + weight + 'kg', m, y), y += 3.5;
+    if (bmi) doc.text('BMI: ' + bmi.toFixed(1), m, y), y += 3.5;
+
+    doc.save(`Patient_Thermal_${clean(formData.hospital_number) || 'new'}_${new Date().toISOString().split('T')[0]}.pdf`);
   };
 
   // Auto-calculate BMI when height or weight changes
@@ -3717,6 +3784,14 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
                 </button>
                 <button
                   type="button"
+                  onClick={generateThermalSummaryPDF}
+                  className="flex items-center space-x-2 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors shadow-sm"
+                  title="Thermal Print (80mm)"
+                >
+                  <span className="font-medium">Thermal Print</span>
+                </button>
+                <button
+                  type="button"
                   onClick={generateNigerianMealPlan}
                   className="text-sm text-green-600 hover:text-green-700 underline"
                 >
@@ -3757,7 +3832,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
             {/* Comorbidity Adjustments */}
             {aiRecommendations.nutritional.mealPlan.comorbidityAdjustments && (
               <div className="mb-4 p-3 bg-yellow-50 rounded-lg">
-                <h6 className="font-medium text-yellow-900 mb-2">⚕️ Special Dietary Considerations</h6>
+                <h6 className="font-medium text-yellow-900 mb-2">�-️ Special Dietary Considerations</h6>
                 <div className="space-y-1 text-sm">
                   {Object.entries(aiRecommendations.nutritional.mealPlan.comorbidityAdjustments).map(([key, value]) => 
                     value ? (
