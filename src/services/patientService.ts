@@ -9,6 +9,23 @@ import { syncService } from '../db/syncService';
 import { pushNotificationService } from './pushNotificationService';
 
 /**
+ * Safely convert an array field to an array of strings.
+ * Handles cases where items are objects (e.g., {condition, currentlyManaged}) instead of plain strings.
+ */
+function normalizeArrayField(value: any): string[] {
+  if (!value) return [];
+  const arr = Array.isArray(value) ? value : [value];
+  return arr.map((item: any) => {
+    if (typeof item === 'string') return item;
+    if (typeof item === 'object' && item !== null) {
+      // Handle {condition: "...", currentlyManaged: true/false} objects
+      return item.condition || item.name || item.label || JSON.stringify(item);
+    }
+    return String(item);
+  }).filter(Boolean);
+}
+
+/**
  * Normalize patient data to ensure arrays are always arrays and computed fields exist
  */
 function normalizePatientData(patient: any) {
@@ -26,12 +43,8 @@ function normalizePatientData(patient: any) {
     last_name: lastName,
     hospital_number: patient.hospital_number || patient.hospitalNumber || '',
     gender: patient.gender || patient.sex || '',
-    allergies: Array.isArray(patient.allergies) 
-      ? patient.allergies 
-      : (patient.allergies ? [patient.allergies] : []),
-    comorbidities: Array.isArray(patient.comorbidities)
-      ? patient.comorbidities
-      : (patient.comorbidities ? [patient.comorbidities] : [])
+    allergies: normalizeArrayField(patient.allergies),
+    comorbidities: normalizeArrayField(patient.comorbidities)
   };
 }
 

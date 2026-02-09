@@ -223,9 +223,9 @@ export const Patients: React.FC = () => {
                             <div className="flex items-center space-x-1">
                               <span className="text-xs text-red-600 font-medium">Allergies:</span>
                               <div className="flex space-x-1">
-                                {patient.allergies.slice(0, 2).map((allergy, index) => (
+                                {patient.allergies.slice(0, 2).map((allergy: any, index: number) => (
                                   <span key={index} className="inline-block bg-red-100 text-red-800 text-xs px-2 py-0.5 rounded-full">
-                                    {allergy}
+                                    {typeof allergy === 'object' && allergy !== null ? (allergy.name || allergy.allergen || JSON.stringify(allergy)) : String(allergy)}
                                   </span>
                                 ))}
                                 {patient.allergies.length > 2 && (
@@ -241,9 +241,9 @@ export const Patients: React.FC = () => {
                             <div className="flex items-center space-x-1">
                               <span className="text-xs text-yellow-600 font-medium">Conditions:</span>
                               <div className="flex space-x-1">
-                                {patient.comorbidities.slice(0, 2).map((condition, index) => (
+                                {patient.comorbidities.slice(0, 2).map((condition: any, index: number) => (
                                   <span key={index} className="inline-block bg-yellow-100 text-yellow-800 text-xs px-2 py-0.5 rounded-full">
-                                    {condition}
+                                    {typeof condition === 'object' && condition !== null ? (condition.condition || condition.name || JSON.stringify(condition)) : String(condition)}
                                   </span>
                                 ))}
                                 {patient.comorbidities.length > 2 && (
