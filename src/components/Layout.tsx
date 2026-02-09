@@ -1,11 +1,11 @@
 import { ReactNode, useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { 
+import {
   Users, 
   Calendar, 
   FlaskConical, 
   GraduationCap, 
-  Settings,
+  Settings as SettingsIcon,
   Stethoscope,
   ClipboardList,
   ClipboardCheck,
@@ -63,7 +63,8 @@ const navigation = [
   { name: 'Chat', href: '/chat', icon: MessageSquare },
   { name: 'Video Conference', href: '/conference', icon: Video },
   { name: 'Notifications', href: '/notifications', icon: Bell },
-  { name: 'Admin', href: '/admin', icon: Settings },
+  { name: 'Settings', href: '/settings', icon: SettingsIcon },
+  { name: 'Admin', href: '/admin', icon: SettingsIcon },
 ];
 
 export default function Layout({ children }: LayoutProps) {

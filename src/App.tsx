@@ -47,6 +47,7 @@ const TreatmentPlanBuilder = lazy(() => import('./components/TreatmentPlanBuilde
 const PreoperativePlanningPage = lazy(() => import('./pages/PreoperativePlanningPage'));
 const WoundCarePage = lazy(() => import('./pages/WoundCarePage'));
 const KeloidCarePage = lazy(() => import('./pages/KeloidCarePage'));
+const Settings = lazy(() => import('./pages/Settings'));
 
 // Loading fallback component
 const PageLoader = () => (
@@ -174,6 +175,7 @@ function App() {
               <Route path="/notifications" element={<NotificationManager />} />
               <Route path="/chat" element={<ChatRooms />} />
               <Route path="/chat/:roomId" element={<ChatRooms />} />
+              <Route path="/settings" element={<Settings />} />
               <Route path="/admin" element={<Admin />} />
             </Routes>
             
