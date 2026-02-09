@@ -70,7 +70,7 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
   const [calibrationReference, setCalibrationReference] = useState<CalibrationReference | null>(null);
   const [calibrationType, setCalibrationType] = useState<'ruler' | 'coin' | 'card' | 'manual' | 'reference_paper'>('reference_paper');
   const [manualPixelsPerCm, setManualPixelsPerCm] = useState<number>(50);
-  const [referencePaperLength, setReferencePaperLength] = useState<number>(10); // Default 10cm line
+  const [referencePaperLength, setReferencePaperLength] = useState<number>(15); // Default 15cm line
   const [isProcessing, setIsProcessing] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const segmentationCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -459,7 +459,7 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(PDF_FONT_SIZES.body);
     doc.setFont('times', 'bold');
-    doc.text('WOUND MEASUREMENT REFERENCE - 10cm Lines', pageWidth / 2, 7, { align: 'center' });
+    doc.text('WOUND MEASUREMENT REFERENCE - 15cm Lines', pageWidth / 2, 7, { align: 'center' });
 
     // Minimal footer
     doc.setFillColor(PDF_COLORS.primary.r, PDF_COLORS.primary.g, PDF_COLORS.primary.b);
@@ -473,7 +473,7 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
     const endY = pageHeight - 10;
     const availableHeight = endY - startY;
     
-    const lineLength = 100; // 10cm = 100mm
+    const lineLength = 150; // 15cm = 150mm
     const gapBetweenLines = 25; // 2.5cm = 25mm
     const lineHeight = 10; // Height allocated for each line including labels
     const rowSpacing = lineHeight + gapBetweenLines; // Total vertical space per row
@@ -481,10 +481,10 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
     // Calculate how many rows of lines we can fit
     const numberOfRows = Math.floor(availableHeight / rowSpacing);
     
-    // Calculate how many columns we can fit (each line is 100mm wide)
+    // Calculate how many columns we can fit (each line is 150mm wide)
     const marginX = 10;
     const availableWidth = pageWidth - (2 * marginX);
-    const numberOfColumns = Math.floor(availableWidth / (lineLength + 20)); // 20mm gap between columns
+    const numberOfColumns = Math.max(1, Math.floor(availableWidth / (lineLength + 20))); // 20mm gap between columns
     
     // Center the grid
     const totalGridWidth = numberOfColumns * lineLength + (numberOfColumns - 1) * 20;
@@ -501,7 +501,7 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
     }
     doc.setLineDash([]); // Reset to solid lines
 
-    // Draw 10cm lines in a grid pattern
+    // Draw 15cm lines in a grid pattern
     let lineNumber = 1;
     
     for (let row = 0; row < numberOfRows; row++) {
@@ -509,21 +509,43 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
         const x = startX + (col * (lineLength + 20));
         const y = startY + (row * rowSpacing) + 8;
         
-        // Draw the 10cm line - BOLD
+        // Draw cm tick marks along the line
+        doc.setDrawColor(0, 0, 0);
+        for (let cm = 0; cm <= 15; cm++) {
+          const tickX = x + (cm * 10);
+          if (cm % 5 === 0) {
+            // Major ticks at 0, 5, 10, 15
+            doc.setLineWidth(2);
+            doc.line(tickX, y - 5, tickX, y + 5);
+            doc.setTextColor(0, 0, 0);
+            doc.setFontSize(10);
+            doc.setFont('times', 'bold');
+            doc.text(`${cm}`, tickX, y - 6, { align: 'center' });
+          } else {
+            // Minor ticks every cm
+            doc.setLineWidth(1);
+            doc.line(tickX, y - 3, tickX, y + 3);
+            doc.setFontSize(7);
+            doc.setFont('times', 'bold');
+            doc.text(`${cm}`, tickX, y - 4, { align: 'center' });
+          }
+        }
+        
+        // Draw the 15cm line - BOLD
         doc.setDrawColor(0, 0, 0);
         doc.setLineWidth(4);
         doc.line(x, y, x + lineLength, y);
         
         // End markers (vertical bars)
         doc.setLineWidth(3);
-        doc.line(x, y - 4, x, y + 4);
-        doc.line(x + lineLength, y - 4, x + lineLength, y + 4);
+        doc.line(x, y - 5, x, y + 5);
+        doc.line(x + lineLength, y - 5, x + lineLength, y + 5);
         
-        // Label above line
+        // Label above line (centered)
         doc.setTextColor(0, 0, 0);
         doc.setFontSize(8);
         doc.setFont('times', 'bold');
-        doc.text('10.0 cm', x + (lineLength / 2), y - 2, { align: 'center' });
+        doc.text('15.0 cm', x + (lineLength / 2), y - 8, { align: 'center' });
         
         // Label below line (line number for reference)
         doc.setFontSize(6);
@@ -562,14 +584,14 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
       doc.text('INSTRUCTIONS:', pageWidth / 2, instructY, { align: 'center' });
       doc.setFont('times', 'normal');
       doc.setFontSize(6);
-      doc.text('Cut along dashed lines to separate individual 10cm reference lines • Place beside wound • Photo from directly above', pageWidth / 2, instructY + 4, { align: 'center' });
+      doc.text('Cut along dashed lines to separate individual 15cm reference lines • Place beside wound • Photo from directly above', pageWidth / 2, instructY + 4, { align: 'center' });
     }
 
     // Add professional footer with page numbers and timestamp
     addFooter(doc);
 
     // Save
-    doc.save('UNTH_Wound_Measurement_Reference_Template.pdf');
+    doc.save('UNTH_Wound_Measurement_Reference_15cm_Template.pdf');
   };
 
   const renderBasicInfo = () => (
@@ -765,7 +787,7 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
                     <p className="font-bold text-green-800 mb-1">RECOMMENDED: Reference Paper Method</p>
                     <p className="text-xs text-green-700 mb-2">
                       Place a white paper beside the wound with a bold horizontal line (use a marker or pen).
-                      Write the line length (e.g., "10 cm") clearly next to it for verification.
+                      Write the line length (e.g., "15 cm") clearly next to it for verification.
                     </p>
                     <div className="bg-white rounded p-2 text-xs text-gray-700 mb-3">
                       <p className="font-semibold mb-1">✅ Benefits:</p>
@@ -787,7 +809,7 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
                       <span className="text-lg">⬇️</span>
                     </button>
                     <p className="text-xs text-green-700 mt-2 text-center">
-                      Print on A4 paper • Optional: Laminate for repeated use • Contains 5cm, 10cm, 15cm, 20cm lines
+                      Print on A4 paper • Optional: Laminate for repeated use • Contains 15cm rulers with 1cm grid
                     </p>
                   </div>
                 </div>
@@ -866,8 +888,8 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
                     <p className="text-xs font-semibold text-gray-700 mb-1">💡 Quick Setup Instructions:</p>
                     <ol className="text-xs text-gray-600 space-y-1 list-decimal list-inside">
                       <li>Take a white A4 paper</li>
-                      <li>Draw a bold horizontal line (10 cm recommended) using a black marker</li>
-                      <li>Write "10 cm" or your chosen length clearly next to the line</li>
+                      <li>Draw a bold horizontal line (15 cm recommended) using a black marker</li>
+                      <li>Write "15 cm" or your chosen length clearly next to the line</li>
                       <li>Place the paper flat beside the wound</li>
                       <li>Take the photo ensuring both wound and reference line are visible</li>
                       <li>Keep the camera directly above (perpendicular) for best accuracy</li>
