@@ -6,7 +6,6 @@ import pg from 'pg';
 const { Pool } = pg;
 
 let pool = null;
-
 export function getPool() {
   if (!pool) {
     // Use DATABASE_URL environment variable (set in Vercel dashboard)

@@ -1143,6 +1143,13 @@ export class PlasticSurgeonDB extends Dexie {
 // Create the database instance with error recovery
 export const db = new PlasticSurgeonDB();
 
+// Handle version changes from other tabs gracefully
+db.on('versionchange', () => {
+  db.close();
+  console.log('⚠️ Database updated in another tab, reloading...');
+  window.location.reload();
+});
+
 // Handle database open errors
 db.open().catch(async (error) => {
   console.error('❌ Failed to open database:', error);

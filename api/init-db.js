@@ -475,6 +475,24 @@ async function createTables() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
+    -- Audit Logs table (HIPAA compliance - PHI access tracking)
+    CREATE TABLE IF NOT EXISTS audit_logs (
+      id SERIAL PRIMARY KEY,
+      user_id VARCHAR(100),
+      user_name VARCHAR(255),
+      user_role VARCHAR(100),
+      action VARCHAR(50) NOT NULL,
+      resource_type VARCHAR(100) NOT NULL,
+      resource_id VARCHAR(255) NOT NULL,
+      resource_identifier VARCHAR(255),
+      details TEXT,
+      ip_address VARCHAR(100),
+      timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_audit_logs_user ON audit_logs(user_id);
+    CREATE INDEX IF NOT EXISTS idx_audit_logs_resource ON audit_logs(resource_type, resource_id);
+    CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs(timestamp DESC);
+
     -- Sync Queue table (for offline sync)
     CREATE TABLE IF NOT EXISTS sync_queue (
       id SERIAL PRIMARY KEY,
@@ -842,7 +860,276 @@ async function createTables() {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
+    -- =====================================================
+    -- SOFT TISSUE INFECTION / NEC MODULE
+    -- =====================================================
+    
+    -- STI/NEC Patient Assessments
+    CREATE TABLE IF NOT EXISTS sti_assessments (
+      id SERIAL PRIMARY KEY,
+      patient_id INTEGER REFERENCES patients(id) ON DELETE CASCADE,
+      hospital_number VARCHAR(100),
+      patient_name VARCHAR(255),
+      assessment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      classification VARCHAR(100) NOT NULL,
+      severity VARCHAR(50) NOT NULL,
+      location VARCHAR(100),
+      onset_date DATE,
+      duration_hours INTEGER,
+      clinical_features JSONB DEFAULT '[]',
+      systemic_signs JSONB DEFAULT '[]',
+      vital_signs JSONB DEFAULT '{}',
+      pain_score INTEGER,
+      pain_disproportionate BOOLEAN DEFAULT FALSE,
+      crepitus BOOLEAN DEFAULT FALSE,
+      skin_necrosis BOOLEAN DEFAULT FALSE,
+      hemorrhagic_bullae BOOLEAN DEFAULT FALSE,
+      lrinec_score INTEGER,
+      lrinec_risk VARCHAR(50),
+      lrinec_details JSONB DEFAULT '{}',
+      qsofa_score INTEGER,
+      qsofa_details JSONB DEFAULT '{}',
+      comorbidities JSONB DEFAULT '[]',
+      diabetes BOOLEAN DEFAULT FALSE,
+      diabetes_hba1c DECIMAL(4,1),
+      renal_impairment BOOLEAN DEFAULT FALSE,
+      creatinine DECIMAL(6,2),
+      jaundice BOOLEAN DEFAULT FALSE,
+      bilirubin DECIMAL(6,2),
+      immunosuppressed BOOLEAN DEFAULT FALSE,
+      imaging_ordered JSONB DEFAULT '[]',
+      imaging_findings TEXT,
+      wound_photos JSONB DEFAULT '[]',
+      treatment_stage VARCHAR(100),
+      disposition VARCHAR(100),
+      assessed_by INTEGER REFERENCES users(id),
+      assessed_by_name VARCHAR(255),
+      status VARCHAR(50) DEFAULT 'active',
+      notes TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- STI/NEC Treatment Plans
+    CREATE TABLE IF NOT EXISTS sti_treatment_plans (
+      id SERIAL PRIMARY KEY,
+      assessment_id INTEGER REFERENCES sti_assessments(id) ON DELETE CASCADE,
+      patient_id INTEGER REFERENCES patients(id) ON DELETE CASCADE,
+      hospital_number VARCHAR(100),
+      patient_name VARCHAR(255),
+      protocol_id VARCHAR(100),
+      stage VARCHAR(100),
+      severity VARCHAR(50),
+      antibiotics JSONB DEFAULT '[]',
+      surgical_interventions JSONB DEFAULT '[]',
+      supportive_care JSONB DEFAULT '[]',
+      monitoring_plan JSONB DEFAULT '[]',
+      comorbidity_modifications JSONB DEFAULT '[]',
+      nutrition_plan JSONB DEFAULT '{}',
+      escalation_criteria JSONB DEFAULT '[]',
+      auto_orders_approved BOOLEAN DEFAULT FALSE,
+      approved_by INTEGER REFERENCES users(id),
+      approved_at TIMESTAMP,
+      status VARCHAR(50) DEFAULT 'draft',
+      created_by INTEGER REFERENCES users(id),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- STI/NEC Auto-Generated Orders (prescriptions, labs, procedures)
+    CREATE TABLE IF NOT EXISTS protocol_orders (
+      id SERIAL PRIMARY KEY,
+      treatment_plan_id INTEGER,
+      patient_id INTEGER REFERENCES patients(id) ON DELETE CASCADE,
+      hospital_number VARCHAR(100),
+      patient_name VARCHAR(255),
+      module VARCHAR(50) NOT NULL,
+      order_type VARCHAR(50) NOT NULL,
+      order_category VARCHAR(100),
+      order_details JSONB NOT NULL,
+      priority VARCHAR(50) DEFAULT 'routine',
+      status VARCHAR(50) DEFAULT 'pending_approval',
+      approved_by INTEGER REFERENCES users(id),
+      approved_at TIMESTAMP,
+      executed_at TIMESTAMP,
+      executed_by INTEGER REFERENCES users(id),
+      linked_prescription_id INTEGER,
+      linked_lab_order_id INTEGER,
+      linked_procedure_id INTEGER,
+      tracking_status VARCHAR(50) DEFAULT 'not_started',
+      tracking_notes TEXT,
+      result TEXT,
+      completed_at TIMESTAMP,
+      created_by INTEGER REFERENCES users(id),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- STI/NEC Debridement Records
+    CREATE TABLE IF NOT EXISTS sti_debridements (
+      id SERIAL PRIMARY KEY,
+      assessment_id INTEGER REFERENCES sti_assessments(id) ON DELETE CASCADE,
+      patient_id INTEGER REFERENCES patients(id) ON DELETE CASCADE,
+      hospital_number VARCHAR(100),
+      patient_name VARCHAR(255),
+      debridement_number INTEGER DEFAULT 1,
+      debridement_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      surgeon VARCHAR(255),
+      assistant VARCHAR(255),
+      anesthesia_type VARCHAR(100),
+      findings TEXT,
+      tissue_debrided TEXT,
+      wound_dimensions JSONB DEFAULT '{}',
+      wound_bed_status VARCHAR(100),
+      margins_viable BOOLEAN,
+      cultures_sent BOOLEAN DEFAULT FALSE,
+      estimated_blood_loss INTEGER,
+      dressing_applied VARCHAR(255),
+      vac_applied BOOLEAN DEFAULT FALSE,
+      vac_settings JSONB DEFAULT '{}',
+      next_planned_debridement TIMESTAMP,
+      photos JSONB DEFAULT '[]',
+      complications TEXT,
+      notes TEXT,
+      created_by INTEGER REFERENCES users(id),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- =====================================================
+    -- PRESSURE SORE MANAGEMENT MODULE (enhanced)
+    -- =====================================================
+
+    -- Pressure Sore Wound Records (detailed per-wound tracking)
+    CREATE TABLE IF NOT EXISTS pressure_sore_wounds (
+      id SERIAL PRIMARY KEY,
+      patient_id INTEGER REFERENCES patients(id) ON DELETE CASCADE,
+      assessment_id INTEGER REFERENCES pressure_sore_assessments(id),
+      hospital_number VARCHAR(100),
+      patient_name VARCHAR(255),
+      location VARCHAR(100) NOT NULL,
+      laterality VARCHAR(20),
+      stage VARCHAR(50) NOT NULL,
+      length_cm DECIMAL(6,2),
+      width_cm DECIMAL(6,2),
+      depth_cm DECIMAL(6,2),
+      area_cm2 DECIMAL(8,2),
+      undermining JSONB DEFAULT '{}',
+      tunneling JSONB DEFAULT '{}',
+      wound_bed_tissue JSONB DEFAULT '{}',
+      exudate_amount VARCHAR(50),
+      exudate_type VARCHAR(50),
+      periwound_skin VARCHAR(255),
+      odor BOOLEAN DEFAULT FALSE,
+      pain_score INTEGER,
+      probe_to_bone BOOLEAN DEFAULT FALSE,
+      osteomyelitis_suspected BOOLEAN DEFAULT FALSE,
+      infection_signs JSONB DEFAULT '[]',
+      photos JSONB DEFAULT '[]',
+      dressing_type VARCHAR(255),
+      vac_in_situ BOOLEAN DEFAULT FALSE,
+      treatment_plan_id INTEGER,
+      status VARCHAR(50) DEFAULT 'active',
+      assessed_by INTEGER REFERENCES users(id),
+      assessed_by_name VARCHAR(255),
+      notes TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Pressure Sore Treatment Plans
+    CREATE TABLE IF NOT EXISTS pressure_sore_treatment_plans (
+      id SERIAL PRIMARY KEY,
+      wound_id INTEGER REFERENCES pressure_sore_wounds(id) ON DELETE CASCADE,
+      patient_id INTEGER REFERENCES patients(id) ON DELETE CASCADE,
+      hospital_number VARCHAR(100),
+      patient_name VARCHAR(255),
+      stage VARCHAR(50),
+      severity VARCHAR(50),
+      wound_care_plan JSONB DEFAULT '[]',
+      surgical_plan JSONB DEFAULT '{}',
+      nutrition_plan JSONB DEFAULT '{}',
+      pressure_relief_plan JSONB DEFAULT '[]',
+      antibiotics JSONB DEFAULT '[]',
+      monitoring_plan JSONB DEFAULT '[]',
+      comorbidity_modifications JSONB DEFAULT '[]',
+      flap_options JSONB DEFAULT '[]',
+      auto_orders_approved BOOLEAN DEFAULT FALSE,
+      approved_by INTEGER REFERENCES users(id),
+      approved_at TIMESTAMP,
+      status VARCHAR(50) DEFAULT 'draft',
+      created_by INTEGER REFERENCES users(id),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Pressure Sore Progress Notes
+    CREATE TABLE IF NOT EXISTS pressure_sore_progress (
+      id SERIAL PRIMARY KEY,
+      wound_id INTEGER REFERENCES pressure_sore_wounds(id) ON DELETE CASCADE,
+      patient_id INTEGER REFERENCES patients(id) ON DELETE CASCADE,
+      assessment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      length_cm DECIMAL(6,2),
+      width_cm DECIMAL(6,2),
+      depth_cm DECIMAL(6,2),
+      area_cm2 DECIMAL(8,2),
+      healing_rate_percent DECIMAL(5,2),
+      wound_bed_tissue JSONB DEFAULT '{}',
+      exudate_amount VARCHAR(50),
+      exudate_type VARCHAR(50),
+      periwound_skin VARCHAR(255),
+      infection_signs JSONB DEFAULT '[]',
+      dressing_used VARCHAR(255),
+      dressing_change_notes TEXT,
+      pain_score INTEGER,
+      photos JSONB DEFAULT '[]',
+      braden_score INTEGER,
+      nutritional_intake VARCHAR(100),
+      repositioning_compliance BOOLEAN DEFAULT TRUE,
+      assessed_by INTEGER REFERENCES users(id),
+      assessed_by_name VARCHAR(255),
+      notes TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- CME Completion Records (for both modules)
+    CREATE TABLE IF NOT EXISTS protocol_cme_completions (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      module VARCHAR(50) NOT NULL,
+      article_id VARCHAR(100) NOT NULL,
+      score DECIMAL(5,2),
+      total_questions INTEGER,
+      correct_answers INTEGER,
+      answers JSONB DEFAULT '[]',
+      passed BOOLEAN DEFAULT FALSE,
+      credits_earned DECIMAL(4,1) DEFAULT 0,
+      completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
     -- Clinical indexes for new tables
+    CREATE INDEX IF NOT EXISTS idx_sti_assessments_patient ON sti_assessments(patient_id);
+    CREATE INDEX IF NOT EXISTS idx_sti_assessments_date ON sti_assessments(assessment_date);
+    CREATE INDEX IF NOT EXISTS idx_sti_assessments_classification ON sti_assessments(classification);
+    CREATE INDEX IF NOT EXISTS idx_sti_assessments_status ON sti_assessments(status);
+    CREATE INDEX IF NOT EXISTS idx_sti_treatment_patient ON sti_treatment_plans(patient_id);
+    CREATE INDEX IF NOT EXISTS idx_sti_treatment_assessment ON sti_treatment_plans(assessment_id);
+    CREATE INDEX IF NOT EXISTS idx_protocol_orders_patient ON protocol_orders(patient_id);
+    CREATE INDEX IF NOT EXISTS idx_protocol_orders_module ON protocol_orders(module);
+    CREATE INDEX IF NOT EXISTS idx_protocol_orders_status ON protocol_orders(status);
+    CREATE INDEX IF NOT EXISTS idx_protocol_orders_type ON protocol_orders(order_type);
+    CREATE INDEX IF NOT EXISTS idx_sti_debridements_patient ON sti_debridements(patient_id);
+    CREATE INDEX IF NOT EXISTS idx_sti_debridements_assessment ON sti_debridements(assessment_id);
+    CREATE INDEX IF NOT EXISTS idx_ps_wounds_patient ON pressure_sore_wounds(patient_id);
+    CREATE INDEX IF NOT EXISTS idx_ps_wounds_location ON pressure_sore_wounds(location);
+    CREATE INDEX IF NOT EXISTS idx_ps_wounds_status ON pressure_sore_wounds(status);
+    CREATE INDEX IF NOT EXISTS idx_ps_treatment_wound ON pressure_sore_treatment_plans(wound_id);
+    CREATE INDEX IF NOT EXISTS idx_ps_treatment_patient ON pressure_sore_treatment_plans(patient_id);
+    CREATE INDEX IF NOT EXISTS idx_ps_progress_wound ON pressure_sore_progress(wound_id);
+    CREATE INDEX IF NOT EXISTS idx_ps_progress_date ON pressure_sore_progress(assessment_date);
+    CREATE INDEX IF NOT EXISTS idx_cme_completions_user ON protocol_cme_completions(user_id);
+    CREATE INDEX IF NOT EXISTS idx_cme_completions_module ON protocol_cme_completions(module);
+
     CREATE INDEX IF NOT EXISTS idx_transfusions_patient ON blood_transfusions(patient_id);
     CREATE INDEX IF NOT EXISTS idx_transfusions_date ON blood_transfusions(transfusion_date);
     CREATE INDEX IF NOT EXISTS idx_burns_patient ON burn_patients(patient_id);

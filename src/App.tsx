@@ -48,6 +48,8 @@ const TreatmentPlanBuilder = lazy(() => import('./components/TreatmentPlanBuilde
 const PreoperativePlanningPage = lazy(() => import('./pages/PreoperativePlanningPage'));
 const WoundCarePage = lazy(() => import('./pages/WoundCarePage'));
 const KeloidCarePage = lazy(() => import('./pages/KeloidCarePage'));
+const SoftTissueInfectionPage = lazy(() => import('./pages/SoftTissueInfectionPage'));
+const PressureSorePage = lazy(() => import('./pages/PressureSorePage'));
 const Settings = lazy(() => import('./pages/Settings'));
 
 // Loading fallback component
@@ -170,6 +172,8 @@ function App() {
               <Route path="/burn-care" element={<BurnCarePage />} />
               <Route path="/wound-care" element={<WoundCarePage />} />
               <Route path="/keloid-care" element={<KeloidCarePage />} />
+              <Route path="/soft-tissue-infection" element={<SoftTissueInfectionPage />} />
+              <Route path="/pressure-sore" element={<PressureSorePage />} />
               <Route path="/medical-training" element={<MedicalTrainingPage />} />
               <Route path="/education" element={<Education />} />
               <Route path="/mcq-education" element={<MCQEducation />} />

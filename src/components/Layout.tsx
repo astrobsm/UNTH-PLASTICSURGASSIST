@@ -31,7 +31,9 @@ import {
   ChevronRight,
   Menu,
   X,
-  Syringe
+  Syringe,
+  Bug,
+  Armchair
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import SyncStatusIndicator from './SyncStatusIndicator';
@@ -56,6 +58,8 @@ const navigation = [
   { name: 'Burn Care', href: '/burn-care', icon: Flame },
   { name: 'Wound Care', href: '/wound-care', icon: HeartPulse },
   { name: 'Keloid Care', href: '/keloid-care', icon: Syringe },
+  { name: 'Soft Tissue Infection', href: '/soft-tissue-infection', icon: Bug },
+  { name: 'Pressure Sore', href: '/pressure-sore', icon: Armchair },
   { name: 'Medical Training', href: '/medical-training', icon: BookOpen },
   { name: 'Labs', href: '/labs', icon: FlaskConical },
   { name: 'Patient Education', href: '/patient-education', icon: BookOpenCheck },

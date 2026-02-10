@@ -38,7 +38,7 @@ export async function logAudit(audit: Omit<AuditLog, 'id' | 'timestamp' | 'synce
 
     // Attempt to sync to server
     try {
-      await apiClient.post('/api/audit-logs', auditLog);
+      await apiClient.post('/audit-logs', auditLog);
       
       // Mark as synced
       if (auditLog.id) {
@@ -133,7 +133,7 @@ export async function getPatientAuditLogs(hospitalNumber: string): Promise<Audit
   try {
     // Try to get from server first
     try {
-      const response = await apiClient.get(`/api/audit-logs/patient/${hospitalNumber}`);
+      const response = await apiClient.get(`/audit-logs/patient/${hospitalNumber}`);
       return response.data;
     } catch (error) {
       // Fallback to local data
@@ -176,7 +176,7 @@ export async function getRecentAuditLogs(limit: number = 50): Promise<AuditLog[]
   try {
     // Try to get from server first (admin only)
     try {
-      const response = await apiClient.get(`/api/audit-logs?limit=${limit}`);
+      const response = await apiClient.get(`/audit-logs?limit=${limit}`);
       return response.data;
     } catch (error) {
       // Fallback to local data
@@ -211,7 +211,7 @@ export async function syncAuditLogs(): Promise<{ synced: number; failed: number 
 
     for (const log of unsyncedLogs) {
       try {
-        await apiClient.post('/api/audit-logs', log);
+        await apiClient.post('/audit-logs', log);
         
         if (log.id) {
           await db.audit_logs.update(log.id, { synced: true });

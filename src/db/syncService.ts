@@ -292,24 +292,54 @@ class SyncService {
 
     switch (action) {
       case 'create':
-        const createResponse = await this.apiCall('POST', '/sync/patients', {
-          hospital_number: patient.hospital_number,
-          first_name: patient.first_name,
-          last_name: patient.last_name,
-          date_of_birth: patient.dob,
-          gender: patient.sex,
-          phone: patient.phone,
-          address: patient.address,
-          allergies: patient.allergies,
-          chronic_conditions: patient.comorbidities,
-          primary_diagnosis: (patient as any).primary_diagnosis || (patient as any).diagnosis || ''
-        });
-        
-        // Update local record with server ID
-        await db.patients.update(localId, {
-          serverId: createResponse.patient?.id || createResponse.id,
-          synced: true
-        });
+        try {
+          const createResponse = await this.apiCall('POST', '/sync/patients', {
+            hospital_number: patient.hospital_number,
+            first_name: patient.first_name,
+            last_name: patient.last_name,
+            date_of_birth: patient.dob,
+            gender: patient.sex,
+            phone: patient.phone,
+            address: patient.address,
+            allergies: patient.allergies,
+            chronic_conditions: patient.comorbidities,
+            primary_diagnosis: (patient as any).primary_diagnosis || (patient as any).diagnosis || ''
+          });
+          
+          // Update local record with server ID
+          await db.patients.update(localId, {
+            serverId: createResponse.patient?.id || createResponse.id,
+            synced: true
+          });
+        } catch (error: any) {
+          // Handle 409 conflict - patient already exists on server
+          if (error.message?.includes('already exists') || error.message?.includes('409')) {
+            console.log(`Patient ${patient.hospital_number} already exists on server, resolving conflict...`);
+            try {
+              // Fetch existing patient from server to get server ID
+              const existingResponse = await this.apiCall('GET', `/sync/patients?hospital_number=${encodeURIComponent(patient.hospital_number)}`);
+              const serverPatient = existingResponse.patients?.find(
+                (p: any) => p.hospital_number === patient.hospital_number
+              ) || existingResponse.patient;
+              if (serverPatient) {
+                await db.patients.update(localId, {
+                  serverId: serverPatient.id,
+                  synced: true
+                });
+                console.log(`✅ Conflict resolved for patient ${patient.hospital_number}`);
+              } else {
+                // Mark as synced anyway to prevent retry loops
+                await db.patients.update(localId, { synced: true });
+              }
+            } catch (fetchError) {
+              // Mark as synced to prevent infinite retry loop
+              await db.patients.update(localId, { synced: true });
+              console.warn('Could not fetch existing patient, marking as synced:', fetchError);
+            }
+          } else {
+            throw error; // Re-throw non-conflict errors
+          }
+        }
         break;
 
       case 'update':
