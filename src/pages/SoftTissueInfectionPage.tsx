@@ -555,10 +555,15 @@ const SoftTissueInfectionPage: React.FC = () => {
                 <div className="mt-3 text-xs text-gray-600 flex items-center gap-2">
                   <span className="font-semibold">Disposition:</span>
                   <span className={`px-2 py-0.5 rounded ${
-                    cls.disposition === 'icu' ? 'bg-red-200 text-red-800' :
-                    cls.disposition === 'ward' ? 'bg-blue-200 text-blue-800' :
+                    (cls.severity === 'critical' || cls.severity === 'severe') ? 'bg-red-200 text-red-800' :
+                    cls.severity === 'moderate' ? 'bg-blue-200 text-blue-800' :
                     'bg-green-200 text-green-800'
-                  }`}>{cls.disposition.toUpperCase()}</span>
+                  }`}>{
+                    cls.severity === 'critical' ? 'ICU' :
+                    cls.severity === 'severe' ? 'ICU / HDU' :
+                    cls.severity === 'moderate' ? 'WARD' :
+                    'OUTPATIENT'
+                  }</span>
                 </div>
               </div>
             ))}
