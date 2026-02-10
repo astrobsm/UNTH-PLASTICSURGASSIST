@@ -535,15 +535,15 @@ const PressureSorePage: React.FC = () => {
                   {loc.flapOptions && (
                     <div className="mb-2">
                       <p className="text-xs font-semibold text-purple-700 mb-1">Flap Options:</p>
-                      {loc.flapOptions.map((f: any, i: number) => (
-                        <p key={i} className="text-xs text-gray-600 ml-2">• {f.name}: {f.indication}</p>
+                      {loc.flapOptions.map((f: string, i: number) => (
+                        <p key={i} className="text-xs text-gray-600 ml-2">• {f}</p>
                       ))}
                     </div>
                   )}
-                  {loc.considerations && (
+                  {loc.specialConsiderations && (
                     <div>
                       <p className="text-xs font-semibold text-gray-700 mb-1">Considerations:</p>
-                      {loc.considerations.slice(0, 3).map((c: string, i: number) => (
+                      {loc.specialConsiderations.slice(0, 3).map((c: string, i: number) => (
                         <p key={i} className="text-xs text-gray-500 ml-2">• {c}</p>
                       ))}
                     </div>

@@ -206,7 +206,7 @@ export default async function handler(req, res) {
 }
 
 async function getAllUsers(currentUser, res) {
-  if (!['admin', 'consultant'].includes(currentUser.role)) {
+  if (!['admin', 'super_admin', 'consultant'].includes(currentUser.role)) {
     return res.status(403).json({ error: 'Access denied' });
   }
 
@@ -233,7 +233,7 @@ async function getUser(id, res) {
 }
 
 async function createUser(data, currentUser, res) {
-  if (!['admin', 'consultant'].includes(currentUser.role)) {
+  if (!['admin', 'super_admin', 'consultant'].includes(currentUser.role)) {
     return res.status(403).json({ error: 'Access denied' });
   }
 
@@ -297,7 +297,7 @@ async function createUser(data, currentUser, res) {
 }
 
 async function updateUser(id, data, currentUser, res) {
-  if (currentUser.id !== parseInt(id) && !['admin', 'consultant'].includes(currentUser.role)) {
+  if (currentUser.id !== parseInt(id) && !['admin', 'super_admin', 'consultant'].includes(currentUser.role)) {
     return res.status(403).json({ error: 'Access denied' });
   }
 
@@ -306,7 +306,7 @@ async function updateUser(id, data, currentUser, res) {
   let paramCount = 1;
 
   const allowedFields = ['email', 'full_name'];
-  if (['admin', 'consultant'].includes(currentUser.role)) {
+  if (['admin', 'super_admin', 'consultant'].includes(currentUser.role)) {
     allowedFields.push('role', 'is_active', 'is_approved');
   }
 
@@ -346,7 +346,7 @@ async function updateUser(id, data, currentUser, res) {
 }
 
 async function approveUser(id, currentUser, res) {
-  if (!['admin', 'consultant'].includes(currentUser.role)) {
+  if (!['admin', 'super_admin', 'consultant'].includes(currentUser.role)) {
     return res.status(403).json({ error: 'Access denied' });
   }
 
@@ -377,7 +377,7 @@ async function approveUser(id, currentUser, res) {
 }
 
 async function changePassword(id, data, currentUser, res) {
-  if (currentUser.id !== parseInt(id) && !['admin', 'consultant'].includes(currentUser.role)) {
+  if (currentUser.id !== parseInt(id) && !['admin', 'super_admin', 'consultant'].includes(currentUser.role)) {
     return res.status(403).json({ error: 'Access denied' });
   }
 
@@ -411,7 +411,7 @@ async function changePassword(id, data, currentUser, res) {
 }
 
 async function deleteUser(id, currentUser, res) {
-  if (!['admin'].includes(currentUser.role)) {
+  if (!['admin', 'super_admin'].includes(currentUser.role)) {
     return res.status(403).json({ error: 'Access denied' });
   }
 
@@ -429,7 +429,7 @@ async function deleteUser(id, currentUser, res) {
 }
 
 async function bulkImportUsers(data, currentUser, res) {
-  if (!['admin'].includes(currentUser.role)) {
+  if (!['admin', 'super_admin'].includes(currentUser.role)) {
     return res.status(403).json({ error: 'Access denied. Only administrators can bulk import users.' });
   }
 

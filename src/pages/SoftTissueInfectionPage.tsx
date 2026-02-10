@@ -577,7 +577,7 @@ const SoftTissueInfectionPage: React.FC = () => {
                 <div key={loc.location} className="bg-white border rounded-lg p-4 shadow-sm">
                   <h3 className="font-bold text-gray-800 mb-2">{loc.location}</h3>
                   <div className="space-y-1">
-                    {loc.considerations.map((c, i) => (
+                    {(loc.specialConsiderations || loc.considerations || []).map((c, i) => (
                       <p key={i} className="text-xs text-gray-600 flex items-start gap-1">
                         <ArrowRight className="h-3 w-3 mt-0.5 text-green-600 flex-shrink-0" />
                         {c}
