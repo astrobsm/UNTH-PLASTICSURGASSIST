@@ -36,6 +36,27 @@ async function getAuditLogs(req, res, user) {
     return res.status(403).json({ error: 'Access denied' });
   }
 
+  // Ensure audit_logs table exists
+  try {
+    await query(`
+      CREATE TABLE IF NOT EXISTS audit_logs (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR(100),
+        user_name VARCHAR(255),
+        user_role VARCHAR(100),
+        action VARCHAR(50) NOT NULL,
+        resource_type VARCHAR(100) NOT NULL,
+        resource_id VARCHAR(255) NOT NULL,
+        resource_identifier VARCHAR(255),
+        details TEXT,
+        ip_address VARCHAR(100),
+        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+  } catch (e) {
+    // Table may already exist
+  }
+
   const { limit = 50, patient_id, resource_type, user_id } = req.query;
 
   let sql = `SELECT * FROM audit_logs`;

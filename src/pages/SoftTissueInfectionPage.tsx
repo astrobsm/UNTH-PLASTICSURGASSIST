@@ -394,7 +394,7 @@ const SoftTissueInfectionPage: React.FC = () => {
   // CME QUIZ
   // ============================================
   const submitCME = async () => {
-    const questions = STI_CME_ARTICLE.questions;
+    const questions = STI_CME_ARTICLE.mcqQuestions || [];
     let correct = 0;
     questions.forEach((q, idx) => {
       if (cmeAnswers[idx] === q.correctAnswer) correct++;
@@ -413,8 +413,8 @@ const SoftTissueInfectionPage: React.FC = () => {
           totalQuestions: questions.length,
           correctAnswers: correct,
           answers: cmeAnswers,
-          passed: score >= STI_CME_ARTICLE.passingScore,
-          creditsEarned: score >= STI_CME_ARTICLE.passingScore ? STI_CME_ARTICLE.cmeCredits : 0
+          passed: score >= 70,
+          creditsEarned: score >= 70 ? STI_CME_ARTICLE.cmeCredits : 0
         })
       });
     } catch (err) {
@@ -577,7 +577,7 @@ const SoftTissueInfectionPage: React.FC = () => {
                 <div key={loc.location} className="bg-white border rounded-lg p-4 shadow-sm">
                   <h3 className="font-bold text-gray-800 mb-2">{loc.location}</h3>
                   <div className="space-y-1">
-                    {(loc.specialConsiderations || loc.considerations || []).map((c, i) => (
+                    {(loc.specialConsiderations || []).map((c, i) => (
                       <p key={i} className="text-xs text-gray-600 flex items-start gap-1">
                         <ArrowRight className="h-3 w-3 mt-0.5 text-green-600 flex-shrink-0" />
                         {c}
@@ -1236,16 +1236,12 @@ const SoftTissueInfectionPage: React.FC = () => {
             {PATIENT_EDUCATION.map(edu => (
               <div key={edu.id} className="bg-white border rounded-lg p-6 mb-4 shadow-sm">
                 <h4 className="font-bold text-lg text-gray-800 mb-2">{edu.title}</h4>
-                <p className="text-sm text-gray-600 mb-4">{edu.summary}</p>
+                <p className="text-sm text-gray-600 mb-4">{edu.targetAudience || ''}</p>
                 <div className="space-y-2">
-                  {edu.sections.map((section, i) => (
+                  {(edu.content || []).map((section, i) => (
                     <div key={i} className="border-l-2 border-green-400 pl-4 py-2">
                       <h5 className="font-semibold text-sm">{section.heading}</h5>
-                      <ul className="list-disc list-inside text-sm text-gray-600 mt-1">
-                        {section.points.map((point, j) => (
-                          <li key={j}>{point}</li>
-                        ))}
-                      </ul>
+                      <p className="text-sm text-gray-600 mt-1">{section.body}</p>
                     </div>
                   ))}
                 </div>
@@ -1260,15 +1256,15 @@ const SoftTissueInfectionPage: React.FC = () => {
             </h3>
             {NURSING_PROTOCOLS.map(np => (
               <div key={np.id} className="bg-white border rounded-lg p-6 mb-4 shadow-sm">
-                <h4 className="font-bold text-gray-800 mb-2">{np.title}</h4>
-                <p className="text-sm text-gray-600 mb-3">{np.description}</p>
+                <h4 className="font-bold text-gray-800 mb-2">{np.topic}</h4>
+                <p className="text-sm text-gray-600 mb-3">{np.objectives?.join('; ') || ''}</p>
                 <div className="space-y-3">
-                  {np.steps.map((step, i) => (
+                  {(np.procedures || []).map((step, i) => (
                     <div key={i} className="flex gap-3 items-start">
                       <span className="flex-shrink-0 w-6 h-6 bg-green-100 text-green-700 rounded-full flex items-center justify-center text-xs font-bold">{i + 1}</span>
                       <div>
-                        <p className="text-sm font-medium">{step.action}</p>
-                        <p className="text-xs text-gray-500">{step.rationale}</p>
+                        <p className="text-sm font-medium">{step.name}</p>
+                        <p className="text-xs text-gray-500">{step.steps?.join(' → ') || ''}</p>
                         {step.frequency && <p className="text-xs text-blue-600">Frequency: {step.frequency}</p>}
                       </div>
                     </div>
@@ -1291,17 +1287,17 @@ const SoftTissueInfectionPage: React.FC = () => {
               <div>
                 <h2 className="text-xl font-bold">{STI_CME_ARTICLE.title}</h2>
                 <p className="text-sm text-gray-500">
-                  {STI_CME_ARTICLE.cmeCredits} CME Credits | Passing Score: {STI_CME_ARTICLE.passingScore}% | {STI_CME_ARTICLE.questions.length} Questions
+                  {STI_CME_ARTICLE.cmeCredits} CME Credits | Passing Score: 70% | {STI_CME_ARTICLE.mcqQuestions.length} Questions
                 </p>
               </div>
             </div>
 
             {/* Article Content */}
             <div className="prose prose-sm max-w-none mb-8">
-              {STI_CME_ARTICLE.content.map((section, i) => (
+              {(STI_CME_ARTICLE.sections || []).map((section, i) => (
                 <div key={i} className="mb-4">
                   <h3 className="text-lg font-bold text-gray-800">{section.heading}</h3>
-                  <p className="text-gray-700">{section.text}</p>
+                  <p className="text-gray-700 whitespace-pre-line">{section.content}</p>
                 </div>
               ))}
             </div>
@@ -1309,7 +1305,7 @@ const SoftTissueInfectionPage: React.FC = () => {
             {/* MCQ Questions */}
             <div className="border-t pt-6">
               <h3 className="text-lg font-bold mb-4">Assessment Questions</h3>
-              {STI_CME_ARTICLE.questions.map((q, qIdx) => (
+              {STI_CME_ARTICLE.mcqQuestions.map((q, qIdx) => (
                 <div key={qIdx} className={`mb-6 p-4 rounded-lg ${
                   cmeSubmitted
                     ? cmeAnswers[qIdx] === q.correctAnswer ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'
@@ -1337,15 +1333,15 @@ const SoftTissueInfectionPage: React.FC = () => {
               ))}
 
               {!cmeSubmitted ? (
-                <button onClick={submitCME} disabled={Object.keys(cmeAnswers).length < STI_CME_ARTICLE.questions.length}
+                <button onClick={submitCME} disabled={Object.keys(cmeAnswers).length < STI_CME_ARTICLE.mcqQuestions.length}
                   className="w-full py-3 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 disabled:opacity-50 font-semibold">
-                  Submit Assessment ({Object.keys(cmeAnswers).length}/{STI_CME_ARTICLE.questions.length} answered)
+                  Submit Assessment ({Object.keys(cmeAnswers).length}/{STI_CME_ARTICLE.mcqQuestions.length} answered)
                 </button>
               ) : (
-                <div className={`p-4 rounded-lg text-center ${cmeScore >= STI_CME_ARTICLE.passingScore ? 'bg-green-100' : 'bg-red-100'}`}>
+                <div className={`p-4 rounded-lg text-center ${cmeScore >= 70 ? 'bg-green-100' : 'bg-red-100'}`}>
                   <p className="text-2xl font-bold">{cmeScore}%</p>
-                  <p className="text-sm">{cmeScore >= STI_CME_ARTICLE.passingScore ? `Passed! You earned ${STI_CME_ARTICLE.cmeCredits} CME credits.` : `Score below passing grade (${STI_CME_ARTICLE.passingScore}%). Please review and retry.`}</p>
-                  {cmeScore < STI_CME_ARTICLE.passingScore && (
+                  <p className="text-sm">{cmeScore >= 70 ? `Passed! You earned ${STI_CME_ARTICLE.cmeCredits} CME credits.` : `Score below passing grade (70%). Please review and retry.`}</p>
+                  {cmeScore < 70 && (
                     <button onClick={() => { setCmeSubmitted(false); setCmeAnswers({}); setCmeScore(0); }}
                       className="mt-3 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">Retry Assessment</button>
                   )}
