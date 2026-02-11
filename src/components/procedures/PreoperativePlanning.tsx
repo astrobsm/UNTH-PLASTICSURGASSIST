@@ -884,8 +884,7 @@ export const PreoperativePlanning: React.FC<PreoperativePlanningProps> = ({
               onClick={onClose}
               className="text-white hover:text-green-200"
             >
-              âœ-
-            </button>
+              </button>
           )}
         </div>
       </div>
@@ -1180,7 +1179,7 @@ export const PreoperativePlanning: React.FC<PreoperativePlanningProps> = ({
                           ...prev,
                           renal: { ...prev.renal, lastEGFR: e.target.value }
                         }))}
-                        placeholder="mL/min/1.73mÂ²"
+                        placeholder="mL/min/1.73m²"
                         className="w-full px-3 py-2 border rounded"
                       />
                     </div>
@@ -1452,9 +1451,9 @@ export const PreoperativePlanning: React.FC<PreoperativePlanningProps> = ({
                   return (
                     <div key={category} className="p-4">
                       <h4 className="font-medium text-gray-700 mb-3 capitalize">
-                        {category === 'laboratory' ? 'ðŸ§ª Laboratory' :
-                         category === 'cardiac' ? 'â¤ï¸ Cardiac' :
-                         category === 'imaging' ? 'ðŸ“· Imaging' : 'ðŸ“‹ Other'}
+                        {category === 'laboratory' ? 'Laboratory' :
+                         category === 'cardiac' ? 'Cardiac' :
+                         category === 'imaging' ? 'Imaging' : 'Other'}
                       </h4>
                       <div className="space-y-2">
                         {categoryInvestigations.map(inv => (

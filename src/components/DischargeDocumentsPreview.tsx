@@ -21,12 +21,12 @@ export default function DischargeDocumentsPreview({
   const [downloadedDocs, setDownloadedDocs] = useState<Set<DocumentType>>(new Set());
   const previewRef = useRef<HTMLDivElement>(null);
 
-  const documents: { type: DocumentType; name: string; icon: string }[] = [
-    { type: 'summary', name: 'Discharge Summary', icon: 'ðŸ“‹' },
-    { type: 'fitness', name: 'Fitness Report', icon: 'âœ…' },
-    { type: 'instructions', name: 'Discharge Instructions', icon: 'ðŸ“' },
-    { type: 'meal_plan', name: '7-Day Meal Plan', icon: 'ðŸ½ï¸' },
-    { type: 'all', name: 'Complete Package', icon: 'ðŸ“¦' }
+  const documents: { type: DocumentType; name: string }[] = [
+    { type: 'summary', name: 'Discharge Summary' },
+    { type: 'fitness', name: 'Fitness Report' },
+    { type: 'instructions', name: 'Discharge Instructions' },
+    { type: 'meal_plan', name: '7-Day Meal Plan' },
+    { type: 'all', name: 'Complete Package' }
   ];
 
   // Hospital header for documents
@@ -111,7 +111,7 @@ export default function DischargeDocumentsPreview({
           <ul className="mt-1">
             {discharge.follow_up_appointments?.map((apt, i) => (
               <li key={i}>
-                ðŸ“… {format(new Date(apt.date), 'dd MMM yyyy')} - {apt.clinic}: {apt.purpose}
+                {format(new Date(apt.date), 'dd MMM yyyy')} - {apt.clinic}: {apt.purpose}
               </li>
             ))}
           </ul>
@@ -221,7 +221,7 @@ export default function DischargeDocumentsPreview({
         {discharge.wound_care_instructions && (
           <div>
             <h4 className="font-semibold text-purple-700 border-b pb-1 flex items-center gap-2">
-              ðŸ©¹ WOUND CARE
+              WOUND CARE
             </h4>
             <div className="mt-2 whitespace-pre-line bg-gray-50 p-3 rounded">
               {discharge.wound_care_instructions}
@@ -232,7 +232,7 @@ export default function DischargeDocumentsPreview({
         {/* Medications */}
         <div>
           <h4 className="font-semibold text-purple-700 border-b pb-1 flex items-center gap-2">
-            ðŸ’Š MEDICATIONS
+            MEDICATIONS
           </h4>
           <p className="text-xs text-gray-600 mt-1">Take the following medications exactly as prescribed:</p>
           <div className="mt-2 space-y-2">
@@ -252,13 +252,12 @@ export default function DischargeDocumentsPreview({
         {discharge.lifestyle_modifications && discharge.lifestyle_modifications.length > 0 && (
           <div>
             <h4 className="font-semibold text-purple-700 border-b pb-1 flex items-center gap-2">
-              ðŸƒ LIFESTYLE MODIFICATIONS
+              LIFESTYLE MODIFICATIONS
             </h4>
             <ul className="mt-2 space-y-1">
               {discharge.lifestyle_modifications.map((mod, i) => (
                 <li key={i} className="flex items-start gap-2">
-                  <span className="text-green-600">âœ“</span>
-                  <span>{mod}</span>
+                  <span className="text-green-600">{mod}</span>
                 </li>
               ))}
             </ul>
@@ -269,13 +268,12 @@ export default function DischargeDocumentsPreview({
         {discharge.activity_restrictions && discharge.activity_restrictions.length > 0 && (
           <div>
             <h4 className="font-semibold text-purple-700 border-b pb-1 flex items-center gap-2">
-              ðŸš« ACTIVITY RESTRICTIONS
+              ACTIVITY RESTRICTIONS
             </h4>
             <ul className="mt-2 space-y-1">
               {discharge.activity_restrictions.map((r, i) => (
                 <li key={i} className="flex items-start gap-2">
-                  <span className="text-red-600">â›”</span>
-                  <span>{r}</span>
+                  <span className="text-red-600">{r}</span>
                 </li>
               ))}
             </ul>
@@ -285,13 +283,12 @@ export default function DischargeDocumentsPreview({
         {/* Warning Signs */}
         <div className="bg-red-50 p-3 rounded border border-red-200">
           <h4 className="font-semibold text-red-700 flex items-center gap-2">
-            âš ï¸ RETURN TO HOSPITAL IMMEDIATELY IF YOU EXPERIENCE:
+             RETURN TO HOSPITAL IMMEDIATELY IF YOU EXPERIENCE:
           </h4>
           <ul className="mt-2 space-y-1">
             {discharge.warning_signs?.map((sign, i) => (
               <li key={i} className="flex items-start gap-2">
-                <span className="text-red-600">ðŸš¨</span>
-                <span>{sign}</span>
+                <span className="text-red-600">{sign}</span>
               </li>
             ))}
           </ul>
@@ -300,13 +297,12 @@ export default function DischargeDocumentsPreview({
         {/* Follow-up */}
         <div className="bg-blue-50 p-3 rounded border border-blue-200">
           <h4 className="font-semibold text-blue-700 flex items-center gap-2">
-            ðŸ“… FOLLOW-UP APPOINTMENTS
+            FOLLOW-UP APPOINTMENTS
           </h4>
           <div className="mt-2 space-y-2">
             {discharge.follow_up_appointments?.map((apt, i) => (
               <div key={i} className="flex items-center gap-2">
-                <span className="text-blue-600">ðŸ“Œ</span>
-                <span><strong>{format(new Date(apt.date), 'EEE, dd MMM yyyy')}</strong> at {apt.clinic}</span>
+                <span className="text-blue-600"><strong>{format(new Date(apt.date), 'EEE, dd MMM yyyy')}</strong> at {apt.clinic}</span>
               </div>
             ))}
           </div>
@@ -338,10 +334,10 @@ export default function DischargeDocumentsPreview({
           {/* Special Considerations */}
           {discharge.meal_plan_7_day.special_considerations.length > 0 && (
             <div className="bg-blue-50 p-3 rounded border border-blue-200">
-              <h4 className="font-semibold text-blue-700">ðŸ“Œ Special Dietary Considerations:</h4>
+              <h4 className="font-semibold text-blue-700">Special Dietary Considerations:</h4>
               <ul className="mt-1">
                 {discharge.meal_plan_7_day.special_considerations.map((c, i) => (
-                  <li key={i}>â€¢ {c}</li>
+                  <li key={i}> {c}</li>
                 ))}
               </ul>
             </div>
@@ -350,7 +346,7 @@ export default function DischargeDocumentsPreview({
           {/* Foods to Avoid */}
           {discharge.meal_plan_7_day.foods_to_avoid.length > 0 && (
             <div className="bg-red-50 p-3 rounded border border-red-200">
-              <h4 className="font-semibold text-red-700">ðŸš« Foods to Avoid:</h4>
+              <h4 className="font-semibold text-red-700">Foods to Avoid:</h4>
               <p className="mt-1">{discharge.meal_plan_7_day.foods_to_avoid.join(', ')}</p>
             </div>
           )}
@@ -388,7 +384,7 @@ export default function DischargeDocumentsPreview({
 
           {/* Hydration */}
           <div className="bg-cyan-50 p-3 rounded border border-cyan-200">
-            <h4 className="font-semibold text-cyan-700">ðŸ’§ Hydration Goals:</h4>
+            <h4 className="font-semibold text-cyan-700">Hydration Goals:</h4>
             <p>{discharge.meal_plan_7_day.hydration_goals}</p>
           </div>
         </div>
@@ -784,7 +780,7 @@ Follow-up: ${discharge.follow_up_appointments?.map(a => `${format(new Date(a.dat
     <div className="space-y-6">
       {/* Header */}
       <div className="bg-gradient-to-r from-green-500 to-green-600 text-white p-4 rounded-lg">
-        <h3 className="text-xl font-bold">ðŸ“„ Discharge Documents</h3>
+        <h3 className="text-xl font-bold">Discharge Documents</h3>
         <p className="text-green-100 mt-1">Preview and download discharge documents for {discharge.patient_name}</p>
       </div>
 
@@ -800,9 +796,8 @@ Follow-up: ${discharge.follow_up_appointments?.map(a => `${format(new Date(a.dat
                 : 'bg-white text-gray-700 hover:bg-gray-50'
             }`}
           >
-            <span>{doc.icon}</span>
             <span className="hidden sm:inline">{doc.name}</span>
-            {downloadedDocs.has(doc.type) && <span className="text-xs">âœ“</span>}
+            {downloadedDocs.has(doc.type) && <span className="text-xs text-green-500">✓</span>}
           </button>
         ))}
       </div>
@@ -831,7 +826,7 @@ Follow-up: ${discharge.follow_up_appointments?.map(a => `${format(new Date(a.dat
             disabled={isGenerating}
             className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 disabled:opacity-50"
           >
-            {isGenerating ? 'â³ Generating...' : 'ðŸ“¥ Download PDF'}
+            {isGenerating ? 'Generating...' : 'Download PDF'}
           </button>
           <button            onClick={generateThermalPDF}
             className="px-6 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 flex items-center gap-2"
@@ -842,13 +837,13 @@ Follow-up: ${discharge.follow_up_appointments?.map(a => `${format(new Date(a.dat
           <button            onClick={() => shareDocument('whatsapp')}
             className="px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 flex items-center gap-2"
           >
-            ðŸ“± Share via WhatsApp
+            Share via WhatsApp
           </button>
           <button
             onClick={() => shareDocument('email')}
             className="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center gap-2"
           >
-            âœ‰ï¸ Share via Email
+            Share via Email
           </button>
         </div>
       </div>
@@ -859,13 +854,13 @@ Follow-up: ${discharge.follow_up_appointments?.map(a => `${format(new Date(a.dat
           onClick={onBack}
           className="px-6 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
         >
-          â† Back
+           Back
         </button>
         <button
           onClick={onComplete}
           className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700"
         >
-          âœ… Complete Discharge
+          Complete Discharge
         </button>
       </div>
     </div>

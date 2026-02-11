@@ -840,7 +840,7 @@ export default function ShoppingList() {
               <div className="flex items-start justify-between mb-2">
                 <div>
                   <h2 className="text-xl font-bold mb-1">
-                    {shareAction === 'thermal' ? 'ðŸ–¨ï¸ Thermal Print - Select Patient' : 'Select Patient'}
+                    {shareAction === 'thermal' ? 'Thermal Print - Select Patient' : 'Select Patient'}
                   </h2>
                   <p className={`${shareAction === 'thermal' ? 'text-gray-300' : 'text-green-100'} text-sm`}>
                     {shareAction === 'thermal' 
@@ -857,8 +857,7 @@ export default function ShoppingList() {
                   }}
                   className="text-white hover:text-gray-200"
                 >
-                  âœ-
-                </button>
+                  </button>
               </div>
               <div className={`mt-4 text-sm ${shareAction === 'thermal' ? 'text-gray-300' : 'text-green-100'}`}>
                 <strong>Items:</strong> {selectedItems.length} selected
@@ -957,7 +956,7 @@ export default function ShoppingList() {
                           </div>
                           <div className="flex gap-4 mt-1 text-xs text-gray-500">
                             <span>{patient.gender}</span>
-                            {patient.phone && <span>ðŸ“ž {patient.phone}</span>}
+                            {patient.phone && <span>{patient.phone}</span>}
                           </div>
                         </div>
                       </div>

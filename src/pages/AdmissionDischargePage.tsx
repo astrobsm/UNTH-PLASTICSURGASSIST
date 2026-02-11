@@ -62,7 +62,7 @@ export default function AdmissionDischargePage() {
     setLoading(true);
     try {
       // First, sync any unsynced admissions
-      console.log('ðŸ”„ Checking for unsynced admissions...');
+      console.log('Checking for unsynced admissions...');
       await admissionDischargeService.syncUnsyncedAdmissions();
       
       // Then load all data
@@ -76,7 +76,7 @@ export default function AdmissionDischargePage() {
       setActiveAdmissions(admissionsData);
       setDischarges(dischargesData);
       setStatistics(statsData);
-      console.log('âœ… Data loaded successfully');
+      console.log('Data loaded successfully');
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -102,11 +102,11 @@ export default function AdmissionDischargePage() {
         {/* Tabs */}
         <div className="flex flex-wrap border-b border-gray-200 bg-gray-50">
           {[
-            { id: 'active', label: 'ðŸ¥ Active Patients', count: activeAdmissions.length },
-            { id: 'admit', label: 'âž- New Admission' },
-            { id: 'discharge', label: 'ðŸšª Discharge Patient' },
-            { id: 'history', label: 'ðŸ“‹ Discharge History' },
-            { id: 'stats', label: 'ðŸ“Š Statistics' }
+            { id: 'active', label: 'Active Patients', count: activeAdmissions.length },
+            { id: 'admit', label: 'New Admission' },
+            { id: 'discharge', label: 'Discharge Patient' },
+            { id: 'history', label: 'Discharge History' },
+            { id: 'stats', label: 'Statistics' }
           ].map(tab => (
             <button
               key={tab.id}
@@ -217,7 +217,7 @@ function ActivePatientsTab({ admissions, searchTerm, setSearchTerm, onDischarge,
           onClick={onRefresh}
           className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
         >
-          ðŸ”„ Refresh
+          Refresh
         </button>
       </div>
 
@@ -391,7 +391,7 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
         setSelectedHouseOfficer(suggestions.house_officer.id);
       }
 
-      console.log('âœ… Medical team loaded and auto-assigned');
+      console.log('Medical team loaded and auto-assigned');
     } catch (error) {
       console.error('Error loading medical team:', error);
     } finally {
@@ -474,7 +474,7 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
     <form onSubmit={handleSubmit} className="space-y-6">
       {/* Patient Selection */}
       <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-        <h3 className="text-lg font-semibold text-blue-900 mb-4">ðŸ‘¤ Patient Selection</h3>
+        <h3 className="text-lg font-semibold text-blue-900 mb-4">Patient Selection</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -509,7 +509,7 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
 
       {/* Admission Details */}
       <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">ðŸ¥ Admission Details</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Admission Details</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -563,14 +563,14 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
       {/* Medical Team Assignment */}
       <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-purple-900">ðŸ‘¥ Medical Team Assignment</h3>
+          <h3 className="text-lg font-semibold text-purple-900">Medical Team Assignment</h3>
           <button
             type="button"
             onClick={loadMedicalTeam}
             className="text-sm px-3 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200"
             disabled={loadingTeam}
           >
-            {loadingTeam ? 'â³ Loading...' : 'ðŸ”„ Refresh & Auto-Assign'}
+            {loadingTeam ? 'Loading...' : 'Refresh & Auto-Assign'}
           </button>
         </div>
         <p className="text-sm text-purple-700 mb-4">
@@ -660,12 +660,12 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
 
       {/* Route of Admission */}
       <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">ðŸš‘ Route of Admission</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Route of Admission</h3>
         <div className="flex gap-6 mb-4">
           {[
-            { value: 'clinic', label: 'Clinic', icon: 'ðŸª' },
-            { value: 'emergency', label: 'Emergency', icon: 'ðŸš¨' },
-            { value: 'consult_transfer', label: 'Consult Transfer', icon: 'ðŸ”„' }
+            { value: 'clinic', label: 'Clinic' },
+            { value: 'emergency', label: 'Emergency' },
+            { value: 'consult_transfer', label: 'Consult Transfer' }
           ].map(route => (
             <label key={route.value} className="flex items-center cursor-pointer">
               <input
@@ -675,7 +675,7 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
                 onChange={(e) => setRouteOfAdmission(e.target.value as any)}
                 className="mr-2 text-green-600"
               />
-              <span>{route.icon} {route.label}</span>
+              <span>{route.label}</span>
             </label>
           ))}
         </div>
@@ -714,7 +714,7 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
 
       {/* Clinical Assessment */}
       <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">ðŸ“‹ Clinical Assessment</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Clinical Assessment</h3>
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -756,10 +756,10 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
 
       {/* Vital Signs */}
       <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">ðŸ’“ Vital Signs</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Vital Signs</h3>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Temp (Â°C)</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Temp (°C)</label>
             <input type="number" step="0.1" value={temperature} onChange={(e) => setTemperature(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="37.0" />
           </div>
@@ -789,7 +789,7 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
       {/* Medical History (Collapsible) */}
       <details className="bg-gray-50 p-4 rounded-lg border border-gray-200">
         <summary className="text-lg font-semibold text-gray-900 cursor-pointer">
-          ðŸ“ Medical History (Optional)
+          Medical History (Optional)
         </summary>
         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
@@ -829,7 +829,7 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
       <div className="flex justify-end gap-4">
         <button type="submit" disabled={loading}
           className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400">
-          {loading ? 'Admitting...' : 'âœ… Admit Patient'}
+          {loading ? 'Admitting...' : 'Admit Patient'}
         </button>
       </div>
     </form>
@@ -925,7 +925,7 @@ function DischargeTab({ activeAdmissions, onSuccess }: DischargeTabProps) {
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold ${
                   currentStep >= step.num ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-600'
                 }`}>
-                  {currentStep > step.num ? 'âœ“' : step.num}
+                  {currentStep > step.num ? '✓' : step.num}
                 </div>
                 <span className={`mt-1 text-xs ${currentStep >= step.num ? 'text-green-600' : 'text-gray-500'}`}>
                   {step.title}
@@ -1034,7 +1034,7 @@ function DischargeStep1SelectPatient({ admissions, selectedAdmission, onSelect, 
           disabled={!selectedAdmission}
           className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400"
         >
-          Next: WHO Assessment â†’
+          Next: WHO Assessment 
         </button>
       </div>
     </div>
@@ -1068,7 +1068,7 @@ function DischargeHistoryTab({ discharges, onRefresh }: DischargeHistoryTabProps
           onChange={(e) => setSearchTerm(e.target.value)}
           className="flex-1 px-4 py-2 border border-gray-300 rounded-lg"
         />
-        <button onClick={onRefresh} className="px-4 py-2 bg-gray-100 rounded-lg">ðŸ”„ Refresh</button>
+        <button onClick={onRefresh} className="px-4 py-2 bg-gray-100 rounded-lg">Refresh</button>
       </div>
 
       <div className="overflow-x-auto rounded-lg border border-gray-200">
@@ -1110,7 +1110,7 @@ function DischargeHistoryTab({ discharges, onRefresh }: DischargeHistoryTabProps
                   <td className="px-4 py-3 text-sm">{discharge.length_of_stay_days}d</td>
                   <td className="px-4 py-3 text-sm">
                     <button className="text-blue-600 hover:text-blue-800 mr-2">View</button>
-                    <button className="text-green-600 hover:text-green-800">ðŸ“„ PDF</button>
+                    <button className="text-green-600 hover:text-green-800">PDF</button>
                   </td>
                 </tr>
               ))

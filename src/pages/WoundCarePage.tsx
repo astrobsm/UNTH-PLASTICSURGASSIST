@@ -597,11 +597,11 @@ const WoundCarePage: React.FC = () => {
       
       if (protocolType === 'graft') {
         const warnings = [
-          'â€¢ Handle graft site with extreme care',
-          'â€¢ Do not apply excessive pressure',
-          'â€¢ Monitor for graft failure signs',
+          ' Handle graft site with extreme care',
+          ' Do not apply excessive pressure',
+          ' Monitor for graft failure signs',
           '  (discoloration, separation)',
-          'â€¢ Next dressing: Day 7'
+          ' Next dressing: Day 7'
         ];
         warnings.forEach(w => {
           doc.text(w, margin, yPos);
@@ -609,7 +609,7 @@ const WoundCarePage: React.FC = () => {
         });
       } else {
         // Donor site specific warnings
-        const warnings = DONOR_SITE_WARNINGS.map(w => `âš ï¸ ${w}`);
+        const warnings = DONOR_SITE_WARNINGS.map(w => `* ¸ ${w}`);
         warnings.forEach(w => {
           const lines = doc.splitTextToSize(w, thermalWidth - margin * 2 - 2);
           lines.forEach((line: string) => {
@@ -1147,7 +1147,7 @@ const WoundCarePage: React.FC = () => {
           </div>
           {formData.length > 0 && formData.width > 0 && (
             <p className="text-sm text-gray-500 mt-2">
-              Area: {calculateArea(formData.length, formData.width)} cmÂ²
+              Area: {calculateArea(formData.length, formData.width)} cm²
             </p>
           )}
         </div>
@@ -1438,7 +1438,7 @@ const WoundCarePage: React.FC = () => {
               </div>
               <div className="bg-gray-50 p-2 rounded-lg">
                 <p className="text-lg font-bold">{assessment.area.toFixed(1)}</p>
-                <p className="text-xs text-gray-500">Area (cmÂ²)</p>
+                <p className="text-xs text-gray-500">Area (cm²)</p>
               </div>
             </div>
           </div>
@@ -1500,14 +1500,14 @@ const WoundCarePage: React.FC = () => {
                 onClick={() => generateThermalProtocolPDF(assessment, 'graft')}
                 className="flex items-center px-3 py-2 bg-white border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-50"
               >
-                ðŸ©¹ Graft Site
+                Graft Site
                 <Printer className="w-4 h-4 ml-2" />
               </button>
               <button
                 onClick={() => generateThermalProtocolPDF(assessment, 'donor')}
                 className="flex items-center px-3 py-2 bg-white border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-50"
               >
-                ðŸ¥ Donor Site
+                Donor Site
                 <Printer className="w-4 h-4 ml-2" />
               </button>
             </div>
@@ -1596,7 +1596,7 @@ const WoundCarePage: React.FC = () => {
                       <h3 className="font-semibold">{assessment.patient_name}</h3>
                       <p className="text-sm text-gray-500">{assessment.location} - {assessment.wound_type}</p>
                       <p className="text-xs text-gray-400 mt-1">
-                        {assessment.length} x {assessment.width} cm | Area: {assessment.area} cmÂ²
+                        {assessment.length} x {assessment.width} cm | Area: {assessment.area} cm²
                       </p>
                     </div>
                     <div className="text-right">

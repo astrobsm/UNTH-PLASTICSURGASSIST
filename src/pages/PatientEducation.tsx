@@ -306,7 +306,7 @@ export default function PatientEducation() {
               'Inability to urinate after 8 hours',
               'Severe nausea or vomiting',
               'Loss of bowel or bladder control',
-              'Fever above 38Â°C (100.4Â°F)'
+              'Fever above 38°C (100.4°F)'
             ]
           }
         ],
@@ -513,7 +513,7 @@ export default function PatientEducation() {
             points: [
               'Foul-smelling drainage from graft or donor site',
               'Increasing redness, warmth, or swelling',
-              'Fever above 38Â°C (100.4Â°F)',
+              'Fever above 38°C (100.4°F)',
               'Graft appears dark, black, or blue',
               'Separation of graft from wound bed',
               'Severe or worsening pain not controlled by medication',
@@ -623,7 +623,7 @@ export default function PatientEducation() {
           {
             title: 'Warning Signs - Seek Medical Attention:',
             points: [
-              'Fever above 38Â°C (100.4Â°F)',
+              'Fever above 38°C (100.4°F)',
               'Increasing redness, warmth, or swelling at incision',
               'Pus or foul-smelling drainage from wound',
               'Wound edges separating or opening',
@@ -1151,7 +1151,7 @@ export default function PatientEducation() {
             points: [
               'Increasing pain, redness, or swelling around wound',
               'Yellow, green, or foul-smelling discharge',
-              'Fever above 38Â°C (100.4Â°F)',
+              'Fever above 38°C (100.4°F)',
               'Wound edges separating or opening',
               'Black or dark tissue appearing in wound',
               'Excessive bleeding that does not stop',
@@ -1919,7 +1919,7 @@ export default function PatientEducation() {
               'Increased redness or warmth around wound',
               'Swelling that is worsening',
               'Yellow, green, or foul-smelling drainage',
-              'Fever above 38Â°C (100.4Â°F)',
+              'Fever above 38°C (100.4°F)',
               'Red streaks spreading from wound',
               'Feeling generally unwell or weak'
             ]
@@ -2035,7 +2035,7 @@ export default function PatientEducation() {
           {
             title: 'Emergency Warning Signs - Return to Hospital If:',
             points: [
-              'Fever above 38Â°C (100.4Â°F) that does not resolve',
+              'Fever above 38°C (100.4°F) that does not resolve',
               'Increasing pain not controlled by medication',
               'Signs of wound infection (redness, swelling, discharge)',
               'Graft or flap appears dark, blue, or black',
@@ -2432,7 +2432,7 @@ export default function PatientEducation() {
     doc.setFont('times', 'normal');
     doc.setTextColor(0, 0, 0);
     topic.content.keyPoints.forEach((point) => {
-      doc.text(clean(`âœ“ ${point}`), margin + 5, yPos);
+      doc.text(clean(`${point}`), margin + 5, yPos);
       yPos += 5;
     });
     yPos += 10;
@@ -2716,8 +2716,7 @@ export default function PatientEducation() {
                   onClick={() => setSelectedTopic(null)}
                   className="text-gray-400 hover:text-gray-600"
                 >
-                  âœ-
-                </button>
+                  </button>
               </div>
             </div>
 
@@ -2732,7 +2731,7 @@ export default function PatientEducation() {
                   <ul className="space-y-2">
                     {section.points.map((point, pidx) => (
                       <li key={pidx} className="flex gap-2 text-gray-700">
-                        <span className="text-green-600 mt-1">â€¢</span>
+                        <span className="text-green-600 mt-1"></span>
                         <span>{point}</span>
                       </li>
                     ))}
@@ -2745,7 +2744,6 @@ export default function PatientEducation() {
                 <ul className="space-y-1">
                   {selectedTopicData.content.keyPoints.map((point, idx) => (
                     <li key={idx} className="flex gap-2 text-green-700 text-sm">
-                      <span>âœ“</span>
                       <span>{point}</span>
                     </li>
                   ))}
@@ -2814,8 +2812,7 @@ export default function PatientEducation() {
                   }}
                   className="text-white hover:text-green-100"
                 >
-                  âœ-
-                </button>
+                  </button>
               </div>
               <div className="mt-4 text-sm text-green-100">
                 <strong>Topic:</strong> {pendingTopicForPDF.title}
@@ -2868,7 +2865,7 @@ export default function PatientEducation() {
                           </div>
                           <div className="flex gap-4 mt-1 text-xs text-gray-500">
                             <span>{patient.gender || patient.sex || 'N/A'}</span>
-                            {patient.phone && <span>ðŸ“ž {patient.phone}</span>}
+                            {patient.phone && <span>{patient.phone}</span>}
                           </div>
                         </div>
                       </div>

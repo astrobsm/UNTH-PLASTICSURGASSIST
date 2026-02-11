@@ -116,7 +116,7 @@ export const PatientProfile: React.FC = () => {
   if (!patient) {
     return (
       <div className="p-8 text-center">
-        <div className="text-gray-400 text-6xl mb-4">ðŸ‘¤</div>
+        <div className="text-gray-400 text-6xl mb-4"></div>
         <h2 className="text-xl font-semibold text-gray-900 mb-2">Patient Not Found</h2>
         <p className="text-gray-600">The patient you're looking for doesn't exist or has been removed.</p>
       </div>
@@ -124,13 +124,13 @@ export const PatientProfile: React.FC = () => {
   }
 
   const tabs = [
-    { id: 'summary', name: 'Summary', icon: 'ðŸ“Š' },
-    { id: 'risk-assessment', name: 'Risk Assessment', icon: 'âš-ï¸' },
-    { id: 'transfer', name: 'Transfer', icon: 'ðŸ”„' },
-    { id: 'progress', name: 'Progress', icon: 'ðŸ“ˆ' },
-    { id: 'plans', name: 'Upcoming Plans', icon: 'ðŸ“…' },
-    { id: 'activity', name: 'Activity Log', icon: 'ðŸ“' },
-    { id: 'discharge', name: 'Discharge', icon: 'ðŸšª' }
+    { id: 'summary', name: 'Summary' },
+    { id: 'risk-assessment', name: 'Risk Assessment' },
+    { id: 'transfer', name: 'Transfer' },
+    { id: 'progress', name: 'Progress' },
+    { id: 'plans', name: 'Upcoming Plans' },
+    { id: 'activity', name: 'Activity Log' },
+    { id: 'discharge', name: 'Discharge' }
   ];
 
   const renderTabContent = () => {
@@ -212,10 +212,10 @@ export const PatientProfile: React.FC = () => {
                   </h1>
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs sm:text-sm text-gray-500">
                     <span>#{patient.hospital_number}</span>
-                    <span className="hidden sm:inline">â€¢</span>
+                    <span className="hidden sm:inline"></span>
                     <span>{calculateAge(patient.dob)}y, {patient.sex}</span>
-                    <span className="hidden sm:inline">â€¢</span>
-                    <span className="hidden sm:inline">ðŸ“ž {patient.phone}</span>
+                    <span className="hidden sm:inline"></span>
+                    <span className="hidden sm:inline">{patient.phone}</span>
                   </div>
                 </div>
               </div>
@@ -308,7 +308,7 @@ export const PatientProfile: React.FC = () => {
                           <p className="text-xs text-gray-500">{member.roleLabel}</p>
                           {member.phone && (
                             <p className={`text-xs mt-1 ${member.color.replace('bg-', 'text-')}`}>
-                              ðŸ“ž {member.phone}
+                              {member.phone}
                             </p>
                           )}
                         </div>
@@ -329,31 +329,31 @@ export const PatientProfile: React.FC = () => {
                   onClick={() => setActiveTab('risk-assessment')}
                   className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded transition-colors"
                 >
-                  âš-ï¸ Risk Assessment
+                  Risk Assessment
                 </button>
                 <button 
                   onClick={() => setActiveTab('transfer')}
                   className="w-full text-left px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded transition-colors"
                 >
-                  ðŸ”„ Transfer Patient
+                  Transfer Patient
                 </button>
                 <button 
                   onClick={() => setActiveTab('discharge')}
                   className="w-full text-left px-3 py-2 text-sm text-green-600 hover:bg-green-50 rounded transition-colors"
                 >
-                  ðŸšª Plan Discharge
+                  Plan Discharge
                 </button>
                 <button 
                   onClick={() => setShowProgressNoteModal(true)}
                   className="w-full text-left px-3 py-2 text-sm text-purple-600 hover:bg-purple-50 rounded transition-colors"
                 >
-                  ðŸ“‹ Add Progress Note
+                  Add Progress Note
                 </button>
                 <button 
                   onClick={() => setShowPrescriptionModal(true)}
                   className="w-full text-left px-3 py-2 text-sm text-orange-600 hover:bg-orange-50 rounded transition-colors"
                 >
-                  ðŸ’Š Prescribe Medication
+                  Prescribe Medication
                 </button>
               </div>
             </div>
@@ -375,7 +375,6 @@ export const PatientProfile: React.FC = () => {
                           : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                       }`}
                     >
-                      <span className="mr-1 sm:mr-2">{tab.icon}</span>
                       <span className="hidden sm:inline">{tab.name}</span>
                       <span className="sm:hidden">{tab.name.split(' ')[0]}</span>
                     </button>
@@ -423,10 +422,10 @@ const RiskAssessmentView: React.FC<{ patientId: string; hospitalNumber: string }
   const [activeAssessment, setActiveAssessment] = useState<'summary' | 'dvt' | 'pressure' | 'nutrition'>('summary');
 
   const assessmentTabs = [
-    { id: 'summary', name: 'Overview', icon: 'ðŸ“Š', color: 'gray' },
-    { id: 'dvt', name: 'DVT Risk', icon: 'ðŸ©¸', color: 'red' },
-    { id: 'pressure', name: 'Pressure Sore', icon: 'ðŸ›ï¸', color: 'orange' },
-    { id: 'nutrition', name: 'Nutrition', icon: 'ðŸŽ', color: 'green' }
+    { id: 'summary', name: 'Overview', color: 'gray' },
+    { id: 'dvt', name: 'DVT Risk', color: 'red' },
+    { id: 'pressure', name: 'Pressure Sore', color: 'orange' },
+    { id: 'nutrition', name: 'Nutrition', color: 'green' }
   ];
 
   const renderAssessmentContent = () => {
@@ -507,7 +506,6 @@ const RiskAssessmentView: React.FC<{ patientId: string; hospitalNumber: string }
                       : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                   }`}
                 >
-                  <span className="mr-2">{tab.icon}</span>
                   {tab.name}
                 </button>
               );
@@ -545,7 +543,6 @@ const UpcomingPlansView: React.FC<{ plans: any[] }> = ({ plans }) => {
         <div className="p-6">
           {plans.length === 0 ? (
             <div className="text-center py-8">
-              <div className="text-gray-400 text-4xl mb-4">ðŸ“…</div>
               <h4 className="text-lg font-medium text-gray-900 mb-2">No Upcoming Plans</h4>
               <p className="text-gray-500">No scheduled treatment plans for this patient.</p>
             </div>

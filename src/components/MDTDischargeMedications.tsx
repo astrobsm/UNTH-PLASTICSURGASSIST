@@ -147,7 +147,7 @@ export default function MDTDischargeMedications({ admission, onComplete, onBack 
     <div className="space-y-6">
       {/* Header */}
       <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
-        <h3 className="text-lg font-bold text-purple-800">ðŸ’Š MDT Harmonized Discharge Medications</h3>
+        <h3 className="text-lg font-bold text-purple-800">MDT Harmonized Discharge Medications</h3>
         <p className="text-sm text-purple-600 mt-1">
           Add medications from all specialties involved in patient care. The system will check for duplicates and drug interactions.
         </p>
@@ -167,14 +167,14 @@ export default function MDTDischargeMedications({ admission, onComplete, onBack 
             onClick={() => setShowAddModal(true)}
             className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm"
           >
-            âž- Add Medication
+            Add Medication
           </button>
           {totalMedCount >= 2 && (
             <button
               onClick={handleHarmonize}
               className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 text-sm"
             >
-              ðŸ”„ Harmonize MDT Medications
+              Harmonize MDT Medications
             </button>
           )}
         </div>
@@ -186,7 +186,7 @@ export default function MDTDischargeMedications({ admission, onComplete, onBack 
           <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
               <h4 className="text-lg font-semibold">Add Discharge Medication</h4>
-              <button onClick={() => setShowAddModal(false)} className="text-gray-500 hover:text-gray-700 text-xl">Ã—</button>
+              <button onClick={() => setShowAddModal(false)} className="text-gray-500 hover:text-gray-700 text-xl">&times;</button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -335,7 +335,7 @@ export default function MDTDischargeMedications({ admission, onComplete, onBack 
             onClick={() => setShowAddModal(true)}
             className="mt-4 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
           >
-            âž- Add First Medication
+            Add First Medication
           </button>
         </div>
       ) : (
@@ -357,15 +357,14 @@ export default function MDTDischargeMedications({ admission, onComplete, onBack 
                         {med.dosage} | {med.route} | {med.frequency} | {med.duration}
                       </div>
                       {med.instructions && (
-                        <div className="text-sm text-blue-600 mt-1">ðŸ“ {med.instructions}</div>
+                        <div className="text-sm text-blue-600 mt-1">{med.instructions}</div>
                       )}
                     </div>
                     <button
                       onClick={() => handleRemoveMedication(specialty, idx)}
                       className="text-red-500 hover:text-red-700 ml-4"
                     >
-                      ðŸ—‘ï¸
-                    </button>
+                      </button>
                   </div>
                 ))}
               </div>
@@ -377,15 +376,15 @@ export default function MDTDischargeMedications({ admission, onComplete, onBack 
       {/* Harmonization Results */}
       {showHarmonization && harmonizationResult && (
         <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 space-y-4">
-          <h4 className="font-semibold text-blue-800">ðŸ”„ MDT Medication Harmonization Results</h4>
+          <h4 className="font-semibold text-blue-800">MDT Medication Harmonization Results</h4>
           
           {/* Duplicates */}
           {harmonizationResult.duplicates.length > 0 && (
             <div className="bg-yellow-50 p-3 rounded border border-yellow-200">
-              <h5 className="font-medium text-yellow-800">âš ï¸ Duplicates Detected</h5>
+              <h5 className="font-medium text-yellow-800">Duplicates Detected</h5>
               <ul className="mt-2 text-sm text-yellow-700">
                 {harmonizationResult.duplicates.map((dup, idx) => (
-                  <li key={idx}>â€¢ {dup}</li>
+                  <li key={idx}> {dup}</li>
                 ))}
               </ul>
             </div>
@@ -394,10 +393,10 @@ export default function MDTDischargeMedications({ admission, onComplete, onBack 
           {/* Interactions */}
           {harmonizationResult.interactions.length > 0 && (
             <div className="bg-red-50 p-3 rounded border border-red-200">
-              <h5 className="font-medium text-red-800">ðŸš¨ Potential Drug Interactions</h5>
+              <h5 className="font-medium text-red-800">Potential Drug Interactions</h5>
               <ul className="mt-2 text-sm text-red-700">
                 {harmonizationResult.interactions.map((int, idx) => (
-                  <li key={idx}>â€¢ {int}</li>
+                  <li key={idx}> {int}</li>
                 ))}
               </ul>
             </div>
@@ -406,10 +405,10 @@ export default function MDTDischargeMedications({ admission, onComplete, onBack 
           {/* Recommendations */}
           {harmonizationResult.recommendations.length > 0 && (
             <div className="bg-green-50 p-3 rounded border border-green-200">
-              <h5 className="font-medium text-green-800">ðŸ’¡ Recommendations</h5>
+              <h5 className="font-medium text-green-800">Recommendations</h5>
               <ul className="mt-2 text-sm text-green-700">
                 {harmonizationResult.recommendations.map((rec, idx) => (
-                  <li key={idx}>â€¢ {rec}</li>
+                  <li key={idx}> {rec}</li>
                 ))}
               </ul>
             </div>
@@ -417,7 +416,7 @@ export default function MDTDischargeMedications({ admission, onComplete, onBack 
 
           {/* Final List */}
           <div>
-            <h5 className="font-medium text-blue-800 mb-2">âœ… Final Harmonized Medication List ({harmonizationResult.harmonizedMedications.length})</h5>
+            <h5 className="font-medium text-blue-800 mb-2">Final Harmonized Medication List ({harmonizationResult.harmonizedMedications.length})</h5>
             <div className="bg-white rounded border divide-y">
               {harmonizationResult.harmonizedMedications.map((med, idx) => (
                 <div key={idx} className="px-3 py-2 flex justify-between">
@@ -434,7 +433,6 @@ export default function MDTDischargeMedications({ admission, onComplete, onBack 
       {totalMedCount > 5 && (
         <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
           <div className="flex items-center gap-2">
-            <span className="text-2xl">âš-ï¸</span>
             <div>
               <h5 className="font-medium text-orange-800">Pharmacy Review Recommended</h5>
               <p className="text-sm text-orange-600">
@@ -451,13 +449,13 @@ export default function MDTDischargeMedications({ admission, onComplete, onBack 
           onClick={onBack}
           className="px-6 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
         >
-          â† Back
+           Back
         </button>
         <button
           onClick={handleComplete}
           className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
         >
-          Continue to Summary â†’
+          Continue to Summary 
         </button>
       </div>
     </div>

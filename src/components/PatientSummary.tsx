@@ -174,15 +174,15 @@ export const PatientSummaryView: React.FC<PatientSummaryViewProps> = ({
   const getSummaryTypeIcon = (type: string) => {
     switch (type) {
       case 'admission':
-        return 'ðŸ¥';
+        return 'A';
       case 'progress':
-        return 'ðŸ“Š';
+        return 'P';
       case 'discharge':
-        return 'ðŸšª';
+        return 'D';
       case 'consultation':
-        return 'ðŸ‘©â€âš-ï¸';
+        return 'C';
       default:
-        return 'ðŸ“„';
+        return 'S';
     }
   };
 
@@ -399,7 +399,6 @@ export const PatientSummaryView: React.FC<PatientSummaryViewProps> = ({
           </div>
         ) : (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
-            <div className="text-gray-400 text-6xl mb-4">ðŸ“„</div>
             <h3 className="text-lg font-medium text-gray-900 mb-2">No Summary Selected</h3>
             <p className="text-gray-500">Select a summary from the list or generate a new one</p>
           </div>
