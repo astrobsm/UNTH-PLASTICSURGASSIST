@@ -1565,7 +1565,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
             heading: 'Nutrition for Healthy Skin',
             content: [
               '🥩 Protein: Eat meat, fish, eggs, beans (helps heal skin)',
-              '�- Vitamin C: Eat fruits and vegetables (oranges, tomatoes, peppers)',
+              '�- Vitamin C: Eat fruits and vegetables (oranges, tomatoes, peppers)',
               '🥛 Zinc: Found in meat, dairy, nuts',
               '💧 Water: Drink plenty of fluids',
               '🍽️ Don\'t skip meals - your body needs nutrition to keep skin healthy'
@@ -1608,7 +1608,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
               '🍚 CARBOHYDRATES: Rice, yam, bread, garri, potatoes',
               '  → Gives you energy',
               '',
-              '�- VEGETABLES & FRUITS: Dark leafy greens, oranges, carrots, tomatoes',
+              '�- VEGETABLES & FRUITS: Dark leafy greens, oranges, carrots, tomatoes',
               '  → Provides vitamins for healing',
               '',
               '🥛 DAIRY: Milk, yogurt, cheese',
@@ -2582,6 +2582,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
             value={formData.first_name || ''}
             onChange={(e) => handleInputChange('first_name', e.target.value)}
             className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
+            title="Patient first name"
           />
         </div>
 
@@ -2595,6 +2596,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
             value={formData.last_name || ''}
             onChange={(e) => handleInputChange('last_name', e.target.value)}
             className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
+            title="Patient last name"
           />
         </div>
 
@@ -2607,6 +2609,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
             value={formData.middle_name || ''}
             onChange={(e) => handleInputChange('middle_name', e.target.value)}
             className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
+            title="Patient middle name"
           />
         </div>
 
@@ -2620,6 +2623,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
             value={formData.date_of_birth || ''}
             onChange={(e) => handleInputChange('date_of_birth', e.target.value)}
             className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
+            title="Patient date of birth"
           />
         </div>
 
@@ -2632,6 +2636,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
             value={formData.sex || 'male'}
             onChange={(e) => handleInputChange('sex', e.target.value)}
             className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
+            title="Select patient sex"
           >
             <option value="male">Male</option>
             <option value="female">Female</option>
@@ -2646,6 +2651,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
             value={formData.marital_status || 'single'}
             onChange={(e) => handleInputChange('marital_status', e.target.value)}
             className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
+            title="Select marital status"
           >
             <option value="single">Single</option>
             <option value="married">Married</option>
@@ -2688,6 +2694,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
               value={formData.next_of_kin?.name || ''}
               onChange={(e) => handleInputChange('next_of_kin.name', e.target.value)}
               className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              title="Next of kin name"
             />
           </div>
 
@@ -2715,6 +2722,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
               value={formData.next_of_kin?.phone || ''}
               onChange={(e) => handleInputChange('next_of_kin.phone', e.target.value)}
               className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              title="Next of kin phone number"
             />
           </div>
 
@@ -2728,6 +2736,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
               value={formData.next_of_kin?.address || ''}
               onChange={(e) => handleInputChange('next_of_kin.address', e.target.value)}
               className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              title="Next of kin address"
             />
           </div>
         </div>
@@ -2742,6 +2751,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
             value={formData.blood_group || ''}
             onChange={(e) => handleInputChange('blood_group', e.target.value)}
             className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
+            title="Select blood group"
           >
             <option value="">Select Blood Group</option>
             <option value="A+">A+</option>
@@ -2763,6 +2773,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
             value={formData.genotype || ''}
             onChange={(e) => handleInputChange('genotype', e.target.value)}
             className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
+            title="Select genotype"
           >
             <option value="">Select Genotype</option>
             <option value="AA">AA</option>
@@ -2858,6 +2869,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
               value={formData.social_history?.occupation || ''}
               onChange={(e) => handleInputChange('social_history.occupation', e.target.value)}
               className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              title="Patient occupation"
             />
           </div>
         </div>
@@ -2876,6 +2888,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
               value={formData.patient_type || 'outpatient'}
               onChange={(e) => handleInputChange('patient_type', e.target.value)}
               className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              title="Select patient type"
             >
               <option value="outpatient">Outpatient</option>
               <option value="inpatient">Inpatient</option>
@@ -2893,6 +2906,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
               value={formData.admission_type || 'clinic'}
               onChange={(e) => handleInputChange('admission_type', e.target.value)}
               className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              title="Select admission type"
             >
               <option value="emergency">Emergency</option>
               <option value="clinic">Clinic</option>
@@ -2911,6 +2925,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
                 value={formData.referring_hospital || ''}
                 onChange={(e) => handleInputChange('referring_hospital', e.target.value)}
                 className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                title="Referring hospital name"
               />
             </div>
           )}
@@ -2924,6 +2939,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
               value={formData.consultant_in_charge || ''}
               onChange={(e) => handleInputChange('consultant_in_charge', e.target.value)}
               className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              title="Select consultant in charge"
             >
               <option value="">Select Consultant</option>
               <option value="Dr Okwesili">Dr Okwesili</option>
@@ -2941,6 +2957,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
               value={formData.ward_id || ''}
               onChange={(e) => handleInputChange('ward_id', e.target.value)}
               className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              title="Select ward assignment"
             >
               <option value="">Select Ward</option>
               {availableWards.map(ward => (
@@ -2974,6 +2991,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
               value={formData.insurance_type || ''}
               onChange={(e) => handleInputChange('insurance_type', e.target.value)}
               className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              title="Select insurance type"
             >
               <option value="">Select Insurance</option>
               <option value="nhis">NHIS</option>
@@ -2993,6 +3011,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
                 value={formData.insurance_number || ''}
                 onChange={(e) => handleInputChange('insurance_number', e.target.value)}
                 className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                title="Insurance number"
               />
             </div>
           )}
@@ -3143,6 +3162,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
                       }));
                     }}
                     className="absolute top-2 right-2 bg-red-600 text-white p-2 rounded-full hover:bg-red-700"
+                    title="Remove clinical photo 1"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -3206,6 +3226,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
                       }));
                     }}
                     className="absolute top-2 right-2 bg-red-600 text-white p-2 rounded-full hover:bg-red-700"
+                    title="Remove clinical photo 2"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -3539,6 +3560,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
                 }))}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-yellow-500 focus:border-yellow-500"
                 required
+                title={config.label}
               >
                 <option value="">Select...</option>
                 {Object.entries(config.options).map(([score, label]) => (
@@ -3832,7 +3854,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
             {/* Comorbidity Adjustments */}
             {aiRecommendations.nutritional.mealPlan.comorbidityAdjustments && (
               <div className="mb-4 p-3 bg-yellow-50 rounded-lg">
-                <h6 className="font-medium text-yellow-900 mb-2">�-️ Special Dietary Considerations</h6>
+                <h6 className="font-medium text-yellow-900 mb-2">�-️ Special Dietary Considerations</h6>
                 <div className="space-y-1 text-sm">
                   {Object.entries(aiRecommendations.nutritional.mealPlan.comorbidityAdjustments).map(([key, value]) => 
                     value ? (
@@ -3977,6 +3999,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
                     value={treatmentPlanData.anesthesia_type}
                     onChange={(e) => setTreatmentPlanData(prev => ({ ...prev, anesthesia_type: e.target.value }))}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                    title="Select anesthesia type"
                   >
                     <option value="local">Local Anesthesia</option>
                     <option value="regional">Regional Anesthesia</option>

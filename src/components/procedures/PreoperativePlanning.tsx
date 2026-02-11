@@ -923,6 +923,7 @@ export const PreoperativePlanning: React.FC<PreoperativePlanningProps> = ({
               value={patientId}
               onChange={(e) => setPatientId(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500"
+              title="Select patient"
             >
               <option value="">Select Patient</option>
               {patients.map(patient => (
@@ -938,6 +939,7 @@ export const PreoperativePlanning: React.FC<PreoperativePlanningProps> = ({
               value={procedureType}
               onChange={(e) => setProcedureType(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500"
+              title="Select procedure type"
             >
               <option value="">Select Procedure</option>
               {procedureTypes.map(proc => (
@@ -951,6 +953,7 @@ export const PreoperativePlanning: React.FC<PreoperativePlanningProps> = ({
               value={anesthesiaType}
               onChange={(e) => setAnesthesiaType(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500"
+              title="Select anesthesia type"
             >
               <option value="">Select Anesthesia</option>
               {anesthesiaTypes.map(anes => (
@@ -964,6 +967,7 @@ export const PreoperativePlanning: React.FC<PreoperativePlanningProps> = ({
               value={urgency}
               onChange={(e) => setUrgency(e.target.value as any)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500"
+              title="Select urgency level"
             >
               <option value="elective">Elective</option>
               <option value="urgent">Urgent</option>
@@ -989,6 +993,7 @@ export const PreoperativePlanning: React.FC<PreoperativePlanningProps> = ({
                     calculateRiskScores();
                   }}
                   className="px-4 py-2 border border-blue-300 rounded-md bg-white focus:ring-2 focus:ring-blue-500"
+                  title="Select ASA physical status classification"
                 >
                   <option value={1}>ASA I - Healthy patient</option>
                   <option value={2}>ASA II - Mild systemic disease</option>
@@ -1144,6 +1149,7 @@ export const PreoperativePlanning: React.FC<PreoperativePlanningProps> = ({
                           renal: { ...prev.renal, ckdStage: parseInt(e.target.value) }
                         }))}
                         className="w-full px-3 py-2 border rounded"
+                        title="Select CKD stage"
                       >
                         <option value={1}>Stage 1</option>
                         <option value={2}>Stage 2</option>
@@ -1356,6 +1362,7 @@ export const PreoperativePlanning: React.FC<PreoperativePlanningProps> = ({
                         hematologic: { ...prev.hematologic, anticoagulantType: e.target.value }
                       }))}
                       className="w-48 px-3 py-2 border rounded"
+                      title="Select anticoagulant type"
                     >
                       <option value="">Select...</option>
                       <option value="Warfarin">Warfarin</option>
@@ -1463,6 +1470,7 @@ export const PreoperativePlanning: React.FC<PreoperativePlanningProps> = ({
                                 checked={inv.ordered}
                                 onChange={() => toggleInvestigationOrdered(inv.id)}
                                 className="rounded border-gray-300 text-green-600 w-5 h-5"
+                                title="Toggle investigation ordered"
                               />
                               <div>
                                 <div className="flex items-center space-x-2">

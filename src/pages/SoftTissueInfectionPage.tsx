@@ -293,12 +293,12 @@ const SoftTissueInfectionPage: React.FC = () => {
           route: abx.route, duration: abx.duration, indication: abx.indication
         })),
         surgicalInterventions: protocol.surgicalInterventions.map(si => ({
-          procedure: si.procedure, timing: si.timing, priority: si.priority, details: si.details
+          procedure: si.procedure, timing: si.timing, indication: si.indication, technique: si.technique
         })),
         supportiveCare: protocol.supportiveCare || [],
         monitoringPlan: protocol.monitoring || [],
         comorbidityModifications: protocol.comorbidityModifications?.map(cm => ({
-          condition: cm.condition, modifications: cm.modifications
+          comorbidity: cm.comorbidity, modifications: cm.modifications
         })) || [],
         escalationCriteria: protocol.escalationCriteria || []
       };
@@ -484,7 +484,7 @@ const SoftTissueInfectionPage: React.FC = () => {
         <div className={`mb-4 p-3 rounded-lg flex items-center gap-2 ${message.type === 'success' ? 'bg-green-50 text-green-800 border border-green-200' : 'bg-red-50 text-red-800 border border-red-200'}`}>
           {message.type === 'success' ? <CheckCircle className="h-5 w-5" /> : <AlertCircle className="h-5 w-5" />}
           <span className="text-sm">{message.text}</span>
-          <button onClick={() => setMessage(null)} className="ml-auto"><X className="h-4 w-4" /></button>
+          <button onClick={() => setMessage(null)} className="ml-auto" title="Dismiss message"><X className="h-4 w-4" /></button>
         </div>
       )}
 
@@ -584,11 +584,9 @@ const SoftTissueInfectionPage: React.FC = () => {
                       </p>
                     ))}
                   </div>
-                  {loc.specialImaging && (
-                    <div className="mt-2 text-xs text-blue-700 bg-blue-50 p-2 rounded">
-                      Imaging: {loc.specialImaging.join(', ')}
-                    </div>
-                  )}
+                  <div className="mt-2 text-xs text-blue-700 bg-blue-50 p-2 rounded">
+                    Risk Factors: {loc.riskFactors.slice(0, 3).join(', ')}
+                  </div>
                 </div>
               ))}
             </div>
@@ -630,7 +628,7 @@ const SoftTissueInfectionPage: React.FC = () => {
                   />
                   <div className="mt-2 text-xs text-gray-500">
                     {param.ranges.map((r, i) => (
-                      <p key={i}>{r.range}: +{r.points} pts</p>
+                      <p key={i}>{r.range}: +{r.score} pts</p>
                     ))}
                   </div>
                 </div>
@@ -755,7 +753,7 @@ const SoftTissueInfectionPage: React.FC = () => {
                 <span className="text-sm font-medium text-green-800">
                   {selectedPatient.full_name || `${selectedPatient.first_name} ${selectedPatient.last_name}`} ({selectedPatient.hospital_number})
                 </span>
-                <button onClick={() => setSelectedPatient(null)} className="text-green-600 hover:text-green-800"><X className="h-4 w-4" /></button>
+                <button onClick={() => setSelectedPatient(null)} className="text-green-600 hover:text-green-800" title="Clear patient selection"><X className="h-4 w-4" /></button>
               </div>
             )}
           </div>
@@ -766,7 +764,7 @@ const SoftTissueInfectionPage: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-semibold mb-1">Classification *</label>
-                <select className="w-full border rounded px-3 py-2 text-sm"
+                <select className="w-full border rounded px-3 py-2 text-sm" title="Select classification"
                   value={assessmentForm.classification}
                   onChange={e => setAssessmentForm(prev => ({ ...prev, classification: e.target.value }))}>
                   <option value="">Select...</option>
@@ -777,7 +775,7 @@ const SoftTissueInfectionPage: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-semibold mb-1">Severity *</label>
-                <select className="w-full border rounded px-3 py-2 text-sm"
+                <select className="w-full border rounded px-3 py-2 text-sm" title="Select severity"
                   value={assessmentForm.severity}
                   onChange={e => setAssessmentForm(prev => ({ ...prev, severity: e.target.value }))}>
                   <option value="">Select...</option>
@@ -789,7 +787,7 @@ const SoftTissueInfectionPage: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-semibold mb-1">Location</label>
-                <select className="w-full border rounded px-3 py-2 text-sm"
+                <select className="w-full border rounded px-3 py-2 text-sm" title="Select location"
                   value={assessmentForm.location}
                   onChange={e => setAssessmentForm(prev => ({ ...prev, location: e.target.value }))}>
                   <option value="">Select...</option>
@@ -800,19 +798,19 @@ const SoftTissueInfectionPage: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-semibold mb-1">Onset Date</label>
-                <input type="date" className="w-full border rounded px-3 py-2 text-sm"
+                <input type="date" className="w-full border rounded px-3 py-2 text-sm" title="Onset date"
                   value={assessmentForm.onset_date}
                   onChange={e => setAssessmentForm(prev => ({ ...prev, onset_date: e.target.value }))} />
               </div>
               <div>
                 <label className="block text-sm font-semibold mb-1">Duration (hours)</label>
-                <input type="number" className="w-full border rounded px-3 py-2 text-sm"
+                <input type="number" className="w-full border rounded px-3 py-2 text-sm" title="Duration in hours"
                   value={assessmentForm.duration_hours || ''}
                   onChange={e => setAssessmentForm(prev => ({ ...prev, duration_hours: parseInt(e.target.value) || 0 }))} />
               </div>
               <div>
                 <label className="block text-sm font-semibold mb-1">Pain Score (0-10)</label>
-                <input type="number" min="0" max="10" className="w-full border rounded px-3 py-2 text-sm"
+                <input type="number" min="0" max="10" className="w-full border rounded px-3 py-2 text-sm" title="Pain score"
                   value={assessmentForm.pain_score || ''}
                   onChange={e => setAssessmentForm(prev => ({ ...prev, pain_score: parseInt(e.target.value) || 0 }))} />
               </div>
@@ -864,7 +862,7 @@ const SoftTissueInfectionPage: React.FC = () => {
             {assessmentForm.diabetes && (
               <div className="mt-3">
                 <label className="text-sm font-semibold">HbA1c (%)</label>
-                <input type="number" step="0.1" className="ml-2 border rounded px-3 py-1 text-sm w-24"
+                <input type="number" step="0.1" className="ml-2 border rounded px-3 py-1 text-sm w-24" title="HbA1c value"
                   value={assessmentForm.diabetes_hba1c || ''}
                   onChange={e => setAssessmentForm(prev => ({ ...prev, diabetes_hba1c: parseFloat(e.target.value) }))} />
               </div>
@@ -872,7 +870,7 @@ const SoftTissueInfectionPage: React.FC = () => {
             {assessmentForm.renal_impairment && (
               <div className="mt-3">
                 <label className="text-sm font-semibold">Creatinine (µmol/L)</label>
-                <input type="number" className="ml-2 border rounded px-3 py-1 text-sm w-24"
+                <input type="number" className="ml-2 border rounded px-3 py-1 text-sm w-24" title="Creatinine value"
                   value={assessmentForm.creatinine || ''}
                   onChange={e => setAssessmentForm(prev => ({ ...prev, creatinine: parseFloat(e.target.value) }))} />
               </div>
@@ -969,9 +967,9 @@ const SoftTissueInfectionPage: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {TREATMENT_PROTOCOLS.map(protocol => (
                     <div key={protocol.id} className="border rounded-lg p-4 bg-white shadow-sm">
-                      <h4 className="font-bold text-gray-800">{protocol.name}</h4>
-                      <p className="text-sm text-gray-600 mb-2">{protocol.description}</p>
-                      <p className="text-xs text-gray-500 mb-3">Applicable: {protocol.applicableTo.join(', ')}</p>
+                      <h4 className="font-bold text-gray-800">{protocol.stage}</h4>
+                      <p className="text-sm text-gray-600 mb-2">Severity: {protocol.severity}</p>
+                      <p className="text-xs text-gray-500 mb-3">Monitoring: {protocol.monitoring?.slice(0, 2).join(', ')}</p>
                       
                       <div className="mb-3">
                         <p className="text-xs font-semibold text-gray-700 mb-1">Antibiotics ({protocol.antibiotics.length}):</p>
@@ -1041,19 +1039,19 @@ const SoftTissueInfectionPage: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-semibold mb-1">Surgeon</label>
-                <input type="text" className="w-full border rounded px-3 py-2 text-sm"
+                <input type="text" className="w-full border rounded px-3 py-2 text-sm" title="Surgeon name"
                   value={debridementForm.surgeon}
                   onChange={e => setDebridementForm(prev => ({ ...prev, surgeon: e.target.value }))} />
               </div>
               <div>
                 <label className="block text-sm font-semibold mb-1">Assistant</label>
-                <input type="text" className="w-full border rounded px-3 py-2 text-sm"
+                <input type="text" className="w-full border rounded px-3 py-2 text-sm" title="Assistant name"
                   value={debridementForm.assistant}
                   onChange={e => setDebridementForm(prev => ({ ...prev, assistant: e.target.value }))} />
               </div>
               <div>
                 <label className="block text-sm font-semibold mb-1">Anesthesia</label>
-                <select className="w-full border rounded px-3 py-2 text-sm"
+                <select className="w-full border rounded px-3 py-2 text-sm" title="Anesthesia type"
                   value={debridementForm.anesthesiaType}
                   onChange={e => setDebridementForm(prev => ({ ...prev, anesthesiaType: e.target.value }))}>
                   <option value="GA">General Anesthesia</option>
@@ -1064,14 +1062,14 @@ const SoftTissueInfectionPage: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-semibold mb-1">EBL (mL)</label>
-                <input type="text" className="w-full border rounded px-3 py-2 text-sm"
+                <input type="text" className="w-full border rounded px-3 py-2 text-sm" title="Estimated blood loss"
                   value={debridementForm.estimatedBloodLoss}
                   onChange={e => setDebridementForm(prev => ({ ...prev, estimatedBloodLoss: e.target.value }))} />
               </div>
             </div>
             <div className="mt-4">
               <label className="block text-sm font-semibold mb-1">Findings</label>
-              <textarea className="w-full border rounded px-3 py-2 text-sm h-20"
+              <textarea className="w-full border rounded px-3 py-2 text-sm h-20" title="Intraoperative findings"
                 value={debridementForm.findings}
                 onChange={e => setDebridementForm(prev => ({ ...prev, findings: e.target.value }))}
                 placeholder="Describe intraoperative findings..." />
@@ -1079,7 +1077,7 @@ const SoftTissueInfectionPage: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
               <div>
                 <label className="block text-sm font-semibold mb-1">Wound Bed Status</label>
-                <select className="w-full border rounded px-3 py-2 text-sm"
+                <select className="w-full border rounded px-3 py-2 text-sm" title="Wound bed status"
                   value={debridementForm.woundBedStatus}
                   onChange={e => setDebridementForm(prev => ({ ...prev, woundBedStatus: e.target.value }))}>
                   <option value="">Select...</option>
@@ -1092,7 +1090,7 @@ const SoftTissueInfectionPage: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-semibold mb-1">Dressing Applied</label>
-                <input type="text" className="w-full border rounded px-3 py-2 text-sm"
+                <input type="text" className="w-full border rounded px-3 py-2 text-sm" title="Dressing applied"
                   value={debridementForm.dressingApplied}
                   onChange={e => setDebridementForm(prev => ({ ...prev, dressingApplied: e.target.value }))} />
               </div>
@@ -1116,7 +1114,7 @@ const SoftTissueInfectionPage: React.FC = () => {
             </div>
             <div className="mt-4">
               <label className="block text-sm font-semibold mb-1">Next Planned Debridement</label>
-              <input type="date" className="border rounded px-3 py-2 text-sm"
+              <input type="date" className="border rounded px-3 py-2 text-sm" title="Next debridement date"
                 value={debridementForm.nextPlannedDebridement}
                 onChange={e => setDebridementForm(prev => ({ ...prev, nextPlannedDebridement: e.target.value }))} />
             </div>

@@ -236,6 +236,7 @@ const PaperworkPage: React.FC = () => {
             onChange={(e) => handlePatientSelect(e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
             disabled={loadingData}
+            title="Select patient"
           >
             <option value="">Select patient...</option>
             {patients.map(p => {
@@ -281,6 +282,7 @@ const PaperworkPage: React.FC = () => {
             value={formData.urgency}
             onChange={(e) => setFormData({ ...formData, urgency: e.target.value as any })}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+            title="Urgency level"
           >
             <option value="routine">Routine</option>
             <option value="urgent">Urgent</option>
@@ -481,6 +483,7 @@ const PaperworkPage: React.FC = () => {
             onChange={(e) => handlePatientSelect(e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
             disabled={loadingAdmission}
+            title="Select patient"
           >
             <option value="">Select patient...</option>
             {patients.map(p => {
@@ -517,6 +520,7 @@ const PaperworkPage: React.FC = () => {
               value={format(new Date(formData.admission_date), 'yyyy-MM-dd')}
               onChange={(e) => setFormData({ ...formData, admission_date: new Date(e.target.value) })}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+              title="Admission date"
             />
           </div>
           <div>
@@ -527,6 +531,7 @@ const PaperworkPage: React.FC = () => {
               value={format(new Date(formData.discharge_date), 'yyyy-MM-dd')}
               onChange={(e) => setFormData({ ...formData, discharge_date: new Date(e.target.value) })}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+              title="Discharge date"
             />
           </div>
         </div>
@@ -539,6 +544,7 @@ const PaperworkPage: React.FC = () => {
             onChange={(e) => setFormData({ ...formData, admission_diagnosis: e.target.value })}
             rows={2}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+            title="Admission diagnosis"
           />
         </div>
 
@@ -550,6 +556,7 @@ const PaperworkPage: React.FC = () => {
             onChange={(e) => setFormData({ ...formData, final_diagnosis: e.target.value })}
             rows={2}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+            title="Final diagnosis"
           />
         </div>
 
@@ -584,6 +591,7 @@ const PaperworkPage: React.FC = () => {
                       procedures_performed: formData.procedures_performed.filter((_, i) => i !== idx)
                     })}
                     className="text-red-600 hover:text-red-700"
+                    title="Remove procedure"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -791,6 +799,7 @@ const PaperworkPage: React.FC = () => {
             onChange={(e) => handlePatientSelect(e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
             disabled={loadingData}
+            title="Select patient"
           >
             <option value="">Select patient...</option>
             {patients.map(p => {
@@ -824,6 +833,7 @@ const PaperworkPage: React.FC = () => {
             value={formData.report_type}
             onChange={(e) => setFormData({ ...formData, report_type: e.target.value as any })}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+            title="Report type"
           >
             <option value="insurance">Insurance</option>
             <option value="legal">Legal</option>
@@ -865,6 +875,7 @@ const PaperworkPage: React.FC = () => {
             onChange={(e) => setFormData({ ...formData, diagnosis: e.target.value })}
             rows={2}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+            title="Diagnosis"
           />
         </div>
 
@@ -876,6 +887,7 @@ const PaperworkPage: React.FC = () => {
             onChange={(e) => setFormData({ ...formData, treatment_given: e.target.value })}
             rows={3}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+            title="Treatment given"
           />
         </div>
 
@@ -887,6 +899,7 @@ const PaperworkPage: React.FC = () => {
             onChange={(e) => setFormData({ ...formData, current_status: e.target.value })}
             rows={2}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+            title="Current status"
           />
         </div>
 
@@ -898,6 +911,7 @@ const PaperworkPage: React.FC = () => {
             onChange={(e) => setFormData({ ...formData, prognosis: e.target.value })}
             rows={2}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+            title="Prognosis"
           />
         </div>
 
@@ -954,6 +968,7 @@ const PaperworkPage: React.FC = () => {
               value={documentType}
               onChange={(e) => setDocumentType(e.target.value as PaperworkType)}
               className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+              title="Document type"
             >
               <option value="consult_request">Consult Request</option>
               <option value="discharge_summary">Discharge Summary</option>

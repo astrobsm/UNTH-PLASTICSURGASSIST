@@ -46,6 +46,7 @@ const BurnCarePage = lazy(() => import('./pages/BurnCarePage'));
 const MedicalTrainingPage = lazy(() => import('./pages/MedicalTrainingPage'));
 const TreatmentPlanBuilder = lazy(() => import('./components/TreatmentPlanBuilder'));
 const PreoperativePlanningPage = lazy(() => import('./pages/PreoperativePlanningPage'));
+const PreSurgicalConferencePage = lazy(() => import('./pages/PreSurgicalConferencePage'));
 const WoundCarePage = lazy(() => import('./pages/WoundCarePage'));
 const KeloidCarePage = lazy(() => import('./pages/KeloidCarePage'));
 const SoftTissueInfectionPage = lazy(() => import('./pages/SoftTissueInfectionPage'));
@@ -165,6 +166,7 @@ function App() {
               <Route path="/ward-rounds" element={<WardRoundsPage />} />
               <Route path="/procedures" element={<Procedures />} />
               <Route path="/preoperative-planning" element={<PreoperativePlanningPage />} />
+              <Route path="/pre-surgical-conference" element={<PreSurgicalConferencePage />} />
               <Route path="/labs" element={<Labs />} />
               <Route path="/patient-education" element={<PatientEducation />} />
               <Route path="/shopping-list" element={<ShoppingList />} />

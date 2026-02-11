@@ -626,7 +626,7 @@ export const IntraoperativeFindingsForm: React.FC<IntraoperativeFindingsFormProp
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(11);
     doc.setFont('times', 'bold');
-    doc.text('👩‍�-️ NURSING CARE & MONITORING', 15, yPosition + 6);
+    doc.text('👩‍�-️ NURSING CARE & MONITORING', 15, yPosition + 6);
     yPosition += 12;
     doc.setTextColor(0, 0, 0);
 
@@ -895,6 +895,7 @@ export const IntraoperativeFindingsForm: React.FC<IntraoperativeFindingsFormProp
             value={findings.procedure_date || ''}
             onChange={(e) => handleInputChange('procedure_date', e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+            title="Procedure date"
           />
         </div>
 
@@ -907,6 +908,7 @@ export const IntraoperativeFindingsForm: React.FC<IntraoperativeFindingsFormProp
             value={findings.start_time || ''}
             onChange={(e) => handleInputChange('start_time', e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+            title="Procedure start time"
           />
         </div>
 
@@ -919,6 +921,7 @@ export const IntraoperativeFindingsForm: React.FC<IntraoperativeFindingsFormProp
             value={findings.end_time || ''}
             onChange={(e) => handleInputChange('end_time', e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+            title="Procedure end time"
           />
         </div>
 
@@ -930,6 +933,7 @@ export const IntraoperativeFindingsForm: React.FC<IntraoperativeFindingsFormProp
             value={findings.position || ''}
             onChange={(e) => handleInputChange('position', e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+            title="Select patient position"
           >
             <option value="">Select Position</option>
             <option value="supine">Supine</option>
@@ -950,6 +954,7 @@ export const IntraoperativeFindingsForm: React.FC<IntraoperativeFindingsFormProp
             value={findings.anesthesia_type || 'general'}
             onChange={(e) => handleInputChange('anesthesia_type', e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+            title="Select anesthesia type"
           >
             <option value="general">General Anesthesia</option>
             <option value="regional">Regional Anesthesia</option>
@@ -1339,7 +1344,7 @@ X-ray: Hardware placement verified...`}
                   <span>Vitamins & Minerals for Healing</span>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <span className="text-green-600">👩‍�-️</span>
+                  <span className="text-green-600">👩‍�-️</span>
                   <span>Nursing Care & Monitoring Protocols</span>
                 </div>
                 <div className="flex items-center space-x-2">

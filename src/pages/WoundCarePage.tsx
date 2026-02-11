@@ -1009,6 +1009,7 @@ const WoundCarePage: React.FC = () => {
         <button
           onClick={() => setActiveTab('phases')}
           className="text-gray-500 hover:text-gray-700"
+          title="Close form"
         >
           <X className="w-6 h-6" />
         </button>
@@ -1050,7 +1051,7 @@ const WoundCarePage: React.FC = () => {
               <p className="font-medium">{selectedPatient.full_name || `${selectedPatient.first_name} ${selectedPatient.last_name}`}</p>
               <p className="text-sm text-gray-600">#{selectedPatient.hospital_number}</p>
             </div>
-            <button onClick={() => setSelectedPatient(null)} className="text-red-500">
+            <button onClick={() => setSelectedPatient(null)} className="text-red-500" title="Clear patient selection">
               <X className="w-5 h-5" />
             </button>
           </div>
@@ -1076,6 +1077,7 @@ const WoundCarePage: React.FC = () => {
               value={formData.wound_type}
               onChange={(e) => setFormData(prev => ({ ...prev, wound_type: e.target.value }))}
               className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+              title="Wound type"
             >
               <option value="">Select type</option>
               {WOUND_TYPES.map(type => (
@@ -1117,6 +1119,7 @@ const WoundCarePage: React.FC = () => {
                 value={formData.length || ''}
                 onChange={(e) => setFormData(prev => ({ ...prev, length: parseFloat(e.target.value) || 0 }))}
                 className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+                title="Wound length in cm"
               />
             </div>
             <div>
@@ -1127,6 +1130,7 @@ const WoundCarePage: React.FC = () => {
                 value={formData.width || ''}
                 onChange={(e) => setFormData(prev => ({ ...prev, width: parseFloat(e.target.value) || 0 }))}
                 className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+                title="Wound width in cm"
               />
             </div>
             <div>
@@ -1137,6 +1141,7 @@ const WoundCarePage: React.FC = () => {
                 value={formData.depth || ''}
                 onChange={(e) => setFormData(prev => ({ ...prev, depth: parseFloat(e.target.value) || 0 }))}
                 className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+                title="Wound depth in cm"
               />
             </div>
           </div>
@@ -1187,6 +1192,7 @@ const WoundCarePage: React.FC = () => {
             value={formData.granulation_percentage}
             onChange={(e) => setFormData(prev => ({ ...prev, granulation_percentage: parseInt(e.target.value) }))}
             className="w-full"
+            title="Granulation percentage"
           />
           <div className="flex justify-between text-xs text-gray-500 mt-1">
             <span>0% (Extension)</span>
@@ -1205,6 +1211,7 @@ const WoundCarePage: React.FC = () => {
             multiple
             onChange={handleFileUpload}
             className="hidden"
+            title="Upload wound photos"
           />
           <div
             onClick={handlePhotoCapture}
@@ -1235,6 +1242,7 @@ const WoundCarePage: React.FC = () => {
                   <button
                     onClick={() => setCapturedPhotos(prev => prev.filter(p => p.id !== photo.id))}
                     className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1"
+                    title="Remove photo"
                   >
                     <X className="w-3 h-3" />
                   </button>
@@ -1271,6 +1279,7 @@ const WoundCarePage: React.FC = () => {
               value={formData.exudate_type}
               onChange={(e) => setFormData(prev => ({ ...prev, exudate_type: e.target.value as any }))}
               className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+              title="Exudate type"
             >
               <option value="none">None</option>
               <option value="serous">Serous</option>
@@ -1293,6 +1302,7 @@ const WoundCarePage: React.FC = () => {
             value={formData.pain_level}
             onChange={(e) => setFormData(prev => ({ ...prev, pain_level: parseInt(e.target.value) }))}
             className="w-full"
+            title="Pain level 0-10"
           />
           <div className="flex justify-between text-xs text-gray-500 mt-1">
             <span>No pain</span>
@@ -1386,6 +1396,7 @@ const WoundCarePage: React.FC = () => {
             <button
               onClick={() => setActiveTab('phases')}
               className="text-gray-500 hover:text-gray-700"
+              title="Close details"
             >
               <X className="w-6 h-6" />
             </button>

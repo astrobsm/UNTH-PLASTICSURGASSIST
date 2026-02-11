@@ -108,6 +108,27 @@ class PatientService {
   }
 
   /**
+   * Search patients by name or hospital number
+   */
+  async searchPatients(searchTerm: string) {
+    try {
+      const allPatients = await this.getAllPatients();
+      const term = searchTerm.toLowerCase().trim();
+      
+      if (!term) return allPatients;
+      
+      return allPatients.filter((patient: any) => {
+        const fullName = (patient.full_name || `${patient.first_name || ''} ${patient.last_name || ''}`).toLowerCase();
+        const hospitalNumber = (patient.hospital_number || '').toLowerCase();
+        return fullName.includes(term) || hospitalNumber.includes(term);
+      });
+    } catch (error) {
+      console.error('Error searching patients:', error);
+      return [];
+    }
+  }
+
+  /**
    * Get a single patient by ID
    */
   async getPatient(id: string | number) {

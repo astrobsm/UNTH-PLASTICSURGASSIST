@@ -336,6 +336,7 @@ const PatientSummariesPage: React.FC = () => {
             value={selectedPatient}
             onChange={(e) => setSelectedPatient(e.target.value)}
             className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+            title="Select patient"
           >
             <option value="">Choose a patient...</option>
             {patients.map(p => (

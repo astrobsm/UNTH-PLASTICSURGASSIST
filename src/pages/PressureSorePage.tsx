@@ -427,7 +427,7 @@ const PressureSorePage: React.FC = () => {
         <div className={`mb-4 p-3 rounded-lg flex items-center gap-2 ${message.type === 'success' ? 'bg-green-50 text-green-800 border border-green-200' : 'bg-red-50 text-red-800 border border-red-200'}`}>
           {message.type === 'success' ? <CheckCircle className="h-5 w-5" /> : <AlertCircle className="h-5 w-5" />}
           <span className="text-sm">{message.text}</span>
-          <button onClick={() => setMessage(null)} className="ml-auto"><X className="h-4 w-4" /></button>
+          <button onClick={() => setMessage(null)} className="ml-auto" title="Dismiss message"><X className="h-4 w-4" /></button>
         </div>
       )}
 
@@ -681,7 +681,7 @@ const PressureSorePage: React.FC = () => {
               {selectedPatient && (
                 <div className="mt-2 p-2 bg-purple-50 rounded-lg text-sm flex items-center justify-between">
                   <span><User className="h-4 w-4 inline mr-1" /> {selectedPatient.full_name || `${selectedPatient.first_name} ${selectedPatient.last_name}`} ({selectedPatient.hospital_number})</span>
-                  <button onClick={() => setSelectedPatient(null)} className="text-gray-400 hover:text-gray-600"><X className="h-4 w-4" /></button>
+                  <button onClick={() => setSelectedPatient(null)} className="text-gray-400 hover:text-gray-600" title="Clear patient selection"><X className="h-4 w-4" /></button>
                 </div>
               )}
             </div>
@@ -690,7 +690,7 @@ const PressureSorePage: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Location *</label>
-                <select value={woundForm.location} onChange={e => setWoundForm(prev => ({ ...prev, location: e.target.value }))}
+                <select value={woundForm.location} onChange={e => setWoundForm(prev => ({ ...prev, location: e.target.value }))} title="Wound location"
                   className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500">
                   <option value="">Select location...</option>
                   <option value="sacrum">Sacrum</option>
@@ -707,7 +707,7 @@ const PressureSorePage: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Laterality</label>
-                <select value={woundForm.laterality} onChange={e => setWoundForm(prev => ({ ...prev, laterality: e.target.value }))}
+                <select value={woundForm.laterality} onChange={e => setWoundForm(prev => ({ ...prev, laterality: e.target.value }))} title="Laterality"
                   className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500">
                   <option value="midline">Midline</option>
                   <option value="left">Left</option>
@@ -718,7 +718,7 @@ const PressureSorePage: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Stage *</label>
-                <select value={woundForm.currentStage} onChange={e => setWoundForm(prev => ({ ...prev, currentStage: e.target.value }))}
+                <select value={woundForm.currentStage} onChange={e => setWoundForm(prev => ({ ...prev, currentStage: e.target.value }))} title="Wound stage"
                   className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500">
                   <option value="">Select stage...</option>
                   {PRESSURE_INJURY_STAGES.map(s => (
@@ -729,21 +729,21 @@ const PressureSorePage: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Length (cm)</label>
-                <input type="number" step="0.1" value={woundForm.woundLength}
+                <input type="number" step="0.1" value={woundForm.woundLength} title="Wound length in cm"
                   onChange={e => setWoundForm(prev => ({ ...prev, woundLength: e.target.value }))}
                   className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500" />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Width (cm)</label>
-                <input type="number" step="0.1" value={woundForm.woundWidth}
+                <input type="number" step="0.1" value={woundForm.woundWidth} title="Wound width in cm"
                   onChange={e => setWoundForm(prev => ({ ...prev, woundWidth: e.target.value }))}
                   className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500" />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Depth (cm)</label>
-                <input type="number" step="0.1" value={woundForm.woundDepth}
+                <input type="number" step="0.1" value={woundForm.woundDepth} title="Wound depth in cm"
                   onChange={e => setWoundForm(prev => ({ ...prev, woundDepth: e.target.value }))}
                   className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500" />
               </div>
@@ -753,19 +753,19 @@ const PressureSorePage: React.FC = () => {
             <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Granulation %</label>
-                <input type="number" min="0" max="100" value={woundForm.granulationPercent}
+                <input type="number" min="0" max="100" value={woundForm.granulationPercent} title="Granulation percentage"
                   onChange={e => setWoundForm(prev => ({ ...prev, granulationPercent: Number(e.target.value) }))}
                   className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Slough %</label>
-                <input type="number" min="0" max="100" value={woundForm.sloughPercent}
+                <input type="number" min="0" max="100" value={woundForm.sloughPercent} title="Slough percentage"
                   onChange={e => setWoundForm(prev => ({ ...prev, sloughPercent: Number(e.target.value) }))}
                   className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Eschar %</label>
-                <input type="number" min="0" max="100" value={woundForm.escharPercent}
+                <input type="number" min="0" max="100" value={woundForm.escharPercent} title="Eschar percentage"
                   onChange={e => setWoundForm(prev => ({ ...prev, escharPercent: Number(e.target.value) }))}
                   className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500" />
               </div>
@@ -775,7 +775,7 @@ const PressureSorePage: React.FC = () => {
             <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Exudate Type</label>
-                <select value={woundForm.exudateType} onChange={e => setWoundForm(prev => ({ ...prev, exudateType: e.target.value }))}
+                <select value={woundForm.exudateType} onChange={e => setWoundForm(prev => ({ ...prev, exudateType: e.target.value }))} title="Exudate type"
                   className="w-full border rounded-lg px-3 py-2 text-sm">
                   <option value="serous">Serous</option>
                   <option value="serosanguinous">Serosanguinous</option>
@@ -786,7 +786,7 @@ const PressureSorePage: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Exudate Amount</label>
-                <select value={woundForm.exudateAmount} onChange={e => setWoundForm(prev => ({ ...prev, exudateAmount: e.target.value }))}
+                <select value={woundForm.exudateAmount} onChange={e => setWoundForm(prev => ({ ...prev, exudateAmount: e.target.value }))} title="Exudate amount"
                   className="w-full border rounded-lg px-3 py-2 text-sm">
                   <option value="none">None</option>
                   <option value="minimal">Minimal</option>
@@ -796,7 +796,7 @@ const PressureSorePage: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Pain Level (0-10)</label>
-                <input type="number" min="0" max="10" value={woundForm.painLevel}
+                <input type="number" min="0" max="10" value={woundForm.painLevel} title="Pain level 0-10"
                   onChange={e => setWoundForm(prev => ({ ...prev, painLevel: Number(e.target.value) }))}
                   className="w-full border rounded-lg px-3 py-2 text-sm" />
               </div>
@@ -1054,19 +1054,19 @@ const PressureSorePage: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Length (cm)</label>
-                    <input type="number" step="0.1" value={progressForm.woundLength}
+                    <input type="number" step="0.1" value={progressForm.woundLength} title="Wound length in cm"
                       onChange={e => setProgressForm(prev => ({ ...prev, woundLength: e.target.value }))}
                       className="w-full border rounded-lg px-3 py-2 text-sm" />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Width (cm)</label>
-                    <input type="number" step="0.1" value={progressForm.woundWidth}
+                    <input type="number" step="0.1" value={progressForm.woundWidth} title="Wound width in cm"
                       onChange={e => setProgressForm(prev => ({ ...prev, woundWidth: e.target.value }))}
                       className="w-full border rounded-lg px-3 py-2 text-sm" />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Depth (cm)</label>
-                    <input type="number" step="0.1" value={progressForm.woundDepth}
+                    <input type="number" step="0.1" value={progressForm.woundDepth} title="Wound depth in cm"
                       onChange={e => setProgressForm(prev => ({ ...prev, woundDepth: e.target.value }))}
                       className="w-full border rounded-lg px-3 py-2 text-sm" />
                   </div>
@@ -1075,19 +1075,19 @@ const PressureSorePage: React.FC = () => {
                 <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Granulation %</label>
-                    <input type="number" min="0" max="100" value={progressForm.granulationPercent}
+                    <input type="number" min="0" max="100" value={progressForm.granulationPercent} title="Granulation percentage"
                       onChange={e => setProgressForm(prev => ({ ...prev, granulationPercent: Number(e.target.value) }))}
                       className="w-full border rounded-lg px-3 py-2 text-sm" />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Slough %</label>
-                    <input type="number" min="0" max="100" value={progressForm.sloughPercent}
+                    <input type="number" min="0" max="100" value={progressForm.sloughPercent} title="Slough percentage"
                       onChange={e => setProgressForm(prev => ({ ...prev, sloughPercent: Number(e.target.value) }))}
                       className="w-full border rounded-lg px-3 py-2 text-sm" />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Eschar %</label>
-                    <input type="number" min="0" max="100" value={progressForm.escharPercent}
+                    <input type="number" min="0" max="100" value={progressForm.escharPercent} title="Eschar percentage"
                       onChange={e => setProgressForm(prev => ({ ...prev, escharPercent: Number(e.target.value) }))}
                       className="w-full border rounded-lg px-3 py-2 text-sm" />
                   </div>
@@ -1103,7 +1103,7 @@ const PressureSorePage: React.FC = () => {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Pain Level (0-10)</label>
-                    <input type="number" min="0" max="10" value={progressForm.painLevel}
+                    <input type="number" min="0" max="10" value={progressForm.painLevel} title="Pain level 0-10"
                       onChange={e => setProgressForm(prev => ({ ...prev, painLevel: Number(e.target.value) }))}
                       className="w-full border rounded-lg px-3 py-2 text-sm" />
                   </div>

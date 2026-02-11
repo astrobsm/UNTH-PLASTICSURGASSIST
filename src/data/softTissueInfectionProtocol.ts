@@ -14,6 +14,7 @@ export interface STIClassification {
   differentialDiagnosis: string[];
   imagingFindings?: string[];
   managementPrinciples: string[];
+  redFlags?: string[];
 }
 
 export interface LRINECScore {

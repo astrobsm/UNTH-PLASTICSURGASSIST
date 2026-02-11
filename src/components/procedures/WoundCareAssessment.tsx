@@ -608,6 +608,7 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
             value={assessment.wound_type || 'surgical'}
             onChange={(e) => handleInputChange('wound_type', e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500"
+            title="Select wound type"
           >
             <option value="surgical">Surgical Wound</option>
             <option value="traumatic">Traumatic Wound</option>
@@ -640,6 +641,7 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
               }
             }}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500"
+            title="Select wound nature"
           >
             <option value="acute">Acute Wound</option>
             <option value="chronic">Chronic Wound</option>
@@ -664,6 +666,7 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
             value={assessment.wound_classification || 'clean'}
             onChange={(e) => handleInputChange('wound_classification', e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+            title="Select wound classification"
           >
             <option value="clean">Clean</option>
             <option value="clean_contaminated">Clean-Contaminated</option>
@@ -688,6 +691,7 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
             value={assessment.healing_stage || 'acute_wound'}
             onChange={(e) => handleInputChange('healing_stage', e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500"
+            title="Select healing stage"
           >
             <option value="acute_wound">Acute Wound (0-4 days)</option>
             <option value="extension_wound">Extension Wound (2-14 days)</option>
@@ -756,6 +760,7 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
                 capture="environment"
                 onChange={handlePhotoUpload}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500"
+                title="Upload wound photograph"
               />
               <p className="text-xs text-gray-500 mt-2">
                 💡 Tip: Include a ruler, coin, or credit card in the photo for automatic calibration
@@ -993,6 +998,7 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
                   value={assessment.dimensions?.length || ''}
                   onChange={(e) => handleNestedInputChange('dimensions', 'length', parseFloat(e.target.value) || 0)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500"
+                  title="Wound length in cm"
                 />
               </div>
 
@@ -1006,6 +1012,7 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
                   value={assessment.dimensions?.width || ''}
                   onChange={(e) => handleNestedInputChange('dimensions', 'width', parseFloat(e.target.value) || 0)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500"
+                  title="Wound width in cm"
                 />
               </div>
 
@@ -1019,6 +1026,7 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
                   value={assessment.dimensions?.depth || ''}
                   onChange={(e) => handleNestedInputChange('dimensions', 'depth', parseFloat(e.target.value) || 0)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500"
+                  title="Wound depth in cm"
                 />
               </div>
 
@@ -1032,6 +1040,7 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
                   value={assessment.dimensions?.area || ''}
                   onChange={(e) => handleNestedInputChange('dimensions', 'area', parseFloat(e.target.value) || 0)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500"
+                  title="Wound area in cm²"
                 />
               </div>
             </div>
@@ -1121,6 +1130,7 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
             value={assessment.appearance?.exudate_amount || 'minimal'}
             onChange={(e) => handleNestedInputChange('appearance', 'exudate_amount', e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500"
+            title="Select exudate amount"
           >
             <option value="none">None</option>
             <option value="minimal">Minimal</option>
@@ -1137,6 +1147,7 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
             value={assessment.appearance?.exudate_type || 'serous'}
             onChange={(e) => handleNestedInputChange('appearance', 'exudate_type', e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500"
+            title="Select exudate type"
           >
             <option value="serous">Serous (Clear)</option>
             <option value="serosanguinous">Serosanguinous (Pink/Red)</option>
@@ -1153,6 +1164,7 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
             value={assessment.appearance?.odor || 'none'}
             onChange={(e) => handleNestedInputChange('appearance', 'odor', e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500"
+            title="Select wound odor level"
           >
             <option value="none">No Odor</option>
             <option value="mild">Mild Odor</option>
@@ -1172,6 +1184,7 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
             value={assessment.pain_score || 0}
             onChange={(e) => handleInputChange('pain_score', parseInt(e.target.value))}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500"
+            title="Pain score from 0 to 10"
           />
         </div>
 
@@ -1183,6 +1196,7 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
             value={assessment.appearance?.surrounding_skin || 'normal'}
             onChange={(e) => handleNestedInputChange('appearance', 'surrounding_skin', e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500"
+            title="Select surrounding skin condition"
           >
             <option value="normal">Normal</option>
             <option value="erythema">Erythema (Red)</option>
@@ -1200,6 +1214,7 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
             value={assessment.healing_rate || 'good'}
             onChange={(e) => handleInputChange('healing_rate', e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500"
+            title="Select healing rate"
           >
             <option value="excellent">Excellent</option>
             <option value="good">Good</option>
@@ -1303,6 +1318,7 @@ fever`}
             value={assessment.dressing_change_frequency || 'daily'}
             onChange={(e) => handleInputChange('dressing_change_frequency', e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500"
+            title="Select dressing change frequency"
           >
             <option value="twice_daily">Twice Daily</option>
             <option value="daily">Daily</option>

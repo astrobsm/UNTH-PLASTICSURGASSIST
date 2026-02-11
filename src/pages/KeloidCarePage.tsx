@@ -1129,12 +1129,14 @@ const TestRow: React.FC<{
               <button
                 onClick={saveResult}
                 className="p-1 text-green-600 hover:bg-green-100 rounded"
+                title="Save result"
               >
                 <Check className="h-5 w-5" />
               </button>
               <button
                 onClick={() => setEditing(false)}
                 className="p-1 text-gray-500 hover:bg-gray-200 rounded"
+                title="Cancel editing"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -1771,7 +1773,7 @@ const CreatePlanModal: React.FC<CreatePlanModalProps> = ({ patients, onClose, on
             <h2 className="text-xl font-semibold text-gray-900">Create Keloid Care Plan</h2>
             <p className="text-sm text-gray-500">Step {step} of 5</p>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-200 rounded-lg">
+          <button onClick={onClose} className="p-2 hover:bg-gray-200 rounded-lg" title="Close">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -1971,6 +1973,7 @@ const CreatePlanModal: React.FC<CreatePlanModalProps> = ({ patients, onClose, on
                       value={formData.preop_triamcinolone_count}
                       onChange={(e) => setFormData({ ...formData, preop_triamcinolone_count: parseInt(e.target.value) || 0 })}
                       className="w-full px-3 py-2 border rounded-lg"
+                      title="Number of sessions"
                     />
                   </div>
                   <div>
@@ -1982,6 +1985,7 @@ const CreatePlanModal: React.FC<CreatePlanModalProps> = ({ patients, onClose, on
                       value={formData.preop_injection_interval_weeks}
                       onChange={(e) => setFormData({ ...formData, preop_injection_interval_weeks: parseInt(e.target.value) || 3 })}
                       className="w-full px-3 py-2 border rounded-lg"
+                      title="Injection interval in weeks"
                     />
                   </div>
                 </div>
@@ -2009,6 +2013,7 @@ const CreatePlanModal: React.FC<CreatePlanModalProps> = ({ patients, onClose, on
                           value={formData.surgery_date}
                           onChange={(e) => setFormData({ ...formData, surgery_date: e.target.value })}
                           className="w-full px-3 py-2 border rounded-lg"
+                          title="Surgery date"
                         />
                       </div>
                       <div>
@@ -2017,6 +2022,7 @@ const CreatePlanModal: React.FC<CreatePlanModalProps> = ({ patients, onClose, on
                           value={formData.surgery_technique}
                           onChange={(e) => setFormData({ ...formData, surgery_technique: e.target.value })}
                           className="w-full px-3 py-2 border rounded-lg"
+                          title="Surgery technique"
                         >
                           <option value="">Select technique...</option>
                           {SURGERY_TECHNIQUES.map(tech => (
@@ -2056,6 +2062,7 @@ const CreatePlanModal: React.FC<CreatePlanModalProps> = ({ patients, onClose, on
                         value={formData.postop_triamcinolone_count}
                         onChange={(e) => setFormData({ ...formData, postop_triamcinolone_count: parseInt(e.target.value) || 0 })}
                         className="w-full px-3 py-2 border rounded-lg"
+                        title="Number of post-op sessions"
                       />
                     </div>
                     <div>
@@ -2067,6 +2074,7 @@ const CreatePlanModal: React.FC<CreatePlanModalProps> = ({ patients, onClose, on
                         value={formData.postop_injection_interval_weeks}
                         onChange={(e) => setFormData({ ...formData, postop_injection_interval_weeks: parseInt(e.target.value) || 3 })}
                         className="w-full px-3 py-2 border rounded-lg"
+                        title="Post-op injection interval in weeks"
                       />
                     </div>
                   </div>
@@ -2089,6 +2097,7 @@ const CreatePlanModal: React.FC<CreatePlanModalProps> = ({ patients, onClose, on
                       value={formData.silicone_sheet_start_date}
                       onChange={(e) => setFormData({ ...formData, silicone_sheet_start_date: e.target.value })}
                       className="w-full px-3 py-2 border rounded-lg"
+                      title="Silicone sheet start date"
                     />
                     <p className="text-xs text-blue-600 mt-1">Usually 2-3 weeks post-surgery</p>
                   </div>
@@ -2101,6 +2110,7 @@ const CreatePlanModal: React.FC<CreatePlanModalProps> = ({ patients, onClose, on
                       value={formData.silicone_sheet_duration_months}
                       onChange={(e) => setFormData({ ...formData, silicone_sheet_duration_months: parseInt(e.target.value) || 6 })}
                       className="w-full px-3 py-2 border rounded-lg"
+                      title="Silicone sheet duration in months"
                     />
                   </div>
                 </div>
@@ -2117,6 +2127,7 @@ const CreatePlanModal: React.FC<CreatePlanModalProps> = ({ patients, onClose, on
                       value={formData.compression_therapy_start_date}
                       onChange={(e) => setFormData({ ...formData, compression_therapy_start_date: e.target.value })}
                       className="w-full px-3 py-2 border rounded-lg"
+                      title="Compression therapy start date"
                     />
                     <p className="text-xs text-green-600 mt-1">Usually after wound healing (~2 weeks)</p>
                   </div>
@@ -2129,6 +2140,7 @@ const CreatePlanModal: React.FC<CreatePlanModalProps> = ({ patients, onClose, on
                       value={formData.compression_therapy_duration_months}
                       onChange={(e) => setFormData({ ...formData, compression_therapy_duration_months: parseInt(e.target.value) || 6 })}
                       className="w-full px-3 py-2 border rounded-lg"
+                      title="Compression therapy duration in months"
                     />
                   </div>
                 </div>
@@ -2182,6 +2194,7 @@ const CreatePlanModal: React.FC<CreatePlanModalProps> = ({ patients, onClose, on
                           value={formData.radiotherapy_timing}
                           onChange={(e) => setFormData({ ...formData, radiotherapy_timing: e.target.value })}
                           className="w-full px-3 py-2 border rounded-lg"
+                          title="Radiotherapy timing"
                         />
                       </div>
                       <div>
@@ -2192,6 +2205,7 @@ const CreatePlanModal: React.FC<CreatePlanModalProps> = ({ patients, onClose, on
                           onChange={(e) => setFormData({ ...formData, radiotherapy_dose: e.target.value })}
                           placeholder="e.g., 12 Gy"
                           className="w-full px-3 py-2 border rounded-lg"
+                          title="Radiotherapy dose"
                         />
                       </div>
                       <div>
@@ -2203,6 +2217,7 @@ const CreatePlanModal: React.FC<CreatePlanModalProps> = ({ patients, onClose, on
                           value={formData.radiotherapy_fractions}
                           onChange={(e) => setFormData({ ...formData, radiotherapy_fractions: parseInt(e.target.value) || 3 })}
                           className="w-full px-3 py-2 border rounded-lg"
+                          title="Radiotherapy fractions"
                         />
                       </div>
                     </div>
@@ -2318,7 +2333,7 @@ const RecordInjectionModal: React.FC<RecordInjectionModalProps> = ({
               {injection.injection_phase === 'preop' ? 'Pre-Operative' : 'Post-Operative'} Injection #{injection.injection_number}
             </p>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg" title="Close">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -2332,6 +2347,7 @@ const RecordInjectionModal: React.FC<RecordInjectionModalProps> = ({
                 value={formData.actual_date}
                 onChange={(e) => setFormData({ ...formData, actual_date: e.target.value })}
                 className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500"
+                title="Date injection was given"
               />
             </div>
             <div>
@@ -2341,6 +2357,7 @@ const RecordInjectionModal: React.FC<RecordInjectionModalProps> = ({
                 value={formData.dose_mg}
                 onChange={(e) => setFormData({ ...formData, dose_mg: parseFloat(e.target.value) || 0 })}
                 className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500"
+                title="Injection dose in mg"
               />
             </div>
           </div>
@@ -2352,6 +2369,7 @@ const RecordInjectionModal: React.FC<RecordInjectionModalProps> = ({
                 value={formData.concentration}
                 onChange={(e) => setFormData({ ...formData, concentration: e.target.value })}
                 className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500"
+                title="Drug concentration"
               >
                 <option value="10mg/ml">10mg/ml</option>
                 <option value="40mg/ml">40mg/ml</option>
@@ -2365,6 +2383,7 @@ const RecordInjectionModal: React.FC<RecordInjectionModalProps> = ({
                 value={formData.volume_ml}
                 onChange={(e) => setFormData({ ...formData, volume_ml: parseFloat(e.target.value) || 0 })}
                 className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500"
+                title="Injection volume in ml"
               />
             </div>
           </div>
