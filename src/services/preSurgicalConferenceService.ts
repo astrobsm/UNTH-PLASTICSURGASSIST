@@ -116,7 +116,7 @@ export interface ConferenceData {
 }
 
 class PreSurgicalConferenceService {
-  private baseUrl = '/api/pre-surgical-conference';
+  private baseUrl = '/pre-surgical-conference';
 
   async getConferenceData(patientId: string): Promise<ConferenceData> {
     try {
