@@ -24,6 +24,12 @@ interface Patient {
   full_name?: string;
   first_name?: string;
   last_name?: string;
+  date_of_birth?: string;
+  gender?: string;
+  blood_group?: string;
+  phone?: string;
+  ward?: string;
+  bed?: string;
 }
 
 interface Assessment {
@@ -210,6 +216,12 @@ const SoftTissueInfectionPage: React.FC = () => {
 
   // Generate LRINEC Lab Request Form PDF
   const generateLRINECLabRequest = async () => {
+    // Warn if no patient selected but allow to continue
+    if (!selectedPatient) {
+      const proceed = window.confirm('No patient selected. The lab request form will have blank patient details.\n\nDo you want to continue?');
+      if (!proceed) return;
+    }
+
     const { jsPDF } = await import('jspdf');
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     const pageWidth = doc.internal.pageSize.getWidth();
@@ -244,15 +256,30 @@ const SoftTissueInfectionPage: React.FC = () => {
 
     const patientName = selectedPatient ? (selectedPatient.full_name || `${selectedPatient.first_name} ${selectedPatient.last_name}`) : '________________________________';
     const hospitalNo = selectedPatient ? selectedPatient.hospital_number : '________________';
+    const patientDOB = selectedPatient?.date_of_birth ? new Date(selectedPatient.date_of_birth).toLocaleDateString('en-GB') : '________________';
+    const patientGender = selectedPatient?.gender || '________';
+    const patientBloodGroup = selectedPatient?.blood_group || '________';
+    const patientPhone = selectedPatient?.phone || '________________';
+    const patientWard = selectedPatient?.ward || '________________';
     const requestDate = new Date().toLocaleDateString('en-GB');
     const requestTime = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
+    // Patient Details - Row 1
     doc.text(`Patient Name: ${patientName}`, margin, y);
     doc.text(`Hospital No: ${hospitalNo}`, pageWidth - margin - 50, y);
     y += 6;
-    doc.text(`Date: ${requestDate}`, margin, y);
-    doc.text(`Time: ${requestTime}`, margin + 50, y);
-    doc.text(`Ward/Clinic: ________________`, pageWidth - margin - 60, y);
+    // Patient Details - Row 2
+    doc.text(`Date of Birth: ${patientDOB}`, margin, y);
+    doc.text(`Gender: ${patientGender}`, margin + 55, y);
+    doc.text(`Blood Group: ${patientBloodGroup}`, pageWidth - margin - 50, y);
+    y += 6;
+    // Patient Details - Row 3
+    doc.text(`Phone: ${patientPhone}`, margin, y);
+    doc.text(`Ward/Clinic: ${patientWard}`, margin + 70, y);
+    y += 6;
+    // Request Details
+    doc.text(`Request Date: ${requestDate}`, margin, y);
+    doc.text(`Time: ${requestTime}`, margin + 60, y);
     y += 10;
 
     // Clinical Indication
@@ -782,6 +809,54 @@ const SoftTissueInfectionPage: React.FC = () => {
       {/* ============================================ */}
       {activeTab === 'lrinec' && (
         <div className="space-y-6">
+          {/* Patient Selection for LRINEC */}
+          <div className="bg-white border rounded-lg p-6 shadow-sm">
+            <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
+              <User className="h-5 w-5 text-green-600" /> Select Patient for Evaluation
+            </h3>
+            <p className="text-sm text-gray-500 mb-3">Search and select a patient to associate with the LRINEC assessment and lab request form.</p>
+            <div className="relative">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-green-300"
+                placeholder="Search by name or hospital number..."
+                value={patientSearch}
+                onChange={e => setPatientSearch(e.target.value)}
+              />
+            </div>
+            {patients.length > 0 && !selectedPatient && (
+              <div className="mt-2 border rounded-lg max-h-40 overflow-y-auto">
+                {patients.map(p => (
+                  <button key={p.id} onClick={() => { setSelectedPatient(p); setPatientSearch(''); setPatients([]); }}
+                    className="w-full text-left px-4 py-2 hover:bg-green-50 text-sm border-b last:border-b-0">
+                    <span className="font-medium">{p.full_name || `${p.first_name} ${p.last_name}`}</span>
+                    <span className="text-gray-500 ml-2">({p.hospital_number})</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {selectedPatient && (
+              <div className="mt-2 bg-green-50 border border-green-200 rounded-lg px-4 py-3 flex items-center justify-between">
+                <div>
+                  <span className="text-sm font-semibold text-green-800">
+                    {selectedPatient.full_name || `${selectedPatient.first_name} ${selectedPatient.last_name}`}
+                  </span>
+                  <span className="text-sm text-green-700 ml-2">({selectedPatient.hospital_number})</span>
+                </div>
+                <button onClick={() => setSelectedPatient(null)} className="text-green-600 hover:text-green-800" title="Clear patient selection">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+            {!selectedPatient && (
+              <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                <span className="text-sm text-yellow-700">Select a patient to include their details in the lab request form</span>
+              </div>
+            )}
+          </div>
+
           <div className="bg-white border rounded-lg p-6 shadow-sm">
             <div className="flex items-center gap-2 mb-4">
               <Calculator className="h-6 w-6 text-red-600" />
