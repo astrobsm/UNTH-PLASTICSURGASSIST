@@ -800,11 +800,21 @@ const SoftTissueInfectionPage: React.FC = () => {
                 <label className="block text-sm font-semibold mb-1">Onset Date</label>
                 <input type="date" className="w-full border rounded px-3 py-2 text-sm" title="Onset date"
                   value={assessmentForm.onset_date}
-                  onChange={e => setAssessmentForm(prev => ({ ...prev, onset_date: e.target.value }))} />
+                  onChange={e => {
+                    const onsetDate = e.target.value;
+                    let durationHours = assessmentForm.duration_hours || 0;
+                    if (onsetDate) {
+                      const onset = new Date(onsetDate);
+                      const now = new Date();
+                      const diffMs = now.getTime() - onset.getTime();
+                      durationHours = Math.max(0, Math.round(diffMs / (1000 * 60 * 60)));
+                    }
+                    setAssessmentForm(prev => ({ ...prev, onset_date: onsetDate, duration_hours: durationHours }));
+                  }} />
               </div>
               <div>
-                <label className="block text-sm font-semibold mb-1">Duration (hours)</label>
-                <input type="number" className="w-full border rounded px-3 py-2 text-sm" title="Duration in hours"
+                <label className="block text-sm font-semibold mb-1">Duration (hours) <span className="text-xs text-gray-500 font-normal">Auto-calculated</span></label>
+                <input type="number" className="w-full border rounded px-3 py-2 text-sm bg-gray-50" title="Duration in hours (auto-calculated from onset date)"
                   value={assessmentForm.duration_hours || ''}
                   onChange={e => setAssessmentForm(prev => ({ ...prev, duration_hours: parseInt(e.target.value) || 0 }))} />
               </div>
