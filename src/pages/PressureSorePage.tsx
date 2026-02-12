@@ -30,7 +30,7 @@ interface Patient {
 const API_BASE = '/api/pressure-sore-protocol';
 
 const getAuthHeaders = () => {
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem('auth_token');
   return {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {})
