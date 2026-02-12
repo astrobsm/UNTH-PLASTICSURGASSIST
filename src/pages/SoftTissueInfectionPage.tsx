@@ -208,6 +208,189 @@ const SoftTissueInfectionPage: React.FC = () => {
     setQsofaResult(score);
   };
 
+  // Generate LRINEC Lab Request Form PDF
+  const generateLRINECLabRequest = async () => {
+    const { jsPDF } = await import('jspdf');
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 15;
+    let y = 15;
+
+    // Header
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text('UNIVERSITY OF NIGERIA TEACHING HOSPITAL', pageWidth / 2, y, { align: 'center' });
+    y += 5;
+    doc.text('Department of Plastic & Reconstructive Surgery', pageWidth / 2, y, { align: 'center' });
+    y += 8;
+
+    // Title
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('LABORATORY REQUEST FORM', pageWidth / 2, y, { align: 'center' });
+    y += 5;
+    doc.setFontSize(11);
+    doc.setTextColor(220, 38, 38);
+    doc.text('LRINEC Score Panel - Soft Tissue Infection Workup', pageWidth / 2, y, { align: 'center' });
+    doc.setTextColor(0, 0, 0);
+    y += 10;
+
+    // Patient Info Section
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text('PATIENT INFORMATION', margin, y);
+    y += 6;
+    doc.setFont('helvetica', 'normal');
+
+    const patientName = selectedPatient ? (selectedPatient.full_name || `${selectedPatient.first_name} ${selectedPatient.last_name}`) : '________________________________';
+    const hospitalNo = selectedPatient ? selectedPatient.hospital_number : '________________';
+    const requestDate = new Date().toLocaleDateString('en-GB');
+    const requestTime = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
+    doc.text(`Patient Name: ${patientName}`, margin, y);
+    doc.text(`Hospital No: ${hospitalNo}`, pageWidth - margin - 50, y);
+    y += 6;
+    doc.text(`Date: ${requestDate}`, margin, y);
+    doc.text(`Time: ${requestTime}`, margin + 50, y);
+    doc.text(`Ward/Clinic: ________________`, pageWidth - margin - 60, y);
+    y += 10;
+
+    // Clinical Indication
+    doc.setFont('helvetica', 'bold');
+    doc.text('CLINICAL INDICATION:', margin, y);
+    y += 5;
+    doc.setFont('helvetica', 'normal');
+    doc.text('Suspected Soft Tissue Infection / Necrotizing Fasciitis Workup', margin, y);
+    y += 5;
+    doc.text('LRINEC Score Calculation Required', margin, y);
+    y += 10;
+
+    // Tests Table Header
+    doc.setFont('helvetica', 'bold');
+    doc.setFillColor(14, 159, 110);
+    doc.rect(margin, y, pageWidth - 2 * margin, 8, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.text('TESTS REQUESTED', margin + 3, y + 5.5);
+    doc.text('SAMPLE', margin + 80, y + 5.5);
+    doc.text('URGENCY', margin + 115, y + 5.5);
+    doc.text('TICK', margin + 155, y + 5.5);
+    doc.setTextColor(0, 0, 0);
+    y += 10;
+
+    // LRINEC Required Tests
+    const lrinecTests = [
+      { test: 'C-Reactive Protein (CRP)', sample: 'Serum (Gold)', urgency: 'STAT' },
+      { test: 'Full Blood Count (WBC, Hb)', sample: 'EDTA (Purple)', urgency: 'STAT' },
+      { test: 'Serum Sodium (Na+)', sample: 'Serum (Gold)', urgency: 'STAT' },
+      { test: 'Serum Creatinine', sample: 'Serum (Gold)', urgency: 'STAT' },
+      { test: 'Random Blood Glucose', sample: 'Fluoride (Grey)', urgency: 'STAT' },
+    ];
+
+    doc.setFont('helvetica', 'normal');
+    lrinecTests.forEach((t, i) => {
+      const rowY = y + i * 8;
+      if (i % 2 === 0) {
+        doc.setFillColor(240, 240, 240);
+        doc.rect(margin, rowY - 1, pageWidth - 2 * margin, 8, 'F');
+      }
+      doc.text(t.test, margin + 3, rowY + 4);
+      doc.text(t.sample, margin + 80, rowY + 4);
+      doc.setTextColor(220, 38, 38);
+      doc.setFont('helvetica', 'bold');
+      doc.text(t.urgency, margin + 115, rowY + 4);
+      doc.setTextColor(0, 0, 0);
+      doc.setFont('helvetica', 'normal');
+      // Checkbox
+      doc.rect(margin + 157, rowY, 5, 5);
+      doc.text('X', margin + 158, rowY + 4); // Pre-ticked
+    });
+    y += lrinecTests.length * 8 + 5;
+
+    // Additional Tests Section
+    y += 5;
+    doc.setFont('helvetica', 'bold');
+    doc.setFillColor(234, 179, 8);
+    doc.rect(margin, y, pageWidth - 2 * margin, 8, 'F');
+    doc.setTextColor(0, 0, 0);
+    doc.text('ADDITIONAL TESTS (If Sepsis/NSTI Suspected)', margin + 3, y + 5.5);
+    y += 10;
+
+    const additionalTests = [
+      { test: 'Blood Lactate', sample: 'Fluoride (Grey)', urgency: 'STAT' },
+      { test: 'Blood Culture (2 sets)', sample: 'Culture bottles', urgency: 'STAT' },
+      { test: 'Procalcitonin', sample: 'Serum (Gold)', urgency: 'Urgent' },
+      { test: 'Arterial Blood Gas (ABG)', sample: 'Heparinized syringe', urgency: 'STAT' },
+      { test: 'Creatine Kinase (CK)', sample: 'Serum (Gold)', urgency: 'Urgent' },
+      { test: 'Liver Function Tests', sample: 'Serum (Gold)', urgency: 'Urgent' },
+      { test: 'Coagulation Screen (PT/INR, aPTT)', sample: 'Citrate (Blue)', urgency: 'Urgent' },
+      { test: 'D-Dimer', sample: 'Citrate (Blue)', urgency: 'Urgent' },
+      { test: 'Group & Crossmatch (2 units)', sample: 'EDTA (Purple)', urgency: 'Urgent' },
+    ];
+
+    doc.setFont('helvetica', 'normal');
+    additionalTests.forEach((t, i) => {
+      const rowY = y + i * 7;
+      doc.text(t.test, margin + 3, rowY + 4);
+      doc.text(t.sample, margin + 80, rowY + 4);
+      doc.setFont('helvetica', 'bold');
+      doc.text(t.urgency, margin + 115, rowY + 4);
+      doc.setFont('helvetica', 'normal');
+      // Empty checkbox
+      doc.rect(margin + 157, rowY, 5, 5);
+    });
+    y += additionalTests.length * 7 + 10;
+
+    // Specimen Collection Notes
+    doc.setFont('helvetica', 'bold');
+    doc.text('SPECIMEN COLLECTION NOTES:', margin, y);
+    y += 5;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.text('- Collect BEFORE starting antibiotics if possible', margin, y); y += 4;
+    doc.text('- Label all specimens with patient details and collection time', margin, y); y += 4;
+    doc.text('- Blood cultures: 2 separate sites, 10mL per bottle', margin, y); y += 4;
+    doc.text('- ABG: Transport on ice immediately to lab', margin, y);
+    y += 10;
+
+    // Requesting Doctor Section
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text('REQUESTING DOCTOR:', margin, y);
+    y += 6;
+    doc.setFont('helvetica', 'normal');
+    const userName = user?.name || user?.full_name || '________________';
+    doc.text(`Name: ${userName}`, margin, y);
+    doc.text('Signature: ________________', margin + 70, y);
+    y += 6;
+    doc.text('Bleep/Phone: ________________', margin, y);
+    doc.text('Designation: ________________', margin + 70, y);
+    y += 15;
+
+    // Footer - LRINEC Reference
+    doc.setFillColor(240, 240, 240);
+    doc.rect(margin, y, pageWidth - 2 * margin, 35, 'F');
+    y += 5;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.text('LRINEC SCORE INTERPRETATION (Laboratory Risk Indicator for Necrotizing Fasciitis)', margin + 3, y);
+    y += 5;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.text('CRP >= 150: +4 | WBC 15-25: +1, >25: +2 | Hb 11-13.5: +1, <11: +2 | Na < 135: +2 | Cr > 1.6: +2 | Glucose > 180: +1', margin + 3, y);
+    y += 5;
+    doc.setTextColor(34, 197, 94);
+    doc.text('Score 0-5: Low Risk (<50% probability NSTI)', margin + 3, y);
+    doc.setTextColor(234, 179, 8);
+    doc.text('Score 6-7: Moderate Risk (50-75%)', margin + 70, y);
+    doc.setTextColor(220, 38, 38);
+    doc.text('Score >= 8: HIGH RISK (>75%) - Surgical Consult STAT', margin + 115, y);
+    doc.setTextColor(0, 0, 0);
+
+    // Download PDF
+    doc.save(`LRINEC_Lab_Request_${selectedPatient?.hospital_number || 'Form'}_${new Date().toISOString().split('T')[0]}.pdf`);
+    setMessage({ type: 'success', text: 'Lab request form generated successfully!' });
+  };
+
   // ============================================
   // SAVE ASSESSMENT
   // ============================================
@@ -635,13 +818,22 @@ const SoftTissueInfectionPage: React.FC = () => {
               ))}
             </div>
 
-            <button
-              onClick={calculateLRINEC}
-              className="w-full md:w-auto px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 font-semibold flex items-center gap-2"
-            >
-              <Calculator className="h-5 w-5" />
-              Calculate LRINEC Score
-            </button>
+            <div className="flex flex-col md:flex-row gap-3">
+              <button
+                onClick={calculateLRINEC}
+                className="w-full md:w-auto px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 font-semibold flex items-center justify-center gap-2"
+              >
+                <Calculator className="h-5 w-5" />
+                Calculate LRINEC Score
+              </button>
+              <button
+                onClick={generateLRINECLabRequest}
+                className="w-full md:w-auto px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold flex items-center justify-center gap-2"
+              >
+                <FileText className="h-5 w-5" />
+                Generate Lab Request Form
+              </button>
+            </div>
 
             {lrinecResult && (
               <div className={`mt-6 p-4 rounded-lg border-2 ${
