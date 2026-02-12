@@ -16,6 +16,14 @@
       "destination": "/api/pre-surgical-conference"
     },
     {
+      "source": "/api/sti-protocol/:path*",
+      "destination": "/api/sti-protocol"
+    },
+    {
+      "source": "/api/pressure-sore-protocol/:path*",
+      "destination": "/api/pressure-sore-protocol"
+    },
+    {
       "source": "/api/:path*",
       "destination": "/api/:path*"
     },
