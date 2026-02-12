@@ -414,26 +414,37 @@ export const QuickSummaryCard: React.FC<{ patientId: string }> = ({ patientId })
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Mock loading latest summary
-    setTimeout(() => {
-      setLatestSummary({
-        id: '1',
-        patient_id: patientId,
-        summary_type: 'progress',
-        generated_by: 'ai',
-        content: 'Patient showing good recovery post-appendectomy. Vital signs stable, wound healing well.',
-        key_points: ['Stable vital signs', 'Good wound healing', 'No complications'],
-        current_problems: ['Post-operative monitoring'],
-        medications: ['IV antibiotics'],
-        investigations_pending: [],
-        plan: ['Continue antibiotics', 'Monitor wound'],
-        generated_at: new Date(),
-        generated_by_user: 'ai-system',
-        ai_confidence: 88
-      });
-      setIsLoading(false);
-    }, 1000);
+    loadLatestSummary();
   }, [patientId]);
+
+  const loadLatestSummary = async () => {
+    setIsLoading(true);
+    try {
+      // Load summaries from database
+      const summaries = await db.patient_summaries
+        ?.where('patient_id')
+        .equals(patientId)
+        .reverse()
+        .sortBy('generated_at') || [];
+      
+      if (summaries.length > 0) {
+        // Get the most recent summary
+        const mostRecent = summaries[summaries.length - 1];
+        setLatestSummary({
+          ...mostRecent,
+          generated_at: new Date(mostRecent.generated_at)
+        });
+      } else {
+        // No summary exists - show empty state
+        setLatestSummary(null);
+      }
+    } catch (error) {
+      console.error('Error loading latest summary:', error);
+      setLatestSummary(null);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   if (isLoading) {
     return (

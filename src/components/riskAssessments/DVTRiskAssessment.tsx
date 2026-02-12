@@ -213,25 +213,85 @@ export const DVTRiskAssessmentForm: React.FC<DVTRiskAssessmentProps> = ({
   };
 
   const riskFactorLabels = {
-    active_cancer: 'Active cancer (treatment within 6 months or palliative)',
-    paralysis_paresis: 'Paralysis, paresis, or recent plaster immobilization',
-    recent_bedrest: 'Recently bedridden for more than 3 days',
-    major_surgery: 'Major surgery in the past 4 weeks',
-    localized_tenderness: 'Localized tenderness along deep venous system',
-    swelling_entire_leg: 'Entire leg swollen',
-    calf_swelling: 'Calf swelling >3 cm compared to asymptomatic leg',
-    pitting_edema: 'Pitting edema (greater in symptomatic leg)',
-    collateral_veins: 'Collateral superficial veins (non-varicose)',
-    previous_dvt: 'Previous documented DVT',
-    alternative_diagnosis: 'Alternative diagnosis likely (subtract 2 points)',
-    age_over_70: 'Age over 70 years',
-    heart_failure: 'Heart failure',
-    trauma_surgery: 'Trauma or surgery',
-    immobilization: 'Immobilization ≥4 days',
-    pregnancy: 'Pregnancy or postpartum',
-    estrogen_therapy: 'Estrogen therapy',
-    obesity_bmi_30: 'Obesity (BMI ≥30)',
-    inherited_thrombophilia: 'Inherited thrombophilia'
+    // 1 Point Factors
+    active_cancer: '(1pt) Active cancer (treatment within 6 months or palliative)',
+    paralysis_paresis: '(1pt) Paralysis, paresis, or recent plaster immobilization',
+    recent_bedrest: '(1pt) Recently bedridden >72 hours',
+    major_surgery: '(2pt) Major surgery (>45 min) in past 4 weeks',
+    localized_tenderness: '(1pt) Localized tenderness along deep venous system',
+    swelling_entire_leg: '(1pt) Entire leg swollen',
+    calf_swelling: '(1pt) Calf swelling >3cm compared to other leg',
+    pitting_edema: '(1pt) Pitting edema (greater in symptomatic leg)',
+    collateral_veins: '(1pt) Collateral superficial veins (non-varicose)',
+    previous_dvt: '(3pt) Previous documented DVT/PE',
+    alternative_diagnosis: '(-2pt) Alternative diagnosis likely',
+    age_over_70: '(2pt) Age 61-74 years / (3pt) Age ≥75 years',
+    heart_failure: '(1pt) Heart failure within 1 month',
+    trauma_surgery: '(2pt) Trauma/surgery within 1 month',
+    immobilization: '(2pt) Immobilization/cast ≥4 days',
+    pregnancy: '(1pt) Pregnancy or postpartum',
+    estrogen_therapy: '(1pt) Oral contraceptives/HRT',
+    obesity_bmi_30: '(1pt) Obesity (BMI ≥25)',
+    inherited_thrombophilia: '(3pt) Known thrombophilia (Factor V Leiden, etc.)'
+  };
+
+  // Caprini Risk Factor Categories for proper scoring
+  const capriniCategories = {
+    onePoint: {
+      title: '1 Point Each',
+      factors: [
+        { key: 'age_41_60', label: 'Age 41-60 years' },
+        { key: 'minor_surgery', label: 'Minor surgery planned' },
+        { key: 'swelling_entire_leg', label: 'Swollen legs (current)' },
+        { key: 'varicose_veins', label: 'Varicose veins' },
+        { key: 'pregnancy', label: 'Pregnancy or postpartum (<1 month)' },
+        { key: 'estrogen_therapy', label: 'Oral contraceptives or HRT' },
+        { key: 'sepsis', label: 'Sepsis (<1 month)' },
+        { key: 'lung_disease', label: 'Serious lung disease incl. pneumonia (<1 month)' },
+        { key: 'inflammatory_bowel', label: 'Inflammatory bowel disease' },
+        { key: 'heart_failure', label: 'Congestive heart failure (<1 month)' },
+        { key: 'acute_mi', label: 'Acute MI (<1 month)' },
+        { key: 'bed_rest', label: 'Medical patient currently at bed rest' },
+        { key: 'obesity_bmi_30', label: 'BMI > 25 kg/m²' }
+      ]
+    },
+    twoPoints: {
+      title: '2 Points Each',
+      factors: [
+        { key: 'age_over_70', label: 'Age 61-74 years' },
+        { key: 'arthroscopic_surgery', label: 'Arthroscopic surgery' },
+        { key: 'active_cancer', label: 'Malignancy (present or previous)' },
+        { key: 'major_surgery', label: 'Major surgery (>45 min)' },
+        { key: 'laparoscopic_surgery', label: 'Laparoscopic surgery (>45 min)' },
+        { key: 'recent_bedrest', label: 'Confined to bed (>72 hours)' },
+        { key: 'immobilization', label: 'Plaster cast immobilization' },
+        { key: 'central_venous_access', label: 'Central venous access' }
+      ]
+    },
+    threePoints: {
+      title: '3 Points Each',
+      factors: [
+        { key: 'age_75', label: 'Age ≥75 years' },
+        { key: 'previous_dvt', label: 'History of DVT/PE' },
+        { key: 'family_vte', label: 'Family history of VTE' },
+        { key: 'factor_v_leiden', label: 'Factor V Leiden positive' },
+        { key: 'prothrombin_mutation', label: 'Prothrombin 20210A positive' },
+        { key: 'lupus_anticoagulant', label: 'Lupus anticoagulant positive' },
+        { key: 'anticardiolipin', label: 'Elevated anticardiolipin antibodies' },
+        { key: 'homocysteine', label: 'Elevated serum homocysteine' },
+        { key: 'hit', label: 'Heparin-induced thrombocytopenia' },
+        { key: 'inherited_thrombophilia', label: 'Other congenital or acquired thrombophilia' }
+      ]
+    },
+    fivePoints: {
+      title: '5 Points Each',
+      factors: [
+        { key: 'stroke', label: 'Stroke (<1 month)' },
+        { key: 'elective_arthroplasty', label: 'Elective major lower extremity arthroplasty' },
+        { key: 'hip_pelvis_fracture', label: 'Hip, pelvis, or leg fracture (<1 month)' },
+        { key: 'spinal_injury', label: 'Acute spinal cord injury (<1 month)' }
+      ]
+    }
   };
 
   const clinicalSignLabels = {
@@ -283,22 +343,85 @@ export const DVTRiskAssessmentForm: React.FC<DVTRiskAssessmentProps> = ({
 
       <div className="p-6 space-y-8">
         
-        {/* Wells Score Risk Factors */}
+        {/* Caprini Score Risk Factors */}
         <div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Wells Score Risk Factors</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {Object.entries(riskFactorLabels).map(([key, label]) => (
-              <label key={key} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-                <input
-                  type="checkbox"
-                  checked={assessment.risk_factors?.[key as keyof DVTRiskAssessment['risk_factors']] || false}
-                  onChange={(e) => handleRiskFactorChange(key as keyof DVTRiskAssessment['risk_factors'], e.target.checked)}
-                  disabled={readOnly}
-                  className="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded"
-                />
-                <span className="text-sm text-gray-700">{label}</span>
-              </label>
-            ))}
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Caprini DVT Risk Assessment (Surgical Patients)</h3>
+          <p className="text-sm text-gray-600 mb-4">Select all risk factors that apply to calculate the Caprini score for VTE prophylaxis.</p>
+          
+          {/* 1 Point Factors */}
+          <div className="mb-6">
+            <h4 className="text-sm font-semibold text-blue-700 mb-2 bg-blue-50 px-3 py-2 rounded">1 Point Each</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {capriniCategories.onePoint.factors.map((factor) => (
+                <label key={factor.key} className="flex items-center space-x-3 p-2 bg-gray-50 rounded hover:bg-gray-100 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={assessment.risk_factors?.[factor.key as keyof DVTRiskAssessment['risk_factors']] || false}
+                    onChange={(e) => handleRiskFactorChange(factor.key as keyof DVTRiskAssessment['risk_factors'], e.target.checked)}
+                    disabled={readOnly}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                  <span className="text-sm text-gray-700">{factor.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          
+          {/* 2 Point Factors */}
+          <div className="mb-6">
+            <h4 className="text-sm font-semibold text-yellow-700 mb-2 bg-yellow-50 px-3 py-2 rounded">2 Points Each</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {capriniCategories.twoPoints.factors.map((factor) => (
+                <label key={factor.key} className="flex items-center space-x-3 p-2 bg-gray-50 rounded hover:bg-gray-100 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={assessment.risk_factors?.[factor.key as keyof DVTRiskAssessment['risk_factors']] || false}
+                    onChange={(e) => handleRiskFactorChange(factor.key as keyof DVTRiskAssessment['risk_factors'], e.target.checked)}
+                    disabled={readOnly}
+                    className="h-4 w-4 text-yellow-600 focus:ring-yellow-500 border-gray-300 rounded"
+                  />
+                  <span className="text-sm text-gray-700">{factor.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          
+          {/* 3 Point Factors */}
+          <div className="mb-6">
+            <h4 className="text-sm font-semibold text-orange-700 mb-2 bg-orange-50 px-3 py-2 rounded">3 Points Each</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {capriniCategories.threePoints.factors.map((factor) => (
+                <label key={factor.key} className="flex items-center space-x-3 p-2 bg-gray-50 rounded hover:bg-gray-100 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={assessment.risk_factors?.[factor.key as keyof DVTRiskAssessment['risk_factors']] || false}
+                    onChange={(e) => handleRiskFactorChange(factor.key as keyof DVTRiskAssessment['risk_factors'], e.target.checked)}
+                    disabled={readOnly}
+                    className="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 rounded"
+                  />
+                  <span className="text-sm text-gray-700">{factor.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          
+          {/* 5 Point Factors */}
+          <div className="mb-6">
+            <h4 className="text-sm font-semibold text-red-700 mb-2 bg-red-50 px-3 py-2 rounded">5 Points Each (High Risk)</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {capriniCategories.fivePoints.factors.map((factor) => (
+                <label key={factor.key} className="flex items-center space-x-3 p-2 bg-gray-50 rounded hover:bg-gray-100 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={assessment.risk_factors?.[factor.key as keyof DVTRiskAssessment['risk_factors']] || false}
+                    onChange={(e) => handleRiskFactorChange(factor.key as keyof DVTRiskAssessment['risk_factors'], e.target.checked)}
+                    disabled={readOnly}
+                    className="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded"
+                  />
+                  <span className="text-sm text-gray-700">{factor.label}</span>
+                </label>
+              ))}
+            </div>
           </div>
         </div>
 

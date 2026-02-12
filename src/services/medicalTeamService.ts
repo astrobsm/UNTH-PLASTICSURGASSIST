@@ -255,6 +255,35 @@ class MedicalTeamService {
   }
 
   /**
+   * Get assigned medical team for a patient from the server API
+   * This is the preferred method for cross-device sync
+   */
+  async getPatientMedicalTeamFromAPI(patientId: string | number): Promise<TeamMember[]> {
+    try {
+      const token = localStorage.getItem('auth_token');
+      const response = await fetch(`/api/medical-team/patient?patient_id=${patientId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        console.error('Failed to fetch medical team from API:', response.status);
+        // Fall back to local IndexedDB
+        return this.getPatientMedicalTeam(Number(patientId));
+      }
+
+      const data = await response.json();
+      return data.team || [];
+    } catch (error) {
+      console.error('Error fetching medical team from API:', error);
+      // Fall back to local IndexedDB
+      return this.getPatientMedicalTeam(Number(patientId));
+    }
+  }
+
+  /**
    * Update team assignment for a patient
    */
   async updateTeamAssignment(

@@ -24,6 +24,10 @@
       "destination": "/api/pressure-sore-protocol"
     },
     {
+      "source": "/api/medical-team/:path*",
+      "destination": "/api/medical-team"
+    },
+    {
       "source": "/api/:path*",
       "destination": "/api/:path*"
     },

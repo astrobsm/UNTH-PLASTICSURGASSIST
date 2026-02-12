@@ -314,8 +314,9 @@ class RiskAssessmentService {
    * Calculate nutritional risk using MUST score
    */
   async calculateNutritionalRisk(assessment: Partial<NutritionalRiskAssessment>): Promise<{ score: number; riskLevel: string; interpretation: string }> {
-    const components = assessment.must_components!;
-    const totalScore = components.bmi_score + components.weight_loss_score + components.acute_disease_score;
+    // Support both must_components and must_scores for backwards compatibility
+    const components = assessment.must_components || assessment.must_scores || { bmi_score: 0, weight_loss_score: 0, acute_disease_score: 0 };
+    const totalScore = (components.bmi_score || 0) + (components.weight_loss_score || 0) + (components.acute_disease_score || 0);
     
     let riskLevel: string;
     let interpretation: string;

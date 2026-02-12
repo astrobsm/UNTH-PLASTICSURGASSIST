@@ -33,6 +33,9 @@ export default async function handler(req, res) {
         if (pathParts[0] === 'analytics') {
           return await getTeamAnalytics(req, res);
         }
+        if (pathParts[0] === 'patient') {
+          return await getPatientMedicalTeam(req, res);
+        }
         return await getAllMedicalStaff(res);
       case 'POST':
         if (pathParts[0] === 'log-activity') {
@@ -496,4 +499,86 @@ async function ensurePatientAssignmentsTable() {
       UNIQUE(patient_id)
     )
   `);
+}
+
+/**
+ * Get medical team assigned to a specific patient
+ */
+async function getPatientMedicalTeam(req, res) {
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  const patientId = url.searchParams.get('patient_id');
+
+  if (!patientId) {
+    return res.status(400).json({ error: 'patient_id is required' });
+  }
+
+  await ensurePatientAssignmentsTable();
+
+  // Get the patient assignment
+  const assignmentResult = await query(
+    `SELECT * FROM patient_assignments WHERE patient_id = $1 AND is_active = TRUE`,
+    [patientId]
+  );
+
+  if (assignmentResult.rows.length === 0) {
+    return res.status(200).json({ team: [], message: 'No team assigned' });
+  }
+
+  const assignment = assignmentResult.rows[0];
+  const team = [];
+
+  // Role configuration
+  const roleConfig = {
+    consultant: { label: 'Consultant', color: 'bg-purple-600', priority: 1 },
+    senior_registrar: { label: 'Senior Registrar', color: 'bg-blue-600', priority: 2 },
+    registrar: { label: 'Registrar', color: 'bg-green-600', priority: 3 },
+    house_officer: { label: 'House Officer', color: 'bg-amber-600', priority: 4 }
+  };
+
+  // Get user details for each assigned role
+  const roleColumns = [
+    { column: 'consultant_id', role: 'consultant' },
+    { column: 'senior_registrar_id', role: 'senior_registrar' },
+    { column: 'registrar_id', role: 'registrar' },
+    { column: 'house_officer_id', role: 'house_officer' }
+  ];
+
+  for (const { column, role } of roleColumns) {
+    if (assignment[column]) {
+      try {
+        const userResult = await query(
+          `SELECT id, full_name, username, email, role, phone FROM users WHERE id::text = $1`,
+          [assignment[column]]
+        );
+        
+        if (userResult.rows.length > 0) {
+          const user = userResult.rows[0];
+          team.push({
+            id: user.id,
+            name: user.full_name || user.username,
+            email: user.email,
+            phone: user.phone,
+            role: user.role,
+            roleLabel: roleConfig[role].label,
+            color: roleConfig[role].color,
+            priority: roleConfig[role].priority
+          });
+        }
+      } catch (err) {
+        console.error(`Error fetching ${role}:`, err);
+      }
+    }
+  }
+
+  // Sort by priority
+  team.sort((a, b) => a.priority - b.priority);
+
+  return res.status(200).json({ 
+    team,
+    assignment: {
+      id: assignment.id,
+      patient_id: assignment.patient_id,
+      assigned_at: assignment.assigned_at
+    }
+  });
 }

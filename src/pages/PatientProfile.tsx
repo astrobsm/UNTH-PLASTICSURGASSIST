@@ -1,5 +1,5 @@
 ﻿import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { db } from '../db/database';
 import { Patient } from '../db/database';
 import { patientService } from '../services/patientService';
@@ -20,9 +20,12 @@ import { useAuthStore } from '../store/authStore';
 
 export const PatientProfile: React.FC = () => {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { user } = useAuthStore();
   const [patient, setPatient] = useState<Patient | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editFormData, setEditFormData] = useState<Partial<Patient>>({});
   const [activeTab, setActiveTab] = useState('summary');
   const [upcomingPlans, setUpcomingPlans] = useState<any[]>([]);
   const [activeRiskAssessment, setActiveRiskAssessment] = useState<'summary' | 'dvt' | 'pressure' | 'nutrition'>('summary');
@@ -82,10 +85,16 @@ export const PatientProfile: React.FC = () => {
     if (!id || !patient) return;
     
     try {
-      // Get assigned medical team for this patient
-      let team = await medicalTeamService.getPatientMedicalTeam(Number(id));
+      // Get assigned medical team for this patient from API first
+      let team = await medicalTeamService.getPatientMedicalTeamFromAPI(id);
       
-      // If no team assigned, auto-assign one
+      // If no team assigned from API, try local IndexedDB
+      if (team.length === 0) {
+        console.log('No team from API, trying local IndexedDB...');
+        team = await medicalTeamService.getPatientMedicalTeam(Number(id));
+      }
+      
+      // If still no team, try auto-assign
       if (team.length === 0) {
         console.log('No team assigned, auto-assigning medical team...');
         await medicalTeamService.assignTeamToPatient(Number(id), patient.hospital_number);
@@ -224,7 +233,13 @@ export const PatientProfile: React.FC = () => {
                 <span className="px-2 sm:px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs sm:text-sm font-medium">
                   Active
                 </span>
-                <button className="px-3 sm:px-4 py-1.5 sm:py-2 border border-gray-300 rounded-md text-sm text-gray-700 hover:bg-gray-50">
+                <button 
+                  onClick={() => {
+                    setEditFormData({ ...patient });
+                    setShowEditModal(true);
+                  }}
+                  className="px-3 sm:px-4 py-1.5 sm:py-2 border border-gray-300 rounded-md text-sm text-gray-700 hover:bg-gray-50"
+                >
                   Edit
                 </button>
               </div>
@@ -413,6 +428,105 @@ export const PatientProfile: React.FC = () => {
           loadPatientData();
         }}
       />
+
+      {/* Edit Patient Modal */}
+      {showEditModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">Edit Patient Details</h3>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
+                  <input
+                    type="text"
+                    value={editFormData.first_name || ''}
+                    onChange={(e) => setEditFormData({ ...editFormData, first_name: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
+                  <input
+                    type="text"
+                    value={editFormData.last_name || ''}
+                    onChange={(e) => setEditFormData({ ...editFormData, last_name: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Date of Birth</label>
+                <input
+                  type="date"
+                  value={editFormData.dob || ''}
+                  onChange={(e) => setEditFormData({ ...editFormData, dob: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                />
+                {editFormData.dob && (
+                  <p className="text-sm text-gray-500 mt-1">Age: {calculateAge(editFormData.dob)} years</p>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Sex</label>
+                  <select
+                    value={editFormData.sex || 'Male'}
+                    onChange={(e) => setEditFormData({ ...editFormData, sex: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                  >
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                  <input
+                    type="tel"
+                    value={editFormData.phone || ''}
+                    onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                <textarea
+                  value={editFormData.address || ''}
+                  onChange={(e) => setEditFormData({ ...editFormData, address: e.target.value })}
+                  rows={2}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                />
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    await patientService.updatePatient(id!, editFormData);
+                    setShowEditModal(false);
+                    loadPatientData();
+                  } catch (error) {
+                    console.error('Error updating patient:', error);
+                    alert('Failed to update patient');
+                  }
+                }}
+                className="px-4 py-2 text-white bg-green-600 rounded-md hover:bg-green-700"
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -431,7 +545,16 @@ const RiskAssessmentView: React.FC<{ patientId: string; hospitalNumber: string }
   const renderAssessmentContent = () => {
     switch (activeAssessment) {
       case 'summary':
-        return <RiskAssessmentSummary patientId={patientId} />;
+        return (
+          <RiskAssessmentSummary 
+            patientId={patientId} 
+            onCreateAssessment={(type) => {
+              if (type === 'dvt') setActiveAssessment('dvt');
+              else if (type === 'pressure_sore') setActiveAssessment('pressure');
+              else if (type === 'nutritional') setActiveAssessment('nutrition');
+            }}
+          />
+        );
       case 'dvt':
         return (
           <DVTRiskAssessmentForm 
@@ -464,7 +587,16 @@ const RiskAssessmentView: React.FC<{ patientId: string; hospitalNumber: string }
           />
         );
       default:
-        return <RiskAssessmentSummary patientId={patientId} />;
+        return (
+          <RiskAssessmentSummary 
+            patientId={patientId} 
+            onCreateAssessment={(type) => {
+              if (type === 'dvt') setActiveAssessment('dvt');
+              else if (type === 'pressure_sore') setActiveAssessment('pressure');
+              else if (type === 'nutritional') setActiveAssessment('nutrition');
+            }}
+          />
+        );
     }
   };
 
