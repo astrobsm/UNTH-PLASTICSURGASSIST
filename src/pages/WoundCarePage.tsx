@@ -669,7 +669,7 @@ const WoundCarePage: React.FC = () => {
     doc.save(filename);
   };
 
-  // Print Rulers helper - 4 full A4 pages with 15cm ruler grids, bold numbers, full-surface coverage
+  // Print Rulers helper - Calibration rulers with 0.5mm precision grid, dashed cut lines
   const printRulers = async () => {
     const { jsPDF } = await import('jspdf');
     
@@ -682,244 +682,336 @@ const WoundCarePage: React.FC = () => {
 
     const pageWidth = 210;
     const pageHeight = 297;
-    const totalPages = 4;
-    const rulerMaxCm = 15; // 15cm ruler
-    const gridSizeMm = 150; // 15cm = 150mm
-    const cmInMm = 10; // 1cm = 10mm
-
-    const drawRulerPage = (pageNum: number) => {
-      // ---- Margins for labels ----
-      const labelMarginLeft = 18; // space for left ruler numbers
-      const labelMarginTop = 28; // space for top title + ruler numbers
-      const labelMarginRight = 18; // space for right ruler numbers
-      const labelMarginBottom = 30; // space for bottom ruler numbers + footer
-
-      // ---- Compute grid origin to center the 15cm grid on the page ----
-      const availableW = pageWidth - labelMarginLeft - labelMarginRight;
-      const availableH = pageHeight - labelMarginTop - labelMarginBottom;
-      const gridW = Math.min(gridSizeMm, availableW);
-      const gridH = Math.min(gridSizeMm, availableH);
-      const startX = labelMarginLeft + (availableW - gridW) / 2;
-      const startY = labelMarginTop + (availableH - gridH) / 2;
-
+    const rulerLength = 150; // 15cm = 150mm
+    const rulerHeight = 25; // Height of each ruler strip
+    const margin = 28; // Page margins
+    
+    const drawCalibrationPage = () => {
       // =======================================
-      // TITLE
+      // PAGE TITLE (Blue color like the reference)
       // =======================================
-      doc.setTextColor(0, 0, 0);
-      doc.setFontSize(16);
+      doc.setTextColor(81, 112, 255); // Blue color
+      doc.setFontSize(14);
       doc.setFont('helvetica', 'bold');
-      doc.text('WOUND MEASUREMENT RULER — 15 cm', pageWidth / 2, 10, { align: 'center' });
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
-      doc.text(`Page ${pageNum} of ${totalPages}  •  Print at 100% (Actual Size)  •  1 cm grid squares`, pageWidth / 2, 17, { align: 'center' });
-      doc.setFontSize(8);
-      doc.text('UNTH Plastic & Reconstructive Surgery Unit', pageWidth / 2, 22, { align: 'center' });
-
-      // =======================================
-      // 5mm SUB-GRID LINES (lightest, drawn first)
-      // =======================================
-      doc.setDrawColor(210, 210, 210);
-      doc.setLineWidth(0.1);
-      for (let mm = 0; mm <= gridW; mm += 5) {
-        if (mm % cmInMm !== 0) { // skip full-cm lines
-          doc.line(startX + mm, startY, startX + mm, startY + gridH);
-        }
-      }
-      for (let mm = 0; mm <= gridH; mm += 5) {
-        if (mm % cmInMm !== 0) {
-          doc.line(startX, startY + mm, startX + gridW, startY + mm);
-        }
-      }
-
-      // =======================================
-      // 1cm GRID LINES
-      // =======================================
-      for (let cm = 0; cm <= rulerMaxCm; cm++) {
-        const offset = cm * cmInMm;
-        if (offset > gridW && offset > gridH) continue;
-
-        if (cm % 5 === 0 && cm !== 0) {
-          // Every 5cm — heavy dark line
-          doc.setDrawColor(0, 0, 0);
-          doc.setLineWidth(0.7);
-        } else {
-          // Normal 1cm lines — medium gray
-          doc.setDrawColor(120, 120, 120);
-          doc.setLineWidth(0.3);
-        }
-
-        // Vertical line
-        if (offset <= gridW) {
-          doc.line(startX + offset, startY, startX + offset, startY + gridH);
-        }
-        // Horizontal line
-        if (offset <= gridH) {
-          doc.line(startX, startY + offset, startX + gridW, startY + offset);
-        }
-      }
-
-      // =======================================
-      // BOLD OUTER BORDER (thick black)
-      // =======================================
-      doc.setDrawColor(0, 0, 0);
-      doc.setLineWidth(1.2);
-      doc.rect(startX, startY, gridW, gridH);
-
-      // =======================================
-      // RULER NUMBERS — LEFT EDGE (vertical, 0-15)
-      // =======================================
-      doc.setTextColor(0, 0, 0);
-      for (let cm = 0; cm <= rulerMaxCm; cm++) {
-        const y = startY + (cm * cmInMm);
-        if (y > startY + gridH + 1) break;
-
-        if (cm % 5 === 0) {
-          doc.setFontSize(14);
-          doc.setFont('helvetica', 'bold');
-        } else {
-          doc.setFontSize(11);
-          doc.setFont('helvetica', 'bold');
-        }
-        doc.text(`${cm}`, startX - 3, y + 1.5, { align: 'right' });
-
-        // Tick mark
-        doc.setDrawColor(0, 0, 0);
-        doc.setLineWidth(0.6);
-        doc.line(startX - 2, y, startX, y);
-      }
-
-      // =======================================
-      // RULER NUMBERS — RIGHT EDGE (vertical, 0-15)
-      // =======================================
-      for (let cm = 0; cm <= rulerMaxCm; cm++) {
-        const y = startY + (cm * cmInMm);
-        if (y > startY + gridH + 1) break;
-
-        if (cm % 5 === 0) {
-          doc.setFontSize(14);
-          doc.setFont('helvetica', 'bold');
-        } else {
-          doc.setFontSize(11);
-          doc.setFont('helvetica', 'bold');
-        }
-        doc.text(`${cm}`, startX + gridW + 3, y + 1.5, { align: 'left' });
-
-        // Tick mark
-        doc.setDrawColor(0, 0, 0);
-        doc.setLineWidth(0.6);
-        doc.line(startX + gridW, y, startX + gridW + 2, y);
-      }
-
-      // =======================================
-      // RULER NUMBERS — TOP EDGE (horizontal, 0-15)
-      // =======================================
-      for (let cm = 0; cm <= rulerMaxCm; cm++) {
-        const x = startX + (cm * cmInMm);
-        if (x > startX + gridW + 1) break;
-
-        if (cm % 5 === 0) {
-          doc.setFontSize(14);
-          doc.setFont('helvetica', 'bold');
-        } else {
-          doc.setFontSize(11);
-          doc.setFont('helvetica', 'bold');
-        }
-        doc.text(`${cm}`, x, startY - 4, { align: 'center' });
-
-        // Tick mark
-        doc.setDrawColor(0, 0, 0);
-        doc.setLineWidth(0.6);
-        doc.line(x, startY - 2, x, startY);
-      }
-
-      // =======================================
-      // RULER NUMBERS — BOTTOM EDGE (horizontal, 0-15)
-      // =======================================
-      for (let cm = 0; cm <= rulerMaxCm; cm++) {
-        const x = startX + (cm * cmInMm);
-        if (x > startX + gridW + 1) break;
-
-        if (cm % 5 === 0) {
-          doc.setFontSize(14);
-          doc.setFont('helvetica', 'bold');
-        } else {
-          doc.setFontSize(11);
-          doc.setFont('helvetica', 'bold');
-        }
-        doc.text(`${cm}`, x, startY + gridH + 6, { align: 'center' });
-
-        // Tick mark
-        doc.setDrawColor(0, 0, 0);
-        doc.setLineWidth(0.6);
-        doc.line(x, startY + gridH, x, startY + gridH + 2);
-      }
-
-      // =======================================
-      // "cm" UNIT LABELS on each edge
-      // =======================================
-      doc.setFontSize(9);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(80, 80, 80);
-      doc.text('cm', startX - 3, startY - 6, { align: 'right' });
-      doc.text('cm', startX + gridW + 3, startY - 6, { align: 'left' });
-
-      // =======================================
-      // 5cm ZONE LABELS (large, faint watermark inside grid)
-      // =======================================
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(28);
-      doc.setTextColor(235, 235, 235);
-      const zones = [
-        { label: '5×5', cx: 25, cy: 25 },
-        { label: '10×5', cx: 75, cy: 25 },
-        { label: '5×10', cx: 25, cy: 75 },
-        { label: '10×10', cx: 75, cy: 75 },
-        { label: '15×5', cx: 125, cy: 25 },
-        { label: '15×10', cx: 125, cy: 75 },
-        { label: '5×15', cx: 25, cy: 125 },
-        { label: '10×15', cx: 75, cy: 125 },
-        { label: '15×15', cx: 125, cy: 125 },
-      ];
-      zones.forEach(z => {
-        if (z.cx <= gridW && z.cy <= gridH) {
-          doc.text(z.label, startX + z.cx, startY + z.cy, { align: 'center' });
-        }
-      });
-
-      // =======================================
-      // VERIFICATION SQUARE (exactly 1cm × 1cm)
-      // =======================================
-      doc.setTextColor(0, 0, 0);
-      doc.setDrawColor(0, 0, 0);
-      doc.setLineWidth(0.5);
-      const verifyX = startX + gridW - 30;
-      const verifyY = startY + gridH + 12;
-      doc.rect(verifyX, verifyY, 10, 10);
-      doc.setFontSize(8);
-      doc.setFont('helvetica', 'bold');
-      doc.text('Verify: 1cm × 1cm', verifyX + 5, verifyY + 15, { align: 'center' });
-
-      // =======================================
-      // FOOTER INSTRUCTIONS
-      // =======================================
-      doc.setTextColor(0, 0, 0);
+      doc.text('15cm Calibration Rulers - Standard Size', pageWidth / 2, 18, { align: 'center' });
+      
+      // Subtitle with instructions
+      doc.setTextColor(100, 100, 100);
       doc.setFontSize(8);
       doc.setFont('helvetica', 'normal');
-      const footerY = pageHeight - 20;
-      doc.text('Instructions: 1. Print at 100% scale (Actual Size — do NOT fit-to-page)  2. Cut along bold border', startX, footerY);
-      doc.text('3. Place ruler flat beside wound  4. Photograph from directly above for AI calibration', startX, footerY + 4);
+      doc.text('Print at 100% scale (no scaling) • Cut along dashed lines • 0.5mm grid for precision', pageWidth / 2, 25, { align: 'center' });
+
+      // Draw multiple ruler strips on the page
+      const startX = (pageWidth - rulerLength) / 2;
+      const rulersPerPage = 8;
+      const rulerSpacing = 30;
+      
+      for (let r = 0; r < rulersPerPage; r++) {
+        const startY = 35 + (r * rulerSpacing);
+        if (startY + rulerHeight > pageHeight - 20) break;
+        
+        drawSingleRuler(startX, startY, rulerLength, rulerHeight, r + 1);
+      }
+
+      // =======================================
+      // FOOTER
+      // =======================================
+      doc.setTextColor(100, 100, 100);
       doc.setFontSize(7);
-      doc.setFont('helvetica', 'bold');
-      doc.text(`Page ${pageNum} / ${totalPages}`, pageWidth - 15, footerY + 4, { align: 'right' });
+      doc.setFont('helvetica', 'normal');
+      doc.text('UNTH Plastic & Reconstructive Surgery Unit - Wound Care Calibration Rulers', pageWidth / 2, pageHeight - 10, { align: 'center' });
     };
 
-    // Generate 4 pages
-    for (let p = 1; p <= totalPages; p++) {
-      if (p > 1) doc.addPage('a4', 'portrait');
-      drawRulerPage(p);
+    const drawSingleRuler = (startX: number, startY: number, width: number, height: number, rulerNum: number) => {
+      // =======================================
+      // DASHED CUT LINE BORDER
+      // =======================================
+      doc.setDrawColor(150, 150, 150);
+      doc.setLineWidth(0.2);
+      doc.setLineDashPattern([2, 2], 0);
+      doc.rect(startX - 3, startY - 3, width + 6, height + 6);
+      doc.setLineDashPattern([], 0); // Reset to solid
+      
+      // =======================================
+      // SOLID RULER BORDER (thick black)
+      // =======================================
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.3);
+      doc.rect(startX, startY, width, height);
+
+      // =======================================
+      // 0.5mm GRID LINES (finest - lightest gray)
+      // =======================================
+      doc.setDrawColor(220, 220, 220);
+      doc.setLineWidth(0.05);
+      // Vertical 0.5mm lines
+      for (let mm = 0; mm <= width; mm += 0.5) {
+        if (mm % 1 !== 0) { // Skip 1mm lines
+          doc.line(startX + mm, startY, startX + mm, startY + height);
+        }
+      }
+      // Horizontal 0.5mm lines
+      for (let mm = 0; mm <= height; mm += 0.5) {
+        if (mm % 1 !== 0) {
+          doc.line(startX, startY + mm, startX + width, startY + mm);
+        }
+      }
+
+      // =======================================
+      // 1mm GRID LINES (light gray)
+      // =======================================
+      doc.setDrawColor(200, 200, 200);
+      doc.setLineWidth(0.08);
+      for (let mm = 0; mm <= width; mm += 1) {
+        if (mm % 5 !== 0) { // Skip 5mm lines
+          doc.line(startX + mm, startY, startX + mm, startY + height);
+        }
+      }
+      for (let mm = 0; mm <= height; mm += 1) {
+        if (mm % 5 !== 0) {
+          doc.line(startX, startY + mm, startX + width, startY + mm);
+        }
+      }
+
+      // =======================================
+      // 5mm GRID LINES (medium gray)
+      // =======================================
+      doc.setDrawColor(170, 170, 170);
+      doc.setLineWidth(0.12);
+      for (let mm = 0; mm <= width; mm += 5) {
+        if (mm % 10 !== 0) { // Skip 1cm lines
+          doc.line(startX + mm, startY, startX + mm, startY + height);
+        }
+      }
+      for (let mm = 0; mm <= height; mm += 5) {
+        if (mm % 10 !== 0) {
+          doc.line(startX, startY + mm, startX + width, startY + mm);
+        }
+      }
+
+      // =======================================
+      // 1cm GRID LINES (dark, prominent)
+      // =======================================
+      doc.setDrawColor(100, 100, 100);
+      doc.setLineWidth(0.2);
+      for (let cm = 0; cm <= 15; cm++) {
+        const offset = cm * 10;
+        if (offset <= width) {
+          doc.line(startX + offset, startY, startX + offset, startY + height);
+        }
+      }
+      for (let mm = 0; mm <= height; mm += 10) {
+        doc.line(startX, startY + mm, startX + width, startY + mm);
+      }
+
+      // =======================================
+      // CM NUMBERS ON TOP
+      // =======================================
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(7);
+      doc.setFont('helvetica', 'bold');
+      for (let cm = 0; cm <= 15; cm++) {
+        const x = startX + (cm * 10);
+        if (x <= startX + width) {
+          // Draw tick mark
+          doc.setDrawColor(0, 0, 0);
+          doc.setLineWidth(0.3);
+          doc.line(x, startY, x, startY + 3);
+          
+          // Draw number above ruler
+          if (cm > 0) {
+            doc.text(`${cm}`, x, startY - 1, { align: 'center' });
+          }
+        }
+      }
+
+      // =======================================
+      // 5mm TICK MARKS ON TOP
+      // =======================================
+      doc.setLineWidth(0.15);
+      for (let mm = 5; mm <= width; mm += 10) {
+        if (mm % 10 !== 0) {
+          doc.line(startX + mm, startY, startX + mm, startY + 2);
+        }
+      }
+
+      // =======================================
+      // CM NUMBERS ON BOTTOM
+      // =======================================
+      for (let cm = 0; cm <= 15; cm++) {
+        const x = startX + (cm * 10);
+        if (x <= startX + width) {
+          // Draw tick mark
+          doc.setLineWidth(0.3);
+          doc.line(x, startY + height - 3, x, startY + height);
+          
+          // Draw number below ruler
+          if (cm > 0) {
+            doc.text(`${cm}`, x, startY + height + 3, { align: 'center' });
+          }
+        }
+      }
+
+      // 5mm tick marks on bottom
+      doc.setLineWidth(0.15);
+      for (let mm = 5; mm <= width; mm += 10) {
+        if (mm % 10 !== 0) {
+          doc.line(startX + mm, startY + height - 2, startX + mm, startY + height);
+        }
+      }
+
+      // =======================================
+      // RULER LABEL
+      // =======================================
+      doc.setTextColor(150, 150, 150);
+      doc.setFontSize(6);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Ruler #${rulerNum}`, startX + 2, startY + height - 2);
+      
+      // "cm" label
+      doc.setTextColor(100, 100, 100);
+      doc.setFontSize(6);
+      doc.text('cm', startX + width - 5, startY + height / 2 + 1);
+    };
+
+    // Generate the calibration page
+    drawCalibrationPage();
+    
+    // Add a second page with large grid ruler
+    doc.addPage('a4', 'portrait');
+    drawLargeGridRuler();
+
+    function drawLargeGridRuler() {
+      // =======================================
+      // PAGE TITLE
+      // =======================================
+      doc.setTextColor(81, 112, 255);
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text('15cm x 15cm Measurement Grid', pageWidth / 2, 18, { align: 'center' });
+      
+      doc.setTextColor(100, 100, 100);
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'normal');
+      doc.text('Print at 100% scale • Place beside wound for accurate AI measurement', pageWidth / 2, 25, { align: 'center' });
+
+      const gridSize = 150; // 15cm
+      const startX = (pageWidth - gridSize) / 2;
+      const startY = 35;
+
+      // =======================================
+      // DASHED CUT LINE
+      // =======================================
+      doc.setDrawColor(150, 150, 150);
+      doc.setLineWidth(0.2);
+      doc.setLineDashPattern([2, 2], 0);
+      doc.rect(startX - 5, startY - 5, gridSize + 10, gridSize + 25);
+      doc.setLineDashPattern([], 0);
+
+      // =======================================
+      // 0.5mm GRID (finest)
+      // =======================================
+      doc.setDrawColor(230, 230, 230);
+      doc.setLineWidth(0.03);
+      for (let mm = 0; mm <= gridSize; mm += 0.5) {
+        if (mm % 1 !== 0) {
+          doc.line(startX + mm, startY, startX + mm, startY + gridSize);
+          doc.line(startX, startY + mm, startX + gridSize, startY + mm);
+        }
+      }
+
+      // =======================================
+      // 1mm GRID
+      // =======================================
+      doc.setDrawColor(210, 210, 210);
+      doc.setLineWidth(0.05);
+      for (let mm = 0; mm <= gridSize; mm += 1) {
+        if (mm % 5 !== 0) {
+          doc.line(startX + mm, startY, startX + mm, startY + gridSize);
+          doc.line(startX, startY + mm, startX + gridSize, startY + mm);
+        }
+      }
+
+      // =======================================
+      // 5mm GRID
+      // =======================================
+      doc.setDrawColor(180, 180, 180);
+      doc.setLineWidth(0.1);
+      for (let mm = 0; mm <= gridSize; mm += 5) {
+        if (mm % 10 !== 0) {
+          doc.line(startX + mm, startY, startX + mm, startY + gridSize);
+          doc.line(startX, startY + mm, startX + gridSize, startY + mm);
+        }
+      }
+
+      // =======================================
+      // 1cm GRID (prominent)
+      // =======================================
+      doc.setDrawColor(120, 120, 120);
+      doc.setLineWidth(0.2);
+      for (let cm = 0; cm <= 15; cm++) {
+        const offset = cm * 10;
+        doc.line(startX + offset, startY, startX + offset, startY + gridSize);
+        doc.line(startX, startY + offset, startX + gridSize, startY + offset);
+      }
+
+      // =======================================
+      // 5cm GRID (bold)
+      // =======================================
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.4);
+      for (let cm = 0; cm <= 15; cm += 5) {
+        const offset = cm * 10;
+        doc.line(startX + offset, startY, startX + offset, startY + gridSize);
+        doc.line(startX, startY + offset, startX + gridSize, startY + offset);
+      }
+
+      // =======================================
+      // OUTER BORDER
+      // =======================================
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.6);
+      doc.rect(startX, startY, gridSize, gridSize);
+
+      // =======================================
+      // TOP RULER NUMBERS
+      // =======================================
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      for (let cm = 0; cm <= 15; cm++) {
+        const x = startX + (cm * 10);
+        doc.text(`${cm}`, x, startY - 2, { align: 'center' });
+      }
+
+      // =======================================
+      // LEFT RULER NUMBERS
+      // =======================================
+      for (let cm = 0; cm <= 15; cm++) {
+        const y = startY + (cm * 10);
+        doc.text(`${cm}`, startX - 3, y + 1, { align: 'right' });
+      }
+
+      // =======================================
+      // VERIFICATION BOX
+      // =======================================
+      doc.setFontSize(7);
+      doc.setFont('helvetica', 'normal');
+      doc.text('Verify: This box should measure exactly 1cm x 1cm', startX, startY + gridSize + 8);
+      doc.setLineWidth(0.3);
+      doc.rect(startX + gridSize - 15, startY + gridSize + 5, 10, 10);
+      doc.setFontSize(6);
+      doc.text('1cm', startX + gridSize - 10, startY + gridSize + 11, { align: 'center' });
+
+      // =======================================
+      // FOOTER
+      // =======================================
+      doc.setTextColor(100, 100, 100);
+      doc.setFontSize(7);
+      doc.text('UNTH Plastic & Reconstructive Surgery Unit', pageWidth / 2, pageHeight - 10, { align: 'center' });
     }
 
-    doc.save('Wound_15cm_Ruler_Grid_4Pages.pdf');
+    doc.save('Wound_Calibration_Rulers_15cm.pdf');
   };
 
   // ============================================
