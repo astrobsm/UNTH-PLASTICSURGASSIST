@@ -73,10 +73,10 @@ export const NutritionalRiskAssessmentForm: React.FC<NutritionalRiskAssessmentPr
   }, [existingAssessment]);
 
   useEffect(() => {
-    if (assessment.must_scores && assessment.height && assessment.weight) {
+    if (assessment.height && assessment.weight) {
       calculateRisk();
     }
-  }, [assessment.must_scores, assessment.height, assessment.weight, assessment.weight_loss_percentage, assessment.acute_disease_effect]);
+  }, [assessment.height, assessment.weight, assessment.weight_loss_percentage, assessment.acute_disease_effect]);
 
   const calculateBMI = (height: number, weight: number): number => {
     if (height === 0 || weight === 0) return 0;
