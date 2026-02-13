@@ -93,13 +93,71 @@ async function getPrescription(id, res) {
 }
 
 async function createPrescription(data, user, res) {
+  // Support both formats:
+  // 1. New format: { patient_id, prescriptions: [{medication, dosage, ...}] }
+  // 2. Legacy format: { patientId, medicationName, dosage, ... }
+  
+  // Normalize patient ID (support both snake_case and camelCase)
+  const patientId = data.patientId || data.patient_id;
+  
+  if (!patientId) {
+    return res.status(400).json({ error: 'Patient ID is required' });
+  }
+  
+  // Check if using new array format
+  if (data.prescriptions && Array.isArray(data.prescriptions)) {
+    // Batch insert multiple prescriptions
+    const prescriptions = data.prescriptions;
+    const prescriber = data.prescriber || user.name;
+    const prescriberRole = data.prescriber_role || data.prescriberRole || user.role;
+    
+    if (prescriptions.length === 0) {
+      return res.status(400).json({ error: 'At least one prescription is required' });
+    }
+    
+    const results = [];
+    for (const p of prescriptions) {
+      const medicationName = p.medicationName || p.medication;
+      if (!medicationName) {
+        return res.status(400).json({ error: 'Medication name is required for all prescriptions' });
+      }
+      
+      const result = await query(
+        `INSERT INTO prescriptions (
+          patient_id, medication_name, dosage, frequency,
+          duration, route, instructions, status, prescribed_by
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        RETURNING *`,
+        [
+          patientId, 
+          medicationName, 
+          p.dosage || '', 
+          p.frequency || '', 
+          p.duration || '', 
+          p.route || 'oral', 
+          p.instructions || p.indication || '', 
+          p.status || 'active', 
+          user.id
+        ]
+      );
+      results.push(result.rows[0]);
+    }
+    
+    return res.status(201).json({ 
+      prescription: results[0], 
+      prescriptions: results,
+      id: results[0]?.id 
+    });
+  }
+  
+  // Legacy single prescription format
   const {
-    patientId, medicationName, dosage, frequency,
+    medicationName, dosage, frequency,
     duration, route, instructions, status = 'active'
   } = data;
 
-  if (!patientId || !medicationName) {
-    return res.status(400).json({ error: 'Patient ID and medication name are required' });
+  if (!medicationName) {
+    return res.status(400).json({ error: 'Medication name is required' });
   }
 
   const result = await query(
@@ -111,7 +169,7 @@ async function createPrescription(data, user, res) {
     [patientId, medicationName, dosage, frequency, duration, route, instructions, status, user.id]
   );
 
-  res.status(201).json({ prescription: result.rows[0] });
+  res.status(201).json({ prescription: result.rows[0], id: result.rows[0].id });
 }
 
 async function updatePrescription(id, data, res) {

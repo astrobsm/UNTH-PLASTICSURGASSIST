@@ -2625,6 +2625,11 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
             className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
             title="Patient date of birth"
           />
+          {formData.date_of_birth && (
+            <p className="mt-1 text-sm text-green-600 font-medium">
+              Age: {Math.floor((new Date().getTime() - new Date(formData.date_of_birth).getTime()) / (365.25 * 24 * 60 * 60 * 1000))} years
+            </p>
+          )}
         </div>
 
         <div>

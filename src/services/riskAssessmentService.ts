@@ -245,37 +245,78 @@ export interface RiskAssessmentAIAnalysis {
 class RiskAssessmentService {
   
   /**
-   * Calculate DVT risk score using Wells Score methodology
+   * Calculate DVT risk score using Caprini Score methodology for surgical VTE prophylaxis
+   * Reference: Caprini JA. Thrombosis risk assessment as a guide to quality patient care. Dis Mon. 2005
    */
   async calculateDVTRisk(assessment: Partial<DVTRiskAssessment>): Promise<{ score: number; riskLevel: string; interpretation: string }> {
     const factors = assessment.risk_factors!;
     let score = 0;
     
-    // Wells Score for DVT
-    if (factors.active_cancer) score += 1;
-    if (factors.paralysis_paresis) score += 1;
-    if (factors.recent_bedrest) score += 1;
-    if (factors.major_surgery) score += 1;
-    if (factors.localized_tenderness) score += 1;
-    if (factors.swelling_entire_leg) score += 1;
-    if (factors.calf_swelling) score += 1;
-    if (factors.pitting_edema) score += 1;
-    if (factors.collateral_veins) score += 1;
-    if (factors.previous_dvt) score += 1;
-    if (factors.alternative_diagnosis) score -= 2;
+    // 1 Point Risk Factors
+    if (factors.age_41_60) score += 1;
+    if (factors.minor_surgery) score += 1;
+    if (factors.bmi_over_25) score += 1;
+    if (factors.swollen_legs) score += 1;
+    if (factors.varicose_veins) score += 1;
+    if (factors.pregnancy_postpartum) score += 1;
+    if (factors.oral_contraceptives) score += 1;
+    if (factors.sepsis_1month) score += 1;
+    if (factors.serious_lung_disease) score += 1;
+    if (factors.abnormal_pulmonary) score += 1;
+    if (factors.acute_mi) score += 1;
+    if (factors.chf_1month) score += 1;
+    if (factors.inflammatory_bowel) score += 1;
+    if (factors.medical_patient_bedrest) score += 1;
+    
+    // 2 Point Risk Factors
+    if (factors.age_61_74) score += 2;
+    if (factors.arthroscopic_surgery) score += 2;
+    if (factors.malignancy) score += 2;
+    if (factors.major_surgery_45min) score += 2;
+    if (factors.laparoscopic_45min) score += 2;
+    if (factors.patient_confined_bed) score += 2;
+    if (factors.immobilizing_cast) score += 2;
+    if (factors.central_venous_access) score += 2;
+    
+    // 3 Point Risk Factors
+    if (factors.age_over_75) score += 3;
+    if (factors.personal_history_vte) score += 3;
+    if (factors.family_history_vte) score += 3;
+    if (factors.factor_v_leiden) score += 3;
+    if (factors.prothrombin_mutation) score += 3;
+    if (factors.elevated_homocysteine) score += 3;
+    if (factors.lupus_anticoagulant) score += 3;
+    if (factors.anticardiolipin_antibodies) score += 3;
+    if (factors.heparin_thrombocytopenia) score += 3;
+    if (factors.other_thrombophilia) score += 3;
+    
+    // 5 Point Risk Factors
+    if (factors.stroke_1month) score += 5;
+    if (factors.elective_arthroplasty) score += 5;
+    if (factors.hip_pelvis_fracture) score += 5;
+    if (factors.acute_spinal_injury) score += 5;
     
     let riskLevel: string;
     let interpretation: string;
+    let recommendation: string;
     
-    if (score >= 3) {
+    // Caprini Score Risk Stratification for VTE Prophylaxis
+    if (score >= 5) {
       riskLevel = 'high';
-      interpretation = 'High probability of DVT. Consider immediate investigation with D-dimer and imaging.';
-    } else if (score >= 1) {
+      interpretation = 'High VTE risk (Caprini >= 5). Strong recommendation for pharmacological prophylaxis.';
+      recommendation = 'LMWH or UFH prophylaxis indicated. Consider extended prophylaxis post-discharge for high-risk surgery.';
+    } else if (score >= 3) {
       riskLevel = 'moderate';
-      interpretation = 'Moderate probability of DVT. Consider D-dimer testing.';
-    } else {
+      interpretation = 'Moderate VTE risk (Caprini 3-4). Pharmacological prophylaxis recommended.';
+      recommendation = 'LMWH or UFH prophylaxis recommended. Mechanical prophylaxis should also be used.';
+    } else if (score >= 1) {
       riskLevel = 'low';
-      interpretation = 'Low probability of DVT. DVT unlikely, consider alternative diagnosis.';
+      interpretation = 'Low VTE risk (Caprini 1-2). Mechanical prophylaxis usually sufficient.';
+      recommendation = 'Early ambulation and mechanical prophylaxis (SCDs or GCS). Pharmacological prophylaxis optional.';
+    } else {
+      riskLevel = 'very_low';
+      interpretation = 'Very low VTE risk (Caprini 0). No specific VTE prophylaxis required.';
+      recommendation = 'Early and frequent ambulation. No routine pharmacological or mechanical prophylaxis needed.';
     }
     
     return { score, riskLevel, interpretation };

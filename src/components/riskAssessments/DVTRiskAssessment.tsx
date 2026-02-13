@@ -26,42 +26,69 @@ export const DVTRiskAssessmentForm: React.FC<DVTRiskAssessmentProps> = ({
     patient_id: patientId,
     assessment_type: 'dvt',
     assessment_date: new Date(),
-    assessed_by: 'Current User', // This would come from auth context
+    assessed_by: user?.name || 'Current User',
     status: 'active',
     risk_factors: {
-      active_cancer: false,
-      paralysis_paresis: false,
-      recent_bedrest: false,
-      major_surgery: false,
-      localized_tenderness: false,
-      swelling_entire_leg: false,
-      calf_swelling: false,
-      pitting_edema: false,
-      collateral_veins: false,
-      previous_dvt: false,
-      alternative_diagnosis: false,
-      age_over_70: false,
-      heart_failure: false,
-      trauma_surgery: false,
-      immobilization: false,
-      pregnancy: false,
-      estrogen_therapy: false,
-      obesity_bmi_30: false,
-      inherited_thrombophilia: false
+      // 1 Point Risk Factors
+      age_41_60: false,
+      minor_surgery: false,
+      bmi_over_25: false,
+      swollen_legs: false,
+      varicose_veins: false,
+      pregnancy_postpartum: false,
+      oral_contraceptives: false,
+      sepsis_1month: false,
+      serious_lung_disease: false,
+      abnormal_pulmonary: false,
+      acute_mi: false,
+      chf_1month: false,
+      inflammatory_bowel: false,
+      medical_patient_bedrest: false,
+      
+      // 2 Point Risk Factors
+      age_61_74: false,
+      arthroscopic_surgery: false,
+      malignancy: false,
+      major_surgery_45min: false,
+      laparoscopic_45min: false,
+      patient_confined_bed: false,
+      immobilizing_cast: false,
+      central_venous_access: false,
+      
+      // 3 Point Risk Factors
+      age_over_75: false,
+      personal_history_vte: false,
+      family_history_vte: false,
+      factor_v_leiden: false,
+      prothrombin_mutation: false,
+      elevated_homocysteine: false,
+      lupus_anticoagulant: false,
+      anticardiolipin_antibodies: false,
+      heparin_thrombocytopenia: false,
+      other_thrombophilia: false,
+      
+      // 5 Point Risk Factors
+      stroke_1month: false,
+      elective_arthroplasty: false,
+      hip_pelvis_fracture: false,
+      acute_spinal_injury: false
     },
     clinical_signs: {
-      leg_pain: false,
-      leg_swelling: false,
-      skin_changes: false,
-      temperature_difference: false,
-      pulse_difference: false
+      localized_tenderness: false,
+      swelling: false,
+      calf_difference: false,
+      pitting_edema: false,
+      collateral_veins: false,
+      warmth: false,
+      erythema: false
     },
     prevention_measures: {
       mechanical_prophylaxis: false,
       pharmacological_prophylaxis: false,
       early_mobilization: false,
+      hydration: false,
       compression_stockings: false,
-      intermittent_pneumatic_compression: false
+      sequential_compression_device: false
     }
   });
 
@@ -204,35 +231,13 @@ export const DVTRiskAssessmentForm: React.FC<DVTRiskAssessmentProps> = ({
 
   const getRiskColor = (riskLevel: string) => {
     switch (riskLevel) {
+      case 'very_low': return 'text-green-600 bg-green-100';
       case 'low': return 'text-green-600 bg-green-100';
       case 'moderate': return 'text-yellow-600 bg-yellow-100';
       case 'high': return 'text-orange-600 bg-orange-100';
       case 'very_high': return 'text-red-600 bg-red-100';
       default: return 'text-gray-600 bg-gray-100';
     }
-  };
-
-  const riskFactorLabels = {
-    // 1 Point Factors
-    active_cancer: '(1pt) Active cancer (treatment within 6 months or palliative)',
-    paralysis_paresis: '(1pt) Paralysis, paresis, or recent plaster immobilization',
-    recent_bedrest: '(1pt) Recently bedridden >72 hours',
-    major_surgery: '(2pt) Major surgery (>45 min) in past 4 weeks',
-    localized_tenderness: '(1pt) Localized tenderness along deep venous system',
-    swelling_entire_leg: '(1pt) Entire leg swollen',
-    calf_swelling: '(1pt) Calf swelling >3cm compared to other leg',
-    pitting_edema: '(1pt) Pitting edema (greater in symptomatic leg)',
-    collateral_veins: '(1pt) Collateral superficial veins (non-varicose)',
-    previous_dvt: '(3pt) Previous documented DVT/PE',
-    alternative_diagnosis: '(-2pt) Alternative diagnosis likely',
-    age_over_70: '(2pt) Age 61-74 years / (3pt) Age ≥75 years',
-    heart_failure: '(1pt) Heart failure within 1 month',
-    trauma_surgery: '(2pt) Trauma/surgery within 1 month',
-    immobilization: '(2pt) Immobilization/cast ≥4 days',
-    pregnancy: '(1pt) Pregnancy or postpartum',
-    estrogen_therapy: '(1pt) Oral contraceptives/HRT',
-    obesity_bmi_30: '(1pt) Obesity (BMI ≥25)',
-    inherited_thrombophilia: '(3pt) Known thrombophilia (Factor V Leiden, etc.)'
   };
 
   // Caprini Risk Factor Categories for proper scoring
@@ -242,72 +247,76 @@ export const DVTRiskAssessmentForm: React.FC<DVTRiskAssessmentProps> = ({
       factors: [
         { key: 'age_41_60', label: 'Age 41-60 years' },
         { key: 'minor_surgery', label: 'Minor surgery planned' },
-        { key: 'swelling_entire_leg', label: 'Swollen legs (current)' },
+        { key: 'bmi_over_25', label: 'BMI > 25 kg/m²' },
+        { key: 'swollen_legs', label: 'Swollen legs (current)' },
         { key: 'varicose_veins', label: 'Varicose veins' },
-        { key: 'pregnancy', label: 'Pregnancy or postpartum (<1 month)' },
-        { key: 'estrogen_therapy', label: 'Oral contraceptives or HRT' },
-        { key: 'sepsis', label: 'Sepsis (<1 month)' },
-        { key: 'lung_disease', label: 'Serious lung disease incl. pneumonia (<1 month)' },
-        { key: 'inflammatory_bowel', label: 'Inflammatory bowel disease' },
-        { key: 'heart_failure', label: 'Congestive heart failure (<1 month)' },
+        { key: 'pregnancy_postpartum', label: 'Pregnancy or postpartum (<1 month)' },
+        { key: 'oral_contraceptives', label: 'Oral contraceptives or HRT' },
+        { key: 'sepsis_1month', label: 'Sepsis (<1 month)' },
+        { key: 'serious_lung_disease', label: 'Serious lung disease incl. pneumonia (<1 month)' },
+        { key: 'abnormal_pulmonary', label: 'Abnormal pulmonary function' },
         { key: 'acute_mi', label: 'Acute MI (<1 month)' },
-        { key: 'bed_rest', label: 'Medical patient currently at bed rest' },
-        { key: 'obesity_bmi_30', label: 'BMI > 25 kg/m²' }
+        { key: 'chf_1month', label: 'Congestive heart failure (<1 month)' },
+        { key: 'inflammatory_bowel', label: 'Inflammatory bowel disease' },
+        { key: 'medical_patient_bedrest', label: 'Medical patient currently at bed rest' }
       ]
     },
     twoPoints: {
       title: '2 Points Each',
       factors: [
-        { key: 'age_over_70', label: 'Age 61-74 years' },
+        { key: 'age_61_74', label: 'Age 61-74 years' },
         { key: 'arthroscopic_surgery', label: 'Arthroscopic surgery' },
-        { key: 'active_cancer', label: 'Malignancy (present or previous)' },
-        { key: 'major_surgery', label: 'Major surgery (>45 min)' },
-        { key: 'laparoscopic_surgery', label: 'Laparoscopic surgery (>45 min)' },
-        { key: 'recent_bedrest', label: 'Confined to bed (>72 hours)' },
-        { key: 'immobilization', label: 'Plaster cast immobilization' },
+        { key: 'malignancy', label: 'Malignancy (present or previous)' },
+        { key: 'major_surgery_45min', label: 'Major surgery (>45 min)' },
+        { key: 'laparoscopic_45min', label: 'Laparoscopic surgery (>45 min)' },
+        { key: 'patient_confined_bed', label: 'Confined to bed (>72 hours)' },
+        { key: 'immobilizing_cast', label: 'Plaster cast immobilization' },
         { key: 'central_venous_access', label: 'Central venous access' }
       ]
     },
     threePoints: {
       title: '3 Points Each',
       factors: [
-        { key: 'age_75', label: 'Age ≥75 years' },
-        { key: 'previous_dvt', label: 'History of DVT/PE' },
-        { key: 'family_vte', label: 'Family history of VTE' },
+        { key: 'age_over_75', label: 'Age ≥75 years' },
+        { key: 'personal_history_vte', label: 'History of DVT/PE' },
+        { key: 'family_history_vte', label: 'Family history of VTE' },
         { key: 'factor_v_leiden', label: 'Factor V Leiden positive' },
         { key: 'prothrombin_mutation', label: 'Prothrombin 20210A positive' },
         { key: 'lupus_anticoagulant', label: 'Lupus anticoagulant positive' },
-        { key: 'anticardiolipin', label: 'Elevated anticardiolipin antibodies' },
-        { key: 'homocysteine', label: 'Elevated serum homocysteine' },
-        { key: 'hit', label: 'Heparin-induced thrombocytopenia' },
-        { key: 'inherited_thrombophilia', label: 'Other congenital or acquired thrombophilia' }
+        { key: 'anticardiolipin_antibodies', label: 'Elevated anticardiolipin antibodies' },
+        { key: 'elevated_homocysteine', label: 'Elevated serum homocysteine' },
+        { key: 'heparin_thrombocytopenia', label: 'Heparin-induced thrombocytopenia (HIT)' },
+        { key: 'other_thrombophilia', label: 'Other congenital/acquired thrombophilia' }
       ]
     },
     fivePoints: {
       title: '5 Points Each',
       factors: [
-        { key: 'stroke', label: 'Stroke (<1 month)' },
+        { key: 'stroke_1month', label: 'Stroke (<1 month)' },
         { key: 'elective_arthroplasty', label: 'Elective major lower extremity arthroplasty' },
         { key: 'hip_pelvis_fracture', label: 'Hip, pelvis, or leg fracture (<1 month)' },
-        { key: 'spinal_injury', label: 'Acute spinal cord injury (<1 month)' }
+        { key: 'acute_spinal_injury', label: 'Acute spinal cord injury (<1 month)' }
       ]
     }
   };
 
   const clinicalSignLabels = {
-    leg_pain: 'Leg pain or cramping',
-    leg_swelling: 'Leg swelling',
-    skin_changes: 'Skin color changes or warmth',
-    temperature_difference: 'Temperature difference between legs',
-    pulse_difference: 'Pulse difference between legs'
+    localized_tenderness: 'Localized tenderness along deep venous system',
+    swelling: 'Leg swelling',
+    calf_difference: 'Calf circumference >3cm difference',
+    pitting_edema: 'Pitting edema (symptomatic leg)',
+    collateral_veins: 'Collateral superficial veins',
+    warmth: 'Warmth in affected leg',
+    erythema: 'Skin erythema/redness'
   };
 
   const preventionMeasureLabels = {
-    mechanical_prophylaxis: 'Mechanical prophylaxis (compression stockings)',
+    mechanical_prophylaxis: 'Mechanical prophylaxis device',
     pharmacological_prophylaxis: 'Pharmacological prophylaxis (anticoagulants)',
     early_mobilization: 'Early mobilization program',
-    compression_stockings: 'Graduated compression stockings',
-    intermittent_pneumatic_compression: 'Intermittent pneumatic compression'
+    hydration: 'Adequate hydration',
+    compression_stockings: 'Graduated compression stockings (GCS)',
+    sequential_compression_device: 'Sequential compression device (SCD)'
   };
 
   return (

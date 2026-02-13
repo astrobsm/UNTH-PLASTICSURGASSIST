@@ -477,7 +477,22 @@ class SyncService {
     if (!prescription) return;
 
     if (action === 'create') {
-      const response = await this.apiCall('POST', '/prescriptions', prescription);
+      // Ensure the data is in the correct format for the API
+      const syncData = {
+        patient_id: prescription.patient_id,
+        prescriptions: prescription.prescriptions || [{
+          medication: prescription.medication_name || prescription.medicationName,
+          dosage: prescription.dosage,
+          frequency: prescription.frequency,
+          duration: prescription.duration,
+          route: prescription.route,
+          indication: prescription.instructions || prescription.indication
+        }],
+        prescriber: prescription.prescriber,
+        prescriber_role: prescription.prescriber_role
+      };
+      
+      const response = await this.apiCall('POST', '/prescriptions', syncData);
       await db.prescriptions.update(localId, { id: response.id, synced: true });
       console.log('✅ Prescription synced to server:', response.id);
     }
