@@ -13,6 +13,7 @@ import {
 } from '../services/treatmentPlanningService';
 import { medicationDosingService, GFRDosingRecommendation } from '../services/medicationDosingService';
 import { investigationPdfService } from '../services/investigationPdfService';
+import { medicalTeamService, StaffByRole } from '../services/medicalTeamService';
 
 interface ComprehensiveTreatmentPlanFormProps {
   onClose: () => void;
@@ -27,70 +28,51 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
 }) => {
   const { user } = useAuthStore();
   const [currentStep, setCurrentStep] = useState(1);
-  const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // Fair round-robin assignment - get least loaded staff member
-  const getLeastLoadedStaff = (staffList: any[], existingPlans: any[]) => {
-    if (staffList.length === 0) return null;
-    
-    // Count current assignments for each staff member
-    const assignmentCounts = staffList.map(staff => {
-      const count = existingPlans.filter(plan => {
-        const team = plan.medical_team;
-        if (!team) return false;
-        return team.senior_registrar === staff.email || 
-               team.registrar === staff.email || 
-               team.house_officer === staff.email;
-      }).length;
-      return { staff, count };
-    });
-    
-    // Sort by count (ascending) and return the least loaded
-    assignmentCounts.sort((a, b) => a.count - b.count);
-    return assignmentCounts[0]?.staff || null;
-  };
+  // Staff by role - fetched from server API
+  const [seniorRegistrars, setSeniorRegistrars] = useState<StaffByRole[]>([]);
+  const [registrars, setRegistrars] = useState<StaffByRole[]>([]);
+  const [houseOfficers, setHouseOfficers] = useState<StaffByRole[]>([]);
   
-  // Fetch users on component mount and auto-assign fairly
+  // Fetch medical team from server and auto-assign fairly (least loaded)
   useEffect(() => {
-    const fetchUsersAndAutoAssign = async () => {
+    const fetchTeamAndAutoAssign = async () => {
       try {
-        const allUsers = await db.approved_users.toArray();
-        setUsers(allUsers);
-        
-        // Get existing treatment plans for fair distribution
-        const existingPlans = await db.treatment_plans.toArray();
-        
-        // Auto-assign medical team based on fair distribution (least loaded)
-        const seniorRegistrars = allUsers.filter(u => u.role === 'senior_registrar');
-        const registrars = allUsers.filter(u => u.role === 'registrar');
-        const houseOfficers = allUsers.filter(u => u.role === 'house_officer');
-        
-        // Get the least loaded staff member for each role
-        const selectedSeniorRegistrar = getLeastLoadedStaff(seniorRegistrars, existingPlans);
-        const selectedRegistrar = getLeastLoadedStaff(registrars, existingPlans);
-        const selectedHouseOfficer = getLeastLoadedStaff(houseOfficers, existingPlans);
-        
+        // Fetch staff by role from server (with workload counts)
+        const [srData, regData, hoData] = await Promise.all([
+          medicalTeamService.getStaffByRole('senior_registrar'),
+          medicalTeamService.getStaffByRole('registrar'),
+          medicalTeamService.getStaffByRole('house_officer')
+        ]);
+
+        setSeniorRegistrars(srData);
+        setRegistrars(regData);
+        setHouseOfficers(hoData);
+
+        // Get suggested auto-assignment from server (least loaded staff)
+        const suggestions = await medicalTeamService.getSuggestedTeamAssignment();
+
         setMedicalTeam({
-          senior_registrar: selectedSeniorRegistrar?.email || '',
-          registrar: selectedRegistrar?.email || '',
-          house_officer: selectedHouseOfficer?.email || '',
+          senior_registrar: suggestions.senior_registrar ? String(suggestions.senior_registrar.id) : '',
+          registrar: suggestions.registrar ? String(suggestions.registrar.id) : '',
+          house_officer: suggestions.house_officer ? String(suggestions.house_officer.id) : '',
           assigned_date: new Date()
         });
-        
+
         console.log('✅ Auto-assigned medical team fairly:', {
-          seniorRegistrar: selectedSeniorRegistrar?.name || 'None available',
-          registrar: selectedRegistrar?.name || 'None available',
-          houseOfficer: selectedHouseOfficer?.name || 'None available'
+          seniorRegistrar: suggestions.senior_registrar?.full_name || 'None available',
+          registrar: suggestions.registrar?.full_name || 'None available',
+          houseOfficer: suggestions.house_officer?.full_name || 'None available'
         });
       } catch (error) {
-        console.error('Error fetching users:', error);
+        console.error('Error fetching medical team:', error);
       } finally {
         setLoading(false);
       }
     };
     
-    fetchUsersAndAutoAssign();
+    fetchTeamAndAutoAssign();
   }, []);
   
   // Basic Information
@@ -380,7 +362,12 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
       admission_date: new Date(basicInfo.admission_date),
       title: `Treatment Plan - ${basicInfo.diagnosis.substring(0, 50)}`,
       status: 'active',
-      medical_team: medicalTeam,
+      medical_team: {
+        ...medicalTeam,
+        senior_registrar_name: seniorRegistrars.find(s => String(s.id) === medicalTeam.senior_registrar)?.full_name || '',
+        registrar_name: registrars.find(r => String(r.id) === medicalTeam.registrar)?.full_name || '',
+        house_officer_name: houseOfficers.find(h => String(h.id) === medicalTeam.house_officer)?.full_name || '',
+      },
       planned_medications: medications.map((m, i) => ({ ...m, id: `med_${Date.now()}_${i}` })),
       planned_investigations: investigations.map((inv, i) => ({ 
         ...inv, 
@@ -505,9 +492,9 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
               </div>
 
               <h3 className="text-lg font-semibold text-gray-900 mt-6">Medical Team Assignment</h3>
-              <p className="text-sm text-gray-500 mb-2">Team members are auto-assigned fairly based on current workload. All fields are optional.</p>
+              <p className="text-sm text-gray-500 mb-2">Team members are auto-assigned fairly based on current workload. You can change the assignment if needed.</p>
               
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Senior Registrar <span className="text-gray-400 text-xs">(optional)</span>
@@ -518,14 +505,14 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
                     disabled={loading}
                   >
-                    <option value="">-- None available --</option>
-                    {users.filter(u => u.role === 'senior_registrar').map(u => (
-                      <option key={u.id} value={u.email}>
-                        {u.name || u.email}
+                    <option value="">-- Select --</option>
+                    {seniorRegistrars.map(u => (
+                      <option key={u.id} value={String(u.id)}>
+                        {u.full_name} ({u.current_patients} pts)
                       </option>
                     ))}
                   </select>
-                  {users.filter(u => u.role === 'senior_registrar').length === 0 && (
+                  {!loading && seniorRegistrars.length === 0 && (
                     <p className="text-xs text-amber-600 mt-1">No senior registrars in database</p>
                   )}
                 </div>
@@ -540,14 +527,14 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
                     disabled={loading}
                   >
-                    <option value="">-- None available --</option>
-                    {users.filter(u => u.role === 'registrar').map(u => (
-                      <option key={u.id} value={u.email}>
-                        {u.name || u.email}
+                    <option value="">-- Select --</option>
+                    {registrars.map(u => (
+                      <option key={u.id} value={String(u.id)}>
+                        {u.full_name} ({u.current_patients} pts)
                       </option>
                     ))}
                   </select>
-                  {users.filter(u => u.role === 'registrar').length === 0 && (
+                  {!loading && registrars.length === 0 && (
                     <p className="text-xs text-amber-600 mt-1">No registrars in database</p>
                   )}
                 </div>
@@ -562,14 +549,14 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
                     disabled={loading}
                   >
-                    <option value="">-- None available --</option>
-                    {users.filter(u => u.role === 'house_officer').map(u => (
-                      <option key={u.id} value={u.email}>
-                        {u.name || u.email}
+                    <option value="">-- Select --</option>
+                    {houseOfficers.map(u => (
+                      <option key={u.id} value={String(u.id)}>
+                        {u.full_name} ({u.current_patients} pts)
                       </option>
                     ))}
                   </select>
-                  {users.filter(u => u.role === 'house_officer').length === 0 && (
+                  {!loading && houseOfficers.length === 0 && (
                     <p className="text-xs text-amber-600 mt-1">No house officers in database</p>
                   )}
                 </div>
