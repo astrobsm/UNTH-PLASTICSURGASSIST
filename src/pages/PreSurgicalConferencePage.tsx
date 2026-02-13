@@ -60,10 +60,11 @@ export default function PreSurgicalConferencePage() {
     try {
       setPatientsLoading(true);
       const data = await preSurgicalConferenceService.getScheduledPatients();
-      setPatients(data);
+      setPatients(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Error loading patients:', err);
       setError('Failed to load patients');
+      setPatients([]);
     } finally {
       setPatientsLoading(false);
     }

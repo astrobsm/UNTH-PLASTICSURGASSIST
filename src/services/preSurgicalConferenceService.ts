@@ -121,7 +121,18 @@ class PreSurgicalConferenceService {
   async getConferenceData(patientId: string): Promise<ConferenceData> {
     try {
       const response = await apiClient.get(`${this.baseUrl}/${patientId}`);
-      return response;
+      // Ensure all array fields are actually arrays (API may return null/undefined)
+      return {
+        patient: response.patient || {} as ConferencePatient,
+        comorbidities: Array.isArray(response.comorbidities) ? response.comorbidities : [],
+        clinicalPhotographs: Array.isArray(response.clinicalPhotographs) ? response.clinicalPhotographs : [],
+        labResults: Array.isArray(response.labResults) ? response.labResults : [],
+        medications: Array.isArray(response.medications) ? response.medications : [],
+        anaesthetistComments: Array.isArray(response.anaesthetistComments) ? response.anaesthetistComments : [],
+        plannedProcedures: Array.isArray(response.plannedProcedures) ? response.plannedProcedures : [],
+        shoppingListStatus: response.shoppingListStatus || { patient_id: patientId, is_complete: false, total_items: 0, procured_items: 0, pending_items: 0, items: [] },
+        preparingTeam: Array.isArray(response.preparingTeam) ? response.preparingTeam : [],
+      };
     } catch (error) {
       console.error('Error fetching conference data:', error);
       throw error;
@@ -131,12 +142,18 @@ class PreSurgicalConferenceService {
   async getScheduledPatients(): Promise<ConferencePatient[]> {
     try {
       const response = await apiClient.get(`${this.baseUrl}/scheduled-patients`);
-      return response;
+      // API returns { patients: [...] } - extract the array
+      const patients = Array.isArray(response) ? response : (response?.patients || []);
+      return patients;
     } catch (error) {
       console.error('Error fetching scheduled patients:', error);
-      // Fallback to getting all patients with scheduled surgeries
-      const patients = await patientService.getAllPatients();
-      return patients;
+      // Fallback to getting all patients with scheduled surgeries from local DB
+      try {
+        const patients = await patientService.getAllPatients();
+        return Array.isArray(patients) ? patients : [];
+      } catch {
+        return [];
+      }
     }
   }
 
@@ -157,6 +174,7 @@ class PreSurgicalConferenceService {
   // Categorize medications by type
   categorizeMedications(medications: Medication[]): Record<string, Medication[]> {
     const categories: Record<string, Medication[]> = {};
+    if (!Array.isArray(medications)) return categories;
     medications.forEach(med => {
       const category = med.category || this.inferMedicationCategory(med.medication_name);
       if (!categories[category]) categories[category] = [];
@@ -183,6 +201,7 @@ class PreSurgicalConferenceService {
   // Categorize lab results by type
   categorizeLabResults(labResults: LabResult[]): Record<string, LabResult[]> {
     const categories: Record<string, LabResult[]> = {};
+    if (!Array.isArray(labResults)) return categories;
     labResults.forEach(lab => {
       const category = lab.test_type || 'Other';
       if (!categories[category]) categories[category] = [];

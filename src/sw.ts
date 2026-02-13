@@ -139,9 +139,11 @@ mutationMethods.forEach(method => {
 });
 
 // ─── Static assets (JS/CSS) → StaleWhileRevalidate ─────────
+// Exclude external CDN scripts (tesseract.js workers, etc.) from SW caching
 registerRoute(
-  ({ request }) =>
-    request.destination === 'script' || request.destination === 'style',
+  ({ request, url }) =>
+    (request.destination === 'script' || request.destination === 'style') &&
+    url.origin === self.location.origin,
   new StaleWhileRevalidate({
     cacheName: STATIC_CACHE,
     plugins: [

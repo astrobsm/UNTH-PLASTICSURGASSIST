@@ -411,20 +411,36 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
     setOcrProgress(0);
 
     try {
-      const result = await Tesseract.recognize(
-        image.data,
-        'eng',
-        {
-          logger: (m) => {
-            if (m.status === 'recognizing text') {
-              setOcrProgress(Math.round(m.progress * 100));
+      let result;
+      try {
+        result = await Tesseract.recognize(
+          image.data,
+          'eng',
+          {
+            logger: (m: any) => {
+              if (m.status === 'recognizing text') {
+                setOcrProgress(Math.round(m.progress * 100));
+              }
             }
           }
-        }
-      );
+        );
+      } catch (ocrLoadError: any) {
+        console.error('Tesseract worker load error:', ocrLoadError);
+        setIsProcessingOCR(false);
+        setOcrProgress(0);
+        alert('OCR is temporarily unavailable. The text recognition engine could not be loaded. Please check your internet connection and try again.');
+        return;
+      }
 
       const extractedText = result.data.text;
       
+      if (!extractedText || extractedText.trim().length === 0) {
+        alert('No text could be extracted from this image. Try a clearer image.');
+        setIsProcessingOCR(false);
+        setOcrProgress(0);
+        return;
+      }
+
       // Update the image with extracted text
       setClinicalImages(prev => prev.map(img => 
         img.id === imageId ? { ...img, extracted_text: extractedText } : img
