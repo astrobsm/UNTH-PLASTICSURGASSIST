@@ -10,6 +10,7 @@ interface ProgressNoteModalProps {
   onClose: () => void;
   patientId: string;
   patientName: string;
+  patientSex?: string;
   onSuccess: () => void;
 }
 
@@ -25,6 +26,7 @@ export const ProgressNoteModal: React.FC<ProgressNoteModalProps> = ({
   onClose,
   patientId,
   patientName,
+  patientSex,
   onSuccess
 }) => {
   const { user } = useAuthStore();
@@ -42,11 +44,19 @@ export const ProgressNoteModal: React.FC<ProgressNoteModalProps> = ({
     oxygenSaturation: '',
     painScore: ''
   });
+  const [lmp, setLmp] = useState('');
   const [saving, setSaving] = useState(false);
+
+  const isFemale = patientSex?.toLowerCase() === 'female' || patientSex?.toLowerCase() === 'f';
 
   const handleSave = async () => {
     if (!note.subjective || !note.objective || !note.assessment || !note.plan) {
       alert('Please fill in all SOAP sections');
+      return;
+    }
+
+    if (isFemale && !lmp) {
+      alert('LMP (Last Menstrual Period) is required for female patients');
       return;
     }
 
@@ -60,6 +70,7 @@ export const ProgressNoteModal: React.FC<ProgressNoteModalProps> = ({
         author_role: user?.role || 'Unknown',
         date: new Date().toISOString(),
         vital_signs: vitalSigns,
+        lmp: isFemale ? lmp : undefined,
         soap: note,
         created_at: new Date(),
         updated_at: new Date()
@@ -123,6 +134,7 @@ export const ProgressNoteModal: React.FC<ProgressNoteModalProps> = ({
       oxygenSaturation: '',
       painScore: ''
     });
+    setLmp('');
     onClose();
   };
 
@@ -158,6 +170,29 @@ export const ProgressNoteModal: React.FC<ProgressNoteModalProps> = ({
           </div>
 
           <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-2">
+            {/* LMP Field for Female Patients */}
+            {isFemale && (
+              <div className="bg-pink-50 border border-pink-200 p-4 rounded-lg">
+                <h4 className="font-semibold text-pink-900 mb-3 flex items-center">
+                  <span className="mr-2">LMP (Last Menstrual Period)</span>
+                  <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">Required</span>
+                </h4>
+                <input
+                  type="date"
+                  value={lmp}
+                  onChange={(e) => setLmp(e.target.value)}
+                  max={new Date().toISOString().split('T')[0]}
+                  className="w-full sm:w-1/2 px-3 py-2 border border-pink-300 rounded-md text-sm focus:ring-pink-500 focus:border-pink-500"
+                  required
+                />
+                {lmp && (
+                  <p className="text-xs text-pink-700 mt-1">
+                    {Math.floor((new Date().getTime() - new Date(lmp).getTime()) / (1000 * 60 * 60 * 24))} days ago
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* Vital Signs */}
             <div className="bg-blue-50 p-4 rounded-lg">
               <h4 className="font-semibold text-blue-900 mb-3">Vital Signs</h4>

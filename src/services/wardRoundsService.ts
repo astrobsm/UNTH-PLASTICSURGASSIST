@@ -65,6 +65,9 @@ export interface WardRound {
   clinical_images?: ClinicalImage[];
   ocr_extracted_text?: string;
   
+  // LMP for female patients
+  lmp?: string;
+  
   // Timestamps
   created_at?: Date;
   updated_at?: Date;

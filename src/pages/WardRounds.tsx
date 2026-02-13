@@ -79,20 +79,22 @@ export default function WardRounds() {
 
     // Filter by status
     if (filterStatus !== 'all') {
-      filtered = filtered.filter(r => r.clinical_status === filterStatus);
+      filtered = filtered.filter(r => r.progress_status === filterStatus);
     }
 
     // Filter by date
     const now = new Date();
+    now.setHours(0, 0, 0, 0);
     if (filterDate !== 'all') {
       filtered = filtered.filter(r => {
         const roundDate = new Date(r.round_date);
-        const diffTime = Math.abs(now.getTime() - roundDate.getTime());
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        roundDate.setHours(0, 0, 0, 0);
+        const diffTime = now.getTime() - roundDate.getTime();
+        const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
         
         if (filterDate === 'today') return diffDays === 0;
-        if (filterDate === 'week') return diffDays <= 7;
-        if (filterDate === 'month') return diffDays <= 30;
+        if (filterDate === 'week') return diffDays >= 0 && diffDays <= 7;
+        if (filterDate === 'month') return diffDays >= 0 && diffDays <= 30;
         return true;
       });
     }
@@ -136,9 +138,9 @@ export default function WardRounds() {
     return {
       total: rounds.length,
       today: todayRounds.length,
-      stable: rounds.filter(r => r.clinical_status === 'stable').length,
-      critical: rounds.filter(r => r.clinical_status === 'critical').length,
-      deteriorating: rounds.filter(r => r.clinical_status === 'deteriorating').length
+      stable: rounds.filter(r => r.progress_status === 'stable').length,
+      critical: rounds.filter(r => r.progress_status === 'critical').length,
+      deteriorating: rounds.filter(r => r.progress_status === 'deteriorating').length
     };
   };
 
@@ -249,6 +251,7 @@ export default function WardRounds() {
             className="form-select"
           >
             <option value="all">All Status</option>
+            <option value="improved">Improved</option>
             <option value="stable">Stable</option>
             <option value="deteriorating">Deteriorating</option>
             <option value="critical">Critical</option>
@@ -296,8 +299,8 @@ export default function WardRounds() {
                         <span className="text-xs sm:text-sm text-gray-500">
                           {patient?.hospital_number}
                         </span>
-                        <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${getStatusBadgeColor(round.clinical_status)}`}>
-                          {round.clinical_status.charAt(0).toUpperCase() + round.clinical_status.slice(1)}
+                        <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${getStatusBadgeColor(round.progress_status)}`}>
+                          {round.progress_status?.charAt(0).toUpperCase() + round.progress_status?.slice(1)}
                         </span>
                       </div>
 

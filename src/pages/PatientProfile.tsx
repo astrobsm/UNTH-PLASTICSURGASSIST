@@ -412,6 +412,7 @@ export const PatientProfile: React.FC = () => {
         onClose={() => setShowProgressNoteModal(false)}
         patientId={id!}
         patientName={`${patient.first_name} ${patient.last_name}`}
+        patientSex={patient.sex || patient.gender}
         onSuccess={() => {
           console.log('Progress note saved');
           loadPatientData();

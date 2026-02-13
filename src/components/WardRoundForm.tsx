@@ -118,6 +118,9 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
     clinical_images: [] as ClinicalImage[],
     ocr_extracted_text: '',
     
+    // LMP for female patients
+    lmp: '',
+    
     notes: ''
   });
 
@@ -214,6 +217,20 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
     e.preventDefault();
     
     try {
+      // Validate patient selection
+      if (!formData.patient_id) {
+        alert('Please select a patient before submitting the ward round');
+        setActiveTab('patient');
+        return;
+      }
+
+      // Validate LMP for female patients
+      const patientSex = (selectedPatient?.sex || selectedPatient?.gender || '').toLowerCase();
+      if ((patientSex === 'female' || patientSex === 'f') && !formData.lmp) {
+        alert('LMP (Last Menstrual Period) is required for female patients');
+        return;
+      }
+
       // Ensure all required fields are present
       const wardRoundData: Partial<WardRound> = {
         patient_id: formData.patient_id,
@@ -273,7 +290,10 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
         // Additional fields
         new_orders: formData.procedures_planned.length > 0 
           ? formData.procedures_planned.join(', ')
-          : undefined
+          : undefined,
+        
+        // LMP for female patients
+        lmp: formData.lmp || undefined
       };
 
       console.log('Submitting ward round data:', wardRoundData);
@@ -644,6 +664,29 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
             {/* Subjective Tab */}
             {activeTab === 'subjective' && (
               <div className="space-y-4">
+                {/* LMP Field for Female Patients */}
+                {selectedPatient && (selectedPatient.sex?.toLowerCase() === 'female' || selectedPatient.sex?.toLowerCase() === 'f' || selectedPatient.gender?.toLowerCase() === 'female' || selectedPatient.gender?.toLowerCase() === 'f') && (
+                  <div className="bg-pink-50 border border-pink-200 rounded-lg p-4">
+                    <label className="block text-sm font-semibold text-pink-900 mb-2 flex items-center">
+                      LMP (Last Menstrual Period)
+                      <span className="ml-2 text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">Required</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={formData.lmp}
+                      onChange={(e) => setFormData({ ...formData, lmp: e.target.value })}
+                      max={new Date().toISOString().split('T')[0]}
+                      className="w-full sm:w-1/2 px-4 py-2 border border-pink-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                      required
+                    />
+                    {formData.lmp && (
+                      <p className="text-xs text-pink-700 mt-1">
+                        {Math.floor((new Date().getTime() - new Date(formData.lmp).getTime()) / (1000 * 60 * 60 * 24))} days ago
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 <MedicalTextInput
                   value={formData.subjective_complaints}
                   onChange={(value) => setFormData({ ...formData, subjective_complaints: value })}
