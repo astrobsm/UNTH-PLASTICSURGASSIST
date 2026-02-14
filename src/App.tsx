@@ -15,43 +15,69 @@ import { pushNotificationService } from './services/pushNotificationService';
 import { initializeCSRFToken } from './utils/csrf';
 import { logger } from './utils/logger';
 
-// Lazy load pages for better performance
-const Dashboard = lazy(() => import('./pages/Dashboard'));
-const Login = lazy(() => import('./pages/Login'));
-const Patients = lazy(() => import('./pages/Patients'));
-const PatientProfile = lazy(() => import('./pages/PatientProfile'));
-const TreatmentPlans = lazy(() => import('./pages/TreatmentPlans'));
-const Procedures = lazy(() => import('./pages/Procedures'));
-const Labs = lazy(() => import('./pages/Labs'));
-const Education = lazy(() => import('./pages/Education'));
-const MCQEducation = lazy(() => import('./pages/MCQEducation'));
-const TopicManagement = lazy(() => import('./pages/TopicManagement'));
-const Admin = lazy(() => import('./pages/Admin'));
-const NotificationManager = lazy(() => import('./pages/NotificationManager'));
-const TreatmentPlanningPage = lazy(() => import('./pages/TreatmentPlanningPage'));
-const PatientSummariesPage = lazy(() => import('./pages/PatientSummariesPage'));
-const PaperworkPage = lazy(() => import('./pages/PaperworkPage'));
-const MDTPage = lazy(() => import('./pages/MDTPage'));
-const AdmissionsPage = lazy(() => import('./pages/AdmissionsPage'));
-const DischargesPage = lazy(() => import('./pages/DischargesPage'));
-const AdmissionDischargePage = lazy(() => import('./pages/AdmissionDischargePage'));
-const BloodTransfusionPage = lazy(() => import('./pages/BloodTransfusion'));
-const WardRoundsPage = lazy(() => import('./pages/WardRounds'));
-const PatientEducation = lazy(() => import('./pages/PatientEducation'));
-const ShoppingList = lazy(() => import('./pages/ShoppingList'));
-const VideoConference = lazy(() => import('./pages/VideoConference'));
-const ChatRooms = lazy(() => import('./pages/ChatRooms'));
-const LimbSalvagePage = lazy(() => import('./pages/LimbSalvagePage'));
-const BurnCarePage = lazy(() => import('./pages/BurnCarePage'));
-const MedicalTrainingPage = lazy(() => import('./pages/MedicalTrainingPage'));
-const TreatmentPlanBuilder = lazy(() => import('./components/TreatmentPlanBuilder'));
-const PreoperativePlanningPage = lazy(() => import('./pages/PreoperativePlanningPage'));
-const PreSurgicalConferencePage = lazy(() => import('./pages/PreSurgicalConferencePage'));
-const WoundCarePage = lazy(() => import('./pages/WoundCarePage'));
-const KeloidCarePage = lazy(() => import('./pages/KeloidCarePage'));
-const SoftTissueInfectionPage = lazy(() => import('./pages/SoftTissueInfectionPage'));
-const PressureSorePage = lazy(() => import('./pages/PressureSorePage'));
-const Settings = lazy(() => import('./pages/Settings'));
+// Auto-retry dynamic imports: if a chunk fails (stale cache after deploy),
+// clear caches and reload the page once to get fresh assets.
+function lazyWithRetry(importFn: () => Promise<any>) {
+  return lazy(() =>
+    importFn().catch((error: any) => {
+      const hasReloaded = sessionStorage.getItem('chunk_reload');
+      if (!hasReloaded) {
+        sessionStorage.setItem('chunk_reload', '1');
+        // Clear service worker caches
+        if ('caches' in window) {
+          caches.keys().then(names => names.forEach(name => caches.delete(name)));
+        }
+        window.location.reload();
+        return new Promise(() => {}); // never resolves, page is reloading
+      }
+      sessionStorage.removeItem('chunk_reload');
+      throw error; // re-throw if reload already attempted
+    })
+  );
+}
+
+// Clear the reload flag on successful page load
+if (sessionStorage.getItem('chunk_reload')) {
+  sessionStorage.removeItem('chunk_reload');
+}
+
+// Lazy load pages for better performance (with stale-chunk auto-reload)
+const Dashboard = lazyWithRetry(() => import('./pages/Dashboard'));
+const Login = lazyWithRetry(() => import('./pages/Login'));
+const Patients = lazyWithRetry(() => import('./pages/Patients'));
+const PatientProfile = lazyWithRetry(() => import('./pages/PatientProfile'));
+const TreatmentPlans = lazyWithRetry(() => import('./pages/TreatmentPlans'));
+const Procedures = lazyWithRetry(() => import('./pages/Procedures'));
+const Labs = lazyWithRetry(() => import('./pages/Labs'));
+const Education = lazyWithRetry(() => import('./pages/Education'));
+const MCQEducation = lazyWithRetry(() => import('./pages/MCQEducation'));
+const TopicManagement = lazyWithRetry(() => import('./pages/TopicManagement'));
+const Admin = lazyWithRetry(() => import('./pages/Admin'));
+const NotificationManager = lazyWithRetry(() => import('./pages/NotificationManager'));
+const TreatmentPlanningPage = lazyWithRetry(() => import('./pages/TreatmentPlanningPage'));
+const PatientSummariesPage = lazyWithRetry(() => import('./pages/PatientSummariesPage'));
+const PaperworkPage = lazyWithRetry(() => import('./pages/PaperworkPage'));
+const MDTPage = lazyWithRetry(() => import('./pages/MDTPage'));
+const AdmissionsPage = lazyWithRetry(() => import('./pages/AdmissionsPage'));
+const DischargesPage = lazyWithRetry(() => import('./pages/DischargesPage'));
+const AdmissionDischargePage = lazyWithRetry(() => import('./pages/AdmissionDischargePage'));
+const BloodTransfusionPage = lazyWithRetry(() => import('./pages/BloodTransfusion'));
+const WardRoundsPage = lazyWithRetry(() => import('./pages/WardRounds'));
+const PatientEducation = lazyWithRetry(() => import('./pages/PatientEducation'));
+const ShoppingList = lazyWithRetry(() => import('./pages/ShoppingList'));
+const VideoConference = lazyWithRetry(() => import('./pages/VideoConference'));
+const ChatRooms = lazyWithRetry(() => import('./pages/ChatRooms'));
+const LimbSalvagePage = lazyWithRetry(() => import('./pages/LimbSalvagePage'));
+const BurnCarePage = lazyWithRetry(() => import('./pages/BurnCarePage'));
+const MedicalTrainingPage = lazyWithRetry(() => import('./pages/MedicalTrainingPage'));
+const TreatmentPlanBuilder = lazyWithRetry(() => import('./components/TreatmentPlanBuilder'));
+const PreoperativePlanningPage = lazyWithRetry(() => import('./pages/PreoperativePlanningPage'));
+const PreSurgicalConferencePage = lazyWithRetry(() => import('./pages/PreSurgicalConferencePage'));
+const WoundCarePage = lazyWithRetry(() => import('./pages/WoundCarePage'));
+const KeloidCarePage = lazyWithRetry(() => import('./pages/KeloidCarePage'));
+const SoftTissueInfectionPage = lazyWithRetry(() => import('./pages/SoftTissueInfectionPage'));
+const PressureSorePage = lazyWithRetry(() => import('./pages/PressureSorePage'));
+const Settings = lazyWithRetry(() => import('./pages/Settings'));
 
 // Loading fallback component
 const PageLoader = () => (
