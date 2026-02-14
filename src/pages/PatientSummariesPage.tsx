@@ -117,7 +117,7 @@ const PatientSummariesPage: React.FC = () => {
     doc.text('OVERVIEW', PDF_MARGINS.left, yPos);
     yPos += 7;
     doc.setFont('times', 'normal');
-    const overviewLines = doc.splitTextToSize(clean(summaryData.summary.overview), pageWidth - PDF_MARGINS.left - PDF_MARGINS.right);
+    const overviewLines = doc.splitTextToSize(clean(summaryData?.summary?.overview), pageWidth - PDF_MARGINS.left - PDF_MARGINS.right);
     doc.text(overviewLines, PDF_MARGINS.left, yPos);
     yPos += overviewLines.length * 5 + 5;
 
@@ -126,7 +126,7 @@ const PatientSummariesPage: React.FC = () => {
     doc.text('DIAGNOSIS', PDF_MARGINS.left, yPos);
     yPos += 7;
     doc.setFont('times', 'normal');
-    const diagnosisLines = doc.splitTextToSize(clean(summaryData.summary.diagnosis), pageWidth - PDF_MARGINS.left - PDF_MARGINS.right);
+    const diagnosisLines = doc.splitTextToSize(clean(summaryData?.summary?.diagnosis), pageWidth - PDF_MARGINS.left - PDF_MARGINS.right);
     doc.text(diagnosisLines, PDF_MARGINS.left, yPos);
     yPos += diagnosisLines.length * 5 + 5;
 
@@ -141,12 +141,12 @@ const PatientSummariesPage: React.FC = () => {
     doc.text('TREATMENT PROGRESS', PDF_MARGINS.left, yPos);
     yPos += 7;
     doc.setFont('times', 'normal');
-    const progressLines = doc.splitTextToSize(clean(summaryData.summary.treatment_progress), pageWidth - PDF_MARGINS.left - PDF_MARGINS.right);
+    const progressLines = doc.splitTextToSize(clean(summaryData?.summary?.treatment_progress), pageWidth - PDF_MARGINS.left - PDF_MARGINS.right);
     doc.text(progressLines, PDF_MARGINS.left, yPos);
     yPos += progressLines.length * 5 + 5;
 
     // Procedures Performed
-    if (summaryData.summary.procedures_performed.length > 0) {
+    if ((summaryData?.summary?.procedures_performed?.length || 0) > 0) {
       doc.setFont('times', 'bold');
       doc.text('PROCEDURES PERFORMED', PDF_MARGINS.left, yPos);
       yPos += 7;
@@ -169,7 +169,7 @@ const PatientSummariesPage: React.FC = () => {
     }
 
     // Medications
-    if (summaryData.summary.medications.length > 0) {
+    if ((summaryData?.summary?.medications?.length || 0) > 0) {
       doc.setFont('times', 'bold');
       doc.text('CURRENT MEDICATIONS', PDF_MARGINS.left, yPos);
       yPos += 7;
@@ -190,12 +190,12 @@ const PatientSummariesPage: React.FC = () => {
     doc.text('LABORATORY INVESTIGATIONS', PDF_MARGINS.left, yPos);
     yPos += 7;
     doc.setFont('times', 'normal');
-    const labLines = doc.splitTextToSize(clean(summaryData.summary.lab_results_summary), pageWidth - PDF_MARGINS.left - PDF_MARGINS.right);
+    const labLines = doc.splitTextToSize(clean(summaryData?.summary?.lab_results_summary), pageWidth - PDF_MARGINS.left - PDF_MARGINS.right);
     doc.text(labLines, PDF_MARGINS.left, yPos);
     yPos += labLines.length * 5 + 5;
 
     // Complications
-    if (summaryData.summary.complications.length > 0) {
+    if ((summaryData?.summary?.complications?.length || 0) > 0) {
       doc.setFont('times', 'bold');
       doc.text('COMPLICATIONS/DELAYS', PDF_MARGINS.left, yPos);
       yPos += 7;
@@ -216,7 +216,7 @@ const PatientSummariesPage: React.FC = () => {
     doc.text('CURRENT STATUS', PDF_MARGINS.left, yPos);
     yPos += 7;
     doc.setFont('times', 'normal');
-    doc.text(clean(summaryData.summary.current_status), PDF_MARGINS.left, yPos);
+    doc.text(clean(summaryData?.summary?.current_status), PDF_MARGINS.left, yPos);
     yPos += 10;
 
     // Plan Forward
@@ -224,7 +224,7 @@ const PatientSummariesPage: React.FC = () => {
     doc.text('PLAN FORWARD', PDF_MARGINS.left, yPos);
     yPos += 7;
     doc.setFont('times', 'normal');
-    const planLines = doc.splitTextToSize(clean(summaryData.summary.plan_forward), pageWidth - PDF_MARGINS.left - PDF_MARGINS.right);
+    const planLines = doc.splitTextToSize(clean(summaryData?.summary?.plan_forward), pageWidth - PDF_MARGINS.left - PDF_MARGINS.right);
     doc.text(planLines, PDF_MARGINS.left, yPos);
     yPos += planLines.length * 5 + 10;
 
@@ -251,12 +251,12 @@ const PatientSummariesPage: React.FC = () => {
     const clean = (text: string | undefined | null): string => sanitizeTextForPDF(text || '');
 
     let estHeight = 150;
-    estHeight += (summaryData.summary.overview?.length || 0) * 0.12;
-    estHeight += (summaryData.summary.diagnosis?.length || 0) * 0.12;
-    estHeight += (summaryData.summary.treatment_progress?.length || 0) * 0.12;
-    estHeight += summaryData.summary.procedures_performed.length * 5;
-    estHeight += summaryData.summary.medications.length * 5;
-    estHeight += summaryData.summary.complications.length * 5;
+    estHeight += (summaryData?.summary?.overview?.length || 0) * 0.12;
+    estHeight += (summaryData?.summary?.diagnosis?.length || 0) * 0.12;
+    estHeight += (summaryData?.summary?.treatment_progress?.length || 0) * 0.12;
+    estHeight += (summaryData?.summary?.procedures_performed?.length || 0) * 5;
+    estHeight += (summaryData?.summary?.medications?.length || 0) * 5;
+    estHeight += (summaryData?.summary?.complications?.length || 0) * 5;
     estHeight = Math.max(estHeight, 200);
 
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [thermalWidth, estHeight] });
@@ -307,15 +307,15 @@ const PatientSummariesPage: React.FC = () => {
       y += 2;
     };
 
-    addSection('OVERVIEW', summaryData.summary.overview);
-    addSection('DIAGNOSIS', summaryData.summary.diagnosis);
-    addSection('TREATMENT', summaryData.summary.treatment_progress);
-    addList('PROCEDURES', summaryData.summary.procedures_performed);
-    addList('MEDICATIONS', summaryData.summary.medications);
-    addSection('LAB RESULTS', summaryData.summary.lab_results_summary);
-    addList('COMPLICATIONS', summaryData.summary.complications);
-    addSection('STATUS', summaryData.summary.current_status);
-    addSection('PLAN', summaryData.summary.plan_forward);
+    addSection('OVERVIEW', summaryData?.summary?.overview || '');
+    addSection('DIAGNOSIS', summaryData?.summary?.diagnosis || '');
+    addSection('TREATMENT', summaryData?.summary?.treatment_progress || '');
+    addList('PROCEDURES', summaryData?.summary?.procedures_performed || []);
+    addList('MEDICATIONS', summaryData?.summary?.medications || []);
+    addSection('LAB RESULTS', summaryData?.summary?.lab_results_summary || '');
+    addList('COMPLICATIONS', summaryData?.summary?.complications || []);
+    addSection('STATUS', summaryData?.summary?.current_status || '');
+    addSection('PLAN', summaryData?.summary?.plan_forward || '');
 
     doc.save('Patient_Summary_Thermal_' + clean(summaryData.hospital_number) + '_' + format(new Date(), 'yyyy-MM-dd') + '.pdf');
   };
@@ -428,7 +428,7 @@ const PatientSummariesPage: React.FC = () => {
                   <span className="font-semibold text-purple-900">Current Status</span>
                 </div>
                 <p className="text-lg font-semibold text-purple-700">
-                  {summary.summary.current_status}
+                  {summary?.summary?.current_status || 'N/A'}
                 </p>
               </div>
             </div>
@@ -439,27 +439,27 @@ const PatientSummariesPage: React.FC = () => {
                 <User className="w-5 h-5" />
                 Overview
               </h3>
-              <p className="text-gray-700 bg-gray-50 p-4 rounded-lg">{summary.summary.overview}</p>
+              <p className="text-gray-700 bg-gray-50 p-4 rounded-lg">{summary?.summary?.overview || 'No overview available'}</p>
             </div>
 
             {/* Diagnosis */}
             <div>
               <h3 className="text-lg font-semibold text-gray-900 mb-2">Diagnosis</h3>
-              <p className="text-gray-700 bg-gray-50 p-4 rounded-lg">{summary.summary.diagnosis}</p>
+              <p className="text-gray-700 bg-gray-50 p-4 rounded-lg">{summary?.summary?.diagnosis || 'No diagnosis available'}</p>
             </div>
 
             {/* Treatment Progress */}
             <div>
               <h3 className="text-lg font-semibold text-gray-900 mb-2">Treatment Progress</h3>
-              <p className="text-gray-700 bg-gray-50 p-4 rounded-lg">{summary.summary.treatment_progress}</p>
+              <p className="text-gray-700 bg-gray-50 p-4 rounded-lg">{summary?.summary?.treatment_progress || 'No treatment progress recorded'}</p>
             </div>
 
             {/* Procedures Performed */}
-            {summary.summary.procedures_performed.length > 0 && (
+            {(summary?.summary?.procedures_performed?.length || 0) > 0 && (
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Procedures Performed</h3>
                 <ul className="bg-gray-50 p-4 rounded-lg space-y-2">
-                  {summary.summary.procedures_performed.map((proc, idx) => (
+                  {(summary?.summary?.procedures_performed || []).map((proc, idx) => (
                     <li key={idx} className="flex items-start gap-2">
                       <span className="text-green-600 font-bold">{idx + 1}.</span>
                       <span className="text-gray-700">{proc}</span>
@@ -470,11 +470,11 @@ const PatientSummariesPage: React.FC = () => {
             )}
 
             {/* Medications */}
-            {summary.summary.medications.length > 0 && (
+            {(summary?.summary?.medications?.length || 0) > 0 && (
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Current Medications</h3>
                 <ul className="bg-gray-50 p-4 rounded-lg space-y-2">
-                  {summary.summary.medications.map((med, idx) => (
+                  {(summary?.summary?.medications || []).map((med, idx) => (
                     <li key={idx} className="flex items-start gap-2">
                       <span className="text-blue-600 font-bold">{idx + 1}.</span>
                       <span className="text-gray-700">{med}</span>
@@ -487,18 +487,18 @@ const PatientSummariesPage: React.FC = () => {
             {/* Lab Results */}
             <div>
               <h3 className="text-lg font-semibold text-gray-900 mb-2">Laboratory Investigations</h3>
-              <p className="text-gray-700 bg-gray-50 p-4 rounded-lg">{summary.summary.lab_results_summary}</p>
+              <p className="text-gray-700 bg-gray-50 p-4 rounded-lg">{summary?.summary?.lab_results_summary || 'No lab results available'}</p>
             </div>
 
             {/* Complications */}
-            {summary.summary.complications.length > 0 && (
+            {(summary?.summary?.complications?.length || 0) > 0 && (
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-2 flex items-center gap-2">
                   <AlertCircle className="w-5 h-5 text-red-600" />
                   Complications/Delays
                 </h3>
                 <ul className="bg-red-50 p-4 rounded-lg space-y-2">
-                  {summary.summary.complications.map((comp, idx) => (
+                  {(summary?.summary?.complications || []).map((comp, idx) => (
                     <li key={idx} className="flex items-start gap-2">
                       <span className="text-red-600 font-bold">{idx + 1}.</span>
                       <span className="text-red-900">{comp}</span>
@@ -512,7 +512,7 @@ const PatientSummariesPage: React.FC = () => {
             <div>
               <h3 className="text-lg font-semibold text-gray-900 mb-2">Plan Forward</h3>
               <p className="text-gray-700 bg-green-50 p-4 rounded-lg border-l-4 border-green-600">
-                {summary.summary.plan_forward}
+                {summary?.summary?.plan_forward || 'No plan forward documented'}
               </p>
             </div>
 

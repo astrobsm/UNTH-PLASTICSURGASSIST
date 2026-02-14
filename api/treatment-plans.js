@@ -98,8 +98,9 @@ async function createPlan(data, user, res) {
     procedures, medications, followUpSchedule, notes, status = 'draft'
   } = data;
 
-  if (!patientId || !diagnosis) {
-    return res.status(400).json({ error: 'Patient ID and diagnosis are required' });
+  const effectiveDiagnosis = diagnosis || description || treatmentType || 'Unspecified';
+  if (!patientId) {
+    return res.status(400).json({ error: 'Patient ID is required' });
   }
 
   const result = await query(
@@ -109,7 +110,7 @@ async function createPlan(data, user, res) {
     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
     RETURNING *`,
     [
-      patientId, diagnosis, treatmentType, description, 
+      patientId, effectiveDiagnosis, treatmentType, description, 
       JSON.stringify(objectives || []),
       JSON.stringify(procedures || []),
       JSON.stringify(medications || []),

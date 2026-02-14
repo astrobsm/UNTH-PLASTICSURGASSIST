@@ -202,7 +202,7 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
 
   const loadWardRound = async () => {
     if (!wardRoundId) return;
-    const round = await wardRoundsService.getWardRoundById(wardRoundId);
+    const round = await wardRoundsService.getWardRound(wardRoundId);
     if (round) {
       setFormData({
         ...round,

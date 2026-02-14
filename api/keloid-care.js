@@ -170,7 +170,7 @@ async function getAllPlans(searchParams, res) {
   let queryStr = `
     SELECT kcp.*, 
            p.first_name, p.last_name, p.hospital_number, p.date_of_birth, p.gender,
-           u.name as created_by_name
+           u.full_name as created_by_name
     FROM keloid_care_plans kcp
     LEFT JOIN patients p ON kcp.patient_id = p.id
     LEFT JOIN users u ON kcp.created_by = u.id
@@ -217,7 +217,7 @@ async function getPlan(id, res) {
   const result = await query(
     `SELECT kcp.*, 
             p.first_name, p.last_name, p.hospital_number, p.date_of_birth, p.gender,
-            u.name as created_by_name
+            u.full_name as created_by_name
      FROM keloid_care_plans kcp
      LEFT JOIN patients p ON kcp.patient_id = p.id
      LEFT JOIN users u ON kcp.created_by = u.id
@@ -233,7 +233,7 @@ async function getPlan(id, res) {
 
   // Get all injections for this plan
   const injectionsResult = await query(
-    `SELECT ki.*, u.name as administered_by_name
+    `SELECT ki.*, u.full_name as administered_by_name
      FROM keloid_injections ki
      LEFT JOIN users u ON ki.administered_by = u.id
      WHERE ki.keloid_plan_id = $1
@@ -427,7 +427,7 @@ async function deletePlan(id, res) {
 // Injection management
 async function getInjections(planId, res) {
   const result = await query(
-    `SELECT ki.*, u.name as administered_by_name
+    `SELECT ki.*, u.full_name as administered_by_name
      FROM keloid_injections ki
      LEFT JOIN users u ON ki.administered_by = u.id
      WHERE ki.keloid_plan_id = $1

@@ -351,6 +351,19 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Validate required fields
+    if (!basicInfo.patient_id) {
+      alert('Please select a patient');
+      setCurrentStep(1);
+      return;
+    }
+    
+    if (!basicInfo.diagnosis || basicInfo.diagnosis.trim() === '') {
+      alert('Diagnosis is required. Please enter a diagnosis before submitting.');
+      setCurrentStep(1);
+      return;
+    }
+    
     const patient = patients.find(p => p.id === parseInt(basicInfo.patient_id));
     if (!patient) return;
 

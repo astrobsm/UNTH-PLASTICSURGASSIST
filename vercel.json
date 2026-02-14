@@ -28,6 +28,10 @@
       "destination": "/api/medical-team"
     },
     {
+      "source": "/api/keloid-care/:path*",
+      "destination": "/api/keloid-care"
+    },
+    {
       "source": "/api/:path*",
       "destination": "/api/:path*"
     },
