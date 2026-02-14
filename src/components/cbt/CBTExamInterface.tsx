@@ -300,10 +300,10 @@ const CBTExamInterface: React.FC<CBTExamInterfaceProps> = ({ test, attempt, onSu
       </div>
       
       {/* Main Content */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex min-h-0">
         {/* Question Navigation Sidebar */}
-        <div className="w-20 md:w-24 bg-white border-r overflow-y-auto p-2">
-          <div className="grid grid-cols-4 md:grid-cols-5 gap-1">
+        <div className="hidden md:block w-24 bg-white border-r overflow-y-auto p-2 flex-shrink-0">
+          <div className="grid grid-cols-5 gap-1">
             {test.questions.map((q, index) => {
               const isAnswered = answers[q.id] !== null;
               const isFlagged = flaggedQuestions.has(q.id);
@@ -347,8 +347,32 @@ const CBTExamInterface: React.FC<CBTExamInterfaceProps> = ({ test, attempt, onSu
         </div>
         
         {/* Question Content */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-8">
+        <div className="flex-1 overflow-y-auto p-4 md:p-8 min-w-0">
           <div className="max-w-3xl mx-auto">
+            {/* Mobile Question Navigator */}
+            <div className="md:hidden mb-4">
+              <div className="flex items-center gap-2 overflow-x-auto pb-2">
+                {test.questions.map((q, index) => {
+                  const isAnswered = answers[q.id] !== null;
+                  const isCurrent = index === currentQuestion;
+                  return (
+                    <button
+                      key={q.id}
+                      onClick={() => setCurrentQuestion(index)}
+                      className={`flex-shrink-0 w-8 h-8 rounded-full text-xs font-bold transition-all ${
+                        isCurrent
+                          ? 'bg-green-500 text-white ring-2 ring-green-300'
+                          : isAnswered
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-gray-200 text-gray-600'
+                      }`}
+                    >
+                      {index + 1}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
             {/* Question Header */}
             <div className="flex items-center justify-between mb-4">
               <span className="text-sm text-gray-500">
@@ -377,25 +401,26 @@ const CBTExamInterface: React.FC<CBTExamInterfaceProps> = ({ test, attempt, onSu
             </div>
             
             {/* Clinical Scenario */}
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
-              <h3 className="text-sm font-medium text-blue-800 mb-2">Clinical Scenario</h3>
-              <p className="text-blue-900">{question.clinicalScenario}</p>
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 md:p-6 mb-6">
+              <h3 className="text-sm font-semibold text-blue-800 mb-2 uppercase tracking-wide">Clinical Scenario</h3>
+              <p className="text-blue-900 text-base md:text-lg leading-relaxed whitespace-pre-wrap break-words">{question.clinicalScenario}</p>
             </div>
             
             {/* Question */}
             <div className="mb-6">
-              <p className="text-lg font-medium text-gray-800">{question.question}</p>
+              <p className="text-lg md:text-xl font-semibold text-gray-900 leading-relaxed break-words">{question.question}</p>
             </div>
             
             {/* Options */}
             <div className="space-y-3">
               {(['A', 'B', 'C', 'D', 'E'] as const).map(option => (
+                question.options[option] ? (
                 <button
                   key={option}
                   onClick={() => handleAnswerSelect(question.id, option)}
                   className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
                     answers[question.id] === option
-                      ? 'border-green-500 bg-green-50'
+                      ? 'border-green-500 bg-green-50 shadow-md'
                       : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                   }`}
                 >
@@ -407,11 +432,12 @@ const CBTExamInterface: React.FC<CBTExamInterfaceProps> = ({ test, attempt, onSu
                     }`}>
                       {option}
                     </span>
-                    <span className={`flex-1 ${answers[question.id] === option ? 'text-green-900' : 'text-gray-700'}`}>
+                    <span className={`flex-1 text-base leading-relaxed break-words ${answers[question.id] === option ? 'text-green-900 font-medium' : 'text-gray-700'}`}>
                       {question.options[option]}
                     </span>
                   </div>
                 </button>
+                ) : null
               ))}
             </div>
             

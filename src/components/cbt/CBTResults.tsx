@@ -114,14 +114,14 @@ const CBTResults: React.FC<CBTResultsProps> = ({ test, attempt, onReturnToTests 
               </div>
               
               {/* Clinical Scenario */}
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
-                <h3 className="text-sm font-medium text-blue-800 mb-2">Clinical Scenario</h3>
-                <p className="text-blue-900">{question.clinicalScenario}</p>
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 md:p-6 mb-6">
+                <h3 className="text-sm font-semibold text-blue-800 mb-2 uppercase tracking-wide">Clinical Scenario</h3>
+                <p className="text-blue-900 text-base md:text-lg leading-relaxed whitespace-pre-wrap break-words">{question.clinicalScenario}</p>
               </div>
               
               {/* Question */}
               <div className="mb-6">
-                <p className="text-lg font-medium text-gray-800">{question.question}</p>
+                <p className="text-lg md:text-xl font-semibold text-gray-900 leading-relaxed break-words">{question.question}</p>
               </div>
               
               {/* Options with Answers */}
@@ -150,7 +150,7 @@ const CBTResults: React.FC<CBTResultsProps> = ({ test, attempt, onReturnToTests 
                         <span className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${circleStyle}`}>
                           {option}
                         </span>
-                        <span className="flex-1 text-gray-700">
+                        <span className="flex-1 text-base leading-relaxed break-words">
                           {question.options[option]}
                         </span>
                         <div className="flex-shrink-0">
@@ -176,7 +176,7 @@ const CBTResults: React.FC<CBTResultsProps> = ({ test, attempt, onReturnToTests 
                 <h4 className={`font-medium mb-2 ${isCorrect ? 'text-green-800' : 'text-amber-800'}`}>
                   Explanation
                 </h4>
-                <p className={isCorrect ? 'text-green-700' : 'text-amber-700'}>
+                <p className={`leading-relaxed ${isCorrect ? 'text-green-700' : 'text-amber-700'}`}>
                   {question.explanation}
                 </p>
               </div>

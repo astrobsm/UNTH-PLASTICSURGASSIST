@@ -537,12 +537,12 @@ const MCQEducation: React.FC = () => {
             </span>
           </div>
 
-          <div className="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6">
+          <div className="bg-blue-50 border-l-4 border-blue-500 p-4 md:p-6 mb-6">
             <h4 className="font-semibold text-blue-900 mb-2">Clinical Scenario:</h4>
-            <p className="text-gray-800 leading-relaxed">{currentQuestion.clinicalScenario}</p>
+            <p className="text-gray-800 text-base md:text-lg leading-relaxed whitespace-pre-wrap break-words">{currentQuestion.clinicalScenario}</p>
           </div>
 
-          <h4 className="font-bold text-lg text-gray-900 mb-4">{currentQuestion.question}</h4>
+          <h4 className="font-bold text-lg md:text-xl text-gray-900 mb-4 leading-relaxed break-words">{currentQuestion.question}</h4>
 
           <div className="space-y-3">
             {currentQuestion.options.map((option, index) => {
@@ -576,11 +576,11 @@ const MCQEducation: React.FC = () => {
                   disabled={hasAnswered}
                   className={`w-full text-left p-4 rounded-lg border-2 ${bgColor} ${borderColor} ${textColor} transition-all disabled:cursor-not-allowed`}
                 >
-                  <div className="flex items-center gap-3">
-                    <span className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-bold border-2 ${borderColor}">
+                  <div className="flex items-start gap-3">
+                    <span className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-bold border-2 ${borderColor}`}>
                       {String.fromCharCode(65 + index)}
                     </span>
-                    <span className="flex-1">{option}</span>
+                    <span className="flex-1 text-base leading-relaxed break-words">{option}</span>
                     {hasAnswered && showExplanation && isCorrectOption && (
                       <CheckCircle className="w-6 h-6 text-green-600 flex-shrink-0" />
                     )}
