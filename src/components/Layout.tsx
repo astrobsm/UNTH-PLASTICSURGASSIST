@@ -54,6 +54,7 @@ const navigation = [
   { name: 'Procedures', href: '/procedures', icon: Stethoscope },
   { name: 'Pre-op Planning', href: '/preoperative-planning', icon: ClipboardCheck },
   { name: 'Pre-Surgical Conference', href: '/pre-surgical-conference', icon: Presentation },
+  { name: 'Dept. Meetings', href: '/departmental-meetings', icon: Presentation },
   { name: 'Blood Transfusion', href: '/blood-transfusion', icon: Droplet },
   { name: 'Ward Rounds', href: '/ward-rounds', icon: Activity },
   { name: 'Limb Salvage', href: '/limb-salvage', icon: Footprints },

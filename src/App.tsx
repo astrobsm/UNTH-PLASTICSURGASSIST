@@ -78,6 +78,7 @@ const KeloidCarePage = lazyWithRetry(() => import('./pages/KeloidCarePage'));
 const SoftTissueInfectionPage = lazyWithRetry(() => import('./pages/SoftTissueInfectionPage'));
 const PressureSorePage = lazyWithRetry(() => import('./pages/PressureSorePage'));
 const Settings = lazyWithRetry(() => import('./pages/Settings'));
+const DepartmentalMeetingsPage = lazyWithRetry(() => import('./pages/DepartmentalMeetingsPage'));
 
 // Loading fallback component
 const PageLoader = () => (
@@ -209,6 +210,7 @@ function App() {
               <Route path="/notifications" element={<NotificationManager />} />
               <Route path="/chat" element={<ChatRooms />} />
               <Route path="/chat/:roomId" element={<ChatRooms />} />
+              <Route path="/departmental-meetings" element={<DepartmentalMeetingsPage />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/admin" element={<Admin />} />
             </Routes>
