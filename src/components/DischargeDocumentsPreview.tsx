@@ -33,7 +33,7 @@ export default function DischargeDocumentsPreview({
   const HospitalHeader = () => (
     <div className="text-center border-b-2 border-green-600 pb-4 mb-4">
       <h1 className="text-xl font-bold text-green-700">UNIVERSITY OF NIGERIA TEACHING HOSPITAL</h1>
-      <h2 className="text-lg font-semibold text-gray-800">DEPARTMENT OF PLASTIC SURGERY</h2>
+      <h2 className="text-lg font-semibold text-gray-800">BURNS, PLASTIC & RECONSTRUCTIVE SURGERY UNIT, DEPARTMENT OF SURGERY</h2>
       <p className="text-sm text-gray-600">Ituku-Ozalla, Enugu State, Nigeria</p>
       <p className="text-sm text-gray-600">Tel: +234-XXX-XXXX-XXX | Email: plasticsurgery@unth.edu.ng</p>
     </div>
@@ -413,7 +413,7 @@ export default function DischargeDocumentsPreview({
         doc.text('UNIVERSITY OF NIGERIA TEACHING HOSPITAL', pageWidth / 2, y, { align: 'center' });
         y += 6;
         doc.setFontSize(PDF_FONT_SIZES.sectionHeader);
-        doc.text('DEPARTMENT OF PLASTIC SURGERY', pageWidth / 2, y, { align: 'center' });
+        doc.text('BURNS, PLASTIC & RECONSTRUCTIVE SURGERY UNIT, DEPARTMENT OF SURGERY', pageWidth / 2, y, { align: 'center' });
         y += 5;
         doc.setFontSize(PDF_FONT_SIZES.small);
         doc.setTextColor(100, 100, 100);

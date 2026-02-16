@@ -112,7 +112,8 @@ export default function MortalityReview() {
         type: 'title',
         content: (
           <div className="text-gray-500 space-y-1" style={{ fontSize: '16px' }}>
-            <p>Department of Plastic & Reconstructive Surgery</p>
+            <p>Burns, Plastic & Reconstructive Surgery UNIT</p>
+            <p>Department of Surgery</p>
             <p>University of Nigeria Teaching Hospital, Enugu</p>
             <p className="mt-2 text-red-600 font-semibold">{presentationDate}</p>
           </div>
@@ -544,7 +545,8 @@ export default function MortalityReview() {
         </div>
         <PresentationSlide
           slides={slides.map((s) => ({ ...s, image: clinicalImages[s.id] || s.image }))}
-          institutionName="Department of Plastic & Reconstructive Surgery, UNTH"
+          onSlidesChange={(updated) => setSlides(updated)}
+          institutionName="Burns, Plastic & Reconstructive Surgery UNIT, Department of Surgery, UNTH"
           logoUrl={logoUrl}
           watermarkText="UNTH Plastic Surgery"
           presentationDate={presentationDate}

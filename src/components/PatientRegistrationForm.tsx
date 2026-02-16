@@ -916,7 +916,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     doc.setFont('times', 'bold');
     doc.text('UNIVERSITY OF NIGERIA TEACHING HOSPITAL', pageWidth / 2, 15, { align: 'center' });
     doc.setFontSize(PDF_FONT_SIZES.sectionHeader + 2);
-    doc.text('Department of Plastic Surgery', pageWidth / 2, 25, { align: 'center' });
+    doc.text('Burns, Plastic & Reconstructive Surgery UNIT, Department of Surgery', pageWidth / 2, 25, { align: 'center' });
     doc.setFontSize(PDF_FONT_SIZES.sectionHeader);
     doc.text('7-DAY PERSONALIZED MEAL PLAN', pageWidth / 2, 35, { align: 'center' });
     
@@ -1164,7 +1164,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     doc.setFontSize(PDF_FONT_SIZES.sectionHeader);
     doc.text('ITUKU-OZALLA, ENUGU', pageWidth / 2, 22, { align: 'center' });
     doc.setFontSize(10);
-    doc.text('Department of Plastic & Reconstructive Surgery', pageWidth / 2, 29, { align: 'center' });
+    doc.text('Burns, Plastic & Reconstructive Surgery UNIT, Department of Surgery', pageWidth / 2, 29, { align: 'center' });
     doc.setFontSize(14);
     doc.setFont('times', 'bold');
     doc.text(details.title, pageWidth / 2, 38, { align: 'center' });
@@ -1412,7 +1412,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     doc.setFont('times', 'normal');
     doc.text('Plastic Surgery Registrar', 15, yPosition);
     yPosition += 5;
-    doc.text('Department of Plastic & Reconstructive Surgery', 15, yPosition);
+    doc.text('Burns, Plastic & Reconstructive Surgery UNIT, Department of Surgery', 15, yPosition);
     yPosition += 5;
     doc.text('University of Nigeria Teaching Hospital', 15, yPosition);
 
@@ -1690,7 +1690,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     doc.setFont('times', 'bold');
     doc.text('UNIVERSITY OF NIGERIA TEACHING HOSPITAL', pageWidth / 2, 12, { align: 'center' });
     doc.setFontSize(10);
-    doc.text('Department of Plastic & Reconstructive Surgery', pageWidth / 2, 19, { align: 'center' });
+    doc.text('Burns, Plastic & Reconstructive Surgery UNIT, Department of Surgery', pageWidth / 2, 19, { align: 'center' });
     doc.setFontSize(14);
     doc.text('PATIENT EDUCATION', pageWidth / 2, 28, { align: 'center' });
     doc.setFontSize(12);
@@ -1824,7 +1824,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     doc.setFontSize(PDF_FONT_SIZES.sectionHeader);
     doc.text('ITUKU-OZALLA, ENUGU', pageWidth / 2, 22, { align: 'center' });
     doc.setFontSize(PDF_FONT_SIZES.subHeader);
-    doc.text('Department of Plastic & Reconstructive Surgery', pageWidth / 2, 29, { align: 'center' });
+    doc.text('Burns, Plastic & Reconstructive Surgery UNIT, Department of Surgery', pageWidth / 2, 29, { align: 'center' });
     doc.setFontSize(PDF_FONT_SIZES.title);
     doc.setFont('times', 'bold');
     doc.text('COMPREHENSIVE CARE PLAN', pageWidth / 2, 38, { align: 'center' });

@@ -46,7 +46,7 @@ export default function MeetingSlideWrapper({
   totalSlides,
   meetingType,
   institutionName = 'University of Nigeria Teaching Hospital',
-  departmentName = 'Department of Plastic, Reconstructive & Burns Surgery',
+  departmentName = 'Burns, Plastic & Reconstructive Surgery UNIT, Department of Surgery',
   presenterName,
   meetingDate,
 }: MeetingSlideWrapperProps) {

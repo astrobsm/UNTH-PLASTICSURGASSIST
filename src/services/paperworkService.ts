@@ -287,7 +287,7 @@ Plastic Surgery Unit
 University of Nigeria Teaching Hospital
 Ituku-Ozalla, Enugu State
 
-Contact: Department of Plastic Surgery
+Contact: Burns, Plastic & Reconstructive Surgery UNIT, Department of Surgery
 Phone: [Hospital Contact Number]
     `.trim();
   }

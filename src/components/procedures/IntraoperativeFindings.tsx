@@ -129,7 +129,7 @@ export const IntraoperativeFindingsForm: React.FC<IntraoperativeFindingsFormProp
     doc.setFontSize(PDF_FONT_SIZES.sectionHeader);
     doc.text('ITUKU-OZALLA, ENUGU', pageWidth / 2, 22, { align: 'center' });
     doc.setFontSize(PDF_FONT_SIZES.subHeader);
-    doc.text('Department of Plastic & Reconstructive Surgery', pageWidth / 2, 29, { align: 'center' });
+    doc.text('Burns, Plastic & Reconstructive Surgery UNIT, Department of Surgery', pageWidth / 2, 29, { align: 'center' });
     doc.setFontSize(PDF_FONT_SIZES.title);
     doc.setFont('times', 'bold');
     doc.text('POSTOPERATIVE CARE PLAN & MANAGEMENT', pageWidth / 2, 38, { align: 'center' });

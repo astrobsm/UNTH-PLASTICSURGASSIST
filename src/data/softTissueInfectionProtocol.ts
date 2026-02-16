@@ -1236,7 +1236,7 @@ export const PATIENT_EDUCATION: PatientEducationModule[] = [
 export const STI_CME_ARTICLE: CMEArticle = {
   id: 'sti-nec-cme-2025',
   title: 'Soft Tissue Infections: From Cellulitis to Necrotizing Fasciitis - A Comprehensive Review for the Plastic and Reconstructive Surgeon',
-  authors: 'Department of Plastic & Reconstructive Surgery - Continuing Medical Education Series',
+  authors: 'Burns, Plastic & Reconstructive Surgery UNIT, Department of Surgery - Continuing Medical Education Series',
   abstract: 'Soft tissue infections represent a spectrum from simple cellulitis to life-threatening necrotizing soft tissue infections (NSTIs). This CME article provides a comprehensive evidence-based review of diagnosis, risk stratification using the LRINEC score, surgical decision-making, antibiotic protocols, and management of complications including sepsis and organ failure. Special emphasis is placed on early recognition, the role of comorbidities in outcomes, and reconstructive strategies after debridement.',
   learningObjectives: [
     'Classify soft tissue infections according to depth, microbiology, and severity',

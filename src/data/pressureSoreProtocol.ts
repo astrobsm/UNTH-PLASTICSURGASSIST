@@ -1317,7 +1317,7 @@ export const PS_PATIENT_EDUCATION: PSPatientEducation[] = [
 export const PS_CME_ARTICLE: PSCMEArticle = {
   id: 'ps-cme-2025',
   title: 'Pressure Injuries: Comprehensive Evidence-Based Management from Prevention to Reconstruction - A Guide for the Plastic Surgeon',
-  authors: 'Department of Plastic & Reconstructive Surgery - Continuing Medical Education Series',
+  authors: 'Burns, Plastic & Reconstructive Surgery UNIT, Department of Surgery - Continuing Medical Education Series',
   abstract: 'Pressure injuries remain a significant healthcare burden affecting up to 3 million adults annually. This CME article provides a comprehensive review of pressure injury prevention, staging, wound management, and surgical reconstruction based on the NPUAP/EPUAP/PPPIA International Guidelines. Special emphasis is placed on the Braden Scale for risk assessment, nutritional optimization, wound bed preparation using the TIME framework, and evidence-based flap selection for Stage 3-4 pressure injuries. Management of complications including osteomyelitis and strategies to reduce recurrence are discussed.',
   learningObjectives: [
     'Accurately stage pressure injuries using the NPUAP/EPUAP classification system',

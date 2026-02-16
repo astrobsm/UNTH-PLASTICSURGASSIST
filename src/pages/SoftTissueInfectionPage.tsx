@@ -233,7 +233,7 @@ const SoftTissueInfectionPage: React.FC = () => {
     doc.setFont('helvetica', 'normal');
     doc.text('UNIVERSITY OF NIGERIA TEACHING HOSPITAL', pageWidth / 2, y, { align: 'center' });
     y += 5;
-    doc.text('Department of Plastic & Reconstructive Surgery', pageWidth / 2, y, { align: 'center' });
+    doc.text('Burns, Plastic & Reconstructive Surgery UNIT, Department of Surgery', pageWidth / 2, y, { align: 'center' });
     y += 8;
 
     // Title
