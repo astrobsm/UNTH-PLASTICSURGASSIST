@@ -79,6 +79,7 @@ const SoftTissueInfectionPage = lazyWithRetry(() => import('./pages/SoftTissueIn
 const PressureSorePage = lazyWithRetry(() => import('./pages/PressureSorePage'));
 const Settings = lazyWithRetry(() => import('./pages/Settings'));
 const DepartmentalMeetingsPage = lazyWithRetry(() => import('./pages/DepartmentalMeetingsPage'));
+const PrescriptionsPage = lazyWithRetry(() => import('./pages/PrescriptionsPage'));
 
 // Loading fallback component
 const PageLoader = () => (
@@ -195,6 +196,7 @@ function App() {
               <Route path="/preoperative-planning" element={<PreoperativePlanningPage />} />
               <Route path="/pre-surgical-conference" element={<PreSurgicalConferencePage />} />
               <Route path="/labs" element={<Labs />} />
+              <Route path="/prescriptions" element={<PrescriptionsPage />} />
               <Route path="/patient-education" element={<PatientEducation />} />
               <Route path="/shopping-list" element={<ShoppingList />} />
               <Route path="/limb-salvage" element={<LimbSalvagePage />} />

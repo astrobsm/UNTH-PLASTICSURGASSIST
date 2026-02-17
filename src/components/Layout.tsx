@@ -34,7 +34,8 @@ import {
   Syringe,
   Bug,
   Armchair,
-  Presentation
+  Presentation,
+  Pill
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import SyncStatusIndicator from './SyncStatusIndicator';
@@ -65,6 +66,7 @@ const navigation = [
   { name: 'Pressure Sore', href: '/pressure-sore', icon: Armchair },
   { name: 'Medical Training', href: '/medical-training', icon: BookOpen },
   { name: 'Labs', href: '/labs', icon: FlaskConical },
+  { name: 'Prescriptions', href: '/prescriptions', icon: Pill },
   { name: 'Patient Education', href: '/patient-education', icon: BookOpenCheck },
   { name: 'Shopping List', href: '/shopping-list', icon: ShoppingCart },
   { name: 'Chat', href: '/chat', icon: MessageSquare },

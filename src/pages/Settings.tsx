@@ -26,6 +26,7 @@ import {
   HardDrive,
   ChevronDown,
   ChevronUp,
+  RotateCw,
 } from 'lucide-react';
 import { dataSyncService } from '../services/dataSyncService';
 import { db } from '../db/database';
@@ -90,6 +91,83 @@ export default function Settings() {
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(() => {
     return localStorage.getItem('auto_sync_enabled') !== 'false'; // Default on
   });
+  const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'available' | 'not-available' | 'error'>('idle');
+
+  // Check for app updates via service worker
+  const handleCheckForUpdates = useCallback(async () => {
+    setUpdateStatus('checking');
+    try {
+      if ('serviceWorker' in navigator) {
+        const registration = await navigator.serviceWorker.getRegistration();
+        if (registration) {
+          // Force check for new service worker
+          await registration.update();
+          
+          if (registration.waiting) {
+            // A new SW is already waiting
+            setUpdateStatus('available');
+            toast.success('Update available! Tap "Update Now" to apply.');
+          } else {
+            // Listen for a new SW being found
+            const onUpdateFound = () => {
+              const newWorker = registration.installing;
+              if (newWorker) {
+                newWorker.addEventListener('statechange', () => {
+                  if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                    setUpdateStatus('available');
+                    toast.success('Update available! Tap "Update Now" to apply.');
+                  }
+                });
+              }
+            };
+            registration.addEventListener('updatefound', onUpdateFound);
+            // Wait a few seconds for any update to be found
+            await new Promise(resolve => setTimeout(resolve, 4000));
+            registration.removeEventListener('updatefound', onUpdateFound);
+            
+            if (updateStatus !== 'available') {
+              // Also try clearing caches to force fresh assets on next reload
+              setUpdateStatus('not-available');
+              toast('You are on the latest version.', { icon: '✓' });
+            }
+          }
+        } else {
+          // No SW registered - just clear caches and reload
+          if ('caches' in window) {
+            const keys = await caches.keys();
+            await Promise.all(keys.map(k => caches.delete(k)));
+          }
+          setUpdateStatus('not-available');
+          toast('Cache cleared. Reload for latest version.', { icon: '✓' });
+        }
+      } else {
+        setUpdateStatus('error');
+        toast.error('Service workers not supported in this browser.');
+      }
+    } catch (err) {
+      console.error('Update check failed:', err);
+      setUpdateStatus('error');
+      toast.error('Failed to check for updates.');
+    }
+  }, [updateStatus]);
+
+  const handleApplyUpdate = useCallback(async () => {
+    try {
+      const registration = await navigator.serviceWorker.getRegistration();
+      if (registration?.waiting) {
+        registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+      }
+      // Clear all caches
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map(k => caches.delete(k)));
+      }
+      toast.success('Applying update...');
+      setTimeout(() => window.location.reload(), 500);
+    } catch {
+      window.location.reload();
+    }
+  }, []);
 
   // Subscribe to sync status changes
   useEffect(() => {
@@ -569,6 +647,34 @@ export default function Settings() {
           <div className="flex items-center justify-between">
             <span className="text-sm text-gray-600">App Version</span>
             <span className="text-sm font-medium text-gray-900">PSA v2.0</span>
+          </div>
+
+          {/* App Update Button */}
+          <div className="pt-3 mt-3 border-t border-gray-100">
+            {updateStatus === 'available' ? (
+              <button
+                onClick={handleApplyUpdate}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm"
+              >
+                <Download className="h-4 w-4" />
+                Update Now
+              </button>
+            ) : (
+              <button
+                onClick={handleCheckForUpdates}
+                disabled={updateStatus === 'checking'}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-primary-50 text-primary-700 rounded-lg hover:bg-primary-100 transition-colors font-medium text-sm disabled:opacity-60"
+              >
+                <RotateCw className={`h-4 w-4 ${updateStatus === 'checking' ? 'animate-spin' : ''}`} />
+                {updateStatus === 'checking' ? 'Checking for Updates...' : 'Check for Updates'}
+              </button>
+            )}
+            {updateStatus === 'not-available' && (
+              <p className="text-xs text-gray-500 text-center mt-1.5">You are on the latest version</p>
+            )}
+            {updateStatus === 'available' && (
+              <p className="text-xs text-green-600 text-center mt-1.5 font-medium">A new version is ready to install</p>
+            )}
           </div>
         </div>
       </div>
