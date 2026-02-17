@@ -42,6 +42,19 @@ const CONSULTANTS = ['Dr Okwesili', 'Dr Nnadi', 'Dr Eze C. B'];
 
 const CLINICS = ['Outpatient Clinic', 'Hand Clinic', 'Burns Clinic', 'Wound Clinic', 'Reconstructive Clinic'];
 
+// ============= HELPERS =============
+
+function calculateAge(dob: string | null | undefined): number | null {
+  if (!dob) return null;
+  const birthDate = new Date(dob);
+  if (isNaN(birthDate.getTime())) return null;
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const m = today.getMonth() - birthDate.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) age--;
+  return age;
+}
+
 // ============= MAIN COMPONENT =============
 
 export default function AdmissionDischargePage() {
@@ -418,7 +431,7 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
         patient_id: selectedPatient.id,
         patient_name: `${selectedPatient.first_name} ${selectedPatient.last_name}`,
         hospital_number: selectedPatient.hospital_number,
-        age: selectedPatient.age,
+        age: calculateAge(selectedPatient.date_of_birth || selectedPatient.dob) ?? undefined,
         gender: selectedPatient.gender,
         admission_date: new Date().toISOString().split('T')[0],
         admission_time: new Date().toTimeString().split(' ')[0],
@@ -499,7 +512,7 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
           </div>
           {selectedPatient && (
             <div className="bg-white p-3 rounded border border-blue-300">
-              <p className="text-sm"><strong>Age:</strong> {selectedPatient.age || 'N/A'} years</p>
+              <p className="text-sm"><strong>Age:</strong> {calculateAge(selectedPatient.date_of_birth || selectedPatient.dob) ?? 'N/A'} years</p>
               <p className="text-sm"><strong>Gender:</strong> {selectedPatient.gender || 'N/A'}</p>
               <p className="text-sm"><strong>Phone:</strong> {selectedPatient.phone || 'N/A'}</p>
             </div>
