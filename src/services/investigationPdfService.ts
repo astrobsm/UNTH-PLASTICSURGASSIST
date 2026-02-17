@@ -44,80 +44,80 @@ class InvestigationPdfService {
 
     // Header
     doc.setFont('times', 'bold');
-    doc.setFontSize(11);
+    doc.setFontSize(14);
     doc.text('UNTH LABORATORY', thermalWidth / 2, yPos, { align: 'center' });
-    yPos += 5;
+    yPos += 6;
     
-    doc.setFontSize(9);
+    doc.setFontSize(14);
     doc.setFont('times', 'normal');
     doc.text('Burns & Plastic Surgery Unit', thermalWidth / 2, yPos, { align: 'center' });
-    yPos += 4;
-    doc.text('INVESTIGATION REQUEST FORM', thermalWidth / 2, yPos, { align: 'center' });
     yPos += 5;
+    doc.text('INVESTIGATION REQUEST FORM', thermalWidth / 2, yPos, { align: 'center' });
+    yPos += 6;
 
     // Divider
     doc.setLineWidth(0.3);
     doc.line(margin, yPos, thermalWidth - margin, yPos);
-    yPos += 4;
+    yPos += 5;
 
     // Patient Info
-    doc.setFontSize(9);
+    doc.setFontSize(14);
     doc.setFont('times', 'bold');
     doc.text('PATIENT DETAILS', margin, yPos);
-    yPos += 4;
+    yPos += 5;
 
     doc.setFont('times', 'normal');
-    doc.setFontSize(8);
+    doc.setFontSize(14);
     doc.text(`Name: ${clean(data.patientName)}`, margin, yPos);
-    yPos += 4;
+    yPos += 5;
     doc.text(`Hosp #: ${clean(data.hospitalNumber)}`, margin, yPos);
-    yPos += 4;
+    yPos += 5;
     
     if (data.patientAge || data.patientGender) {
       doc.text(`Age/Sex: ${data.patientAge || 'N/A'} / ${data.patientGender || 'N/A'}`, margin, yPos);
-      yPos += 4;
+      yPos += 5;
     }
     
     if (data.ward) {
       doc.text(`Ward: ${clean(data.ward)}${data.bedNumber ? ' | Bed: ' + clean(data.bedNumber) : ''}`, margin, yPos);
-      yPos += 4;
+      yPos += 5;
     }
     
     doc.text(`Diagnosis: ${clean(data.diagnosis).substring(0, 50)}`, margin, yPos);
-    yPos += 5;
+    yPos += 6;
 
     // Divider
     doc.line(margin, yPos, thermalWidth - margin, yPos);
-    yPos += 4;
+    yPos += 5;
 
     // Request Info
     doc.setFont('times', 'bold');
     doc.text('REQUEST DETAILS', margin, yPos);
-    yPos += 4;
+    yPos += 5;
 
     doc.setFont('times', 'normal');
     doc.text(`Date: ${format(data.requestDate, 'dd/MM/yyyy HH:mm')}`, margin, yPos);
-    yPos += 4;
+    yPos += 5;
     doc.text(`Requested By: ${clean(data.requestedBy)}`, margin, yPos);
-    yPos += 4;
+    yPos += 5;
     
     if (data.urgency) {
       const urgencyText = data.urgency.toUpperCase();
       doc.setFont('times', 'bold');
       doc.text(`Urgency: ${urgencyText}`, margin, yPos);
       doc.setFont('times', 'normal');
-      yPos += 4;
+      yPos += 5;
     }
     
     if (data.clinicalIndication) {
       doc.text(`Indication: ${clean(data.clinicalIndication).substring(0, 40)}`, margin, yPos);
-      yPos += 4;
+      yPos += 5;
     }
     yPos += 2;
 
     // Divider
     doc.line(margin, yPos, thermalWidth - margin, yPos);
-    yPos += 4;
+    yPos += 5;
 
     // Investigations Header
     doc.setFont('times', 'bold');
@@ -131,24 +131,25 @@ class InvestigationPdfService {
 
     if (labTests.length > 0) {
       doc.setFont('times', 'bold');
-      doc.setFontSize(8);
+      doc.setFontSize(14);
       doc.text('Laboratory:', margin, yPos);
-      yPos += 4;
+      yPos += 5;
       
       doc.setFont('times', 'normal');
+      doc.setFontSize(14);
       labTests.forEach((inv, index) => {
         const name = inv.investigation_name.length > 35 
           ? inv.investigation_name.substring(0, 32) + '...' 
           : inv.investigation_name;
         const freqText = inv.frequency !== 'once' ? ` (${inv.frequency})` : '';
         doc.text(`${index + 1}. ${clean(name)}${freqText}`, margin + 2, yPos);
-        yPos += 4;
+        yPos += 5;
         
         if (inv.target_value || inv.target_range) {
-          doc.setFontSize(7);
+          doc.setFontSize(14);
           doc.text(`   Target: ${inv.target_value || ''} ${inv.target_range ? `(${inv.target_range})` : ''}`, margin + 2, yPos);
-          doc.setFontSize(8);
-          yPos += 3;
+          doc.setFontSize(14);
+          yPos += 5;
         }
       });
       yPos += 2;
@@ -156,47 +157,52 @@ class InvestigationPdfService {
 
     if (imagingTests.length > 0) {
       doc.setFont('times', 'bold');
+      doc.setFontSize(14);
       doc.text('Imaging:', margin, yPos);
-      yPos += 4;
+      yPos += 5;
       
       doc.setFont('times', 'normal');
+      doc.setFontSize(14);
       imagingTests.forEach((inv, index) => {
         const name = inv.investigation_name.length > 35 
           ? inv.investigation_name.substring(0, 32) + '...' 
           : inv.investigation_name;
         doc.text(`${index + 1}. ${clean(name)}`, margin + 2, yPos);
-        yPos += 4;
+        yPos += 5;
       });
       yPos += 2;
     }
 
     if (otherTests.length > 0) {
       doc.setFont('times', 'bold');
+      doc.setFontSize(14);
       doc.text('Other:', margin, yPos);
-      yPos += 4;
+      yPos += 5;
       
       doc.setFont('times', 'normal');
+      doc.setFontSize(14);
       otherTests.forEach((inv, index) => {
         const name = inv.investigation_name.length > 35 
           ? inv.investigation_name.substring(0, 32) + '...' 
           : inv.investigation_name;
         doc.text(`${index + 1}. ${clean(name)}`, margin + 2, yPos);
-        yPos += 4;
+        yPos += 5;
       });
     }
 
     yPos += 3;
     doc.line(margin, yPos, thermalWidth - margin, yPos);
-    yPos += 4;
+    yPos += 5;
 
     // Summary
     doc.setFont('times', 'bold');
+    doc.setFontSize(14);
     doc.text(`Total Investigations: ${data.investigations.length}`, margin, yPos);
     yPos += 5;
 
     // Signature Line
     doc.setFont('times', 'normal');
-    doc.setFontSize(7);
+    doc.setFontSize(14);
     doc.text('Doctor\'s Signature: _______________________', margin, yPos);
     yPos += 5;
     doc.text('Date/Time: _______________________', margin, yPos);
@@ -205,10 +211,10 @@ class InvestigationPdfService {
     // Footer
     doc.setLineWidth(0.3);
     doc.line(margin, yPos, thermalWidth - margin, yPos);
-    yPos += 3;
-    doc.setFontSize(6);
+    yPos += 4;
+    doc.setFontSize(14);
     doc.text('Drs Okwesili/Nnadi/Eze', thermalWidth / 2, yPos, { align: 'center' });
-    yPos += 3;
+    yPos += 5;
     doc.text('Department of Surgery, UNTH Enugu', thermalWidth / 2, yPos, { align: 'center' });
 
     // Save

@@ -264,8 +264,13 @@ const WoundCarePage: React.FC = () => {
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [showCamera, setShowCamera] = useState(false);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [cameraError, setCameraError] = useState('');
+  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
 
   // Load patients and assessments
   useEffect(() => {
@@ -311,7 +316,105 @@ const WoundCarePage: React.FC = () => {
            (p.hospital_number || '').toLowerCase().includes(searchLower);
   });
 
-  // Handle photo capture
+  // ─── Camera Functions ────────────────────────────────
+  const startCamera = async () => {
+    setCameraError('');
+    try {
+      // Stop existing stream if any
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(t => t.stop());
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        audio: false
+      });
+      setCameraStream(stream);
+      setShowCamera(true);
+      // Wait for videoRef to mount then attach
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play().catch(() => {});
+        }
+      }, 100);
+    } catch (err: any) {
+      console.error('Camera access error:', err);
+      // Fallback: use file input with capture attribute on mobile
+      if (cameraInputRef.current) {
+        cameraInputRef.current.click();
+      } else if (fileInputRef.current) {
+        fileInputRef.current.click();
+      }
+      setCameraError('Camera not available — use file upload instead.');
+    }
+  };
+
+  const stopCamera = () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(t => t.stop());
+      setCameraStream(null);
+    }
+    setShowCamera(false);
+  };
+
+  const switchCamera = async () => {
+    const newMode = facingMode === 'environment' ? 'user' : 'environment';
+    setFacingMode(newMode);
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(t => t.stop());
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: newMode, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        audio: false
+      });
+      setCameraStream(stream);
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play().catch(() => {});
+      }
+    } catch {
+      setCameraError('Could not switch camera.');
+    }
+  };
+
+  const captureFromCamera = async () => {
+    if (!videoRef.current || !canvasRef.current) return;
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    canvas.width = video.videoWidth || 1280;
+    canvas.height = video.videoHeight || 720;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+
+    setIsAnalyzing(true);
+    const measurements = await simulateAIMeasurement(dataUrl);
+    const newPhoto: WoundPhoto = {
+      id: `photo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      dataUrl,
+      timestamp: new Date(),
+      measurements
+    };
+    setCapturedPhotos(prev => [...prev, newPhoto]);
+    if (capturedPhotos.length === 0 && measurements) {
+      setFormData(prev => ({ ...prev, length: measurements.length, width: measurements.width }));
+    }
+    setTimeout(() => setIsAnalyzing(false), 2000);
+    // Don't stop camera — allow multiple captures
+  };
+
+  // Cleanup camera on unmount
+  useEffect(() => {
+    return () => {
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(t => t.stop());
+      }
+    };
+  }, [cameraStream]);
+
+  // Handle photo capture (legacy — triggers file input)
   const handlePhotoCapture = async () => {
     if (fileInputRef.current) {
       fileInputRef.current.click();
@@ -491,7 +594,7 @@ const WoundCarePage: React.FC = () => {
       siteType = assessment.wound_type;
     }
     
-    const estimatedHeight = 180 + (protocol.length * 8);
+    const estimatedHeight = 250 + (protocol.length * 12);
     
     const doc = new jsPDF({
       orientation: 'portrait',
@@ -504,13 +607,13 @@ const WoundCarePage: React.FC = () => {
 
     // Header
     doc.setFont('times', 'bold');
-    doc.setFontSize(12);
+    doc.setFontSize(14);
     doc.text(title, thermalWidth / 2, yPos, { align: 'center' });
     yPos += 6;
     
-    doc.setFontSize(10);
+    doc.setFontSize(14);
     doc.text(siteType, thermalWidth / 2, yPos, { align: 'center' });
-    yPos += 5;
+    yPos += 6;
 
     // Divider
     doc.setLineWidth(0.3);
@@ -520,49 +623,49 @@ const WoundCarePage: React.FC = () => {
     // Post-Op Day for graft/donor
     if (protocolType === 'graft' || protocolType === 'donor') {
       doc.setFont('times', 'bold');
-      doc.setFontSize(10);
+      doc.setFontSize(14);
       doc.text('POST-OP DAY: 5', margin, yPos);
       yPos += 6;
     }
 
     // Patient Info
-    doc.setFontSize(10);
+    doc.setFontSize(14);
     doc.setFont('times', 'normal');
     doc.text(`Patient: ${assessment.patient_name}`, margin, yPos);
-    yPos += 4;
-    doc.text(`Hosp #: ${assessment.hospital_number}`, margin, yPos);
-    yPos += 4;
-    doc.text(`Location: ${assessment.location}`, margin, yPos);
-    yPos += 4;
-    doc.text(`Date: ${new Date().toLocaleDateString()}`, margin, yPos);
-    yPos += 4;
-    doc.text(`Time: ${new Date().toLocaleTimeString()}`, margin, yPos);
     yPos += 5;
+    doc.text(`Hosp #: ${assessment.hospital_number}`, margin, yPos);
+    yPos += 5;
+    doc.text(`Location: ${assessment.location}`, margin, yPos);
+    yPos += 5;
+    doc.text(`Date: ${new Date().toLocaleDateString()}`, margin, yPos);
+    yPos += 5;
+    doc.text(`Time: ${new Date().toLocaleTimeString()}`, margin, yPos);
+    yPos += 6;
 
     // Divider
     doc.line(margin, yPos, thermalWidth - margin, yPos);
-    yPos += 4;
+    yPos += 5;
 
     // Wound Phase (for standard protocol only)
     if (protocolType === 'standard') {
       const phase = WOUND_PHASES[assessment.healing_phase];
       doc.setFont('times', 'bold');
-      doc.setFontSize(10);
+      doc.setFontSize(14);
       doc.text(`Phase: ${phase.name}`, margin, yPos);
-      yPos += 4;
-      doc.setFont('times', 'normal');
-      doc.setFontSize(9);
-      doc.text(`Granulation: ${assessment.granulation_percentage}%`, margin, yPos);
-      yPos += 4;
-      doc.text(`Dressing: ${phase.frequency}`, margin, yPos);
       yPos += 5;
+      doc.setFont('times', 'normal');
+      doc.setFontSize(14);
+      doc.text(`Granulation: ${assessment.granulation_percentage}%`, margin, yPos);
+      yPos += 5;
+      doc.text(`Dressing: ${phase.frequency}`, margin, yPos);
+      yPos += 6;
       doc.line(margin, yPos, thermalWidth - margin, yPos);
-      yPos += 4;
+      yPos += 5;
     }
 
     // Protocol Steps Header
     doc.setFont('times', 'bold');
-    doc.setFontSize(10);
+    doc.setFontSize(14);
     doc.text('DRESSING PROTOCOL', margin, yPos);
     yPos += 2;
     doc.line(margin, yPos, thermalWidth - margin, yPos);
@@ -570,13 +673,13 @@ const WoundCarePage: React.FC = () => {
 
     // Protocol Steps
     doc.setFont('times', 'normal');
-    doc.setFontSize(10);
+    doc.setFontSize(14);
     protocol.forEach((step) => {
       const text = `${step.step}. ${step.action}`;
       const lines = doc.splitTextToSize(text, thermalWidth - margin * 2 - 5);
       lines.forEach((line: string) => {
         doc.text(line, margin + 2, yPos);
-        yPos += 4;
+        yPos += 5;
       });
       yPos += 1;
     });
@@ -585,15 +688,15 @@ const WoundCarePage: React.FC = () => {
     if (protocolType === 'graft' || protocolType === 'donor') {
       yPos += 3;
       doc.line(margin, yPos, thermalWidth - margin, yPos);
-      yPos += 4;
+      yPos += 5;
       
       doc.setFont('times', 'bold');
-      doc.setFontSize(9);
+      doc.setFontSize(14);
       doc.text('IMPORTANT WARNINGS', margin, yPos);
-      yPos += 4;
+      yPos += 5;
       
       doc.setFont('times', 'normal');
-      doc.setFontSize(8);
+      doc.setFontSize(14);
       
       if (protocolType === 'graft') {
         const warnings = [
@@ -605,7 +708,7 @@ const WoundCarePage: React.FC = () => {
         ];
         warnings.forEach(w => {
           doc.text(w, margin, yPos);
-          yPos += 3.5;
+          yPos += 5;
         });
       } else {
         // Donor site specific warnings
@@ -614,7 +717,7 @@ const WoundCarePage: React.FC = () => {
           const lines = doc.splitTextToSize(w, thermalWidth - margin * 2 - 2);
           lines.forEach((line: string) => {
             doc.text(line, margin, yPos);
-            yPos += 3.5;
+            yPos += 5;
           });
         });
       }
@@ -623,15 +726,15 @@ const WoundCarePage: React.FC = () => {
     // Special Instructions
     yPos += 3;
     doc.line(margin, yPos, thermalWidth - margin, yPos);
-    yPos += 4;
+    yPos += 5;
     
     doc.setFont('times', 'bold');
-    doc.setFontSize(9);
+    doc.setFontSize(14);
     doc.text('SPECIAL INSTRUCTIONS', margin, yPos);
-    yPos += 4;
+    yPos += 5;
     
     doc.setFont('times', 'normal');
-    doc.setFontSize(8);
+    doc.setFontSize(14);
     
     // Use specific instructions for donor site
     let specialInstructions: string;
@@ -646,14 +749,14 @@ const WoundCarePage: React.FC = () => {
     const dressLines = doc.splitTextToSize(specialInstructions, thermalWidth - margin * 2);
     dressLines.forEach((line: string) => {
       doc.text(line, margin, yPos);
-      yPos += 3.5;
+      yPos += 5;
     });
 
     // Footer with signature line
-    yPos += 4;
+    yPos += 5;
     doc.line(margin, yPos, thermalWidth - margin, yPos);
-    yPos += 4;
-    doc.setFontSize(9);
+    yPos += 5;
+    doc.setFontSize(14);
     doc.text(`Assessed by: ${assessment.assessed_by || 'Dr. ___________'}`, margin, yPos);
     yPos += 6;
     doc.text('Signature / Stamp:', margin, yPos);
@@ -661,7 +764,7 @@ const WoundCarePage: React.FC = () => {
     doc.line(margin, yPos, thermalWidth / 2, yPos); // Signature line
     yPos += 5;
     doc.setFont('times', 'bold');
-    doc.setFontSize(8);
+    doc.setFontSize(14);
     doc.text('UNTH Plastic & Reconstructive Surgery', thermalWidth / 2, yPos, { align: 'center' });
 
     // Save
@@ -1195,7 +1298,7 @@ const WoundCarePage: React.FC = () => {
           <div className="flex items-center justify-between mb-2">
             <label className="block text-sm font-medium text-gray-700">Wound Dimensions</label>
             <button
-              onClick={handlePhotoCapture}
+              onClick={startCamera}
               className="flex items-center text-sm text-primary-600 hover:text-primary-700"
             >
               <Camera className="w-4 h-4 mr-1" />
@@ -1296,6 +1399,7 @@ const WoundCarePage: React.FC = () => {
         {/* Wound Photos */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Wound Photos</label>
+          {/* Hidden file inputs */}
           <input
             ref={fileInputRef}
             type="file"
@@ -1305,22 +1409,115 @@ const WoundCarePage: React.FC = () => {
             className="hidden"
             title="Upload wound photos"
           />
-          <div
-            onClick={handlePhotoCapture}
-            className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:border-primary-500 hover:bg-primary-50 transition-colors"
-          >
-            {isAnalyzing ? (
-              <div className="flex flex-col items-center">
-                <Loader2 className="w-8 h-8 text-primary-600 animate-spin mb-2" />
-                <p className="text-primary-600">Analyzing wound image...</p>
+          <input
+            ref={cameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={handleFileUpload}
+            className="hidden"
+            title="Take wound photo"
+          />
+          {/* Hidden canvas for camera capture */}
+          <canvas ref={canvasRef} className="hidden" />
+
+          {/* Camera Viewfinder */}
+          {showCamera && (
+            <div className="relative mb-3 rounded-xl overflow-hidden bg-black border-2 border-primary-500 shadow-lg">
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className="w-full rounded-xl"
+                style={{ maxHeight: '50vh' }}
+              />
+              {/* Camera overlay controls */}
+              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4 flex items-center justify-center gap-4">
+                <button
+                  onClick={stopCamera}
+                  className="p-3 bg-red-600 hover:bg-red-700 text-white rounded-full shadow-lg transition"
+                  title="Close camera"
+                  type="button"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={captureFromCamera}
+                  className="p-4 bg-white hover:bg-gray-100 rounded-full shadow-lg transition border-4 border-primary-500"
+                  title="Capture photo"
+                  type="button"
+                  disabled={isAnalyzing}
+                >
+                  {isAnalyzing ? (
+                    <Loader2 className="w-8 h-8 text-primary-600 animate-spin" />
+                  ) : (
+                    <Camera className="w-8 h-8 text-primary-600" />
+                  )}
+                </button>
+                <button
+                  onClick={switchCamera}
+                  className="p-3 bg-gray-700 hover:bg-gray-600 text-white rounded-full shadow-lg transition"
+                  title="Switch camera"
+                  type="button"
+                >
+                  <RefreshCw className="w-5 h-5" />
+                </button>
               </div>
-            ) : (
-              <>
-                <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                <p className="text-gray-500">Click to upload wound images</p>
-              </>
-            )}
-          </div>
+              {/* Photo count badge */}
+              {capturedPhotos.length > 0 && (
+                <div className="absolute top-3 right-3 bg-primary-600 text-white text-xs font-bold px-2 py-1 rounded-full shadow">
+                  {capturedPhotos.length} photo{capturedPhotos.length > 1 ? 's' : ''}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Camera & Upload buttons */}
+          {!showCamera && (
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={startCamera}
+                className="flex flex-col items-center justify-center border-2 border-dashed border-primary-400 rounded-lg p-5 cursor-pointer hover:border-primary-600 hover:bg-primary-50 transition-colors"
+              >
+                <Camera className="w-8 h-8 text-primary-500 mb-2" />
+                <p className="text-primary-600 font-medium text-sm">Take Photo</p>
+                <p className="text-gray-400 text-xs mt-0.5">Open camera</p>
+              </button>
+              <button
+                type="button"
+                onClick={handlePhotoCapture}
+                className="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg p-5 cursor-pointer hover:border-gray-400 hover:bg-gray-50 transition-colors"
+              >
+                {isAnalyzing ? (
+                  <div className="flex flex-col items-center">
+                    <Loader2 className="w-8 h-8 text-primary-600 animate-spin mb-2" />
+                    <p className="text-primary-600 text-sm">Analyzing...</p>
+                  </div>
+                ) : (
+                  <>
+                    <Upload className="w-8 h-8 text-gray-400 mb-2" />
+                    <p className="text-gray-600 font-medium text-sm">Upload Image</p>
+                    <p className="text-gray-400 text-xs mt-0.5">From gallery</p>
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+
+          {/* Camera error */}
+          {cameraError && (
+            <div className="flex items-center gap-2 mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-700 text-xs">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <span>{cameraError}</span>
+              <button onClick={() => setCameraError('')} className="ml-auto" title="Dismiss error">
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+
+          {/* Captured photos grid */}
           {capturedPhotos.length > 0 && (
             <div className="grid grid-cols-3 gap-2 mt-3">
               {capturedPhotos.map(photo => (

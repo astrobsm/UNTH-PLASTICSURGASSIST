@@ -723,60 +723,60 @@ class KeloidPdfService {
     let y = m;
 
     doc.setFont('times', 'bold');
-    doc.setFontSize(12);
+    doc.setFontSize(14);
     doc.text('KELOID CARE PLAN', thermalWidth / 2, y, { align: 'center' });
-    y += 5;
-    doc.setFontSize(8);
+    y += 6;
+    doc.setFontSize(14);
     doc.setFont('times', 'normal');
     doc.text('UNTH Plastic Surgery Unit', thermalWidth / 2, y, { align: 'center' });
-    y += 4;
+    y += 5;
     doc.line(m, y, thermalWidth - m, y);
-    y += 3;
+    y += 5;
 
     const patientName = clean(`${plan.first_name || ''} ${plan.last_name || ''}`).trim();
-    doc.setFontSize(9);
-    doc.text('Patient: ' + patientName, m, y); y += 3.5;
-    doc.text('Hosp #: ' + clean(plan.hospital_number), m, y); y += 3.5;
-    doc.text('Summary: ' + clean(plan.clinical_summary), m, y); y += 3.5;
+    doc.setFontSize(14);
+    doc.text('Patient: ' + patientName, m, y); y += 5;
+    doc.text('Hosp #: ' + clean(plan.hospital_number), m, y); y += 5;
+    doc.text('Summary: ' + clean(plan.clinical_summary), m, y); y += 5;
     if (plan.keloid_locations?.length) {
-      doc.text('Location: ' + plan.keloid_locations.map(l => clean(l)).join(', '), m, y); y += 3.5;
+      doc.text('Location: ' + plan.keloid_locations.map(l => clean(l)).join(', '), m, y); y += 5;
     }
-    doc.text('Phase: ' + this.getPhaseLabel(plan.phase), m, y); y += 3.5;
-    doc.text('Date: ' + format(new Date(), 'dd/MM/yyyy'), m, y); y += 4;
+    doc.text('Phase: ' + this.getPhaseLabel(plan.phase), m, y); y += 5;
+    doc.text('Date: ' + format(new Date(), 'dd/MM/yyyy'), m, y); y += 5;
     doc.line(m, y, thermalWidth - m, y);
-    y += 3;
+    y += 5;
 
     // Classification
-    doc.setFontSize(10);
+    doc.setFontSize(14);
     doc.setFont('times', 'bold');
-    doc.text('DETAILS', m, y); y += 4;
-    doc.setFontSize(9);
+    doc.text('DETAILS', m, y); y += 5;
+    doc.setFontSize(14);
     doc.setFont('times', 'normal');
-    doc.text('Surgery Planned: ' + (plan.surgery_planned ? 'Yes' : 'No'), m, y); y += 3.5;
-    doc.text('Radiotherapy: ' + (plan.radiotherapy_indicated ? 'Yes' : 'No'), m, y); y += 3.5;
-    doc.text('Status: ' + clean(plan.status), m, y); y += 4;
+    doc.text('Surgery Planned: ' + (plan.surgery_planned ? 'Yes' : 'No'), m, y); y += 5;
+    doc.text('Radiotherapy: ' + (plan.radiotherapy_indicated ? 'Yes' : 'No'), m, y); y += 5;
+    doc.text('Status: ' + clean(plan.status), m, y); y += 5;
 
     // Injections summary
     if (plan.injections && plan.injections.length > 0) {
       doc.setFont('times', 'bold');
-      doc.setFontSize(10);
-      doc.text('INJECTIONS', m, y); y += 4;
-      doc.setFontSize(9);
+      doc.setFontSize(14);
+      doc.text('INJECTIONS', m, y); y += 5;
+      doc.setFontSize(14);
       doc.setFont('times', 'normal');
       const completed = plan.injections.filter(inj => inj.status === 'completed').length;
-      doc.text('Completed: ' + completed + '/' + plan.injections.length, m, y); y += 3.5;
+      doc.text('Completed: ' + completed + '/' + plan.injections.length, m, y); y += 5;
     }
 
     // Treatment notes
     if (plan.surgery_notes) {
       y += 2;
       doc.setFont('times', 'bold');
-      doc.setFontSize(10);
-      doc.text('SURGICAL NOTES', m, y); y += 4;
-      doc.setFontSize(9);
+      doc.setFontSize(14);
+      doc.text('SURGICAL NOTES', m, y); y += 5;
+      doc.setFontSize(14);
       doc.setFont('times', 'normal');
       const lines = doc.splitTextToSize(clean(plan.surgery_notes), thermalWidth - m * 2);
-      lines.forEach((line: string) => { doc.text(line, m, y); y += 3.5; });
+      lines.forEach((line: string) => { doc.text(line, m, y); y += 5; });
     }
 
     doc.save('Keloid_CarePlan_Thermal_' + clean(plan.hospital_number) + '_' + format(new Date(), 'yyyy-MM-dd') + '.pdf');

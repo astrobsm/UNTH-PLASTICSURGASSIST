@@ -682,43 +682,43 @@ export default function DischargeDocumentsPreview({
     const clean = (text: string | undefined | null): string => sanitizeTextForPDF(text || '');
 
     let estHeight = 200;
-    estHeight += (discharge.discharge_instructions?.length || 0) * 0.12;
-    estHeight += (discharge.medications?.length || 0) * 8;
-    estHeight = Math.max(estHeight, 250);
+    estHeight += (discharge.discharge_instructions?.length || 0) * 0.15;
+    estHeight += (discharge.medications?.length || 0) * 10;
+    estHeight = Math.max(estHeight, 300);
 
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [thermalWidth, estHeight] });
     let y = m;
 
     doc.setFont('times', 'bold');
-    doc.setFontSize(12);
+    doc.setFontSize(14);
     doc.text('DISCHARGE SUMMARY', thermalWidth / 2, y, { align: 'center' });
-    y += 5;
-    doc.setFontSize(8);
+    y += 6;
+    doc.setFontSize(14);
     doc.setFont('times', 'normal');
     doc.text('UNTH Plastic Surgery', thermalWidth / 2, y, { align: 'center' });
+    y += 5;
+    doc.line(m, y, thermalWidth - m, y);
     y += 4;
-    doc.line(m, y, thermalWidth - m, y);
-    y += 3;
 
-    doc.setFontSize(9);
-    doc.text('Patient: ' + clean(discharge.patient_name), m, y); y += 3.5;
-    doc.text('Hosp #: ' + clean(discharge.hospital_number), m, y); y += 3.5;
+    doc.setFontSize(14);
+    doc.text('Patient: ' + clean(discharge.patient_name), m, y); y += 5;
+    doc.text('Hosp #: ' + clean(discharge.hospital_number), m, y); y += 5;
     if (discharge.admission_date) {
-      doc.text('Admitted: ' + format(new Date(discharge.admission_date), 'dd/MM/yyyy'), m, y); y += 3.5;
+      doc.text('Admitted: ' + format(new Date(discharge.admission_date), 'dd/MM/yyyy'), m, y); y += 5;
     }
-    doc.text('Discharged: ' + format(new Date(discharge.discharge_date), 'dd/MM/yyyy'), m, y); y += 4;
+    doc.text('Discharged: ' + format(new Date(discharge.discharge_date), 'dd/MM/yyyy'), m, y); y += 5;
     doc.line(m, y, thermalWidth - m, y);
-    y += 3;
+    y += 4;
 
     const addSection = (title: string, content: string | undefined) => {
       if (!content) return;
-      doc.setFontSize(10);
+      doc.setFontSize(14);
       doc.setFont('times', 'bold');
-      doc.text(title, m, y); y += 4;
-      doc.setFontSize(9);
+      doc.text(title, m, y); y += 5;
+      doc.setFontSize(14);
       doc.setFont('times', 'normal');
       const lines = doc.splitTextToSize(clean(content), thermalWidth - m * 2);
-      lines.forEach((line: string) => { doc.text(line, m, y); y += 3.5; });
+      lines.forEach((line: string) => { doc.text(line, m, y); y += 5; });
       y += 2;
     };
 
@@ -727,27 +727,27 @@ export default function DischargeDocumentsPreview({
     addSection('INSTRUCTIONS', discharge.discharge_instructions);
 
     if (discharge.medications && discharge.medications.length > 0) {
-      doc.setFontSize(10);
+      doc.setFontSize(14);
       doc.setFont('times', 'bold');
-      doc.text('MEDICATIONS', m, y); y += 4;
-      doc.setFontSize(9);
+      doc.text('MEDICATIONS', m, y); y += 5;
+      doc.setFontSize(14);
       doc.setFont('times', 'normal');
       discharge.medications.forEach((med: any) => {
         const medText = typeof med === 'string' ? med : `${med.name || ''} ${med.dosage || ''} ${med.frequency || ''}`;
         const lines = doc.splitTextToSize('- ' + clean(medText), thermalWidth - m * 2);
-        lines.forEach((line: string) => { doc.text(line, m, y); y += 3.5; });
+        lines.forEach((line: string) => { doc.text(line, m, y); y += 5; });
       });
       y += 2;
     }
 
     if (discharge.follow_up_appointments && discharge.follow_up_appointments.length > 0) {
-      doc.setFontSize(10);
+      doc.setFontSize(14);
       doc.setFont('times', 'bold');
-      doc.text('FOLLOW-UP', m, y); y += 4;
-      doc.setFontSize(9);
+      doc.text('FOLLOW-UP', m, y); y += 5;
+      doc.setFontSize(14);
       doc.setFont('times', 'normal');
       discharge.follow_up_appointments.forEach((appt: any) => {
-        doc.text('- ' + format(new Date(appt.date), 'dd/MM/yyyy') + ' ' + clean(appt.clinic), m, y); y += 3.5;
+        doc.text('- ' + format(new Date(appt.date), 'dd/MM/yyyy') + ' ' + clean(appt.clinic), m, y); y += 5;
       });
     }
 

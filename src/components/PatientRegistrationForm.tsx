@@ -2211,58 +2211,58 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     let y = m;
 
     doc.setFont('times', 'bold');
-    doc.setFontSize(12);
+    doc.setFontSize(14);
     doc.text('PATIENT SUMMARY', thermalWidth / 2, y, { align: 'center' });
-    y += 5;
-    doc.setFontSize(8);
+    y += 6;
+    doc.setFontSize(14);
     doc.setFont('times', 'normal');
     doc.text('UNTH Plastic Surgery', thermalWidth / 2, y, { align: 'center' });
-    y += 4;
+    y += 5;
     doc.line(m, y, thermalWidth - m, y);
-    y += 3;
+    y += 4;
 
-    doc.setFontSize(9);
+    doc.setFontSize(14);
     const patientName = `${(formData as any).surname || ''} ${formData.first_name || ''} ${(formData as any).other_names || ''}`.trim();
-    doc.text('Name: ' + clean(patientName), m, y); y += 3.5;
-    doc.text('Hosp #: ' + clean(formData.hospital_number), m, y); y += 3.5;
-    doc.text('Sex: ' + clean(formData.sex), m, y); y += 3.5;
+    doc.text('Name: ' + clean(patientName), m, y); y += 5;
+    doc.text('Hosp #: ' + clean(formData.hospital_number), m, y); y += 5;
+    doc.text('Sex: ' + clean(formData.sex), m, y); y += 5;
     if (formData.date_of_birth) {
-      doc.text('DOB: ' + new Date(formData.date_of_birth as any).toLocaleDateString(), m, y); y += 3.5;
+      doc.text('DOB: ' + new Date(formData.date_of_birth as any).toLocaleDateString(), m, y); y += 5;
     }
     y += 2;
     doc.line(m, y, thermalWidth - m, y);
-    y += 3;
+    y += 4;
 
     // DVT Risk
     const dvtScore = riskAssessmentService.calculateDVTScore(riskAssessmentData.dvt);
     const dvtRisk = riskAssessmentService.getDVTRiskLevel(dvtScore);
     doc.setFont('times', 'bold');
-    doc.setFontSize(10);
-    doc.text('DVT RISK', m, y); y += 4;
+    doc.setFontSize(14);
+    doc.text('DVT RISK', m, y); y += 5;
     doc.setFont('times', 'normal');
-    doc.setFontSize(9);
-    doc.text('Score: ' + dvtScore + ' - ' + dvtRisk.riskLevel, m, y); y += 4;
+    doc.setFontSize(14);
+    doc.text('Score: ' + dvtScore + ' - ' + dvtRisk.riskLevel, m, y); y += 5;
 
     // Pressure Sore Risk
     const psScore = riskAssessmentService.calculatePressureSoreScore(riskAssessmentData.pressureSore);
     const psRisk = riskAssessmentService.getPressureSoreRiskLevel(psScore);
     doc.setFont('times', 'bold');
-    doc.setFontSize(10);
-    doc.text('PRESSURE SORE RISK', m, y); y += 4;
+    doc.setFontSize(14);
+    doc.text('PRESSURE SORE RISK', m, y); y += 5;
     doc.setFont('times', 'normal');
-    doc.setFontSize(9);
-    doc.text('Score: ' + psScore + ' - ' + psRisk.riskLevel, m, y); y += 4;
+    doc.setFontSize(14);
+    doc.text('Score: ' + psScore + ' - ' + psRisk.riskLevel, m, y); y += 5;
 
     // Nutritional
     const { height, weight, bmi } = riskAssessmentData.nutritional;
     doc.setFont('times', 'bold');
-    doc.setFontSize(10);
-    doc.text('NUTRITION', m, y); y += 4;
+    doc.setFontSize(14);
+    doc.text('NUTRITION', m, y); y += 5;
     doc.setFont('times', 'normal');
-    doc.setFontSize(9);
-    if (height > 0) doc.text('Height: ' + height + 'cm', m, y), y += 3.5;
-    if (weight > 0) doc.text('Weight: ' + weight + 'kg', m, y), y += 3.5;
-    if (bmi) doc.text('BMI: ' + bmi.toFixed(1), m, y), y += 3.5;
+    doc.setFontSize(14);
+    if (height > 0) doc.text('Height: ' + height + 'cm', m, y), y += 5;
+    if (weight > 0) doc.text('Weight: ' + weight + 'kg', m, y), y += 5;
+    if (bmi) doc.text('BMI: ' + bmi.toFixed(1), m, y), y += 5;
 
     doc.save(`Patient_Thermal_${clean(formData.hospital_number) || 'new'}_${new Date().toISOString().split('T')[0]}.pdf`);
   };
@@ -3077,14 +3077,48 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
               Co-morbidities <span className="text-red-500">*</span>
             </label>
             <div className="grid grid-cols-2 gap-2 mt-2">
+              {/* None option */}
+              <label className={`flex items-center p-2 rounded-md border ${
+                riskAssessmentData.clinical.comorbidities.includes('none') 
+                  ? 'bg-green-50 border-green-300' 
+                  : 'border-gray-200 hover:bg-gray-50'
+              }`}>
+                <input
+                  type="checkbox"
+                  checked={riskAssessmentData.clinical.comorbidities.includes('none')}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      // Selecting 'None' clears all other comorbidities
+                      setRiskAssessmentData(prev => ({
+                        ...prev,
+                        clinical: { ...prev.clinical, comorbidities: ['none'] }
+                      }));
+                    } else {
+                      setRiskAssessmentData(prev => ({
+                        ...prev,
+                        clinical: { ...prev.clinical, comorbidities: [] }
+                      }));
+                    }
+                  }}
+                  className="mr-2 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                />
+                <span className="text-sm font-medium text-green-700">None</span>
+              </label>
+
+              {/* Comorbidity options */}
               {['diabetes', 'hypertension', 'renal_impairment', 'liver_disease', 'heart_disease', 'respiratory_disease'].map(condition => (
-                <label key={condition} className="flex items-center">
+                <label key={condition} className={`flex items-center p-2 rounded-md border ${
+                  riskAssessmentData.clinical.comorbidities.includes(condition)
+                    ? 'bg-yellow-50 border-yellow-300'
+                    : 'border-gray-200 hover:bg-gray-50'
+                } ${riskAssessmentData.clinical.comorbidities.includes('none') ? 'opacity-50' : ''}`}>
                   <input
                     type="checkbox"
                     checked={riskAssessmentData.clinical.comorbidities.includes(condition)}
+                    disabled={riskAssessmentData.clinical.comorbidities.includes('none')}
                     onChange={(e) => {
                       const newComorbidities = e.target.checked
-                        ? [...riskAssessmentData.clinical.comorbidities, condition]
+                        ? [...riskAssessmentData.clinical.comorbidities.filter(c => c !== 'none'), condition]
                         : riskAssessmentData.clinical.comorbidities.filter(c => c !== condition);
                       setRiskAssessmentData(prev => ({
                         ...prev,
@@ -3097,6 +3131,9 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
                 </label>
               ))}
             </div>
+            {riskAssessmentData.clinical.comorbidities.length === 0 && (
+              <p className="text-xs text-red-500 mt-1">Please select at least one option (or choose "None")</p>
+            )}
           </div>
 
           <div>
@@ -3141,8 +3178,17 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
 
       {/* Clinical Photographs Section */}
       <div className="bg-purple-50 p-6 rounded-lg">
-        <h4 className="text-md font-semibold text-purple-900 mb-4">Clinical Photographs of Lesion</h4>
-        <p className="text-sm text-gray-600 mb-4">Upload up to 2 clinical photographs of the lesion for documentation and monitoring</p>
+        <div className="flex items-center justify-between mb-4">
+          <h4 className="text-md font-semibold text-purple-900">Clinical Photographs of Lesion</h4>
+          <span className="text-xs font-medium text-purple-600 bg-purple-100 px-2 py-1 rounded-full">Optional</span>
+        </div>
+        <p className="text-sm text-gray-600 mb-2">Upload up to 2 clinical photographs of the lesion for documentation and monitoring</p>
+        <div className="flex items-center gap-2 mb-4 p-2 bg-blue-50 border border-blue-200 rounded-md">
+          <svg className="w-4 h-4 text-blue-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+          </svg>
+          <p className="text-xs text-blue-700">Photos can be uploaded later from the patient's profile. You may skip this step and continue with registration.</p>
+        </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Photo 1 */}

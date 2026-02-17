@@ -183,29 +183,29 @@ export function createThermalPDF(): jsPDF {
  * Adds thermal header with institution name
  */
 export function addThermalHeader(pdf: jsPDF, title: string): number {
-  let y = PDF_THERMAL.margin + 4;
+  let y = PDF_THERMAL.margin + 5;
   const m = PDF_THERMAL.margin;
   const cw = PDF_THERMAL.contentWidth;
 
   pdf.setFont('times', 'bold');
-  pdf.setFontSize(11);
+  pdf.setFontSize(14);
   pdf.text(sanitizeTextForPDF(PDF_INSTITUTION.name), m, y, { maxWidth: cw });
-  y += 4;
-  pdf.setFontSize(9);
+  y += 5;
+  pdf.setFontSize(14);
   pdf.setFont('times', 'normal');
   pdf.text(PDF_INSTITUTION.department, m, y, { maxWidth: cw });
-  y += 5;
+  y += 6;
 
   // separator
   pdf.setLineWidth(0.3);
   pdf.line(m, y, m + cw, y);
-  y += 4;
+  y += 5;
 
   // title
   pdf.setFont('times', 'bold');
-  pdf.setFontSize(PDF_THERMAL.fontSize);
+  pdf.setFontSize(14);
   pdf.text(sanitizeTextForPDF(title), m, y, { maxWidth: cw });
-  y += 5;
+  y += 6;
 
   pdf.setFont('times', 'normal');
   return y;
@@ -245,11 +245,11 @@ export function finalizeThermalPDF(pdf: jsPDF, y: number): void {
   pdf.setLineWidth(0.3);
   pdf.line(m, y, m + cw, y);
   y += 3;
-  pdf.setFontSize(8);
+  pdf.setFontSize(14);
   pdf.setFont('times', 'normal');
   const ts = new Date().toLocaleString('en-GB', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
   pdf.text(ts, m, y);
-  pdf.text(PDF_INSTITUTION.department, m, y + 3, { maxWidth: cw });
+  pdf.text(PDF_INSTITUTION.department, m, y + 4, { maxWidth: cw });
 }
 
 /**

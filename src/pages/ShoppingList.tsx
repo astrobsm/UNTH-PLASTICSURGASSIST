@@ -267,7 +267,7 @@ export default function ShoppingList() {
     const thermalWidth = 80; // mm
     const margin = 2; // Smaller margin for thermal paper
     const maxTextWidth = thermalWidth - (margin * 2) - 22; // Leave space for qty and checkbox columns
-    const estimatedHeight = 150 + (selectedItems.length * 10); // Estimate height based on items
+    const estimatedHeight = 200 + (selectedItems.length * 14); // Estimate height based on items
     
     const doc = new jsPDF({
       orientation: 'portrait',
@@ -318,47 +318,47 @@ export default function ShoppingList() {
     doc.setFont('times', 'normal'); // Georgia-like serif font
     
     // Header - Hospital Name
-    doc.setFontSize(9);
+    doc.setFontSize(14);
     doc.setFont('times', 'bold');
     doc.text('UNTH Plastic Surgery', thermalWidth / 2, yPos, { align: 'center' });
-    yPos += 4;
+    yPos += 5;
     
-    doc.setFontSize(7);
+    doc.setFontSize(14);
     doc.setFont('times', 'normal');
     doc.text('Burns & Reconstructive Unit', thermalWidth / 2, yPos, { align: 'center' });
-    yPos += 5;
+    yPos += 6;
 
     // Divider line
     doc.setLineWidth(0.3);
     doc.line(margin, yPos, thermalWidth - margin, yPos);
-    yPos += 3;
+    yPos += 5;
 
     // Title
-    doc.setFontSize(10);
+    doc.setFontSize(14);
     doc.setFont('times', 'bold');
     const categoryTitle = selectedCategory === 'wound_dressing' ? 'WOUND DRESSING' : 
                           selectedCategory === 'bedside_debridement' ? 'BEDSIDE DEBRIDEMENT' : 
                           'SURGERY';
     doc.text(`SHOPPING LIST - ${categoryTitle}`, thermalWidth / 2, yPos, { align: 'center' });
-    yPos += 5;
+    yPos += 6;
 
     // Patient Info
-    doc.setFontSize(8);
+    doc.setFontSize(14);
     doc.setFont('times', 'normal');
     const patientNameClean = clean(patientName);
-    const patientNameLines = wrapText(`Patient: ${patientNameClean}`, thermalWidth - (margin * 2), 8);
+    const patientNameLines = wrapText(`Patient: ${patientNameClean}`, thermalWidth - (margin * 2), 14);
     patientNameLines.forEach(line => {
       doc.text(line, margin, yPos);
-      yPos += 3;
+      yPos += 5;
     });
     doc.text(`Hosp #: ${clean(hospitalNum)}`, margin, yPos);
-    yPos += 3;
+    yPos += 5;
     doc.text(`Date: ${new Date().toLocaleDateString()}`, margin, yPos);
-    yPos += 4;
+    yPos += 5;
 
     // Divider
     doc.line(margin, yPos, thermalWidth - margin, yPos);
-    yPos += 3;
+    yPos += 5;
 
     // Column positions for 80mm thermal paper
     const checkboxCol = margin; // 2mm
@@ -368,20 +368,20 @@ export default function ShoppingList() {
     const tickCol = thermalWidth - margin - 5; // Right edge
 
     // Items Header
-    doc.setFontSize(8);
+    doc.setFontSize(14);
     doc.setFont('times', 'bold');
     doc.text('#', numCol, yPos);
     doc.text('ITEM', nameCol, yPos);
     doc.text('Q', qtyCol, yPos);
     doc.text('OK', tickCol, yPos);
-    yPos += 3;
+    yPos += 5;
 
     doc.setLineWidth(0.2);
     doc.line(margin, yPos, thermalWidth - margin, yPos);
-    yPos += 2;
+    yPos += 3;
 
     // Items List with checkboxes
-    doc.setFontSize(8);
+    doc.setFontSize(14);
     doc.setFont('times', 'normal');
 
     selectedItems.forEach((item, index) => {
@@ -393,7 +393,7 @@ export default function ShoppingList() {
       doc.text(`${index + 1}`, numCol, yPos);
       
       // Wrap item name to fit within available space (maxTextWidth)
-      const nameLines = wrapText(item.name, maxTextWidth, 8);
+      const nameLines = wrapText(item.name, maxTextWidth, 14);
       
       // First line with qty and checkbox
       doc.text(nameLines[0], nameCol, yPos);
@@ -402,12 +402,12 @@ export default function ShoppingList() {
       // Draw availability checkbox at the end
       doc.rect(tickCol, yPos - 2.5, 3, 3);
       
-      yPos += 4;
+      yPos += 5;
       
       // Additional lines for wrapped text (if any)
       for (let i = 1; i < nameLines.length; i++) {
         doc.text(nameLines[i], nameCol, yPos);
-        yPos += 3;
+        yPos += 5;
       }
       
       // Add small gap between items
@@ -418,31 +418,31 @@ export default function ShoppingList() {
     yPos += 1;
     doc.setLineWidth(0.3);
     doc.line(margin, yPos, thermalWidth - margin, yPos);
-    yPos += 3;
+    yPos += 5;
 
     // Summary
-    doc.setFontSize(9);
+    doc.setFontSize(14);
     doc.setFont('times', 'bold');
     doc.text(`Total: ${selectedItems.length} items`, margin, yPos);
     doc.text(`Qty: ${selectedItems.reduce((sum, item) => sum + item.quantity, 0)}`, thermalWidth / 2, yPos);
-    yPos += 4;
+    yPos += 5;
 
     // Availability check instruction
-    doc.setFontSize(7);
+    doc.setFontSize(14);
     doc.setFont('times', 'italic');
     doc.text('Tick OK column if item available', margin, yPos);
-    yPos += 4;
+    yPos += 5;
 
     // Footer divider
     doc.setLineWidth(0.3);
     doc.line(margin, yPos, thermalWidth - margin, yPos);
-    yPos += 3;
+    yPos += 5;
 
     // Footer
-    doc.setFontSize(7);
+    doc.setFontSize(14);
     doc.setFont('times', 'normal');
     doc.text('Drs Okwesili/Nnadi/Eze', thermalWidth / 2, yPos, { align: 'center' });
-    yPos += 3;
+    yPos += 5;
     doc.text('Thank you', thermalWidth / 2, yPos, { align: 'center' });
 
     // Save
