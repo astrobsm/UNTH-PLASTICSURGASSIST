@@ -34,6 +34,7 @@ import { patientService } from '../services/patientService';
 import { logDataExport } from '../services/auditLoggingService';
 import { useAuthStore } from '../store/authStore';
 import { dataSyncService } from '../services/dataSyncService';
+import jsPDF from 'jspdf';
 import toast from 'react-hot-toast';
 
 type LabTab = 'investigations' | 'results' | 'upload' | 'trends' | 'requests' | 'gfr';
@@ -435,6 +436,266 @@ const InvestigationsSection = ({ investigations, onRefresh, searchQuery }: any) 
 };
 
 // Investigation Detail Modal Component
+// ─── Lab Investigation PDF Generation ──────────────────────────────────────
+function generateLabRequestPDF(investigation: LabInvestigation, mode: 'a4' | 'thermal') {
+  if (mode === 'thermal') {
+    generateLabRequestThermal(investigation);
+    return;
+  }
+
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const margin = 15;
+  const contentWidth = pageWidth - margin * 2;
+  let y = 20;
+
+  // Header
+  doc.setFont('times', 'bold');
+  doc.setFontSize(14);
+  doc.text('LABORATORY INVESTIGATION REQUEST', pageWidth / 2, y, { align: 'center' });
+  y += 8;
+
+  doc.setFont('times', 'normal');
+  doc.setFontSize(11);
+  doc.text('Division of Plastic, Reconstructive & Burn Surgery', pageWidth / 2, y, { align: 'center' });
+  y += 6;
+  doc.text('University of Nigeria Teaching Hospital (UNTH), Ituku-Ozalla, Enugu', pageWidth / 2, y, { align: 'center' });
+  y += 10;
+
+  // Line
+  doc.setLineWidth(0.5);
+  doc.line(margin, y, pageWidth - margin, y);
+  y += 8;
+
+  // Patient Info
+  doc.setFont('times', 'bold');
+  doc.setFontSize(10);
+  doc.text('Patient Name:', margin, y);
+  doc.setFont('times', 'normal');
+  doc.text(investigation.patient_name || 'N/A', margin + 32, y);
+
+  doc.setFont('times', 'bold');
+  doc.text('Patient ID:', pageWidth/ 2, y);
+  doc.setFont('times', 'normal');
+  doc.text(investigation.patient_id || 'N/A', pageWidth / 2 + 28, y);
+  y += 7;
+
+  doc.setFont('times', 'bold');
+  doc.text('Request Date:', margin, y);
+  doc.setFont('times', 'normal');
+  doc.text(format(new Date(investigation.request_date), 'dd/MM/yyyy'), margin + 32, y);
+
+  doc.setFont('times', 'bold');
+  doc.text('Requested By:', pageWidth / 2, y);
+  doc.setFont('times', 'normal');
+  doc.text(investigation.requested_by || 'N/A', pageWidth / 2 + 32, y);
+  y += 7;
+
+  doc.setFont('times', 'bold');
+  doc.text('Urgency:', margin, y);
+  doc.setFont('times', 'normal');
+  doc.text((investigation.urgency || 'routine').toUpperCase(), margin + 32, y);
+
+  doc.setFont('times', 'bold');
+  doc.text('Status:', pageWidth / 2, y);
+  doc.setFont('times', 'normal');
+  doc.text((investigation.status || 'pending').toUpperCase(), pageWidth / 2 + 32, y);
+  y += 10;
+
+  // Clinical Indication
+  if (investigation.clinical_indication) {
+    doc.setFont('times', 'bold');
+    doc.text('Clinical Indication:', margin, y);
+    y += 5;
+    doc.setFont('times', 'normal');
+    doc.setFontSize(10);
+    const indLines = doc.splitTextToSize(investigation.clinical_indication, contentWidth);
+    indLines.forEach((line: string) => {
+      doc.text(line, margin, y);
+      y += 5;
+    });
+    y += 3;
+  }
+
+  // Special Instructions
+  if (investigation.special_instructions) {
+    doc.setFont('times', 'bold');
+    doc.text('Special Instructions:', margin, y);
+    y += 5;
+    doc.setFont('times', 'normal');
+    const siLines = doc.splitTextToSize(investigation.special_instructions, contentWidth);
+    siLines.forEach((line: string) => {
+      doc.text(line, margin, y);
+      y += 5;
+    });
+    y += 3;
+  }
+
+  // Line
+  doc.setLineWidth(0.3);
+  doc.line(margin, y, pageWidth - margin, y);
+  y += 8;
+
+  // Tests Table
+  doc.setFont('times', 'bold');
+  doc.setFontSize(11);
+  doc.text('INVESTIGATIONS ORDERED', margin, y);
+  y += 6;
+
+  // Table headers
+  doc.setFontSize(10);
+  const colNum = margin;
+  const colTest = margin + 10;
+  const colCategory = margin + 90;
+  const colSample = margin + 130;
+  doc.text('#', colNum, y);
+  doc.text('Test Name', colTest, y);
+  doc.text('Category', colCategory, y);
+  doc.text('Sample', colSample, y);
+  y += 2;
+  doc.line(margin, y, pageWidth - margin, y);
+  y += 5;
+
+  doc.setFont('times', 'normal');
+  if (investigation.tests && investigation.tests.length > 0) {
+    investigation.tests.forEach((test: LabTest, idx: number) => {
+      if (y > 270) {
+        doc.addPage();
+        y = 20;
+      }
+      doc.text(`${idx + 1}`, colNum, y);
+      doc.text(test.test_name || '', colTest, y, { maxWidth: 75 });
+      doc.text(test.category || '', colCategory, y, { maxWidth: 35 });
+      doc.text(test.sample_type || '', colSample, y, { maxWidth: 35 });
+      y += 6;
+      if (test.fasting_required) {
+        doc.setFont('times', 'italic');
+        doc.setFontSize(8);
+        doc.text('* Fasting Required', colTest + 2, y);
+        doc.setFont('times', 'normal');
+        doc.setFontSize(10);
+        y += 4;
+      }
+    });
+  }
+
+  // Footer
+  y += 10;
+  if (y > 260) { doc.addPage(); y = 20; }
+  doc.line(margin, y, margin + 60, y);
+  y += 5;
+  doc.setFontSize(9);
+  doc.text(`Requested by: ${investigation.requested_by || ''}`, margin, y);
+  y += 4;
+  doc.text(`Date: ${format(new Date(investigation.request_date), 'dd/MM/yyyy')}`, margin, y);
+  y += 4;
+  doc.text(`Printed: ${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`, margin, y);
+
+  doc.save(`LabRequest_${investigation.patient_name || 'lab'}_${new Date().toISOString().slice(0, 10)}.pdf`);
+}
+
+// Thermal 80mm Lab Request PDF
+function generateLabRequestThermal(investigation: LabInvestigation) {
+  const thermalWidth = 80;
+  const margin = 4;
+  const contentWidth = thermalWidth - margin * 2;
+  const testCount = investigation.tests?.length || 0;
+  let estHeight = 70 + testCount * 12;
+  if (investigation.clinical_indication) estHeight += 12;
+  if (investigation.special_instructions) estHeight += 12;
+  estHeight = Math.max(estHeight, 80);
+
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [thermalWidth, estHeight] });
+  let y = 6;
+
+  // Header
+  doc.setFont('times', 'bold');
+  doc.setFontSize(13);
+  doc.text('LAB REQUEST', thermalWidth / 2, y, { align: 'center' });
+  y += 5;
+
+  doc.setFontSize(8);
+  doc.setFont('times', 'normal');
+  doc.text('Plastic, Reconstructive & Burn Surgery', thermalWidth / 2, y, { align: 'center' });
+  y += 3.5;
+  doc.text('UNTH, Ituku-Ozalla, Enugu', thermalWidth / 2, y, { align: 'center' });
+  y += 4;
+
+  // Dashed line
+  doc.setLineDashPattern([1, 1], 0);
+  doc.line(margin, y, thermalWidth - margin, y);
+  doc.setLineDashPattern([], 0);
+  y += 4;
+
+  // Patient info
+  doc.setFont('times', 'bold');
+  doc.setFontSize(10);
+  doc.text(investigation.patient_name || 'N/A', margin, y);
+  y += 4;
+  doc.setFont('times', 'normal');
+  doc.setFontSize(9);
+  doc.text(`Patient ID: ${investigation.patient_id || 'N/A'}`, margin, y);
+  y += 3.5;
+  doc.text(`Date: ${format(new Date(investigation.request_date), 'dd/MM/yyyy')}`, margin, y);
+  y += 3.5;
+  doc.text(`Urgency: ${(investigation.urgency || 'routine').toUpperCase()}`, margin, y);
+  y += 4;
+
+  if (investigation.clinical_indication) {
+    doc.setFont('times', 'italic');
+    doc.setFontSize(8);
+    const indLines = doc.splitTextToSize(`Indication: ${investigation.clinical_indication}`, contentWidth);
+    indLines.forEach((line: string) => {
+      doc.text(line, margin, y);
+      y += 3;
+    });
+    doc.setFont('times', 'normal');
+    y += 1;
+  }
+
+  // Dashed line
+  doc.setLineDashPattern([1, 1], 0);
+  doc.line(margin, y, thermalWidth - margin, y);
+  doc.setLineDashPattern([], 0);
+  y += 4;
+
+  // Tests list
+  doc.setFont('times', 'bold');
+  doc.setFontSize(10);
+  doc.text('TESTS ORDERED:', margin, y);
+  y += 4;
+
+  doc.setFont('times', 'normal');
+  doc.setFontSize(9);
+  if (investigation.tests && investigation.tests.length > 0) {
+    investigation.tests.forEach((test: LabTest, idx: number) => {
+      if (y > estHeight - 15) {
+        doc.addPage([thermalWidth, estHeight]);
+        y = 6;
+      }
+      doc.text(`${idx + 1}. ${test.test_name}`, margin, y, { maxWidth: contentWidth });
+      y += 3.5;
+      doc.setFontSize(7);
+      doc.text(`   ${test.category} | ${test.sample_type}${test.fasting_required ? ' | Fasting' : ''}`, margin, y, { maxWidth: contentWidth });
+      doc.setFontSize(9);
+      y += 4;
+    });
+  }
+
+  // Footer
+  y += 2;
+  doc.setLineDashPattern([1, 1], 0);
+  doc.line(margin, y, thermalWidth - margin, y);
+  doc.setLineDashPattern([], 0);
+  y += 4;
+  doc.setFontSize(8);
+  doc.text(`Requested by: ${investigation.requested_by || ''}`, margin, y);
+  y += 3;
+  doc.text(`Printed: ${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`, margin, y);
+
+  doc.save(`LabReq_thermal_${investigation.patient_name || 'lab'}_${new Date().toISOString().slice(0, 10)}.pdf`);
+}
+
 const InvestigationDetailModal = ({ investigation, onClose }: { investigation: LabInvestigation; onClose: () => void }) => {
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -587,7 +848,23 @@ const InvestigationDetailModal = ({ investigation, onClose }: { investigation: L
         </div>
 
         {/* Footer */}
-        <div className="sticky bottom-0 bg-gray-50 border-t px-6 py-4 flex justify-end">
+        <div className="sticky bottom-0 bg-gray-50 border-t px-6 py-4 flex justify-between items-center">
+          <div className="flex gap-2">
+            <button
+              onClick={() => generateLabRequestPDF(investigation, 'a4')}
+              className="px-3 py-2 bg-blue-100 text-blue-700 rounded-lg text-sm hover:bg-blue-200 flex items-center gap-1"
+            >
+              <Download className="h-4 w-4" />
+              A4 PDF
+            </button>
+            <button
+              onClick={() => generateLabRequestPDF(investigation, 'thermal')}
+              className="px-3 py-2 bg-yellow-100 text-yellow-800 rounded-lg text-sm hover:bg-yellow-200 flex items-center gap-1"
+            >
+              <Download className="h-4 w-4" />
+              80mm Print
+            </button>
+          </div>
           <button
             onClick={onClose}
             className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"

@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   Search, Plus, X, AlertTriangle, AlertCircle, Info, ChevronDown, ChevronUp,
   Pill, FileText, Check, Printer, Trash2, Clock, User, ShieldAlert,
-  Baby, Heart, Droplet as KidneyIcon, Activity, ChevronRight
+  Baby, Heart, Droplet as KidneyIcon, Activity, ChevronRight, Download
 } from 'lucide-react';
 import {
   BNF_DRUG_DATABASE,
@@ -21,11 +21,13 @@ import {
 } from '../data/bnfDrugDatabase';
 import { useAuthStore } from '../store/authStore';
 import { db } from '../db/database';
+import { patientService } from '../services/patientService';
 import jsPDF from 'jspdf';
 
 // ─── TYPES ──────────────────────────────────────────────────────────────────
 
 interface PatientContext {
+  patient_id?: string;
   name: string;
   hospitalNumber: string;
   sex?: string;
@@ -95,10 +97,71 @@ export default function PrescriptionsPage() {
   const [allergyInput, setAllergyInput] = useState('');
   const [medInput, setMedInput] = useState('');
 
+  // Patient search from DB
+  const [allPatients, setAllPatients] = useState<any[]>([]);
+  const [patientSearchQuery, setPatientSearchQuery] = useState('');
+  const [showPatientDropdown, setShowPatientDropdown] = useState(false);
+  const patientSearchRef = useRef<HTMLDivElement>(null);
+
   // Load saved prescriptions from IndexedDB
   useEffect(() => {
     loadSavedPrescriptions();
+    loadAllPatients();
   }, []);
+
+  async function loadAllPatients() {
+    try {
+      const pts = await patientService.getAllPatients();
+      setAllPatients(pts);
+    } catch (err) {
+      console.error('Failed to load patients:', err);
+    }
+  }
+
+  const filteredPatients = useMemo(() => {
+    if (!patientSearchQuery || patientSearchQuery.length < 1) return [];
+    const q = patientSearchQuery.toLowerCase();
+    return allPatients.filter(p => {
+      const fullName = `${p.first_name || ''} ${p.last_name || ''}`.toLowerCase();
+      const hospNum = (p.hospital_number || '').toLowerCase();
+      return fullName.includes(q) || hospNum.includes(q);
+    }).slice(0, 10);
+  }, [patientSearchQuery, allPatients]);
+
+  // Close patient dropdown on outside click
+  useEffect(() => {
+    function handlePatientClick(e: MouseEvent) {
+      if (patientSearchRef.current && !patientSearchRef.current.contains(e.target as Node)) {
+        setShowPatientDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', handlePatientClick);
+    return () => document.removeEventListener('mousedown', handlePatientClick);
+  }, []);
+
+  function selectPatient(patient: any) {
+    const fullName = `${patient.first_name || ''} ${patient.last_name || ''}`.trim();
+    const dob = patient.date_of_birth ? new Date(patient.date_of_birth) : null;
+    let age: number | undefined;
+    if (dob) {
+      const now = new Date();
+      age = now.getFullYear() - dob.getFullYear();
+      const monthDiff = now.getMonth() - dob.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < dob.getDate())) {
+        age--;
+      }
+    }
+    setPatientContext(p => ({
+      ...p,
+      patient_id: patient.id?.toString() || patient.serverId?.toString() || '',
+      name: fullName,
+      hospitalNumber: patient.hospital_number || '',
+      sex: patient.gender?.toLowerCase() || patient.sex?.toLowerCase() || '',
+      age: age,
+    }));
+    setPatientSearchQuery(`${fullName} (${patient.hospital_number || 'N/A'})`);
+    setShowPatientDropdown(false);
+  }
 
   async function loadSavedPrescriptions() {
     try {
@@ -231,6 +294,7 @@ export default function PrescriptionsPage() {
     try {
       const record = {
         id: `presc-${Date.now()}`,
+        patient_id: patientContext.patient_id || '',
         patientName: patientContext.name,
         hospitalNumber: patientContext.hospitalNumber,
         prescriptions: prescriptions.map(p => ({
@@ -384,6 +448,117 @@ export default function PrescriptionsPage() {
     doc.save(`Prescription_${patientContext.hospitalNumber || 'chart'}_${new Date().toISOString().slice(0, 10)}.pdf`);
   }
 
+  // Thermal print 80mm prescription
+  function handleThermalPrint() {
+    if (prescriptions.length === 0) return;
+
+    const thermalWidth = 80;
+    const margin = 4;
+    const contentWidth = thermalWidth - margin * 2;
+    // Calculate height needed
+    let estHeight = 60 + prescriptions.length * 30;
+    if (patientContext.allergies.length > 0) estHeight += 10;
+    estHeight = Math.max(estHeight, 100);
+
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [thermalWidth, estHeight] });
+    let y = 6;
+
+    // Header
+    doc.setFont('times', 'bold');
+    doc.setFontSize(14);
+    doc.text('PRESCRIPTION', thermalWidth / 2, y, { align: 'center' });
+    y += 5;
+
+    doc.setFontSize(8);
+    doc.setFont('times', 'normal');
+    doc.text('Plastic, Reconstructive & Burn Surgery', thermalWidth / 2, y, { align: 'center' });
+    y += 3.5;
+    doc.text('UNTH, Ituku-Ozalla, Enugu', thermalWidth / 2, y, { align: 'center' });
+    y += 4;
+
+    // Dashed line
+    doc.setLineDashPattern([1, 1], 0);
+    doc.line(margin, y, thermalWidth - margin, y);
+    doc.setLineDashPattern([], 0);
+    y += 4;
+
+    // Patient info
+    doc.setFontSize(10);
+    doc.setFont('times', 'bold');
+    doc.text(patientContext.name || 'N/A', margin, y);
+    y += 4;
+    doc.setFont('times', 'normal');
+    doc.setFontSize(9);
+    doc.text(`Hosp No: ${patientContext.hospitalNumber || 'N/A'}`, margin, y);
+    if (patientContext.sex) {
+      doc.text(`Sex: ${patientContext.sex === 'male' ? 'M' : 'F'}`, thermalWidth / 2, y);
+    }
+    y += 4;
+    if (patientContext.age) {
+      doc.text(`Age: ${patientContext.age}yrs`, margin, y);
+      y += 4;
+    }
+
+    if (patientContext.allergies.length > 0) {
+      doc.setFont('times', 'bold');
+      doc.setFontSize(9);
+      doc.text(`ALLERGIES: ${patientContext.allergies.join(', ')}`, margin, y, { maxWidth: contentWidth });
+      y += 4;
+      doc.setFont('times', 'normal');
+    }
+
+    // Dashed line
+    doc.setLineDashPattern([1, 1], 0);
+    doc.line(margin, y, thermalWidth - margin, y);
+    doc.setLineDashPattern([], 0);
+    y += 4;
+
+    // Prescriptions
+    doc.setFontSize(10);
+    prescriptions.forEach((rx, idx) => {
+      if (y > estHeight - 20) {
+        doc.addPage([thermalWidth, estHeight]);
+        y = 6;
+      }
+      doc.setFont('times', 'bold');
+      doc.text(`${idx + 1}. ${rx.drug.genericName}`, margin, y, { maxWidth: contentWidth });
+      y += 4;
+      doc.setFont('times', 'normal');
+      doc.setFontSize(9);
+      doc.text(`${rx.dose} | ${getRouteLabel(rx.route).split(' ')[0]} | ${getFrequencyLabel(rx.frequency).split(' ')[0]}`, margin + 2, y, { maxWidth: contentWidth - 2 });
+      y += 3.5;
+      if (rx.duration) {
+        doc.text(`Duration: ${rx.duration}`, margin + 2, y);
+        y += 3.5;
+      }
+      if (rx.instructions) {
+        doc.setFont('times', 'italic');
+        doc.setFontSize(8);
+        const instrLines = doc.splitTextToSize(rx.instructions, contentWidth - 4);
+        instrLines.forEach((line: string) => {
+          doc.text(line, margin + 2, y);
+          y += 3;
+        });
+        doc.setFont('times', 'normal');
+      }
+      doc.setFontSize(10);
+      y += 2;
+    });
+
+    // Footer
+    y += 2;
+    doc.setLineDashPattern([1, 1], 0);
+    doc.line(margin, y, thermalWidth - margin, y);
+    doc.setLineDashPattern([], 0);
+    y += 4;
+    doc.setFontSize(8);
+    doc.text(`Prescriber: ${user?.full_name || user?.username || ''}`, margin, y);
+    y += 3;
+    doc.text(`Date: ${new Date().toLocaleDateString('en-GB')} ${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`, margin, y);
+
+    doc.save(`Rx_thermal_${patientContext.hospitalNumber || 'chart'}_${new Date().toISOString().slice(0, 10)}.pdf`);
+  }
+
   // Add allergy
   function addAllergy() {
     const val = allergyInput.trim();
@@ -464,6 +639,46 @@ export default function PrescriptionsPage() {
 
             {showPatientForm && (
               <div className="p-4 border-t border-gray-100 space-y-4">
+                {/* Patient Search from Database */}
+                <div ref={patientSearchRef} className="relative">
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Search Patient from Database *</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={patientSearchQuery}
+                      onChange={e => { setPatientSearchQuery(e.target.value); setShowPatientDropdown(true); }}
+                      onFocus={() => setShowPatientDropdown(true)}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500 pr-10"
+                      placeholder="Type patient name or hospital number..."
+                    />
+                    <Search className="absolute right-3 top-2.5 h-4 w-4 text-gray-400" />
+                  </div>
+                  {showPatientDropdown && patientSearchQuery && filteredPatients.length > 0 && (
+                    <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                      {filteredPatients.map(patient => (
+                        <button
+                          key={patient.id || patient.serverId}
+                          type="button"
+                          onClick={() => selectPatient(patient)}
+                          className="w-full text-left px-3 py-2 hover:bg-green-50 border-b border-gray-100 last:border-0"
+                        >
+                          <div className="font-medium text-sm text-gray-900">
+                            {patient.first_name} {patient.last_name}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {patient.hospital_number || 'No ID'} | {patient.gender || patient.sex || 'N/A'} | DOB: {patient.date_of_birth ? new Date(patient.date_of_birth).toLocaleDateString('en-GB') : 'N/A'}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {showPatientDropdown && patientSearchQuery && patientSearchQuery.length >= 1 && filteredPatients.length === 0 && (
+                    <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg p-3 text-sm text-gray-500 text-center">
+                      No patients found. You can enter details manually below.
+                    </div>
+                  )}
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Patient Name *</label>
@@ -471,8 +686,8 @@ export default function PrescriptionsPage() {
                       type="text"
                       value={patientContext.name}
                       onChange={e => setPatientContext(p => ({ ...p, name: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                      placeholder="Full name"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-gray-50"
+                      placeholder="Auto-filled from search"
                     />
                   </div>
                   <div>
@@ -481,8 +696,8 @@ export default function PrescriptionsPage() {
                       type="text"
                       value={patientContext.hospitalNumber}
                       onChange={e => setPatientContext(p => ({ ...p, hospitalNumber: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                      placeholder="e.g. UNTH/2025/001"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-gray-50"
+                      placeholder="Auto-filled from search"
                     />
                   </div>
                   <div>
@@ -941,7 +1156,14 @@ export default function PrescriptionsPage() {
                     className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 flex items-center gap-1"
                   >
                     <Printer className="h-4 w-4" />
-                    Print PDF
+                    A4 PDF
+                  </button>
+                  <button
+                    onClick={handleThermalPrint}
+                    className="px-3 py-1.5 bg-yellow-100 text-yellow-800 rounded-lg text-sm hover:bg-yellow-200 flex items-center gap-1"
+                  >
+                    <Download className="h-4 w-4" />
+                    80mm Print
                   </button>
                   <button
                     onClick={handleSavePrescriptions}
@@ -1053,7 +1275,14 @@ export default function PrescriptionsPage() {
                   className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 flex items-center gap-2"
                 >
                   <Printer className="h-4 w-4" />
-                  Print PDF
+                  A4 PDF
+                </button>
+                <button
+                  onClick={handleThermalPrint}
+                  className="px-4 py-2 bg-yellow-100 text-yellow-800 rounded-lg text-sm hover:bg-yellow-200 flex items-center gap-2"
+                >
+                  <Download className="h-4 w-4" />
+                  80mm Print
                 </button>
               </div>
             </div>
