@@ -14,6 +14,12 @@ export interface Admission {
   route_of_admission: 'clinic' | 'emergency' | 'consult_transfer';
   referring_specialty?: string; // For consult transfers
   referring_doctor?: string;
+  consult_documents?: Array<{
+    name: string;
+    data: string; // base64 data URL
+    type: string; // MIME type
+    uploaded_at: string;
+  }>;
   reasons_for_admission: string;
   presenting_complaint: string;
   provisional_diagnosis: string;

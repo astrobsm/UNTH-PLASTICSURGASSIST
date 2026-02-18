@@ -86,6 +86,12 @@ export interface PatientRegistration {
   patient_type?: 'outpatient' | 'inpatient';
   admission_type?: 'emergency' | 'clinic' | 'referral' | 'elective';
   referring_hospital?: string;
+  consult_documents?: Array<{
+    name: string;
+    data: string; // base64 data URL
+    type: string; // MIME type
+    uploaded_at: string;
+  }>;
   consultant_in_charge: string;
   resident_in_charge?: string;
   
