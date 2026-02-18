@@ -54,6 +54,7 @@ export interface CBTAttempt {
   flaggedForReview: string[]; // question IDs
   tabSwitchCount: number;
   suspiciousActivity: boolean;
+  postingCycle?: number; // Track which posting cycle this attempt belongs to
 }
 
 export interface CBTProgress {
@@ -62,7 +63,19 @@ export interface CBTProgress {
   completedTests: number;
   averageScore: number;
   attempts: CBTAttempt[];
+  currentPostingCycle: number;
+  cumulativeAverage: number; // Average across all posting cycles
+  passMarkReached: boolean;
 }
+
+// Posting duration configuration (in weeks)
+const POSTING_DURATION: Record<TrainingLevel, number> = {
+  house_officer: 4,
+  junior_resident: 12,
+  senior_resident: 24,
+};
+
+const PASS_MARK_PERCENTAGE = 75; // 75% pass mark for posting sign-out
 
 // Clinical scenario templates for generating questions
 const CLINICAL_SCENARIOS = {
@@ -291,7 +304,7 @@ const generateTestsForLevel = (level: TrainingLevel): CBTTest[] => {
       questions: generateQuestionsFromCME(level, i),
       duration: 600, // 10 minutes in seconds
       totalMarks: 100, // 25 questions × 4 marks
-      passMark: 50, // 50%
+      passMark: 75, // 75% for posting sign-out
       scheduledDay: 'Tuesday',
       scheduledTimeStart: '08:00',
       scheduledTimeEnd: '10:00'
@@ -429,21 +442,37 @@ const isTestCompleted = (level: TrainingLevel, testNumber: number): boolean => {
   return attempts.some(a => a.testNumber === testNumber && a.completed);
 };
 
-// Get progress for a level
+// Get progress for a level (with posting cycle tracking)
 const getProgress = (level: TrainingLevel): CBTProgress => {
-  const attempts = getAttemptsForLevel(level).filter(a => a.completed);
+  const allAttempts = getAttemptsForLevel(level).filter(a => a.completed);
   const totalTests = getTotalTestsForLevel(level);
-  const completedTests = new Set(attempts.map(a => a.testNumber)).size;
-  const averageScore = attempts.length > 0
-    ? attempts.reduce((sum, a) => sum + a.percentage, 0) / attempts.length
+  
+  // Determine current posting cycle
+  const currentCycle = getCurrentPostingCycle(level);
+  
+  // Current cycle attempts
+  const currentCycleAttempts = allAttempts.filter(a => (a.postingCycle || 1) === currentCycle);
+  const completedTests = new Set(currentCycleAttempts.map(a => a.testNumber)).size;
+  const currentAverage = currentCycleAttempts.length > 0
+    ? currentCycleAttempts.reduce((sum, a) => sum + a.percentage, 0) / currentCycleAttempts.length
     : 0;
+  
+  // Cumulative average across ALL posting cycles
+  const cumulativeAverage = allAttempts.length > 0
+    ? allAttempts.reduce((sum, a) => sum + a.percentage, 0) / allAttempts.length
+    : 0;
+  
+  const passMarkReached = cumulativeAverage >= PASS_MARK_PERCENTAGE;
   
   return {
     level,
     totalTests,
     completedTests,
-    averageScore,
-    attempts
+    averageScore: currentAverage,
+    attempts: currentCycleAttempts,
+    currentPostingCycle: currentCycle,
+    cumulativeAverage,
+    passMarkReached,
   };
 };
 
@@ -460,6 +489,81 @@ const calculateScore = (test: CBTTest, answers: { [questionId: string]: 'A' | 'B
   return score;
 };
 
+// Check if user has already taken a CBT this week
+const hasAttemptedThisWeek = (level: TrainingLevel, userId: string): { attempted: boolean; lastAttemptDate: string | null } => {
+  const attempts = getAttemptsForLevel(level).filter(a => a.completed && a.userId === userId);
+  if (attempts.length === 0) return { attempted: false, lastAttemptDate: null };
+  
+  // Get the most recent completed attempt
+  const sortedAttempts = [...attempts].sort((a, b) => 
+    new Date(b.endTime).getTime() - new Date(a.endTime).getTime()
+  );
+  const lastAttempt = sortedAttempts[0];
+  const lastAttemptDate = new Date(lastAttempt.endTime);
+  
+  // Calculate the start of the current week (Monday)
+  const now = new Date();
+  const dayOfWeek = now.getDay();
+  const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  const startOfWeek = new Date(now);
+  startOfWeek.setDate(now.getDate() + mondayOffset);
+  startOfWeek.setHours(0, 0, 0, 0);
+  
+  const attempted = lastAttemptDate >= startOfWeek;
+  return { 
+    attempted, 
+    lastAttemptDate: lastAttempt.endTime 
+  };
+};
+
+// Get current posting cycle for a level
+const getCurrentPostingCycle = (level: TrainingLevel): number => {
+  const allAttempts = getAttemptsForLevel(level).filter(a => a.completed);
+  const totalTests = getTotalTestsForLevel(level);
+  
+  if (allAttempts.length === 0) return 1;
+  
+  // Count how many full cycles have been completed
+  // A cycle is complete when all tests in the level have been attempted
+  const cycleAttempts: Record<number, Set<number>> = {};
+  
+  allAttempts.forEach(a => {
+    const cycle = a.postingCycle || 1;
+    if (!cycleAttempts[cycle]) cycleAttempts[cycle] = new Set();
+    cycleAttempts[cycle].add(a.testNumber);
+  });
+  
+  // Find the latest cycle
+  const maxCycle = Math.max(...Object.keys(cycleAttempts).map(Number));
+  
+  // If the latest cycle is complete AND cumulative average < 75%, start a new cycle
+  if (cycleAttempts[maxCycle] && cycleAttempts[maxCycle].size >= totalTests) {
+    const allCompleted = allAttempts.filter(a => a.completed);
+    const cumulativeAvg = allCompleted.reduce((sum, a) => sum + a.percentage, 0) / allCompleted.length;
+    
+    if (cumulativeAvg < PASS_MARK_PERCENTAGE) {
+      return maxCycle + 1; // Start new cycle
+    }
+  }
+  
+  return maxCycle;
+};
+
+// Get next available test number in current cycle
+const getNextTestNumber = (level: TrainingLevel): number => {
+  const currentCycle = getCurrentPostingCycle(level);
+  const allAttempts = getAttemptsForLevel(level).filter(a => a.completed);
+  const currentCycleAttempts = allAttempts.filter(a => (a.postingCycle || 1) === currentCycle);
+  const completedTestNumbers = new Set(currentCycleAttempts.map(a => a.testNumber));
+  
+  const totalTests = getTotalTestsForLevel(level);
+  for (let i = 1; i <= totalTests; i++) {
+    if (!completedTestNumbers.has(i)) return i;
+  }
+  
+  return totalTests; // All complete
+};
+
 // Export the service
 class CBTService {
   generateTestsForLevel = generateTestsForLevel;
@@ -473,9 +577,14 @@ class CBTService {
   isTestCompleted = isTestCompleted;
   getProgress = getProgress;
   calculateScore = calculateScore;
+  hasAttemptedThisWeek = hasAttemptedThisWeek;
+  getCurrentPostingCycle = getCurrentPostingCycle;
+  getNextTestNumber = getNextTestNumber;
+  PASS_MARK_PERCENTAGE = PASS_MARK_PERCENTAGE;
   
   // Start a new test attempt
   startTest(test: CBTTest, userId: string): CBTAttempt {
+    const currentCycle = getCurrentPostingCycle(test.level);
     const attempt: CBTAttempt = {
       id: `attempt-${test.id}-${Date.now()}`,
       testId: test.id,
@@ -492,7 +601,8 @@ class CBTService {
       completed: false,
       flaggedForReview: [],
       tabSwitchCount: 0,
-      suspiciousActivity: false
+      suspiciousActivity: false,
+      postingCycle: currentCycle
     };
     
     // Initialize all answers as null
@@ -532,7 +642,7 @@ class CBTService {
     attempt.endTime = new Date().toISOString();
     attempt.score = score;
     attempt.percentage = percentage;
-    attempt.passed = percentage >= 50;
+    attempt.passed = percentage >= PASS_MARK_PERCENTAGE;
     attempt.completed = true;
     
     saveAttempt(attempt);

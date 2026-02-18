@@ -35,6 +35,15 @@ const CBTPage: React.FC<CBTPageProps> = ({ level, onBack }) => {
   }, [level]);
   
   const handleStartTest = (test: CBTTest) => {
+    // Check weekly limit
+    const userId = localStorage.getItem('userId') || `user-${Date.now()}`;
+    const { attempted, lastAttemptDate } = cbtService.hasAttemptedThisWeek(level, userId);
+    
+    if (attempted) {
+      alert(`You have already taken a CBT this week. You are limited to ONE test per week.\n\nLast attempt: ${lastAttemptDate ? new Date(lastAttemptDate).toLocaleDateString() : 'N/A'}\n\nPlease come back next week for your next test.`);
+      return;
+    }
+    
     setCurrentTest(test);
     setShowPreExamModal(true);
   };
@@ -42,6 +51,15 @@ const CBTPage: React.FC<CBTPageProps> = ({ level, onBack }) => {
   const confirmStartTest = () => {
     if (currentTest) {
       const userId = localStorage.getItem('userId') || `user-${Date.now()}`;
+      
+      // Double-check weekly limit
+      const { attempted } = cbtService.hasAttemptedThisWeek(level, userId);
+      if (attempted) {
+        alert('You have already taken a CBT this week. Please come back next week.');
+        setShowPreExamModal(false);
+        return;
+      }
+      
       const attempt = cbtService.startTest(currentTest, userId);
       setCurrentAttempt(attempt);
       setShowPreExamModal(false);

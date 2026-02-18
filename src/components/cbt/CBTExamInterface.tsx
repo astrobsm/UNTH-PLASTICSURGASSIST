@@ -23,7 +23,219 @@ const CBTExamInterface: React.FC<CBTExamInterfaceProps> = ({ test, attempt, onSu
   const [tabSwitchCount, setTabSwitchCount] = useState(attempt.tabSwitchCount);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [attentionWarnings, setAttentionWarnings] = useState(0);
+  const [showAttentionAlert, setShowAttentionAlert] = useState(false);
   const examRef = useRef<HTMLDivElement>(null);
+  const lastInteractionRef = useRef<number>(Date.now());
+  
+  // ========== ADVANCED ANTI-CHEATING MEASURES ==========
+  
+  // Anti-cheat: Prevent screenshots via PrintScreen key
+  useEffect(() => {
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'PrintScreen') {
+        // Clear clipboard
+        navigator.clipboard?.writeText('Screenshots are disabled during examination').catch(() => {});
+        setWarningMessage('⚠️ SCREENSHOT ATTEMPT DETECTED! Screenshots are prohibited during the examination. This has been logged.');
+        setShowWarning(true);
+        setTabSwitchCount(prev => {
+          const newCount = prev + 1;
+          cbtService.recordTabSwitch(attempt.id);
+          return newCount;
+        });
+      }
+    };
+    
+    document.addEventListener('keyup', handleKeyUp);
+    return () => document.removeEventListener('keyup', handleKeyUp);
+  }, [attempt.id]);
+  
+  // Anti-cheat: Block Windows screenshot shortcuts (Win+Shift+S, Win+PrtSc)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Block Win+Shift+S (Snipping Tool)
+      if (e.metaKey && e.shiftKey && e.key === 'S') {
+        e.preventDefault();
+        setWarningMessage('⚠️ Screen capture tool blocked! Do not attempt to capture the screen during examination.');
+        setShowWarning(true);
+      }
+      // Block Ctrl+PrtSc
+      if (e.ctrlKey && e.key === 'PrintScreen') {
+        e.preventDefault();
+        navigator.clipboard?.writeText('').catch(() => {});
+      }
+    };
+    
+    document.addEventListener('keydown', handleKeyDown, true);
+    return () => document.removeEventListener('keydown', handleKeyDown, true);
+  }, []);
+  
+  // Anti-cheat: Detect screen recording/capture APIs
+  useEffect(() => {
+    // Detect if getDisplayMedia is being called (screen recording)
+    const originalGetDisplayMedia = navigator.mediaDevices?.getDisplayMedia;
+    if (navigator.mediaDevices && originalGetDisplayMedia) {
+      navigator.mediaDevices.getDisplayMedia = async function() {
+        setWarningMessage('⚠️ SCREEN RECORDING ATTEMPT BLOCKED! This activity has been logged and may result in test invalidation.');
+        setShowWarning(true);
+        throw new Error('Screen recording is disabled during examination');
+      };
+      
+      return () => {
+        if (navigator.mediaDevices) {
+          navigator.mediaDevices.getDisplayMedia = originalGetDisplayMedia;
+        }
+      };
+    }
+  }, []);
+  
+  // Anti-cheat: CSS-based screenshot and photo prevention
+  useEffect(() => {
+    // Add anti-screenshot CSS styles
+    const style = document.createElement('style');
+    style.id = 'cbt-anti-cheat-styles';
+    style.textContent = `
+      /* Make screen captures show a black/warning overlay */
+      @media print {
+        body * { display: none !important; }
+        body::after {
+          content: "EXAMINATION CONTENT - PRINTING PROHIBITED";
+          display: block !important;
+          font-size: 48px;
+          color: red;
+          text-align: center;
+          padding: 200px 20px;
+        }
+      }
+      
+      /* Add a subtle dynamic watermark pattern that's hard to photograph */
+      .cbt-exam-watermark {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 9999;
+        opacity: 0.04;
+        background-image: repeating-linear-gradient(
+          45deg,
+          transparent,
+          transparent 100px,
+          rgba(0,0,0,0.1) 100px,
+          rgba(0,0,0,0.1) 101px
+        );
+        animation: cbt-watermark-shift 3s linear infinite;
+      }
+      
+      @keyframes cbt-watermark-shift {
+        0% { transform: translateX(0) translateY(0); }
+        100% { transform: translateX(10px) translateY(10px); }
+      }
+      
+      /* Moire pattern that interferes with phone camera captures */
+      .cbt-moire-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 9998;
+        opacity: 0.015;
+        background: repeating-linear-gradient(
+          0deg,
+          #000 0px,
+          transparent 1px,
+          transparent 3px
+        );
+      }
+    `;
+    document.head.appendChild(style);
+    
+    return () => {
+      const existingStyle = document.getElementById('cbt-anti-cheat-styles');
+      if (existingStyle) existingStyle.remove();
+    };
+  }, []);
+  
+  // Anti-cheat: Monitor user attention (inactivity detection)
+  useEffect(() => {
+    const INACTIVITY_THRESHOLD = 30000; // 30 seconds of no interaction
+    
+    const updateInteraction = () => {
+      lastInteractionRef.current = Date.now();
+      if (showAttentionAlert) setShowAttentionAlert(false);
+    };
+    
+    const checkInactivity = setInterval(() => {
+      const elapsed = Date.now() - lastInteractionRef.current;
+      if (elapsed > INACTIVITY_THRESHOLD) {
+        setAttentionWarnings(prev => prev + 1);
+        setShowAttentionAlert(true);
+        setWarningMessage('⚠️ ATTENTION CHECK: No activity detected. Please focus on your examination. Extended inactivity may be flagged as suspicious.');
+        setShowWarning(true);
+        lastInteractionRef.current = Date.now(); // Reset to avoid spam
+      }
+    }, 5000);
+    
+    // Track mouse/touch/keyboard interactions
+    document.addEventListener('mousemove', updateInteraction);
+    document.addEventListener('mousedown', updateInteraction);
+    document.addEventListener('touchstart', updateInteraction);
+    document.addEventListener('keydown', updateInteraction);
+    document.addEventListener('scroll', updateInteraction);
+    
+    return () => {
+      clearInterval(checkInactivity);
+      document.removeEventListener('mousemove', updateInteraction);
+      document.removeEventListener('mousedown', updateInteraction);
+      document.removeEventListener('touchstart', updateInteraction);
+      document.removeEventListener('keydown', updateInteraction);
+      document.removeEventListener('scroll', updateInteraction);
+    };
+  }, [showAttentionAlert]);
+  
+  // Anti-cheat: Detect window resize (possible screen sharing)
+  useEffect(() => {
+    let lastWidth = window.innerWidth;
+    let lastHeight = window.innerHeight;
+    
+    const handleResize = () => {
+      const widthDiff = Math.abs(window.innerWidth - lastWidth);
+      const heightDiff = Math.abs(window.innerHeight - lastHeight);
+      
+      // Significant resize may indicate screen sharing or dev tools
+      if (widthDiff > 200 || heightDiff > 200) {
+        setWarningMessage('⚠️ Significant window resize detected. Please maintain fullscreen mode during the examination.');
+        setShowWarning(true);
+      }
+      
+      lastWidth = window.innerWidth;
+      lastHeight = window.innerHeight;
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+  
+  // Anti-cheat: Prevent drag/drop of content from exam
+  useEffect(() => {
+    const handleDrag = (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    
+    document.addEventListener('dragstart', handleDrag, true);
+    document.addEventListener('drop', handleDrag, true);
+    
+    return () => {
+      document.removeEventListener('dragstart', handleDrag, true);
+      document.removeEventListener('drop', handleDrag, true);
+    };
+  }, []);
+  
+  // ========== END ANTI-CHEATING MEASURES ==========
   
   // Timer effect
   useEffect(() => {
@@ -198,7 +410,19 @@ const CBTExamInterface: React.FC<CBTExamInterfaceProps> = ({ test, attempt, onSu
   const isTimeCritical = timeRemaining <= 60; // 1 minute critical
   
   return (
-    <div ref={examRef} className="fixed inset-0 bg-gray-100 z-50 flex flex-col">
+    <div ref={examRef} className="fixed inset-0 bg-gray-100 z-50 flex flex-col" style={{ userSelect: 'none', WebkitUserSelect: 'none' }}>
+      {/* Anti-screenshot watermark overlay */}
+      <div className="cbt-exam-watermark" />
+      {/* Anti-phone-photo moire overlay */}
+      <div className="cbt-moire-overlay" />
+      
+      {/* Attention monitoring indicator */}
+      {attentionWarnings > 0 && (
+        <div className="absolute top-16 right-4 z-40 flex items-center gap-2 bg-amber-100 border border-amber-300 rounded-full px-3 py-1 text-xs text-amber-800">
+          <span className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
+          Attention alerts: {attentionWarnings}
+        </div>
+      )}
       {/* Warning Modal */}
       {showWarning && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -348,7 +572,7 @@ const CBTExamInterface: React.FC<CBTExamInterfaceProps> = ({ test, attempt, onSu
         
         {/* Question Content */}
         <div className="flex-1 overflow-y-auto p-4 md:p-8 min-w-0">
-          <div className="max-w-3xl mx-auto">
+          <div className="max-w-4xl mx-auto">
             {/* Mobile Question Navigator */}
             <div className="md:hidden mb-4">
               <div className="flex items-center gap-2 overflow-x-auto pb-2">
@@ -401,14 +625,15 @@ const CBTExamInterface: React.FC<CBTExamInterfaceProps> = ({ test, attempt, onSu
             </div>
             
             {/* Clinical Scenario */}
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 md:p-6 mb-6">
-              <h3 className="text-sm font-semibold text-blue-800 mb-2 uppercase tracking-wide">Clinical Scenario</h3>
-              <p className="text-blue-900 text-base md:text-lg leading-relaxed whitespace-pre-wrap break-words">{question.clinicalScenario}</p>
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 md:p-8 mb-6">
+              <h3 className="text-sm font-semibold text-blue-800 mb-3 uppercase tracking-wide">Clinical Scenario</h3>
+              <p className="text-blue-900 text-lg md:text-xl leading-relaxed whitespace-pre-wrap break-words">{question.clinicalScenario}</p>
             </div>
             
             {/* Question */}
-            <div className="mb-6">
-              <p className="text-lg md:text-xl font-semibold text-gray-900 leading-relaxed break-words">{question.question}</p>
+            <div className="mb-8 bg-gray-50 border border-gray-200 rounded-xl p-5 md:p-8">
+              <h3 className="text-sm font-semibold text-gray-500 mb-3 uppercase tracking-wide">Question</h3>
+              <p className="text-xl md:text-2xl font-semibold text-gray-900 leading-relaxed break-words">{question.question}</p>
             </div>
             
             {/* Options */}
@@ -418,21 +643,21 @@ const CBTExamInterface: React.FC<CBTExamInterfaceProps> = ({ test, attempt, onSu
                 <button
                   key={option}
                   onClick={() => handleAnswerSelect(question.id, option)}
-                  className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
+                  className={`w-full text-left p-4 md:p-5 rounded-xl border-2 transition-all ${
                     answers[question.id] === option
                       ? 'border-green-500 bg-green-50 shadow-md'
                       : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                   }`}
                 >
                   <div className="flex items-start gap-3">
-                    <span className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
+                    <span className={`flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center font-bold text-base ${
                       answers[question.id] === option
                         ? 'bg-green-500 text-white'
                         : 'bg-gray-200 text-gray-600'
                     }`}>
                       {option}
                     </span>
-                    <span className={`flex-1 text-base leading-relaxed break-words ${answers[question.id] === option ? 'text-green-900 font-medium' : 'text-gray-700'}`}>
+                    <span className={`flex-1 text-base md:text-lg leading-relaxed break-words ${answers[question.id] === option ? 'text-green-900 font-medium' : 'text-gray-700'}`}>
                       {question.options[option]}
                     </span>
                   </div>

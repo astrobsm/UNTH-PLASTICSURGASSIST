@@ -18,6 +18,9 @@ const CBTTestSelection: React.FC<CBTTestSelectionProps> = ({ level, onStartTest,
   const progress = cbtService.getProgress(level);
   const isWithinWindow = cbtService.isWithinTestWindow();
   const nextWindow = cbtService.getNextTestWindow();
+  const userId = localStorage.getItem('userId') || '';
+  const weeklyStatus = cbtService.hasAttemptedThisWeek(level, userId);
+  const hasAttemptedThisWeek = weeklyStatus.attempted;
   
   const getLevelColor = (level: TrainingLevel) => {
     switch (level) {
@@ -88,7 +91,63 @@ const CBTTestSelection: React.FC<CBTTestSelectionProps> = ({ level, onStartTest,
             />
           </div>
         </div>
+        
+        {/* Posting Cycle & Cumulative Score */}
+        <div className="mt-3 flex flex-wrap gap-4 text-sm">
+          {progress.currentPostingCycle > 1 && (
+            <span className="bg-white/20 px-3 py-1 rounded-full">
+              Posting Cycle: {progress.currentPostingCycle}
+            </span>
+          )}
+          <span className="bg-white/20 px-3 py-1 rounded-full">
+            Cumulative Average: {progress.cumulativeAverage.toFixed(0)}%
+          </span>
+          <span className={`px-3 py-1 rounded-full ${progress.passMarkReached ? 'bg-green-400/30' : 'bg-red-400/30'}`}>
+            Sign-out: {progress.passMarkReached ? '✓ Eligible' : `Need ${cbtService.PASS_MARK_PERCENTAGE}%`}
+          </span>
+        </div>
       </div>
+      
+      {/* Weekly Attempt Status */}
+      {hasAttemptedThisWeek && (
+        <div className="p-4 rounded-lg flex items-center gap-3 bg-red-50 border border-red-200">
+          <div className="p-2 rounded-full bg-red-100">
+            <svg className="w-5 h-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <div>
+            <p className="text-red-800 font-medium">
+              Weekly CBT limit reached. You can only take <strong>one CBT per week</strong>.
+            </p>
+            <p className="text-red-600 text-sm mt-1">
+              Last attempt: {weeklyStatus.lastAttemptDate ? new Date(weeklyStatus.lastAttemptDate).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' }) : 'N/A'}.
+              Come back next week for your next test.
+            </p>
+          </div>
+        </div>
+      )}
+      
+      {/* Posting Cycle Info */}
+      {progress.currentPostingCycle > 1 && (
+        <div className="p-4 rounded-lg flex items-center gap-3 bg-purple-50 border border-purple-200">
+          <div className="p-2 rounded-full bg-purple-100">
+            <svg className="w-5 h-5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </div>
+          <div>
+            <p className="text-purple-800 font-medium">
+              Posting Cycle {progress.currentPostingCycle} — Scores accumulate across cycles
+            </p>
+            <p className="text-purple-600 text-sm mt-1">
+              Your cumulative average is <strong>{progress.cumulativeAverage.toFixed(1)}%</strong>. 
+              You need <strong>{cbtService.PASS_MARK_PERCENTAGE}%</strong> cumulative average for posting sign-out.
+              {!progress.passMarkReached && ' Additional marks from new tests will be added to your previous scores.'}
+            </p>
+          </div>
+        </div>
+      )}
       
       {/* Test Window Status */}
       <div className={`p-4 rounded-lg flex items-center gap-3 ${
@@ -196,7 +255,7 @@ const CBTTestSelection: React.FC<CBTTestSelectionProps> = ({ level, onStartTest,
                       View Results
                     </button>
                   </div>
-                ) : isNext && isWithinWindow ? (
+                ) : isNext && isWithinWindow && !hasAttemptedThisWeek ? (
                   <button
                     onClick={() => onStartTest(test)}
                     className="w-full py-2 px-4 bg-green-500 hover:bg-green-600 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
@@ -207,6 +266,10 @@ const CBTTestSelection: React.FC<CBTTestSelectionProps> = ({ level, onStartTest,
                     </svg>
                     Start Test
                   </button>
+                ) : isNext && hasAttemptedThisWeek ? (
+                  <div className="text-center py-2 text-red-600 text-sm font-medium">
+                    Weekly limit reached
+                  </div>
                 ) : isNext ? (
                   <div className="text-center py-2 text-amber-600 text-sm">
                     Available Tuesday 8-10 AM
@@ -253,11 +316,23 @@ const CBTTestSelection: React.FC<CBTTestSelectionProps> = ({ level, onStartTest,
           </li>
           <li className="flex items-start gap-2">
             <span className="text-blue-400 mt-0.5">•</span>
-            <strong>Anti-cheating measures</strong> are in place - tab switching is monitored
+            <strong>One CBT per week</strong> — you can only take one test each week (Monday to Sunday)
           </li>
           <li className="flex items-start gap-2">
             <span className="text-blue-400 mt-0.5">•</span>
-            Tests can be taken <strong>offline</strong> - results sync when online
+            <strong>Pass mark is 75%</strong> cumulative average across all tests for posting sign-out
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="text-blue-400 mt-0.5">•</span>
+            If you do not reach 75% by the end of your posting, <strong>a new cycle starts</strong> and additional scores accumulate until you pass
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="text-blue-400 mt-0.5">•</span>
+            <strong>Advanced anti-cheating measures</strong> are active — screen recording, screenshots, tab switching, and phone camera capture are all monitored and blocked
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="text-blue-400 mt-0.5">•</span>
+            Tests can be taken <strong>offline</strong> — results sync when online
           </li>
         </ul>
       </div>
