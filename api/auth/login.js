@@ -88,7 +88,7 @@ async function handleLogin(req, res) {
 
   // Update last login
   try {
-    await query('UPDATE users SET updated_at = NOW() WHERE id = $1', [user.id]);
+    await query('UPDATE users SET last_login = NOW(), updated_at = NOW() WHERE id = $1', [user.id]);
   } catch (e) {
     // Ignore
   }
