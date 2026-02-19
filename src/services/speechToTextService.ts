@@ -1,12 +1,22 @@
 /**
- * Speech-to-Text Service for Medical Dictation
- * Uses Web Speech API with medical terminology support
+ * Speech-to-Text Service for Medical Dictation — Advanced Engine
+ * Uses Web Speech API with robust accumulation, deduplication, and medical terminology support.
+ * 
+ * Key design decisions:
+ * - The SERVICE owns the accumulated transcript across recognition restarts
+ * - Each finalized segment is stored as a separate entry to prevent echoes
+ * - Deduplication compares new segments against recent history
+ * - Consumer components receive ONLY new segments (not the full transcript) via onResult
+ * - The service exposes getFullTranscript() for the complete accumulated text
  */
 
 export interface SpeechRecognitionResult {
+  /** The new text segment (NOT the full transcript — just the new part) */
   transcript: string;
   confidence: number;
   isFinal: boolean;
+  /** The complete accumulated transcript so far (all segments joined) */
+  fullTranscript: string;
 }
 
 export interface SpeechToTextOptions {
@@ -38,7 +48,6 @@ const MEDICAL_CORRECTIONS: Record<string, string> = {
   'necro sis': 'necrosis',
   'cell u litis': 'cellulitis',
   'de his ence': 'dehiscence',
-  'keloid': 'keloid',
   'hyper trophic': 'hypertrophic',
   
   // Anatomy
@@ -46,33 +55,18 @@ const MEDICAL_CORRECTIONS: Record<string, string> = {
   'intra muscular': 'intramuscular',
   'intra venous': 'intravenous',
   'epi dermal': 'epidermal',
-  'dermal': 'dermal',
   
   // Medications
-  'lidocaine': 'lidocaine',
   'epi nephrine': 'epinephrine',
-  'ceftriaxone': 'ceftriaxone',
   'metro nidazole': 'metronidazole',
-  'ampicillin': 'ampicillin',
-  'gentamicin': 'gentamicin',
-  'tramadol': 'tramadol',
-  'paracetamol': 'paracetamol',
-  'diclofenac': 'diclofenac',
   
   // Lab values
-  'hemoglobin': 'hemoglobin',
   'hemo globin': 'hemoglobin',
   'white blood cell': 'WBC',
   'red blood cell': 'RBC',
-  'platelet': 'platelet',
-  'creatinine': 'creatinine',
   'electro lytes': 'electrolytes',
   
   // Common phrases
-  'patient is': 'Patient is',
-  'impression': 'Impression',
-  'plan': 'Plan',
-  'assessment': 'Assessment',
   'vital signs': 'Vital signs',
   'wound is': 'Wound is',
   'no signs of': 'No signs of',
@@ -81,167 +75,118 @@ const MEDICAL_CORRECTIONS: Record<string, string> = {
 
 // Medical abbreviation expansions
 const MEDICAL_ABBREVIATIONS: Record<string, string> = {
-  'bp': 'BP',
-  'hr': 'HR',
-  'rr': 'RR',
-  'spo2': 'SpO2',
-  'temp': 'Temperature',
-  'iv': 'IV',
-  'im': 'IM',
-  'po': 'PO',
-  'bid': 'BD',
-  'tid': 'TDS',
-  'qid': 'QDS',
-  'prn': 'PRN',
-  'stat': 'STAT',
-  'npo': 'NPO',
-  'uo': 'Urine output',
-  'sob': 'SOB',
-  'nkda': 'NKDA',
-  'wbc': 'WBC',
-  'rbc': 'RBC',
-  'hgb': 'Hgb',
-  'hct': 'Hct',
-  'plt': 'Platelets',
-  'bun': 'BUN',
-  'cr': 'Creatinine',
-  'na': 'Na+',
-  'k': 'K+',
-  'cl': 'Cl-',
-  'co2': 'CO2',
-  'ast': 'AST',
-  'alt': 'ALT',
-  'inr': 'INR',
-  'ptt': 'PTT'
+  'bp': 'BP', 'hr': 'HR', 'rr': 'RR', 'spo2': 'SpO2',
+  'iv': 'IV', 'im': 'IM', 'po': 'PO',
+  'bid': 'BD', 'tid': 'TDS', 'qid': 'QDS', 'prn': 'PRN',
+  'stat': 'STAT', 'npo': 'NPO',
+  'sob': 'SOB', 'nkda': 'NKDA',
+  'wbc': 'WBC', 'rbc': 'RBC', 'hgb': 'Hgb', 'hct': 'Hct',
+  'plt': 'Platelets', 'bun': 'BUN', 'cr': 'Creatinine',
+  'na': 'Na+', 'k': 'K+', 'cl': 'Cl-', 'co2': 'CO2',
+  'ast': 'AST', 'alt': 'ALT', 'inr': 'INR', 'ptt': 'PTT'
 };
+
+/**
+ * Normalize text for comparison (lowercase, collapse spaces, trim punctuation)
+ */
+function normalize(text: string): string {
+  return text.toLowerCase().replace(/[.,!?;:]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Check if `candidate` is a suffix/substring of `existing` or vice-versa (echo detection)
+ */
+function isEchoOrRepeat(existing: string, candidate: string): boolean {
+  const a = normalize(existing);
+  const b = normalize(candidate);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  // Check if one contains the other
+  if (a.includes(b) || b.includes(a)) return true;
+  // Check if the candidate starts/ends with a large overlap (>60%) of existing
+  const minLen = Math.min(a.length, b.length);
+  const overlapThreshold = Math.floor(minLen * 0.6);
+  if (overlapThreshold < 5) return false;
+  // Check trailing overlap: end of existing matches start of candidate
+  for (let len = overlapThreshold; len <= minLen; len++) {
+    if (a.endsWith(b.substring(0, len))) return true;
+    if (b.endsWith(a.substring(0, len))) return true;
+  }
+  return false;
+}
 
 class SpeechToTextService {
   private recognition: any = null;
   private isListening: boolean = false;
-  private currentTranscript: string = '';
-  private finalizedTranscript: string = '';  // Track what's been finalized
-  private lastFinalIndex: number = 0;        // Track last finalized result index
   private options: SpeechToTextOptions = {};
-  private sessionId: number = 0;             // Track unique session
+
+  /**
+   * ACCUMULATED SEGMENTS: Each finalized speech result is stored as a separate segment.
+   * This array persists across recognition restarts in continuous mode.
+   * The full transcript = segments.join(' ')
+   */
+  private segments: string[] = [];
+
+  /**
+   * The number of finalized results processed in the CURRENT recognition session.
+   * Reset on each recognition restart. Used to know which event.results are new.
+   */
+  private processedFinalCount: number = 0;
+
+  /**
+   * Track whether we're in a deliberate stop (vs. auto-restart)
+   */
+  private deliberatelyStopped: boolean = false;
+
+  /**
+   * Debounce timer for auto-restart
+   */
+  private restartTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * Last interim text, for dedup
+   */
+  private lastInterim: string = '';
 
   constructor() {
     this.initializeRecognition();
   }
 
   private initializeRecognition(): void {
-    // Check for browser support
     const SpeechRecognition = (window as any).SpeechRecognition || 
                               (window as any).webkitSpeechRecognition;
-
     if (!SpeechRecognition) {
       console.warn('Speech Recognition not supported in this browser');
       return;
     }
-
     this.recognition = new SpeechRecognition();
   }
 
-  // Check if speech recognition is supported
   isSupported(): boolean {
     return this.recognition !== null;
   }
 
-  // Start listening
+  /**
+   * Start listening. The service accumulates all finalized text internally.
+   * onResult receives ONLY new segments (isFinal=true) or current interim (isFinal=false).
+   * Both carry `fullTranscript` (the complete accumulated text so far).
+   */
   startListening(options: SpeechToTextOptions = {}): boolean {
     if (!this.recognition) {
       options.onError?.('Speech recognition not supported');
       return false;
     }
-
     if (this.isListening) {
       return false;
     }
 
     this.options = options;
-    this.currentTranscript = '';
-    this.finalizedTranscript = '';
-    this.lastFinalIndex = 0;
-    this.sessionId = Date.now();
+    this.segments = [];
+    this.processedFinalCount = 0;
+    this.deliberatelyStopped = false;
+    this.lastInterim = '';
 
-    // Configure recognition
-    this.recognition.lang = options.language || 'en-US';
-    this.recognition.continuous = options.continuous ?? true;
-    this.recognition.interimResults = options.interimResults ?? true;
-    this.recognition.maxAlternatives = options.maxAlternatives ?? 1;
-
-    // Set up event handlers
-    this.recognition.onstart = () => {
-      this.isListening = true;
-      console.log('🎤 Speech recognition started (session:', this.sessionId, ')');
-      this.options.onStart?.();
-    };
-
-    this.recognition.onresult = (event: any) => {
-      // Build the complete transcript from all results
-      let fullTranscript = '';
-      let currentInterim = '';
-      
-      // Process all results from the beginning to ensure we don't lose anything
-      for (let i = 0; i < event.results.length; i++) {
-        const result = event.results[i];
-        const transcript = result[0].transcript;
-        
-        if (result.isFinal) {
-          // Add finalized text with medical corrections
-          fullTranscript += this.correctMedicalTerms(transcript);
-        } else {
-          // Current interim (only the latest non-final)
-          currentInterim = transcript;
-        }
-      }
-      
-      // Store the finalized transcript
-      this.finalizedTranscript = fullTranscript;
-      this.currentTranscript = fullTranscript + (currentInterim ? ' ' + currentInterim : '');
-      
-      // Send the result
-      // For isFinal, send the complete finalized transcript
-      // For interim, send what's being spoken now
-      const latestResult = event.results[event.results.length - 1];
-      const isFinal = latestResult.isFinal;
-      
-      this.options.onResult?.({
-        transcript: isFinal ? this.finalizedTranscript : this.currentTranscript,
-        confidence: latestResult[0].confidence || 0.9,
-        isFinal: isFinal
-      });
-    };
-
-    this.recognition.onerror = (event: any) => {
-      console.error('Speech recognition error:', event.error);
-      this.options.onError?.(event.error);
-      
-      if (event.error === 'no-speech') {
-        // Auto restart on no-speech if continuous
-        if (this.options.continuous && this.isListening) {
-          setTimeout(() => this.recognition?.start(), 100);
-        }
-      }
-    };
-
-    this.recognition.onend = () => {
-      console.log('🎤 Speech recognition ended');
-      
-      // Auto restart if continuous mode
-      if (this.options.continuous && this.isListening) {
-        setTimeout(() => {
-          try {
-            this.recognition?.start();
-          } catch (e) {
-            this.isListening = false;
-            this.options.onEnd?.();
-          }
-        }, 100);
-      } else {
-        this.isListening = false;
-        this.options.onEnd?.();
-      }
-    };
+    this.setupRecognition();
 
     try {
       this.recognition.start();
@@ -253,27 +198,158 @@ class SpeechToTextService {
     }
   }
 
-  // Stop listening
+  private setupRecognition(): void {
+    const rec = this.recognition;
+    rec.lang = this.options.language || 'en-US';
+    rec.continuous = true;           // Always continuous internally
+    rec.interimResults = this.options.interimResults ?? true;
+    rec.maxAlternatives = 1;
+
+    rec.onstart = () => {
+      this.isListening = true;
+      this.processedFinalCount = 0; // Reset for this session
+      console.log('🎤 Recognition session started');
+      this.options.onStart?.();
+    };
+
+    rec.onresult = (event: any) => {
+      this.handleRecognitionResult(event);
+    };
+
+    rec.onerror = (event: any) => {
+      console.warn('Speech recognition error:', event.error);
+      if (event.error === 'no-speech' || event.error === 'audio-capture') {
+        // Non-fatal — will auto-restart
+        return;
+      }
+      if (event.error === 'aborted') {
+        return; // Normal during restart
+      }
+      this.options.onError?.(event.error);
+    };
+
+    rec.onend = () => {
+      console.log('🎤 Recognition session ended');
+      if (!this.deliberatelyStopped && this.isListening) {
+        // Auto-restart with a small delay to prevent rapid cycling
+        this.restartTimer = setTimeout(() => {
+          if (this.isListening && !this.deliberatelyStopped) {
+            try {
+              console.log('🎤 Auto-restarting recognition...');
+              this.processedFinalCount = 0; // Reset for new session
+              this.recognition.start();
+            } catch (e) {
+              console.error('Auto-restart failed:', e);
+              this.isListening = false;
+              this.options.onEnd?.();
+            }
+          }
+        }, 300);
+      } else {
+        this.isListening = false;
+        this.options.onEnd?.();
+      }
+    };
+  }
+
+  /**
+   * Core result handler. Processes event.results and extracts only NEW finalized segments.
+   */
+  private handleRecognitionResult(event: any): void {
+    let newFinalSegments: string[] = [];
+    let currentInterim = '';
+
+    for (let i = 0; i < event.results.length; i++) {
+      const result = event.results[i];
+      if (result.isFinal) {
+        // Only process if this is a NEW final result (index >= processedFinalCount)
+        if (i >= this.processedFinalCount) {
+          const rawText = result[0].transcript.trim();
+          if (rawText) {
+            const corrected = this.correctMedicalTerms(rawText);
+            // Dedup: check against last 3 segments
+            const recentSegments = this.segments.slice(-3);
+            const isDuplicate = recentSegments.some(seg => isEchoOrRepeat(seg, corrected));
+            if (!isDuplicate) {
+              newFinalSegments.push(corrected);
+            } else {
+              console.log('🔇 Duplicate segment suppressed:', corrected.substring(0, 50));
+            }
+          }
+          this.processedFinalCount = i + 1;
+        }
+      } else {
+        // Interim — always take the latest
+        currentInterim = result[0].transcript.trim();
+      }
+    }
+
+    // Add new segments to accumulated array
+    if (newFinalSegments.length > 0) {
+      this.segments.push(...newFinalSegments);
+      const joinedNew = newFinalSegments.join(' ');
+      const fullTranscript = this.segments.join(' ');
+
+      this.options.onResult?.({
+        transcript: joinedNew,
+        confidence: event.results[event.results.length - 1][0].confidence || 0.9,
+        isFinal: true,
+        fullTranscript
+      });
+      this.lastInterim = '';
+    }
+
+    // Send interim if changed
+    if (currentInterim && currentInterim !== this.lastInterim) {
+      this.lastInterim = currentInterim;
+      const fullSoFar = this.segments.length > 0
+        ? this.segments.join(' ') + ' ' + currentInterim
+        : currentInterim;
+
+      this.options.onResult?.({
+        transcript: currentInterim,
+        confidence: 0.5,
+        isFinal: false,
+        fullTranscript: fullSoFar
+      });
+    }
+  }
+
+  /**
+   * Stop listening. Returns the full accumulated transcript.
+   */
   stopListening(): string {
+    this.deliberatelyStopped = true;
+    if (this.restartTimer) {
+      clearTimeout(this.restartTimer);
+      this.restartTimer = null;
+    }
     if (this.recognition && this.isListening) {
       this.isListening = false;
-      this.recognition.stop();
+      try {
+        this.recognition.stop();
+      } catch (e) {
+        // Already stopped
+      }
       console.log('🎤 Speech recognition stopped');
     }
-    return this.currentTranscript;
+    return this.getFullTranscript();
   }
 
-  // Get current transcript
-  getTranscript(): string {
-    return this.currentTranscript;
+  /**
+   * Get the complete accumulated transcript (all finalized segments joined).
+   */
+  getFullTranscript(): string {
+    return this.segments.join(' ');
   }
 
-  // Clear transcript
-  clearTranscript(): void {
-    this.currentTranscript = '';
+  /**
+   * Get the number of accumulated segments.
+   */
+  getSegmentCount(): number {
+    return this.segments.length;
   }
 
-  // Check if currently listening
   getIsListening(): boolean {
     return this.isListening;
   }
@@ -281,61 +357,42 @@ class SpeechToTextService {
   // Correct common medical misrecognitions
   private correctMedicalTerms(text: string): string {
     let corrected = text;
-
-    // Apply corrections
     for (const [wrong, right] of Object.entries(MEDICAL_CORRECTIONS)) {
       const regex = new RegExp(wrong, 'gi');
       corrected = corrected.replace(regex, right);
     }
-
-    // Expand abbreviations when spoken
     for (const [abbr, full] of Object.entries(MEDICAL_ABBREVIATIONS)) {
-      // Only expand if it's a standalone word
       const regex = new RegExp(`\\b${abbr}\\b`, 'gi');
       corrected = corrected.replace(regex, full);
     }
-
     return corrected;
   }
 
   // Format dictated text with proper punctuation and structure
   formatDictatedText(text: string): string {
     let formatted = text;
-
-    // Capitalize first letter of sentences
     formatted = formatted.replace(/(^\s*\w|[.!?]\s*\w)/g, (c) => c.toUpperCase());
-
-    // Add periods after common medical section headers
     const headers = ['Impression', 'Plan', 'Assessment', 'Diagnosis', 'History', 'Examination', 'Findings'];
     headers.forEach(header => {
       const regex = new RegExp(`(${header})\\s*:?\\s*`, 'gi');
       formatted = formatted.replace(regex, `\n\n${header}:\n`);
     });
-
-    // Format vital signs
     formatted = formatted.replace(/vital signs/gi, '\n\nVital Signs:\n');
-
-    // Format bullet points when "dash" or "bullet" is spoken
     formatted = formatted.replace(/\b(dash|bullet)\s*/gi, '\n• ');
-
-    // Add comma after common transition words
     const transitions = ['however', 'therefore', 'additionally', 'furthermore', 'moreover'];
     transitions.forEach(word => {
       const regex = new RegExp(`\\b${word}\\b`, 'gi');
       formatted = formatted.replace(regex, `${word},`);
     });
-
-    // Clean up extra whitespace
-    formatted = formatted.replace(/\n{3,}/g, '\n\n');
-    formatted = formatted.trim();
-
+    formatted = formatted.replace(/\n{3,}/g, '\n\n').trim();
     return formatted;
   }
 
-  // Add punctuation commands processing
+  // Process punctuation commands
   processPunctuationCommands(text: string): string {
     return text
       .replace(/\bperiod\b/gi, '.')
+      .replace(/\bfull stop\b/gi, '.')
       .replace(/\bcomma\b/gi, ',')
       .replace(/\bquestion mark\b/gi, '?')
       .replace(/\bexclamation mark\b/gi, '!')

@@ -53,10 +53,12 @@ export const SpeechToTextInput: React.FC<SpeechToTextInputProps> = ({
   const [isSpeechSupported, setIsSpeechSupported] = useState(true);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const originalValueRef = useRef<string>('');
+  const currentValueRef = useRef<string>(value);
 
-  // Store the base text value when speech starts
-  const baseTextRef = useRef<string>('');
-  const lastFinalTranscriptRef = useRef<string>('');
+  // Keep currentValueRef in sync with value prop
+  useEffect(() => {
+    currentValueRef.current = value;
+  }, [value]);
 
   // Check speech recognition support
   useEffect(() => {
@@ -64,27 +66,29 @@ export const SpeechToTextInput: React.FC<SpeechToTextInputProps> = ({
     setIsSpeechSupported(!!SpeechRecognition);
   }, []);
 
-  // Handle speech recognition results - IMPROVED to prevent text wiping and repetition
+  // Handle speech recognition results — NEW architecture:
+  // The service sends ONLY new segments via onResult (not the full transcript).
+  // For isFinal: we APPEND the new segment to the current value.
+  // For interim: we show it as a preview suffix.
   const handleSpeechResult = useCallback((result: SpeechRecognitionResult) => {
     if (result.isFinal) {
-      // The service now sends the COMPLETE finalized transcript
-      // We combine with the base text that existed before speech started
-      const baseText = baseTextRef.current.trim();
-      const newSpeechText = result.transcript.trim();
-      
-      // Only update if we have new content and it's different from last
-      if (newSpeechText && newSpeechText !== lastFinalTranscriptRef.current) {
-        lastFinalTranscriptRef.current = newSpeechText;
-        
-        const newValue = baseText 
-          ? `${baseText} ${newSpeechText}`
-          : newSpeechText;
-        onChange(newValue);
-      }
+      const newSegment = result.transcript.trim();
+      if (!newSegment) return;
+
+      // Process punctuation commands
+      const processed = speechToTextService.processPunctuationCommands(newSegment);
+
+      // Use ref to get the LATEST value (avoids stale closure)
+      const currentVal = currentValueRef.current.trim();
+      const separator = currentVal ? ' ' : '';
+      const newValue = currentVal + separator + processed;
+      currentValueRef.current = newValue; // Update ref immediately
+      onChange(newValue);
+
       setInterimTranscript('');
     } else {
       // Show interim results as preview
-      setInterimTranscript(result.transcript);
+      setInterimTranscript(result.transcript || '');
     }
   }, [onChange]);
 
@@ -111,9 +115,6 @@ export const SpeechToTextInput: React.FC<SpeechToTextInputProps> = ({
     } else {
       setSpeechError(null);
       originalValueRef.current = value;
-      // Store the current text as base for this speech session
-      baseTextRef.current = value;
-      lastFinalTranscriptRef.current = '';
       
       try {
         speechToTextService.startListening({

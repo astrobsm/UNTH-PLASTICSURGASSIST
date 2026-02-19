@@ -94,8 +94,13 @@ export const MedicalTextInput: React.FC<MedicalTextInputProps> = ({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
-  const baseTextRef = useRef<string>('');
-  const lastFinalTranscriptRef = useRef<string>('');
+  const preRecordingValueRef = useRef<string>('');
+  const currentValueRef = useRef<string>(value);
+
+  // Keep currentValueRef in sync with value prop
+  useEffect(() => {
+    currentValueRef.current = value;
+  }, [value]);
 
   // Check speech recognition support
   useEffect(() => {
@@ -103,27 +108,29 @@ export const MedicalTextInput: React.FC<MedicalTextInputProps> = ({
     setIsSpeechSupported(!!SpeechRecognition);
   }, []);
 
-  // Speech recognition handlers - IMPROVED to prevent text wiping and repetition
+  // Speech recognition handlers — NEW architecture:
+  // The service sends ONLY new segments via onResult.
+  // For isFinal: transcript = new finalized segment. We APPEND it to the value.
+  // For interim: transcript = current interim text. We show it as preview.
   const handleSpeechResult = useCallback((result: SpeechRecognitionResult) => {
     if (result.isFinal) {
-      // The service now sends the COMPLETE finalized transcript
-      // We combine with the base text that existed before speech started
-      const baseText = baseTextRef.current.trim();
-      const newSpeechText = result.transcript.trim();
-      
-      // Only update if we have new content and it's different from last
-      if (newSpeechText && newSpeechText !== lastFinalTranscriptRef.current) {
-        lastFinalTranscriptRef.current = newSpeechText;
-        
-        const newValue = baseText 
-          ? `${baseText} ${newSpeechText}`
-          : newSpeechText;
-        onChange(newValue);
-      }
+      const newSegment = result.transcript.trim();
+      if (!newSegment) return;
+
+      // Process punctuation commands in the new segment
+      const processed = speechToTextService.processPunctuationCommands(newSegment);
+
+      // Use ref to get the LATEST value (avoids stale closure)
+      const currentVal = currentValueRef.current.trim();
+      const separator = currentVal ? ' ' : '';
+      const newValue = currentVal + separator + processed;
+      currentValueRef.current = newValue; // Update ref immediately
+      onChange(newValue);
+
       setInterimTranscript('');
     } else {
-      // Show interim results as preview
-      setInterimTranscript(result.transcript);
+      // Just update the interim preview
+      setInterimTranscript(result.transcript || '');
     }
   }, [onChange]);
 
@@ -147,9 +154,7 @@ export const MedicalTextInput: React.FC<MedicalTextInputProps> = ({
     } else {
       setInputError(null);
       setOriginalValue(value);
-      // Store the current text as base for this speech session
-      baseTextRef.current = value;
-      lastFinalTranscriptRef.current = '';
+      preRecordingValueRef.current = value;
       
       try {
         speechToTextService.startListening({
