@@ -139,6 +139,12 @@ class SpeechToTextService {
   private deliberatelyStopped: boolean = false;
 
   /**
+   * Whether the browser's SpeechRecognition is actively running.
+   * This is set true in onstart and false in onend — tracks the REAL browser state.
+   */
+  private recognitionActive: boolean = false;
+
+  /**
    * Debounce timer for auto-restart
    */
   private restartTimer: ReturnType<typeof setTimeout> | null = null;
@@ -147,6 +153,12 @@ class SpeechToTextService {
    * Last interim text, for dedup
    */
   private lastInterim: string = '';
+
+  /**
+   * Pending start: if the user calls startListening while recognition is still
+   * shutting down, we queue the start and execute it once onend fires.
+   */
+  private pendingStart: (() => void) | null = null;
 
   constructor() {
     this.initializeRecognition();
@@ -176,23 +188,45 @@ class SpeechToTextService {
       options.onError?.('Speech recognition not supported');
       return false;
     }
-    if (this.isListening) {
+
+    // If already actively listening, ignore
+    if (this.isListening && this.recognitionActive) {
+      console.log('🎤 Already listening, ignoring start request');
       return false;
     }
 
+    // If recognition is still shutting down (active but we called stop), queue the start
+    if (this.recognitionActive) {
+      console.log('🎤 Recognition still active, queuing start for after shutdown...');
+      this.pendingStart = () => this.doStart(options);
+      return true;
+    }
+
+    return this.doStart(options);
+  }
+
+  private doStart(options: SpeechToTextOptions): boolean {
     this.options = options;
     this.segments = [];
     this.processedFinalCount = 0;
     this.deliberatelyStopped = false;
     this.lastInterim = '';
+    this.pendingStart = null;
 
     this.setupRecognition();
 
     try {
       this.recognition.start();
+      this.isListening = true;
       return true;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to start recognition:', error);
+      // If it's already started, mark as listening and let onstart handle it
+      if (error.name === 'InvalidStateError') {
+        console.log('🎤 Recognition already running, will attach to existing session');
+        this.isListening = true;
+        return true;
+      }
       this.options.onError?.('Failed to start recognition');
       return false;
     }
@@ -207,8 +241,9 @@ class SpeechToTextService {
 
     rec.onstart = () => {
       this.isListening = true;
+      this.recognitionActive = true;
       this.processedFinalCount = 0; // Reset for this session
-      console.log('🎤 Recognition session started');
+      console.log('🎤 Recognition session started (recognitionActive=true)');
       this.options.onStart?.();
     };
 
@@ -229,11 +264,23 @@ class SpeechToTextService {
     };
 
     rec.onend = () => {
-      console.log('🎤 Recognition session ended');
+      this.recognitionActive = false;
+      console.log('🎤 Recognition session ended (recognitionActive=false)');
+
+      // If there's a pending start queued (user clicked start while shutting down)
+      if (this.pendingStart) {
+        console.log('🎤 Executing pending start...');
+        const pendingFn = this.pendingStart;
+        this.pendingStart = null;
+        // Small delay to let browser fully clean up
+        setTimeout(() => pendingFn(), 50);
+        return;
+      }
+
       if (!this.deliberatelyStopped && this.isListening) {
         // Auto-restart with a small delay to prevent rapid cycling
         this.restartTimer = setTimeout(() => {
-          if (this.isListening && !this.deliberatelyStopped) {
+          if (this.isListening && !this.deliberatelyStopped && !this.recognitionActive) {
             try {
               console.log('🎤 Auto-restarting recognition...');
               this.processedFinalCount = 0; // Reset for new session
@@ -241,6 +288,7 @@ class SpeechToTextService {
             } catch (e) {
               console.error('Auto-restart failed:', e);
               this.isListening = false;
+              this.recognitionActive = false;
               this.options.onEnd?.();
             }
           }
@@ -320,18 +368,23 @@ class SpeechToTextService {
    */
   stopListening(): string {
     this.deliberatelyStopped = true;
+    this.pendingStart = null; // Cancel any queued start
     if (this.restartTimer) {
       clearTimeout(this.restartTimer);
       this.restartTimer = null;
     }
-    if (this.recognition && this.isListening) {
+    if (this.recognition && (this.isListening || this.recognitionActive)) {
       this.isListening = false;
       try {
         this.recognition.stop();
       } catch (e) {
-        // Already stopped
+        // Already stopped — that's fine
+        this.recognitionActive = false;
       }
-      console.log('🎤 Speech recognition stopped');
+      console.log('🎤 Speech recognition stop requested');
+    } else {
+      this.isListening = false;
+      this.recognitionActive = false;
     }
     return this.getFullTranscript();
   }
