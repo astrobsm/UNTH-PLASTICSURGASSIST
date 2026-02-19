@@ -21,6 +21,7 @@ import {
   TrainingLevel 
 } from '../services/medicalTrainingService';
 import { performanceService } from '../services/performanceService';
+import { cbtService, CBTProgress } from '../services/cbtService';
 import CMEArticleViewer from '../components/training/CMEArticleViewer';
 import { CBTPage } from '../components/cbt';
 import { PerformanceDashboard } from '../components/performance';
@@ -39,6 +40,24 @@ const MedicalTrainingPage: React.FC = () => {
   });
   const [showCBT, setShowCBT] = useState(false);
   const [showPerformance, setShowPerformance] = useState(false);
+  const [cbtProgress, setCbtProgress] = useState<CBTProgress | null>(null);
+  const [cbtWeeklyStatus, setCbtWeeklyStatus] = useState<{ attempted: boolean; lastAttemptDate: string | null }>({ attempted: false, lastAttemptDate: null });
+
+  // Load CBT status for dashboard display
+  useEffect(() => {
+    const loadCbtStatus = () => {
+      try {
+        const progress = cbtService.getProgress(activeTab as any);
+        setCbtProgress(progress);
+        const userId = localStorage.getItem('userId') || `user-${Date.now()}`;
+        const weeklyStatus = cbtService.hasAttemptedThisWeek(activeTab as any, userId);
+        setCbtWeeklyStatus(weeklyStatus);
+      } catch (e) {
+        console.warn('Failed to load CBT status:', e);
+      }
+    };
+    loadCbtStatus();
+  }, [activeTab, showCBT]); // Refresh when returning from CBT page
 
   // Record login on component mount
   useEffect(() => {
@@ -234,23 +253,94 @@ const MedicalTrainingPage: React.FC = () => {
             </div>
           </div>
           
-          {/* CBT Button */}
-          <button
-            onClick={() => setShowCBT(true)}
-            className="mt-6 w-full md:w-auto flex items-center justify-center gap-3 px-6 py-4 bg-white/20 hover:bg-white/30 backdrop-blur rounded-xl font-semibold transition-all group"
-          >
-            <ClipboardCheck className="h-6 w-6" />
-            <div className="text-left">
-              <p className="font-bold">Take Weekly CBT</p>
-              <p className="text-sm text-white/80">Computer-Based Test • 25 MCQs • 10 min</p>
+          {/* CBT Status Card - Dashboard Summary */}
+          <div className="mt-6 bg-white/15 backdrop-blur rounded-xl p-5 border border-white/20">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <ClipboardCheck className="h-7 w-7" />
+                <div>
+                  <h3 className="font-bold text-lg">Weekly CBT Status</h3>
+                  <p className="text-sm text-green-100">Computer-Based Test • 25 MCQs • 10 min</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowCBT(true)}
+                className="px-4 py-2 bg-white text-green-700 rounded-lg font-semibold hover:bg-green-50 transition-colors flex items-center gap-2"
+              >
+                {cbtWeeklyStatus.attempted ? 'View Tests' : 'Take CBT'}
+                <ChevronRight className="h-4 w-4" />
+              </button>
             </div>
-            <ChevronRight className="h-5 w-5 ml-2 group-hover:translate-x-1 transition-transform" />
-          </button>
+
+            {cbtProgress && (
+              <>
+                {/* Progress Bar */}
+                <div className="mb-3">
+                  <div className="flex justify-between text-sm mb-1">
+                    <span>{cbtProgress.completedTests} of {cbtProgress.totalTests} tests completed</span>
+                    <span className="font-bold">{Math.round(cbtProgress.cumulativeAverage)}% avg</span>
+                  </div>
+                  <div className="w-full bg-white/20 rounded-full h-3">
+                    <div 
+                      className={`h-3 rounded-full transition-all ${cbtProgress.cumulativeAverage >= 75 ? 'bg-yellow-400' : 'bg-white/70'}`}
+                      style={{ width: `${Math.min(100, (cbtProgress.completedTests / cbtProgress.totalTests) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Status Row */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                  {/* Cumulative Average */}
+                  <div className="bg-white/10 rounded-lg p-3 text-center">
+                    <p className="text-green-100 text-xs">Cumulative Avg</p>
+                    <p className={`text-xl font-bold ${cbtProgress.cumulativeAverage >= 75 ? 'text-yellow-300' : 'text-white'}`}>
+                      {Math.round(cbtProgress.cumulativeAverage)}%
+                    </p>
+                  </div>
+
+                  {/* Pass Mark */}
+                  <div className="bg-white/10 rounded-lg p-3 text-center">
+                    <p className="text-green-100 text-xs">Pass Mark</p>
+                    <p className="text-xl font-bold">75%</p>
+                  </div>
+
+                  {/* Posting Cycle */}
+                  <div className="bg-white/10 rounded-lg p-3 text-center">
+                    <p className="text-green-100 text-xs">Posting Cycle</p>
+                    <p className="text-xl font-bold">{cbtProgress.currentPostingCycle}</p>
+                  </div>
+
+                  {/* Sign-out Status */}
+                  <div className="bg-white/10 rounded-lg p-3 text-center">
+                    <p className="text-green-100 text-xs">Sign-out</p>
+                    {cbtProgress.passMarkReached ? (
+                      <p className="text-lg font-bold text-yellow-300">✓ Eligible</p>
+                    ) : (
+                      <p className="text-lg font-bold text-red-300">✗ Not yet</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Weekly Limit Banner */}
+                {cbtWeeklyStatus.attempted ? (
+                  <div className="mt-3 bg-red-500/30 border border-red-300/30 rounded-lg px-4 py-2 text-sm flex items-center gap-2">
+                    <span className="text-red-200">⏳</span>
+                    <span>Weekly limit reached. Last attempt: {cbtWeeklyStatus.lastAttemptDate ? new Date(cbtWeeklyStatus.lastAttemptDate).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' }) : 'N/A'}. Come back next week.</span>
+                  </div>
+                ) : (
+                  <div className="mt-3 bg-yellow-500/30 border border-yellow-300/30 rounded-lg px-4 py-2 text-sm flex items-center gap-2">
+                    <span className="text-yellow-200">✦</span>
+                    <span>You can take your weekly CBT now. Click <strong>"Take CBT"</strong> to begin.</span>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
           
           {/* Performance Dashboard Button */}
           <button
             onClick={() => setShowPerformance(true)}
-            className="mt-6 md:mt-0 md:ml-4 w-full md:w-auto flex items-center justify-center gap-3 px-6 py-4 bg-white/20 hover:bg-white/30 backdrop-blur rounded-xl font-semibold transition-all group"
+            className="mt-4 w-full md:w-auto flex items-center justify-center gap-3 px-6 py-4 bg-white/20 hover:bg-white/30 backdrop-blur rounded-xl font-semibold transition-all group"
           >
             <TrendingUp className="h-6 w-6" />
             <div className="text-left">
