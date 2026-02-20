@@ -1107,6 +1107,202 @@ async function createTables() {
       completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
+    -- =====================================================
+    -- CROSS-DEVICE SYNC: PAPERWORK, CME, EDUCATION TABLES
+    -- =====================================================
+
+    -- Paperwork Documents table (consult requests, discharge summaries, medical reports)
+    CREATE TABLE IF NOT EXISTS paperwork_documents (
+      id VARCHAR(100) PRIMARY KEY,
+      type VARCHAR(50) NOT NULL,
+      patient_id VARCHAR(100),
+      patient_name VARCHAR(255),
+      hospital_number VARCHAR(100),
+      title VARCHAR(500),
+      content TEXT,
+      data JSONB DEFAULT '{}',
+      generated_by VARCHAR(50) DEFAULT 'manual',
+      created_by VARCHAR(255),
+      status VARCHAR(50) DEFAULT 'draft',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      last_modified TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- CME Topics table (AI-generated weekly CME topics)
+    CREATE TABLE IF NOT EXISTS cme_topics (
+      id VARCHAR(100) PRIMARY KEY,
+      title VARCHAR(500),
+      category VARCHAR(255),
+      description TEXT,
+      learning_objectives JSONB DEFAULT '[]',
+      content TEXT,
+      key_points JSONB DEFAULT '[]',
+      clinical_pearls JSONB DEFAULT '[]',
+      questions JSONB DEFAULT '[]',
+      generated_from JSONB DEFAULT '{}',
+      week_of VARCHAR(20),
+      estimated_duration INTEGER DEFAULT 30,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- CME Test Sessions table
+    CREATE TABLE IF NOT EXISTS cme_test_sessions (
+      id VARCHAR(100) PRIMARY KEY,
+      user_id VARCHAR(100),
+      topic_id VARCHAR(100),
+      questions JSONB DEFAULT '[]',
+      answers JSONB DEFAULT '{}',
+      score INTEGER,
+      started_at TIMESTAMP,
+      completed_at TIMESTAMP,
+      time_spent INTEGER DEFAULT 0,
+      passed BOOLEAN DEFAULT FALSE,
+      certificate_eligible BOOLEAN DEFAULT FALSE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- CME Progress table
+    CREATE TABLE IF NOT EXISTS cme_progress (
+      id SERIAL PRIMARY KEY,
+      user_id VARCHAR(100) NOT NULL,
+      topic_id VARCHAR(100) NOT NULL,
+      completed BOOLEAN DEFAULT FALSE,
+      score DECIMAL(5,2),
+      time_spent INTEGER DEFAULT 0,
+      attempts INTEGER DEFAULT 0,
+      last_attempt TIMESTAMP,
+      certificate_earned BOOLEAN DEFAULT FALSE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id, topic_id)
+    );
+
+    -- CME Certificates table
+    CREATE TABLE IF NOT EXISTS cme_certificates (
+      id VARCHAR(100) PRIMARY KEY,
+      user_id VARCHAR(100),
+      topic_id VARCHAR(100),
+      issued_at TIMESTAMP,
+      valid_until TIMESTAMP,
+      score DECIMAL(5,2),
+      credits_earned DECIMAL(4,1) DEFAULT 1.0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- CME Articles table (WACS curriculum articles)
+    CREATE TABLE IF NOT EXISTS cme_articles (
+      id VARCHAR(100) PRIMARY KEY,
+      topic VARCHAR(500),
+      category VARCHAR(100),
+      subcategory VARCHAR(255),
+      title VARCHAR(500),
+      content TEXT,
+      summary TEXT,
+      learning_objectives JSONB DEFAULT '[]',
+      key_points JSONB DEFAULT '[]',
+      clinical_pearls JSONB DEFAULT '[]',
+      case_studies JSONB DEFAULT '[]',
+      references_list JSONB DEFAULT '[]',
+      author VARCHAR(255) DEFAULT 'AI-CME System',
+      published_date TIMESTAMP,
+      reading_time_minutes INTEGER DEFAULT 15,
+      difficulty_level VARCHAR(50) DEFAULT 'intermediate',
+      related_topics JSONB DEFAULT '[]',
+      mcq_quiz_id VARCHAR(100),
+      view_count INTEGER DEFAULT 0,
+      like_count INTEGER DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- CME Reading Progress table
+    CREATE TABLE IF NOT EXISTS cme_reading_progress (
+      id VARCHAR(100) PRIMARY KEY,
+      user_id VARCHAR(100) NOT NULL,
+      article_id VARCHAR(100) NOT NULL,
+      started_at TIMESTAMP,
+      completed_at TIMESTAMP,
+      progress_percentage DECIMAL(5,2) DEFAULT 0,
+      time_spent_seconds INTEGER DEFAULT 0,
+      liked BOOLEAN DEFAULT FALSE,
+      bookmarked BOOLEAN DEFAULT FALSE,
+      notes TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id, article_id)
+    );
+
+    -- Educational Topics table
+    CREATE TABLE IF NOT EXISTS educational_topics (
+      id VARCHAR(100) PRIMARY KEY,
+      title VARCHAR(500),
+      category VARCHAR(255),
+      description TEXT,
+      target_levels JSONB DEFAULT '[]',
+      keywords JSONB DEFAULT '[]',
+      difficulty VARCHAR(50) DEFAULT 'intermediate',
+      estimated_study_time INTEGER DEFAULT 30,
+      uploaded_by VARCHAR(255),
+      uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      status VARCHAR(50) DEFAULT 'active',
+      weekly_content_generated BOOLEAN DEFAULT FALSE,
+      last_content_generated_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Weekly Contents table (AI-generated weekly educational content)
+    CREATE TABLE IF NOT EXISTS weekly_contents (
+      id VARCHAR(100) PRIMARY KEY,
+      topic_id VARCHAR(100),
+      week_number INTEGER,
+      year INTEGER,
+      content TEXT,
+      references_list JSONB DEFAULT '[]',
+      learning_objectives JSONB DEFAULT '[]',
+      key_takeaways JSONB DEFAULT '[]',
+      clinical_pearls JSONB DEFAULT '[]',
+      case_studies JSONB DEFAULT '[]',
+      generated_at TIMESTAMP,
+      published_at TIMESTAMP,
+      view_count INTEGER DEFAULT 0,
+      target_levels JSONB DEFAULT '[]',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Topic Schedules table
+    CREATE TABLE IF NOT EXISTS topic_schedules (
+      id VARCHAR(100) PRIMARY KEY,
+      topic_id VARCHAR(100),
+      scheduled_week TIMESTAMP,
+      status VARCHAR(50) DEFAULT 'scheduled',
+      notifications_sent BOOLEAN DEFAULT FALSE,
+      target_levels JSONB DEFAULT '[]',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Education User Progress table
+    CREATE TABLE IF NOT EXISTS education_user_progress (
+      id VARCHAR(100) PRIMARY KEY,
+      user_id VARCHAR(100),
+      topic_id VARCHAR(100),
+      weekly_content_id VARCHAR(100),
+      read_at TIMESTAMP,
+      completion_percentage DECIMAL(5,2) DEFAULT 0,
+      time_spent INTEGER DEFAULT 0,
+      mcq_test_taken BOOLEAN DEFAULT FALSE,
+      mcq_score DECIMAL(5,2),
+      notes TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
     -- Clinical indexes for new tables
     CREATE INDEX IF NOT EXISTS idx_sti_assessments_patient ON sti_assessments(patient_id);
     CREATE INDEX IF NOT EXISTS idx_sti_assessments_date ON sti_assessments(assessment_date);
@@ -1129,6 +1325,30 @@ async function createTables() {
     CREATE INDEX IF NOT EXISTS idx_ps_progress_date ON pressure_sore_progress(assessment_date);
     CREATE INDEX IF NOT EXISTS idx_cme_completions_user ON protocol_cme_completions(user_id);
     CREATE INDEX IF NOT EXISTS idx_cme_completions_module ON protocol_cme_completions(module);
+
+    -- Indexes for cross-device sync tables
+    CREATE INDEX IF NOT EXISTS idx_paperwork_patient ON paperwork_documents(patient_id);
+    CREATE INDEX IF NOT EXISTS idx_paperwork_type ON paperwork_documents(type);
+    CREATE INDEX IF NOT EXISTS idx_paperwork_status ON paperwork_documents(status);
+    CREATE INDEX IF NOT EXISTS idx_paperwork_updated ON paperwork_documents(updated_at);
+    CREATE INDEX IF NOT EXISTS idx_cme_topics_week ON cme_topics(week_of);
+    CREATE INDEX IF NOT EXISTS idx_cme_topics_updated ON cme_topics(updated_at);
+    CREATE INDEX IF NOT EXISTS idx_cme_sessions_user ON cme_test_sessions(user_id);
+    CREATE INDEX IF NOT EXISTS idx_cme_sessions_topic ON cme_test_sessions(topic_id);
+    CREATE INDEX IF NOT EXISTS idx_cme_progress_user ON cme_progress(user_id);
+    CREATE INDEX IF NOT EXISTS idx_cme_certificates_user ON cme_certificates(user_id);
+    CREATE INDEX IF NOT EXISTS idx_cme_articles_category ON cme_articles(category);
+    CREATE INDEX IF NOT EXISTS idx_cme_articles_updated ON cme_articles(updated_at);
+    CREATE INDEX IF NOT EXISTS idx_cme_reading_user ON cme_reading_progress(user_id);
+    CREATE INDEX IF NOT EXISTS idx_cme_reading_article ON cme_reading_progress(article_id);
+    CREATE INDEX IF NOT EXISTS idx_edu_topics_status ON educational_topics(status);
+    CREATE INDEX IF NOT EXISTS idx_edu_topics_updated ON educational_topics(updated_at);
+    CREATE INDEX IF NOT EXISTS idx_weekly_contents_topic ON weekly_contents(topic_id);
+    CREATE INDEX IF NOT EXISTS idx_weekly_contents_updated ON weekly_contents(updated_at);
+    CREATE INDEX IF NOT EXISTS idx_topic_schedules_topic ON topic_schedules(topic_id);
+    CREATE INDEX IF NOT EXISTS idx_topic_schedules_status ON topic_schedules(status);
+    CREATE INDEX IF NOT EXISTS idx_edu_progress_user ON education_user_progress(user_id);
+    CREATE INDEX IF NOT EXISTS idx_edu_progress_topic ON education_user_progress(topic_id);
 
     CREATE INDEX IF NOT EXISTS idx_transfusions_patient ON blood_transfusions(patient_id);
     CREATE INDEX IF NOT EXISTS idx_transfusions_date ON blood_transfusions(transfusion_date);

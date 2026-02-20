@@ -1,5 +1,6 @@
 import { db } from '../db/database';
 import { aiService } from './aiService';
+import { apiClient } from './apiClient';
 
 // CME Article Interfaces
 export interface CMEArticle {
@@ -124,6 +125,87 @@ export const WACS_TOPICS = {
 };
 
 class CMEWACSService {
+  // Helper: push entity to server
+  private async pushToServer(entityType: string, entityId: string, payload: any): Promise<void> {
+    try {
+      await apiClient.post('/sync/push', {
+        changes: [{
+          entityType,
+          entityId,
+          action: 'upsert',
+          payload
+        }]
+      });
+    } catch (error) {
+      console.warn(`Failed to push ${entityType} to server:`, error);
+    }
+  }
+
+  // Helper: pull articles from server and sync to local
+  private async pullArticlesFromServer(): Promise<void> {
+    try {
+      const response = await apiClient.get('/sync/cme-articles');
+      if (Array.isArray(response)) {
+        for (const article of response) {
+          try {
+            const parsed = {
+              ...article,
+              learning_objectives: typeof article.learning_objectives === 'string' ? JSON.parse(article.learning_objectives) : (article.learning_objectives || []),
+              key_points: typeof article.key_points === 'string' ? JSON.parse(article.key_points) : (article.key_points || []),
+              clinical_pearls: typeof article.clinical_pearls === 'string' ? JSON.parse(article.clinical_pearls) : (article.clinical_pearls || []),
+              case_studies: typeof article.case_studies === 'string' ? JSON.parse(article.case_studies) : (article.case_studies || []),
+              references: typeof article.references_list === 'string' ? JSON.parse(article.references_list) : (article.references_list || article.references || []),
+              related_topics: typeof article.related_topics === 'string' ? JSON.parse(article.related_topics) : (article.related_topics || []),
+              published_date: new Date(article.published_date),
+              created_at: new Date(article.created_at),
+              updated_at: new Date(article.updated_at),
+            };
+            const existing = await db.cme_articles.get(article.id);
+            if (existing) {
+              await db.cme_articles.update(article.id, parsed);
+            } else {
+              await db.cme_articles.add(parsed);
+            }
+          } catch (e) {
+            console.warn('Error syncing CME article to local:', e);
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to pull CME articles from server:', error);
+    }
+  }
+
+  // Helper: pull reading progress from server 
+  private async pullReadingProgressFromServer(): Promise<void> {
+    try {
+      const response = await apiClient.get('/sync/cme-reading-progress');
+      if (Array.isArray(response)) {
+        for (const prog of response) {
+          try {
+            const parsed = {
+              ...prog,
+              started_at: prog.started_at ? new Date(prog.started_at) : undefined,
+              completed_at: prog.completed_at ? new Date(prog.completed_at) : undefined,
+              created_at: new Date(prog.created_at),
+              updated_at: new Date(prog.updated_at),
+            };
+            const existing = await db.cme_reading_progress.get(prog.id);
+            if (existing) {
+              await db.cme_reading_progress.update(prog.id, parsed);
+            } else {
+              await db.cme_reading_progress.add(parsed);
+            }
+          } catch (e) {
+            console.warn('Error syncing reading progress to local:', e);
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to pull reading progress from server:', error);
+    }
+  }
+
   // Generate AI-powered CME article
   async generateArticle(topicData: { topic: string; category: WACSCategory; difficulty: 'beginner' | 'intermediate' | 'advanced' }): Promise<CMEArticle> {
     const prompt = this.buildArticlePrompt(topicData);
@@ -136,6 +218,12 @@ class CMEWACSService {
       
       // Save to database
       await db.cme_articles.add(article);
+      
+      // Push to server for cross-device sync
+      await this.pushToServer('cme_articles', article.id, {
+        ...article,
+        references_list: article.references,
+      });
       
       return article;
     } catch (error) {
@@ -335,16 +423,31 @@ Please generate the article in HTML format with proper headings, paragraphs, lis
 
   // Get all articles
   async getAllArticles(): Promise<CMEArticle[]> {
+    try {
+      await this.pullArticlesFromServer();
+    } catch (error) {
+      console.warn('Server pull failed for articles, using local:', error);
+    }
     return await db.cme_articles.orderBy('published_date').reverse().toArray();
   }
 
   // Get articles by category
   async getArticlesByCategory(category: WACSCategory): Promise<CMEArticle[]> {
+    try {
+      await this.pullArticlesFromServer();
+    } catch (error) {
+      console.warn('Server pull failed for articles by category, using local:', error);
+    }
     return await db.cme_articles.where('category').equals(category).reverse().sortBy('published_date');
   }
 
   // Get article by ID
   async getArticleById(id: string): Promise<CMEArticle | undefined> {
+    try {
+      await this.pullArticlesFromServer();
+    } catch (error) {
+      console.warn('Server pull failed for article by ID, using local:', error);
+    }
     return await db.cme_articles.get(id);
   }
 
@@ -356,6 +459,11 @@ Please generate the article in HTML format with proper headings, paragraphs, lis
         view_count: article.view_count + 1,
         updated_at: new Date()
       });
+      // Push updated article to server
+      const updated = await db.cme_articles.get(articleId);
+      if (updated) {
+        await this.pushToServer('cme_articles', articleId, { ...updated, references_list: updated.references });
+      }
     }
   }
 
@@ -367,6 +475,11 @@ Please generate the article in HTML format with proper headings, paragraphs, lis
         like_count: article.like_count + 1,
         updated_at: new Date()
       });
+      // Push updated article to server
+      const updated = await db.cme_articles.get(articleId);
+      if (updated) {
+        await this.pushToServer('cme_articles', articleId, { ...updated, references_list: updated.references });
+      }
     }
   }
 
@@ -384,6 +497,8 @@ Please generate the article in HTML format with proper headings, paragraphs, lis
         ...progress,
         updated_at: now
       });
+      // Push to server
+      await this.pushToServer('cme_reading_progress', existing.id, { ...progress, updated_at: now, id: existing.id });
       return existing.id;
     } else {
       const id = `progress_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -394,12 +509,19 @@ Please generate the article in HTML format with proper headings, paragraphs, lis
         updated_at: now
       };
       await db.cme_reading_progress.add(newProgress);
+      // Push to server
+      await this.pushToServer('cme_reading_progress', id, newProgress);
       return id;
     }
   }
 
   // Get user's reading progress for an article
   async getReadingProgress(userId: string, articleId: string): Promise<CMEReadingProgress | undefined> {
+    try {
+      await this.pullReadingProgressFromServer();
+    } catch (error) {
+      console.warn('Server pull failed for reading progress, using local:', error);
+    }
     return await db.cme_reading_progress
       .where('[user_id+article_id]')
       .equals([userId, articleId])
@@ -408,6 +530,12 @@ Please generate the article in HTML format with proper headings, paragraphs, lis
 
   // Get user's completed articles
   async getCompletedArticles(userId: string): Promise<CMEArticle[]> {
+    try {
+      await this.pullReadingProgressFromServer();
+      await this.pullArticlesFromServer();
+    } catch (error) {
+      console.warn('Server pull failed for completed articles, using local:', error);
+    }
     const completedProgress = await db.cme_reading_progress
       .where('user_id')
       .equals(userId)
@@ -422,6 +550,12 @@ Please generate the article in HTML format with proper headings, paragraphs, lis
 
   // Get user's bookmarked articles
   async getBookmarkedArticles(userId: string): Promise<CMEArticle[]> {
+    try {
+      await this.pullReadingProgressFromServer();
+      await this.pullArticlesFromServer();
+    } catch (error) {
+      console.warn('Server pull failed for bookmarked articles, using local:', error);
+    }
     const bookmarkedProgress = await db.cme_reading_progress
       .where('user_id')
       .equals(userId)
@@ -436,6 +570,11 @@ Please generate the article in HTML format with proper headings, paragraphs, lis
 
   // Search articles
   async searchArticles(query: string): Promise<CMEArticle[]> {
+    try {
+      await this.pullArticlesFromServer();
+    } catch (error) {
+      console.warn('Server pull failed for article search, using local:', error);
+    }
     const allArticles = await db.cme_articles.toArray();
     const lowerQuery = query.toLowerCase();
     
@@ -489,6 +628,11 @@ Please generate the article in HTML format with proper headings, paragraphs, lis
     total_likes: number;
     avg_reading_time: number;
   }> {
+    try {
+      await this.pullArticlesFromServer();
+    } catch (error) {
+      console.warn('Server pull failed for article statistics, using local:', error);
+    }
     const articles = await db.cme_articles.toArray();
     
     const stats = {

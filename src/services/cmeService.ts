@@ -1,5 +1,6 @@
 import { db } from '../db/database';
 import { aiService, CMETopic, CMEQuestion, TestSession, ClinicalData } from './aiService';
+import { apiClient } from './apiClient';
 
 export interface CMEProgress {
   userId: string;
@@ -23,6 +24,57 @@ export interface CMECertificate {
 }
 
 class CMEService {
+  // Helper: push entity to server via sync API
+  private async pushToServer(entityType: string, entityId: string, payload: any): Promise<void> {
+    try {
+      await apiClient.post('/sync/push', {
+        changes: [{
+          entityType,
+          entityId,
+          action: 'upsert',
+          payload
+        }]
+      });
+    } catch (error) {
+      console.warn(`Failed to push ${entityType} to server:`, error);
+    }
+  }
+
+  // Helper: pull CME topics from server
+  private async pullTopicsFromServer(): Promise<CMETopic[]> {
+    try {
+      const response = await apiClient.get('/sync/cme-topics');
+      if (Array.isArray(response)) {
+        for (const topic of response) {
+          try {
+            const parsed = {
+              ...topic,
+              learningObjectives: typeof topic.learning_objectives === 'string' ? JSON.parse(topic.learning_objectives) : (topic.learning_objectives || topic.learningObjectives || []),
+              keyPoints: typeof topic.key_points === 'string' ? JSON.parse(topic.key_points) : (topic.key_points || topic.keyPoints || []),
+              clinicalPearls: typeof topic.clinical_pearls === 'string' ? JSON.parse(topic.clinical_pearls) : (topic.clinical_pearls || topic.clinicalPearls || []),
+              questions: typeof topic.questions === 'string' ? JSON.parse(topic.questions) : (topic.questions || []),
+              generatedFrom: typeof topic.generated_from === 'string' ? JSON.parse(topic.generated_from) : (topic.generated_from || topic.generatedFrom || {}),
+              weekOf: topic.week_of || topic.weekOf,
+              estimatedDuration: topic.estimated_duration || topic.estimatedDuration || 30,
+            };
+            const existing = await db.cmeTopics.get(topic.id);
+            if (existing) {
+              await db.cmeTopics.update(topic.id, parsed);
+            } else {
+              await db.cmeTopics.add(parsed);
+            }
+          } catch (e) {
+            console.warn('Error syncing CME topic to local:', e);
+          }
+        }
+        return response;
+      }
+    } catch (error) {
+      console.warn('Failed to pull CME topics from server:', error);
+    }
+    return [];
+  }
+
   /**
    * Generate weekly CME topic based on clinical data from the application
    */
@@ -35,7 +87,18 @@ class CMEService {
     
     // Store in database
     await this.storeCMETopic(topic);
-    
+
+    // Push to server for cross-device sync
+    await this.pushToServer('cme_topics', topic.id, {
+      ...topic,
+      learning_objectives: topic.learningObjectives,
+      key_points: topic.keyPoints,
+      clinical_pearls: topic.clinicalPearls,
+      generated_from: topic.generatedFrom,
+      week_of: topic.weekOf,
+      estimated_duration: topic.estimatedDuration,
+    });
+
     return topic;
   }
 
@@ -43,6 +106,12 @@ class CMEService {
    * Get all available CME topics
    */
   async getAllTopics(): Promise<CMETopic[]> {
+    try {
+      // Try server first for cross-device sync
+      await this.pullTopicsFromServer();
+    } catch (error) {
+      console.warn('Server pull failed for CME topics, using local:', error);
+    }
     try {
       return await db.cmeTopics.orderBy('weekOf').reverse().toArray();
     } catch (error) {
@@ -55,6 +124,11 @@ class CMEService {
    * Get a specific CME topic by ID
    */
   async getTopic(topicId: string): Promise<CMETopic | undefined> {
+    try {
+      await this.pullTopicsFromServer();
+    } catch (error) {
+      console.warn('Server pull failed for CME topic, using local:', error);
+    }
     try {
       return await db.cmeTopics.get(topicId);
     } catch (error) {
@@ -85,6 +159,17 @@ class CMEService {
     };
 
     await db.testSessions.add(session);
+
+    // Push to server for cross-device sync
+    await this.pushToServer('cme_test_sessions', session.id, {
+      ...session,
+      user_id: session.userId,
+      topic_id: session.topicId,
+      started_at: session.startedAt,
+      time_spent: session.timeSpent,
+      certificate_eligible: session.certificateEligible,
+    });
+
     return session;
   }
 
@@ -115,6 +200,17 @@ class CMEService {
 
     await db.testSessions.put(updatedSession);
 
+    // Push updated session to server
+    await this.pushToServer('cme_test_sessions', updatedSession.id, {
+      ...updatedSession,
+      user_id: updatedSession.userId,
+      topic_id: updatedSession.topicId,
+      started_at: updatedSession.startedAt,
+      completed_at: updatedSession.completedAt,
+      time_spent: updatedSession.timeSpent,
+      certificate_eligible: updatedSession.certificateEligible,
+    });
+
     // Update progress
     await this.updateProgress(session.userId, session.topicId, updatedSession);
 
@@ -131,6 +227,39 @@ class CMEService {
    */
   async getUserProgress(userId: string): Promise<CMEProgress[]> {
     try {
+      // Pull progress from server
+      const response = await apiClient.get('/sync/cme-progress');
+      if (Array.isArray(response)) {
+        for (const prog of response) {
+          try {
+            const parsed = {
+              userId: prog.user_id || prog.userId,
+              topicId: prog.topic_id || prog.topicId,
+              completed: prog.completed,
+              score: prog.score,
+              timeSpent: prog.time_spent || prog.timeSpent || 0,
+              attempts: prog.attempts || 0,
+              lastAttempt: new Date(prog.last_attempt || prog.lastAttempt || prog.updated_at),
+              certificateEarned: prog.certificate_earned || prog.certificateEarned || false,
+            };
+            const existing = await db.cmeProgress
+              .where(['userId', 'topicId'])
+              .equals([parsed.userId, parsed.topicId])
+              .first();
+            if (existing) {
+              await db.cmeProgress.put({ ...existing, ...parsed });
+            } else {
+              await db.cmeProgress.add(parsed);
+            }
+          } catch (e) {
+            console.warn('Error syncing CME progress to local:', e);
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('Server pull failed for CME progress, using local:', error);
+    }
+    try {
       return await db.cmeProgress.where('userId').equals(userId).toArray();
     } catch (error) {
       console.error('Error fetching user progress:', error);
@@ -143,12 +272,39 @@ class CMEService {
    */
   async getUserCertificates(userId: string): Promise<CMECertificate[]> {
     try {
+      // Pull certificates from server
+      const response = await apiClient.get('/sync/cme-certificates');
+      if (Array.isArray(response)) {
+        for (const cert of response) {
+          try {
+            const parsed = {
+              id: cert.id,
+              userId: cert.user_id || cert.userId,
+              topicId: cert.topic_id || cert.topicId,
+              issuedAt: new Date(cert.issued_at || cert.issuedAt),
+              validUntil: new Date(cert.valid_until || cert.validUntil),
+              score: cert.score,
+              creditsEarned: cert.credits_earned || cert.creditsEarned || 1.0,
+            };
+            const existing = await db.cmeCertificates.get(cert.id);
+            if (existing) {
+              await db.cmeCertificates.update(cert.id, parsed);
+            } else {
+              await db.cmeCertificates.add(parsed);
+            }
+          } catch (e) {
+            console.warn('Error syncing CME certificate to local:', e);
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('Server pull failed for CME certificates, using local:', error);
+    }
+    try {
       const certificates = await db.cmeCertificates
         .where('userId')
         .equals(userId)
         .toArray();
-      
-      // Sort manually since Dexie doesn't support orderBy after where clause
       return certificates.sort((a, b) => new Date(b.issuedAt).getTime() - new Date(a.issuedAt).getTime());
     } catch (error) {
       console.error('Error fetching user certificates:', error);
@@ -314,6 +470,16 @@ class CMEService {
   private async storeCMETopic(topic: CMETopic): Promise<void> {
     try {
       await db.cmeTopics.add(topic);
+      // Push to server
+      await this.pushToServer('cme_topics', topic.id, {
+        ...topic,
+        learning_objectives: topic.learningObjectives,
+        key_points: topic.keyPoints,
+        clinical_pearls: topic.clinicalPearls,
+        generated_from: topic.generatedFrom,
+        week_of: topic.weekOf,
+        estimated_duration: topic.estimatedDuration,
+      });
     } catch (error) {
       console.error('Error storing CME topic:', error);
       throw error;
@@ -360,6 +526,18 @@ class CMEService {
       } else {
         await db.cmeProgress.add(progress);
       }
+
+      // Push progress to server
+      await this.pushToServer('cme_progress', `${userId}_${topicId}`, {
+        user_id: userId,
+        topic_id: topicId,
+        completed: progress.completed,
+        score: progress.score,
+        time_spent: progress.timeSpent,
+        attempts: progress.attempts,
+        last_attempt: progress.lastAttempt,
+        certificate_earned: progress.certificateEarned,
+      });
     } catch (error) {
       console.error('Error updating progress:', error);
     }
@@ -378,6 +556,16 @@ class CMEService {
       };
 
       await db.cmeCertificates.add(certificate);
+
+      // Push certificate to server
+      await this.pushToServer('cme_certificates', certificate.id, {
+        ...certificate,
+        user_id: certificate.userId,
+        topic_id: certificate.topicId,
+        issued_at: certificate.issuedAt,
+        valid_until: certificate.validUntil,
+        credits_earned: certificate.creditsEarned,
+      });
     } catch (error) {
       console.error('Error generating certificate:', error);
     }

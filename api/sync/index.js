@@ -91,6 +91,40 @@ export default async function handler(req, res) {
         if (action === 'who-safety-checklists' || action === 'who_safety_checklists') {
           return await getSyncEntity('who_safety_checklists', res);
         }
+        // Paperwork, CME, Education tables
+        if (action === 'paperwork-documents' || action === 'paperwork_documents') {
+          return await getSyncEntity('paperwork_documents', res);
+        }
+        if (action === 'cme-topics' || action === 'cme_topics') {
+          return await getSyncEntity('cme_topics', res);
+        }
+        if (action === 'cme-test-sessions' || action === 'cme_test_sessions') {
+          return await getSyncEntity('cme_test_sessions', res);
+        }
+        if (action === 'cme-progress' || action === 'cme_progress') {
+          return await getSyncEntity('cme_progress', res);
+        }
+        if (action === 'cme-certificates' || action === 'cme_certificates') {
+          return await getSyncEntity('cme_certificates', res);
+        }
+        if (action === 'cme-articles' || action === 'cme_articles') {
+          return await getSyncEntity('cme_articles', res);
+        }
+        if (action === 'cme-reading-progress' || action === 'cme_reading_progress') {
+          return await getSyncEntity('cme_reading_progress', res);
+        }
+        if (action === 'educational-topics' || action === 'educational_topics') {
+          return await getSyncEntity('educational_topics', res);
+        }
+        if (action === 'weekly-contents' || action === 'weekly_contents') {
+          return await getSyncEntity('weekly_contents', res);
+        }
+        if (action === 'topic-schedules' || action === 'topic_schedules') {
+          return await getSyncEntity('topic_schedules', res);
+        }
+        if (action === 'education-user-progress' || action === 'education_user_progress') {
+          return await getSyncEntity('education_user_progress', res);
+        }
         return await getSyncStatus(auth.user, res);
       default:
         res.status(405).json({ error: 'Method not allowed' });
@@ -249,7 +283,10 @@ async function handlePush(data, user, res) {
       const clinicalEntities = [
         'blood_transfusions', 'burn_patients', 'diabetic_foot_assessments',
         'preoperative_assessments', 'dvt_assessments', 'pressure_sore_assessments',
-        'nutritional_assessments', 'procedures', 'who_safety_checklists'
+        'nutritional_assessments', 'procedures', 'who_safety_checklists',
+        'paperwork_documents', 'cme_topics', 'cme_test_sessions',
+        'cme_progress', 'cme_certificates', 'cme_articles', 'cme_reading_progress',
+        'educational_topics', 'weekly_contents', 'topic_schedules', 'education_user_progress'
       ];
       
       if (clinicalEntities.includes(entityType) && payload) {
@@ -364,7 +401,19 @@ async function handlePull(data, user, res) {
     cbt_tests: { table: 'cbt_tests', userField: null },
     cbt_attempts: { table: 'cbt_attempts', userField: 'user_id' },
     activity_logs: { table: 'activity_logs', userField: 'user_id' },
-    duty_assignments: { table: 'duty_assignments', userField: 'user_id' }
+    duty_assignments: { table: 'duty_assignments', userField: 'user_id' },
+    // Paperwork, CME, Education tables
+    paperwork_documents: { table: 'paperwork_documents', userField: null },
+    cme_topics: { table: 'cme_topics', userField: null },
+    cme_test_sessions: { table: 'cme_test_sessions', userField: null },
+    cme_progress: { table: 'cme_progress', userField: null },
+    cme_certificates: { table: 'cme_certificates', userField: null },
+    cme_articles: { table: 'cme_articles', userField: null },
+    cme_reading_progress: { table: 'cme_reading_progress', userField: null },
+    educational_topics: { table: 'educational_topics', userField: null },
+    weekly_contents: { table: 'weekly_contents', userField: null },
+    topic_schedules: { table: 'topic_schedules', userField: null },
+    education_user_progress: { table: 'education_user_progress', userField: null }
   };
 
   for (const [entityName, config] of Object.entries(entityConfigs)) {

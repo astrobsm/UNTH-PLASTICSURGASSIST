@@ -1,6 +1,7 @@
 import { db } from '../db/database';
 import { aiService } from './aiService';
 import { notificationService } from './notificationService';
+import { apiClient } from './apiClient';
 
 // Interfaces
 export interface EducationalTopic {
@@ -75,6 +76,141 @@ export interface UserProgress {
 }
 
 class TopicManagementService {
+
+  // --- Server sync helpers ---
+
+  private async pushToServer(entityType: string, entityId: string, payload: any): Promise<void> {
+    try {
+      const token = apiClient.getToken();
+      if (!token) return;
+      await apiClient.post('/api/sync/push', {
+        entities: [{
+          entityType,
+          entityId,
+          action: 'upsert',
+          data: payload,
+          timestamp: new Date().toISOString()
+        }]
+      });
+    } catch (error) {
+      console.warn(`Failed to push ${entityType} to server:`, error);
+    }
+  }
+
+  private async pullTopicsFromServer(): Promise<void> {
+    try {
+      const token = apiClient.getToken();
+      if (!token) return;
+      const response = await apiClient.get('/api/sync/educational-topics');
+      if (response && Array.isArray(response)) {
+        for (const row of response) {
+          const topic: EducationalTopic = {
+            id: row.id,
+            title: row.title,
+            category: row.category,
+            description: row.description || '',
+            targetLevels: typeof row.target_levels === 'string' ? JSON.parse(row.target_levels) : (row.target_levels || []),
+            keywords: typeof row.keywords === 'string' ? JSON.parse(row.keywords) : (row.keywords || []),
+            difficulty: row.difficulty || 'intermediate',
+            estimatedStudyTime: row.estimated_study_time || 30,
+            uploadedBy: row.uploaded_by || '',
+            uploadedAt: new Date(row.uploaded_at || row.created_at),
+            status: row.status || 'active',
+            weeklyContentGenerated: row.weekly_content_generated || false,
+            lastContentGeneratedAt: row.last_content_generated_at ? new Date(row.last_content_generated_at) : undefined
+          };
+          await db.educational_topics.put(topic);
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to pull educational topics from server:', error);
+    }
+  }
+
+  private async pullWeeklyContentsFromServer(): Promise<void> {
+    try {
+      const token = apiClient.getToken();
+      if (!token) return;
+      const response = await apiClient.get('/api/sync/weekly-contents');
+      if (response && Array.isArray(response)) {
+        for (const row of response) {
+          const content: WeeklyContent = {
+            id: row.id,
+            topicId: row.topic_id || '',
+            weekNumber: row.week_number || 0,
+            year: row.year || new Date().getFullYear(),
+            content: row.content || '',
+            references: typeof row.references_list === 'string' ? JSON.parse(row.references_list) : (row.references_list || []),
+            learningObjectives: typeof row.learning_objectives === 'string' ? JSON.parse(row.learning_objectives) : (row.learning_objectives || []),
+            keyTakeaways: typeof row.key_takeaways === 'string' ? JSON.parse(row.key_takeaways) : (row.key_takeaways || []),
+            clinicalPearls: typeof row.clinical_pearls === 'string' ? JSON.parse(row.clinical_pearls) : (row.clinical_pearls || []),
+            caseStudies: typeof row.case_studies === 'string' ? JSON.parse(row.case_studies) : (row.case_studies || []),
+            generatedAt: new Date(row.generated_at || row.created_at),
+            publishedAt: row.published_at ? new Date(row.published_at) : undefined,
+            viewCount: row.view_count || 0,
+            targetLevels: typeof row.target_levels === 'string' ? JSON.parse(row.target_levels) : (row.target_levels || [])
+          };
+          await db.weekly_contents.put(content);
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to pull weekly contents from server:', error);
+    }
+  }
+
+  private async pullSchedulesFromServer(): Promise<void> {
+    try {
+      const token = apiClient.getToken();
+      if (!token) return;
+      const response = await apiClient.get('/api/sync/topic-schedules');
+      if (response && Array.isArray(response)) {
+        for (const row of response) {
+          const schedule: TopicSchedule = {
+            id: row.id,
+            topicId: row.topic_id || '',
+            scheduledWeek: new Date(row.scheduled_week || row.created_at),
+            status: row.status || 'scheduled',
+            notificationsSent: row.notifications_sent || false,
+            targetLevels: typeof row.target_levels === 'string' ? JSON.parse(row.target_levels) : (row.target_levels || []),
+            createdAt: new Date(row.created_at)
+          };
+          await db.topic_schedules.put(schedule);
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to pull topic schedules from server:', error);
+    }
+  }
+
+  private async pullUserProgressFromServer(): Promise<void> {
+    try {
+      const token = apiClient.getToken();
+      if (!token) return;
+      const response = await apiClient.get('/api/sync/education-user-progress');
+      if (response && Array.isArray(response)) {
+        for (const row of response) {
+          const progress: UserProgress = {
+            id: row.id,
+            userId: row.user_id || '',
+            topicId: row.topic_id || '',
+            weeklyContentId: row.weekly_content_id || '',
+            readAt: new Date(row.read_at || row.created_at),
+            completionPercentage: row.completion_percentage || 0,
+            timeSpent: row.time_spent || 0,
+            mcqTestTaken: row.mcq_test_taken || false,
+            mcqScore: row.mcq_score,
+            notes: row.notes || ''
+          };
+          await db.user_progress.put(progress);
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to pull user progress from server:', error);
+    }
+  }
+
+  // --- End server sync helpers ---
+
   // Upload a new topic
   async uploadTopic(topicData: Omit<EducationalTopic, 'id' | 'uploadedAt' | 'status' | 'weeklyContentGenerated'>): Promise<string> {
     const topic: EducationalTopic = {
@@ -86,6 +222,17 @@ class TopicManagementService {
     };
 
     await db.educational_topics.add(topic);
+
+    // Push to server
+    await this.pushToServer('educational_topics', topic.id, {
+      ...topic,
+      target_levels: topic.targetLevels,
+      estimated_study_time: topic.estimatedStudyTime,
+      uploaded_by: topic.uploadedBy,
+      uploaded_at: topic.uploadedAt,
+      weekly_content_generated: topic.weeklyContentGenerated,
+      last_content_generated_at: topic.lastContentGeneratedAt
+    });
 
     // Schedule for next available week
     await this.scheduleTopicForWeek(topic.id, this.getNextAvailableWeek());
@@ -147,11 +294,41 @@ class TopicManagementService {
 
     await db.weekly_contents.add(weeklyContent);
 
+    // Push weekly content to server
+    await this.pushToServer('weekly_contents', weeklyContent.id, {
+      ...weeklyContent,
+      topic_id: weeklyContent.topicId,
+      week_number: weeklyContent.weekNumber,
+      references_list: weeklyContent.references,
+      learning_objectives: weeklyContent.learningObjectives,
+      key_takeaways: weeklyContent.keyTakeaways,
+      clinical_pearls: weeklyContent.clinicalPearls,
+      case_studies: weeklyContent.caseStudies,
+      generated_at: weeklyContent.generatedAt,
+      published_at: weeklyContent.publishedAt,
+      view_count: weeklyContent.viewCount,
+      target_levels: weeklyContent.targetLevels
+    });
+
     // Update topic
     await db.educational_topics.update(topicId, {
       weeklyContentGenerated: true,
       lastContentGeneratedAt: new Date()
     });
+
+    // Push topic update to server
+    const updatedTopic = await db.educational_topics.get(topicId);
+    if (updatedTopic) {
+      await this.pushToServer('educational_topics', topicId, {
+        ...updatedTopic,
+        target_levels: updatedTopic.targetLevels,
+        estimated_study_time: updatedTopic.estimatedStudyTime,
+        uploaded_by: updatedTopic.uploadedBy,
+        uploaded_at: updatedTopic.uploadedAt,
+        weekly_content_generated: updatedTopic.weeklyContentGenerated,
+        last_content_generated_at: updatedTopic.lastContentGeneratedAt
+      });
+    }
 
     // Send notifications to all users in target levels
     await this.sendWeeklyContentNotifications(weeklyContent, topic);
@@ -407,6 +584,17 @@ Format the response as JSON with sections: mainContent, learningObjectives, keyT
     };
 
     await db.topic_schedules.add(schedule);
+
+    // Push schedule to server
+    await this.pushToServer('topic_schedules', schedule.id, {
+      ...schedule,
+      topic_id: schedule.topicId,
+      scheduled_week: schedule.scheduledWeek,
+      notifications_sent: schedule.notificationsSent,
+      target_levels: schedule.targetLevels,
+      created_at: schedule.createdAt
+    });
+
     return schedule.id;
   }
 
@@ -440,16 +628,40 @@ Format the response as JSON with sections: mainContent, learningObjectives, keyT
     };
 
     await db.user_progress.add(progress);
+
+    // Push to server
+    await this.pushToServer('education_user_progress', progress.id, {
+      ...progress,
+      user_id: progress.userId,
+      topic_id: progress.topicId,
+      weekly_content_id: progress.weeklyContentId,
+      read_at: progress.readAt,
+      completion_percentage: progress.completionPercentage,
+      time_spent: progress.timeSpent,
+      mcq_test_taken: progress.mcqTestTaken,
+      mcq_score: progress.mcqScore
+    });
+
     return progress.id;
   }
 
   // Get all topics
   async getAllTopics(): Promise<EducationalTopic[]> {
+    try {
+      await this.pullTopicsFromServer();
+    } catch (error) {
+      console.warn('Server pull failed for topics, using local:', error);
+    }
     return await db.educational_topics.where('status').equals('active').toArray();
   }
 
   // Get recent weekly content
   async getRecentWeeklyContent(limit: number = 10): Promise<WeeklyContent[]> {
+    try {
+      await this.pullWeeklyContentsFromServer();
+    } catch (error) {
+      console.warn('Server pull failed for weekly content, using local:', error);
+    }
     return await db.weekly_contents
       .orderBy('publishedAt')
       .reverse()
@@ -459,6 +671,11 @@ Format the response as JSON with sections: mainContent, learningObjectives, keyT
 
   // Get upcoming schedules
   async getUpcomingSchedules(): Promise<TopicSchedule[]> {
+    try {
+      await this.pullSchedulesFromServer();
+    } catch (error) {
+      console.warn('Server pull failed for schedules, using local:', error);
+    }
     const today = new Date();
     return await db.topic_schedules
       .where('scheduledWeek')
@@ -468,6 +685,11 @@ Format the response as JSON with sections: mainContent, learningObjectives, keyT
 
   // Get user's progress for a topic
   async getUserProgress(userId: string, topicId: string): Promise<UserProgress[]> {
+    try {
+      await this.pullUserProgressFromServer();
+    } catch (error) {
+      console.warn('Server pull failed for user progress, using local:', error);
+    }
     return await db.user_progress
       .where(['userId', 'topicId'])
       .equals([userId, topicId])
@@ -482,6 +704,11 @@ Format the response as JSON with sections: mainContent, learningObjectives, keyT
     topPerformers: any[];
     weakAreas: string[];
   }> {
+    try {
+      await this.pullUserProgressFromServer();
+    } catch (error) {
+      console.warn('Server pull failed for analytics, using local:', error);
+    }
     const users = await db.users.where('role').equals(cadre).toArray();
     const allProgress = await db.user_progress.toArray();
     
@@ -511,6 +738,13 @@ Format the response as JSON with sections: mainContent, learningObjectives, keyT
     const currentWeek = this.getWeekNumber(today);
     const currentYear = today.getFullYear();
 
+    // Pull latest schedules from server
+    try {
+      await this.pullSchedulesFromServer();
+    } catch (error) {
+      console.warn('Server pull failed for weekly automation, using local:', error);
+    }
+
     // Get scheduled topics for this week
     const scheduledTopics = await db.topic_schedules
       .where('status')
@@ -529,6 +763,19 @@ Format the response as JSON with sections: mainContent, learningObjectives, keyT
           status: 'published',
           notificationsSent: true
         });
+
+        // Push schedule update to server
+        const updatedSchedule = await db.topic_schedules.get(schedule.id);
+        if (updatedSchedule) {
+          await this.pushToServer('topic_schedules', schedule.id, {
+            ...updatedSchedule,
+            topic_id: updatedSchedule.topicId,
+            scheduled_week: updatedSchedule.scheduledWeek,
+            notifications_sent: updatedSchedule.notificationsSent,
+            target_levels: updatedSchedule.targetLevels,
+            created_at: updatedSchedule.createdAt
+          });
+        }
       }
     }
   }

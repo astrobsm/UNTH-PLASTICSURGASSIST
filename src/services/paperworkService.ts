@@ -1,4 +1,5 @@
 import { db } from '../db/database';
+import { apiClient } from './apiClient';
 
 export type PaperworkType = 'consult_request' | 'discharge_summary' | 'medical_report';
 
@@ -63,6 +64,58 @@ export interface PaperworkDocument {
 }
 
 class PaperworkService {
+  // Helper: push a document to server
+  private async pushToServer(document: PaperworkDocument): Promise<void> {
+    try {
+      await apiClient.post('/sync/push', {
+        changes: [{
+          entityType: 'paperwork_documents',
+          entityId: document.id,
+          action: 'upsert',
+          payload: {
+            ...document,
+            data: typeof document.data === 'object' ? JSON.stringify(document.data) : document.data
+          }
+        }]
+      });
+    } catch (error) {
+      console.warn('Failed to push paperwork document to server:', error);
+    }
+  }
+
+  // Helper: pull documents from server and sync to local
+  private async pullFromServer(): Promise<PaperworkDocument[]> {
+    const response = await apiClient.get('/sync/paperwork-documents');
+    if (Array.isArray(response)) {
+      // Sync to local DB
+      for (const doc of response) {
+        try {
+          const parsed = {
+            ...doc,
+            data: typeof doc.data === 'string' ? JSON.parse(doc.data) : doc.data,
+            created_at: new Date(doc.created_at),
+            last_modified: new Date(doc.last_modified || doc.updated_at),
+          };
+          const existing = await db.paperwork_documents.get(doc.id);
+          if (existing) {
+            await db.paperwork_documents.update(doc.id, parsed);
+          } else {
+            await db.paperwork_documents.add(parsed as any);
+          }
+        } catch (e) {
+          console.warn('Error syncing paperwork document to local:', e);
+        }
+      }
+      return response.map(doc => ({
+        ...doc,
+        data: typeof doc.data === 'string' ? JSON.parse(doc.data) : doc.data,
+        created_at: new Date(doc.created_at),
+        last_modified: new Date(doc.last_modified || doc.updated_at),
+      }));
+    }
+    return [];
+  }
+
   // Generate AI-powered Consult Request
   async generateConsultRequest(data: ConsultRequestData, userId: string): Promise<PaperworkDocument> {
     const content = this.buildConsultRequestContent(data);
@@ -84,6 +137,8 @@ class PaperworkService {
     };
 
     await db.paperwork_documents.add(document as any);
+    // Push to server for cross-device sync
+    await this.pushToServer(document);
     return document;
   }
 
@@ -154,6 +209,8 @@ University of Nigeria Teaching Hospital
     };
 
     await db.paperwork_documents.add(document as any);
+    // Push to server for cross-device sync
+    await this.pushToServer(document);
     return document;
   }
 
@@ -232,6 +289,8 @@ Date: ${dischargeDate}
     };
 
     await db.paperwork_documents.add(document as any);
+    // Push to server for cross-device sync
+    await this.pushToServer(document);
     return document;
   }
 
@@ -294,11 +353,27 @@ Phone: [Hospital Contact Number]
 
   // Get document by ID
   async getDocument(documentId: string): Promise<PaperworkDocument | undefined> {
+    try {
+      const serverDocs = await this.pullFromServer();
+      const found = serverDocs.find(d => d.id === documentId);
+      if (found) return found;
+    } catch (error) {
+      console.warn('Server fetch failed for document, using local:', error);
+    }
     return await db.paperwork_documents.get(documentId);
   }
 
   // Get all documents for a patient
   async getPatientDocuments(patientId: string): Promise<PaperworkDocument[]> {
+    try {
+      const serverDocs = await this.pullFromServer();
+      const filtered = serverDocs
+        .filter(d => d.patient_id === patientId)
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      if (filtered.length > 0) return filtered;
+    } catch (error) {
+      console.warn('Server fetch failed for patient documents, using local:', error);
+    }
     return await db.paperwork_documents
       .where('patient_id')
       .equals(patientId)
@@ -308,6 +383,15 @@ Phone: [Hospital Contact Number]
 
   // Get documents by type
   async getDocumentsByType(type: PaperworkType): Promise<PaperworkDocument[]> {
+    try {
+      const serverDocs = await this.pullFromServer();
+      const filtered = serverDocs
+        .filter(d => d.type === type)
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      if (filtered.length > 0) return filtered;
+    } catch (error) {
+      console.warn('Server fetch failed for documents by type, using local:', error);
+    }
     return await db.paperwork_documents
       .where('type')
       .equals(type)
@@ -317,10 +401,15 @@ Phone: [Hospital Contact Number]
 
   // Update document
   async updateDocument(documentId: string, updates: Partial<PaperworkDocument>): Promise<void> {
-    await db.paperwork_documents.update(documentId, {
-      ...updates,
-      last_modified: new Date()
-    });
+    const updatedFields = { ...updates, last_modified: new Date() };
+    await db.paperwork_documents.update(documentId, updatedFields);
+    // Push update to server
+    try {
+      const doc = await db.paperwork_documents.get(documentId);
+      if (doc) await this.pushToServer(doc as PaperworkDocument);
+    } catch (error) {
+      console.warn('Failed to push document update to server:', error);
+    }
   }
 
   // Update document status
@@ -329,15 +418,45 @@ Phone: [Hospital Contact Number]
       status,
       last_modified: new Date()
     });
+    // Push status update to server
+    try {
+      const doc = await db.paperwork_documents.get(documentId);
+      if (doc) await this.pushToServer(doc as PaperworkDocument);
+    } catch (error) {
+      console.warn('Failed to push status update to server:', error);
+    }
   }
 
   // Delete document
   async deleteDocument(documentId: string): Promise<void> {
     await db.paperwork_documents.delete(documentId);
+    // Push delete to server
+    try {
+      await apiClient.post('/sync/push', {
+        changes: [{
+          entityType: 'paperwork_documents',
+          entityId: documentId,
+          action: 'delete',
+          payload: { id: documentId }
+        }]
+      });
+    } catch (error) {
+      console.warn('Failed to push document delete to server:', error);
+    }
   }
 
   // Get recent documents
   async getRecentDocuments(limit: number = 10): Promise<PaperworkDocument[]> {
+    try {
+      const serverDocs = await this.pullFromServer();
+      if (serverDocs.length > 0) {
+        return serverDocs
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+          .slice(0, limit);
+      }
+    } catch (error) {
+      console.warn('Server fetch failed for recent documents, using local:', error);
+    }
     const documents = await db.paperwork_documents.toArray();
     return documents
       .sort((a, b) => b.created_at.getTime() - a.created_at.getTime())
