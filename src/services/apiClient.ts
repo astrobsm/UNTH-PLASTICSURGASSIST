@@ -388,8 +388,11 @@ class ApiClient {
     return data.admission;
   }
 
-  async getAdmissions(since?: string) {
-    const query = since ? `?since=${since}` : '';
+  async getAdmissions(since?: string, patientId?: string) {
+    const params: string[] = [];
+    if (since) params.push(`since=${since}`);
+    if (patientId) params.push(`patientId=${patientId}`);
+    const query = params.length > 0 ? `?${params.join('&')}` : '';
     const data = await this.request(`/admissions${query}`);
     return data.admissions || [];
   }
@@ -614,6 +617,47 @@ class ApiClient {
     if (since) query += (query ? '&' : '?') + `since=${since}`;
     const data = await this.request(`/patient-transfers${query}`);
     return data.transfers || [];
+  }
+
+  // Ward Rounds
+  async getWardRounds(startDate?: string, endDate?: string) {
+    let query = '';
+    if (startDate) query += `?startDate=${startDate}`;
+    if (endDate) query += (query ? '&' : '?') + `endDate=${endDate}`;
+    const data = await this.request(`/ward-rounds${query}`);
+    return data.wardRounds || [];
+  }
+
+  async getWardRoundsByPatient(patientId: string) {
+    const data = await this.request(`/ward-rounds?action=by-patient&patientId=${patientId}`);
+    return data.wardRounds || [];
+  }
+
+  async getWardRound(roundId: string) {
+    const data = await this.request(`/ward-rounds?action=detail&roundId=${roundId}`);
+    return data.wardRound;
+  }
+
+  async createWardRound(roundData: any) {
+    const data = await this.request('/ward-rounds?action=create', {
+      method: 'POST',
+      body: JSON.stringify(roundData)
+    });
+    return data.wardRound;
+  }
+
+  async updateWardRound(roundId: string, updateData: any) {
+    const data = await this.request('/ward-rounds?action=update', {
+      method: 'PUT',
+      body: JSON.stringify({ roundId, ...updateData })
+    });
+    return data.wardRound;
+  }
+
+  async deleteWardRound(roundId: string) {
+    return this.request(`/ward-rounds?roundId=${roundId}`, {
+      method: 'DELETE'
+    });
   }
 
   // Health check

@@ -20,7 +20,7 @@ export default function WardRounds() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'stable' | 'deteriorating' | 'critical'>('all');
-  const [filterDate, setFilterDate] = useState<'today' | 'week' | 'month' | 'all'>('today');
+  const [filterDate, setFilterDate] = useState<'today' | 'week' | 'month' | 'all'>('all');
 
   useEffect(() => {
     loadData();

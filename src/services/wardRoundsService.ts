@@ -1,4 +1,5 @@
 import { db } from '../db/database';
+import { apiClient } from './apiClient';
 
 // Round types as requested
 export type RoundType = 'house_officers_round' | 'registrars_round' | 'senior_registrars_round' | 'consultants_round';
@@ -17,15 +18,17 @@ export interface WardRound {
   hospital_number?: string;
   round_date: Date;
   round_time: string;
-  round_type: RoundType; // NEW: Type of ward round
+  round_type: RoundType;
   reviewing_doctor: string;
+  reviewed_by?: string;
   doctor_role: 'consultant' | 'senior_registrar' | 'registrar' | 'house_officer';
-  accompanying_team?: string[]; // NEW: Team members present
+  accompanying_team?: string[];
   
   // Clinical Assessment
   chief_complaint: string;
   clinical_notes: string;
   examination_findings: string;
+  assessment_notes?: string;
   
   // Vitals
   temperature?: number;
@@ -51,8 +54,9 @@ export interface WardRound {
   follow_up_plan: string;
   next_review_date?: Date;
   discharge_planning?: string;
+  plan_changes?: string[];
   
-  // Wound Care (if applicable)
+  // Wound Care
   wound_assessment_done: boolean;
   wound_notes?: string;
   
@@ -72,16 +76,16 @@ export interface WardRound {
   created_at?: Date;
   updated_at?: Date;
   synced?: boolean;
+  server_id?: number | string;
 }
 
-// Clinical image interface for wound photos, lab results, etc.
 export interface ClinicalImage {
   id: string;
   type: 'wound_photo' | 'lab_result' | 'imaging' | 'handwritten_note' | 'other';
   filename: string;
-  data: string; // Base64 encoded image
+  data: string;
   caption?: string;
-  extracted_text?: string; // OCR extracted text for handwritten notes
+  extracted_text?: string;
   timestamp: string;
 }
 
@@ -95,127 +99,374 @@ export interface WardRoundSummary {
   consultations_requested: number;
 }
 
-class WardRoundsService {
-  async createWardRound(round: WardRound): Promise<string> {
-    try {
-      const id = crypto.randomUUID();
-      const now = new Date();
-      
-      // Ensure round_date is a Date object
-      const roundDate = round.round_date instanceof Date 
-        ? round.round_date 
-        : new Date(round.round_date);
-      
-      const roundData = {
-        ...round,
-        round_date: roundDate,
-        id,
-        created_at: now,
-        updated_at: now,
-        synced: false
-      };
+/**
+ * Transform frontend WardRound → server API format
+ */
+function toServerFormat(round: Partial<WardRound>): any {
+  const findingsObj = {
+    chief_complaint: round.chief_complaint || '',
+    clinical_notes: round.clinical_notes || '',
+    examination_findings: round.examination_findings || '',
+    assessment_notes: round.assessment_notes || '',
+    doctor_role: round.doctor_role || '',
+    accompanying_team: round.accompanying_team || [],
+    recent_labs_reviewed: round.recent_labs_reviewed || false,
+    lab_notes: round.lab_notes || '',
+    treatment_plan_updated: round.treatment_plan_updated || false,
+    medications_changed: round.medications_changed || false,
+    medication_changes: round.medication_changes || '',
+    progress_status: round.progress_status || 'stable',
+    complications: round.complications || '',
+    discharge_planning: round.discharge_planning || '',
+    wound_assessment_done: round.wound_assessment_done || false,
+    wound_notes: round.wound_notes || '',
+    consultation_requested: round.consultation_requested || false,
+    consultation_specialty: round.consultation_specialty || '',
+    consultation_reason: round.consultation_reason || '',
+    reviewing_doctor: round.reviewing_doctor || '',
+    lmp: round.lmp || '',
+    patient_name: round.patient_name || '',
+    hospital_number: round.hospital_number || '',
+    round_type: round.round_type || 'house_officers_round',
+    round_time: round.round_time || ''
+  };
 
-      console.log('Creating ward round in DB:', {
-        id,
-        patient_id: roundData.patient_id,
-        round_date: roundData.round_date,
-        reviewing_doctor: roundData.reviewing_doctor
-      });
-      
-      await db.ward_rounds.add(roundData);
-      
-      // Log activity for analytics
-      await this.logActivity({
-        user_name: round.reviewing_doctor,
-        action: 'ward_round_created',
-        patient_id: round.patient_id,
-        details: `Round completed for ${round.patient_name || 'patient'}`
-      });
+  const vitalSigns: any = {};
+  if (round.temperature) vitalSigns.temperature = round.temperature;
+  if (round.pulse) vitalSigns.pulse = round.pulse;
+  if (round.bp_systolic) vitalSigns.bp_systolic = round.bp_systolic;
+  if (round.bp_diastolic) vitalSigns.bp_diastolic = round.bp_diastolic;
+  if (round.respiratory_rate) vitalSigns.respiratory_rate = round.respiratory_rate;
+  if (round.spo2) vitalSigns.spo2 = round.spo2;
 
-      console.log('✅ Ward round created successfully with ID:', id);
-      return id;
-    } catch (error) {
-      console.error('❌ Failed to create ward round:', error);
-      throw error;
+  return {
+    patientId: round.patient_id,
+    roundDate: round.round_date instanceof Date
+      ? round.round_date.toISOString().split('T')[0]
+      : typeof round.round_date === 'string'
+        ? new Date(round.round_date).toISOString().split('T')[0]
+        : new Date().toISOString().split('T')[0],
+    roundType: round.round_type || 'routine',
+    findings: JSON.stringify(findingsObj),
+    vitalSigns,
+    newOrders: round.new_orders ? [round.new_orders] : [],
+    plan: round.follow_up_plan || round.chief_complaint || '',
+    issues: round.complications ? [round.complications] : [],
+    nursingNotes: round.wound_notes || ''
+  };
+}
+
+/**
+ * Transform server API response → frontend WardRound format
+ */
+function fromServerFormat(row: any): WardRound {
+  let findingsObj: any = {};
+  try {
+    if (typeof row.findings === 'string') {
+      findingsObj = JSON.parse(row.findings);
+    } else if (row.findings && typeof row.findings === 'object') {
+      findingsObj = row.findings;
     }
+  } catch {
+    findingsObj = { chief_complaint: row.findings || '' };
   }
 
+  let vitalSigns: any = {};
+  try {
+    if (typeof row.vital_signs === 'string') {
+      vitalSigns = JSON.parse(row.vital_signs);
+    } else if (row.vital_signs && typeof row.vital_signs === 'object') {
+      vitalSigns = row.vital_signs;
+    }
+  } catch { /* ignore */ }
+
+  let issues: string[] = [];
+  try {
+    if (typeof row.issues === 'string') {
+      issues = JSON.parse(row.issues);
+    } else if (Array.isArray(row.issues)) {
+      issues = row.issues;
+    }
+  } catch { /* ignore */ }
+
+  const reviewingDoctor = findingsObj.reviewing_doctor || row.documented_by_name || '';
+
+  return {
+    id: String(row.id),
+    patient_id: String(row.patient_id),
+    patient_name: row.patient_name || findingsObj.patient_name || '',
+    hospital_number: row.hospital_number || findingsObj.hospital_number || '',
+    round_date: new Date(row.round_date),
+    round_time: findingsObj.round_time || '',
+    round_type: findingsObj.round_type || row.round_type || 'house_officers_round',
+    reviewing_doctor: reviewingDoctor,
+    reviewed_by: reviewingDoctor,
+    doctor_role: findingsObj.doctor_role || 'house_officer',
+    accompanying_team: findingsObj.accompanying_team || [],
+    chief_complaint: findingsObj.chief_complaint || row.findings || '',
+    clinical_notes: findingsObj.clinical_notes || '',
+    examination_findings: findingsObj.examination_findings || '',
+    assessment_notes: findingsObj.assessment_notes || findingsObj.clinical_notes || '',
+    temperature: vitalSigns.temperature,
+    pulse: vitalSigns.pulse,
+    bp_systolic: vitalSigns.bp_systolic,
+    bp_diastolic: vitalSigns.bp_diastolic,
+    respiratory_rate: vitalSigns.respiratory_rate,
+    spo2: vitalSigns.spo2,
+    recent_labs_reviewed: findingsObj.recent_labs_reviewed || false,
+    lab_notes: findingsObj.lab_notes || '',
+    treatment_plan_updated: findingsObj.treatment_plan_updated || false,
+    medications_changed: findingsObj.medications_changed || false,
+    medication_changes: findingsObj.medication_changes || '',
+    new_orders: Array.isArray(row.new_orders) ? row.new_orders.join(', ') : (row.new_orders || ''),
+    progress_status: findingsObj.progress_status || 'stable',
+    complications: issues.join(', ') || findingsObj.complications || '',
+    follow_up_plan: row.plan || '',
+    discharge_planning: findingsObj.discharge_planning || '',
+    wound_assessment_done: findingsObj.wound_assessment_done || false,
+    wound_notes: row.nursing_notes || findingsObj.wound_notes || '',
+    consultation_requested: findingsObj.consultation_requested || false,
+    consultation_specialty: findingsObj.consultation_specialty || '',
+    consultation_reason: findingsObj.consultation_reason || '',
+    lmp: findingsObj.lmp || '',
+    plan_changes: [],
+    created_at: row.created_at ? new Date(row.created_at) : undefined,
+    updated_at: row.updated_at ? new Date(row.updated_at) : undefined,
+    synced: true
+  };
+}
+
+class WardRoundsService {
+  /**
+   * Create a ward round — sends to server API, falls back to IndexedDB if offline
+   */
+  async createWardRound(round: Partial<WardRound>): Promise<string> {
+    const id = crypto.randomUUID();
+    const now = new Date();
+
+    const roundDate = round.round_date instanceof Date
+      ? round.round_date
+      : new Date(round.round_date || Date.now());
+
+    const localRound = {
+      ...round,
+      round_date: roundDate,
+      id,
+      created_at: now,
+      updated_at: now,
+      synced: false
+    };
+
+    // Always save to IndexedDB first (offline-first)
+    try {
+      await db.ward_rounds.add(localRound);
+    } catch (e) {
+      console.warn('Could not save ward round to IndexedDB:', e);
+    }
+
+    // Then try sending to server
+    if (navigator.onLine) {
+      try {
+        const serverPayload = toServerFormat(round);
+        const serverResult = await apiClient.createWardRound(serverPayload);
+        console.log('✅ Ward round saved to server:', serverResult?.id);
+
+        // Update local record with server ID and mark as synced
+        if (serverResult?.id) {
+          try {
+            await db.ward_rounds.update(id, {
+              synced: true,
+              server_id: serverResult.id
+            });
+          } catch { /* ignore */ }
+        }
+
+        return serverResult?.id ? String(serverResult.id) : id;
+      } catch (error) {
+        console.warn('⚠️ Could not save ward round to server, kept locally:', error);
+        return id;
+      }
+    }
+
+    return id;
+  }
+
+  /**
+   * Update a ward round
+   */
   async updateWardRound(id: string, updates: Partial<WardRound>): Promise<void> {
+    // Update local
     try {
       await db.ward_rounds.update(id, {
         ...updates,
         updated_at: new Date(),
         synced: false
       });
+    } catch { /* ignore */ }
 
-      await this.logActivity({
-        user_name: updates.reviewing_doctor || 'Unknown',
-        action: 'ward_round_updated',
-        patient_id: updates.patient_id,
-        details: `Ward round updated`
-      });
-    } catch (error) {
-      console.error('Failed to update ward round:', error);
-      throw error;
+    // Update server
+    if (navigator.onLine) {
+      try {
+        const serverPayload = toServerFormat(updates);
+        await apiClient.updateWardRound(id, serverPayload);
+      } catch (error) {
+        console.warn('Could not update ward round on server:', error);
+      }
     }
   }
 
+  /**
+   * Get a single ward round by ID
+   */
   async getWardRound(id: string): Promise<WardRound | undefined> {
+    // Try server first
+    if (navigator.onLine) {
+      try {
+        const serverRound = await apiClient.getWardRound(id);
+        if (serverRound) return fromServerFormat(serverRound);
+      } catch { /* fallback */ }
+    }
+
+    // Fallback to local
     return await db.ward_rounds.get(id);
   }
 
+  /**
+   * Get ward rounds for a specific patient — server first, IndexedDB fallback
+   */
   async getPatientWardRounds(patientId: string): Promise<WardRound[]> {
-    return await db.ward_rounds
-      .where('patient_id')
-      .equals(patientId)
-      .reverse()
-      .sortBy('round_date');
+    if (navigator.onLine) {
+      try {
+        const serverRounds = await apiClient.getWardRoundsByPatient(patientId);
+        if (Array.isArray(serverRounds) && serverRounds.length > 0) {
+          return serverRounds.map(fromServerFormat);
+        }
+      } catch (error) {
+        console.warn('Could not fetch ward rounds from server:', error);
+      }
+    }
+
+    // Fallback to IndexedDB (use filter instead of .where on non-indexed field)
+    try {
+      return await db.ward_rounds
+        .filter(r => r.patient_id === patientId)
+        .reverse()
+        .sortBy('round_date');
+    } catch {
+      return [];
+    }
   }
 
+  /**
+   * Get ALL ward rounds — server first, IndexedDB fallback
+   */
   async getAllWardRounds(): Promise<WardRound[]> {
-    return await db.ward_rounds.reverse().sortBy('round_date');
+    if (navigator.onLine) {
+      try {
+        const serverRounds = await apiClient.getWardRounds();
+        if (Array.isArray(serverRounds)) {
+          const mapped = serverRounds.map(fromServerFormat);
+
+          // Also merge any unsynced local rounds
+          try {
+            const localRounds = await db.ward_rounds
+              .filter(r => !r.synced)
+              .toArray();
+            if (localRounds.length > 0) {
+              return [...localRounds as WardRound[], ...mapped];
+            }
+          } catch { /* ignore */ }
+
+          return mapped;
+        }
+      } catch (error) {
+        console.warn('Could not fetch ward rounds from server, using local:', error);
+      }
+    }
+
+    // Fallback to IndexedDB
+    try {
+      const local = await db.ward_rounds.toArray();
+      return (local as WardRound[]).sort(
+        (a, b) => new Date(b.round_date).getTime() - new Date(a.round_date).getTime()
+      );
+    } catch {
+      return [];
+    }
   }
 
+  /**
+   * Delete a ward round
+   */
+  async deleteWardRound(id: string): Promise<void> {
+    // Delete on server
+    if (navigator.onLine) {
+      try {
+        await apiClient.deleteWardRound(id);
+      } catch (error) {
+        console.warn('Could not delete ward round on server:', error);
+      }
+    }
+
+    // Delete locally
+    try {
+      await db.ward_rounds.delete(id);
+    } catch { /* ignore */ }
+  }
+
+  /**
+   * Alias for deleteWardRound (backward compat)
+   */
+  async deleteRound(id: string): Promise<void> {
+    return this.deleteWardRound(id);
+  }
+
+  /**
+   * Get ward rounds by doctor name
+   */
   async getWardRoundsByDoctor(doctorName: string): Promise<WardRound[]> {
-    return await db.ward_rounds
-      .where('reviewing_doctor')
-      .equals(doctorName)
-      .reverse()
-      .sortBy('round_date');
+    const all = await this.getAllWardRounds();
+    return all.filter(r =>
+      r.reviewing_doctor?.toLowerCase().includes(doctorName.toLowerCase())
+    );
   }
 
+  /**
+   * Get ward rounds for a specific date
+   */
   async getWardRoundsByDate(date: Date): Promise<WardRound[]> {
+    const dateStr = date.toISOString().split('T')[0];
+    if (navigator.onLine) {
+      try {
+        const serverRounds = await apiClient.getWardRounds(dateStr, dateStr);
+        if (Array.isArray(serverRounds)) {
+          return serverRounds.map(fromServerFormat);
+        }
+      } catch { /* fallback */ }
+    }
+
     const startOfDay = new Date(date);
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(date);
     endOfDay.setHours(23, 59, 59, 999);
 
-    return await db.ward_rounds
-      .where('round_date')
-      .between(startOfDay, endOfDay)
-      .sortBy('round_time');
+    try {
+      const local = await db.ward_rounds.toArray();
+      return (local as WardRound[]).filter(r => {
+        const rd = new Date(r.round_date);
+        return rd >= startOfDay && rd <= endOfDay;
+      });
+    } catch {
+      return [];
+    }
   }
 
   async getTodaysWardRounds(): Promise<WardRound[]> {
     return await this.getWardRoundsByDate(new Date());
   }
 
-  async deleteWardRound(id: string): Promise<void> {
-    await db.ward_rounds.delete(id);
-  }
-
-  async getWardRoundSummary(startDate?: Date, endDate?: Date): Promise<WardRoundSummary> {
-    let rounds: WardRound[];
-
-    if (startDate && endDate) {
-      rounds = await db.ward_rounds
-        .where('round_date')
-        .between(startDate, endDate)
-        .toArray();
-    } else {
-      rounds = await this.getTodaysWardRounds();
-    }
-
+  async getWardRoundSummary(): Promise<WardRoundSummary> {
+    const rounds = await this.getTodaysWardRounds();
     const summary: WardRoundSummary = {
       total_rounds: rounds.length,
       rounds_by_doctor: {},
@@ -225,45 +476,39 @@ class WardRoundsService {
       patients_deteriorating: rounds.filter(r => r.progress_status === 'deteriorating').length,
       consultations_requested: rounds.filter(r => r.consultation_requested).length
     };
-
-    rounds.forEach(round => {
-      if (!summary.rounds_by_doctor[round.reviewing_doctor]) {
-        summary.rounds_by_doctor[round.reviewing_doctor] = 0;
-      }
-      summary.rounds_by_doctor[round.reviewing_doctor]++;
-    });
-
     return summary;
   }
 
   async getPatientsForRounds(): Promise<any[]> {
-    // Get all admitted or in-treatment patients
-    const patients = await db.patients
-      .filter(p => 
-        p.status === 'admitted' || 
-        p.status === 'in-treatment' ||
-        p.status === 'post-operative'
-      )
-      .toArray();
+    try {
+      const patients = await db.patients
+        .filter(p =>
+          p.status === 'admitted' ||
+          p.status === 'in-treatment' ||
+          p.status === 'post-operative'
+        )
+        .toArray();
 
-    // Check last ward round for each patient
-    const patientsWithLastRound = await Promise.all(
-      patients.map(async (patient) => {
-        const rounds = await this.getPatientWardRounds(patient.id!);
-        const lastRound = rounds[0]; // Most recent
-        return {
-          ...patient,
-          last_round_date: lastRound?.round_date,
-          last_round_by: lastRound?.reviewing_doctor,
-          last_progress: lastRound?.progress_status,
-          hours_since_round: lastRound 
-            ? Math.floor((new Date().getTime() - new Date(lastRound.round_date).getTime()) / (1000 * 60 * 60))
-            : null
-        };
-      })
-    );
+      const patientsWithLastRound = await Promise.all(
+        patients.map(async (patient) => {
+          const rounds = await this.getPatientWardRounds(patient.id!);
+          const lastRound = rounds[0];
+          return {
+            ...patient,
+            last_round_date: lastRound?.round_date,
+            last_round_by: lastRound?.reviewing_doctor,
+            last_progress: lastRound?.progress_status,
+            hours_since_round: lastRound
+              ? Math.floor((Date.now() - new Date(lastRound.round_date).getTime()) / (1000 * 60 * 60))
+              : null
+          };
+        })
+      );
 
-    return patientsWithLastRound;
+      return patientsWithLastRound;
+    } catch {
+      return [];
+    }
   }
 
   // Activity logging for analytics
