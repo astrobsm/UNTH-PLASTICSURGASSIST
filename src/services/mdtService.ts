@@ -194,6 +194,10 @@ class MDTService {
 
   // Get patient's MDT team
   async getPatientTeam(patientId: string): Promise<MDTPatientTeam | undefined> {
+    // Try sync from server first
+    if (navigator.onLine) {
+      try { await this.syncFromServer(); } catch { /* ignore */ }
+    }
     const teams = await db.mdt_patient_teams
       .where('patient_id')
       .equals(patientId)
@@ -204,6 +208,10 @@ class MDTService {
 
   // Get all active MDT patients
   async getAllActiveMDTPatients(): Promise<MDTPatientTeam[]> {
+    // Try sync from server first
+    if (navigator.onLine) {
+      try { await this.syncFromServer(); } catch { /* ignore */ }
+    }
     const allTeams = await db.mdt_patient_teams.toArray();
     return allTeams.filter(team => team.is_active === true);
   }
@@ -218,6 +226,10 @@ class MDTService {
     };
 
     await db.mdt_meetings.add(meeting as any);
+    // Push to server immediately
+    if (navigator.onLine) {
+      try { await this.pushToServer(); } catch { /* will retry */ }
+    }
     return meeting.id;
   }
 
@@ -266,6 +278,9 @@ class MDTService {
 
   // Get patient's MDT meetings
   async getPatientMeetings(patientId: string): Promise<MDTMeeting[]> {
+    if (navigator.onLine) {
+      try { await this.syncFromServer(); } catch { /* ignore */ }
+    }
     return await db.mdt_meetings
       .where('patient_id')
       .equals(patientId)
@@ -275,6 +290,9 @@ class MDTService {
 
   // Get upcoming meetings
   async getUpcomingMeetings(): Promise<MDTMeeting[]> {
+    if (navigator.onLine) {
+      try { await this.syncFromServer(); } catch { /* ignore */ }
+    }
     const now = new Date();
     const allMeetings = await db.mdt_meetings.toArray();
     
@@ -292,11 +310,18 @@ class MDTService {
     };
 
     await db.mdt_contact_logs.add(contact as any);
+    // Push to server immediately
+    if (navigator.onLine) {
+      try { await this.pushToServer(); } catch { /* will retry */ }
+    }
     return contact.id;
   }
 
   // Get contact history for patient
   async getPatientContactHistory(patientId: string): Promise<MDTContactLog[]> {
+    if (navigator.onLine) {
+      try { await this.syncFromServer(); } catch { /* ignore */ }
+    }
     return await db.mdt_contact_logs
       .where('patient_id')
       .equals(patientId)

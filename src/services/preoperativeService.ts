@@ -844,6 +844,22 @@ Date: ${new Date().toLocaleDateString()}
    */
   async getAssessmentByPatient(patientId: string): Promise<PreoperativeAssessment | null> {
     try {
+      // Try server first
+      if (navigator.onLine) {
+        try {
+          const serverAssessments = await apiClient.getPreoperativeAssessments(patientId);
+          if (Array.isArray(serverAssessments) && serverAssessments.length > 0) {
+            // Sync to local
+            for (const a of serverAssessments) {
+              try { await db.preoperative_assessments.put({ ...a, synced: true }); } catch { /* ignore */ }
+            }
+            return serverAssessments[serverAssessments.length - 1] as PreoperativeAssessment;
+          }
+        } catch (e) {
+          console.warn('Could not fetch preoperative assessments from server:', e);
+        }
+      }
+      // Fallback to local
       const assessment = await db.preoperative_assessments
         .where('patient_id')
         .equals(patientId)
@@ -860,6 +876,23 @@ Date: ${new Date().toLocaleDateString()}
    */
   async getAssessmentBySurgery(surgeryId: string): Promise<PreoperativeAssessment | null> {
     try {
+      // Try server first - fetch all assessments and filter
+      if (navigator.onLine) {
+        try {
+          const serverAssessments = await apiClient.getPreoperativeAssessments();
+          if (Array.isArray(serverAssessments) && serverAssessments.length > 0) {
+            // Sync to local
+            for (const a of serverAssessments) {
+              try { await db.preoperative_assessments.put({ ...a, synced: true }); } catch { /* ignore */ }
+            }
+            const match = serverAssessments.find((a: any) => String(a.surgery_booking_id) === String(surgeryId));
+            return match ? (match as PreoperativeAssessment) : null;
+          }
+        } catch (e) {
+          console.warn('Could not fetch preoperative assessments from server:', e);
+        }
+      }
+      // Fallback to local
       const assessment = await db.preoperative_assessments
         .where('surgery_booking_id')
         .equals(surgeryId)

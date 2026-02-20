@@ -600,11 +600,46 @@ class TreatmentPlanningService {
 
   // Get treatment plan by ID
   async getTreatmentPlan(planId: string): Promise<EnhancedTreatmentPlan | undefined> {
+    // Try server first
+    if (navigator.onLine) {
+      try {
+        const plans = await apiClient.getTreatmentPlans();
+        if (Array.isArray(plans)) {
+          const match = plans.find((p: any) => String(p.id) === String(planId));
+          if (match) return match as EnhancedTreatmentPlan;
+        }
+      } catch (e) {
+        console.warn('Could not fetch treatment plan from server:', e);
+      }
+    }
     return await db.treatment_plans.get({ id: planId } as any);
   }
 
   // Get all treatment plans for a patient
   async getPatientTreatmentPlans(patientId: string): Promise<EnhancedTreatmentPlan[]> {
+    // Try server first
+    if (navigator.onLine) {
+      try {
+        const serverPlans = await apiClient.getTreatmentPlans(patientId);
+        if (Array.isArray(serverPlans) && serverPlans.length > 0) {
+          // Sync to local
+          for (const plan of serverPlans) {
+            try { await db.treatment_plans.put({ ...plan, synced: true }); } catch { /* ignore */ }
+          }
+          return serverPlans.map((plan: any) => ({
+            ...plan,
+            id: plan.id?.toString() || '',
+            patient_id: plan.patient_id?.toString() || patientId,
+            patient_name: plan.patient_name || '',
+            hospital_number: plan.hospital_number || '',
+            admission_date: plan.admission_date || new Date()
+          })) as EnhancedTreatmentPlan[];
+        }
+      } catch (e) {
+        console.warn('Could not fetch treatment plans from server:', e);
+      }
+    }
+    // Fallback to local
     const patientIdNum = parseInt(patientId);
     const plans = await db.treatment_plans.where('patient_id').equals(patientIdNum).toArray();
     return plans.map(plan => ({
@@ -619,6 +654,30 @@ class TreatmentPlanningService {
 
   // Get active treatment plans
   async getActiveTreatmentPlans(): Promise<EnhancedTreatmentPlan[]> {
+    // Try server first
+    if (navigator.onLine) {
+      try {
+        const serverPlans = await apiClient.getTreatmentPlans();
+        if (Array.isArray(serverPlans) && serverPlans.length > 0) {
+          // Sync to local
+          for (const plan of serverPlans) {
+            try { await db.treatment_plans.put({ ...plan, synced: true }); } catch { /* ignore */ }
+          }
+          const activePlans = serverPlans.filter((p: any) => p.status === 'active');
+          return activePlans.map((plan: any) => ({
+            ...plan,
+            id: plan.id?.toString() || '',
+            patient_id: plan.patient_id?.toString() || '',
+            patient_name: plan.patient_name || '',
+            hospital_number: plan.hospital_number || '',
+            admission_date: plan.admission_date || new Date()
+          })) as EnhancedTreatmentPlan[];
+        }
+      } catch (e) {
+        console.warn('Could not fetch treatment plans from server:', e);
+      }
+    }
+    // Fallback to local
     const plans = await db.treatment_plans.where('status').equals('active').toArray();
     return plans.map(plan => ({
       ...plan,

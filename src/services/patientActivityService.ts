@@ -1,5 +1,25 @@
 import { db } from '../db/database';
 import { logger } from '../utils/logger';
+import { apiClient } from './apiClient';
+
+// Helper to push activity to server
+async function pushActivityToServer(activity: any): Promise<void> {
+  try {
+    const token = apiClient.getToken();
+    if (!token) return;
+    const baseUrl = (import.meta as any).env?.VITE_API_BASE_URL || '/api';
+    await fetch(`${baseUrl}/activities`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ action: 'log', ...activity })
+    });
+  } catch (e) {
+    // Silent fail - activity logging should not break main flow
+  }
+}
 
 export interface PatientActivity {
   id?: number;
@@ -31,6 +51,10 @@ class PatientActivityService {
       };
 
       await db.activity_logs.add(activityRecord);
+      // Push to server in background (non-blocking)
+      if (navigator.onLine) {
+        pushActivityToServer(activityRecord).catch(() => {});
+      }
       logger.log(`✅ Logged activity: ${activity.activity_type} - ${activity.action} for patient ${activity.hospital_number}`);
     } catch (error) {
       console.error('Error logging patient activity:', error);

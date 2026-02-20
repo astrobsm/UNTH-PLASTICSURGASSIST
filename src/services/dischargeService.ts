@@ -1,5 +1,6 @@
 ﻿import { db } from '../db/database';
 import { format } from 'date-fns';
+import { apiClient } from './apiClient';
 import {
   createPDF,
   sanitizeTextForPDF,
@@ -78,27 +79,77 @@ class DischargeService {
       updated_at: now
     };
 
-    const id = await db.discharges.add(discharge);
-    
-    // Update admission status
-    if (dischargeData.admission_id) {
-      await db.admissions.update(dischargeData.admission_id, {
-        status: 'discharged',
-        discharge_date: dischargeData.discharge_date,
-        updated_at: now
-      });
+    // Try server first
+    try {
+      const saved = await apiClient.createDischarge(discharge);
+      console.log('Discharge synced to server:', saved.id);
+      const id = await db.discharges.add({ ...discharge, id: saved.id, synced: true });
+      // Update admission status
+      if (dischargeData.admission_id) {
+        try {
+          await apiClient.updateAdmission(dischargeData.admission_id, {
+            status: 'discharged',
+            discharge_date: dischargeData.discharge_date
+          });
+        } catch { /* ignore server admission update failure */ }
+        await db.admissions.update(dischargeData.admission_id, {
+          status: 'discharged',
+          discharge_date: dischargeData.discharge_date,
+          updated_at: now
+        });
+      }
+      return saved.id || id;
+    } catch (error) {
+      console.warn('Failed to sync discharge to server, saving locally', error);
+      const id = await db.discharges.add({ ...discharge, synced: false });
+      // Update admission status locally
+      if (dischargeData.admission_id) {
+        await db.admissions.update(dischargeData.admission_id, {
+          status: 'discharged',
+          discharge_date: dischargeData.discharge_date,
+          updated_at: now
+        });
+      }
+      return id;
     }
-
-    return id;
   }
 
   // Get discharge by ID
   async getDischarge(id: number): Promise<Discharge | undefined> {
+    // Try server first
+    if (navigator.onLine) {
+      try {
+        const serverDischarges = await apiClient.getDischarges();
+        if (Array.isArray(serverDischarges)) {
+          const match = serverDischarges.find((d: any) => Number(d.id) === id);
+          if (match) return match as Discharge;
+        }
+      } catch (e) {
+        console.warn('Could not fetch discharge from server:', e);
+      }
+    }
     return await db.discharges.get(id);
   }
 
   // Get patient discharges
   async getPatientDischarges(patientId: number): Promise<Discharge[]> {
+    // Try server first
+    if (navigator.onLine) {
+      try {
+        const serverDischarges = await apiClient.getDischarges();
+        if (Array.isArray(serverDischarges) && serverDischarges.length > 0) {
+          // Sync to local
+          for (const d of serverDischarges) {
+            try { await db.discharges.put({ ...d, synced: true }); } catch { /* ignore */ }
+          }
+          return serverDischarges
+            .filter((d: any) => Number(d.patient_id) === patientId)
+            .sort((a: any, b: any) => new Date(b.discharge_date).getTime() - new Date(a.discharge_date).getTime());
+        }
+      } catch (e) {
+        console.warn('Could not fetch discharges from server:', e);
+      }
+    }
     return await db.discharges
       .where('patient_id')
       .equals(patientId)
@@ -108,13 +159,30 @@ class DischargeService {
 
   // Get all discharges
   async getAllDischarges(): Promise<Discharge[]> {
+    // Try server first
+    if (navigator.onLine) {
+      try {
+        const serverDischarges = await apiClient.getDischarges();
+        if (Array.isArray(serverDischarges) && serverDischarges.length > 0) {
+          // Sync to local
+          for (const d of serverDischarges) {
+            try { await db.discharges.put({ ...d, synced: true }); } catch { /* ignore */ }
+          }
+          return serverDischarges.sort((a: any, b: any) => 
+            new Date(b.discharge_date).getTime() - new Date(a.discharge_date).getTime());
+        }
+      } catch (e) {
+        console.warn('Could not fetch discharges from server:', e);
+      }
+    }
     const discharges = await db.discharges.toArray();
     return discharges.sort((a, b) => b.discharge_date.getTime() - a.discharge_date.getTime());
   }
 
   // Search discharges
   async searchDischarges(query: string): Promise<Discharge[]> {
-    const discharges = await db.discharges.toArray();
+    // Use server-first getAllDischarges then filter
+    const discharges = await this.getAllDischarges();
     const searchLower = query.toLowerCase();
     
     return discharges.filter(discharge => 

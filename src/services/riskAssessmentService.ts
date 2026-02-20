@@ -654,6 +654,29 @@ class RiskAssessmentService {
     nutritional: NutritionalRiskAssessment[];
   }> {
     try {
+      // Try server first
+      if (navigator.onLine) {
+        try {
+          const [dvtServer, pressureServer, nutritionalServer] = await Promise.all([
+            apiClient.getRiskAssessments(patientId, 'dvt'),
+            apiClient.getRiskAssessments(patientId, 'pressure_sore'),
+            apiClient.getRiskAssessments(patientId, 'nutritional')
+          ]);
+          const dvt = Array.isArray(dvtServer) ? dvtServer : [];
+          const pressureSore = Array.isArray(pressureServer) ? pressureServer : [];
+          const nutritional = Array.isArray(nutritionalServer) ? nutritionalServer : [];
+          // Sync to local
+          for (const a of dvt) { try { await db.dvt_assessments.put({ ...a, synced: true }); } catch { /* ignore */ } }
+          for (const a of pressureSore) { try { await db.pressure_sore_assessments.put({ ...a, synced: true }); } catch { /* ignore */ } }
+          for (const a of nutritional) { try { await db.nutritional_assessments.put({ ...a, synced: true }); } catch { /* ignore */ } }
+          if (dvt.length > 0 || pressureSore.length > 0 || nutritional.length > 0) {
+            return { dvt, pressureSore, nutritional };
+          }
+        } catch (e) {
+          console.warn('Could not fetch risk assessments from server:', e);
+        }
+      }
+      // Fallback to local
       const [dvtAssessments, pressureSoreAssessments, nutritionalAssessments] = await Promise.all([
         db.dvt_assessments.where('patient_id').equals(patientId).toArray(),
         db.pressure_sore_assessments.where('patient_id').equals(patientId).toArray(),
@@ -684,6 +707,29 @@ class RiskAssessmentService {
     nutritional?: NutritionalRiskAssessment;
   }> {
     try {
+      // Try server first
+      if (navigator.onLine) {
+        try {
+          const [dvtServer, pressureServer, nutritionalServer] = await Promise.all([
+            apiClient.getRiskAssessments(patientId, 'dvt'),
+            apiClient.getRiskAssessments(patientId, 'pressure_sore'),
+            apiClient.getRiskAssessments(patientId, 'nutritional')
+          ]);
+          const dvtArr = Array.isArray(dvtServer) ? dvtServer : [];
+          const psArr = Array.isArray(pressureServer) ? pressureServer : [];
+          const nutArr = Array.isArray(nutritionalServer) ? nutritionalServer : [];
+          if (dvtArr.length > 0 || psArr.length > 0 || nutArr.length > 0) {
+            return {
+              dvt: dvtArr.length > 0 ? dvtArr[dvtArr.length - 1] : undefined,
+              pressureSore: psArr.length > 0 ? psArr[psArr.length - 1] : undefined,
+              nutritional: nutArr.length > 0 ? nutArr[nutArr.length - 1] : undefined
+            };
+          }
+        } catch (e) {
+          console.warn('Could not fetch latest risk assessments from server:', e);
+        }
+      }
+      // Fallback to local
       const [latestDVT, latestPressureSore, latestNutritional] = await Promise.all([
         db.dvt_assessments
           .where('patient_id')

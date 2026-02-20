@@ -182,11 +182,45 @@ class SchedulingService {
       updated_at: now
     };
 
-    await db.ward_rounds.add(newWardRound);
-    return id;
+    // Try server first
+    try {
+      const saved = await apiClient.createWardRound(newWardRound);
+      console.log('Ward round synced to server:', saved.id);
+      await db.ward_rounds.add({ ...newWardRound, id: saved.id, synced: true });
+      return saved.id;
+    } catch (error) {
+      console.warn('Failed to sync ward round to server, saving locally', error);
+      await db.ward_rounds.add({ ...newWardRound, synced: false });
+      return id;
+    }
   }
 
   async getWardRounds(date?: Date): Promise<WardRound[]> {
+    // Try server first
+    if (navigator.onLine) {
+      try {
+        const serverRounds = await apiClient.getWardRounds();
+        if (Array.isArray(serverRounds) && serverRounds.length > 0) {
+          for (const r of serverRounds) {
+            try { await db.ward_rounds.put({ ...r, synced: true }); } catch { /* ignore */ }
+          }
+          if (date) {
+            const startOfDay = new Date(date);
+            startOfDay.setHours(0, 0, 0, 0);
+            const endOfDay = new Date(date);
+            endOfDay.setHours(23, 59, 59, 999);
+            return serverRounds.filter((r: any) => {
+              const d = new Date(r.date);
+              return d >= startOfDay && d <= endOfDay;
+            });
+          }
+          return serverRounds;
+        }
+      } catch (e) {
+        console.warn('Could not fetch ward rounds from server:', e);
+      }
+    }
+    // Fallback to local
     if (date) {
       const startOfDay = new Date(date);
       startOfDay.setHours(0, 0, 0, 0);
@@ -238,6 +272,7 @@ class SchedulingService {
   }
 
   async getClinicSessions(date?: Date): Promise<ClinicSession[]> {
+    // Clinic sessions don't have a dedicated server endpoint yet, use local
     if (date) {
       const startOfDay = new Date(date);
       startOfDay.setHours(0, 0, 0, 0);
@@ -319,6 +354,34 @@ class SchedulingService {
   }
 
   async getSurgeryBookings(date?: Date): Promise<SurgeryBooking[]> {
+    // Try server first
+    if (navigator.onLine) {
+      try {
+        const serverSurgeries = await apiClient.getSurgeries();
+        if (Array.isArray(serverSurgeries) && serverSurgeries.length > 0) {
+          // Sync to local
+          for (const s of serverSurgeries) {
+            try { await db.surgery_bookings.put({ ...s, synced: true }); } catch { /* ignore */ }
+          }
+          if (date) {
+            const startOfDay = new Date(date);
+            startOfDay.setHours(0, 0, 0, 0);
+            const endOfDay = new Date(date);
+            endOfDay.setHours(23, 59, 59, 999);
+            return serverSurgeries
+              .filter((s: any) => {
+                const d = new Date(s.date);
+                return d >= startOfDay && d <= endOfDay;
+              })
+              .sort((a: any, b: any) => (a.start_time || '').localeCompare(b.start_time || ''));
+          }
+          return serverSurgeries;
+        }
+      } catch (e) {
+        console.warn('Could not fetch surgeries from server:', e);
+      }
+    }
+    // Fallback to local
     if (date) {
       const startOfDay = new Date(date);
       startOfDay.setHours(0, 0, 0, 0);
@@ -330,7 +393,6 @@ class SchedulingService {
         .between(startOfDay, endOfDay)
         .toArray();
       
-      // Sort manually since Dexie doesn't support orderBy after where clause
       return surgeries.sort((a, b) => a.start_time.localeCompare(b.start_time));
     }
     
@@ -635,17 +697,23 @@ class SchedulingService {
     const weekStart = startOfWeek(date, { weekStartsOn: 1 }); // Monday
     const weekEnd = endOfWeek(date, { weekStartsOn: 1 }); // Sunday
     
-    const wardRounds = await db.ward_rounds
-      .where('date')
-      .between(weekStart, weekEnd)
-      .toArray();
+    // Use server-first methods for ward rounds and surgeries
+    const [allWardRounds, allSurgeries] = await Promise.all([
+      this.getWardRounds(),
+      this.getSurgeryBookings()
+    ]);
+    
+    const wardRounds = allWardRounds.filter(r => {
+      const d = new Date(r.date);
+      return d >= weekStart && d <= weekEnd;
+    });
+    
+    const surgeries = allSurgeries.filter(s => {
+      const d = new Date(s.date);
+      return d >= weekStart && d <= weekEnd;
+    });
       
     const clinics = await db.clinic_sessions
-      .where('date')
-      .between(weekStart, weekEnd)
-      .toArray();
-      
-    const surgeries = await db.surgery_bookings
       .where('date')
       .between(weekStart, weekEnd)
       .toArray();
@@ -661,17 +729,23 @@ class SchedulingService {
     completedClinics: number;
     completedSurgeries: number;
   }> {
-    const wardRounds = await db.ward_rounds
-      .where('date')
-      .between(startDate, endDate)
-      .toArray();
+    // Use server-first methods for ward rounds and surgeries
+    const [allWardRounds, allSurgeries] = await Promise.all([
+      this.getWardRounds(),
+      this.getSurgeryBookings()
+    ]);
+    
+    const wardRounds = allWardRounds.filter(r => {
+      const d = new Date(r.date);
+      return d >= startDate && d <= endDate;
+    });
+    
+    const surgeries = allSurgeries.filter(s => {
+      const d = new Date(s.date);
+      return d >= startDate && d <= endDate;
+    });
       
     const clinics = await db.clinic_sessions
-      .where('date')
-      .between(startDate, endDate)
-      .toArray();
-      
-    const surgeries = await db.surgery_bookings
       .where('date')
       .between(startDate, endDate)
       .toArray();

@@ -1,4 +1,50 @@
 import { db } from '../db/database';
+import { apiClient } from './apiClient';
+
+// Helper to sync blood transfusion to server via sync/push
+async function pushTransfusionToServer(transfusion: any): Promise<void> {
+  try {
+    const token = apiClient.getToken();
+    if (!token) return;
+    const baseUrl = (import.meta as any).env?.VITE_API_BASE_URL || '/api';
+    await fetch(`${baseUrl}/sync/push`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        changes: [{
+          entityType: 'blood_transfusions',
+          entityId: transfusion.id || `bt_${Date.now()}`,
+          action: 'upsert',
+          payload: transfusion
+        }]
+      })
+    });
+  } catch (e) {
+    console.warn('Failed to push blood transfusion to server:', e);
+  }
+}
+
+// Helper to pull blood transfusions from server
+async function pullTransfusionsFromServer(): Promise<any[]> {
+  try {
+    const token = apiClient.getToken();
+    if (!token) return [];
+    const baseUrl = (import.meta as any).env?.VITE_API_BASE_URL || '/api';
+    const res = await fetch(`${baseUrl}/sync/blood-transfusions`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
+    }
+  } catch (e) {
+    console.warn('Failed to pull blood transfusions from server:', e);
+  }
+  return [];
+}
 
 export interface BloodBagDetails {
   bag_number: string;
@@ -127,6 +173,10 @@ class BloodTransfusionService {
       transfusion.created_at = new Date();
       transfusion.updated_at = new Date();
       const id = await db.blood_transfusions.add(transfusion as any);
+      // Push to server in background
+      if (navigator.onLine) {
+        pushTransfusionToServer({ ...transfusion, id: String(id) }).catch(() => {});
+      }
       return String(id);
     } catch (error) {
       console.error('Error creating transfusion:', error);
@@ -165,6 +215,20 @@ class BloodTransfusionService {
    */
   async getPatientTransfusions(patientId: string): Promise<BloodTransfusion[]> {
     try {
+      // Try server first
+      if (navigator.onLine) {
+        try {
+          const serverData = await pullTransfusionsFromServer();
+          if (serverData.length > 0) {
+            for (const t of serverData) {
+              try { await db.blood_transfusions.put({ ...t, synced: true }); } catch { /* ignore */ }
+            }
+            return serverData
+              .filter((t: any) => String(t.patient_id) === String(patientId))
+              .sort((a: any, b: any) => new Date(b.transfusion_date).getTime() - new Date(a.transfusion_date).getTime());
+          }
+        } catch { /* fallback to local */ }
+      }
       return await db.blood_transfusions
         .where('patient_id')
         .equals(patientId)
@@ -181,6 +245,19 @@ class BloodTransfusionService {
    */
   async getAllTransfusions(): Promise<BloodTransfusion[]> {
     try {
+      // Try server first
+      if (navigator.onLine) {
+        try {
+          const serverData = await pullTransfusionsFromServer();
+          if (serverData.length > 0) {
+            for (const t of serverData) {
+              try { await db.blood_transfusions.put({ ...t, synced: true }); } catch { /* ignore */ }
+            }
+            return serverData.sort((a: any, b: any) => 
+              new Date(b.transfusion_date).getTime() - new Date(a.transfusion_date).getTime());
+          }
+        } catch { /* fallback to local */ }
+      }
       return await db.blood_transfusions
         .orderBy('transfusion_date')
         .reverse()
