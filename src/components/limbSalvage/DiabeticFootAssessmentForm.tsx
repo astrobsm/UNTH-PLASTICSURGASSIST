@@ -2271,8 +2271,8 @@ const Step8Results: React.FC<{ formData: any; selectedPatient: any }> = ({ formD
 // ==================== PDF GENERATORS ====================
 
 /**
- * Generates comprehensive laboratory and imaging request PDF
- * covering ALL parameters necessary for the diabetic foot assessment.
+ * Generates lab & imaging request PDF matching EXACTLY the assessment form sections.
+ * Only includes the tests required to complete each assessment tab.
  */
 async function generateLabAndImagingPDF(
   formData: any,
@@ -2302,16 +2302,23 @@ async function generateLabAndImagingPDF(
     doc.text('DIABETIC FOOT - LIMB SALVAGE ASSESSMENT', pw / 2, y, { align: 'center' });
     y += 5;
     doc.setFontSize(11);
-    doc.setTextColor(220, 38, 38);
-    doc.text('COMPREHENSIVE LABORATORY & IMAGING REQUEST', pw / 2, y, { align: 'center' });
+    doc.setTextColor(14, 159, 110);
+    doc.text('LABORATORY & IMAGING REQUEST FORM', pw / 2, y, { align: 'center' });
     doc.setTextColor(0, 0, 0);
-    y += 8;
+    y += 4;
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'italic');
+    doc.text('(Tests required to complete the Limb Salvage Assessment)', pw / 2, y, { align: 'center' });
+    doc.setFont('helvetica', 'normal');
+    y += 7;
 
     // ---- Patient Info ----
     doc.setFontSize(9);
     doc.setFont('helvetica', 'bold');
-    doc.text('PATIENT INFORMATION', margin, y);
-    y += 5;
+    doc.setFillColor(240, 240, 240);
+    doc.rect(margin, y - 2, pw - 2 * margin, 20, 'F');
+    doc.text('PATIENT INFORMATION', margin + 2, y + 2);
+    y += 6;
     doc.setFont('helvetica', 'normal');
     const pName = patient ? (patient.full_name || `${patient.first_name} ${patient.last_name}`) : '________________________________';
     const pHosp = patient?.hospital_number || '________________';
@@ -2320,185 +2327,209 @@ async function generateLabAndImagingPDF(
     const nowDate = new Date().toLocaleDateString('en-GB');
     const nowTime = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
-    doc.text(`Patient: ${pName}`, margin, y);
-    doc.text(`Hospital No: ${pHosp}`, pw - margin - 50, y);
+    doc.text(`Patient: ${pName}`, margin + 2, y + 2);
+    doc.text(`Hospital No: ${pHosp}`, pw - margin - 48, y + 2);
     y += 5;
-    doc.text(`DOB: ${pDOB}   Gender: ${pGender}`, margin, y);
-    doc.text(`Date: ${nowDate}  Time: ${nowTime}`, pw - margin - 55, y);
-    y += 5;
-    doc.text(`Assessment Score: ${totalScore} — ${risk.category}`, margin, y);
-    y += 8;
+    doc.text(`DOB: ${pDOB}    Gender: ${pGender}`, margin + 2, y + 2);
+    doc.text(`Date: ${nowDate}   Time: ${nowTime}`, pw - margin - 50, y + 2);
+    y += 10;
 
-    // Helper for test table
-    const drawTestTable = (title: string, titleColor: [number, number, number], tests: { test: string; sample: string; urgency: string; rationale: string }[]) => {
-      // Check page space
-      if (y + tests.length * 6 + 15 > 280) {
-        doc.addPage();
-        y = 15;
-      }
+    // ---- Helper: Section table ----
+    const drawSection = (
+      sectionLabel: string, 
+      assessmentStep: string,
+      headerColor: [number, number, number], 
+      tests: { test: string; sample: string; urgency: string; forField: string }[]
+    ) => {
+      const neededH = tests.length * 7 + 20;
+      if (y + neededH > 280) { doc.addPage(); y = 15; }
 
+      // Section header
       doc.setFont('helvetica', 'bold');
-      doc.setFillColor(...titleColor);
-      doc.rect(margin, y, pw - 2 * margin, 7, 'F');
+      doc.setFillColor(...headerColor);
+      doc.rect(margin, y, pw - 2 * margin, 8, 'F');
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(9);
-      doc.text(title, margin + 2, y + 5);
+      doc.text(sectionLabel, margin + 3, y + 5.5);
+      doc.setFontSize(7);
+      doc.text(`Assessment Step: ${assessmentStep}`, pw - margin - 55, y + 5.5);
       doc.setTextColor(0, 0, 0);
-      y += 8;
+      y += 10;
 
       // Column headers
       doc.setFontSize(7.5);
       doc.setFont('helvetica', 'bold');
-      doc.text('TEST', margin + 2, y + 3);
-      doc.text('SAMPLE', margin + 68, y + 3);
-      doc.text('URGENCY', margin + 105, y + 3);
-      doc.text('RATIONALE', margin + 130, y + 3);
-      y += 5;
+      doc.setFillColor(230, 230, 230);
+      doc.rect(margin, y - 2, pw - 2 * margin, 6, 'F');
+      doc.text('TEST', margin + 2, y + 2);
+      doc.text('SAMPLE TYPE', margin + 75, y + 2);
+      doc.text('URGENCY', margin + 113, y + 2);
+      doc.text('FOR FIELD', margin + 140, y + 2);
+      // Tick column
+      doc.text('\u2713', pw - margin - 4, y + 2);
+      y += 6;
 
       doc.setFont('helvetica', 'normal');
       tests.forEach((t, i) => {
         if (y > 275) { doc.addPage(); y = 15; }
         if (i % 2 === 0) {
-          doc.setFillColor(245, 245, 245);
-          doc.rect(margin, y - 1, pw - 2 * margin, 6, 'F');
+          doc.setFillColor(248, 248, 248);
+          doc.rect(margin, y - 1.5, pw - 2 * margin, 7, 'F');
         }
-        doc.setFontSize(7);
+        doc.setFontSize(7.5);
         doc.text(t.test, margin + 2, y + 3);
-        doc.text(t.sample, margin + 68, y + 3);
-        // Urgency in red if STAT
-        if (t.urgency === 'STAT') { doc.setTextColor(220, 38, 38); doc.setFont('helvetica', 'bold'); }
-        doc.text(t.urgency, margin + 105, y + 3);
+        doc.setFontSize(7);
+        doc.text(t.sample, margin + 75, y + 3);
+        // Urgency coloring
+        if (t.urgency === 'STAT') { 
+          doc.setTextColor(220, 38, 38); 
+          doc.setFont('helvetica', 'bold'); 
+        } else if (t.urgency === 'Urgent') {
+          doc.setTextColor(180, 100, 0);
+        }
+        doc.text(t.urgency, margin + 113, y + 3);
         doc.setTextColor(0, 0, 0);
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(6.5);
-        doc.text(t.rationale, margin + 130, y + 3, { maxWidth: pw - margin - 132 });
-        doc.setFontSize(7);
-        // Tick box
-        doc.rect(pw - margin - 6, y - 0.5, 4, 4);
-        doc.text('✓', pw - margin - 5.5, y + 2.5);
-        y += 6;
+        doc.setFont('helvetica', 'italic');
+        doc.text(t.forField, margin + 140, y + 3, { maxWidth: pw - margin - 148 });
+        doc.setFont('helvetica', 'normal');
+        // Checkbox
+        doc.rect(pw - margin - 6, y - 0.5, 5, 5);
+        y += 7;
       });
-      y += 3;
+      y += 4;
     };
 
-    // ===== SECTION 1: Metabolic / Glycemic Panel =====
-    drawTestTable('A. METABOLIC & GLYCEMIC PANEL', [14, 159, 110], [
-      { test: 'Fasting Blood Glucose (FBG)', sample: 'Fluoride (Grey)', urgency: 'Urgent', rationale: 'Glycemic status' },
-      { test: 'Random Blood Glucose', sample: 'Fluoride (Grey)', urgency: 'STAT', rationale: 'Acute control assessment' },
-      { test: 'HbA1c (Glycated Haemoglobin)', sample: 'EDTA (Purple)', urgency: 'Urgent', rationale: 'Long-term control (current: ' + formData.hba1c + '%)' },
-      { test: 'Fructosamine', sample: 'Serum (Gold)', urgency: 'Routine', rationale: '2-3 week glycemic trend' },
-      { test: 'Fasting Lipid Profile', sample: 'Serum (Gold)', urgency: 'Routine', rationale: 'Cardiovascular risk (PVD assessment)' },
-      { test: 'Serum Albumin', sample: 'Serum (Gold)', urgency: 'Urgent', rationale: 'Nutritional/wound healing capacity' },
-      { test: 'Pre-Albumin (Transthyretin)', sample: 'Serum (Gold)', urgency: 'Urgent', rationale: 'Early malnutrition indicator' },
-    ]);
+    // ============================================================
+    // SECTION A: COMORBIDITIES (Step 3)
+    // Fields: hba1c, bloodSugarControl, anemia, malnutrition
+    // ============================================================
+    drawSection(
+      'A. COMORBIDITIES PANEL', 'Step 3 — Comorbidities',
+      [14, 159, 110],
+      [
+        { test: 'HbA1c (Glycated Haemoglobin)', sample: 'EDTA (Purple)', urgency: 'Urgent', forField: 'HbA1c field' },
+        { test: 'Fasting Blood Glucose', sample: 'Fluoride (Grey)', urgency: 'Urgent', forField: 'Blood sugar control' },
+        { test: 'Random Blood Glucose', sample: 'Fluoride (Grey)', urgency: 'STAT', forField: 'Blood sugar control' },
+        { test: 'Full Blood Count (Hb, WBC)', sample: 'EDTA (Purple)', urgency: 'Urgent', forField: 'Anaemia assessment' },
+        { test: 'Serum Albumin', sample: 'Serum (Gold)', urgency: 'Urgent', forField: 'Malnutrition status' },
+      ]
+    );
 
-    // ===== SECTION 2: Renal Function =====
-    drawTestTable('B. RENAL FUNCTION PANEL', [59, 130, 246], [
-      { test: 'Serum Creatinine', sample: 'Serum (Gold)', urgency: 'STAT', rationale: 'eGFR calculation (current Cr: ' + formData.creatinine + ')' },
-      { test: 'Blood Urea Nitrogen (BUN)', sample: 'Serum (Gold)', urgency: 'STAT', rationale: 'Renal function (current: ' + formData.bun + ')' },
-      { test: 'Electrolytes (Na+, K+, Cl-, HCO3-)', sample: 'Serum (Gold)', urgency: 'STAT', rationale: 'Electrolyte balance/sepsis' },
-      { test: 'Serum Calcium & Phosphate', sample: 'Serum (Gold)', urgency: 'Urgent', rationale: 'Bone metabolism/dialysis' },
-      { test: 'Urine Microalbumin/Creatinine Ratio', sample: 'Spot Urine', urgency: 'Routine', rationale: 'Diabetic nephropathy staging' },
-      { test: 'Urinalysis + Microscopy', sample: 'Mid-stream Urine', urgency: 'Urgent', rationale: 'UTI screen / proteinuria' },
-    ]);
+    // ============================================================
+    // SECTION B: RENAL STATUS (Step 4)
+    // Fields: creatinine, bun, egfr, dialysisDependent
+    // ============================================================
+    drawSection(
+      'B. RENAL FUNCTION PANEL', 'Step 4 — Renal Status',
+      [59, 130, 246],
+      [
+        { test: 'Serum Creatinine', sample: 'Serum (Gold)', urgency: 'STAT', forField: 'Creatinine field' },
+        { test: 'Blood Urea Nitrogen (BUN)', sample: 'Serum (Gold)', urgency: 'STAT', forField: 'BUN field' },
+        { test: 'Electrolytes (Na+, K+, Cl-, HCO3-)', sample: 'Serum (Gold)', urgency: 'Urgent', forField: 'eGFR calculation' },
+      ]
+    );
 
-    // ===== SECTION 3: Haematology / Infection =====
-    drawTestTable('C. HAEMATOLOGY & INFECTION MARKERS', [220, 38, 38], [
-      { test: 'Full Blood Count + Differential', sample: 'EDTA (Purple)', urgency: 'STAT', rationale: 'WBC for sepsis (current: ' + formData.wbc + ')' },
-      { test: 'Erythrocyte Sedimentation Rate (ESR)', sample: 'EDTA (Purple)', urgency: 'Urgent', rationale: 'Osteomyelitis marker (current: ' + formData.esr + ')' },
-      { test: 'C-Reactive Protein (CRP)', sample: 'Serum (Gold)', urgency: 'STAT', rationale: 'Inflammation/infection (current: ' + formData.crp + ')' },
-      { test: 'Procalcitonin', sample: 'Serum (Gold)', urgency: 'STAT', rationale: 'Bacterial sepsis differentiation' },
-      { test: 'Blood Culture × 2 sets', sample: 'Culture Bottles', urgency: 'STAT', rationale: 'Identify causative organism' },
-      { test: 'Wound Swab M/C/S', sample: 'Swab (Charcoal)', urgency: 'STAT', rationale: 'Targeted antibiotic therapy' },
-      { test: 'Deep Tissue Culture (if debriding)', sample: 'Tissue in sterile container', urgency: 'STAT', rationale: 'More reliable than surface swab' },
-      { test: 'Blood Lactate', sample: 'Fluoride (Grey)', urgency: 'STAT', rationale: 'Sepsis severity (current: ' + formData.lactate + ')' },
-      { test: 'Coagulation Screen (PT/INR, aPTT)', sample: 'Citrate (Blue)', urgency: 'Urgent', rationale: 'DIC screen/pre-operative' },
-      { test: 'D-Dimer', sample: 'Citrate (Blue)', urgency: 'Urgent', rationale: 'DVT screening / DIC' },
-      { test: 'Group & Crossmatch (2 units)', sample: 'EDTA (Purple)', urgency: 'Urgent', rationale: 'Pre-operative preparation' },
-    ]);
+    // ============================================================
+    // SECTION C: SEPSIS ASSESSMENT (Step 5)
+    // Fields: wbc, crp, procalcitonin, lactate
+    // (temperature, HR, RR, BP are clinical readings, not lab)
+    // ============================================================
+    drawSection(
+      'C. SEPSIS & INFECTION MARKERS', 'Step 5 — Sepsis Assessment',
+      [220, 38, 38],
+      [
+        { test: 'Full Blood Count + Differential (WBC)', sample: 'EDTA (Purple)', urgency: 'STAT', forField: 'WBC field' },
+        { test: 'C-Reactive Protein (CRP)', sample: 'Serum (Gold)', urgency: 'STAT', forField: 'CRP field' },
+        { test: 'Procalcitonin', sample: 'Serum (Gold)', urgency: 'STAT', forField: 'Procalcitonin field' },
+        { test: 'Blood Lactate', sample: 'Fluoride (Grey)', urgency: 'STAT', forField: 'Lactate field' },
+        { test: 'Wound Swab M/C/S', sample: 'Swab (Charcoal)', urgency: 'STAT', forField: 'Infection organism ID' },
+        { test: 'Blood Culture x 2 sets', sample: 'Culture Bottles', urgency: 'STAT', forField: 'Sepsis organism ID' },
+      ]
+    );
 
-    // ===== SECTION 4: Liver / Nutrition =====
-    drawTestTable('D. LIVER FUNCTION & NUTRITIONAL MARKERS', [161, 98, 7], [
-      { test: 'Liver Function Tests (ALT, AST, ALP, GGT)', sample: 'Serum (Gold)', urgency: 'Urgent', rationale: 'Hepatic status/antibiotic adjustment' },
-      { test: 'Total Protein & Albumin', sample: 'Serum (Gold)', urgency: 'Urgent', rationale: 'Wound healing capacity' },
-      { test: 'Serum Vitamin D (25-OH)', sample: 'Serum (Gold)', urgency: 'Routine', rationale: 'Bone healing/immune function' },
-      { test: 'Serum Iron, Ferritin, TIBC', sample: 'Serum (Gold)', urgency: 'Routine', rationale: 'Anaemia workup' },
-      { test: 'Vitamin B12 & Folate', sample: 'Serum (Gold)', urgency: 'Routine', rationale: 'Neuropathy contributing factor' },
-      { test: 'Zinc Level', sample: 'Serum (Gold/Trace Metal)', urgency: 'Routine', rationale: 'Wound healing cofactor' },
-      { test: 'Vitamin C Level', sample: 'Serum (special tube)', urgency: 'Routine', rationale: 'Collagen synthesis / healing' },
-    ]);
+    // ============================================================
+    // SECTION D: VASCULAR ASSESSMENT (Step 6)
+    // Fields: abiRight, abiLeft, toePressure, waveformType,
+    //   dorsalisPedis, posteriorTibial, peroneal, stenosisPresent,
+    //   stenosisLocation, stenosisSeverity, vesselCalcification,
+    //   incompressibleVessels, dvtPresent, chronicVenousInsufficiency,
+    //   venousReflux, edemaGrade
+    // ============================================================
+    drawSection(
+      'D. VASCULAR STUDIES — ARTERIAL', 'Step 6 — Vascular (Arterial)',
+      [139, 69, 19],
+      [
+        { test: 'Arterial Doppler Ultrasound (Bilateral LL)', sample: 'Patient', urgency: 'STAT', forField: 'ABI, waveform, vessel status, stenosis' },
+        { test: 'Toe Pressures / Toe-Brachial Index', sample: 'Patient', urgency: 'Urgent', forField: 'Toe pressure field' },
+        { test: 'CT Angiography (Lower Limb)', sample: 'Patient + IV Contrast', urgency: 'Urgent', forField: 'Stenosis location & severity' },
+        { test: 'Transcutaneous Oxygen (TcPO2)', sample: 'Patient', urgency: 'Urgent', forField: 'Tissue perfusion assessment' },
+      ]
+    );
 
-    // ===== SECTION 5: Cardiac Panel =====
-    if (formData.coronaryArteryDisease || formData.congestiveHeartFailure || formData.hypertension) {
-      drawTestTable('E. CARDIAC PANEL (Comorbidity-Indicated)', [139, 92, 246], [
-        { test: 'Troponin I/T', sample: 'Serum (Gold)', urgency: 'Urgent', rationale: 'Myocardial assessment pre-op' },
-        { test: 'BNP / NT-proBNP', sample: 'EDTA (Purple)', urgency: 'Urgent', rationale: 'Heart failure status' },
-        { test: 'ECG (12-lead)', sample: 'Patient', urgency: 'Urgent', rationale: 'Cardiac rhythm / ischaemia' },
-        { test: 'Chest X-ray PA', sample: 'Patient', urgency: 'Urgent', rationale: 'Cardiac size / pulmonary status' },
-      ]);
-    }
+    drawSection(
+      'E. VASCULAR STUDIES — VENOUS', 'Step 6 — Vascular (Venous)',
+      [107, 33, 168],
+      [
+        { test: 'Venous Doppler Ultrasound (Affected Limb)', sample: 'Patient', urgency: 'Urgent', forField: 'DVT, CVI, venous reflux' },
+      ]
+    );
 
-    // ===== SECTION 6: IMAGING =====
-    doc.addPage();
-    y = 15;
+    // ============================================================
+    // SECTION F: OSTEOMYELITIS ASSESSMENT (Step 7)
+    // Fields: xrayFindings, mriFinding, boneBiopsyResult, esr
+    // (probeToBone, visibleBone, sausageToe are clinical exam)
+    // ============================================================
+    drawSection(
+      'F. OSTEOMYELITIS WORKUP', 'Step 7 — Osteomyelitis',
+      [161, 98, 7],
+      [
+        { test: 'ESR (Erythrocyte Sedimentation Rate)', sample: 'EDTA (Purple)', urgency: 'Urgent', forField: 'ESR field' },
+        { test: 'X-ray Foot AP / Lateral / Oblique', sample: 'Patient', urgency: 'STAT', forField: 'X-ray findings field' },
+        { test: 'MRI Foot with Contrast (Gadolinium)', sample: 'Patient + IV Contrast', urgency: 'Urgent', forField: 'MRI finding field' },
+        { test: 'Bone Biopsy + Culture (if indicated)', sample: 'Bone tissue (sterile)', urgency: 'Urgent', forField: 'Bone biopsy result field' },
+      ]
+    );
 
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'bold');
-    doc.text('IMAGING REQUESTS', pw / 2, y, { align: 'center' });
-    y += 8;
-
-    drawTestTable('F. VASCULAR IMAGING (Critical for Limb Salvage)', [14, 159, 110], [
-      { test: 'Arterial Doppler Ultrasound (Bilateral LL)', sample: 'Patient', urgency: 'STAT', rationale: 'ABI, waveforms, stenosis mapping' },
-      { test: 'Venous Doppler Ultrasound (Affected Limb)', sample: 'Patient', urgency: 'Urgent', rationale: 'DVT screening / CVI assessment' },
-      { test: 'CT Angiography (Lower Limb)', sample: 'Patient + IV Contrast', urgency: totalScore >= 100 ? 'STAT' : 'Urgent', rationale: 'Detailed arterial mapping for revascularization' },
-      { test: 'Transcutaneous Oxygen (TcPO₂)', sample: 'Patient', urgency: 'Urgent', rationale: 'Local tissue perfusion & healing potential' },
-      { test: 'Toe Pressures / TBI', sample: 'Patient', urgency: 'Urgent', rationale: 'Better distal perfusion assessment if diabetic calcification' },
-    ]);
-
-    drawTestTable('G. MUSCULOSKELETAL IMAGING', [139, 69, 19], [
-      { test: 'X-ray Foot AP/Lateral/Oblique', sample: 'Patient', urgency: 'STAT', rationale: 'Osteomyelitis, fracture, gas gangrene' },
-      { test: 'MRI Foot with Contrast (Gadolinium)', sample: 'Patient + IV Contrast', urgency: totalScore >= 100 ? 'STAT' : 'Urgent', rationale: 'Gold standard osteomyelitis + soft tissue extent' },
-      { test: 'Bone Scan (Tc-99m MDP) [if MRI contraindicated]', sample: 'Patient + IV Isotope', urgency: 'Urgent', rationale: 'Alternative osteomyelitis detection' },
-      { test: 'Tagged WBC Scan (In-111 or Tc-99m HMPAO)', sample: 'Patient + Labelled WBCs', urgency: 'Routine', rationale: 'Differentiate Charcot from osteomyelitis' },
-    ]);
-
-    drawTestTable('H. GENERAL PRE-OPERATIVE IMAGING', [107, 114, 128], [
-      { test: 'Chest X-ray PA', sample: 'Patient', urgency: 'Urgent', rationale: 'Pre-anaesthetic evaluation' },
-      { test: 'ECG (12-lead)', sample: 'Patient', urgency: 'Urgent', rationale: 'Cardiac risk assessment' },
-      { test: 'Echocardiography (if cardiac Hx)', sample: 'Patient', urgency: 'Routine', rationale: 'Ejection fraction / valvular disease' },
-    ]);
-
-    // ===== Specimen Collection Notes =====
-    if (y > 255) { doc.addPage(); y = 15; }
-    y += 5;
+    // ============================================================
+    // Specimen Notes + Doctor Signature
+    // ============================================================
+    if (y > 240) { doc.addPage(); y = 15; }
+    y += 3;
+    doc.setFillColor(255, 255, 230);
+    doc.rect(margin, y - 2, pw - 2 * margin, 32, 'F');
     doc.setFontSize(8);
     doc.setFont('helvetica', 'bold');
-    doc.text('SPECIMEN COLLECTION NOTES:', margin, y);
-    y += 4;
+    doc.text('SPECIMEN COLLECTION NOTES:', margin + 2, y + 2);
+    y += 5;
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7);
-    doc.text('• Collect blood cultures BEFORE starting/changing antibiotics if possible', margin, y); y += 3.5;
-    doc.text('• Label all specimens with full patient details and collection time', margin, y); y += 3.5;
-    doc.text('• Deep tissue culture preferred over wound swabs when debridement is performed', margin, y); y += 3.5;
-    doc.text('• CT Angiography: ensure adequate renal function (eGFR >' + '30) before IV contrast; hydrate if indicated', margin, y); y += 3.5;
-    doc.text('• MRI Foot: screen for metallic implants; contrast contraindicated if eGFR <30 (risk of NSF)', margin, y); y += 3.5;
-    doc.text('• For dialysis patients: coordinate timing of contrast studies with dialysis schedule', margin, y);
-    y += 8;
+    doc.text('1. Collect blood cultures BEFORE starting/changing antibiotics', margin + 2, y + 1); y += 4;
+    doc.text('2. Label ALL specimens with patient name, hospital number, date & time of collection', margin + 2, y + 1); y += 4;
+    doc.text('3. CT Angiography: check eGFR > 30 before IV contrast; pre-hydrate if borderline', margin + 2, y + 1); y += 4;
+    doc.text('4. MRI: screen for metallic implants; gadolinium contraindicated if eGFR < 30 (NSF risk)', margin + 2, y + 1); y += 4;
+    doc.text('5. Deep tissue/bone biopsy preferred over surface swab for accurate organism identification', margin + 2, y + 1); y += 4;
+    doc.text('6. Dialysis patients: coordinate contrast studies with dialysis schedule', margin + 2, y + 1);
+    y += 10;
 
-    // ===== Requesting Doctor =====
+    // Requesting Doctor
     doc.setFontSize(9);
     doc.setFont('helvetica', 'bold');
-    doc.text('REQUESTING DOCTOR:', margin, y);
-    y += 5;
+    doc.text('REQUESTING DOCTOR', margin, y);
+    y += 6;
     doc.setFont('helvetica', 'normal');
-    doc.text('Name: ________________________________', margin, y);
-    doc.text('Signature: ________________________', pw / 2, y);
-    y += 5;
-    doc.text('Designation: ________________________', margin, y);
-    doc.text('Bleep/Phone: ______________________', pw / 2, y);
+    doc.text('Name: ______________________________________', margin, y);
+    doc.text('Signature: ______________________________', pw / 2 + 5, y);
+    y += 6;
+    doc.text('Designation: ________________________________', margin, y);
+    doc.text('Bleep/Phone: ____________________________', pw / 2 + 5, y);
+    y += 6;
+    doc.text(`Date: ${nowDate}`, margin, y);
+    doc.text(`Time: ${nowTime}`, pw / 2 + 5, y);
 
     // Save
-    const filename = `DiabeticFoot_LabImaging_${patient?.hospital_number || 'Form'}_${new Date().toISOString().split('T')[0]}.pdf`;
+    const filename = `DiabeticFoot_LabRequest_${patient?.hospital_number || 'Form'}_${new Date().toISOString().split('T')[0]}.pdf`;
     doc.save(filename);
   } catch (err) {
     console.error('Error generating lab/imaging PDF:', err);
