@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -15,7 +15,16 @@ import {
   CheckCircle,
   Search,
   UserPlus,
-  Download
+  Download,
+  ClipboardList,
+  MessageSquare,
+  Upload,
+  FileCheck,
+  Printer,
+  TestTube,
+  Camera as CameraIcon,
+  AlertTriangle,
+  Info
 } from 'lucide-react';
 import { DiabeticFootAssessment } from '../../services/diabeticFootService';
 import { patientService } from '../../services/patientService';
@@ -265,7 +274,7 @@ export const DiabeticFootAssessmentForm: React.FC<Props> = ({
       case 7:
         return <Step7Osteomyelitis formData={formData} setFormData={setFormData} />;
       case 8:
-        return <Step8Results formData={formData} />;
+        return <Step8Results formData={formData} selectedPatient={selectedPatient} />;
       default:
         return null;
     }
@@ -1831,7 +1840,14 @@ const Step7Osteomyelitis: React.FC<{ formData: any; setFormData: any }> = ({ for
 };
 
 // Step 8: Results & Recommendations
-const Step8Results: React.FC<{ formData: any }> = ({ formData }) => {
+const Step8Results: React.FC<{ formData: any; selectedPatient: any }> = ({ formData, selectedPatient }) => {
+  const [consentFile, setConsentFile] = useState<File | null>(null);
+  const [consentPreview, setConsentPreview] = useState<string | null>(null);
+  const [consentUploaded, setConsentUploaded] = useState(false);
+  const [generatingLab, setGeneratingLab] = useState(false);
+  const [generatingCounselling, setGeneratingCounselling] = useState(false);
+  const consentInputRef = useRef<HTMLInputElement>(null);
+
   // Calculate all component scores
   const calculateScores = () => {
     let totalScore = 0;
@@ -2109,8 +2125,724 @@ const Step8Results: React.FC<{ formData: any }> = ({ formData }) => {
           </div>
         </div>
       </div>
+
+      {/* ========== ACTION BUTTONS ========== */}
+      <div className="border-t-2 border-gray-300 pt-6 mt-6">
+        <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <ClipboardList className="w-5 h-5 text-primary-600" />
+          Clinical Actions
+        </h4>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Button 1: Generate Lab & Imaging Requests */}
+          <button
+            onClick={() => generateLabAndImagingPDF(formData, selectedPatient, risk, totalScore, setGeneratingLab)}
+            disabled={generatingLab}
+            className="flex items-center gap-3 p-4 bg-cyan-50 border-2 border-cyan-300 rounded-xl hover:bg-cyan-100 hover:border-cyan-500 transition-all disabled:opacity-50"
+          >
+            <div className="p-3 bg-cyan-100 rounded-lg">
+              <TestTube className="w-6 h-6 text-cyan-700" />
+            </div>
+            <div className="text-left">
+              <p className="font-semibold text-cyan-900">{generatingLab ? 'Generating...' : 'Generate Lab & Imaging Requests'}</p>
+              <p className="text-xs text-cyan-700 mt-0.5">Comprehensive lab panel + imaging for full assessment workup</p>
+            </div>
+            <Download className="w-5 h-5 text-cyan-600 ml-auto" />
+          </button>
+
+          {/* Button 2: Generate Patient Counselling & Consent */}
+          <button
+            onClick={() => generateCounsellingAndConsentPDF(formData, selectedPatient, risk, totalScore, recommendations, breakdown, setGeneratingCounselling)}
+            disabled={generatingCounselling}
+            className="flex items-center gap-3 p-4 bg-amber-50 border-2 border-amber-300 rounded-xl hover:bg-amber-100 hover:border-amber-500 transition-all disabled:opacity-50"
+          >
+            <div className="p-3 bg-amber-100 rounded-lg">
+              <MessageSquare className="w-6 h-6 text-amber-700" />
+            </div>
+            <div className="text-left">
+              <p className="font-semibold text-amber-900">{generatingCounselling ? 'Generating...' : 'Patient Counselling & Consent'}</p>
+              <p className="text-xs text-amber-700 mt-0.5">Explanatory counselling + informed consent form for signature</p>
+            </div>
+            <Download className="w-5 h-5 text-amber-600 ml-auto" />
+          </button>
+        </div>
+      </div>
+
+      {/* ========== UPLOAD SIGNED CONSENT ========== */}
+      <div className="border-t border-gray-200 pt-6 mt-4">
+        <h4 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+          <FileCheck className="w-5 h-5 text-green-600" />
+          Signed Consent Upload
+        </h4>
+        <p className="text-sm text-gray-600 mb-4">
+          Upload the patient's signed consent form (photo or scanned PDF). This will be attached to the assessment record.
+        </p>
+
+        <input
+          ref={consentInputRef}
+          type="file"
+          accept="image/*,application/pdf,.pdf"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) {
+              setConsentFile(file);
+              setConsentUploaded(true);
+              // Generate preview
+              if (file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = (ev) => setConsentPreview(ev.target?.result as string);
+                reader.readAsDataURL(file);
+              } else {
+                setConsentPreview(null);
+              }
+            }
+          }}
+        />
+
+        {!consentUploaded ? (
+          <div className="flex flex-col items-center gap-3">
+            <button
+              onClick={() => consentInputRef.current?.click()}
+              className="flex items-center gap-3 px-6 py-4 bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl hover:bg-gray-100 hover:border-primary-400 transition-all w-full justify-center"
+            >
+              <Upload className="w-6 h-6 text-gray-500" />
+              <div className="text-left">
+                <p className="font-medium text-gray-700">Click to upload signed consent</p>
+                <p className="text-xs text-gray-500">Accepts images (JPG, PNG) or PDF files</p>
+              </div>
+            </button>
+            {/* Also allow camera capture on mobile */}
+            <button
+              onClick={() => {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = 'image/*';
+                input.capture = 'environment';
+                input.onchange = (e) => {
+                  const file = (e.target as HTMLInputElement).files?.[0];
+                  if (file) {
+                    setConsentFile(file);
+                    setConsentUploaded(true);
+                    const reader = new FileReader();
+                    reader.onload = (ev) => setConsentPreview(ev.target?.result as string);
+                    reader.readAsDataURL(file);
+                  }
+                };
+                input.click();
+              }}
+              className="flex items-center gap-2 px-4 py-2 text-sm bg-primary-50 border border-primary-200 rounded-lg hover:bg-primary-100 transition-all"
+            >
+              <CameraIcon className="w-4 h-4 text-primary-600" />
+              <span className="text-primary-700 font-medium">Take Photo of Signed Consent</span>
+            </button>
+          </div>
+        ) : (
+          <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+            <div className="flex items-center gap-3 mb-3">
+              <CheckCircle className="w-6 h-6 text-green-600" />
+              <div>
+                <p className="font-semibold text-green-900">Signed Consent Uploaded</p>
+                <p className="text-sm text-green-700">{consentFile?.name} ({(consentFile?.size ? (consentFile.size / 1024).toFixed(1) : '?')} KB)</p>
+              </div>
+              <button
+                onClick={() => {
+                  setConsentFile(null);
+                  setConsentPreview(null);
+                  setConsentUploaded(false);
+                  if (consentInputRef.current) consentInputRef.current.value = '';
+                }}
+                className="ml-auto text-red-500 hover:text-red-700 text-sm font-medium"
+              >
+                Remove
+              </button>
+            </div>
+            {consentPreview && (
+              <div className="mt-2 border border-green-200 rounded-lg overflow-hidden">
+                <img src={consentPreview} alt="Signed consent" className="max-h-64 w-full object-contain bg-white" />
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 };
+
+// ==================== PDF GENERATORS ====================
+
+/**
+ * Generates comprehensive laboratory and imaging request PDF
+ * covering ALL parameters necessary for the diabetic foot assessment.
+ */
+async function generateLabAndImagingPDF(
+  formData: any,
+  patient: any,
+  risk: { category: string; color: string; probability: number; intervention: string },
+  totalScore: number,
+  setLoading: (v: boolean) => void
+) {
+  setLoading(true);
+  try {
+    const { jsPDF } = await import('jspdf');
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const pw = doc.internal.pageSize.getWidth();
+    const margin = 14;
+    let y = 12;
+
+    // ---- Header ----
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.text('UNIVERSITY OF NIGERIA TEACHING HOSPITAL', pw / 2, y, { align: 'center' });
+    y += 4;
+    doc.text('Burns, Plastic & Reconstructive Surgery UNIT, Department of Surgery', pw / 2, y, { align: 'center' });
+    y += 7;
+
+    doc.setFontSize(13);
+    doc.setFont('helvetica', 'bold');
+    doc.text('DIABETIC FOOT - LIMB SALVAGE ASSESSMENT', pw / 2, y, { align: 'center' });
+    y += 5;
+    doc.setFontSize(11);
+    doc.setTextColor(220, 38, 38);
+    doc.text('COMPREHENSIVE LABORATORY & IMAGING REQUEST', pw / 2, y, { align: 'center' });
+    doc.setTextColor(0, 0, 0);
+    y += 8;
+
+    // ---- Patient Info ----
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.text('PATIENT INFORMATION', margin, y);
+    y += 5;
+    doc.setFont('helvetica', 'normal');
+    const pName = patient ? (patient.full_name || `${patient.first_name} ${patient.last_name}`) : '________________________________';
+    const pHosp = patient?.hospital_number || '________________';
+    const pDOB = patient?.date_of_birth ? new Date(patient.date_of_birth).toLocaleDateString('en-GB') : '__________';
+    const pGender = patient?.gender || '________';
+    const nowDate = new Date().toLocaleDateString('en-GB');
+    const nowTime = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
+    doc.text(`Patient: ${pName}`, margin, y);
+    doc.text(`Hospital No: ${pHosp}`, pw - margin - 50, y);
+    y += 5;
+    doc.text(`DOB: ${pDOB}   Gender: ${pGender}`, margin, y);
+    doc.text(`Date: ${nowDate}  Time: ${nowTime}`, pw - margin - 55, y);
+    y += 5;
+    doc.text(`Assessment Score: ${totalScore} — ${risk.category}`, margin, y);
+    y += 8;
+
+    // Helper for test table
+    const drawTestTable = (title: string, titleColor: [number, number, number], tests: { test: string; sample: string; urgency: string; rationale: string }[]) => {
+      // Check page space
+      if (y + tests.length * 6 + 15 > 280) {
+        doc.addPage();
+        y = 15;
+      }
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFillColor(...titleColor);
+      doc.rect(margin, y, pw - 2 * margin, 7, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(9);
+      doc.text(title, margin + 2, y + 5);
+      doc.setTextColor(0, 0, 0);
+      y += 8;
+
+      // Column headers
+      doc.setFontSize(7.5);
+      doc.setFont('helvetica', 'bold');
+      doc.text('TEST', margin + 2, y + 3);
+      doc.text('SAMPLE', margin + 68, y + 3);
+      doc.text('URGENCY', margin + 105, y + 3);
+      doc.text('RATIONALE', margin + 130, y + 3);
+      y += 5;
+
+      doc.setFont('helvetica', 'normal');
+      tests.forEach((t, i) => {
+        if (y > 275) { doc.addPage(); y = 15; }
+        if (i % 2 === 0) {
+          doc.setFillColor(245, 245, 245);
+          doc.rect(margin, y - 1, pw - 2 * margin, 6, 'F');
+        }
+        doc.setFontSize(7);
+        doc.text(t.test, margin + 2, y + 3);
+        doc.text(t.sample, margin + 68, y + 3);
+        // Urgency in red if STAT
+        if (t.urgency === 'STAT') { doc.setTextColor(220, 38, 38); doc.setFont('helvetica', 'bold'); }
+        doc.text(t.urgency, margin + 105, y + 3);
+        doc.setTextColor(0, 0, 0);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(6.5);
+        doc.text(t.rationale, margin + 130, y + 3, { maxWidth: pw - margin - 132 });
+        doc.setFontSize(7);
+        // Tick box
+        doc.rect(pw - margin - 6, y - 0.5, 4, 4);
+        doc.text('✓', pw - margin - 5.5, y + 2.5);
+        y += 6;
+      });
+      y += 3;
+    };
+
+    // ===== SECTION 1: Metabolic / Glycemic Panel =====
+    drawTestTable('A. METABOLIC & GLYCEMIC PANEL', [14, 159, 110], [
+      { test: 'Fasting Blood Glucose (FBG)', sample: 'Fluoride (Grey)', urgency: 'Urgent', rationale: 'Glycemic status' },
+      { test: 'Random Blood Glucose', sample: 'Fluoride (Grey)', urgency: 'STAT', rationale: 'Acute control assessment' },
+      { test: 'HbA1c (Glycated Haemoglobin)', sample: 'EDTA (Purple)', urgency: 'Urgent', rationale: 'Long-term control (current: ' + formData.hba1c + '%)' },
+      { test: 'Fructosamine', sample: 'Serum (Gold)', urgency: 'Routine', rationale: '2-3 week glycemic trend' },
+      { test: 'Fasting Lipid Profile', sample: 'Serum (Gold)', urgency: 'Routine', rationale: 'Cardiovascular risk (PVD assessment)' },
+      { test: 'Serum Albumin', sample: 'Serum (Gold)', urgency: 'Urgent', rationale: 'Nutritional/wound healing capacity' },
+      { test: 'Pre-Albumin (Transthyretin)', sample: 'Serum (Gold)', urgency: 'Urgent', rationale: 'Early malnutrition indicator' },
+    ]);
+
+    // ===== SECTION 2: Renal Function =====
+    drawTestTable('B. RENAL FUNCTION PANEL', [59, 130, 246], [
+      { test: 'Serum Creatinine', sample: 'Serum (Gold)', urgency: 'STAT', rationale: 'eGFR calculation (current Cr: ' + formData.creatinine + ')' },
+      { test: 'Blood Urea Nitrogen (BUN)', sample: 'Serum (Gold)', urgency: 'STAT', rationale: 'Renal function (current: ' + formData.bun + ')' },
+      { test: 'Electrolytes (Na+, K+, Cl-, HCO3-)', sample: 'Serum (Gold)', urgency: 'STAT', rationale: 'Electrolyte balance/sepsis' },
+      { test: 'Serum Calcium & Phosphate', sample: 'Serum (Gold)', urgency: 'Urgent', rationale: 'Bone metabolism/dialysis' },
+      { test: 'Urine Microalbumin/Creatinine Ratio', sample: 'Spot Urine', urgency: 'Routine', rationale: 'Diabetic nephropathy staging' },
+      { test: 'Urinalysis + Microscopy', sample: 'Mid-stream Urine', urgency: 'Urgent', rationale: 'UTI screen / proteinuria' },
+    ]);
+
+    // ===== SECTION 3: Haematology / Infection =====
+    drawTestTable('C. HAEMATOLOGY & INFECTION MARKERS', [220, 38, 38], [
+      { test: 'Full Blood Count + Differential', sample: 'EDTA (Purple)', urgency: 'STAT', rationale: 'WBC for sepsis (current: ' + formData.wbc + ')' },
+      { test: 'Erythrocyte Sedimentation Rate (ESR)', sample: 'EDTA (Purple)', urgency: 'Urgent', rationale: 'Osteomyelitis marker (current: ' + formData.esr + ')' },
+      { test: 'C-Reactive Protein (CRP)', sample: 'Serum (Gold)', urgency: 'STAT', rationale: 'Inflammation/infection (current: ' + formData.crp + ')' },
+      { test: 'Procalcitonin', sample: 'Serum (Gold)', urgency: 'STAT', rationale: 'Bacterial sepsis differentiation' },
+      { test: 'Blood Culture × 2 sets', sample: 'Culture Bottles', urgency: 'STAT', rationale: 'Identify causative organism' },
+      { test: 'Wound Swab M/C/S', sample: 'Swab (Charcoal)', urgency: 'STAT', rationale: 'Targeted antibiotic therapy' },
+      { test: 'Deep Tissue Culture (if debriding)', sample: 'Tissue in sterile container', urgency: 'STAT', rationale: 'More reliable than surface swab' },
+      { test: 'Blood Lactate', sample: 'Fluoride (Grey)', urgency: 'STAT', rationale: 'Sepsis severity (current: ' + formData.lactate + ')' },
+      { test: 'Coagulation Screen (PT/INR, aPTT)', sample: 'Citrate (Blue)', urgency: 'Urgent', rationale: 'DIC screen/pre-operative' },
+      { test: 'D-Dimer', sample: 'Citrate (Blue)', urgency: 'Urgent', rationale: 'DVT screening / DIC' },
+      { test: 'Group & Crossmatch (2 units)', sample: 'EDTA (Purple)', urgency: 'Urgent', rationale: 'Pre-operative preparation' },
+    ]);
+
+    // ===== SECTION 4: Liver / Nutrition =====
+    drawTestTable('D. LIVER FUNCTION & NUTRITIONAL MARKERS', [161, 98, 7], [
+      { test: 'Liver Function Tests (ALT, AST, ALP, GGT)', sample: 'Serum (Gold)', urgency: 'Urgent', rationale: 'Hepatic status/antibiotic adjustment' },
+      { test: 'Total Protein & Albumin', sample: 'Serum (Gold)', urgency: 'Urgent', rationale: 'Wound healing capacity' },
+      { test: 'Serum Vitamin D (25-OH)', sample: 'Serum (Gold)', urgency: 'Routine', rationale: 'Bone healing/immune function' },
+      { test: 'Serum Iron, Ferritin, TIBC', sample: 'Serum (Gold)', urgency: 'Routine', rationale: 'Anaemia workup' },
+      { test: 'Vitamin B12 & Folate', sample: 'Serum (Gold)', urgency: 'Routine', rationale: 'Neuropathy contributing factor' },
+      { test: 'Zinc Level', sample: 'Serum (Gold/Trace Metal)', urgency: 'Routine', rationale: 'Wound healing cofactor' },
+      { test: 'Vitamin C Level', sample: 'Serum (special tube)', urgency: 'Routine', rationale: 'Collagen synthesis / healing' },
+    ]);
+
+    // ===== SECTION 5: Cardiac Panel =====
+    if (formData.coronaryArteryDisease || formData.congestiveHeartFailure || formData.hypertension) {
+      drawTestTable('E. CARDIAC PANEL (Comorbidity-Indicated)', [139, 92, 246], [
+        { test: 'Troponin I/T', sample: 'Serum (Gold)', urgency: 'Urgent', rationale: 'Myocardial assessment pre-op' },
+        { test: 'BNP / NT-proBNP', sample: 'EDTA (Purple)', urgency: 'Urgent', rationale: 'Heart failure status' },
+        { test: 'ECG (12-lead)', sample: 'Patient', urgency: 'Urgent', rationale: 'Cardiac rhythm / ischaemia' },
+        { test: 'Chest X-ray PA', sample: 'Patient', urgency: 'Urgent', rationale: 'Cardiac size / pulmonary status' },
+      ]);
+    }
+
+    // ===== SECTION 6: IMAGING =====
+    doc.addPage();
+    y = 15;
+
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('IMAGING REQUESTS', pw / 2, y, { align: 'center' });
+    y += 8;
+
+    drawTestTable('F. VASCULAR IMAGING (Critical for Limb Salvage)', [14, 159, 110], [
+      { test: 'Arterial Doppler Ultrasound (Bilateral LL)', sample: 'Patient', urgency: 'STAT', rationale: 'ABI, waveforms, stenosis mapping' },
+      { test: 'Venous Doppler Ultrasound (Affected Limb)', sample: 'Patient', urgency: 'Urgent', rationale: 'DVT screening / CVI assessment' },
+      { test: 'CT Angiography (Lower Limb)', sample: 'Patient + IV Contrast', urgency: totalScore >= 100 ? 'STAT' : 'Urgent', rationale: 'Detailed arterial mapping for revascularization' },
+      { test: 'Transcutaneous Oxygen (TcPO₂)', sample: 'Patient', urgency: 'Urgent', rationale: 'Local tissue perfusion & healing potential' },
+      { test: 'Toe Pressures / TBI', sample: 'Patient', urgency: 'Urgent', rationale: 'Better distal perfusion assessment if diabetic calcification' },
+    ]);
+
+    drawTestTable('G. MUSCULOSKELETAL IMAGING', [139, 69, 19], [
+      { test: 'X-ray Foot AP/Lateral/Oblique', sample: 'Patient', urgency: 'STAT', rationale: 'Osteomyelitis, fracture, gas gangrene' },
+      { test: 'MRI Foot with Contrast (Gadolinium)', sample: 'Patient + IV Contrast', urgency: totalScore >= 100 ? 'STAT' : 'Urgent', rationale: 'Gold standard osteomyelitis + soft tissue extent' },
+      { test: 'Bone Scan (Tc-99m MDP) [if MRI contraindicated]', sample: 'Patient + IV Isotope', urgency: 'Urgent', rationale: 'Alternative osteomyelitis detection' },
+      { test: 'Tagged WBC Scan (In-111 or Tc-99m HMPAO)', sample: 'Patient + Labelled WBCs', urgency: 'Routine', rationale: 'Differentiate Charcot from osteomyelitis' },
+    ]);
+
+    drawTestTable('H. GENERAL PRE-OPERATIVE IMAGING', [107, 114, 128], [
+      { test: 'Chest X-ray PA', sample: 'Patient', urgency: 'Urgent', rationale: 'Pre-anaesthetic evaluation' },
+      { test: 'ECG (12-lead)', sample: 'Patient', urgency: 'Urgent', rationale: 'Cardiac risk assessment' },
+      { test: 'Echocardiography (if cardiac Hx)', sample: 'Patient', urgency: 'Routine', rationale: 'Ejection fraction / valvular disease' },
+    ]);
+
+    // ===== Specimen Collection Notes =====
+    if (y > 255) { doc.addPage(); y = 15; }
+    y += 5;
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    doc.text('SPECIMEN COLLECTION NOTES:', margin, y);
+    y += 4;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.text('• Collect blood cultures BEFORE starting/changing antibiotics if possible', margin, y); y += 3.5;
+    doc.text('• Label all specimens with full patient details and collection time', margin, y); y += 3.5;
+    doc.text('• Deep tissue culture preferred over wound swabs when debridement is performed', margin, y); y += 3.5;
+    doc.text('• CT Angiography: ensure adequate renal function (eGFR >' + '30) before IV contrast; hydrate if indicated', margin, y); y += 3.5;
+    doc.text('• MRI Foot: screen for metallic implants; contrast contraindicated if eGFR <30 (risk of NSF)', margin, y); y += 3.5;
+    doc.text('• For dialysis patients: coordinate timing of contrast studies with dialysis schedule', margin, y);
+    y += 8;
+
+    // ===== Requesting Doctor =====
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.text('REQUESTING DOCTOR:', margin, y);
+    y += 5;
+    doc.setFont('helvetica', 'normal');
+    doc.text('Name: ________________________________', margin, y);
+    doc.text('Signature: ________________________', pw / 2, y);
+    y += 5;
+    doc.text('Designation: ________________________', margin, y);
+    doc.text('Bleep/Phone: ______________________', pw / 2, y);
+
+    // Save
+    const filename = `DiabeticFoot_LabImaging_${patient?.hospital_number || 'Form'}_${new Date().toISOString().split('T')[0]}.pdf`;
+    doc.save(filename);
+  } catch (err) {
+    console.error('Error generating lab/imaging PDF:', err);
+    alert('Failed to generate PDF. Please try again.');
+  }
+  setLoading(false);
+}
+
+/**
+ * Generates patient counselling document + informed consent form
+ * with detailed explanations based on assessment results.
+ */
+async function generateCounsellingAndConsentPDF(
+  formData: any,
+  patient: any,
+  risk: { category: string; color: string; probability: number; intervention: string },
+  totalScore: number,
+  recommendations: string[],
+  breakdown: { category: string; score: number; maxScore: number }[],
+  setLoading: (v: boolean) => void
+) {
+  setLoading(true);
+  try {
+    const { jsPDF } = await import('jspdf');
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const pw = doc.internal.pageSize.getWidth();
+    const margin = 15;
+    let y = 12;
+
+    const pName = patient ? (patient.full_name || `${patient.first_name} ${patient.last_name}`) : '____________________________';
+    const pHosp = patient?.hospital_number || '________________';
+    const nowDate = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+
+    // Helper: wrapped text with auto page break
+    const addWrapped = (text: string, x: number, maxW: number, fontSize: number = 9, fontStyle: string = 'normal') => {
+      doc.setFontSize(fontSize);
+      doc.setFont('helvetica', fontStyle);
+      const lines = doc.splitTextToSize(text, maxW);
+      lines.forEach((line: string) => {
+        if (y > 275) { doc.addPage(); y = 15; }
+        doc.text(line, x, y);
+        y += fontSize * 0.45;
+      });
+    };
+
+    // =================== PAGE 1: PATIENT COUNSELLING ===================
+    doc.setFontSize(9);
+    doc.text('UNIVERSITY OF NIGERIA TEACHING HOSPITAL', pw / 2, y, { align: 'center' });
+    y += 4;
+    doc.text('Burns, Plastic & Reconstructive Surgery UNIT', pw / 2, y, { align: 'center' });
+    y += 7;
+
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('PATIENT COUNSELLING DOCUMENT', pw / 2, y, { align: 'center' });
+    y += 5;
+    doc.setFontSize(10);
+    doc.setTextColor(14, 159, 110);
+    doc.text('Diabetic Foot — Limb Salvage Assessment', pw / 2, y, { align: 'center' });
+    doc.setTextColor(0, 0, 0);
+    y += 8;
+
+    // Patient info box
+    doc.setFillColor(245, 245, 245);
+    doc.rect(margin, y, pw - 2 * margin, 14, 'F');
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Patient: ${pName}`, margin + 3, y + 5);
+    doc.text(`Hospital No: ${pHosp}`, pw - margin - 45, y + 5);
+    doc.text(`Date: ${nowDate}`, margin + 3, y + 11);
+    doc.text(`Assessment Score: ${totalScore}`, pw - margin - 45, y + 11);
+    y += 18;
+
+    // Greeting / Introduction
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.text('Dear Patient,', margin, y);
+    y += 6;
+
+    addWrapped(
+      'We have completed a comprehensive assessment of your diabetic foot condition. This document is intended to explain your results in clear language, describe the treatment options available, and help you make an informed decision about your care. Please read carefully and feel free to ask your medical team any questions.',
+      margin, pw - 2 * margin, 9.5
+    );
+    y += 4;
+
+    // Understanding Your Condition
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    if (y > 270) { doc.addPage(); y = 15; }
+    doc.text('1. UNDERSTANDING YOUR CONDITION', margin, y);
+    y += 6;
+
+    addWrapped(
+      'Diabetes can damage the blood vessels and nerves in your feet over time. When this happens, you may not feel injuries, and your feet may not get enough blood flow to heal properly. This is what we call "diabetic foot disease." If not managed correctly, it can lead to infections, tissue death (gangrene), and in severe cases, the need for amputation (surgical removal of part of the leg).',
+      margin, pw - 2 * margin, 9
+    );
+    y += 3;
+
+    // Wagner grade explanation
+    const wagnerExplanations: Record<number, string> = {
+      0: 'Your foot shows early warning signs (bony changes or a healed ulcer) but no open wound currently. This is the earliest stage, and with proper care, we can prevent progression.',
+      1: 'You have a superficial (surface-level) ulcer on your foot. The wound does not go deep into the tissue. With proper wound care and offloading, this has an excellent chance of healing.',
+      2: 'Your foot ulcer extends deeper, possibly reaching tendons or bone. This requires more aggressive wound care and close monitoring for infection.',
+      3: 'Your foot has a deep infection (abscess) or signs that the infection has reached the bone (osteomyelitis). This is serious and usually requires surgery to clean the infection and prolonged antibiotics.',
+      4: 'Part of your foot (toes or forefoot) has developed gangrene — the tissue has died due to poor blood supply. The dead tissue will need to be surgically removed. The goal is to save as much of your foot as possible.',
+      5: 'The gangrene has spread extensively across your foot. This is the most severe stage and carries a significant risk. A more extensive amputation may be necessary to save your life and prevent the infection from spreading.',
+    };
+
+    addWrapped(
+      `Your Wound Grade: Wagner Grade ${formData.wagnerGrade} — ${wagnerExplanations[formData.wagnerGrade] || 'Assessment recorded.'}`,
+      margin, pw - 2 * margin, 9
+    );
+    y += 4;
+
+    // Assessment Results
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    if (y > 270) { doc.addPage(); y = 15; }
+    doc.text('2. YOUR ASSESSMENT RESULTS', margin, y);
+    y += 6;
+
+    addWrapped(
+      `Your overall Limb Salvage Score is ${totalScore} out of a maximum possible score. Based on this score, your assessment falls into the category: "${risk.category}". This means there is approximately a ${risk.probability}% chance that your limb can be saved with appropriate treatment.`,
+      margin, pw - 2 * margin, 9
+    );
+    y += 3;
+
+    // Score breakdown in simple terms
+    addWrapped('Here is a summary of what contributed to your score:', margin, pw - 2 * margin, 9, 'bold');
+    y += 2;
+    breakdown.forEach(b => {
+      const pct = b.maxScore > 0 ? Math.round((b.score / b.maxScore) * 100) : 0;
+      const severity = pct > 70 ? '(Significant concern)' : pct > 40 ? '(Moderate concern)' : '(Within acceptable range)';
+      addWrapped(`• ${b.category}: ${b.score}/${b.maxScore} ${severity}`, margin + 3, pw - 2 * margin - 3, 8.5);
+    });
+    y += 4;
+
+    // Recommended Approach
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    if (y > 270) { doc.addPage(); y = 15; }
+    doc.text('3. RECOMMENDED TREATMENT APPROACH', margin, y);
+    y += 6;
+
+    const interventionExplanations: Record<string, string> = {
+      'Conservative Management': 'Based on your assessment, we recommend conservative (non-surgical) management. This involves specialised wound dressings, offloading devices (special shoes or casts to take pressure off the wound), optimising your blood sugar control, nutritional support, and close monitoring. Most patients in your risk category respond well to this approach, and the wound heals with time and proper care.',
+      'Wound Care & Debridement': 'We recommend wound care combined with surgical debridement. Debridement means removing dead, damaged, or infected tissue from the wound to help it heal. This is done under anaesthesia and helps create a clean wound bed. After the procedure, you will need ongoing wound dressings and may need antibiotics. The goal is to promote healing and prevent the need for amputation.',
+      'Ray/Transmetatarsal Amputation': 'Based on your assessment, we recommend a limited amputation — either a "ray amputation" (removing one or more toes along with part of the connecting bone) or a "transmetatarsal amputation" (removing the front part of the foot while preserving the heel). These procedures save most of your foot and allow you to walk with special footwear. The decision on the exact level will be made during surgery based on the extent of viable tissue.',
+      'Below-Knee Amputation': 'Due to the severity of your condition, we recommend a below-knee amputation (BKA). This means removing the leg below the knee joint. While this is a significant procedure, it is the safest option to control infection, relieve pain, and preserve your life. Modern prosthetics (artificial legs) allow many patients to walk and live independently after this surgery. Rehabilitation will be an important part of your recovery.',
+      'Above-Knee Amputation': 'Due to the extensive involvement, we recommend an above-knee amputation (AKA). This is the most extensive option but is necessary when the disease or infection has spread beyond what a below-knee procedure can manage. Your safety and survival are our primary concern. We will provide comprehensive rehabilitation support and prosthetic fitting after recovery.',
+    };
+
+    addWrapped(
+      `Our recommended intervention: ${risk.intervention}`,
+      margin, pw - 2 * margin, 10, 'bold'
+    );
+    y += 3;
+    addWrapped(
+      interventionExplanations[risk.intervention] || `Based on your specific clinical picture, we recommend: ${risk.intervention}. Your medical team will discuss the details of this approach with you.`,
+      margin, pw - 2 * margin, 9
+    );
+    y += 4;
+
+    // Specific clinical recommendations
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    if (y > 270) { doc.addPage(); y = 15; }
+    doc.text('4. ADDITIONAL CLINICAL RECOMMENDATIONS', margin, y);
+    y += 6;
+
+    recommendations.forEach(rec => {
+      const cleanRec = rec.replace('🚨 ', '').replace('🚨', '');
+      addWrapped(`• ${cleanRec}`, margin + 3, pw - 2 * margin - 3, 8.5);
+    });
+    y += 4;
+
+    // Risks and Benefits
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    if (y > 270) { doc.addPage(); y = 15; }
+    doc.text('5. RISKS & BENEFITS', margin, y);
+    y += 6;
+
+    addWrapped(
+      'Benefits of the recommended treatment: Control of infection, pain relief, removal of dead tissue, improved wound healing, prevention of further tissue loss, and ultimately saving as much of your limb as possible — or protecting your life when amputation is necessary.',
+      margin, pw - 2 * margin, 9
+    );
+    y += 2;
+
+    addWrapped(
+      'Potential risks and complications: Bleeding, infection, delayed wound healing, need for further surgery, phantom limb pain (after amputation), blood clots (DVT/PE), anaesthetic complications, and in rare cases, the need for a higher level of amputation. Your diabetes and other medical conditions may increase some of these risks.',
+      margin, pw - 2 * margin, 9
+    );
+    y += 2;
+
+    addWrapped(
+      'Alternatives: You have the right to decline the recommended treatment. Alternative options (if applicable) include continued conservative management, seeking a second opinion, or choosing a different level of intervention. However, delayed treatment of a critical diabetic foot carries the risk of life-threatening infection (sepsis) and uncontrolled tissue death.',
+      margin, pw - 2 * margin, 9
+    );
+    y += 6;
+
+    // Treatment options for patient preference
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    if (y > 270) { doc.addPage(); y = 15; }
+    doc.text('6. TREATMENT OPTIONS (Please discuss with your doctor)', margin, y);
+    y += 6;
+
+    const treatmentOptions = [
+      { option: 'Option A: Recommended Intervention', desc: risk.intervention + ' — as described above.' },
+      { option: 'Option B: Conservative Management', desc: 'Wound care, antibiotics, and close monitoring without surgery (if feasible based on your condition).' },
+      { option: 'Option C: Alternative Surgical Approach', desc: 'A different surgical option (to be discussed with your surgeon based on intra-operative findings).' },
+      { option: 'Option D: Decline Treatment', desc: 'You may choose not to proceed. Risks of non-treatment have been explained.' },
+    ];
+
+    treatmentOptions.forEach(t => {
+      addWrapped(`${t.option}:`, margin, pw - 2 * margin, 9, 'bold');
+      addWrapped(t.desc, margin + 5, pw - 2 * margin - 5, 8.5);
+      y += 1;
+    });
+
+    // =================== CONSENT FORM (New Page) ===================
+    doc.addPage();
+    y = 15;
+
+    doc.setFontSize(9);
+    doc.text('UNIVERSITY OF NIGERIA TEACHING HOSPITAL', pw / 2, y, { align: 'center' });
+    y += 4;
+    doc.text('Burns, Plastic & Reconstructive Surgery UNIT', pw / 2, y, { align: 'center' });
+    y += 7;
+
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('INFORMED CONSENT FORM', pw / 2, y, { align: 'center' });
+    y += 5;
+    doc.setFontSize(10);
+    doc.text('Diabetic Foot — Limb Salvage / Amputation Procedure', pw / 2, y, { align: 'center' });
+    y += 10;
+
+    // Patient Details
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Patient Name: ${pName}`, margin, y);
+    doc.text(`Hospital No: ${pHosp}`, pw - margin - 45, y);
+    y += 6;
+    doc.text(`Date: ${nowDate}`, margin, y);
+    y += 8;
+
+    // Consent Statements
+    const consentStatements = [
+      'I confirm that I have been given a thorough explanation of my condition (diabetic foot disease) in a language I understand.',
+      'I understand the nature and purpose of the recommended procedure: ' + risk.intervention + '.',
+      'The potential benefits, risks, complications, and alternative treatment options have been explained to me in detail.',
+      'I have had the opportunity to ask questions, and all my questions have been answered to my satisfaction.',
+      'I understand that the exact extent of the procedure may need to be adjusted during surgery based on findings, and I give my consent for the surgical team to make necessary intra-operative decisions.',
+      'I have been informed about the anaesthesia (general/regional/local) required for the procedure and its associated risks.',
+      'I understand that no guarantee has been made regarding the outcome of the procedure.',
+      'I understand my right to withdraw my consent at any time before the procedure.',
+      'I consent to the procedure being photographed/documented for my medical records and for clinical education (identifiable photos will not be shared without separate consent).',
+    ];
+
+    consentStatements.forEach((stmt, idx) => {
+      if (y > 270) { doc.addPage(); y = 15; }
+      // Checkbox
+      doc.rect(margin, y - 3, 4, 4);
+      addWrapped(`${idx + 1}. ${stmt}`, margin + 7, pw - 2 * margin - 7, 9);
+      y += 2;
+    });
+
+    y += 5;
+
+    // Patient Preferred Treatment Choice
+    if (y > 250) { doc.addPage(); y = 15; }
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.text('Patient\'s Preferred Treatment Choice:', margin, y);
+    y += 6;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.rect(margin, y - 3, 4, 4); doc.text('Option A: ' + risk.intervention + ' (Recommended)', margin + 7, y);
+    y += 6;
+    doc.rect(margin, y - 3, 4, 4); doc.text('Option B: Conservative Management', margin + 7, y);
+    y += 6;
+    doc.rect(margin, y - 3, 4, 4); doc.text('Option C: Alternative Surgical Approach (specify): ______________________________', margin + 7, y);
+    y += 6;
+    doc.rect(margin, y - 3, 4, 4); doc.text('Option D: Decline Treatment (Against Medical Advice)', margin + 7, y);
+    y += 10;
+
+    // Signature Section
+    if (y > 230) { doc.addPage(); y = 15; }
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.text('PATIENT / NEXT OF KIN SIGNATURE', margin, y);
+    y += 8;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+
+    doc.text('Patient Signature: ________________________________', margin, y);
+    doc.text('Date: ________________', pw - margin - 40, y);
+    y += 8;
+    doc.text('Patient Name (Print): ________________________________', margin, y);
+    y += 8;
+    doc.text('Next of Kin Name: ________________________________', margin, y);
+    doc.text('Relationship: ________________', pw - margin - 45, y);
+    y += 8;
+    doc.text('Next of Kin Signature: ________________________________', margin, y);
+    doc.text('Date: ________________', pw - margin - 40, y);
+    y += 8;
+    doc.text('Next of Kin Phone: ________________________________', margin, y);
+    y += 12;
+
+    // Doctor Section
+    doc.setFont('helvetica', 'bold');
+    doc.text('ATTENDING DOCTOR / SURGEON', margin, y);
+    y += 8;
+    doc.setFont('helvetica', 'normal');
+    doc.text('Doctor Name: ________________________________', margin, y);
+    doc.text('Designation: ________________', pw - margin - 40, y);
+    y += 8;
+    doc.text('Doctor Signature: ________________________________', margin, y);
+    doc.text('Date: ________________', pw - margin - 40, y);
+    y += 8;
+    doc.text('GMC/MDCN No: ________________________________', margin, y);
+    y += 12;
+
+    // Witness Section
+    doc.setFont('helvetica', 'bold');
+    doc.text('WITNESS', margin, y);
+    y += 8;
+    doc.setFont('helvetica', 'normal');
+    doc.text('Witness Name: ________________________________', margin, y);
+    doc.text('Designation: ________________', pw - margin - 40, y);
+    y += 8;
+    doc.text('Witness Signature: ________________________________', margin, y);
+    doc.text('Date: ________________', pw - margin - 40, y);
+
+    // Save
+    const filename = `DiabeticFoot_Counselling_Consent_${patient?.hospital_number || 'Form'}_${new Date().toISOString().split('T')[0]}.pdf`;
+    doc.save(filename);
+  } catch (err) {
+    console.error('Error generating counselling/consent PDF:', err);
+    alert('Failed to generate PDF. Please try again.');
+  }
+  setLoading(false);
+}
 
 export default DiabeticFootAssessmentForm;
