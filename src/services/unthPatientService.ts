@@ -28,7 +28,7 @@ const authenticatedFetch = async (url: string, options: RequestInit = {}): Promi
 export interface Ward {
   id: string;
   name: string;
-  type: 'general' | 'surgical' | 'medical' | 'emergency' | 'icu' | 'private';
+  type: 'general' | 'surgical' | 'medical' | 'emergency' | 'icu' | 'private' | 'oncology' | 'obstetric' | 'neuro' | 'labour' | 'pediatric' | 'eye';
   capacity: number;
   currentOccupancy: number;
   supervisor: string;
@@ -93,6 +93,7 @@ export interface PatientRegistration {
     uploaded_at: string;
   }>;
   consultant_in_charge: string;
+  consulting_unit?: string;
   resident_in_charge?: string;
   
   // Timestamps
@@ -224,27 +225,64 @@ export interface TreatmentProgress {
 
 class UNTHPatientService {
   private wards: Ward[] = [
-    { id: 'emergency_ward', name: 'Emergency Ward', type: 'emergency', capacity: 40, currentOccupancy: 15, supervisor: 'Ward Supervisor' },
-    { id: 'ward_1', name: 'Ward 1', type: 'general', capacity: 30, currentOccupancy: 10, supervisor: 'Ward Supervisor' },
-    { id: 'ward_2', name: 'Ward 2', type: 'general', capacity: 30, currentOccupancy: 10, supervisor: 'Ward Supervisor' },
-    { id: 'ward_3', name: 'Ward 3', type: 'general', capacity: 30, currentOccupancy: 10, supervisor: 'Ward Supervisor' },
-    { id: 'ward_4', name: 'Ward 4', type: 'general', capacity: 30, currentOccupancy: 10, supervisor: 'Ward Supervisor' },
-    { id: 'ward_5', name: 'Ward 5', type: 'general', capacity: 30, currentOccupancy: 10, supervisor: 'Ward Supervisor' },
-    { id: 'ward_6', name: 'Ward 6', type: 'general', capacity: 30, currentOccupancy: 10, supervisor: 'Ward Supervisor' },
-    { id: 'ward_7', name: 'Ward 7', type: 'general', capacity: 30, currentOccupancy: 10, supervisor: 'Ward Supervisor' },
-    { id: 'ward_8', name: 'Ward 8', type: 'general', capacity: 30, currentOccupancy: 10, supervisor: 'Ward Supervisor' },
-    { id: 'ward_9', name: 'Ward 9', type: 'general', capacity: 30, currentOccupancy: 10, supervisor: 'Ward Supervisor' },
-    { id: 'ward_10', name: 'Ward 10', type: 'general', capacity: 30, currentOccupancy: 10, supervisor: 'Ward Supervisor' },
-    { id: 'eye_ward', name: 'Eye Ward', type: 'surgical', capacity: 20, currentOccupancy: 5, supervisor: 'Ward Supervisor' },
-    { id: 'private_ward', name: 'Private Ward', type: 'private', capacity: 15, currentOccupancy: 2, supervisor: 'Ward Supervisor' },
-    { id: 'male_medical_ward', name: 'Male Medical Ward', type: 'medical', capacity: 30, currentOccupancy: 20, supervisor: 'Ward Supervisor' },
-    { id: 'female_medical_ward', name: 'Female Medical Ward', type: 'medical', capacity: 30, currentOccupancy: 18, supervisor: 'Ward Supervisor' },
-    { id: 'oncology_ward', name: 'Oncology Ward', type: 'medical', capacity: 25, currentOccupancy: 10, supervisor: 'Ward Supervisor' },
-    { id: 'male_medical_ext', name: 'Male Medical Ward Extension', type: 'medical', capacity: 20, currentOccupancy: 5, supervisor: 'Ward Supervisor' },
-    { id: 'ward_6a', name: 'Ward 6A', type: 'general', capacity: 15, currentOccupancy: 3, supervisor: 'Ward Supervisor' },
-    { id: 'ward_6b', name: 'Ward 6B', type: 'general', capacity: 15, currentOccupancy: 4, supervisor: 'Ward Supervisor' },
-    { id: 'picu', name: 'PICU', type: 'icu', capacity: 10, currentOccupancy: 6, supervisor: 'Ward Supervisor' },
-    { id: 'newborn', name: 'Newborn', type: 'icu', capacity: 20, currentOccupancy: 8, supervisor: 'Ward Supervisor' },
+    // General Wards (1-5, 6A, 6B, 8-10)
+    { id: 'ward_1', name: 'Ward 1', type: 'general', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
+    { id: 'ward_2', name: 'Ward 2', type: 'general', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
+    { id: 'ward_3', name: 'Ward 3', type: 'general', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
+    { id: 'ward_4', name: 'Ward 4', type: 'general', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
+    { id: 'ward_5', name: 'Ward 5', type: 'general', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
+    { id: 'ward_6a', name: 'Ward 6A', type: 'general', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
+    { id: 'ward_6b', name: 'Ward 6B', type: 'general', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
+    { id: 'ward_8', name: 'Ward 8', type: 'general', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
+    { id: 'ward_9', name: 'Ward 9', type: 'general', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
+    { id: 'ward_10', name: 'Ward 10', type: 'general', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
+    // Specialty Wards
+    { id: 'oncology_ward', name: 'Oncology Ward', type: 'oncology', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
+    { id: 'post_natal_ward', name: 'Post Natal Ward', type: 'obstetric', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
+    { id: 'neuro_ward', name: 'Neuro Ward', type: 'neuro', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
+    // Medical Wards
+    { id: 'male_medical_ext', name: 'Male Medical Ward Extension', type: 'medical', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
+    { id: 'male_medical_ward', name: 'Male Medical Ward', type: 'medical', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
+    { id: 'female_medical_ward', name: 'Female Medical Ward', type: 'medical', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
+    // Private Suites
+    { id: 'private_suite_pink', name: 'Private Suite (Pink)', type: 'private', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
+    { id: 'private_suite_purple', name: 'Private Suite (Purple)', type: 'private', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
+    { id: 'private_suite_blue', name: 'Private Suite (Blue)', type: 'private', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
+    { id: 'private_suite_white', name: 'Private Suite (White)', type: 'private', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
+    // Surgical & Emergency
+    { id: 'eye_ward', name: 'Eye Ward', type: 'eye', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
+    { id: 'labour_ward', name: 'Labour Ward', type: 'labour', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
+    { id: 'surgical_emergency', name: 'Surgical Emergency Ward', type: 'emergency', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
+    { id: 'medical_emergency', name: 'Medical Emergency', type: 'emergency', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
+    // Pediatric & Neonatal
+    { id: 'newborn', name: 'Newborn', type: 'pediatric', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
+    { id: 'children_emergency', name: 'Children Emergency Ward', type: 'pediatric', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
+  ];
+
+  // Consulting units list
+  private consultingUnits: string[] = [
+    'Cardiology',
+    'Endocrinology',
+    'Respiratory',
+    'Nephrology',
+    'Dermatology and Rheumatology',
+    'Haematology',
+    'Neurology',
+    'Psychiatry',
+    'Pediatrics',
+    'Ophthalmology',
+    'ENT',
+    'Maxillofacial',
+    'General Surgery',
+    'Urology',
+    'Cardiothoracic',
+    'Gastroenterology',
+    'Radio-Oncology',
+    'Obstetrics and Gynaecology',
+    'ICU',
+    'Orthopaedic',
+    'Pain and Palliative Unit',
+    'Burns, Plastic and Reconstructive Surgery',
   ];
 
   // Consultants list for auto-assignment
@@ -537,6 +575,13 @@ class UNTHPatientService {
    */
   getAvailableWards(): Ward[] {
     return this.wards.filter(ward => ward.currentOccupancy < ward.capacity);
+  }
+
+  /**
+   * Get all consulting units
+   */
+  getConsultingUnits(): string[] {
+    return [...this.consultingUnits];
   }
 
   /**

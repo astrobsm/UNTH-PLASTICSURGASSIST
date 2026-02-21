@@ -198,6 +198,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [availableWards, setAvailableWards] = useState<Ward[]>([]);
+  const [consultingUnits, setConsultingUnits] = useState<string[]>([]);
   const { user } = useAuthStore();
   
   // Treatment Plan Creation State
@@ -216,6 +217,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
 
   React.useEffect(() => {
     setAvailableWards(unthPatientService.getAvailableWards());
+    setConsultingUnits(unthPatientService.getConsultingUnits());
   }, []);
 
   // Utility Functions
@@ -3052,6 +3054,24 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
             </div>
             </>
           )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Consulting Unit
+            </label>
+            <select
+              required={formData.patient_type === 'inpatient'}
+              value={(formData as any).consulting_unit || ''}
+              onChange={(e) => handleInputChange('consulting_unit', e.target.value)}
+              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              title="Select consulting unit"
+            >
+              <option value="">Select Consulting Unit</option>
+              {consultingUnits.map(unit => (
+                <option key={unit} value={unit}>{unit}</option>
+              ))}
+            </select>
+          </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
