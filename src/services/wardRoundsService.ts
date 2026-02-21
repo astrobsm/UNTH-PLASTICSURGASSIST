@@ -229,6 +229,7 @@ function fromServerFormat(row: any): WardRound {
     consultation_specialty: findingsObj.consultation_specialty || '',
     consultation_reason: findingsObj.consultation_reason || '',
     lmp: findingsObj.lmp || '',
+    clinical_images: row.clinical_images || [],
     plan_changes: [],
     created_at: row.created_at ? new Date(row.created_at) : undefined,
     updated_at: row.updated_at ? new Date(row.updated_at) : undefined,

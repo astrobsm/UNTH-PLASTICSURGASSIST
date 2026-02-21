@@ -493,6 +493,18 @@ class TreatmentPlanningService {
     if (plan) {
       const reviews = [...(plan.reviews || []), review];
       await this.updatePlanLocal(planId, { reviews, updated_at: new Date() });
+
+      // Sync reviews to server as follow_up_schedule
+      try {
+        const serverId = plan.serverId || plan.id;
+        if (serverId && navigator.onLine) {
+          await apiClient.updateTreatmentPlan(String(serverId), {
+            followUpSchedule: reviews
+          });
+        }
+      } catch (e) {
+        console.warn('Could not sync reviews to server:', e);
+      }
     }
 
     return review.id;
@@ -697,11 +709,53 @@ class TreatmentPlanningService {
       try {
         const serverPlans = await apiClient.getTreatmentPlans(patientId);
         if (Array.isArray(serverPlans) && serverPlans.length > 0) {
-          // Sync to local
+          // Merge server data with existing local data to preserve local-only fields (reviews, lab_works, etc.)
+          const mergedPlans: any[] = [];
           for (const plan of serverPlans) {
-            try { await db.treatment_plans.put({ ...plan, synced: true }); } catch { /* ignore */ }
+            try {
+              // Find existing local record to preserve local-only fields
+              const planId = plan.id;
+              let existing: any = null;
+              try {
+                existing = await db.treatment_plans.get(planId);
+                if (!existing) {
+                  const numId = parseInt(String(planId));
+                  if (!isNaN(numId)) existing = await db.treatment_plans.get(numId);
+                }
+              } catch { /* ignore */ }
+
+              // Parse server JSONB fields
+              const serverReviews = Array.isArray(plan.follow_up_schedule)
+                ? plan.follow_up_schedule
+                : (typeof plan.follow_up_schedule === 'string' ? JSON.parse(plan.follow_up_schedule || '[]') : []);
+              const serverProcedures = Array.isArray(plan.procedures)
+                ? plan.procedures
+                : (typeof plan.procedures === 'string' ? JSON.parse(plan.procedures || '[]') : []);
+              const serverMedications = Array.isArray(plan.medications)
+                ? plan.medications
+                : (typeof plan.medications === 'string' ? JSON.parse(plan.medications || '[]') : []);
+
+              const merged = {
+                ...plan,
+                synced: true,
+                // Preserve local-only fields if they have data, otherwise use server data
+                reviews: (existing?.reviews && existing.reviews.length > 0) ? existing.reviews : serverReviews,
+                lab_works: (existing?.lab_works && existing.lab_works.length > 0) ? existing.lab_works : (plan.lab_works || []),
+                procedures: (existing?.procedures && existing.procedures.length > 0) ? existing.procedures : serverProcedures,
+                medications: (existing?.medications && existing.medications.length > 0) ? existing.medications : serverMedications,
+                discharge_timeline: existing?.discharge_timeline || plan.discharge_timeline || null,
+                // Preserve local fields that server doesn't have
+                planned_discharge_date: existing?.planned_discharge_date || plan.planned_discharge_date || null,
+                primary_consultant: existing?.primary_consultant || plan.primary_consultant || '',
+                patient_name: existing?.patient_name || plan.patient_name || [plan.first_name, plan.last_name].filter(Boolean).join(' ') || '',
+                hospital_number: existing?.hospital_number || plan.hospital_number || '',
+                title: existing?.title || plan.title || plan.diagnosis || plan.description || 'Treatment Plan'
+              };
+              await db.treatment_plans.put(merged as any);
+              mergedPlans.push(merged);
+            } catch { mergedPlans.push(plan); }
           }
-          return serverPlans.map((plan: any) => ({
+          return mergedPlans.map((plan: any) => ({
             ...plan,
             id: plan.id?.toString() || '',
             patient_id: plan.patient_id?.toString() || patientId,
@@ -713,7 +767,7 @@ class TreatmentPlanningService {
             planned_discharge_date: plan.planned_discharge_date || null,
             primary_consultant: plan.primary_consultant || '',
             status: plan.status || 'active',
-            reviews: plan.reviews || plan.follow_up_schedule || [],
+            reviews: plan.reviews || [],
             lab_works: plan.lab_works || [],
             procedures: plan.procedures || [],
             medications: plan.medications || [],

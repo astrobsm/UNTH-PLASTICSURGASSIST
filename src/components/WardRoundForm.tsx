@@ -204,11 +204,20 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
     if (!wardRoundId) return;
     const round = await wardRoundsService.getWardRound(wardRoundId);
     if (round) {
-      setFormData({
+      setFormData(prev => ({
+        ...prev,
         ...round,
+        // Preserve default arrays that server data may not include
+        clinical_images: round.clinical_images || prev.clinical_images || [],
+        new_medications: (round as any).new_medications || prev.new_medications || [],
+        stop_medications: (round as any).stop_medications || prev.stop_medications || [],
+        continue_medications: (round as any).continue_medications || prev.continue_medications || [],
+        investigations_ordered: (round as any).investigations_ordered || prev.investigations_ordered || [],
+        procedures_planned: (round as any).procedures_planned || prev.procedures_planned || [],
+        accompanying_team: round.accompanying_team || prev.accompanying_team || [],
         round_date: format(new Date(round.round_date), 'yyyy-MM-dd'),
-        round_time: round.round_time
-      });
+        round_time: round.round_time || prev.round_time
+      }));
       loadPatientDetails(round.patient_id);
     }
   };

@@ -36,8 +36,8 @@ export default function WardRounds() {
       setRounds(roundsData);
       setPatients(patientsData.map(p => ({
         id: p.id?.toString() || '',
-        name: `${p.first_name} ${p.last_name}`,
-        hospital_number: p.hospital_number
+        name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unknown Patient',
+        hospital_number: p.hospital_number || ''
       })));
     } catch (error) {
       console.error('Error loading ward rounds data:', error);
@@ -103,12 +103,12 @@ export default function WardRounds() {
     if (searchTerm) {
       filtered = filtered.filter(r => {
         const patient = patients.find(p => p.id === r.patient_id);
-        const patientName = patient?.name.toLowerCase() || '';
-        const hospitalNumber = patient?.hospital_number.toLowerCase() || '';
+        const patientName = (patient?.name || '').toLowerCase();
+        const hospitalNumber = (patient?.hospital_number || '').toLowerCase();
         const search = searchTerm.toLowerCase();
         return patientName.includes(search) || 
                hospitalNumber.includes(search) ||
-               r.chief_complaint.toLowerCase().includes(search);
+               (r.chief_complaint || '').toLowerCase().includes(search);
       });
     }
 

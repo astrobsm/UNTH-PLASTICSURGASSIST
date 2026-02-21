@@ -205,6 +205,34 @@ export default function TreatmentPlanningEnhanced() {
     }
   };
 
+  // Reload the currently selected plan from local DB after mutations (add review, lab, etc.)
+  // This avoids the server fetch which would overwrite locally-added data
+  const reloadSelectedPlan = async () => {
+    if (!selectedPlan) return;
+    try {
+      const updatedPlan = await treatmentPlanningService.getTreatmentPlan(selectedPlan.id);
+      if (updatedPlan) {
+        const planWithDefaults = {
+          ...updatedPlan,
+          id: updatedPlan.id?.toString() || selectedPlan.id,
+          reviews: updatedPlan.reviews || [],
+          lab_works: updatedPlan.lab_works || [],
+          procedures: updatedPlan.procedures || [],
+          medications: updatedPlan.medications || [],
+          discharge_timeline: updatedPlan.discharge_timeline || null
+        };
+        setSelectedPlan(planWithDefaults as any);
+        setTreatmentPlans(prev => prev.map(p => 
+          String(p.id) === String(selectedPlan.id) ? (planWithDefaults as any) : p
+        ));
+      }
+    } catch (error) {
+      console.error('Error reloading plan:', error);
+      // Fallback to full reload
+      loadTreatmentPlans();
+    }
+  };
+
   const handleCreatePlan = async () => {
     if (!newPlan.patient_id || !newPlan.diagnosis || !newPlan.planned_discharge_date) {
       alert('Please fill in all required fields');
@@ -260,7 +288,15 @@ export default function TreatmentPlanningEnhanced() {
 
     setShowReviewModal(false);
     setNewReview({ review_date: '', house_officer: '', review_notes: '' });
-    loadTreatmentPlans();
+    // Reload the updated plan directly from local DB to reflect the new review immediately
+    const updatedPlan = await treatmentPlanningService.getTreatmentPlan(selectedPlan.id);
+    if (updatedPlan) {
+      setSelectedPlan(updatedPlan as any);
+      // Also update the plans list
+      setTreatmentPlans(prev => prev.map(p => p.id === selectedPlan.id ? (updatedPlan as any) : p));
+    } else {
+      loadTreatmentPlans();
+    }
   };
 
   const handleCompleteReview = async (reviewId: string, notes: string, delayReason?: string) => {
@@ -274,7 +310,7 @@ export default function TreatmentPlanningEnhanced() {
       delayReason
     );
 
-    loadTreatmentPlans();
+    await reloadSelectedPlan();
   };
 
   const handleAddLab = async () => {
@@ -299,7 +335,7 @@ export default function TreatmentPlanningEnhanced() {
       end_date: '',
       notes: ''
     });
-    loadTreatmentPlans();
+    await reloadSelectedPlan();
   };
 
   const handleAddProcedure = async () => {
@@ -317,7 +353,7 @@ export default function TreatmentPlanningEnhanced() {
 
     setShowProcedureModal(false);
     setNewProcedure({ procedure_name: '', planned_date: '', surgeon: '', notes: '' });
-    loadTreatmentPlans();
+    await reloadSelectedPlan();
   };
 
   const handleCompleteProcedure = async (procedureId: string, actualDate: string, delayReason?: string) => {
@@ -330,7 +366,7 @@ export default function TreatmentPlanningEnhanced() {
       delayReason
     );
 
-    loadTreatmentPlans();
+    await reloadSelectedPlan();
   };
 
   const handleAddMedication = async () => {
@@ -359,7 +395,7 @@ export default function TreatmentPlanningEnhanced() {
       end_date: '',
       prescribing_doctor: user?.name || ''
     });
-    loadTreatmentPlans();
+    await reloadSelectedPlan();
   };
 
   const handleSetDischarge = async () => {
@@ -375,7 +411,7 @@ export default function TreatmentPlanningEnhanced() {
     });
 
     setShowDischargeModal(false);
-    loadTreatmentPlans();
+    await reloadSelectedPlan();
   };
 
   const toggleSection = (section: keyof typeof expandedSections) => {

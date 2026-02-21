@@ -724,7 +724,7 @@ function ActivePatientsTab({ admissions, searchTerm, setSearchTerm, onDischarge,
                                 <div className="text-sm text-gray-500 italic">
                                   No preoperative assessment found for this patient. 
                                   <button 
-                                    onClick={() => navigate(`/preoperative?patientId=${admission.patient_id}`)}
+                                    onClick={() => navigate(`/preoperative-planning?patientId=${admission.patient_id}`)}
                                     className="ml-2 text-green-600 hover:text-green-800 underline"
                                   >
                                     Create Assessment
