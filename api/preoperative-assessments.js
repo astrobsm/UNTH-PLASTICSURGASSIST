@@ -236,9 +236,9 @@ async function updateAssessment(req, res, id) {
 export default async function handler(req, res) {
   if (cors(req, res)) return;
 
-  const user = authenticateRequest(req);
-  if (!user) {
-    return res.status(401).json({ error: 'Authentication required' });
+  const authResult = authenticateRequest(req);
+  if (!authResult.authenticated) {
+    return res.status(401).json({ error: 'Authentication required', message: authResult.error });
   }
 
   try {

@@ -8,13 +8,27 @@ async function pushActivityToServer(activity: any): Promise<void> {
     const token = apiClient.getToken();
     if (!token) return;
     const baseUrl = (import.meta as any).env?.VITE_API_BASE_URL || '/api';
-    await fetch(`${baseUrl}/activities`, {
+    await fetch(`${baseUrl}/activities?action=log`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`
       },
-      body: JSON.stringify({ action: 'log', ...activity })
+      body: JSON.stringify({
+        activityType: activity.activity_type,
+        description: activity.description,
+        metadata: {
+          patient_id: activity.patient_id,
+          hospital_number: activity.hospital_number,
+          user_role: activity.user_role,
+          details: activity.details,
+          before_state: activity.before_state,
+          after_state: activity.after_state,
+          action: activity.action
+        },
+        referenceId: activity.patient_id,
+        referenceType: 'patient'
+      })
     });
   } catch (e) {
     // Silent fail - activity logging should not break main flow

@@ -150,7 +150,7 @@ async function handleGet(req, res, userId, userRole) {
 }
 
 async function handlePost(req, res, userId, userRole) {
-  const { action } = req.query;
+  const action = req.query.action || req.body?.action;
   const body = req.body;
 
   switch (action) {
