@@ -452,7 +452,7 @@ class ApiClient {
     if (patientId) query += `?patientId=${patientId}`;
     if (since) query += (query ? '&' : '?') + `since=${since}`;
     const data = await this.request(`/treatment-plans${query}`);
-    return data.plans || [];
+    return data.treatmentPlans || data.plans || [];
   }
 
   async createTreatmentPlan(planData: any) {

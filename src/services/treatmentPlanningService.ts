@@ -377,11 +377,59 @@ export interface MDTSpecialtyInput {
 }
 
 class TreatmentPlanningService {
+  // Helper to find a plan in Dexie by string or numeric ID
+  private async findPlanLocal(planId: string): Promise<any> {
+    // Try direct get with the key
+    let plan = await db.treatment_plans.get(planId as any);
+    if (plan) return plan;
+    // Try as integer
+    const numId = parseInt(planId);
+    if (!isNaN(numId)) {
+      plan = await db.treatment_plans.get(numId);
+      if (plan) return plan;
+    }
+    // Try object key match
+    plan = await db.treatment_plans.get({ id: planId } as any);
+    if (plan) return plan;
+    if (!isNaN(numId)) {
+      plan = await db.treatment_plans.get({ id: numId } as any);
+    }
+    return plan || null;
+  }
+
+  // Helper to update a plan in Dexie by string or numeric ID  
+  private async updatePlanLocal(planId: string, updates: any): Promise<void> {
+    const numId = parseInt(planId);
+    // Try numeric first (most common from Dexie ++id)
+    if (!isNaN(numId)) {
+      const count = await db.treatment_plans.update(numId, updates);
+      if (count > 0) return;
+    }
+    // Try string
+    await db.treatment_plans.update(planId as any, updates);
+  }
+
   // Create new treatment plan
-  async createTreatmentPlan(data: Omit<EnhancedTreatmentPlan, 'id' | 'created_at' | 'updated_at'>): Promise<string> {
-    const plan: EnhancedTreatmentPlan = {
+  async createTreatmentPlan(data: any): Promise<string> {
+    // Ensure all required array fields have defaults
+    const plan: any = {
       ...data,
-      id: `plan_${Date.now()}`,
+      patient_id: data.patient_id,
+      patient_name: data.patient_name || '',
+      hospital_number: data.hospital_number || '',
+      title: data.title || data.diagnosis || 'Treatment Plan',
+      diagnosis: data.diagnosis || '',
+      admission_date: data.admission_date || new Date(),
+      planned_discharge_date: data.planned_discharge_date || null,
+      primary_consultant: data.primary_consultant || '',
+      status: data.status || 'active',
+      reviews: data.reviews || [],
+      lab_works: data.lab_works || [],
+      procedures: data.procedures || [],
+      medications: data.medications || [],
+      discharge_timeline: data.discharge_timeline || null,
+      notes: data.notes || '',
+      created_by: data.created_by || 'unknown',
       created_at: new Date(),
       updated_at: new Date()
     };
@@ -392,152 +440,174 @@ class TreatmentPlanningService {
     try {
       const saved = await apiClient.createTreatmentPlan(plan);
       console.log('✅ Treatment plan synced to server:', saved);
-      const savedId = saved.id || saved.plan_id || plan.id;
-      await db.treatment_plans.add({ ...plan, id: savedId, synced: true } as any);
+      const savedId = saved?.id || saved?.plan_id;
+      // For server saves, use the server's integer ID
+      const localRecord = { ...plan, synced: true };
+      if (savedId) {
+        localRecord.id = savedId;
+        localRecord.serverId = String(savedId);
+      }
+      // Remove id if undefined so Dexie auto-generates
+      if (!localRecord.id) delete localRecord.id;
+      const localId = await db.treatment_plans.add(localRecord as any);
       toast.success('Treatment plan created successfully');
-      return savedId;
+      return String(savedId || localId);
     } catch (error: any) {
       console.warn('⚠️ Failed to sync treatment plan to server, saving locally', error);
       
-      // Check if patient is synced
-      const patient = await db.patients.get({ id: plan.patient_id } as any);
-      if (patient && !patient.synced) {
-        toast.error('Cannot sync treatment plan: patient not synced yet. Please wait for patient to sync first.');
-      }
-      
-      const localId = await db.treatment_plans.add({ ...plan, synced: false } as any);
+      // Save locally - let Dexie auto-generate the integer ID
+      const localRecord = { ...plan, synced: false };
+      delete localRecord.id; // Remove so Dexie auto-generates integer ID
+      const localId = await db.treatment_plans.add(localRecord as any);
       await syncService.queueAction('create', 'treatment_plans', localId as any, plan);
       console.log('📱 Treatment plan saved locally, will sync when online:', localId);
       toast.success('Treatment plan saved locally, will sync when online');
-      return plan.id;
+      return String(localId);
     }
   }
 
   // Add review to plan
-  async addReview(planId: string, reviewData: Omit<TreatmentPlanReview, 'id' | 'plan_id' | 'created_at' | 'updated_at' | 'status' | 'scheduled_date' | 'assigned_role'>): Promise<string> {
-    const review: TreatmentPlanReview = {
+  async addReview(planId: string, reviewData: any): Promise<string> {
+    // Support both field naming conventions from different callers
+    const houseOfficer = reviewData.house_officer || reviewData.assigned_house_officer || reviewData.assigned_to || '';
+    const reviewNotes = reviewData.review_notes || reviewData.notes || '';
+    const reviewDate = reviewData.review_date || new Date();
+    
+    const review: any = {
       id: `review_${Date.now()}`,
       plan_id: planId,
-      review_date: reviewData.review_date,
-      scheduled_date: reviewData.review_date, // Same as review_date initially
-      assigned_to: (reviewData as any).assigned_house_officer || reviewData.assigned_to || '',
-      assigned_house_officer: (reviewData as any).assigned_house_officer || reviewData.assigned_to || '',
+      review_date: reviewDate,
+      scheduled_date: reviewDate,
+      house_officer: houseOfficer,
+      assigned_to: houseOfficer,
+      assigned_house_officer: houseOfficer,
       assigned_role: 'house_officer',
       status: 'pending',
-      notes: reviewData.notes,
+      notes: reviewNotes,
+      review_notes: reviewNotes,
       created_at: new Date(),
       updated_at: new Date()
     };
 
-    const plan = await db.treatment_plans.get({ id: planId } as any);
+    const plan = await this.findPlanLocal(planId);
     if (plan) {
       const reviews = [...(plan.reviews || []), review];
-      await db.treatment_plans.update(planId as any, { reviews, updated_at: new Date() });
+      await this.updatePlanLocal(planId, { reviews, updated_at: new Date() });
     }
 
     return review.id;
   }
 
   // Complete review and check for delays
-  async completeReview(planId: string, reviewId: string, findings: string, actionsTaken: string): Promise<void> {
-    const plan = await db.treatment_plans.get({ id: planId } as any);
+  // Accepts: (planId, reviewId, completedBy, notes, delayReason?)
+  async completeReview(planId: string, reviewId: string, completedBy: string, notes: string, delayReason?: string): Promise<void> {
+    let plan = await this.findPlanLocal(planId);
     if (plan && plan.reviews) {
       const reviewIndex = plan.reviews.findIndex((r: any) => r.id === reviewId);
       if (reviewIndex !== -1) {
         const review = plan.reviews[reviewIndex];
         const now = new Date();
-        const delayDays = differenceInDays(now, review.scheduled_date);
+        const scheduledDate = review.scheduled_date ? new Date(review.scheduled_date) : new Date(review.review_date);
+        const delayDays = differenceInDays(now, scheduledDate);
         
         plan.reviews[reviewIndex] = {
           ...review,
           status: 'completed',
-          findings,
-          actions_taken: actionsTaken,
+          findings: notes,
+          actions_taken: notes,
+          notes: notes,
+          review_notes: notes,
+          completed_by: completedBy,
           completed_at: now,
-          delay_reason: delayDays > 0 ? 'Review completed late' : undefined,
+          delay_days: delayDays > 0 ? delayDays : 0,
+          delay_reason: delayReason || (delayDays > 0 ? 'Review completed late' : undefined),
           updated_at: now
         };
 
-        await db.treatment_plans.update(planId as any, { reviews: plan.reviews, updated_at: now });
+        await this.updatePlanLocal(planId, { reviews: plan.reviews, updated_at: now });
       }
     }
   }
 
   // Add lab work
-  async addLabWork(planId: string, labData: Omit<LabWork, 'id' | 'plan_id' | 'created_at' | 'updated_at'>): Promise<string> {
-    const lab: LabWork = {
+  async addLabWork(planId: string, labData: any): Promise<string> {
+    const lab: any = {
       ...labData,
       id: `lab_${Date.now()}`,
       plan_id: planId,
+      status: labData.status || 'active',
       created_at: new Date(),
       updated_at: new Date()
     };
 
-    const plan = await db.treatment_plans.get({ id: planId } as any);
+    const plan = await this.findPlanLocal(planId);
     if (plan) {
       const labWorks = [...(plan.lab_works || []), lab];
-      await db.treatment_plans.update(planId as any, { lab_works: labWorks, updated_at: new Date() });
+      await this.updatePlanLocal(planId, { lab_works: labWorks, updated_at: new Date() });
     }
 
     return lab.id;
   }
 
   // Add procedure
-  async addProcedure(planId: string, procedureData: Omit<PlannedProcedure, 'id' | 'plan_id' | 'created_at' | 'updated_at'>): Promise<string> {
-    const procedure: PlannedProcedure = {
+  async addProcedure(planId: string, procedureData: any): Promise<string> {
+    const procedure: any = {
       ...procedureData,
       id: `proc_${Date.now()}`,
       plan_id: planId,
+      status: procedureData.status || 'planned',
       created_at: new Date(),
       updated_at: new Date()
     };
 
-    const plan = await db.treatment_plans.get({ id: planId } as any);
+    const plan = await this.findPlanLocal(planId);
     if (plan) {
       const procedures = [...(plan.procedures || []), procedure];
-      await db.treatment_plans.update(planId as any, { procedures, updated_at: new Date() });
+      await this.updatePlanLocal(planId, { procedures, updated_at: new Date() });
     }
 
     return procedure.id;
   }
 
   // Complete procedure and track delays
-  async completeProcedure(planId: string, procedureId: string, actualDate: Date, actualTime: string): Promise<void> {
-    const plan = await db.treatment_plans.get({ id: planId } as any);
+  async completeProcedure(planId: string, procedureId: string, actualDate: Date, delayReason?: string): Promise<void> {
+    const plan = await this.findPlanLocal(planId);
     if (plan && plan.procedures) {
       const procIndex = plan.procedures.findIndex((p: any) => p.id === procedureId);
       if (procIndex !== -1) {
         const procedure = plan.procedures[procIndex];
-        const delayDays = differenceInDays(actualDate, procedure.proposed_date);
+        const proposedDate = procedure.proposed_date || procedure.planned_date;
+        const delayDays = proposedDate ? differenceInDays(actualDate, new Date(proposedDate)) : 0;
         
         plan.procedures[procIndex] = {
           ...procedure,
           actual_date: actualDate,
-          actual_time: actualTime,
           status: 'completed',
           delay_days: delayDays > 0 ? delayDays : 0,
+          delay_reason: delayReason || (delayDays > 0 ? 'Procedure delayed' : undefined),
           updated_at: new Date()
         };
 
-        await db.treatment_plans.update(planId as any, { procedures: plan.procedures, updated_at: new Date() });
+        await this.updatePlanLocal(planId, { procedures: plan.procedures, updated_at: new Date() });
       }
     }
   }
 
   // Add medication
-  async addMedication(planId: string, medicationData: Omit<MedicationAdministration, 'id' | 'plan_id' | 'created_at' | 'updated_at'>): Promise<string> {
-    const medication: MedicationAdministration = {
+  async addMedication(planId: string, medicationData: any): Promise<string> {
+    const medication: any = {
       ...medicationData,
       id: `med_${Date.now()}`,
       plan_id: planId,
+      status: medicationData.status || 'active',
       created_at: new Date(),
       updated_at: new Date()
     };
 
-    const plan = await db.treatment_plans.get({ id: planId } as any);
+    const plan = await this.findPlanLocal(planId);
     if (plan) {
       const medications = [...(plan.medications || []), medication];
-      await db.treatment_plans.update(planId as any, { medications, updated_at: new Date() });
+      await this.updatePlanLocal(planId, { medications, updated_at: new Date() });
     }
 
     return medication.id;
@@ -553,14 +623,14 @@ class TreatmentPlanningService {
       updated_at: new Date()
     };
 
-    await db.treatment_plans.update(planId as any, { discharge_timeline: discharge, updated_at: new Date() });
+    await this.updatePlanLocal(planId, { discharge_timeline: discharge, updated_at: new Date() });
     return discharge.id;
   }
 
   // Get overdue items for a plan (synchronous version - takes plan object directly)
   getOverdueItems(plan: EnhancedTreatmentPlan | null | undefined): {
-    reviews: TreatmentPlanReview[];
-    procedures: PlannedProcedure[];
+    reviews: any[];
+    procedures: any[];
     medications: any[];
   } {
     if (!plan) {
@@ -569,17 +639,22 @@ class TreatmentPlanningService {
 
     const now = new Date();
 
-    const overdueReviews = (plan.reviews || []).filter((r: TreatmentPlanReview) => 
-      r.status === 'pending' && isBefore(new Date(r.scheduled_date), now)
-    );
+    const overdueReviews = (plan.reviews || []).filter((r: any) => {
+      const scheduledDate = r.scheduled_date || r.review_date;
+      return r.status === 'pending' && scheduledDate && isBefore(new Date(scheduledDate), now);
+    });
 
-    const overdueProcedures = (plan.procedures || []).filter((p: PlannedProcedure) => 
-      p.status === 'planned' && isBefore(new Date(p.proposed_date), now)
-    );
+    const overdueProcedures = (plan.procedures || []).filter((p: any) => {
+      const proposedDate = p.proposed_date || p.planned_date;
+      return (p.status === 'planned' || p.status === 'pending') && proposedDate && isBefore(new Date(proposedDate), now);
+    });
 
-    const overdueMedications = (plan.medications || []).flatMap((m: MedicationAdministration) =>
-      (m.administration_records || []).filter(r => r.status === 'pending' && isBefore(new Date(r.scheduled_datetime), now))
-    );
+    const overdueMedications = (plan.medications || []).filter((m: any) => {
+      if (m.administration_records) {
+        return m.administration_records.some((r: any) => r.status === 'pending' && r.scheduled_datetime && isBefore(new Date(r.scheduled_datetime), now));
+      }
+      return false;
+    });
 
     return {
       reviews: overdueReviews,
@@ -590,11 +665,11 @@ class TreatmentPlanningService {
 
   // Get overdue items for a plan by ID (async version)
   async getOverdueItemsById(planId: string): Promise<{
-    reviews: TreatmentPlanReview[];
-    procedures: PlannedProcedure[];
+    reviews: any[];
+    procedures: any[];
     medications: any[];
   }> {
-    const plan = await db.treatment_plans.get({ id: planId } as any);
+    const plan = await this.findPlanLocal(planId);
     return this.getOverdueItems(plan as EnhancedTreatmentPlan);
   }
 
@@ -612,7 +687,7 @@ class TreatmentPlanningService {
         console.warn('Could not fetch treatment plan from server:', e);
       }
     }
-    return await db.treatment_plans.get({ id: planId } as any);
+    return await this.findPlanLocal(planId);
   }
 
   // Get all treatment plans for a patient
@@ -630,25 +705,47 @@ class TreatmentPlanningService {
             ...plan,
             id: plan.id?.toString() || '',
             patient_id: plan.patient_id?.toString() || patientId,
-            patient_name: plan.patient_name || '',
+            patient_name: plan.patient_name || [plan.first_name, plan.last_name].filter(Boolean).join(' ') || '',
             hospital_number: plan.hospital_number || '',
-            admission_date: plan.admission_date || new Date()
+            title: plan.title || plan.diagnosis || plan.description || 'Treatment Plan',
+            diagnosis: plan.diagnosis || plan.description || '',
+            admission_date: plan.admission_date || plan.created_at || new Date(),
+            planned_discharge_date: plan.planned_discharge_date || null,
+            primary_consultant: plan.primary_consultant || '',
+            status: plan.status || 'active',
+            reviews: plan.reviews || plan.follow_up_schedule || [],
+            lab_works: plan.lab_works || [],
+            procedures: plan.procedures || [],
+            medications: plan.medications || [],
+            discharge_timeline: plan.discharge_timeline || null,
+            notes: plan.notes || ''
           })) as EnhancedTreatmentPlan[];
         }
       } catch (e) {
         console.warn('Could not fetch treatment plans from server:', e);
       }
     }
-    // Fallback to local
+    // Fallback to local - try both string and number for patient_id
     const patientIdNum = parseInt(patientId);
-    const plans = await db.treatment_plans.where('patient_id').equals(patientIdNum).toArray();
+    let plans = await db.treatment_plans.where('patient_id').equals(patientIdNum).toArray();
+    if (plans.length === 0) {
+      plans = await db.treatment_plans.where('patient_id').equals(patientId).toArray();
+    }
     return plans.map(plan => ({
       ...plan,
       id: plan.id?.toString() || '',
-      patient_id: plan.patient_id.toString(),
+      patient_id: plan.patient_id?.toString() || patientId,
       patient_name: plan.patient_name || '',
       hospital_number: plan.hospital_number || '',
-      admission_date: plan.admission_date || new Date()
+      title: plan.title || (plan as any).diagnosis || 'Treatment Plan',
+      diagnosis: (plan as any).diagnosis || '',
+      admission_date: plan.admission_date || new Date(),
+      status: plan.status || 'active',
+      reviews: plan.reviews || [],
+      lab_works: plan.lab_works || [],
+      procedures: plan.procedures || [],
+      medications: plan.medications || [],
+      discharge_timeline: plan.discharge_timeline || null
     })) as EnhancedTreatmentPlan[];
   }
 
@@ -847,7 +944,7 @@ class TreatmentPlanningService {
     const pendingMods = plan.pending_modifications || [];
     pendingMods.push(modificationRequest);
 
-    await db.treatment_plans.update(planId, {
+    await this.updatePlanLocal(planId, {
       pending_modifications: pendingMods,
       updated_at: new Date()
     });
@@ -926,7 +1023,7 @@ class TreatmentPlanningService {
     const history = plan.modification_history || [];
     history.push(modification);
 
-    await db.treatment_plans.update(planId, {
+    await this.updatePlanLocal(planId, {
       pending_modifications: pendingMods,
       modification_history: history,
       updated_at: new Date()
@@ -970,7 +1067,7 @@ class TreatmentPlanningService {
     const history = plan.modification_history || [];
     history.push(modification);
 
-    await db.treatment_plans.update(planId, {
+    await this.updatePlanLocal(planId, {
       pending_modifications: pendingMods,
       modification_history: history,
       updated_at: new Date()
@@ -1042,7 +1139,7 @@ class TreatmentPlanningService {
         break;
     }
 
-    await db.treatment_plans.update(plan.id!, {
+    await this.updatePlanLocal(plan.id!, {
       ...updates,
       updated_at: new Date()
     });
@@ -1168,7 +1265,7 @@ class TreatmentPlanningService {
     const history = plan.modification_history || [];
     history.push(modification);
 
-    await db.treatment_plans.update(planId, {
+    await this.updatePlanLocal(planId, {
       modification_history: history,
       updated_at: new Date()
     });

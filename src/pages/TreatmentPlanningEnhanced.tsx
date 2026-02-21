@@ -190,10 +190,18 @@ export default function TreatmentPlanningEnhanced() {
   };
 
   const loadTreatmentPlans = async () => {
-    const plans = await treatmentPlanningService.getPatientTreatmentPlans(selectedPatient);
-    setTreatmentPlans(plans);
-    if (plans.length > 0) {
-      setSelectedPlan(plans[0]);
+    try {
+      const plans = await treatmentPlanningService.getPatientTreatmentPlans(selectedPatient);
+      setTreatmentPlans(plans);
+      if (plans.length > 0) {
+        setSelectedPlan(plans[0]);
+      } else {
+        setSelectedPlan(null);
+      }
+    } catch (error) {
+      console.error('Error loading treatment plans:', error);
+      setTreatmentPlans([]);
+      setSelectedPlan(null);
     }
   };
 
@@ -203,9 +211,17 @@ export default function TreatmentPlanningEnhanced() {
       return;
     }
 
+    // Look up patient info
+    const patient = patients.find(p => String(p.id) === String(newPlan.patient_id));
+    const patientName = patient ? `${patient.first_name} ${patient.last_name}` : '';
+    const hospitalNumber = patient?.hospital_number || '';
+
     await treatmentPlanningService.createTreatmentPlan({
       patient_id: newPlan.patient_id,
+      patient_name: patientName,
+      hospital_number: hospitalNumber,
       diagnosis: newPlan.diagnosis,
+      title: newPlan.diagnosis,
       admission_date: new Date(newPlan.admission_date),
       planned_discharge_date: new Date(newPlan.planned_discharge_date),
       primary_consultant: newPlan.primary_consultant,
@@ -214,6 +230,10 @@ export default function TreatmentPlanningEnhanced() {
     });
 
     setShowNewPlanModal(false);
+    // Switch to the patient we just created a plan for
+    if (String(selectedPatient) !== String(newPlan.patient_id)) {
+      setSelectedPatient(String(newPlan.patient_id));
+    }
     setNewPlan({
       patient_id: '',
       diagnosis: '',
@@ -222,7 +242,8 @@ export default function TreatmentPlanningEnhanced() {
       primary_consultant: '',
       notes: ''
     });
-    loadTreatmentPlans();
+    // Small delay to let DB write complete
+    setTimeout(() => loadTreatmentPlans(), 300);
   };
 
   const handleAddReview = async () => {
@@ -445,26 +466,46 @@ export default function TreatmentPlanningEnhanced() {
         <div className="space-y-6">
           {/* Plan Overview */}
           <div className="bg-white p-6 rounded-lg shadow">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">{selectedPlan.diagnosis}</h2>
+            <h2 className="text-xl font-bold text-gray-900 mb-4">{selectedPlan.diagnosis || selectedPlan.title || 'Treatment Plan'}</h2>
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
                 <span className="text-gray-600">Admission:</span>{' '}
-                <span className="font-medium">{format(new Date(selectedPlan.admission_date), 'MMM d, yyyy')}</span>
+                <span className="font-medium">
+                  {selectedPlan.admission_date 
+                    ? format(new Date(selectedPlan.admission_date), 'MMM d, yyyy') 
+                    : 'Not set'}
+                </span>
               </div>
               <div>
                 <span className="text-gray-600">Planned Discharge:</span>{' '}
-                <span className="font-medium">{format(new Date(selectedPlan.planned_discharge_date), 'MMM d, yyyy')}</span>
+                <span className="font-medium">
+                  {(selectedPlan as any).planned_discharge_date 
+                    ? format(new Date((selectedPlan as any).planned_discharge_date), 'MMM d, yyyy') 
+                    : 'Not set'}
+                </span>
               </div>
               <div>
                 <span className="text-gray-600">Consultant:</span>{' '}
-                <span className="font-medium">{selectedPlan.primary_consultant}</span>
+                <span className="font-medium">{(selectedPlan as any).primary_consultant || 'Not assigned'}</span>
               </div>
               <div>
                 <span className="text-gray-600">Status:</span>{' '}
                 <span className={`font-medium ${selectedPlan.status === 'active' ? 'text-green-600' : 'text-gray-600'}`}>
-                  {selectedPlan.status.charAt(0).toUpperCase() + selectedPlan.status.slice(1)}
+                  {(selectedPlan.status || 'draft').charAt(0).toUpperCase() + (selectedPlan.status || 'draft').slice(1)}
                 </span>
               </div>
+              {selectedPlan.patient_name && (
+                <div>
+                  <span className="text-gray-600">Patient:</span>{' '}
+                  <span className="font-medium">{selectedPlan.patient_name}</span>
+                </div>
+              )}
+              {selectedPlan.hospital_number && (
+                <div>
+                  <span className="text-gray-600">Hospital No:</span>{' '}
+                  <span className="font-medium">{selectedPlan.hospital_number}</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -498,9 +539,13 @@ export default function TreatmentPlanningEnhanced() {
                     <div className="flex justify-between items-start mb-2">
                       <div>
                         <div className="font-medium text-gray-900">
-                          {format(new Date(review.review_date), 'MMM d, yyyy')}
+                          {review.review_date 
+                            ? format(new Date(review.review_date), 'MMM d, yyyy')
+                            : 'Date not set'}
                         </div>
-                        <div className="text-sm text-gray-600">House Officer: {review.house_officer}</div>
+                        <div className="text-sm text-gray-600">
+                          House Officer: {(review as any).house_officer || review.assigned_house_officer || review.assigned_to || 'Unassigned'}
+                        </div>
                       </div>
                       <span className={`px-2 py-1 rounded text-xs font-medium ${
                         review.status === 'completed' ? 'bg-green-100 text-green-800' :
@@ -510,8 +555,8 @@ export default function TreatmentPlanningEnhanced() {
                         {review.status}
                       </span>
                     </div>
-                    {review.review_notes && (
-                      <p className="text-sm text-gray-700 mb-2">{review.review_notes}</p>
+                    {((review as any).review_notes || review.notes) && (
+                      <p className="text-sm text-gray-700 mb-2">{(review as any).review_notes || review.notes}</p>
                     )}
                     {review.status === 'pending' && (
                       <button
@@ -519,7 +564,9 @@ export default function TreatmentPlanningEnhanced() {
                           const notes = prompt('Enter review notes:');
                           if (notes !== null) {
                             let delayReason;
-                            if (review.delay_days && review.delay_days > 0) {
+                            const reviewDate = review.scheduled_date || review.review_date;
+                            const daysDiff = reviewDate ? differenceInDays(new Date(), new Date(reviewDate)) : 0;
+                            if (daysDiff > 0) {
                               delayReason = prompt('This review is delayed. Please provide a reason:');
                             }
                             handleCompleteReview(review.id, notes, delayReason || undefined);
@@ -530,9 +577,9 @@ export default function TreatmentPlanningEnhanced() {
                         Complete Review
                       </button>
                     )}
-                    {review.delay_days && review.delay_days > 0 && (
+                    {((review as any).delay_days && (review as any).delay_days > 0) && (
                       <div className="mt-2 text-sm text-red-600">
-                        Delayed by {review.delay_days} day(s)
+                        Delayed by {(review as any).delay_days} day(s)
                         {review.delay_reason && `: ${review.delay_reason}`}
                       </div>
                     )}
@@ -590,13 +637,15 @@ export default function TreatmentPlanningEnhanced() {
                   <div key={lab.id} className="p-3 bg-gray-50 rounded-lg">
                     <div className="flex justify-between items-start mb-2">
                       <div>
-                        <div className="font-medium text-gray-900">{lab.test_name}</div>
+                        <div className="font-medium text-gray-900">{lab.test_name || lab.test_type || 'Lab Test'}</div>
                         <div className="text-sm text-gray-600">
-                          Frequency: {lab.frequency} | Start: {format(new Date(lab.start_date), 'MMM d, yyyy')}
+                          Frequency: {lab.frequency || 'once'}
+                          {(lab.start_date || lab.timeline_start) && 
+                            ` | Start: ${format(new Date(lab.start_date || lab.timeline_start), 'MMM d, yyyy')}`}
                         </div>
                       </div>
-                      <span className="px-2 py-1 rounded text-xs font-medium bg-purple-100 text-purple-800">
-                        {lab.frequency}
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${lab.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-purple-100 text-purple-800'}`}>
+                        {lab.status || lab.frequency || 'active'}
                       </span>
                     </div>
                     {lab.notes && <p className="text-sm text-gray-700">{lab.notes}</p>}
@@ -641,9 +690,11 @@ export default function TreatmentPlanningEnhanced() {
                   <div key={procedure.id} className={`p-3 rounded-lg ${procedure.status === 'overdue' ? 'bg-red-50 border border-red-200' : 'bg-gray-50'}`}>
                     <div className="flex justify-between items-start mb-2">
                       <div>
-                        <div className="font-medium text-gray-900">{procedure.procedure_name}</div>
+                        <div className="font-medium text-gray-900">{procedure.procedure_name || 'Procedure'}</div>
                         <div className="text-sm text-gray-600">
-                          Planned: {format(new Date(procedure.planned_date), 'MMM d, yyyy')}
+                          Planned: {(procedure.planned_date || procedure.proposed_date)
+                            ? format(new Date(procedure.planned_date || procedure.proposed_date), 'MMM d, yyyy')
+                            : 'Not set'}
                           {procedure.surgeon && ` | Surgeon: ${procedure.surgeon}`}
                         </div>
                       </div>
@@ -652,17 +703,19 @@ export default function TreatmentPlanningEnhanced() {
                         procedure.status === 'overdue' ? 'bg-red-100 text-red-800' :
                         'bg-yellow-100 text-yellow-800'
                       }`}>
-                        {procedure.status}
+                        {procedure.status || 'planned'}
                       </span>
                     </div>
                     {procedure.notes && <p className="text-sm text-gray-700 mb-2">{procedure.notes}</p>}
-                    {procedure.status === 'planned' && (
+                    {(procedure.status === 'planned' || !procedure.status) && (
                       <button
                         onClick={() => {
                           const actualDate = prompt('Enter actual procedure date (YYYY-MM-DD):');
                           if (actualDate) {
+                            const proposedDate = procedure.planned_date || procedure.proposed_date;
+                            const daysDiff = proposedDate ? differenceInDays(new Date(actualDate), new Date(proposedDate)) : 0;
                             let delayReason;
-                            if (procedure.delay_days && procedure.delay_days > 0) {
+                            if (daysDiff > 0) {
                               delayReason = prompt('This procedure is delayed. Please provide a reason:');
                             }
                             handleCompleteProcedure(procedure.id, actualDate, delayReason || undefined);
@@ -733,24 +786,30 @@ export default function TreatmentPlanningEnhanced() {
                   <div key={med.id} className={`p-3 rounded-lg ${med.status === 'overdue' ? 'bg-red-50 border border-red-200' : 'bg-gray-50'}`}>
                     <div className="flex justify-between items-start mb-2">
                       <div>
-                        <div className="font-medium text-gray-900">{med.medication_name}</div>
+                        <div className="font-medium text-gray-900">{med.medication_name || 'Medication'}</div>
                         <div className="text-sm text-gray-600">
-                          {med.dosage} {med.route} {med.frequency}
+                          {[med.dosage, med.route, med.frequency].filter(Boolean).join(' ') || 'No details'}
                         </div>
                         <div className="text-sm text-gray-600">
-                          Start: {format(new Date(med.start_date), 'MMM d, yyyy')}
-                          {med.end_date && ` | End: ${format(new Date(med.end_date), 'MMM d, yyyy')}`}
+                          {(med.start_date || med.timeline_start) 
+                            ? `Start: ${format(new Date(med.start_date || med.timeline_start), 'MMM d, yyyy')}` 
+                            : ''}
+                          {(med.end_date || med.timeline_end) 
+                            ? ` | End: ${format(new Date(med.end_date || med.timeline_end), 'MMM d, yyyy')}` 
+                            : ''}
                         </div>
                       </div>
                       <span className={`px-2 py-1 rounded text-xs font-medium ${
                         med.status === 'completed' ? 'bg-green-100 text-green-800' :
-                        med.status === 'overdue' ? 'bg-red-100 text-red-800' :
+                        med.status === 'discontinued' ? 'bg-red-100 text-red-800' :
                         'bg-blue-100 text-blue-800'
                       }`}>
-                        {med.status}
+                        {med.status || 'active'}
                       </span>
                     </div>
-                    <div className="text-sm text-gray-600">Prescribed by: {med.prescribing_doctor}</div>
+                    {med.prescribing_doctor && (
+                      <div className="text-sm text-gray-600">Prescribed by: {med.prescribing_doctor}</div>
+                    )}
                   </div>
                 ))}
                 {(!selectedPlan.medications || selectedPlan.medications.length === 0) && (
@@ -793,7 +852,11 @@ export default function TreatmentPlanningEnhanced() {
                       <div className="grid grid-cols-2 gap-4 mb-3">
                         <div>
                           <span className="text-sm text-gray-600">Planned Date:</span>
-                          <div className="font-medium">{format(selectedPlan.discharge_timeline.planned_date, 'MMM d, yyyy')}</div>
+                          <div className="font-medium">
+                            {(selectedPlan.discharge_timeline.planned_date || (selectedPlan.discharge_timeline as any).proposed_discharge_date) 
+                              ? format(new Date(selectedPlan.discharge_timeline.planned_date || (selectedPlan.discharge_timeline as any).proposed_discharge_date), 'MMM d, yyyy')
+                              : 'Not set'}
+                          </div>
                         </div>
                         <div>
                           <span className="text-sm text-gray-600">Status:</span>
@@ -802,37 +865,37 @@ export default function TreatmentPlanningEnhanced() {
                               selectedPlan.discharge_timeline.status === 'ready' ? 'bg-green-100 text-green-800' :
                               'bg-yellow-100 text-yellow-800'
                             }`}>
-                              {selectedPlan.discharge_timeline.status}
+                              {selectedPlan.discharge_timeline.status || 'planned'}
                             </span>
                           </div>
                         </div>
                       </div>
-                      {selectedPlan.discharge_timeline.criteria_met.length > 0 && (
+                      {(selectedPlan.discharge_timeline.criteria_met || []).length > 0 && (
                         <div className="mb-2">
                           <div className="text-sm font-medium text-gray-700 mb-1">Criteria Met:</div>
                           <ul className="list-disc list-inside text-sm text-gray-600">
-                            {selectedPlan.discharge_timeline.criteria_met.map((criteria, idx) => (
+                            {(selectedPlan.discharge_timeline.criteria_met || []).map((criteria: string, idx: number) => (
                               <li key={idx}>{criteria}</li>
                             ))}
                           </ul>
                         </div>
                       )}
-                      {selectedPlan.discharge_timeline.pending_requirements.length > 0 && (
+                      {(selectedPlan.discharge_timeline.pending_requirements || []).length > 0 && (
                         <div>
                           <div className="text-sm font-medium text-gray-700 mb-1">Pending Requirements:</div>
                           <ul className="list-disc list-inside text-sm text-red-600">
-                            {selectedPlan.discharge_timeline.pending_requirements.map((req, idx) => (
+                            {(selectedPlan.discharge_timeline.pending_requirements || []).map((req: string, idx: number) => (
                               <li key={idx}>{req}</li>
                             ))}
                           </ul>
                         </div>
                       )}
-                      {selectedPlan.discharge_timeline.delay_days && selectedPlan.discharge_timeline.delay_days > 0 && (
+                      {(selectedPlan.discharge_timeline as any).delay_days > 0 && (
                         <div className="mt-3 p-2 bg-red-50 border border-red-200 rounded">
                           <div className="text-sm font-medium text-red-900">
-                            Discharge Delayed by {selectedPlan.discharge_timeline.delay_days} day(s)
+                            Discharge Delayed by {(selectedPlan.discharge_timeline as any).delay_days} day(s)
                           </div>
-                          {selectedPlan.discharge_timeline.delay_reasons.map((reason, idx) => (
+                          {((selectedPlan.discharge_timeline as any).delay_reasons || []).map((reason: string, idx: number) => (
                             <div key={idx} className="text-sm text-red-700 mt-1">• {reason}</div>
                           ))}
                         </div>
