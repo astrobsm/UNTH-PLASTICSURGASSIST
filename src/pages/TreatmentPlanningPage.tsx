@@ -24,6 +24,7 @@ import {
   DischargeTimeline
 } from '../services/treatmentPlanningService';
 import { format, isPast } from 'date-fns';
+import { safeFormatDate } from '../utils/dateUtils';
 import { ComprehensiveTreatmentPlanForm } from '../components/ComprehensiveTreatmentPlanForm';
 
 const TreatmentPlanningPage: React.FC = () => {
@@ -209,7 +210,7 @@ const TreatmentPlanningPage: React.FC = () => {
               <div className="flex items-center gap-4 text-xs text-gray-500">
                 <span className="flex items-center gap-1">
                   <Calendar className="w-3 h-3" />
-                  {format(new Date(plan.admission_date), 'MMM d, yyyy')}
+                  {safeFormatDate(plan.admission_date, 'MMM d, yyyy')}
                 </span>
                 <span className="flex items-center gap-1">
                   <Activity className="w-3 h-3" />
@@ -304,7 +305,7 @@ const TreatmentPlanningPage: React.FC = () => {
                         <div className="flex items-center gap-2">
                           <Calendar className="w-4 h-4 text-gray-500" />
                           <span className="font-medium">
-                            {format(new Date(review.review_date), 'MMM d, yyyy')}
+                            {safeFormatDate(review.review_date, 'MMM d, yyyy')}
                           </span>
                         </div>
                         <span
@@ -357,7 +358,7 @@ const TreatmentPlanningPage: React.FC = () => {
                     <div key={lab.id} className="p-4 rounded-lg border border-gray-200 bg-gray-50">
                       <div className="font-medium text-gray-900">{lab.test_name}</div>
                       <div className="text-sm text-gray-600 mt-1">
-                        Frequency: {lab.frequency} | Start: {format(new Date(lab.start_date), 'MMM d, yyyy')}
+                        Frequency: {lab.frequency} | Start: {safeFormatDate(lab.start_date, 'MMM d, yyyy')}
                       </div>
                       {lab.notes && <p className="text-sm text-gray-600 mt-2">{lab.notes}</p>}
                     </div>
@@ -397,7 +398,7 @@ const TreatmentPlanningPage: React.FC = () => {
                         <div>
                           <div className="font-medium text-gray-900">{procedure.procedure_name}</div>
                           <div className="text-sm text-gray-600 mt-1">
-                            Planned: {format(new Date(procedure.planned_date), 'MMM d, yyyy')}
+                            Planned: {safeFormatDate(procedure.planned_date, 'MMM d, yyyy')}
                             {procedure.surgeon && ` | Surgeon: ${procedure.surgeon}`}
                           </div>
                         </div>
@@ -443,8 +444,8 @@ const TreatmentPlanningPage: React.FC = () => {
                         {med.dosage} {med.route} {med.frequency}
                       </div>
                       <div className="text-sm text-gray-600">
-                        Start: {format(new Date(med.start_date), 'MMM d, yyyy')}
-                        {med.end_date && ` | End: ${format(new Date(med.end_date), 'MMM d, yyyy')}`}
+                        Start: {safeFormatDate(med.start_date, 'MMM d, yyyy')}
+                        {med.end_date && ` | End: ${safeFormatDate(med.end_date, 'MMM d, yyyy')}`}
                       </div>
                       <span
                         className={`inline-block mt-2 px-2 py-1 text-xs font-medium rounded ${
@@ -483,7 +484,7 @@ const TreatmentPlanningPage: React.FC = () => {
                       {selectedPlan.discharge_plan.planned_date && (
                         <p className="text-sm text-gray-600">
                           <span className="font-medium">Planned Date:</span>{' '}
-                          {format(new Date(selectedPlan.discharge_plan.planned_date), 'MMM d, yyyy')}
+                          {safeFormatDate(selectedPlan.discharge_plan.planned_date, 'MMM d, yyyy')}
                         </p>
                       )}
                       {selectedPlan.discharge_plan.discharge_criteria && (

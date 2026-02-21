@@ -26,6 +26,7 @@ import {
   MDTContactLog
 } from '../services/mdtService';
 import { format } from 'date-fns';
+import { safeFormatDate } from '../utils/dateUtils';
 import { useAuthStore } from '../store/authStore';
 
 const MDTPage: React.FC = () => {
@@ -1084,7 +1085,7 @@ const MDTPage: React.FC = () => {
                           <div className="flex items-center gap-3 mt-1 text-sm text-gray-600">
                             <span className="flex items-center gap-1">
                               <Calendar className="w-4 h-4" />
-                              {format(new Date(meeting.meeting_date), 'MMM dd, yyyy')}
+                              {safeFormatDate(meeting.meeting_date, 'MMM dd, yyyy')}
                             </span>
                             <span className="flex items-center gap-1">
                               <Clock className="w-4 h-4" />
@@ -1157,7 +1158,7 @@ const MDTPage: React.FC = () => {
                                   <p className="text-gray-900">{action.action}</p>
                                   <p className="text-xs text-gray-600">
                                     Assigned to: {action.assigned_to} ({action.specialty}) - 
-                                    Due: {format(new Date(action.due_date), 'MMM dd, yyyy')}
+                                    Due: {safeFormatDate(action.due_date, 'MMM dd, yyyy')}
                                   </p>
                                 </div>
                               </div>
@@ -1201,7 +1202,7 @@ const MDTPage: React.FC = () => {
                         <div>
                           <h4 className="font-semibold text-gray-900">{contact.specialty_name}</h4>
                           <div className="flex items-center gap-3 mt-1 text-sm text-gray-600">
-                            <span>{format(new Date(contact.contact_date), 'MMM dd, yyyy')} at {contact.contact_time}</span>
+                            <span>{safeFormatDate(contact.contact_date, 'MMM dd, yyyy')} at {contact.contact_time}</span>
                             <span className="px-2 py-0.5 bg-gray-100 text-gray-700 text-xs rounded">
                               {contact.contact_type}
                             </span>
@@ -1240,7 +1241,7 @@ const MDTPage: React.FC = () => {
                           <div className="pt-2 border-t border-gray-100">
                             <span className="text-gray-600 font-medium">Follow-up by:</span>
                             <span className="text-gray-900 ml-1">
-                              {format(new Date(contact.follow_up_date), 'MMM dd, yyyy')}
+                              {safeFormatDate(contact.follow_up_date, 'MMM dd, yyyy')}
                             </span>
                           </div>
                         )}
