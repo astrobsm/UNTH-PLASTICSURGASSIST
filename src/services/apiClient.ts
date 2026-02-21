@@ -368,23 +368,44 @@ class ApiClient {
 
   // Admission management
   async createAdmission(admissionData: any) {
-    // Transform frontend format to backend format
+    // Send ALL fields to server using snake_case (server accepts both)
     const backendData = {
-      patientId: admissionData.patient_id,
-      admissionDate: admissionData.admission_date,
-      ward: admissionData.ward_location,
-      bedNumber: admissionData.bed_number,
-      admittingDiagnosis: admissionData.provisional_diagnosis || admissionData.reasons_for_admission,
-      notes: admissionData.presenting_complaint || '',
-      status: 'active' // Always use 'active' for new admissions
+      patient_id: admissionData.patient_id,
+      patient_name: admissionData.patient_name,
+      hospital_number: admissionData.hospital_number,
+      age: admissionData.age,
+      gender: admissionData.gender,
+      admission_date: admissionData.admission_date,
+      admission_time: admissionData.admission_time,
+      ward_location: admissionData.ward_location,
+      bed_number: admissionData.bed_number,
+      route_of_admission: admissionData.route_of_admission,
+      referring_specialty: admissionData.referring_specialty,
+      referring_doctor: admissionData.referring_doctor,
+      reasons_for_admission: admissionData.reasons_for_admission,
+      presenting_complaint: admissionData.presenting_complaint,
+      provisional_diagnosis: admissionData.provisional_diagnosis || admissionData.reasons_for_admission,
+      admitting_doctor: admissionData.admitting_doctor,
+      admitting_consultant: admissionData.admitting_consultant,
+      vital_signs: admissionData.vital_signs,
+      allergies: admissionData.allergies,
+      current_medications: admissionData.current_medications,
+      past_medical_history: admissionData.past_medical_history,
+      past_surgical_history: admissionData.past_surgical_history,
+      social_history: admissionData.social_history,
+      family_history: admissionData.family_history,
+      comorbidities: admissionData.comorbidities,
+      examination_findings: admissionData.examination_findings,
+      initial_management_plan: admissionData.initial_management_plan,
+      status: admissionData.status || 'active'
     };
     
-    console.log('📤 Sending admission to server:', backendData);
+    console.log('📤 Sending FULL admission to server:', Object.keys(backendData).length, 'fields');
     const data = await this.request('/admissions', {
       method: 'POST',
       body: JSON.stringify(backendData)
     });
-    console.log('✅ Server created admission:', data.admission);
+    console.log('✅ Server created admission:', data.admission?.id);
     return data.admission;
   }
 

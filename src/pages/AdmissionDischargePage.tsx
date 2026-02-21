@@ -12,10 +12,27 @@ import {
   AdmissionStatistics
 } from '../services/admissionDischargeService';
 import { medicalTeamService, StaffByRole, SuggestedTeam } from '../services/medicalTeamService';
+import { preoperativeService, PreoperativeAssessment } from '../services/preoperativeService';
 import WHODischargeAssessment from '../components/WHODischargeAssessment';
 import MDTDischargeMedications from '../components/MDTDischargeMedications';
 import DischargeSummaryForm from '../components/DischargeSummaryForm';
 import DischargeDocumentsPreview from '../components/DischargeDocumentsPreview';
+import {
+  createPDF,
+  addPDFHeader,
+  addSectionHeader,
+  addBodyText,
+  addBulletList,
+  addWarningBox,
+  addSeparator,
+  addFooter,
+  addLabeledField,
+  sanitizeTextForPDF,
+  formatDateForPDF,
+  PDF_MARGINS,
+  PDF_COLORS,
+  PDF_FONT_SIZES
+} from '../utils/pdfUtils';
 
 // ============= CONSTANTS =============
 
@@ -213,6 +230,289 @@ interface ActivePatientsTabProps {
 }
 
 function ActivePatientsTab({ admissions, searchTerm, setSearchTerm, onDischarge, onRefresh, navigate }: ActivePatientsTabProps) {
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [preopData, setPreopData] = useState<Record<number, PreoperativeAssessment | null>>({});
+  const [loadingPreop, setLoadingPreop] = useState<number | null>(null);
+  const [generatingPdf, setGeneratingPdf] = useState<string | null>(null);
+
+  const handleExpand = async (admission: Admission) => {
+    const id = admission.id!;
+    if (expandedId === id) {
+      setExpandedId(null);
+      return;
+    }
+    setExpandedId(id);
+    
+    // Load preoperative assessment if not cached
+    if (preopData[id] === undefined) {
+      setLoadingPreop(id);
+      try {
+        const assessment = await preoperativeService.getAssessmentByPatient(admission.patient_id);
+        setPreopData(prev => ({ ...prev, [id]: assessment }));
+      } catch (error) {
+        console.error('Error loading preoperative assessment:', error);
+        setPreopData(prev => ({ ...prev, [id]: null }));
+      } finally {
+        setLoadingPreop(null);
+      }
+    }
+  };
+
+  // ── PDF Document Generation Helpers ──
+  const generatePreopEducationPDF = async (admission: Admission, assessment: PreoperativeAssessment | null) => {
+    setGeneratingPdf('preop-education');
+    try {
+      const doc = createPDF();
+      let y = addPDFHeader(doc, 'Pre-Operative Patient Education & Information');
+      
+      y = addSectionHeader(doc, 'Patient Information', y);
+      y = addLabeledField(doc, 'Patient Name', admission.patient_name || 'N/A', y);
+      y = addLabeledField(doc, 'Hospital Number', admission.hospital_number || 'N/A', y);
+      y = addLabeledField(doc, 'Admission Date', formatDateForPDF(admission.admission_date), y);
+      y = addLabeledField(doc, 'Diagnosis', admission.provisional_diagnosis || 'N/A', y);
+      y = addSeparator(doc, y);
+
+      y = addSectionHeader(doc, 'Before Your Surgery', y);
+      y = addBulletList(doc, [
+        'You must not eat solid food for at least 6 hours before your surgery.',
+        'You may drink clear fluids (water, clear juice) up to 2 hours before surgery.',
+        'Please take a bath or shower on the morning of your operation.',
+        'Remove all jewelry, nail polish, and makeup before coming to the operating theatre.',
+        'Wear loose, comfortable clothing. Hospital gowns will be provided.',
+        'Bring a list of all your medications and any allergies.',
+      ], y);
+      y = addSeparator(doc, y);
+
+      if (assessment) {
+        y = addSectionHeader(doc, 'Your Risk Assessment Summary', y);
+        if (assessment.bleeding_risk) {
+          y = addLabeledField(doc, 'Bleeding Risk', `${assessment.bleeding_risk.risk_level} (Score: ${assessment.bleeding_risk.total_score})`, y);
+        }
+        if (assessment.dvt_risk) {
+          y = addLabeledField(doc, 'DVT Risk (Caprini)', `${assessment.dvt_risk.risk_level} (Score: ${assessment.dvt_risk.total_score})`, y);
+        }
+        if (assessment.cardiovascular_risk) {
+          y = addLabeledField(doc, 'Cardiovascular Risk (RCRI)', `${assessment.cardiovascular_risk.risk_level} (Score: ${assessment.cardiovascular_risk.total_score})`, y);
+        }
+        if (assessment.pressure_sore_risk) {
+          y = addLabeledField(doc, 'Pressure Sore Risk (Braden)', `${assessment.pressure_sore_risk.risk_level} (Score: ${assessment.pressure_sore_risk.total_score})`, y);
+        }
+        y = addSeparator(doc, y);
+
+        if (assessment.preop_instructions) {
+          y = addSectionHeader(doc, 'Personalized Pre-Operative Instructions', y);
+          y = addBodyText(doc, sanitizeTextForPDF(assessment.preop_instructions), y);
+          y = addSeparator(doc, y);
+        }
+      }
+
+      y = addSectionHeader(doc, 'What to Expect on Surgery Day', y);
+      y = addBulletList(doc, [
+        'You will be checked in and asked to change into a hospital gown.',
+        'An IV (intravenous line) will be placed for fluids and medications.',
+        'The anaesthetist will visit you to explain the anaesthesia plan.',
+        'Your surgeon will mark the surgical site and confirm the procedure with you.',
+        'You may feel drowsy after the anaesthesia - this is normal.',
+      ], y);
+
+      y = addSectionHeader(doc, 'Important Contact Numbers', y);
+      y = addBodyText(doc, 'If you have any questions or concerns before your surgery, please contact the Plastic Surgery Unit during office hours.', y);
+      
+      addFooter(doc, `Generated: ${new Date().toLocaleString()} | ${admission.patient_name}`);
+      doc.save(`PreOp_Education_${(admission.patient_name || 'patient').replace(/\s+/g, '_')}.pdf`);
+    } catch (error) {
+      console.error('Error generating preop education PDF:', error);
+      alert('Failed to generate PDF. Please try again.');
+    } finally {
+      setGeneratingPdf(null);
+    }
+  };
+
+  const generatePostopEducationPDF = async (admission: Admission) => {
+    setGeneratingPdf('postop-education');
+    try {
+      const doc = createPDF();
+      let y = addPDFHeader(doc, 'Post-Operative Patient Education & Information');
+      
+      y = addSectionHeader(doc, 'Patient Information', y);
+      y = addLabeledField(doc, 'Patient Name', admission.patient_name || 'N/A', y);
+      y = addLabeledField(doc, 'Hospital Number', admission.hospital_number || 'N/A', y);
+      y = addLabeledField(doc, 'Procedure/Diagnosis', admission.provisional_diagnosis || 'N/A', y);
+      y = addSeparator(doc, y);
+
+      y = addSectionHeader(doc, 'After Your Surgery', y);
+      y = addBulletList(doc, [
+        'Rest as much as possible in the first 24-48 hours after surgery.',
+        'Take your pain medications as prescribed. Do not wait until pain becomes severe.',
+        'Keep the surgical site clean and dry unless otherwise instructed.',
+        'Do NOT remove dressings unless instructed by your doctor.',
+        'Elevate the operated area to reduce swelling where applicable.',
+      ], y);
+      y = addSeparator(doc, y);
+
+      y = addSectionHeader(doc, 'Wound Care Instructions', y);
+      y = addBulletList(doc, [
+        'Keep your wound dressing intact until your next clinic appointment.',
+        'If the dressing becomes soaked with blood, apply gentle pressure and contact us.',
+        'Do not immerse the wound in water (no swimming/bathing) until cleared by your doctor.',
+        'Watch for signs of infection: increasing redness, swelling, warmth, pus, or fever.',
+        'Follow-up appointments are crucial for wound assessment and suture removal.',
+      ], y);
+      y = addSeparator(doc, y);
+
+      y = addSectionHeader(doc, 'Activity Restrictions', y);
+      y = addBulletList(doc, [
+        'Avoid heavy lifting (more than 5 kg) for the specified recovery period.',
+        'Avoid strenuous exercise until cleared by your surgeon.',
+        'You may walk and do light activities unless told otherwise.',
+        'Do not drive for at least 24 hours after general anaesthesia.',
+      ], y);
+      y = addSeparator(doc, y);
+
+      y = addWarningBox(doc, 'SEEK IMMEDIATE MEDICAL ATTENTION if you experience: severe/increasing pain not relieved by medication, heavy bleeding from the wound, fever above 38.5°C, difficulty breathing, severe nausea/vomiting, or any sudden change in your condition.', y);
+
+      y = addSectionHeader(doc, 'Follow-Up', y);
+      y = addBodyText(doc, 'Please attend your follow-up appointment as scheduled. If you need to reschedule, contact the Plastic Surgery Unit during office hours.', y);
+      
+      addFooter(doc, `Generated: ${new Date().toLocaleString()} | ${admission.patient_name}`);
+      doc.save(`PostOp_Education_${(admission.patient_name || 'patient').replace(/\s+/g, '_')}.pdf`);
+    } catch (error) {
+      console.error('Error generating postop education PDF:', error);
+      alert('Failed to generate PDF.');
+    } finally {
+      setGeneratingPdf(null);
+    }
+  };
+
+  const generateCounsellingPDF = async (admission: Admission, assessment: PreoperativeAssessment | null) => {
+    setGeneratingPdf('counselling');
+    try {
+      const doc = createPDF();
+      let y = addPDFHeader(doc, 'Patient Counselling Record');
+      
+      y = addSectionHeader(doc, 'Patient Information', y);
+      y = addLabeledField(doc, 'Patient Name', admission.patient_name || 'N/A', y);
+      y = addLabeledField(doc, 'Hospital Number', admission.hospital_number || 'N/A', y);
+      y = addLabeledField(doc, 'Age/Gender', `${admission.age || 'N/A'} years / ${admission.gender || 'N/A'}`, y);
+      y = addLabeledField(doc, 'Diagnosis', admission.provisional_diagnosis || 'N/A', y);
+      y = addLabeledField(doc, 'Admission Date', formatDateForPDF(admission.admission_date), y);
+      y = addSeparator(doc, y);
+
+      y = addSectionHeader(doc, 'Pre-Operative Counselling', y);
+      y = addBodyText(doc, 'The following points were discussed with the patient and/or their guardian/next of kin:', y);
+      y += 4;
+      y = addBulletList(doc, [
+        'Nature of the condition/diagnosis and its implications.',
+        'Proposed surgical procedure and its goals/expected outcomes.',
+        'Alternative treatment options (including non-surgical management).',
+        'Potential risks and complications of the proposed procedure.',
+        'Expected recovery timeline and rehabilitation requirements.',
+        'Post-operative care requirements and follow-up schedule.',
+        'Activity restrictions and lifestyle modifications during recovery.',
+        'Medications that will be prescribed and their side effects.',
+      ], y);
+      y = addSeparator(doc, y);
+
+      if (assessment?.comprehensive_summary) {
+        y = addSectionHeader(doc, 'Clinical Assessment Summary', y);
+        y = addBodyText(doc, sanitizeTextForPDF(assessment.comprehensive_summary), y);
+        y = addSeparator(doc, y);
+      }
+
+      y = addSectionHeader(doc, 'Patient Understanding', y);
+      y = addBodyText(doc, 'The patient has been given the opportunity to ask questions and has expressed understanding of the above information.', y);
+      y += 10;
+
+      y = addLabeledField(doc, 'Patient/Guardian Signature', '______________________________', y);
+      y = addLabeledField(doc, 'Date', '______________________________', y);
+      y += 6;
+      y = addLabeledField(doc, 'Counselled By (Doctor)', '______________________________', y);
+      y = addLabeledField(doc, 'Signature', '______________________________', y);
+      y = addLabeledField(doc, 'Date', '______________________________', y);
+
+      addFooter(doc, `Generated: ${new Date().toLocaleString()} | ${admission.patient_name}`);
+      doc.save(`Counselling_${(admission.patient_name || 'patient').replace(/\s+/g, '_')}.pdf`);
+    } catch (error) {
+      console.error('Error generating counselling PDF:', error);
+      alert('Failed to generate PDF.');
+    } finally {
+      setGeneratingPdf(null);
+    }
+  };
+
+  const generateConsentFormPDF = async (admission: Admission) => {
+    setGeneratingPdf('consent');
+    try {
+      const doc = createPDF();
+      let y = addPDFHeader(doc, 'Informed Consent for Surgery');
+      
+      y = addSectionHeader(doc, 'Patient Details', y);
+      y = addLabeledField(doc, 'Patient Name', admission.patient_name || 'N/A', y);
+      y = addLabeledField(doc, 'Hospital Number', admission.hospital_number || 'N/A', y);
+      y = addLabeledField(doc, 'Age/Gender', `${admission.age || 'N/A'} years / ${admission.gender || 'N/A'}`, y);
+      y = addLabeledField(doc, 'Ward/Bed', `${admission.ward_location || 'N/A'} / ${admission.bed_number || 'N/A'}`, y);
+      y = addSeparator(doc, y);
+
+      y = addSectionHeader(doc, 'Diagnosis', y);
+      y = addBodyText(doc, admission.provisional_diagnosis || 'To be specified by the surgeon', y);
+      y += 4;
+
+      y = addSectionHeader(doc, 'Proposed Operation/Procedure', y);
+      y = addBodyText(doc, '________________________________________________________________', y);
+      y = addBodyText(doc, '________________________________________________________________', y);
+      y += 4;
+
+      y = addSectionHeader(doc, 'Statement of Patient/Guardian', y);
+      y = addBodyText(doc, 'I, the undersigned, hereby confirm that:', y);
+      y += 3;
+      y = addBulletList(doc, [
+        'I have been informed about my condition and the proposed surgical procedure.',
+        'The nature, purpose, expected benefits, and possible risks/complications have been explained to me.',
+        'I have been informed of alternative treatment options.',
+        'I have had the opportunity to ask questions and all my questions have been answered satisfactorily.',
+        'I understand that the surgical outcome cannot be guaranteed.',
+        'I consent to the administration of anaesthesia as deemed necessary by the anaesthetist.',
+        'I consent to any additional procedure that may be found necessary during surgery.',
+        'I understand I can withdraw my consent at any time before the procedure.',
+      ], y);
+      y += 6;
+
+      y = addSectionHeader(doc, 'Allergies', y);
+      y = addLabeledField(doc, 'Known Allergies', admission.allergies || 'None reported', y);
+      y += 4;
+
+      y = addSectionHeader(doc, 'Signatures', y);
+      y += 4;
+      y = addLabeledField(doc, 'Patient Name (Print)', '______________________________', y);
+      y = addLabeledField(doc, 'Patient/Guardian Signature', '______________________________', y);
+      y = addLabeledField(doc, 'Date & Time', '______________________________', y);
+      y += 6;
+      y = addLabeledField(doc, 'Witness Name', '______________________________', y);
+      y = addLabeledField(doc, 'Witness Signature', '______________________________', y);
+      y += 6;
+      y = addLabeledField(doc, 'Surgeon Name', admission.admitting_consultant || '______________________________', y);
+      y = addLabeledField(doc, 'Surgeon Signature', '______________________________', y);
+      y = addLabeledField(doc, 'Date & Time', '______________________________', y);
+
+      addFooter(doc, `Generated: ${new Date().toLocaleString()} | ${admission.patient_name}`);
+      doc.save(`Consent_Form_${(admission.patient_name || 'patient').replace(/\s+/g, '_')}.pdf`);
+    } catch (error) {
+      console.error('Error generating consent form PDF:', error);
+      alert('Failed to generate PDF.');
+    } finally {
+      setGeneratingPdf(null);
+    }
+  };
+
+  // Risk level badge color helper
+  const riskBadge = (level?: string) => {
+    if (!level) return 'bg-gray-100 text-gray-600';
+    const l = level.toLowerCase();
+    if (l.includes('high') || l.includes('severe')) return 'bg-red-100 text-red-700';
+    if (l.includes('moderate') || l.includes('medium')) return 'bg-yellow-100 text-yellow-700';
+    return 'bg-green-100 text-green-700';
+  };
+
   return (
     <div>
       {/* Search Bar */}
@@ -261,59 +561,266 @@ function ActivePatientsTab({ admissions, searchTerm, setSearchTerm, onDischarge,
                 const daysAdmitted = Math.ceil(
                   (new Date().getTime() - new Date(admission.admission_date).getTime()) / (1000 * 60 * 60 * 24)
                 );
+                const isExpanded = expandedId === admission.id;
+                const assessment = preopData[admission.id!];
                 return (
-                  <tr key={admission.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-gray-900">{admission.patient_name}</div>
-                      <div className="text-xs text-gray-500">{admission.age}y / {admission.gender}</div>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{admission.hospital_number}</td>
-                    <td className="px-4 py-3 text-sm">
-                      <span className="font-medium">{admission.ward_location}</span>
-                      {admission.bed_number && <span className="text-gray-500"> / {admission.bed_number}</span>}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">
-                      {new Date(admission.admission_date).toLocaleDateString()}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-1 text-xs rounded-full ${
-                        daysAdmitted > 14 ? 'bg-red-100 text-red-700' :
-                        daysAdmitted > 7 ? 'bg-yellow-100 text-yellow-700' :
-                        'bg-green-100 text-green-700'
-                      }`}>
-                        {daysAdmitted}d
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">
-                      <div className="max-w-xs truncate">{admission.provisional_diagnosis}</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-1 text-xs rounded-full ${
-                        admission.route_of_admission === 'emergency' ? 'bg-red-100 text-red-700' :
-                        admission.route_of_admission === 'consult_transfer' ? 'bg-purple-100 text-purple-700' :
-                        'bg-blue-100 text-blue-700'
-                      }`}>
-                        {String(admission.route_of_admission || 'clinic').replace('_', ' ')}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-sm">
-                      <div className="flex gap-2">
-                        <button 
-                          onClick={() => admission.patient_id && navigate(`/patients/${admission.patient_id}`)}
-                          className="text-blue-600 hover:text-blue-800"
-                          disabled={!admission.patient_id}
-                        >
-                          View
-                        </button>
-                        <button 
-                          onClick={() => onDischarge(admission)}
-                          className="text-green-600 hover:text-green-800"
-                        >
-                          Discharge
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+                  <React.Fragment key={admission.id}>
+                    <tr className={`hover:bg-gray-50 cursor-pointer ${isExpanded ? 'bg-green-50' : ''}`}
+                        onClick={() => handleExpand(admission)}>
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-gray-900">{admission.patient_name}</div>
+                        <div className="text-xs text-gray-500">{admission.age}y / {admission.gender}</div>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{admission.hospital_number}</td>
+                      <td className="px-4 py-3 text-sm">
+                        <span className="font-medium">{admission.ward_location}</span>
+                        {admission.bed_number && <span className="text-gray-500"> / {admission.bed_number}</span>}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600">
+                        {new Date(admission.admission_date).toLocaleDateString()}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-1 text-xs rounded-full ${
+                          daysAdmitted > 14 ? 'bg-red-100 text-red-700' :
+                          daysAdmitted > 7 ? 'bg-yellow-100 text-yellow-700' :
+                          'bg-green-100 text-green-700'
+                        }`}>
+                          {daysAdmitted}d
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600">
+                        <div className="max-w-xs truncate">{admission.provisional_diagnosis}</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-1 text-xs rounded-full ${
+                          admission.route_of_admission === 'emergency' ? 'bg-red-100 text-red-700' :
+                          admission.route_of_admission === 'consult_transfer' ? 'bg-purple-100 text-purple-700' :
+                          'bg-blue-100 text-blue-700'
+                        }`}>
+                          {String(admission.route_of_admission || 'clinic').replace('_', ' ')}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex gap-2">
+                          <button 
+                            onClick={() => admission.patient_id && navigate(`/patients/${admission.patient_id}`)}
+                            className="text-blue-600 hover:text-blue-800"
+                            disabled={!admission.patient_id}
+                          >
+                            View
+                          </button>
+                          <button 
+                            onClick={() => onDischarge(admission)}
+                            className="text-green-600 hover:text-green-800"
+                          >
+                            Discharge
+                          </button>
+                          <button
+                            onClick={() => handleExpand(admission)}
+                            className="text-purple-600 hover:text-purple-800"
+                          >
+                            {isExpanded ? 'Close' : 'Details'}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    {/* ── EXPANDED DETAIL ROW: Preop Planning + Document Downloads ── */}
+                    {isExpanded && (
+                      <tr>
+                        <td colSpan={8} className="px-4 py-4 bg-gray-50 border-t border-b border-green-200">
+                          <div className="space-y-4">
+                            {/* Preoperative Assessment */}
+                            <div className="bg-white p-4 rounded-lg border border-gray-200">
+                              <h4 className="text-md font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                                <span className="text-lg">📋</span> Preoperative Planning
+                              </h4>
+                              {loadingPreop === admission.id ? (
+                                <div className="flex items-center gap-2 text-gray-500">
+                                  <div className="animate-spin h-4 w-4 border-2 border-green-600 border-t-transparent rounded-full"></div>
+                                  Loading assessment...
+                                </div>
+                              ) : assessment ? (
+                                <div className="space-y-3">
+                                  {/* Risk Scores Grid */}
+                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                    {assessment.bleeding_risk && (
+                                      <div className="bg-gray-50 p-3 rounded border">
+                                        <div className="text-xs text-gray-500 mb-1">Bleeding Risk</div>
+                                        <span className={`px-2 py-1 text-xs rounded-full font-medium ${riskBadge(assessment.bleeding_risk.risk_level)}`}>
+                                          {assessment.bleeding_risk.risk_level} ({assessment.bleeding_risk.total_score})
+                                        </span>
+                                      </div>
+                                    )}
+                                    {assessment.dvt_risk && (
+                                      <div className="bg-gray-50 p-3 rounded border">
+                                        <div className="text-xs text-gray-500 mb-1">DVT Risk (Caprini)</div>
+                                        <span className={`px-2 py-1 text-xs rounded-full font-medium ${riskBadge(assessment.dvt_risk.risk_level)}`}>
+                                          {assessment.dvt_risk.risk_level} ({assessment.dvt_risk.total_score})
+                                        </span>
+                                      </div>
+                                    )}
+                                    {assessment.cardiovascular_risk && (
+                                      <div className="bg-gray-50 p-3 rounded border">
+                                        <div className="text-xs text-gray-500 mb-1">Cardiac Risk (RCRI)</div>
+                                        <span className={`px-2 py-1 text-xs rounded-full font-medium ${riskBadge(assessment.cardiovascular_risk.risk_level)}`}>
+                                          {assessment.cardiovascular_risk.risk_level} ({assessment.cardiovascular_risk.total_score})
+                                        </span>
+                                      </div>
+                                    )}
+                                    {assessment.pressure_sore_risk && (
+                                      <div className="bg-gray-50 p-3 rounded border">
+                                        <div className="text-xs text-gray-500 mb-1">Pressure Sore (Braden)</div>
+                                        <span className={`px-2 py-1 text-xs rounded-full font-medium ${riskBadge(assessment.pressure_sore_risk.risk_level)}`}>
+                                          {assessment.pressure_sore_risk.risk_level} ({assessment.pressure_sore_risk.total_score})
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Consent & Insurance Status */}
+                                  <div className="flex gap-4 text-sm">
+                                    <div className="flex items-center gap-1">
+                                      <span className={`w-3 h-3 rounded-full ${assessment.consent_document ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                                      Consent: {assessment.consent_document ? 'Obtained' : 'Pending'}
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                      <span className={`w-3 h-3 rounded-full ${assessment.insurance_covered ? 'bg-green-500' : 'bg-yellow-500'}`}></span>
+                                      Insurance: {assessment.insurance_covered ? 'Covered' : 'Not Covered/Pending'}
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                      <span className={`w-3 h-3 rounded-full ${assessment.payment_evidence ? 'bg-green-500' : 'bg-yellow-500'}`}></span>
+                                      Payment: {assessment.payment_evidence ? 'Confirmed' : 'Pending'}
+                                    </div>
+                                  </div>
+
+                                  {/* Comprehensive Summary */}
+                                  {assessment.comprehensive_summary && (
+                                    <details className="border rounded p-3 bg-gray-50">
+                                      <summary className="cursor-pointer text-sm font-medium text-gray-700">
+                                        View Comprehensive Summary
+                                      </summary>
+                                      <p className="mt-2 text-sm text-gray-600 whitespace-pre-wrap">
+                                        {assessment.comprehensive_summary}
+                                      </p>
+                                    </details>
+                                  )}
+
+                                  {/* Current Medications */}
+                                  {assessment.current_medications && assessment.current_medications.length > 0 && (
+                                    <div className="text-sm">
+                                      <span className="font-medium text-gray-700">Current Medications: </span>
+                                      {assessment.current_medications.map(m => 
+                                        typeof m === 'string' ? m : `${m.name} ${m.dose || ''}`
+                                      ).join(', ')}
+                                    </div>
+                                  )}
+
+                                  <div className="text-xs text-gray-400">
+                                    Assessed by: {assessment.assessed_by || 'N/A'} | 
+                                    Date: {assessment.assessed_at ? new Date(assessment.assessed_at).toLocaleDateString() : 'N/A'}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="text-sm text-gray-500 italic">
+                                  No preoperative assessment found for this patient. 
+                                  <button 
+                                    onClick={() => navigate(`/preoperative?patientId=${admission.patient_id}`)}
+                                    className="ml-2 text-green-600 hover:text-green-800 underline"
+                                  >
+                                    Create Assessment
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Clinical Details */}
+                            {(admission.vital_signs || admission.allergies || admission.comorbidities) && (
+                              <div className="bg-white p-4 rounded-lg border border-gray-200">
+                                <h4 className="text-md font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                                  <span className="text-lg">🩺</span> Clinical Details
+                                </h4>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                                  {admission.vital_signs && (
+                                    <div>
+                                      <span className="font-medium text-gray-700">Vital Signs:</span>
+                                      <div className="text-gray-600">
+                                        {admission.vital_signs.temperature && <span>Temp: {admission.vital_signs.temperature}°C | </span>}
+                                        {admission.vital_signs.blood_pressure && <span>BP: {admission.vital_signs.blood_pressure} | </span>}
+                                        {admission.vital_signs.pulse && <span>HR: {admission.vital_signs.pulse} | </span>}
+                                        {admission.vital_signs.respiratory_rate && <span>RR: {admission.vital_signs.respiratory_rate} | </span>}
+                                        {admission.vital_signs.oxygen_saturation && <span>SpO2: {admission.vital_signs.oxygen_saturation}%</span>}
+                                      </div>
+                                    </div>
+                                  )}
+                                  {admission.allergies && (
+                                    <div>
+                                      <span className="font-medium text-gray-700">Allergies: </span>
+                                      <span className="text-red-600">{admission.allergies}</span>
+                                    </div>
+                                  )}
+                                  {admission.comorbidities && admission.comorbidities.length > 0 && (
+                                    <div>
+                                      <span className="font-medium text-gray-700">Comorbidities: </span>
+                                      <span className="text-gray-600">{Array.isArray(admission.comorbidities) ? admission.comorbidities.join(', ') : admission.comorbidities}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Document Downloads */}
+                            <div className="bg-white p-4 rounded-lg border border-gray-200">
+                              <h4 className="text-md font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                                <span className="text-lg">📄</span> Download Documents
+                              </h4>
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                <button
+                                  onClick={() => generatePreopEducationPDF(admission, assessment)}
+                                  disabled={generatingPdf !== null}
+                                  className="flex flex-col items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 disabled:opacity-50 transition-colors"
+                                >
+                                  <span className="text-2xl">📘</span>
+                                  <span className="text-xs font-medium text-blue-800 text-center">
+                                    {generatingPdf === 'preop-education' ? 'Generating...' : 'Pre-Op Education'}
+                                  </span>
+                                </button>
+                                <button
+                                  onClick={() => generatePostopEducationPDF(admission)}
+                                  disabled={generatingPdf !== null}
+                                  className="flex flex-col items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 disabled:opacity-50 transition-colors"
+                                >
+                                  <span className="text-2xl">📗</span>
+                                  <span className="text-xs font-medium text-green-800 text-center">
+                                    {generatingPdf === 'postop-education' ? 'Generating...' : 'Post-Op Education'}
+                                  </span>
+                                </button>
+                                <button
+                                  onClick={() => generateCounsellingPDF(admission, assessment)}
+                                  disabled={generatingPdf !== null}
+                                  className="flex flex-col items-center gap-2 p-3 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 disabled:opacity-50 transition-colors"
+                                >
+                                  <span className="text-2xl">📝</span>
+                                  <span className="text-xs font-medium text-purple-800 text-center">
+                                    {generatingPdf === 'counselling' ? 'Generating...' : 'Counselling Record'}
+                                  </span>
+                                </button>
+                                <button
+                                  onClick={() => generateConsentFormPDF(admission)}
+                                  disabled={generatingPdf !== null}
+                                  className="flex flex-col items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 disabled:opacity-50 transition-colors"
+                                >
+                                  <span className="text-2xl">✍️</span>
+                                  <span className="text-xs font-medium text-red-800 text-center">
+                                    {generatingPdf === 'consent' ? 'Generating...' : 'Consent Form'}
+                                  </span>
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 );
               })
             )}

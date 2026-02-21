@@ -29,6 +29,7 @@ import {
   RotateCw,
 } from 'lucide-react';
 import { dataSyncService } from '../services/dataSyncService';
+import { bulkMigrationService, MigrationProgress } from '../services/bulkMigrationService';
 import { db } from '../db/database';
 import { useAuthStore } from '../store/authStore';
 import toast from 'react-hot-toast';
@@ -73,6 +74,18 @@ const ENTITY_TABLES = [
   { label: 'MDT Contact Logs', table: 'mdt_contact_logs' },
   { label: 'Chat Messages', table: 'chat_messages' },
   { label: 'Activity Logs', table: 'user_activities' },
+  { label: 'Paperwork Documents', table: 'paperwork_documents' },
+  { label: 'CME Topics', table: 'cmeTopics' },
+  { label: 'CME Test Sessions', table: 'testSessions' },
+  { label: 'CME Progress', table: 'cmeProgress' },
+  { label: 'CME Certificates', table: 'cmeCertificates' },
+  { label: 'CME Articles', table: 'cme_articles' },
+  { label: 'CME Reading Progress', table: 'cme_reading_progress' },
+  { label: 'Educational Topics', table: 'educational_topics' },
+  { label: 'Weekly Contents', table: 'weekly_contents' },
+  { label: 'Topic Schedules', table: 'topic_schedules' },
+  { label: 'User Progress', table: 'user_progress' },
+  { label: 'Audit Logs', table: 'audit_logs' },
 ];
 
 export default function Settings() {
@@ -92,6 +105,11 @@ export default function Settings() {
     return localStorage.getItem('auto_sync_enabled') !== 'false'; // Default on
   });
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'available' | 'not-available' | 'error'>('idle');
+  const [migrationRunning, setMigrationRunning] = useState(false);
+  const [migrationProgress, setMigrationProgress] = useState<MigrationProgress[] | null>(null);
+  const [migrationDone, setMigrationDone] = useState<boolean>(
+    () => !!localStorage.getItem('bulk_migration_completed')
+  );
 
   // Check for app updates via service worker
   const handleCheckForUpdates = useCallback(async () => {
@@ -483,6 +501,74 @@ export default function Settings() {
               <Download className="h-4 w-4" />
               <span className="text-sm font-medium">Pull from Cloud Only</span>
             </button>
+          </div>
+
+          {/* Bulk Migration */}
+          <div className="pt-4 border-t border-gray-100">
+            <button
+              onClick={async () => {
+                if (migrationRunning) return;
+                if (!syncState.isOnline) { toast.error('You are offline.'); return; }
+                setMigrationRunning(true);
+                setMigrationProgress(null);
+                setMigrationDone(false);
+                try {
+                  const result = await bulkMigrationService.migrateAllToServer((progress) => {
+                    setMigrationProgress([...progress]);
+                  });
+                  setMigrationDone(true);
+                  localStorage.setItem('bulk_migration_completed', new Date().toISOString());
+                  await loadLocalDataSummary();
+                  toast.success(
+                    `Migration complete! ${result.totalSynced} records pushed to cloud (${result.totalErrors} errors).`,
+                    { duration: 6000 }
+                  );
+                } catch (err: any) {
+                  toast.error('Migration failed: ' + err.message);
+                } finally {
+                  setMigrationRunning(false);
+                }
+              }}
+              disabled={migrationRunning || !syncState.isOnline}
+              className={`w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-medium transition-all ${
+                migrationRunning
+                  ? 'bg-amber-100 text-amber-700 cursor-wait'
+                  : !syncState.isOnline
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'bg-amber-500 hover:bg-amber-600 text-white shadow-md hover:shadow-lg active:scale-[0.98]'
+              }`}
+            >
+              {migrationRunning ? (
+                <><RefreshCw className="h-5 w-5 animate-spin" /> Migrating Local Data...</>
+              ) : (
+                <><Upload className="h-5 w-5" /> Migrate All Local Data to Cloud</>
+              )}
+            </button>
+            <p className="text-xs text-gray-500 mt-2">
+              {migrationDone
+                ? `✅ Last migration: ${new Date(localStorage.getItem('bulk_migration_completed') || '').toLocaleString()}`
+                : 'Push ALL existing local records to the server for cross-device sync. Safe to run multiple times.'}
+            </p>
+
+            {/* Migration Progress */}
+            {migrationProgress && migrationProgress.some(p => p.total > 0) && (
+              <div className="mt-3 bg-gray-50 rounded-lg p-3 max-h-48 overflow-y-auto">
+                <p className="text-xs font-medium text-gray-600 mb-2">Migration Progress:</p>
+                {migrationProgress.filter(p => p.total > 0).map(p => (
+                  <div key={p.table} className="flex items-center justify-between text-xs py-1">
+                    <span className="text-gray-700">{p.table}</span>
+                    <span className={`font-medium ${
+                      p.status === 'done' ? 'text-green-600' :
+                      p.status === 'error' ? 'text-red-600' :
+                      p.status === 'in-progress' ? 'text-blue-600' : 'text-gray-400'
+                    }`}>
+                      {p.synced}/{p.total}{p.errors > 0 ? ` (${p.errors} err)` : ''}
+                      {p.status === 'in-progress' ? ' ⏳' : p.status === 'done' ? ' ✅' : p.status === 'error' ? ' ❌' : ''}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Auto-sync Toggle */}

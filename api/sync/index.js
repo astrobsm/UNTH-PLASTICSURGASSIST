@@ -279,6 +279,47 @@ async function handlePush(data, user, res) {
         }
       }
 
+      // Handle patient entities - upsert by hospital_number (special case: SERIAL primary key)
+      if (entityType === 'patients' && payload) {
+        try {
+          const { hospital_number, first_name, last_name, date_of_birth, gender, phone, email,
+                  address, blood_group, allergies, medical_history, primary_diagnosis, 
+                  secondary_diagnoses, ward, bed_number, emergency_contact_name, emergency_contact_phone } = payload;
+          
+          if (hospital_number) {
+            const existing = await query('SELECT id FROM patients WHERE hospital_number = $1', [hospital_number]);
+            if (existing.rows.length > 0) {
+              await query(
+                `UPDATE patients SET first_name = COALESCE($1, first_name), last_name = COALESCE($2, last_name), 
+                 date_of_birth = COALESCE($3, date_of_birth), gender = COALESCE($4, gender), 
+                 phone = COALESCE($5, phone), email = COALESCE($6, email), address = COALESCE($7, address),
+                 blood_group = COALESCE($8, blood_group), allergies = COALESCE($9, allergies), 
+                 medical_history = COALESCE($10, medical_history), primary_diagnosis = COALESCE($11, primary_diagnosis),
+                 updated_at = CURRENT_TIMESTAMP WHERE hospital_number = $12`,
+                [first_name, last_name, date_of_birth, gender, phone, email, address,
+                 blood_group, allergies, medical_history, primary_diagnosis, hospital_number]
+              );
+            } else {
+              await query(
+                `INSERT INTO patients (hospital_number, first_name, last_name, date_of_birth, gender, phone, email, 
+                 address, blood_group, allergies, medical_history, primary_diagnosis)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+                [hospital_number, first_name, last_name, date_of_birth, gender, phone, email, 
+                 address, blood_group, allergies, medical_history, primary_diagnosis]
+              );
+            }
+            results.push({ entityId, status: 'synced' });
+          } else {
+            results.push({ entityId, status: 'skipped', message: 'No hospital_number' });
+          }
+          continue;
+        } catch (err) {
+          console.error('Error syncing patient:', err);
+          results.push({ entityId, status: 'error', message: err.message });
+          continue;
+        }
+      }
+
       // Handle clinical assessment entities with upsert
       const clinicalEntities = [
         'blood_transfusions', 'burn_patients', 'diabetic_foot_assessments',
@@ -286,31 +327,64 @@ async function handlePush(data, user, res) {
         'nutritional_assessments', 'procedures', 'who_safety_checklists',
         'paperwork_documents', 'cme_topics', 'cme_test_sessions',
         'cme_progress', 'cme_certificates', 'cme_articles', 'cme_reading_progress',
-        'educational_topics', 'weekly_contents', 'topic_schedules', 'education_user_progress'
+        'educational_topics', 'weekly_contents', 'topic_schedules', 'education_user_progress',
+        'wound_care_records', 'ward_rounds', 'discharge_summaries',
+        'admissions', 'surgeries', 'treatment_plans', 'prescriptions', 'lab_orders',
+        'chat_messages', 'chat_rooms', 'audit_logs', 'user_activities'
       ];
       
       if (clinicalEntities.includes(entityType) && payload) {
         try {
-          // Build dynamic upsert query
-          const columns = Object.keys(payload).filter(k => k !== 'id' && k !== 'serverId' && k !== 'synced');
+          // Tables with SERIAL (integer) primary keys - local auto-increment ids should NOT be used for lookup
+          const serialKeyTables = [
+            'wound_care_records', 'ward_rounds', 'discharge_summaries',
+            'admissions', 'surgeries', 'treatment_plans', 'prescriptions', 'lab_orders'
+          ];
+          const isSerialKey = serialKeyTables.includes(entityType);
+
+          // Build dynamic upsert query - filter out internal fields and local-only id for SERIAL tables
+          const skipKeys = ['serverId', 'synced', 'deleted'];
+          if (isSerialKey) skipKeys.push('id'); // don't use local auto-increment id
+          const columns = Object.keys(payload).filter(k => !skipKeys.includes(k));
           const values = columns.map(k => {
             const v = payload[k];
-            return typeof v === 'object' ? JSON.stringify(v) : v;
+            return (v !== null && typeof v === 'object') ? JSON.stringify(v) : v;
           });
           const placeholders = columns.map((_, i) => `$${i + 1}`).join(', ');
           
-          // Check if record exists by patient_id or id
-          const existingId = payload.serverId || payload.id;
+          // Check if record exists
           let existing = null;
-          if (existingId) {
-            existing = await query(`SELECT id FROM ${entityType} WHERE id = $1`, [existingId]);
-          } else if (payload.patient_id) {
-            // For some entities, check by patient_id + date
-            const dateField = entityType.includes('assessment') ? 'assessment_date' : 
-                             entityType === 'blood_transfusions' ? 'transfusion_date' :
-                             entityType === 'burn_patients' ? 'admission_date' :
-                             entityType === 'procedures' ? 'procedure_date' : 'checklist_date';
-            if (payload[dateField]) {
+          
+          if (!isSerialKey) {
+            // VARCHAR id tables: look up by id directly
+            const existingId = payload.serverId || payload.id;
+            if (existingId) {
+              existing = await query(`SELECT id FROM ${entityType} WHERE id = $1`, [existingId]);
+            }
+          }
+          
+          // For all entities with patient_id, try lookup by patient_id + date
+          if ((!existing || existing.rows.length === 0) && payload.patient_id) {
+            const dateFieldMap = {
+              'dvt_assessments': 'assessment_date',
+              'pressure_sore_assessments': 'assessment_date',
+              'nutritional_assessments': 'assessment_date',
+              'diabetic_foot_assessments': 'assessment_date',
+              'preoperative_assessments': 'assessed_at',
+              'blood_transfusions': 'transfusion_date',
+              'burn_patients': 'admission_date',
+              'procedures': 'scheduled_date',
+              'who_safety_checklists': 'created_at',
+              'wound_care_records': 'recorded_at',
+              'ward_rounds': 'round_date',
+              'admissions': 'admission_date',
+              'surgeries': 'scheduled_date',
+              'prescriptions': 'prescribed_at',
+              'lab_orders': 'ordered_at',
+              'discharge_summaries': 'discharge_date'
+            };
+            const dateField = dateFieldMap[entityType];
+            if (dateField && payload[dateField]) {
               existing = await query(
                 `SELECT id FROM ${entityType} WHERE patient_id = $1 AND ${dateField} = $2`,
                 [payload.patient_id, payload[dateField]]
@@ -326,7 +400,7 @@ async function handlePush(data, user, res) {
               [...values, existing.rows[0].id]
             );
           } else {
-            // Insert
+            // Insert (for SERIAL tables, PostgreSQL auto-generates the id)
             await query(
               `INSERT INTO ${entityType} (${columns.join(', ')}) VALUES (${placeholders})`,
               values

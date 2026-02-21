@@ -83,13 +83,12 @@ class TopicManagementService {
     try {
       const token = apiClient.getToken();
       if (!token) return;
-      await apiClient.post('/api/sync/push', {
-        entities: [{
+      await apiClient.post('/sync/push', {
+        changes: [{
           entityType,
           entityId,
           action: 'upsert',
-          data: payload,
-          timestamp: new Date().toISOString()
+          payload
         }]
       });
     } catch (error) {
@@ -101,7 +100,7 @@ class TopicManagementService {
     try {
       const token = apiClient.getToken();
       if (!token) return;
-      const response = await apiClient.get('/api/sync/educational-topics');
+      const response = await apiClient.get('/sync/educational-topics');
       if (response && Array.isArray(response)) {
         for (const row of response) {
           const topic: EducationalTopic = {
@@ -131,7 +130,7 @@ class TopicManagementService {
     try {
       const token = apiClient.getToken();
       if (!token) return;
-      const response = await apiClient.get('/api/sync/weekly-contents');
+      const response = await apiClient.get('/sync/weekly-contents');
       if (response && Array.isArray(response)) {
         for (const row of response) {
           const content: WeeklyContent = {
@@ -162,7 +161,7 @@ class TopicManagementService {
     try {
       const token = apiClient.getToken();
       if (!token) return;
-      const response = await apiClient.get('/api/sync/topic-schedules');
+      const response = await apiClient.get('/sync/topic-schedules');
       if (response && Array.isArray(response)) {
         for (const row of response) {
           const schedule: TopicSchedule = {
@@ -186,7 +185,7 @@ class TopicManagementService {
     try {
       const token = apiClient.getToken();
       if (!token) return;
-      const response = await apiClient.get('/api/sync/education-user-progress');
+      const response = await apiClient.get('/sync/education-user-progress');
       if (response && Array.isArray(response)) {
         for (const row of response) {
           const progress: UserProgress = {
