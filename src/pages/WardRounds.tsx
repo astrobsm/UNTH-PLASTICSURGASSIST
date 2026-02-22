@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { Calendar, User, Activity, FileText, Plus, Search, Filter, TrendingUp, Clock, AlertCircle } from 'lucide-react';
+﻿import React, { useState, useEffect, useMemo } from 'react';
+import { Calendar, User, Activity, FileText, Plus, Search, TrendingUp, Clock, AlertCircle, ChevronDown, ChevronUp, Thermometer, Heart, Wind, Droplets, Stethoscope, Pill, TestTube, Eye, ClipboardList, ArrowLeft, X, FileDown } from 'lucide-react';
 import WardRoundForm from '../components/WardRoundForm';
-import { wardRoundsService, WardRound } from '../services/wardRoundsService';
+import { wardRoundsService, WardRound, ROUND_TYPES } from '../services/wardRoundsService';
 import { db } from '../db/database';
 import { patientService } from '../services/patientService';
-import { format } from 'date-fns';
+import { format, isWithinInterval, parseISO, startOfDay, endOfDay } from 'date-fns';
+import { safeFormatDate } from '../utils/dateUtils';
 
 interface Patient {
   id: string;
@@ -19,19 +20,24 @@ export default function WardRounds() {
   const [selectedRound, setSelectedRound] = useState<WardRound | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'stable' | 'deteriorating' | 'critical'>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'stable' | 'deteriorating' | 'critical' | 'improved'>('all');
   const [filterDate, setFilterDate] = useState<'today' | 'week' | 'month' | 'all'>('all');
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  // Patient-focused documentation preview
+  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [expandedRoundIds, setExpandedRoundIds] = useState<Set<string>>(new Set());
+  const [patientSearch, setPatientSearch] = useState('');
+
+  useEffect(() => { loadData(); }, []);
 
   const loadData = async () => {
     try {
       setLoading(true);
       const [roundsData, patientsData] = await Promise.all([
         wardRoundsService.getAllWardRounds(),
-        patientService.getAllPatients() // Fetch from server API (includes all users' patients)
+        patientService.getAllPatients()
       ]);
       setRounds(roundsData);
       setPatients(patientsData.map(p => ({
@@ -46,21 +52,9 @@ export default function WardRounds() {
     }
   };
 
-  const handleCreateRound = () => {
-    setSelectedRound(null);
-    setShowForm(true);
-  };
-
-  const handleEditRound = (round: WardRound) => {
-    setSelectedRound(round);
-    setShowForm(true);
-  };
-
-  const handleCloseForm = () => {
-    setShowForm(false);
-    setSelectedRound(null);
-    loadData();
-  };
+  const handleCreateRound = () => { setSelectedRound(null); setShowForm(true); };
+  const handleEditRound = (round: WardRound) => { setSelectedRound(round); setShowForm(true); };
+  const handleCloseForm = () => { setShowForm(false); setSelectedRound(null); loadData(); };
 
   const handleDeleteRound = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this ward round entry?')) {
@@ -74,67 +68,104 @@ export default function WardRounds() {
     }
   };
 
+  const toggleExpand = (id: string) => {
+    setExpandedRoundIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const expandAll = () => {
+    setExpandedRoundIds(new Set(patientRounds.map(r => r.id || '')));
+  };
+  const collapseAll = () => setExpandedRoundIds(new Set());
+
+  // Patients who have at least one ward round
+  const patientsWithRounds = useMemo(() => {
+    const patientIds = new Set(rounds.map(r => r.patient_id));
+    return patients.filter(p => patientIds.has(p.id));
+  }, [patients, rounds]);
+
+  // Filtered patient list for sidebar search
+  const filteredPatientList = useMemo(() => {
+    if (!patientSearch) return patientsWithRounds;
+    const s = patientSearch.toLowerCase();
+    return patientsWithRounds.filter(p =>
+      p.name.toLowerCase().includes(s) || p.hospital_number.toLowerCase().includes(s)
+    );
+  }, [patientsWithRounds, patientSearch]);
+
+  const selectedPatient = patients.find(p => p.id === selectedPatientId);
+
+  // Rounds for the selected patient, filtered by date range
+  const patientRounds = useMemo(() => {
+    if (!selectedPatientId) return [];
+    let pr = rounds.filter(r => r.patient_id === selectedPatientId);
+
+    if (dateFrom) {
+      const from = startOfDay(new Date(dateFrom));
+      pr = pr.filter(r => {
+        try { return new Date(r.round_date) >= from; } catch { return true; }
+      });
+    }
+    if (dateTo) {
+      const to = endOfDay(new Date(dateTo));
+      pr = pr.filter(r => {
+        try { return new Date(r.round_date) <= to; } catch { return true; }
+      });
+    }
+
+    return pr.sort((a, b) => new Date(b.round_date).getTime() - new Date(a.round_date).getTime());
+  }, [selectedPatientId, rounds, dateFrom, dateTo]);
+
+  // Filtered rounds for the main list view (when no patient selected)
   const getFilteredRounds = () => {
     let filtered = rounds;
-
-    // Filter by status
     if (filterStatus !== 'all') {
       filtered = filtered.filter(r => r.progress_status === filterStatus);
     }
-
-    // Filter by date
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
+    const now = new Date(); now.setHours(0, 0, 0, 0);
     if (filterDate !== 'all') {
       filtered = filtered.filter(r => {
-        const roundDate = new Date(r.round_date);
-        roundDate.setHours(0, 0, 0, 0);
-        const diffTime = now.getTime() - roundDate.getTime();
-        const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
-        
-        if (filterDate === 'today') return diffDays === 0;
-        if (filterDate === 'week') return diffDays >= 0 && diffDays <= 7;
-        if (filterDate === 'month') return diffDays >= 0 && diffDays <= 30;
+        const d = new Date(r.round_date); d.setHours(0, 0, 0, 0);
+        const diff = Math.round((now.getTime() - d.getTime()) / 86400000);
+        if (filterDate === 'today') return diff === 0;
+        if (filterDate === 'week') return diff >= 0 && diff <= 7;
+        if (filterDate === 'month') return diff >= 0 && diff <= 30;
         return true;
       });
     }
-
-    // Filter by search term
     if (searchTerm) {
+      const s = searchTerm.toLowerCase();
       filtered = filtered.filter(r => {
-        const patient = patients.find(p => p.id === r.patient_id);
-        const patientName = (patient?.name || '').toLowerCase();
-        const hospitalNumber = (patient?.hospital_number || '').toLowerCase();
-        const search = searchTerm.toLowerCase();
-        return patientName.includes(search) || 
-               hospitalNumber.includes(search) ||
-               (r.chief_complaint || '').toLowerCase().includes(search);
+        const p = patients.find(x => x.id === r.patient_id);
+        return (p?.name || '').toLowerCase().includes(s) ||
+               (p?.hospital_number || '').toLowerCase().includes(s) ||
+               (r.chief_complaint || '').toLowerCase().includes(s);
       });
     }
-
     return filtered.sort((a, b) => new Date(b.round_date).getTime() - new Date(a.round_date).getTime());
   };
 
-  const getStatusBadgeColor = (status: string) => {
-    switch (status) {
-      case 'stable': return 'bg-green-100 text-green-800';
-      case 'improving': return 'bg-blue-100 text-blue-800';
-      case 'deteriorating': return 'bg-yellow-100 text-yellow-800';
-      case 'critical': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
+  const statusColor = (s: string) => {
+    switch (s) {
+      case 'stable': return 'bg-green-100 text-green-800 border-green-300';
+      case 'improved': return 'bg-blue-100 text-blue-800 border-blue-300';
+      case 'deteriorating': return 'bg-yellow-100 text-yellow-800 border-yellow-300';
+      case 'critical': return 'bg-red-100 text-red-800 border-red-300';
+      default: return 'bg-gray-100 text-gray-800 border-gray-300';
     }
   };
 
-  const getStats = () => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    const todayRounds = rounds.filter(r => {
-      const roundDate = new Date(r.round_date);
-      roundDate.setHours(0, 0, 0, 0);
-      return roundDate.getTime() === today.getTime();
-    });
+  const roundTypeLabel = (t: string) => ROUND_TYPES.find(rt => rt.value === t)?.label || t;
 
+  const getStats = () => {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const todayRounds = rounds.filter(r => {
+      const d = new Date(r.round_date); d.setHours(0, 0, 0, 0);
+      return d.getTime() === today.getTime();
+    });
     return {
       total: rounds.length,
       today: todayRounds.length,
@@ -150,7 +181,7 @@ export default function WardRounds() {
   if (showForm) {
     return (
       <WardRoundForm
-        patientId={selectedRound?.patient_id}
+        patientId={selectedRound?.patient_id || selectedPatientId || undefined}
         wardRoundId={selectedRound?.id}
         onClose={handleCloseForm}
         onSave={handleCloseForm}
@@ -158,6 +189,258 @@ export default function WardRounds() {
     );
   }
 
+  //  DOCUMENTATION PREVIEW for selected patient 
+  if (selectedPatientId && selectedPatient) {
+    return (
+      <div className="space-y-4">
+        {/* Back button + patient header */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 bg-white rounded-lg shadow p-4">
+          <button onClick={() => { setSelectedPatientId(null); setExpandedRoundIds(new Set()); }} className="flex items-center gap-2 text-green-700 hover:text-green-900 font-medium">
+            <ArrowLeft className="w-5 h-5" /> Back to All Rounds
+          </button>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-lg font-bold text-gray-900 truncate">{selectedPatient.name}</h2>
+            <p className="text-sm text-gray-500">{selectedPatient.hospital_number}</p>
+          </div>
+          <button onClick={() => { setSelectedRound(null); setShowForm(true); }} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm">
+            <Plus className="w-4 h-4" /> New Round for Patient
+          </button>
+        </div>
+
+        {/* Date range filter */}
+        <div className="bg-white rounded-lg shadow p-4">
+          <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+            <div className="flex-1">
+              <label className="block text-xs font-medium text-gray-600 mb-1">From Date</label>
+              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-green-500" title="From date" />
+            </div>
+            <div className="flex-1">
+              <label className="block text-xs font-medium text-gray-600 mb-1">To Date</label>
+              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-green-500" title="To date" />
+            </div>
+            <button onClick={() => { setDateFrom(''); setDateTo(''); }} className="px-3 py-2 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50">Clear</button>
+            <div className="flex gap-2">
+              <button onClick={expandAll} className="px-3 py-2 text-sm text-green-700 border border-green-300 rounded-md hover:bg-green-50">Expand All</button>
+              <button onClick={collapseAll} className="px-3 py-2 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50">Collapse All</button>
+            </div>
+          </div>
+          <p className="mt-2 text-xs text-gray-500">{patientRounds.length} round{patientRounds.length !== 1 ? 's' : ''} found{dateFrom || dateTo ? ' in selected range' : ''}</p>
+        </div>
+
+        {/* Documentation entries */}
+        {patientRounds.length === 0 ? (
+          <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
+            <Activity className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+            <p className="font-medium">No ward round documentation found</p>
+            <p className="text-sm mt-1">{dateFrom || dateTo ? 'Try adjusting the date range' : 'No ward rounds recorded for this patient yet'}</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {patientRounds.map(round => {
+              const isExpanded = expandedRoundIds.has(round.id || '');
+              const r = round as any;
+              return (
+                <div key={round.id} className={`bg-white rounded-lg shadow overflow-hidden border-l-4 ${
+                  round.progress_status === 'critical' ? 'border-red-500' :
+                  round.progress_status === 'deteriorating' ? 'border-yellow-500' :
+                  round.progress_status === 'improved' ? 'border-blue-500' : 'border-green-500'
+                }`}>
+                  {/* Round header - always visible */}
+                  <div className="p-4 cursor-pointer hover:bg-gray-50" onClick={() => toggleExpand(round.id || '')}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2 mb-1">
+                          <span className="font-semibold text-gray-900">{safeFormatDate(round.round_date, 'EEE, MMM dd yyyy')}</span>
+                          <span className="text-sm text-gray-500">{r.round_time || ''}</span>
+                          <span className={`px-2 py-0.5 text-xs font-medium rounded-full border ${statusColor(round.progress_status)}`}>
+                            {round.progress_status?.charAt(0).toUpperCase() + round.progress_status?.slice(1)}
+                          </span>
+                          <span className="px-2 py-0.5 text-xs bg-purple-50 text-purple-700 rounded-full">{roundTypeLabel(round.round_type)}</span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
+                          <span className="flex items-center gap-1"><User className="w-3 h-3" />{round.reviewing_doctor || round.reviewed_by || 'N/A'}</span>
+                          <span className="flex items-center gap-1"><FileText className="w-3 h-3" />{round.chief_complaint || 'No complaint recorded'}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <button onClick={e => { e.stopPropagation(); handleEditRound(round); }} className="text-xs text-green-600 hover:text-green-800 px-2 py-1 border border-green-200 rounded">Edit</button>
+                        <button onClick={e => { e.stopPropagation(); handleDeleteRound(round.id!); }} className="text-xs text-red-600 hover:text-red-800 px-2 py-1 border border-red-200 rounded">Delete</button>
+                        {isExpanded ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Expanded documentation preview */}
+                  {isExpanded && (
+                    <div className="border-t border-gray-100 px-4 pb-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+
+                        {/* Vitals */}
+                        {(r.temperature || r.pulse || r.bp_systolic || r.blood_pressure || r.respiratory_rate || r.spo2) && (
+                          <div className="bg-blue-50 rounded-lg p-3">
+                            <h4 className="text-sm font-semibold text-blue-800 mb-2 flex items-center gap-1"><Thermometer className="w-4 h-4" /> Vitals</h4>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                              {r.temperature && <div><span className="text-gray-500">Temp:</span> <span className="font-medium">{r.temperature}{'\u00B0'}C</span></div>}
+                              {r.pulse && <div><span className="text-gray-500">Pulse:</span> <span className="font-medium">{r.pulse} bpm</span></div>}
+                              {(r.bp_systolic || r.blood_pressure) && <div><span className="text-gray-500">BP:</span> <span className="font-medium">{r.bp_systolic ? `${r.bp_systolic}/${r.bp_diastolic}` : r.blood_pressure} mmHg</span></div>}
+                              {r.respiratory_rate && <div><span className="text-gray-500">RR:</span> <span className="font-medium">{r.respiratory_rate}/min</span></div>}
+                              {r.spo2 && <div><span className="text-gray-500">SpO2:</span> <span className="font-medium">{r.spo2}%</span></div>}
+                              {r.pain_score > 0 && <div><span className="text-gray-500">Pain:</span> <span className="font-medium">{r.pain_score}/10</span></div>}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Subjective */}
+                        {(r.subjective_complaints || r.sleep_quality || r.appetite || r.bowel_movement) && (
+                          <div className="bg-green-50 rounded-lg p-3">
+                            <h4 className="text-sm font-semibold text-green-800 mb-2 flex items-center gap-1"><User className="w-4 h-4" /> Subjective</h4>
+                            <div className="text-xs space-y-1">
+                              {r.subjective_complaints && <p><span className="text-gray-500">Complaints:</span> {r.subjective_complaints}</p>}
+                              {r.sleep_quality && r.sleep_quality !== 'good' && <p><span className="text-gray-500">Sleep:</span> {r.sleep_quality}</p>}
+                              {r.appetite && r.appetite !== 'good' && <p><span className="text-gray-500">Appetite:</span> {r.appetite}</p>}
+                              {r.bowel_movement && r.bowel_movement !== 'normal' && <p><span className="text-gray-500">Bowel:</span> {r.bowel_movement}</p>}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Clinical Notes */}
+                        {(round.clinical_notes || round.examination_findings) && (
+                          <div className="bg-purple-50 rounded-lg p-3">
+                            <h4 className="text-sm font-semibold text-purple-800 mb-2 flex items-center gap-1"><Stethoscope className="w-4 h-4" /> Clinical Assessment</h4>
+                            <div className="text-xs space-y-1">
+                              {round.clinical_notes && <p><span className="text-gray-500 font-medium">Notes:</span> {round.clinical_notes}</p>}
+                              {round.examination_findings && <p><span className="text-gray-500 font-medium">Examination:</span> {round.examination_findings}</p>}
+                              {r.general_appearance && <p><span className="text-gray-500 font-medium">Appearance:</span> {r.general_appearance}</p>}
+                              {r.clinical_impression && <p><span className="text-gray-500 font-medium">Impression:</span> {r.clinical_impression}</p>}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Wound / Drain */}
+                        {(r.wound_status || r.wound_notes || r.drain_output) && (
+                          <div className="bg-orange-50 rounded-lg p-3">
+                            <h4 className="text-sm font-semibold text-orange-800 mb-2 flex items-center gap-1"><Eye className="w-4 h-4" /> Wound / Drain</h4>
+                            <div className="text-xs space-y-1">
+                              {r.wound_status && <p><span className="text-gray-500">Status:</span> {r.wound_status}</p>}
+                              {round.wound_notes && <p><span className="text-gray-500">Notes:</span> {round.wound_notes}</p>}
+                              {r.drain_output && <p><span className="text-gray-500">Drain output:</span> {r.drain_output}</p>}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Full width sections */}
+                      <div className="space-y-3 mt-4">
+                        {/* Assessment Notes */}
+                        {round.assessment_notes && (
+                          <div className="bg-gray-50 rounded-lg p-3">
+                            <h4 className="text-sm font-semibold text-gray-700 mb-1">Assessment</h4>
+                            <p className="text-xs text-gray-600 whitespace-pre-wrap">{round.assessment_notes}</p>
+                          </div>
+                        )}
+
+                        {/* Complications */}
+                        {round.complications && (
+                          <div className="bg-red-50 rounded-lg p-3">
+                            <h4 className="text-sm font-semibold text-red-700 mb-1 flex items-center gap-1"><AlertCircle className="w-4 h-4" /> Complications</h4>
+                            <p className="text-xs text-red-600">{round.complications}</p>
+                          </div>
+                        )}
+
+                        {/* Medications */}
+                        {(round.medication_changes || r.new_medications?.length > 0 || r.stop_medications?.length > 0) && (
+                          <div className="bg-indigo-50 rounded-lg p-3">
+                            <h4 className="text-sm font-semibold text-indigo-800 mb-1 flex items-center gap-1"><Pill className="w-4 h-4" /> Medication Changes</h4>
+                            <div className="text-xs space-y-1">
+                              {round.medication_changes && <p>{round.medication_changes}</p>}
+                              {r.new_medications?.length > 0 && (
+                                <div><span className="text-gray-500 font-medium">New:</span>
+                                  <ul className="list-disc ml-4">{r.new_medications.map((m: any, i: number) => <li key={i}>{m.name} {m.dose} {m.frequency} ({m.route})</li>)}</ul>
+                                </div>
+                              )}
+                              {r.stop_medications?.length > 0 && (
+                                <div><span className="text-red-600 font-medium">Stopped:</span> {r.stop_medications.join(', ')}</div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Investigations */}
+                        {(round.lab_notes || r.investigations_ordered?.length > 0) && (
+                          <div className="bg-teal-50 rounded-lg p-3">
+                            <h4 className="text-sm font-semibold text-teal-800 mb-1 flex items-center gap-1"><TestTube className="w-4 h-4" /> Investigations</h4>
+                            <div className="text-xs space-y-1">
+                              {round.lab_notes && <p>{round.lab_notes}</p>}
+                              {r.investigations_ordered?.length > 0 && <p><span className="text-gray-500 font-medium">Ordered:</span> {r.investigations_ordered.join(', ')}</p>}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Plan */}
+                        {(round.follow_up_plan || round.plan_changes?.length > 0 || round.discharge_planning || r.treatment_plan_changes || r.dietary_modifications || r.activity_orders || r.nursing_instructions) && (
+                          <div className="bg-emerald-50 rounded-lg p-3">
+                            <h4 className="text-sm font-semibold text-emerald-800 mb-1 flex items-center gap-1"><ClipboardList className="w-4 h-4" /> Plan</h4>
+                            <div className="text-xs space-y-1">
+                              {round.follow_up_plan && <p><span className="text-gray-500 font-medium">Follow-up:</span> {round.follow_up_plan}</p>}
+                              {round.plan_changes?.length > 0 && <p><span className="text-gray-500 font-medium">Plan changes:</span> {round.plan_changes.join('; ')}</p>}
+                              {r.treatment_plan_changes && <p><span className="text-gray-500 font-medium">Treatment plan:</span> {r.treatment_plan_changes}</p>}
+                              {r.dietary_modifications && <p><span className="text-gray-500 font-medium">Diet:</span> {r.dietary_modifications}</p>}
+                              {r.activity_orders && <p><span className="text-gray-500 font-medium">Activity:</span> {r.activity_orders}</p>}
+                              {r.nursing_instructions && <p><span className="text-gray-500 font-medium">Nursing:</span> {r.nursing_instructions}</p>}
+                              {round.discharge_planning && <p><span className="text-gray-500 font-medium">Discharge plan:</span> {round.discharge_planning}</p>}
+                              {round.next_review_date && <p><span className="text-gray-500 font-medium">Next review:</span> {safeFormatDate(round.next_review_date, 'MMM dd, yyyy')}</p>}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Consultation */}
+                        {round.consultation_requested && (
+                          <div className="bg-pink-50 rounded-lg p-3">
+                            <h4 className="text-sm font-semibold text-pink-800 mb-1">Consultation Requested</h4>
+                            <p className="text-xs">{round.consultation_specialty}{round.consultation_reason ? `  ${round.consultation_reason}` : ''}</p>
+                          </div>
+                        )}
+
+                        {/* LMP */}
+                        {r.lmp && (
+                          <div className="text-xs text-gray-500 mt-1">LMP: {r.lmp}</div>
+                        )}
+
+                        {/* Clinical Images */}
+                        {round.clinical_images && round.clinical_images.length > 0 && (
+                          <div className="bg-gray-50 rounded-lg p-3">
+                            <h4 className="text-sm font-semibold text-gray-700 mb-2">Clinical Images ({round.clinical_images.length})</h4>
+                            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                              {round.clinical_images.map((img, i) => (
+                                <div key={img.id || i} className="relative">
+                                  <img src={img.data} alt={img.caption || img.type} className="w-full h-20 object-cover rounded" />
+                                  {img.caption && <p className="text-[10px] text-gray-500 truncate mt-0.5">{img.caption}</p>}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* OCR text */}
+                        {r.ocr_extracted_text && (
+                          <div className="bg-yellow-50 rounded-lg p-3">
+                            <h4 className="text-sm font-semibold text-yellow-800 mb-1">Extracted Text (OCR)</h4>
+                            <p className="text-xs whitespace-pre-wrap">{r.ocr_extracted_text}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  //  MAIN LIST VIEW (default) 
   return (
     <div className="space-y-4 sm:space-y-6">
       {/* Header */}
@@ -169,12 +452,8 @@ export default function WardRounds() {
           </h1>
           <p className="text-sm sm:text-base text-gray-600 mt-1">Daily patient reviews and clinical updates</p>
         </div>
-        <button
-          onClick={handleCreateRound}
-          className="flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 w-full sm:w-auto"
-        >
-          <Plus className="w-5 h-5" />
-          New Ward Round
+        <button onClick={handleCreateRound} className="flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 w-full sm:w-auto">
+          <Plus className="w-5 h-5" /> New Ward Round
         </button>
       </div>
 
@@ -182,51 +461,32 @@ export default function WardRounds() {
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 sm:gap-4">
         <div className="bg-white rounded-lg shadow p-3 sm:p-4">
           <div className="flex items-center justify-between">
-            <div className="min-w-0">
-              <p className="text-xs sm:text-sm text-gray-600 truncate">Total Rounds</p>
-              <p className="text-xl sm:text-2xl font-bold text-gray-900">{stats.total}</p>
-            </div>
-            <Activity className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600 flex-shrink-0" />
+            <div><p className="text-xs sm:text-sm text-gray-600">Total Rounds</p><p className="text-xl sm:text-2xl font-bold text-gray-900">{stats.total}</p></div>
+            <Activity className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600" />
           </div>
         </div>
-
         <div className="bg-white rounded-lg shadow p-3 sm:p-4">
           <div className="flex items-center justify-between">
-            <div className="min-w-0">
-              <p className="text-xs sm:text-sm text-gray-600 truncate">Today</p>
-              <p className="text-xl sm:text-2xl font-bold text-green-600">{stats.today}</p>
-            </div>
-            <Clock className="w-6 h-6 sm:w-8 sm:h-8 text-green-600 flex-shrink-0" />
+            <div><p className="text-xs sm:text-sm text-gray-600">Today</p><p className="text-xl sm:text-2xl font-bold text-green-600">{stats.today}</p></div>
+            <Clock className="w-6 h-6 sm:w-8 sm:h-8 text-green-600" />
           </div>
         </div>
-
         <div className="bg-white rounded-lg shadow p-3 sm:p-4">
           <div className="flex items-center justify-between">
-            <div className="min-w-0">
-              <p className="text-xs sm:text-sm text-gray-600 truncate">Stable</p>
-              <p className="text-xl sm:text-2xl font-bold text-green-600">{stats.stable}</p>
-            </div>
-            <TrendingUp className="w-6 h-6 sm:w-8 sm:h-8 text-green-600 flex-shrink-0" />
+            <div><p className="text-xs sm:text-sm text-gray-600">Stable</p><p className="text-xl sm:text-2xl font-bold text-green-600">{stats.stable}</p></div>
+            <TrendingUp className="w-6 h-6 sm:w-8 sm:h-8 text-green-600" />
           </div>
         </div>
-
         <div className="bg-white rounded-lg shadow p-3 sm:p-4">
           <div className="flex items-center justify-between">
-            <div className="min-w-0">
-              <p className="text-xs sm:text-sm text-gray-600 truncate">Deteriorating</p>
-              <p className="text-xl sm:text-2xl font-bold text-yellow-600">{stats.deteriorating}</p>
-            </div>
-            <AlertCircle className="w-6 h-6 sm:w-8 sm:h-8 text-yellow-600 flex-shrink-0" />
+            <div><p className="text-xs sm:text-sm text-gray-600">Deteriorating</p><p className="text-xl sm:text-2xl font-bold text-yellow-600">{stats.deteriorating}</p></div>
+            <AlertCircle className="w-6 h-6 sm:w-8 sm:h-8 text-yellow-600" />
           </div>
         </div>
-
         <div className="bg-white rounded-lg shadow p-3 sm:p-4 col-span-2 sm:col-span-1">
           <div className="flex items-center justify-between">
-            <div className="min-w-0">
-              <p className="text-xs sm:text-sm text-gray-600 truncate">Critical</p>
-              <p className="text-xl sm:text-2xl font-bold text-red-600">{stats.critical}</p>
-            </div>
-            <AlertCircle className="w-6 h-6 sm:w-8 sm:h-8 text-red-600 flex-shrink-0" />
+            <div><p className="text-xs sm:text-sm text-gray-600">Critical</p><p className="text-xl sm:text-2xl font-bold text-red-600">{stats.critical}</p></div>
+            <AlertCircle className="w-6 h-6 sm:w-8 sm:h-8 text-red-600" />
           </div>
         </div>
       </div>
@@ -236,32 +496,16 @@ export default function WardRounds() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search patients..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="form-input pl-10"
-            />
+            <input type="text" placeholder="Search patients..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="form-input pl-10" />
           </div>
-
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value as any)}
-            className="form-select"
-          >
+          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as any)} className="form-select" title="Filter by status">
             <option value="all">All Status</option>
             <option value="improved">Improved</option>
             <option value="stable">Stable</option>
             <option value="deteriorating">Deteriorating</option>
             <option value="critical">Critical</option>
           </select>
-
-          <select
-            value={filterDate}
-            onChange={(e) => setFilterDate(e.target.value as any)}
-            className="form-select"
-          >
+          <select value={filterDate} onChange={(e) => setFilterDate(e.target.value as any)} className="form-select" title="Filter by date range">
             <option value="today">Today</option>
             <option value="week">This Week</option>
             <option value="month">This Month</option>
@@ -269,6 +513,41 @@ export default function WardRounds() {
           </select>
         </div>
       </div>
+
+      {/* Patient Quick Select Bar */}
+      {patientsWithRounds.length > 0 && (
+        <div className="bg-white rounded-lg shadow p-3 sm:p-4">
+          <h3 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+            <User className="w-4 h-4" /> Select Patient for Documentation Preview
+          </h3>
+          <div className="relative mb-3">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search patients with ward rounds..."
+              value={patientSearch}
+              onChange={e => setPatientSearch(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-md text-sm focus:ring-2 focus:ring-green-500"
+            />
+          </div>
+          <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
+            {filteredPatientList.map(p => {
+              const count = rounds.filter(r => r.patient_id === p.id).length;
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => { setSelectedPatientId(p.id); setExpandedRoundIds(new Set()); }}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 hover:bg-green-50 border border-gray-200 hover:border-green-400 rounded-full text-sm transition-colors"
+                >
+                  <span className="font-medium text-gray-800 truncate max-w-[150px]">{p.name}</span>
+                  <span className="text-xs text-gray-400">{p.hospital_number}</span>
+                  <span className="bg-green-100 text-green-700 text-xs font-medium px-1.5 py-0.5 rounded-full">{count}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Ward Rounds List */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
@@ -293,55 +572,45 @@ export default function WardRounds() {
                   <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
-                        <h3 className="font-semibold text-gray-900 truncate">
-                          {patient?.name || 'Unknown Patient'}
-                        </h3>
-                        <span className="text-xs sm:text-sm text-gray-500">
-                          {patient?.hospital_number}
-                        </span>
-                        <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${getStatusBadgeColor(round.progress_status)}`}>
+                        <h3 className="font-semibold text-gray-900 truncate">{patient?.name || 'Unknown Patient'}</h3>
+                        <span className="text-xs sm:text-sm text-gray-500">{patient?.hospital_number}</span>
+                        <span className={`px-2 py-0.5 text-xs font-medium rounded-full border ${statusColor(round.progress_status)}`}>
                           {round.progress_status?.charAt(0).toUpperCase() + round.progress_status?.slice(1)}
                         </span>
+                        <span className="px-2 py-0.5 text-xs bg-purple-50 text-purple-700 rounded-full">{roundTypeLabel(round.round_type)}</span>
                       </div>
-
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 sm:gap-2 text-xs sm:text-sm text-gray-600">
                         <div className="flex items-center gap-2">
                           <Calendar className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
-                          <span className="truncate">{format(new Date(round.round_date), 'MMM dd, yyyy')}</span>
+                          <span className="truncate">{safeFormatDate(round.round_date, 'MMM dd, yyyy')}</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <User className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
-                          <span className="truncate">{round.reviewed_by}</span>
+                          <span className="truncate">{round.reviewing_doctor || round.reviewed_by}</span>
                         </div>
                         <div className="flex items-center gap-2 sm:col-span-2">
                           <FileText className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
                           <span className="truncate">{round.chief_complaint}</span>
                         </div>
                       </div>
-
                       {round.assessment_notes && (
-                        <p className="mt-2 text-xs sm:text-sm text-gray-700 line-clamp-2">
-                          {round.assessment_notes}
-                        </p>
-                      )}
-
-                      {round.plan_changes && round.plan_changes.length > 0 && (
-                        <div className="mt-2 flex items-center gap-2 text-xs sm:text-sm">
-                          <span className="font-medium text-gray-700">Plan Changes:</span>
-                          <span className="text-gray-600">{round.plan_changes.length} updates</span>
-                        </div>
+                        <p className="mt-2 text-xs sm:text-sm text-gray-700 line-clamp-2">{round.assessment_notes}</p>
                       )}
                     </div>
-
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteRound(round.id!);
-                      }}
-                      className="self-start sm:ml-4 text-red-600 hover:text-red-800 text-sm px-3 py-1.5 border border-red-200 rounded-lg sm:border-0 sm:p-0"
-                    >
-                      Delete
-                    </button>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setSelectedPatientId(round.patient_id); setExpandedRoundIds(new Set([round.id || ''])); }}
+                        className="text-green-600 hover:text-green-800 text-sm px-3 py-1.5 border border-green-200 rounded-lg"
+                      >
+                        Preview
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleDeleteRound(round.id!); }}
+                        className="text-red-600 hover:text-red-800 text-sm px-3 py-1.5 border border-red-200 rounded-lg"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
