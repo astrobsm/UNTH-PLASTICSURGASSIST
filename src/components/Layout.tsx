@@ -53,7 +53,7 @@ const navigation = [
   { name: 'Paperwork', href: '/paperwork', icon: FolderOpen },
   { name: 'MDT', href: '/mdt', icon: UserCog },
   { name: 'Procedures', href: '/procedures', icon: Stethoscope },
-  { name: 'Pre-op Planning', href: '/preoperative-planning', icon: ClipboardCheck },
+  { name: 'Booking Register', href: '/booking-register', icon: ClipboardCheck },
   { name: 'Pre-Surgical Conference', href: '/pre-surgical-conference', icon: Presentation },
   { name: 'Dept. Meetings', href: '/departmental-meetings', icon: Presentation },
   { name: 'Blood Transfusion', href: '/blood-transfusion', icon: Droplet },
