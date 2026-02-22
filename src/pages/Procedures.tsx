@@ -99,10 +99,10 @@ export const Procedures: React.FC = () => {
                 
                 <button 
                   type="button"
-                  onClick={() => navigate('/preoperative-planning')}
+                  onClick={() => navigate('/booking-register')}
                   className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer"
                 >
-                  📋 Pre-op Planning
+                  📋 Booking Register
                 </button>
                 
                 <button 
