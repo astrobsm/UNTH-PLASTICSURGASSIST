@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo, useCallback } from 'react';
+﻿import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { PreoperativePlanningModule } from '../components/procedures/PreoperativePlanningModule';
 import { patientService } from '../services/patientService';
@@ -11,7 +11,7 @@ import {
   Eye, Plus, CheckCircle, AlertTriangle, FileText, Download, BookOpen,
   ShoppingCart, Shield, Printer, Filter, ChevronDown, ChevronUp,
   Image, CreditCard, Clock, MapPin, Stethoscope, ListChecks,
-  Upload, X, CalendarDays
+  Upload, X, CalendarDays, Lock, Unlock, FlaskConical, Ban
 } from 'lucide-react';
 import {
   createPDF, addPDFHeader, addSectionHeader, addBodyText, addBulletList,
@@ -46,6 +46,67 @@ interface PreparationStatus {
   fullyPrepared: boolean;
 }
 
+/** Manual stage overrides stored per-patient in localStorage */
+interface ManualStageOverrides {
+  [patientId: string]: {
+    riskAssessed?: boolean;
+    comorbidityChecked?: boolean;
+    investigationsOrdered?: boolean;
+    shoppingListDone?: boolean;
+    consentObtained?: boolean;
+    paymentConfirmed?: boolean;
+    preOpInstructionsGiven?: boolean;
+    fullyPrepared?: boolean;
+  };
+}
+
+/** Investigation result for a single test */
+type InvestigationFlag = 'normal' | 'borderline' | 'abnormal';
+
+interface InvestigationResult {
+  name: string;
+  value: string;
+  flag: InvestigationFlag;
+  enteredBy?: string;
+  enteredAt?: string;
+}
+
+/** Per-patient investigation results stored in localStorage */
+interface PatientInvestigationResults {
+  [patientId: string]: InvestigationResult[];
+}
+
+/** Force readiness override */
+interface ForceReadinessRecord {
+  patientId: string;
+  reason: string;
+  forcedBy: string;
+  forcedAt: string;
+}
+
+interface ForceReadinessOverrides {
+  [patientId: string]: ForceReadinessRecord;
+}
+
+/** Booked case document uploads stored per booking */
+interface BookedCaseDocuments {
+  [bookingId: string]: {
+    signedConsent?: string; // base64
+    paymentEvidence?: string; // base64
+  };
+}
+
+// ─── localStorage helpers ───
+const STAGE_OVERRIDES_KEY = 'booking_stage_overrides';
+const INVESTIGATION_RESULTS_KEY = 'booking_investigation_results';
+const FORCE_READINESS_KEY = 'booking_force_readiness';
+const BOOKED_DOCS_KEY = 'booked_case_documents';
+
+const loadJSON = <T,>(key: string, fallback: T): T => {
+  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
+};
+const saveJSON = (key: string, val: any) => { localStorage.setItem(key, JSON.stringify(val)); };
+
 //  helpers 
 const calcAge = (dob: string): number => {
   const b = new Date(dob);
@@ -75,17 +136,40 @@ const stageBadge = (status: PreparationStatus) => {
   return { label: 'Early Stage', cls: 'bg-gray-100 text-gray-800 border-gray-300' };
 };
 
-const getPreparationStatus = (a: PreoperativeAssessment | null, b?: SurgeryBooking | null): PreparationStatus => {
-  const riskAssessed = !!(a?.bleeding_risk?.risk_level || a?.dvt_risk?.risk_category);
-  const comorbidityChecked = !!(a?.comorbidities_medications && a.comorbidities_medications.length >= 0 && a.assessed_at);
-  const investigationsOrdered = !!(a?.comprehensive_summary && a.comprehensive_summary.length > 30);
-  const shoppingListDone = !!(b?.equipment_needed && b.equipment_needed.length > 0);
-  const consentObtained = !!(a?.consent_document || b?.consent_obtained);
-  const paymentConfirmed = !!(a?.payment_evidence);
-  const preOpInstructionsGiven = !!(a?.preop_instructions && a.preop_instructions.length > 10);
-  const fullyPrepared = riskAssessed && comorbidityChecked && consentObtained && preOpInstructionsGiven;
+const getPreparationStatus = (
+  a: PreoperativeAssessment | null,
+  b?: SurgeryBooking | null,
+  overrides?: ManualStageOverrides[string]
+): PreparationStatus => {
+  const riskAssessed = overrides?.riskAssessed ?? !!(a?.bleeding_risk?.risk_level || a?.dvt_risk?.risk_category);
+  const comorbidityChecked = overrides?.comorbidityChecked ?? !!(a?.comorbidities_medications && a.comorbidities_medications.length >= 0 && a.assessed_at);
+  const investigationsOrdered = overrides?.investigationsOrdered ?? !!(a?.comprehensive_summary && a.comprehensive_summary.length > 30);
+  const shoppingListDone = overrides?.shoppingListDone ?? !!(b?.equipment_needed && b.equipment_needed.length > 0);
+  const consentObtained = overrides?.consentObtained ?? !!(a?.consent_document || b?.consent_obtained);
+  const paymentConfirmed = overrides?.paymentConfirmed ?? !!(a?.payment_evidence);
+  const preOpInstructionsGiven = overrides?.preOpInstructionsGiven ?? !!(a?.preop_instructions && a.preop_instructions.length > 10);
+  const fullyPrepared = overrides?.fullyPrepared ?? (riskAssessed && comorbidityChecked && consentObtained && preOpInstructionsGiven);
   return { riskAssessed, comorbidityChecked, investigationsOrdered, shoppingListDone, consentObtained, paymentConfirmed, preOpInstructionsGiven, fullyPrepared };
 };
+
+/** Standard pre-op investigations list */
+const STANDARD_INVESTIGATIONS = [
+  'Full Blood Count (FBC)',
+  'Electrolytes, Urea & Creatinine (E/U/Cr)',
+  'Fasting Blood Glucose (FBG)',
+  'Liver Function Tests (LFT)',
+  'Coagulation Profile (PT/INR/aPTT)',
+  'Urinalysis',
+  'Chest X-ray (CXR)',
+  'ECG (12-lead)',
+  'Blood Group & Cross-match',
+  'HIV/HBsAg/HCV Screening',
+  'Serum Protein & Albumin',
+  'Thyroid Function Tests (TFT)',
+  'HbA1c',
+  'CT Scan',
+  'MRI',
+];
 
 // 
 //  BOOKING REGISTER PAGE
@@ -121,6 +205,23 @@ const BookingRegisterPage: React.FC = () => {
   //  stage list filter (all patients with assessments) 
   const [stagePatients, setStagePatients] = useState<Array<{ patient: Patient; assessment: PreoperativeAssessment; booking?: SurgeryBooking; status: PreparationStatus }>>([]);
   const [stageSearch, setStageSearch] = useState('');
+
+  // Manual overrides & investigation state
+  const [stageOverrides, setStageOverrides] = useState<ManualStageOverrides>(() => loadJSON(STAGE_OVERRIDES_KEY, {}));
+  const [investigationResults, setInvestigationResults] = useState<PatientInvestigationResults>(() => loadJSON(INVESTIGATION_RESULTS_KEY, {}));
+  const [forceReadiness, setForceReadiness] = useState<ForceReadinessOverrides>(() => loadJSON(FORCE_READINESS_KEY, {}));
+  const [bookedCaseDocs, setBookedCaseDocs] = useState<BookedCaseDocuments>(() => loadJSON(BOOKED_DOCS_KEY, {}));
+
+  // Modal state
+  const [showInvestigationModal, setShowInvestigationModal] = useState<string | null>(null);
+  const [showForceReadinessModal, setShowForceReadinessModal] = useState<string | null>(null);
+  const [forceReason, setForceReason] = useState('');
+  const [investigationEntries, setInvestigationEntries] = useState<InvestigationResult[]>([]);
+
+  // Upload refs
+  const consentFileRef = useRef<HTMLInputElement>(null);
+  const paymentFileRef = useRef<HTMLInputElement>(null);
+  const [uploadTarget, setUploadTarget] = useState<{ bookingId: string; type: 'consent' | 'payment' } | null>(null);
 
   //  Effects 
   useEffect(() => { loadPatients(); }, []);
@@ -187,7 +288,8 @@ const BookingRegisterPage: React.FC = () => {
           if (a) {
             const bookings = await schedulingService.getSurgeryBookings();
             const b = (bookings || []).find((bk: SurgeryBooking) => bk.patient_id === p.id);
-            const status = getPreparationStatus(a, b);
+            const overrides = stageOverrides[p.id];
+            const status = getPreparationStatus(a, b, overrides);
             results.push({ patient: p, assessment: a, booking: b, status });
           }
         } catch { /* no assessment */ }
@@ -301,6 +403,209 @@ const BookingRegisterPage: React.FC = () => {
   const handleCancel = () => {
     if (selectedPatientId) { setShowPatientSelector(true); setSelectedPatientId(null); setViewMode('stages'); }
     else navigate('/procedures');
+  };
+
+  // ─── Stage Toggle Handler ───
+  const toggleStage = async (patientId: string, stageKey: string, currentValue: boolean, sp: typeof stagePatients[0]) => {
+    // Special handling for "fullyPrepared" (Ready)
+    if (stageKey === 'fullyPrepared' && !currentValue) {
+      // Check for abnormal investigations
+      const patientInvResults = investigationResults[patientId] || [];
+      const hasAbnormal = patientInvResults.some(r => r.flag === 'abnormal');
+      const alreadyForced = !!forceReadiness[patientId];
+
+      if (hasAbnormal && !alreadyForced) {
+        setShowForceReadinessModal(patientId);
+        return; // Block - must force readiness with reason
+      }
+
+      // Auto-create booking when marking Ready
+      try {
+        const patientName = sp.patient.full_name || ((sp.patient.first_name || '') + ' ' + (sp.patient.last_name || '')).trim();
+        const existingBookings = await schedulingService.getSurgeryBookings();
+        const alreadyBooked = (existingBookings || []).some((bk: SurgeryBooking) => bk.patient_id === patientId && (bk.status === 'scheduled' || bk.status === 'confirmed'));
+
+        if (!alreadyBooked) {
+          const procedureName = sp.assessment?.comprehensive_summary?.match(/Procedure:\s*([^.]+)/)?.[1]?.trim() || 'Planned Surgery';
+          const anaesthesiaMatch = sp.assessment?.comprehensive_summary?.match(/Anesthesia:\s*([^.]+)/)?.[1]?.trim()?.toLowerCase() || 'general';
+          const anaesthesiaType = (['general', 'regional', 'local', 'sedation'].includes(anaesthesiaMatch) ? anaesthesiaMatch : 'general') as 'general' | 'regional' | 'local' | 'sedation';
+
+          await schedulingService.createSurgeryBooking({
+            date: new Date(Date.now() + 7 * 86400000), // Default: 1 week from now
+            theatre_number: 'TBD',
+            start_time: '08:00',
+            estimated_end_time: '10:00',
+            primary_surgeon: sp.assessment?.assessed_by || 'TBD',
+            anaesthetist: 'TBD',
+            scrub_nurse: 'TBD',
+            circulating_nurse: 'TBD',
+            patient_id: patientId,
+            patient_name: patientName,
+            hospital_number: sp.patient.hospital_number,
+            ward: sp.patient.ward,
+            indication: sp.assessment?.comprehensive_summary?.match(/Procedure:\s*([^.]+)/)?.[1]?.trim() || '',
+            procedure_name: procedureName,
+            procedure_code: '',
+            urgency: 'elective',
+            anaesthesia_type: anaesthesiaType,
+            estimated_duration_minutes: 120,
+            special_requirements: [],
+            equipment_needed: sp.booking?.equipment_needed || [],
+            implants_needed: [],
+            allergies: [],
+            medical_conditions: [],
+            pre_op_checklist_completed: true,
+            consent_obtained: sp.status.consentObtained,
+            notes: alreadyForced ? 'Force readiness: ' + (forceReadiness[patientId]?.reason || '') : '',
+            status: 'scheduled',
+          });
+          toast.success(patientName + ' moved to Booked Cases!');
+          loadBookedCases(); // Refresh booked cases
+        }
+      } catch (err) {
+        console.error('Failed to auto-create booking:', err);
+        toast.error('Failed to create booking. Stage still toggled.');
+      }
+    }
+
+    // Toggle override
+    const updated = { ...stageOverrides };
+    if (!updated[patientId]) updated[patientId] = {};
+    updated[patientId][stageKey as keyof PreparationStatus] = !currentValue;
+    setStageOverrides(updated);
+    saveJSON(STAGE_OVERRIDES_KEY, updated);
+
+    // Refresh stage data
+    loadStageData();
+    toast.success((currentValue ? 'Unmarked' : 'Marked') + ' as done');
+  };
+
+  // ─── Investigation Modal Handlers ───
+  const openInvestigationModal = (patientId: string) => {
+    const existing = investigationResults[patientId] || [];
+    if (existing.length === 0) {
+      // Pre-populate with standard investigations
+      setInvestigationEntries(STANDARD_INVESTIGATIONS.map(name => ({
+        name, value: '', flag: 'normal' as InvestigationFlag,
+      })));
+    } else {
+      setInvestigationEntries([...existing]);
+    }
+    setShowInvestigationModal(patientId);
+  };
+
+  const saveInvestigationResults = (patientId: string) => {
+    const filled = investigationEntries.filter(e => e.value.trim() !== '');
+    const updated = { ...investigationResults, [patientId]: filled.map(e => ({ ...e, enteredBy: localStorage.getItem('userName') || 'Unknown', enteredAt: new Date().toISOString() })) };
+    setInvestigationResults(updated);
+    saveJSON(INVESTIGATION_RESULTS_KEY, updated);
+    setShowInvestigationModal(null);
+
+    // If there were abnormal results and patient was Ready, uncheck Ready
+    const hasAbnormal = filled.some(r => r.flag === 'abnormal');
+    const currentOverrides = stageOverrides[patientId];
+    if (hasAbnormal && currentOverrides?.fullyPrepared && !forceReadiness[patientId]) {
+      const updatedOverrides = { ...stageOverrides };
+      updatedOverrides[patientId] = { ...updatedOverrides[patientId], fullyPrepared: false };
+      setStageOverrides(updatedOverrides);
+      saveJSON(STAGE_OVERRIDES_KEY, updatedOverrides);
+      toast.error('Patient has abnormal investigations - Ready status removed');
+    } else {
+      toast.success('Investigation results saved');
+    }
+    loadStageData();
+  };
+
+  const addCustomInvestigation = () => {
+    setInvestigationEntries([...investigationEntries, { name: '', value: '', flag: 'normal' }]);
+  };
+
+  // ─── Force Readiness Handler ───
+  const handleForceReadiness = (patientId: string) => {
+    if (!forceReason.trim()) {
+      toast.error('Please provide a clinical reason');
+      return;
+    }
+    const record: ForceReadinessRecord = {
+      patientId,
+      reason: forceReason,
+      forcedBy: localStorage.getItem('userName') || 'Unknown',
+      forcedAt: new Date().toISOString(),
+    };
+    const updated = { ...forceReadiness, [patientId]: record };
+    setForceReadiness(updated);
+    saveJSON(FORCE_READINESS_KEY, updated);
+
+    // Now toggle Ready on
+    const updatedOverrides = { ...stageOverrides };
+    if (!updatedOverrides[patientId]) updatedOverrides[patientId] = {};
+    updatedOverrides[patientId].fullyPrepared = true;
+    setStageOverrides(updatedOverrides);
+    saveJSON(STAGE_OVERRIDES_KEY, updatedOverrides);
+
+    setShowForceReadinessModal(null);
+    setForceReason('');
+    toast.success('Forced readiness applied with clinical justification');
+
+    // Find the stage patient data to auto-create booking
+    const sp = stagePatients.find(s => s.patient.id === patientId);
+    if (sp) {
+      const patientName = sp.patient.full_name || ((sp.patient.first_name || '') + ' ' + (sp.patient.last_name || '')).trim();
+      schedulingService.createSurgeryBooking({
+        date: new Date(Date.now() + 7 * 86400000),
+        theatre_number: 'TBD',
+        start_time: '08:00',
+        estimated_end_time: '10:00',
+        primary_surgeon: sp.assessment?.assessed_by || 'TBD',
+        anaesthetist: 'TBD',
+        scrub_nurse: 'TBD',
+        circulating_nurse: 'TBD',
+        patient_id: patientId,
+        patient_name: patientName,
+        hospital_number: sp.patient.hospital_number,
+        ward: sp.patient.ward,
+        indication: '',
+        procedure_name: sp.assessment?.comprehensive_summary?.match(/Procedure:\s*([^.]+)/)?.[1]?.trim() || 'Planned Surgery',
+        procedure_code: '',
+        urgency: 'elective',
+        anaesthesia_type: 'general',
+        estimated_duration_minutes: 120,
+        special_requirements: [],
+        equipment_needed: [],
+        implants_needed: [],
+        allergies: [],
+        medical_conditions: [],
+        pre_op_checklist_completed: true,
+        consent_obtained: sp.status.consentObtained,
+        notes: 'Force readiness: ' + forceReason,
+        status: 'scheduled',
+      }).then(() => {
+        toast.success(patientName + ' moved to Booked Cases');
+        loadBookedCases();
+      }).catch(err => console.error('Booking creation failed:', err));
+    }
+    loadStageData();
+  };
+
+  // ─── Booked Case Document Upload Handlers ───
+  const handleFileUpload = (bookingId: string, type: 'consent' | 'payment', file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result as string;
+      const updated = { ...bookedCaseDocs };
+      if (!updated[bookingId]) updated[bookingId] = {};
+      if (type === 'consent') updated[bookingId].signedConsent = base64;
+      else updated[bookingId].paymentEvidence = base64;
+      setBookedCaseDocs(updated);
+      saveJSON(BOOKED_DOCS_KEY, updated);
+      toast.success(type === 'consent' ? 'Signed consent uploaded' : 'Payment evidence uploaded');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // ─── Investigation results for a booked case patient ───
+  const openBookedCaseInvestigations = (patientId: string) => {
+    openInvestigationModal(patientId);
   };
 
   //  PDF Generators 
@@ -618,7 +923,7 @@ const BookingRegisterPage: React.FC = () => {
                             <span className="text-xs text-gray-400">{done}/{total}</span>
                           </div>
                         </div>
-                        {/* Checklist progress bar */}
+                        {/* Clickable preparation stage chips */}
                         <div className="mt-3 grid grid-cols-4 md:grid-cols-8 gap-1">
                           {[
                             { key: 'riskAssessed', label: 'Risk' },
@@ -629,18 +934,47 @@ const BookingRegisterPage: React.FC = () => {
                             { key: 'paymentConfirmed', label: 'Payment' },
                             { key: 'preOpInstructionsGiven', label: 'Instruct' },
                             { key: 'fullyPrepared', label: 'Ready' },
-                          ].map(item => (
-                            <div key={item.key} className={'text-center px-1 py-1 rounded text-[10px] font-medium ' +
-                              ((sp.status as any)[item.key]
-                                ? 'bg-green-100 text-green-700'
-                                : 'bg-gray-100 text-gray-400')}>
-                              {(sp.status as any)[item.key]
-                                ? <CheckCircle className="w-3 h-3 inline mr-0.5" />
-                                : <Clock className="w-3 h-3 inline mr-0.5" />}
-                              {item.label}
-                            </div>
-                          ))}
+                          ].map(item => {
+                            const isDone = (sp.status as any)[item.key];
+                            const hasAbnormal = (investigationResults[sp.patient.id] || []).some(r => r.flag === 'abnormal');
+                            const isReady = item.key === 'fullyPrepared';
+                            const isBlocked = isReady && hasAbnormal && !forceReadiness[sp.patient.id] && !isDone;
+                            return (
+                              <button
+                                key={item.key}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (item.key === 'investigationsOrdered') {
+                                    openInvestigationModal(sp.patient.id);
+                                    return;
+                                  }
+                                  toggleStage(sp.patient.id, item.key, isDone, sp);
+                                }}
+                                title={isBlocked ? 'Blocked: abnormal investigation results' : (isDone ? 'Click to unmark' : 'Click to mark done')}
+                                className={'text-center px-1 py-1.5 rounded text-[10px] font-medium transition-all cursor-pointer border ' +
+                                  (isDone
+                                    ? 'bg-green-100 text-green-700 border-green-300 hover:bg-green-200'
+                                    : isBlocked
+                                      ? 'bg-red-50 text-red-400 border-red-200 cursor-not-allowed'
+                                      : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-700')}
+                              >
+                                {isDone
+                                  ? <CheckCircle className="w-3 h-3 inline mr-0.5" />
+                                  : isBlocked
+                                    ? <Ban className="w-3 h-3 inline mr-0.5" />
+                                    : <Clock className="w-3 h-3 inline mr-0.5" />}
+                                {item.label}
+                              </button>
+                            );
+                          })}
                         </div>
+                        {/* Abnormal investigation warning */}
+                        {(investigationResults[sp.patient.id] || []).some(r => r.flag === 'abnormal') && (
+                          <div className="mt-2 flex items-center gap-2 text-xs text-red-600 bg-red-50 px-3 py-1.5 rounded-lg border border-red-200">
+                            <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                            <span>Abnormal investigation(s) detected{forceReadiness[sp.patient.id] ? ' — Force readiness applied by ' + forceReadiness[sp.patient.id].forcedBy : ' — cannot mark Ready without clinical override'}</span>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -829,12 +1163,12 @@ const BookingRegisterPage: React.FC = () => {
           <div className="flex flex-wrap items-end gap-4 mb-6 bg-white p-4 rounded-lg shadow-sm border">
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">From Date</label>
-              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} title="From date"
                 className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500" />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">To Date</label>
-              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} title="To date"
                 className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500" />
             </div>
             {(dateFrom || dateTo) && (
@@ -985,6 +1319,160 @@ const BookingRegisterPage: React.FC = () => {
                             <p className="text-sm text-gray-700">{bk.notes}</p>
                           </div>
                         )}
+
+                        {/* ─── DOCUMENT UPLOADS & INVESTIGATIONS ─── */}
+                        <div className="border-t pt-4 mt-2 space-y-4">
+                          <h4 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+                            <FileText className="w-4 h-4 text-primary-600" />
+                            Documents & Investigations
+                          </h4>
+
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            {/* Upload Signed Consent */}
+                            <div className="bg-white p-3 rounded-lg border space-y-2">
+                              <div className="text-xs text-gray-500 uppercase tracking-wider font-medium flex items-center gap-1">
+                                <Shield className="w-3 h-3" /> Signed Consent
+                              </div>
+                              {bookedCaseDocs[bk.id]?.signedConsent ? (
+                                <div className="space-y-2">
+                                  <div className="flex items-center gap-2 text-xs text-green-700 bg-green-50 px-2 py-1 rounded">
+                                    <CheckCircle className="w-3.5 h-3.5" /> Uploaded
+                                  </div>
+                                  {bookedCaseDocs[bk.id].signedConsent!.startsWith('data:image') && (
+                                    <img src={bookedCaseDocs[bk.id].signedConsent!} alt="Consent" className="w-full h-20 object-cover rounded border cursor-pointer"
+                                      onClick={() => window.open(bookedCaseDocs[bk.id].signedConsent!, '_blank')} />
+                                  )}
+                                  <button onClick={() => {
+                                    setUploadTarget({ bookingId: bk.id, type: 'consent' });
+                                    setTimeout(() => consentFileRef.current?.click(), 50);
+                                  }} className="text-xs text-primary-600 hover:underline">Replace</button>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => {
+                                    setUploadTarget({ bookingId: bk.id, type: 'consent' });
+                                    setTimeout(() => consentFileRef.current?.click(), 50);
+                                  }}
+                                  className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-xs text-gray-500 hover:border-primary-400 hover:text-primary-600 flex items-center justify-center gap-1"
+                                >
+                                  <Upload className="w-3.5 h-3.5" /> Upload Consent
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Upload Payment Evidence */}
+                            <div className="bg-white p-3 rounded-lg border space-y-2">
+                              <div className="text-xs text-gray-500 uppercase tracking-wider font-medium flex items-center gap-1">
+                                <CreditCard className="w-3 h-3" /> Payment Evidence
+                              </div>
+                              {bookedCaseDocs[bk.id]?.paymentEvidence ? (
+                                <div className="space-y-2">
+                                  <div className="flex items-center gap-2 text-xs text-green-700 bg-green-50 px-2 py-1 rounded">
+                                    <CheckCircle className="w-3.5 h-3.5" /> Uploaded
+                                  </div>
+                                  {bookedCaseDocs[bk.id].paymentEvidence!.startsWith('data:image') && (
+                                    <img src={bookedCaseDocs[bk.id].paymentEvidence!} alt="Payment" className="w-full h-20 object-cover rounded border cursor-pointer"
+                                      onClick={() => window.open(bookedCaseDocs[bk.id].paymentEvidence!, '_blank')} />
+                                  )}
+                                  <button onClick={() => {
+                                    setUploadTarget({ bookingId: bk.id, type: 'payment' });
+                                    setTimeout(() => paymentFileRef.current?.click(), 50);
+                                  }} className="text-xs text-primary-600 hover:underline">Replace</button>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => {
+                                    setUploadTarget({ bookingId: bk.id, type: 'payment' });
+                                    setTimeout(() => paymentFileRef.current?.click(), 50);
+                                  }}
+                                  className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-xs text-gray-500 hover:border-primary-400 hover:text-primary-600 flex items-center justify-center gap-1"
+                                >
+                                  <Upload className="w-3.5 h-3.5" /> Upload Receipt
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Investigation Results */}
+                            <div className="bg-white p-3 rounded-lg border space-y-2">
+                              <div className="text-xs text-gray-500 uppercase tracking-wider font-medium flex items-center gap-1">
+                                <FlaskConical className="w-3 h-3" /> Investigation Results
+                              </div>
+                              {(() => {
+                                const patientInvs = investigationResults[bk.patient_id] || [];
+                                const abnormalCount = patientInvs.filter(r => r.flag === 'abnormal').length;
+                                const borderlineCount = patientInvs.filter(r => r.flag === 'borderline').length;
+                                const normalCount = patientInvs.filter(r => r.flag === 'normal').length;
+                                return patientInvs.length > 0 ? (
+                                  <div className="space-y-2">
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {normalCount > 0 && <span className="px-2 py-0.5 text-[10px] bg-green-100 text-green-700 rounded-full">{normalCount} Normal</span>}
+                                      {borderlineCount > 0 && <span className="px-2 py-0.5 text-[10px] bg-yellow-100 text-yellow-700 rounded-full">{borderlineCount} Borderline</span>}
+                                      {abnormalCount > 0 && <span className="px-2 py-0.5 text-[10px] bg-red-100 text-red-700 rounded-full">{abnormalCount} Abnormal</span>}
+                                    </div>
+                                    <button
+                                      onClick={() => openBookedCaseInvestigations(bk.patient_id)}
+                                      className="text-xs text-primary-600 hover:underline flex items-center gap-1"
+                                    >
+                                      <Eye className="w-3 h-3" /> View / Edit Results
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => openBookedCaseInvestigations(bk.patient_id)}
+                                    className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-xs text-gray-500 hover:border-primary-400 hover:text-primary-600 flex items-center justify-center gap-1"
+                                  >
+                                    <Plus className="w-3.5 h-3.5" /> Enter Results
+                                  </button>
+                                );
+                              })()}
+                            </div>
+                          </div>
+
+                          {/* Investigation detail table */}
+                          {(investigationResults[bk.patient_id] || []).length > 0 && (
+                            <div className="bg-white rounded-lg border overflow-hidden">
+                              <table className="w-full text-xs">
+                                <thead className="bg-gray-50">
+                                  <tr>
+                                    <th className="text-left px-3 py-2 text-gray-600 font-medium">Investigation</th>
+                                    <th className="text-left px-3 py-2 text-gray-600 font-medium">Result</th>
+                                    <th className="text-center px-3 py-2 text-gray-600 font-medium">Flag</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                  {(investigationResults[bk.patient_id] || []).map((inv, idx) => (
+                                    <tr key={idx}>
+                                      <td className="px-3 py-2 text-gray-800">{inv.name}</td>
+                                      <td className="px-3 py-2 text-gray-700">{inv.value}</td>
+                                      <td className="px-3 py-2 text-center">
+                                        <span className={'px-2 py-0.5 rounded-full text-[10px] font-medium ' +
+                                          (inv.flag === 'normal' ? 'bg-green-100 text-green-700' :
+                                           inv.flag === 'borderline' ? 'bg-yellow-100 text-yellow-700' :
+                                           'bg-red-100 text-red-700')}>
+                                          {inv.flag.charAt(0).toUpperCase() + inv.flag.slice(1)}
+                                        </span>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+
+                          {/* Force readiness info if applicable */}
+                          {forceReadiness[bk.patient_id] && (
+                            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                              <div className="flex items-start gap-2">
+                                <Unlock className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                                <div className="text-xs">
+                                  <p className="font-medium text-amber-800">Force Readiness Override Applied</p>
+                                  <p className="text-amber-700 mt-1">Reason: {forceReadiness[bk.patient_id].reason}</p>
+                                  <p className="text-amber-600 mt-0.5">By: {forceReadiness[bk.patient_id].forcedBy} on {safeFormatDate(forceReadiness[bk.patient_id].forcedAt, 'dd MMM yyyy HH:mm')}</p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -994,6 +1482,187 @@ const BookingRegisterPage: React.FC = () => {
           )}
         </div>
       )}
+      {/* ─── INVESTIGATION RESULTS MODAL ─── */}
+      {showInvestigationModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowInvestigationModal(null)}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between rounded-t-xl">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-100 rounded-lg"><FlaskConical className="w-5 h-5 text-blue-600" /></div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">Investigation Results</h3>
+                  <p className="text-xs text-gray-500">Enter results and flag each as Normal, Borderline, or Abnormal</p>
+                </div>
+              </div>
+              <button onClick={() => setShowInvestigationModal(null)} className="p-2 hover:bg-gray-100 rounded-lg" title="Close">
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            <div className="px-6 py-4 space-y-3">
+              {investigationEntries.map((entry, idx) => (
+                <div key={idx} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border">
+                  <div className="flex-1 space-y-2">
+                    <input
+                      type="text"
+                      value={entry.name}
+                      onChange={e => {
+                        const updated = [...investigationEntries];
+                        updated[idx] = { ...updated[idx], name: e.target.value };
+                        setInvestigationEntries(updated);
+                      }}
+                      placeholder="Investigation name"
+                      className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                    />
+                    <input
+                      type="text"
+                      value={entry.value}
+                      onChange={e => {
+                        const updated = [...investigationEntries];
+                        updated[idx] = { ...updated[idx], value: e.target.value };
+                        setInvestigationEntries(updated);
+                      }}
+                      placeholder="Result value (e.g. 12.5 g/dL, Normal, Reactive)"
+                      className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1 min-w-[100px]">
+                    {(['normal', 'borderline', 'abnormal'] as InvestigationFlag[]).map(flag => (
+                      <button
+                        key={flag}
+                        onClick={() => {
+                          const updated = [...investigationEntries];
+                          updated[idx] = { ...updated[idx], flag };
+                          setInvestigationEntries(updated);
+                        }}
+                        className={'px-3 py-1 text-xs font-medium rounded-lg border transition-colors ' +
+                          (entry.flag === flag
+                            ? flag === 'normal' ? 'bg-green-100 text-green-700 border-green-400'
+                              : flag === 'borderline' ? 'bg-yellow-100 text-yellow-700 border-yellow-400'
+                              : 'bg-red-100 text-red-700 border-red-400'
+                            : 'bg-white text-gray-400 border-gray-200 hover:bg-gray-50')}
+                      >
+                        {flag.charAt(0).toUpperCase() + flag.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => setInvestigationEntries(investigationEntries.filter((_, i) => i !== idx))}
+                    className="p-1 text-gray-400 hover:text-red-500 mt-1"
+                    title="Remove investigation"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+              <button onClick={addCustomInvestigation}
+                className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-500 hover:border-primary-400 hover:text-primary-600 transition-colors">
+                <Plus className="w-4 h-4 inline mr-1" /> Add Custom Investigation
+              </button>
+            </div>
+            <div className="sticky bottom-0 bg-white border-t px-6 py-4 flex items-center justify-between rounded-b-xl">
+              <div className="text-xs text-gray-500">
+                {investigationEntries.filter(e => e.flag === 'abnormal').length > 0 && (
+                  <span className="text-red-600 font-medium flex items-center gap-1">
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    {investigationEntries.filter(e => e.flag === 'abnormal').length} abnormal result(s) — patient cannot be marked Ready without override
+                  </span>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => setShowInvestigationModal(null)}
+                  className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">
+                  Cancel
+                </button>
+                <button onClick={() => saveInvestigationResults(showInvestigationModal)}
+                  className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium">
+                  Save Results
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── FORCE READINESS MODAL ─── */}
+      {showForceReadinessModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => { setShowForceReadinessModal(null); setForceReason(''); }}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-red-100 rounded-lg"><AlertTriangle className="w-5 h-5 text-red-600" /></div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">Force Readiness Override</h3>
+                  <p className="text-xs text-red-600">Patient has abnormal investigation results</p>
+                </div>
+              </div>
+            </div>
+            <div className="px-6 py-4 space-y-4">
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                <h4 className="text-sm font-medium text-red-800 mb-2">Abnormal Results:</h4>
+                <ul className="space-y-1">
+                  {(investigationResults[showForceReadinessModal] || [])
+                    .filter(r => r.flag === 'abnormal')
+                    .map((r, i) => (
+                      <li key={i} className="text-xs text-red-700 flex items-center gap-2">
+                        <Ban className="w-3 h-3 flex-shrink-0" />
+                        <span className="font-medium">{r.name}:</span> {r.value}
+                      </li>
+                    ))}
+                </ul>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Clinical Reason for Proceeding <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={forceReason}
+                  onChange={e => setForceReason(e.target.value)}
+                  rows={3}
+                  placeholder="Provide clear clinical justification for marking this patient as ready despite abnormal results..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                />
+              </div>
+              <p className="text-xs text-gray-500">
+                This action will be logged with your name and timestamp for audit purposes.
+              </p>
+            </div>
+            <div className="px-6 py-4 border-t flex items-center justify-end gap-2">
+              <button onClick={() => { setShowForceReadinessModal(null); setForceReason(''); }}
+                className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">
+                Cancel
+              </button>
+              <button
+                onClick={() => handleForceReadiness(showForceReadinessModal)}
+                disabled={!forceReason.trim()}
+                className={'px-4 py-2 text-sm rounded-lg font-medium ' +
+                  (forceReason.trim()
+                    ? 'bg-red-600 text-white hover:bg-red-700'
+                    : 'bg-gray-200 text-gray-400 cursor-not-allowed')}
+              >
+                <Unlock className="w-4 h-4 inline mr-1" /> Force Ready
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Hidden file inputs for booked case uploads */}
+      <input type="file" ref={consentFileRef} className="hidden" accept="image/*,.pdf" title="Upload consent document"
+        onChange={e => {
+          if (e.target.files?.[0] && uploadTarget?.type === 'consent') {
+            handleFileUpload(uploadTarget.bookingId, 'consent', e.target.files[0]);
+          }
+          e.target.value = '';
+        }}
+      />
+      <input type="file" ref={paymentFileRef} className="hidden" accept="image/*,.pdf" title="Upload payment evidence"
+        onChange={e => {
+          if (e.target.files?.[0] && uploadTarget?.type === 'payment') {
+            handleFileUpload(uploadTarget.bookingId, 'payment', e.target.files[0]);
+          }
+          e.target.value = '';
+        }}
+      />
     </div>
   );
 };
