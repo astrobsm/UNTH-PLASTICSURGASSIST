@@ -96,11 +96,36 @@ interface BookedCaseDocuments {
   };
 }
 
+/** Per-patient stage approval status (Accept / Reject for each stage) */
+interface StageApprovalStatus {
+  [patientId: string]: {
+    riskAssessed?: 'accepted' | 'rejected';
+    comorbidityChecked?: 'accepted' | 'rejected';
+    investigationsOrdered?: 'accepted' | 'rejected';
+    shoppingListDone?: 'accepted' | 'rejected';
+    consentObtained?: 'accepted' | 'rejected';
+    paymentConfirmed?: 'accepted' | 'rejected';
+    preOpInstructionsGiven?: 'accepted' | 'rejected';
+    fullyPrepared?: 'accepted' | 'rejected';
+  };
+}
+
+/** Per-patient uploaded documents during planning phase */
+interface StageDocs {
+  [patientId: string]: {
+    consentDoc?: string; // base64
+    paymentDoc?: string; // base64
+    stageNotes?: { [stageKey: string]: string };
+  };
+}
+
 // ─── localStorage helpers ───
 const STAGE_OVERRIDES_KEY = 'booking_stage_overrides';
 const INVESTIGATION_RESULTS_KEY = 'booking_investigation_results';
 const FORCE_READINESS_KEY = 'booking_force_readiness';
 const BOOKED_DOCS_KEY = 'booked_case_documents';
+const STAGE_APPROVALS_KEY = 'booking_stage_approvals';
+const STAGE_DOCS_KEY = 'booking_stage_docs';
 
 const loadJSON = <T,>(key: string, fallback: T): T => {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
@@ -218,9 +243,17 @@ const BookingRegisterPage: React.FC = () => {
   const [forceReason, setForceReason] = useState('');
   const [investigationEntries, setInvestigationEntries] = useState<InvestigationResult[]>([]);
 
+  // Stage review panel state
+  const [stageReviewPanel, setStageReviewPanel] = useState<{ patientId: string; stage: string } | null>(null);
+  const [stageApprovals, setStageApprovals] = useState<StageApprovalStatus>(() => loadJSON(STAGE_APPROVALS_KEY, {}));
+  const [stageDocs, setStageDocs] = useState<StageDocs>(() => loadJSON(STAGE_DOCS_KEY, {}));
+  const [stageReviewNote, setStageReviewNote] = useState('');
+
   // Upload refs
   const consentFileRef = useRef<HTMLInputElement>(null);
   const paymentFileRef = useRef<HTMLInputElement>(null);
+  const planConsentFileRef = useRef<HTMLInputElement>(null);
+  const planPaymentFileRef = useRef<HTMLInputElement>(null);
   const [uploadTarget, setUploadTarget] = useState<{ bookingId: string; type: 'consent' | 'payment' } | null>(null);
 
   //  Effects 
@@ -587,6 +620,186 @@ const BookingRegisterPage: React.FC = () => {
     loadStageData();
   };
 
+  // ─── Stage Review Handlers ───
+  const openStageReview = (patientId: string, stageKey: string) => {
+    if (stageKey === 'investigationsOrdered') {
+      // For Invest, open the investigation modal first, but also allow review
+      openInvestigationModal(patientId);
+      return;
+    }
+    // Load existing note for this stage
+    const existingNote = stageDocs[patientId]?.stageNotes?.[stageKey] || '';
+    setStageReviewNote(existingNote);
+    setStageReviewPanel({ patientId, stage: stageKey });
+  };
+
+  const acceptStage = (patientId: string, stageKey: string) => {
+    // Update approval status
+    const updatedApprovals = { ...stageApprovals };
+    if (!updatedApprovals[patientId]) updatedApprovals[patientId] = {};
+    (updatedApprovals[patientId] as any)[stageKey] = 'accepted';
+    setStageApprovals(updatedApprovals);
+    saveJSON(STAGE_APPROVALS_KEY, updatedApprovals);
+
+    // Also mark the stage override as done
+    const updatedOverrides = { ...stageOverrides };
+    if (!updatedOverrides[patientId]) updatedOverrides[patientId] = {};
+    updatedOverrides[patientId][stageKey as keyof PreparationStatus] = true;
+    setStageOverrides(updatedOverrides);
+    saveJSON(STAGE_OVERRIDES_KEY, updatedOverrides);
+
+    // Save the review note
+    const updatedDocs = { ...stageDocs };
+    if (!updatedDocs[patientId]) updatedDocs[patientId] = {};
+    if (!updatedDocs[patientId].stageNotes) updatedDocs[patientId].stageNotes = {};
+    updatedDocs[patientId].stageNotes![stageKey] = stageReviewNote;
+    setStageDocs(updatedDocs);
+    saveJSON(STAGE_DOCS_KEY, updatedDocs);
+
+    setStageReviewPanel(null);
+    setStageReviewNote('');
+    toast.success('Stage accepted');
+    loadStageData();
+  };
+
+  const rejectStage = (patientId: string, stageKey: string) => {
+    const updatedApprovals = { ...stageApprovals };
+    if (!updatedApprovals[patientId]) updatedApprovals[patientId] = {};
+    (updatedApprovals[patientId] as any)[stageKey] = 'rejected';
+    setStageApprovals(updatedApprovals);
+    saveJSON(STAGE_APPROVALS_KEY, updatedApprovals);
+
+    // Mark stage override as NOT done
+    const updatedOverrides = { ...stageOverrides };
+    if (!updatedOverrides[patientId]) updatedOverrides[patientId] = {};
+    updatedOverrides[patientId][stageKey as keyof PreparationStatus] = false;
+    setStageOverrides(updatedOverrides);
+    saveJSON(STAGE_OVERRIDES_KEY, updatedOverrides);
+
+    // Save the review note
+    const updatedDocs = { ...stageDocs };
+    if (!updatedDocs[patientId]) updatedDocs[patientId] = {};
+    if (!updatedDocs[patientId].stageNotes) updatedDocs[patientId].stageNotes = {};
+    updatedDocs[patientId].stageNotes![stageKey] = stageReviewNote;
+    setStageDocs(updatedDocs);
+    saveJSON(STAGE_DOCS_KEY, updatedDocs);
+
+    setStageReviewPanel(null);
+    setStageReviewNote('');
+    toast.error('Stage rejected');
+    loadStageData();
+  };
+
+  const handlePlanDocUpload = (patientId: string, type: 'consent' | 'payment', file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result as string;
+      const updated = { ...stageDocs };
+      if (!updated[patientId]) updated[patientId] = {};
+      if (type === 'consent') updated[patientId].consentDoc = base64;
+      else updated[patientId].paymentDoc = base64;
+      setStageDocs(updated);
+      saveJSON(STAGE_DOCS_KEY, updated);
+      toast.success((type === 'consent' ? 'Consent document' : 'Payment evidence') + ' uploaded');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const approveBooking = async (patientId: string) => {
+    const sp = stagePatients.find(s => s.patient.id === patientId);
+    if (!sp) return;
+
+    // Check for abnormal investigations
+    const patientInvResults = investigationResults[patientId] || [];
+    const hasAbnormal = patientInvResults.some(r => r.flag === 'abnormal');
+    const alreadyForced = !!forceReadiness[patientId];
+
+    if (hasAbnormal && !alreadyForced) {
+      setShowForceReadinessModal(patientId);
+      return;
+    }
+
+    // Mark fullyPrepared
+    const updatedOverrides = { ...stageOverrides };
+    if (!updatedOverrides[patientId]) updatedOverrides[patientId] = {};
+    updatedOverrides[patientId].fullyPrepared = true;
+    setStageOverrides(updatedOverrides);
+    saveJSON(STAGE_OVERRIDES_KEY, updatedOverrides);
+
+    // Mark fullyPrepared approval
+    const updatedApprovals = { ...stageApprovals };
+    if (!updatedApprovals[patientId]) updatedApprovals[patientId] = {};
+    updatedApprovals[patientId].fullyPrepared = 'accepted';
+    setStageApprovals(updatedApprovals);
+    saveJSON(STAGE_APPROVALS_KEY, updatedApprovals);
+
+    // Create booking
+    try {
+      const patientName = sp.patient.full_name || ((sp.patient.first_name || '') + ' ' + (sp.patient.last_name || '')).trim();
+      const existingBookings = await schedulingService.getSurgeryBookings();
+      const alreadyBooked = (existingBookings || []).some((bk: SurgeryBooking) => bk.patient_id === patientId && (bk.status === 'scheduled' || bk.status === 'confirmed'));
+
+      if (!alreadyBooked) {
+        const procedureName = sp.assessment?.comprehensive_summary?.match(/Procedure:\s*([^.]+)/)?.[1]?.trim() || 'Planned Surgery';
+        const anaesthesiaMatch = sp.assessment?.comprehensive_summary?.match(/Anesthesia:\s*([^.]+)/)?.[1]?.trim()?.toLowerCase() || 'general';
+        const anaesthesiaType = (['general', 'regional', 'local', 'sedation'].includes(anaesthesiaMatch) ? anaesthesiaMatch : 'general') as 'general' | 'regional' | 'local' | 'sedation';
+
+        await schedulingService.createSurgeryBooking({
+          date: new Date(Date.now() + 7 * 86400000),
+          theatre_number: 'TBD',
+          start_time: '08:00',
+          estimated_end_time: '10:00',
+          primary_surgeon: sp.assessment?.assessed_by || 'TBD',
+          anaesthetist: 'TBD',
+          scrub_nurse: 'TBD',
+          circulating_nurse: 'TBD',
+          patient_id: patientId,
+          patient_name: patientName,
+          hospital_number: sp.patient.hospital_number,
+          ward: sp.patient.ward,
+          indication: sp.assessment?.comprehensive_summary?.match(/Procedure:\s*([^.]+)/)?.[1]?.trim() || '',
+          procedure_name: procedureName,
+          procedure_code: '',
+          urgency: 'elective',
+          anaesthesia_type: anaesthesiaType,
+          estimated_duration_minutes: 120,
+          special_requirements: [],
+          equipment_needed: sp.booking?.equipment_needed || [],
+          implants_needed: [],
+          allergies: [],
+          medical_conditions: [],
+          pre_op_checklist_completed: true,
+          consent_obtained: sp.status.consentObtained,
+          notes: alreadyForced ? 'Force readiness: ' + (forceReadiness[patientId]?.reason || '') : '',
+          status: 'scheduled',
+        });
+        toast.success(patientName + ' booking approved — moved to Booked Cases!');
+        loadBookedCases();
+      } else {
+        toast.success('Booking approved — patient already in Booked Cases');
+      }
+    } catch (err) {
+      console.error('Failed to create booking on approval:', err);
+      toast.error('Booking approval failed.');
+    }
+    loadStageData();
+  };
+
+  /** Get the stage review content label */
+  const getStageLabel = (key: string) => {
+    const labels: Record<string, string> = {
+      riskAssessed: 'Risk Assessment',
+      comorbidityChecked: 'Comorbidity Check',
+      investigationsOrdered: 'Investigation Results',
+      shoppingListDone: 'Shopping List / Equipment',
+      consentObtained: 'Signed Consent',
+      paymentConfirmed: 'Payment Evidence',
+      preOpInstructionsGiven: 'Pre-Op Instructions',
+      fullyPrepared: 'Overall Readiness',
+    };
+    return labels[key] || key;
+  };
+
   // ─── Booked Case Document Upload Handlers ───
   const handleFileUpload = (bookingId: string, type: 'consent' | 'payment', file: File) => {
     const reader = new FileReader();
@@ -923,7 +1136,7 @@ const BookingRegisterPage: React.FC = () => {
                             <span className="text-xs text-gray-400">{done}/{total}</span>
                           </div>
                         </div>
-                        {/* Clickable preparation stage chips */}
+                        {/* Clickable preparation stage chips — click opens review panel */}
                         <div className="mt-3 grid grid-cols-4 md:grid-cols-8 gap-1">
                           {[
                             { key: 'riskAssessed', label: 'Risk' },
@@ -939,30 +1152,45 @@ const BookingRegisterPage: React.FC = () => {
                             const hasAbnormal = (investigationResults[sp.patient.id] || []).some(r => r.flag === 'abnormal');
                             const isReady = item.key === 'fullyPrepared';
                             const isBlocked = isReady && hasAbnormal && !forceReadiness[sp.patient.id] && !isDone;
+                            const approval = (stageApprovals[sp.patient.id] as any)?.[item.key];
                             return (
                               <button
                                 key={item.key}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  if (item.key === 'investigationsOrdered') {
-                                    openInvestigationModal(sp.patient.id);
+                                  if (isReady) {
+                                    // Ready is handled by Approve Booking button
                                     return;
                                   }
-                                  toggleStage(sp.patient.id, item.key, isDone, sp);
+                                  openStageReview(sp.patient.id, item.key);
                                 }}
-                                title={isBlocked ? 'Blocked: abnormal investigation results' : (isDone ? 'Click to unmark' : 'Click to mark done')}
-                                className={'text-center px-1 py-1.5 rounded text-[10px] font-medium transition-all cursor-pointer border ' +
-                                  (isDone
+                                title={
+                                  isReady ? 'Use Approve Booking button below' :
+                                  isBlocked ? 'Blocked: abnormal investigation results' :
+                                  approval === 'accepted' ? 'Accepted — click to review' :
+                                  approval === 'rejected' ? 'Rejected — click to review' :
+                                  'Click to review & accept/reject'
+                                }
+                                className={'text-center px-1 py-1.5 rounded text-[10px] font-medium transition-all cursor-pointer border relative ' +
+                                  (approval === 'accepted'
                                     ? 'bg-green-100 text-green-700 border-green-300 hover:bg-green-200'
-                                    : isBlocked
-                                      ? 'bg-red-50 text-red-400 border-red-200 cursor-not-allowed'
-                                      : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-700')}
+                                    : approval === 'rejected'
+                                      ? 'bg-red-100 text-red-600 border-red-300 hover:bg-red-200'
+                                      : isDone
+                                        ? 'bg-green-50 text-green-600 border-green-200 hover:bg-green-100'
+                                        : isBlocked
+                                          ? 'bg-red-50 text-red-400 border-red-200 cursor-not-allowed'
+                                          : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-700')}
                               >
-                                {isDone
+                                {approval === 'accepted'
                                   ? <CheckCircle className="w-3 h-3 inline mr-0.5" />
-                                  : isBlocked
-                                    ? <Ban className="w-3 h-3 inline mr-0.5" />
-                                    : <Clock className="w-3 h-3 inline mr-0.5" />}
+                                  : approval === 'rejected'
+                                    ? <X className="w-3 h-3 inline mr-0.5" />
+                                    : isDone
+                                      ? <CheckCircle className="w-3 h-3 inline mr-0.5" />
+                                      : isBlocked
+                                        ? <Ban className="w-3 h-3 inline mr-0.5" />
+                                        : <Clock className="w-3 h-3 inline mr-0.5" />}
                                 {item.label}
                               </button>
                             );
@@ -975,6 +1203,48 @@ const BookingRegisterPage: React.FC = () => {
                             <span>Abnormal investigation(s) detected{forceReadiness[sp.patient.id] ? ' — Force readiness applied by ' + forceReadiness[sp.patient.id].forcedBy : ' — cannot mark Ready without clinical override'}</span>
                           </div>
                         )}
+                        {/* Approve Booking button */}
+                        {(() => {
+                          const pa = stageApprovals[sp.patient.id] || {};
+                          const requiredStages = ['riskAssessed', 'comorbidityChecked', 'investigationsOrdered', 'consentObtained', 'paymentConfirmed', 'preOpInstructionsGiven'] as const;
+                          const allAccepted = requiredStages.every(k => (pa as any)[k] === 'accepted');
+                          const anyRejected = requiredStages.some(k => (pa as any)[k] === 'rejected');
+                          const acceptedCount = requiredStages.filter(k => (pa as any)[k] === 'accepted').length;
+                          const alreadyBooked = sp.status.fullyPrepared && (stageApprovals[sp.patient.id] as any)?.fullyPrepared === 'accepted';
+
+                          return (
+                            <div className="mt-3 flex items-center gap-3">
+                              {alreadyBooked ? (
+                                <div className="flex items-center gap-2 text-xs text-green-700 bg-green-50 px-4 py-2 rounded-lg border border-green-200">
+                                  <CheckCircle className="w-4 h-4" />
+                                  <span className="font-medium">Booking Approved — Patient in Booked Cases</span>
+                                </div>
+                              ) : (
+                                <>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      approveBooking(sp.patient.id);
+                                    }}
+                                    disabled={!allAccepted}
+                                    title={allAccepted ? 'Approve booking and move to Booked Cases' : 'Accept all required stages first (' + acceptedCount + '/' + requiredStages.length + ')'}
+                                    className={'flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all ' +
+                                      (allAccepted
+                                        ? 'bg-primary-600 text-white hover:bg-primary-700 shadow-sm'
+                                        : 'bg-gray-200 text-gray-400 cursor-not-allowed')}
+                                  >
+                                    <BookOpen className="w-4 h-4" />
+                                    Approve Booking
+                                  </button>
+                                  <span className="text-[10px] text-gray-400">
+                                    {acceptedCount}/{requiredStages.length} stages accepted
+                                    {anyRejected && <span className="text-red-500 ml-1">(has rejections)</span>}
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     );
                   })}
@@ -1482,6 +1752,295 @@ const BookingRegisterPage: React.FC = () => {
           )}
         </div>
       )}
+
+      {/* ─── STAGE REVIEW MODAL ─── */}
+      {stageReviewPanel && (() => {
+        const { patientId, stage } = stageReviewPanel;
+        const sp = stagePatients.find(s => s.patient.id === patientId);
+        const patientName = sp ? (sp.patient.full_name || ((sp.patient.first_name || '') + ' ' + (sp.patient.last_name || '')).trim()) : 'Patient';
+        const approval = (stageApprovals[patientId] as any)?.[stage];
+        const patientDocs = stageDocs[patientId] || {};
+
+        const renderStageContent = () => {
+          switch (stage) {
+            case 'riskAssessed':
+              return (
+                <div className="space-y-3">
+                  <p className="text-sm text-gray-600">Review the risk assessment scores for this patient.</p>
+                  {sp?.assessment ? (
+                    <div className="grid grid-cols-2 gap-3">
+                      {sp.assessment.bleeding_risk && (
+                        <div className="bg-white p-3 rounded-lg border">
+                          <div className="text-xs text-gray-500 mb-1">Bleeding Risk</div>
+                          <span className={'px-2 py-1 text-xs rounded-full font-medium border ' + riskBadge(sp.assessment.bleeding_risk.risk_level)}>
+                            {sp.assessment.bleeding_risk.risk_level} (Score: {sp.assessment.bleeding_risk.risk_score})
+                          </span>
+                        </div>
+                      )}
+                      {sp.assessment.dvt_risk && (
+                        <div className="bg-white p-3 rounded-lg border">
+                          <div className="text-xs text-gray-500 mb-1">DVT Risk (Caprini)</div>
+                          <span className={'px-2 py-1 text-xs rounded-full font-medium border ' + riskBadge(sp.assessment.dvt_risk.risk_category)}>
+                            {sp.assessment.dvt_risk.risk_category} (Score: {sp.assessment.dvt_risk.total_score})
+                          </span>
+                        </div>
+                      )}
+                      {sp.assessment.cardiovascular_risk && (
+                        <div className="bg-white p-3 rounded-lg border">
+                          <div className="text-xs text-gray-500 mb-1">Cardiac Risk (RCRI)</div>
+                          <span className={'px-2 py-1 text-xs rounded-full font-medium border ' + riskBadge(sp.assessment.cardiovascular_risk.risk_level)}>
+                            {sp.assessment.cardiovascular_risk.risk_level} (Score: {sp.assessment.cardiovascular_risk.rcri_score})
+                          </span>
+                        </div>
+                      )}
+                      {sp.assessment.pressure_sore_risk && (
+                        <div className="bg-white p-3 rounded-lg border">
+                          <div className="text-xs text-gray-500 mb-1">Pressure Sore (Braden)</div>
+                          <span className={'px-2 py-1 text-xs rounded-full font-medium border ' + riskBadge(sp.assessment.pressure_sore_risk.risk_category)}>
+                            {sp.assessment.pressure_sore_risk.risk_category} (Score: {sp.assessment.pressure_sore_risk.braden_total})
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-gray-400 italic">No risk assessment data available. Complete the pre-operative assessment first.</div>
+                  )}
+                </div>
+              );
+
+            case 'comorbidityChecked':
+              return (
+                <div className="space-y-3">
+                  <p className="text-sm text-gray-600">Review the patient's comorbidities and current medications.</p>
+                  {sp?.assessment?.comorbidities_medications && sp.assessment.comorbidities_medications.length > 0 ? (
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap gap-2">
+                        {sp.assessment.comorbidities_medications.map((c, i) => (
+                          <span key={i} className="px-3 py-1 bg-orange-50 text-orange-700 rounded-full text-xs border border-orange-200">
+                            {c.comorbidity}
+                          </span>
+                        ))}
+                      </div>
+                      {sp.assessment.current_medications && sp.assessment.current_medications.length > 0 && (
+                        <div>
+                          <div className="text-xs text-gray-500 uppercase tracking-wider font-medium mb-2">Current Medications</div>
+                          <div className="flex flex-wrap gap-2">
+                            {sp.assessment.current_medications.map((m, i) => (
+                              <span key={i} className="px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-xs border border-blue-200">
+                                {m.drug_name}{m.dosage ? ' (' + m.dosage + ')' : ''}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-gray-400 italic">No comorbidities recorded.</div>
+                  )}
+                </div>
+              );
+
+            case 'shoppingListDone':
+              return (
+                <div className="space-y-3">
+                  <p className="text-sm text-gray-600">Review surgical equipment and shopping list.</p>
+                  {sp?.booking?.equipment_needed && sp.booking.equipment_needed.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {sp.booking.equipment_needed.map((eq, i) => (
+                        <span key={i} className="px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-xs border border-blue-200">{eq}</span>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-gray-400 italic">No equipment / shopping list available yet.</div>
+                  )}
+                </div>
+              );
+
+            case 'consentObtained':
+              return (
+                <div className="space-y-3">
+                  <p className="text-sm text-gray-600">Upload and review the signed consent document.</p>
+                  {patientDocs.consentDoc ? (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 px-3 py-2 rounded-lg border border-green-200">
+                        <CheckCircle className="w-4 h-4" /> Consent document uploaded
+                      </div>
+                      {patientDocs.consentDoc.startsWith('data:image') ? (
+                        <img src={patientDocs.consentDoc} alt="Consent Document" className="w-full max-h-64 object-contain rounded-lg border cursor-pointer"
+                          onClick={() => window.open(patientDocs.consentDoc!, '_blank')} />
+                      ) : patientDocs.consentDoc.startsWith('data:application/pdf') ? (
+                        <div className="bg-gray-50 p-4 rounded-lg border text-center">
+                          <FileText className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                          <p className="text-sm text-gray-500">PDF Document uploaded</p>
+                          <button onClick={() => window.open(patientDocs.consentDoc!, '_blank')} className="text-xs text-primary-600 hover:underline mt-1">View PDF</button>
+                        </div>
+                      ) : null}
+                      <button
+                        onClick={() => planConsentFileRef.current?.click()}
+                        className="text-xs text-primary-600 hover:underline flex items-center gap-1"
+                      >
+                        <Upload className="w-3 h-3" /> Replace document
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => planConsentFileRef.current?.click()}
+                      className="w-full py-6 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-500 hover:border-primary-400 hover:text-primary-600 flex flex-col items-center gap-2"
+                    >
+                      <Upload className="w-6 h-6" />
+                      Click to upload signed consent document
+                    </button>
+                  )}
+                </div>
+              );
+
+            case 'paymentConfirmed':
+              return (
+                <div className="space-y-3">
+                  <p className="text-sm text-gray-600">Upload and review the payment evidence / receipt.</p>
+                  {patientDocs.paymentDoc ? (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 px-3 py-2 rounded-lg border border-green-200">
+                        <CheckCircle className="w-4 h-4" /> Payment evidence uploaded
+                      </div>
+                      {patientDocs.paymentDoc.startsWith('data:image') ? (
+                        <img src={patientDocs.paymentDoc} alt="Payment Evidence" className="w-full max-h-64 object-contain rounded-lg border cursor-pointer"
+                          onClick={() => window.open(patientDocs.paymentDoc!, '_blank')} />
+                      ) : patientDocs.paymentDoc.startsWith('data:application/pdf') ? (
+                        <div className="bg-gray-50 p-4 rounded-lg border text-center">
+                          <CreditCard className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                          <p className="text-sm text-gray-500">PDF Receipt uploaded</p>
+                          <button onClick={() => window.open(patientDocs.paymentDoc!, '_blank')} className="text-xs text-primary-600 hover:underline mt-1">View PDF</button>
+                        </div>
+                      ) : null}
+                      <button
+                        onClick={() => planPaymentFileRef.current?.click()}
+                        className="text-xs text-primary-600 hover:underline flex items-center gap-1"
+                      >
+                        <Upload className="w-3 h-3" /> Replace document
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => planPaymentFileRef.current?.click()}
+                      className="w-full py-6 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-500 hover:border-primary-400 hover:text-primary-600 flex flex-col items-center gap-2"
+                    >
+                      <Upload className="w-6 h-6" />
+                      Click to upload payment evidence / receipt
+                    </button>
+                  )}
+                </div>
+              );
+
+            case 'preOpInstructionsGiven':
+              return (
+                <div className="space-y-3">
+                  <p className="text-sm text-gray-600">Review the pre-operative instructions given to the patient.</p>
+                  {sp?.assessment?.preop_instructions ? (
+                    <div className="bg-white p-4 rounded-lg border">
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap">{sp.assessment.preop_instructions}</p>
+                    </div>
+                  ) : (
+                    <div className="text-sm text-gray-400 italic">No pre-operative instructions recorded.</div>
+                  )}
+                </div>
+              );
+
+            case 'fullyPrepared':
+              return (
+                <div className="space-y-3">
+                  <p className="text-sm text-gray-600">Overall readiness summary.</p>
+                  {sp?.assessment?.comprehensive_summary ? (
+                    <div className="bg-white p-4 rounded-lg border">
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap">{sp.assessment.comprehensive_summary}</p>
+                    </div>
+                  ) : (
+                    <div className="text-sm text-gray-400 italic">No comprehensive summary available.</div>
+                  )}
+                </div>
+              );
+
+            default:
+              return <div className="text-sm text-gray-400 italic">No preview available for this stage.</div>;
+          }
+        };
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => { setStageReviewPanel(null); setStageReviewNote(''); }}>
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+              {/* Header */}
+              <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between rounded-t-xl z-10">
+                <div className="flex items-center gap-3">
+                  <div className={'p-2 rounded-lg ' + (approval === 'accepted' ? 'bg-green-100' : approval === 'rejected' ? 'bg-red-100' : 'bg-blue-100')}>
+                    {stage === 'riskAssessed' ? <Shield className="w-5 h-5 text-blue-600" /> :
+                     stage === 'comorbidityChecked' ? <Stethoscope className="w-5 h-5 text-blue-600" /> :
+                     stage === 'shoppingListDone' ? <ShoppingCart className="w-5 h-5 text-blue-600" /> :
+                     stage === 'consentObtained' ? <Shield className="w-5 h-5 text-blue-600" /> :
+                     stage === 'paymentConfirmed' ? <CreditCard className="w-5 h-5 text-blue-600" /> :
+                     stage === 'preOpInstructionsGiven' ? <ClipboardCheck className="w-5 h-5 text-blue-600" /> :
+                     <FileText className="w-5 h-5 text-blue-600" />}
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900">{getStageLabel(stage)}</h3>
+                    <p className="text-xs text-gray-500">{patientName}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {approval && (
+                    <span className={'px-2 py-1 text-xs font-medium rounded-full ' +
+                      (approval === 'accepted' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700')}>
+                      {approval === 'accepted' ? 'Accepted' : 'Rejected'}
+                    </span>
+                  )}
+                  <button onClick={() => { setStageReviewPanel(null); setStageReviewNote(''); }} className="p-2 hover:bg-gray-100 rounded-lg" title="Close">
+                    <X className="w-5 h-5 text-gray-500" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Content */}
+              <div className="px-6 py-4 space-y-4">
+                {renderStageContent()}
+
+                {/* Review note */}
+                <div>
+                  <label className="block text-xs text-gray-500 uppercase tracking-wider font-medium mb-1">Review Note (optional)</label>
+                  <textarea
+                    value={stageReviewNote}
+                    onChange={e => setStageReviewNote(e.target.value)}
+                    rows={2}
+                    placeholder="Add a note about this stage..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500"
+                  />
+                </div>
+              </div>
+
+              {/* Footer with Accept / Reject */}
+              <div className="sticky bottom-0 bg-white border-t px-6 py-4 flex items-center justify-between rounded-b-xl">
+                <button onClick={() => { setStageReviewPanel(null); setStageReviewNote(''); }}
+                  className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">
+                  Cancel
+                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => rejectStage(patientId, stage)}
+                    className="px-5 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium flex items-center gap-1.5"
+                  >
+                    <X className="w-4 h-4" /> Reject
+                  </button>
+                  <button
+                    onClick={() => acceptStage(patientId, stage)}
+                    className="px-5 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium flex items-center gap-1.5"
+                  >
+                    <CheckCircle className="w-4 h-4" /> Accept
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ─── INVESTIGATION RESULTS MODAL ─── */}
       {showInvestigationModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowInvestigationModal(null)}>
@@ -1659,6 +2218,24 @@ const BookingRegisterPage: React.FC = () => {
         onChange={e => {
           if (e.target.files?.[0] && uploadTarget?.type === 'payment') {
             handleFileUpload(uploadTarget.bookingId, 'payment', e.target.files[0]);
+          }
+          e.target.value = '';
+        }}
+      />
+
+      {/* Hidden file inputs for planning-phase stage review uploads */}
+      <input type="file" ref={planConsentFileRef} className="hidden" accept="image/*,.pdf" title="Upload consent for stage review"
+        onChange={e => {
+          if (e.target.files?.[0] && stageReviewPanel) {
+            handlePlanDocUpload(stageReviewPanel.patientId, 'consent', e.target.files[0]);
+          }
+          e.target.value = '';
+        }}
+      />
+      <input type="file" ref={planPaymentFileRef} className="hidden" accept="image/*,.pdf" title="Upload payment for stage review"
+        onChange={e => {
+          if (e.target.files?.[0] && stageReviewPanel) {
+            handlePlanDocUpload(stageReviewPanel.patientId, 'payment', e.target.files[0]);
           }
           e.target.value = '';
         }}
