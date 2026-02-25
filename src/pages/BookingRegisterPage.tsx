@@ -71,6 +71,16 @@ interface InvestigationResult {
   enteredAt?: string;
 }
 
+/** Per-patient uploaded investigation documents (photos of lab reports, PDFs) */
+interface InvestigationDocuments {
+  [patientId: string]: Array<{
+    name: string;
+    dataUrl: string; // base64
+    uploadedAt: string;
+    uploadedBy: string;
+  }>;
+}
+
 /** Per-patient investigation results stored in localStorage */
 interface PatientInvestigationResults {
   [patientId: string]: InvestigationResult[];
@@ -126,6 +136,7 @@ const FORCE_READINESS_KEY = 'booking_force_readiness';
 const BOOKED_DOCS_KEY = 'booked_case_documents';
 const STAGE_APPROVALS_KEY = 'booking_stage_approvals';
 const STAGE_DOCS_KEY = 'booking_stage_docs';
+const INVESTIGATION_DOCS_KEY = 'booking_investigation_docs';
 
 const loadJSON = <T,>(key: string, fallback: T): T => {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
@@ -242,6 +253,7 @@ const BookingRegisterPage: React.FC = () => {
   const [showForceReadinessModal, setShowForceReadinessModal] = useState<string | null>(null);
   const [forceReason, setForceReason] = useState('');
   const [investigationEntries, setInvestigationEntries] = useState<InvestigationResult[]>([]);
+  const [investigationDocs, setInvestigationDocs] = useState<InvestigationDocuments>(() => loadJSON(INVESTIGATION_DOCS_KEY, {}));
 
   // Stage review panel state
   const [stageReviewPanel, setStageReviewPanel] = useState<{ patientId: string; stage: string } | null>(null);
@@ -254,7 +266,9 @@ const BookingRegisterPage: React.FC = () => {
   const paymentFileRef = useRef<HTMLInputElement>(null);
   const planConsentFileRef = useRef<HTMLInputElement>(null);
   const planPaymentFileRef = useRef<HTMLInputElement>(null);
+  const investigationFileRef = useRef<HTMLInputElement>(null);
   const [uploadTarget, setUploadTarget] = useState<{ bookingId: string; type: 'consent' | 'payment' } | null>(null);
+  const [investigationUploadTarget, setInvestigationUploadTarget] = useState<string | null>(null);
 
   //  Effects 
   useEffect(() => { loadPatients(); }, []);
@@ -620,14 +634,43 @@ const BookingRegisterPage: React.FC = () => {
     loadStageData();
   };
 
+  // ─── Investigation Document Upload Handler ───
+  const handleInvestigationDocUpload = (patientId: string, file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      const updated = { ...investigationDocs };
+      if (!updated[patientId]) updated[patientId] = [];
+      updated[patientId] = [
+        ...updated[patientId],
+        {
+          name: file.name,
+          dataUrl,
+          uploadedAt: new Date().toISOString(),
+          uploadedBy: localStorage.getItem('userName') || 'Unknown',
+        },
+      ];
+      setInvestigationDocs(updated);
+      saveJSON(INVESTIGATION_DOCS_KEY, updated);
+      toast.success('Investigation document uploaded: ' + file.name);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeInvestigationDoc = (patientId: string, idx: number) => {
+    const updated = { ...investigationDocs };
+    if (updated[patientId]) {
+      updated[patientId] = updated[patientId].filter((_, i) => i !== idx);
+      setInvestigationDocs(updated);
+      saveJSON(INVESTIGATION_DOCS_KEY, updated);
+      toast.success('Document removed');
+    }
+  };
+
   // ─── Stage Review Handlers ───
   const openStageReview = (patientId: string, stageKey: string) => {
-    if (stageKey === 'investigationsOrdered') {
-      // For Invest, open the investigation modal first, but also allow review
-      openInvestigationModal(patientId);
-      return;
-    }
-    // Load existing note for this stage
+    // All stages (including investigationsOrdered) now open the stage review modal
+    // The investigation modal can be launched from within the review modal
     const existingNote = stageDocs[patientId]?.stageNotes?.[stageKey] || '';
     setStageReviewNote(existingNote);
     setStageReviewPanel({ patientId, stage: stageKey });
@@ -1856,6 +1899,109 @@ const BookingRegisterPage: React.FC = () => {
                 </div>
               );
 
+            case 'investigationsOrdered':
+              return (
+                <div className="space-y-4">
+                  <p className="text-sm text-gray-600">Upload lab results and review investigation findings.</p>
+
+                  {/* Upload investigation documents button */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs text-gray-500 uppercase tracking-wider font-medium">Uploaded Lab Reports</h4>
+                      <button
+                        onClick={() => {
+                          setInvestigationUploadTarget(patientId);
+                          investigationFileRef.current?.click();
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 transition-colors"
+                      >
+                        <Upload className="w-3.5 h-3.5" /> Upload Lab Results
+                      </button>
+                    </div>
+
+                    {/* Preview uploaded docs */}
+                    {(investigationDocs[patientId] || []).length > 0 ? (
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                        {(investigationDocs[patientId] || []).map((doc, idx) => (
+                          <div key={idx} className="relative bg-white rounded-lg border overflow-hidden group">
+                            {doc.dataUrl.startsWith('data:image') ? (
+                              <img
+                                src={doc.dataUrl}
+                                alt={doc.name}
+                                className="w-full h-32 object-cover cursor-pointer hover:opacity-90"
+                                onClick={() => window.open(doc.dataUrl, '_blank')}
+                              />
+                            ) : (
+                              <div
+                                className="w-full h-32 flex flex-col items-center justify-center bg-gray-50 cursor-pointer hover:bg-gray-100"
+                                onClick={() => window.open(doc.dataUrl, '_blank')}
+                              >
+                                <FileText className="w-8 h-8 text-gray-400 mb-1" />
+                                <span className="text-xs text-gray-500">PDF Document</span>
+                              </div>
+                            )}
+                            <div className="px-2 py-1.5 bg-white border-t">
+                              <p className="text-[10px] text-gray-600 truncate" title={doc.name}>{doc.name}</p>
+                              <p className="text-[9px] text-gray-400">{safeFormatDate(doc.uploadedAt, 'dd MMM yyyy HH:mm')}</p>
+                            </div>
+                            <button
+                              onClick={() => removeInvestigationDoc(patientId, idx)}
+                              className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                              title="Remove document"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div
+                        onClick={() => {
+                          setInvestigationUploadTarget(patientId);
+                          investigationFileRef.current?.click();
+                        }}
+                        className="w-full py-6 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-500 hover:border-blue-400 hover:text-blue-600 flex flex-col items-center gap-2 cursor-pointer"
+                      >
+                        <Upload className="w-6 h-6" />
+                        Click to upload investigation results (photos, PDFs)
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Entered investigation results summary */}
+                  {(investigationResults[patientId] || []).length > 0 && (
+                    <div className="space-y-2">
+                      <h4 className="text-xs text-gray-500 uppercase tracking-wider font-medium">Entered Results</h4>
+                      <div className="space-y-1">
+                        {(investigationResults[patientId] || []).map((r, i) => (
+                          <div key={i} className="flex items-center justify-between px-3 py-2 bg-white rounded-lg border text-sm">
+                            <span className="text-gray-700 font-medium">{r.name}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-gray-600">{r.value}</span>
+                              <span className={'px-2 py-0.5 text-[10px] font-semibold rounded-full ' +
+                                (r.flag === 'normal' ? 'bg-green-100 text-green-700' :
+                                 r.flag === 'borderline' ? 'bg-yellow-100 text-yellow-700' :
+                                 'bg-red-100 text-red-700')}>
+                                {r.flag.charAt(0).toUpperCase() + r.flag.slice(1)}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Button to open manual investigation entry modal */}
+                  <button
+                    onClick={() => openInvestigationModal(patientId)}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium transition-colors border border-gray-200"
+                  >
+                    <FlaskConical className="w-4 h-4" />
+                    {(investigationResults[patientId] || []).length > 0 ? 'Edit Investigation Results' : 'Enter Investigation Results Manually'}
+                  </button>
+                </div>
+              );
+
             case 'consentObtained':
               return (
                 <div className="space-y-3">
@@ -2058,6 +2204,52 @@ const BookingRegisterPage: React.FC = () => {
               </button>
             </div>
             <div className="px-6 py-4 space-y-3">
+              {/* Upload investigation documents section */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sm text-blue-800 font-medium">
+                    <Upload className="w-4 h-4" />
+                    Upload Investigation Results
+                  </div>
+                  <button
+                    onClick={() => {
+                      setInvestigationUploadTarget(showInvestigationModal);
+                      investigationFileRef.current?.click();
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700"
+                  >
+                    <Upload className="w-3.5 h-3.5" /> Upload Photos/PDF
+                  </button>
+                </div>
+                {(investigationDocs[showInvestigationModal] || []).length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {(investigationDocs[showInvestigationModal] || []).map((doc, idx) => (
+                      <div key={idx} className="relative group">
+                        {doc.dataUrl.startsWith('data:image') ? (
+                          <img src={doc.dataUrl} alt={doc.name}
+                            className="w-16 h-16 object-cover rounded-lg border cursor-pointer hover:opacity-90"
+                            onClick={() => window.open(doc.dataUrl, '_blank')} />
+                        ) : (
+                          <div className="w-16 h-16 flex flex-col items-center justify-center bg-white rounded-lg border cursor-pointer hover:bg-gray-50"
+                            onClick={() => window.open(doc.dataUrl, '_blank')}>
+                            <FileText className="w-5 h-5 text-gray-400" />
+                            <span className="text-[8px] text-gray-400">PDF</span>
+                          </div>
+                        )}
+                        <button onClick={() => removeInvestigationDoc(showInvestigationModal!, idx)}
+                          className="absolute -top-1 -right-1 p-0.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="Remove">
+                          <X className="w-2.5 h-2.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <p className="text-[10px] text-blue-600">Upload photos or PDF scans of lab result sheets</p>
+              </div>
+
+              {/* Manual entry section header */}
+              <div className="text-xs text-gray-500 uppercase tracking-wider font-medium pt-1">Manual Entry</div>
               {investigationEntries.map((entry, idx) => (
                 <div key={idx} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border">
                   <div className="flex-1 space-y-2">
@@ -2238,6 +2430,19 @@ const BookingRegisterPage: React.FC = () => {
             handlePlanDocUpload(stageReviewPanel.patientId, 'payment', e.target.files[0]);
           }
           e.target.value = '';
+        }}
+      />
+
+      {/* Hidden file input for investigation document uploads */}
+      <input type="file" ref={investigationFileRef} className="hidden" accept="image/*,.pdf" multiple title="Upload investigation results"
+        onChange={e => {
+          if (e.target.files && investigationUploadTarget) {
+            Array.from(e.target.files).forEach(file => {
+              handleInvestigationDocUpload(investigationUploadTarget, file);
+            });
+          }
+          e.target.value = '';
+          setInvestigationUploadTarget(null);
         }}
       />
     </div>
