@@ -222,7 +222,7 @@ export const PatientProfile: React.FC = () => {
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs sm:text-sm text-gray-500">
                     <span>#{patient.hospital_number}</span>
                     <span className="hidden sm:inline"></span>
-                    <span>{calculateAge(patient.dob)}y, {patient.sex}</span>
+                    <span>{calculateAge(patient.dob || patient.date_of_birth) ?? 'N/A'}y, {patient.sex || patient.gender}</span>
                     <span className="hidden sm:inline"></span>
                     <span className="hidden sm:inline">{patient.phone}</span>
                   </div>
@@ -263,7 +263,7 @@ export const PatientProfile: React.FC = () => {
               <div className="p-4 space-y-3">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">Date of Birth:</span>
-                  <span className="font-medium">{patient.dob}</span>
+                  <span className="font-medium">{patient.dob || patient.date_of_birth || 'N/A'}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">Address:</span>
@@ -466,8 +466,8 @@ export const PatientProfile: React.FC = () => {
                   onChange={(e) => setEditFormData({ ...editFormData, dob: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
                 />
-                {editFormData.dob && (
-                  <p className="text-sm text-gray-500 mt-1">Age: {calculateAge(editFormData.dob)} years</p>
+                {(editFormData.dob || editFormData.date_of_birth) && (
+                  <p className="text-sm text-gray-500 mt-1">Age: {calculateAge(editFormData.dob || editFormData.date_of_birth) ?? 'N/A'} years</p>
                 )}
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -704,9 +704,11 @@ const UpcomingPlansView: React.FC<{ plans: any[] }> = ({ plans }) => {
   );
 };
 
-// Utility function
-const calculateAge = (dob: string): number => {
+// Utility function - handles null/undefined/empty dob gracefully
+const calculateAge = (dob: string | null | undefined): number | null => {
+  if (!dob) return null;
   const birthDate = new Date(dob);
+  if (isNaN(birthDate.getTime())) return null;
   const today = new Date();
   let age = today.getFullYear() - birthDate.getFullYear();
   const monthDiff = today.getMonth() - birthDate.getMonth();

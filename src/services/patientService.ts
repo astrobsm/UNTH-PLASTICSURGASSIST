@@ -36,6 +36,10 @@ function normalizePatientData(patient: any) {
   const lastName = patient.last_name || patient.lastName || '';
   const fullName = patient.full_name || patient.fullName || `${firstName} ${lastName}`.trim() || 'Unknown';
   
+  // Normalize dob / date_of_birth - ensure both fields are populated
+  const dob = patient.dob || patient.date_of_birth || '';
+  const dateOfBirth = patient.date_of_birth || patient.dob || '';
+
   return {
     ...patient,
     full_name: fullName,
@@ -43,6 +47,9 @@ function normalizePatientData(patient: any) {
     last_name: lastName,
     hospital_number: patient.hospital_number || patient.hospitalNumber || '',
     gender: patient.gender || patient.sex || '',
+    sex: patient.sex || patient.gender || '',
+    dob: dob,
+    date_of_birth: dateOfBirth,
     allergies: normalizeArrayField(patient.allergies),
     comorbidities: normalizeArrayField(patient.comorbidities)
   };

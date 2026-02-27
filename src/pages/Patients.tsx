@@ -5,6 +5,7 @@ import { Patient } from '../db/database';
 import { PatientRegistrationForm } from '../components/PatientRegistrationForm';
 import patientService from '../services/patientService';
 import { apiClient } from '../services/apiClient';
+import { preoperativeService } from '../services/preoperativeService';
 
 // Data category definitions
 interface DataCategory {
@@ -119,7 +120,22 @@ export const Patients: React.FC = () => {
         }
         case 'preop_assessments': {
           try {
-            return await db.preoperative_assessments.where('patient_id').equals(pid).toArray();
+            // Try the preoperativeService first (handles API + local fallback)
+            const assessment = await preoperativeService.getAssessmentByPatient(pid);
+            if (assessment) return [assessment];
+            
+            // Also try fetching all assessments for this patient from local DB with various ID formats
+            let localData = await db.preoperative_assessments.where('patient_id').equals(pid).toArray();
+            if (localData.length === 0 && !isNaN(numPid)) {
+              localData = await db.preoperative_assessments.where('patient_id').equals(numPid as any).toArray();
+            }
+            if (localData.length === 0) {
+              // Try string match on all assessments (handles ID format mismatches)
+              localData = await db.preoperative_assessments.filter(
+                (a: any) => String(a.patient_id) === pid || String(a.patient_id) === String(numPid)
+              ).toArray();
+            }
+            return localData;
           } catch { return []; }
         }
         default:
@@ -617,7 +633,7 @@ export const Patients: React.FC = () => {
                           <svg className="mr-1 h-3.5 w-3.5 sm:h-4 sm:w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3a2 2 0 012-2h4a2 2 0 012 2v4m-6 4h6m-6 4h6m-6 4h6M3 7h18" />
                           </svg>
-                          DOB: {patient.dob}
+                          DOB: {patient.dob || patient.date_of_birth || 'N/A'}
                         </span>
                         
                         <span className="flex items-center capitalize">

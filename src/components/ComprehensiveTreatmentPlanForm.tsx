@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { X, Plus, Trash2, AlertTriangle, Info, FileDown, Printer } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, Plus, Trash2, AlertTriangle, Info, FileDown, Printer, Search, ChevronDown, Beaker, Activity } from 'lucide-react';
 import { format } from 'date-fns';
 import { useAuthStore } from '../store/authStore';
 import { db } from '../db/database';
@@ -14,6 +14,8 @@ import {
 import { medicationDosingService, GFRDosingRecommendation } from '../services/medicationDosingService';
 import { investigationPdfService } from '../services/investigationPdfService';
 import { medicalTeamService, StaffByRole } from '../services/medicalTeamService';
+import { searchMedications, getMedicationByName, BNFMedication, MEDICATION_CATEGORIES, checkInteractions } from '../data/bnfMedications';
+import { searchInvestigations, getInvestigationByName, Investigation, INVESTIGATION_CATEGORIES, PREOP_PANELS } from '../data/investigationDatabase';
 
 interface ComprehensiveTreatmentPlanFormProps {
   onClose: () => void;
@@ -106,6 +108,141 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
   // GFR-based dosing
   const [patientGFR, setPatientGFR] = useState<number | ''>('');
   const [gfrRecommendation, setGfrRecommendation] = useState<GFRDosingRecommendation | null>(null);
+  
+  // BNF Medication Search
+  const [medSearchQuery, setMedSearchQuery] = useState('');
+  const [medSearchResults, setMedSearchResults] = useState<BNFMedication[]>([]);
+  const [showMedDropdown, setShowMedDropdown] = useState(false);
+  const [selectedBNFMed, setSelectedBNFMed] = useState<BNFMedication | null>(null);
+  const medSearchRef = useRef<HTMLDivElement>(null);
+  
+  // Investigation Search
+  const [invSearchQuery, setInvSearchQuery] = useState('');
+  const [invSearchResults, setInvSearchResults] = useState<Investigation[]>([]);
+  const [showInvDropdown, setShowInvDropdown] = useState(false);
+  const [selectedInvestigation, setSelectedInvestigation] = useState<Investigation | null>(null);
+  const [showPanelSelector, setShowPanelSelector] = useState(false);
+  const invSearchRef = useRef<HTMLDivElement>(null);
+  
+  // Click outside to close dropdowns
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (medSearchRef.current && !medSearchRef.current.contains(e.target as Node)) {
+        setShowMedDropdown(false);
+      }
+      if (invSearchRef.current && !invSearchRef.current.contains(e.target as Node)) {
+        setShowInvDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+  
+  // Medication search handler
+  const handleMedSearch = (query: string) => {
+    setMedSearchQuery(query);
+    setNewMed({ ...newMed, medication_name: query });
+    if (query.length >= 2) {
+      const results = searchMedications(query);
+      setMedSearchResults(results);
+      setShowMedDropdown(results.length > 0);
+    } else {
+      setMedSearchResults([]);
+      setShowMedDropdown(false);
+    }
+    setSelectedBNFMed(null);
+  };
+  
+  // Select a BNF medication from search results
+  const selectBNFMedication = (med: BNFMedication) => {
+    setSelectedBNFMed(med);
+    setMedSearchQuery(med.name);
+    setShowMedDropdown(false);
+    
+    // Auto-fill fields from BNF data
+    const defaultDosage = med.dosages.length > 0 ? med.dosages[0].adult : '';
+    const defaultRoute = med.routes.length > 0 ? med.routes[0].toLowerCase() : 'oral';
+    const defaultFrequency = med.frequencies.length > 0 ? med.frequencies[0] : '';
+    
+    setNewMed(prev => ({
+      ...prev,
+      medication_name: med.name,
+      dosage: defaultDosage,
+      route: defaultRoute as any,
+      frequency: defaultFrequency,
+    }));
+    
+    // Apply GFR adjustment if available
+    handleMedicationChange(med.name);
+  };
+  
+  // Investigation search handler
+  const handleInvSearch = (query: string) => {
+    setInvSearchQuery(query);
+    setNewInv({ ...newInv, investigation_name: query });
+    if (query.length >= 1) {
+      const results = searchInvestigations(query);
+      setInvSearchResults(results);
+      setShowInvDropdown(results.length > 0);
+    } else {
+      setInvSearchResults([]);
+      setShowInvDropdown(false);
+    }
+    setSelectedInvestigation(null);
+  };
+  
+  // Select an investigation from search results
+  const selectInvestigation = (inv: Investigation) => {
+    setSelectedInvestigation(inv);
+    setInvSearchQuery(inv.name);
+    setShowInvDropdown(false);
+    
+    // Auto-fill fields from investigation database
+    const typeMap: Record<string, string> = { lab: 'lab', imaging: 'imaging', bedside: 'other', special: 'other' };
+    setNewInv(prev => ({
+      ...prev,
+      investigation_name: inv.name,
+      investigation_type: (typeMap[inv.type] || 'lab') as any,
+      target_range: inv.normalRange || '',
+      notes: inv.preAnalytical ? `Pre-analytical: ${inv.preAnalytical.join('; ')}` : prev.notes,
+    }));
+  };
+  
+  // Add entire investigation panel at once
+  const addInvestigationPanel = (panelName: string) => {
+    const panelItems = PREOP_PANELS[panelName];
+    if (!panelItems) return;
+    
+    const newInvestigations = panelItems.map(invName => {
+      const inv = getInvestigationByName(invName);
+      const typeMap: Record<string, string> = { lab: 'lab', imaging: 'imaging', bedside: 'other', special: 'other' };
+      return {
+        investigation_name: invName,
+        investigation_type: (inv ? typeMap[inv.type] || 'lab' : 'lab') as 'lab' | 'imaging' | 'other',
+        frequency: 'once' as const,
+        repeat_count: 1,
+        target_value: '',
+        target_range: inv?.normalRange || '',
+        ordered_date: new Date(),
+        notes: '',
+        status: 'pending' as const
+      };
+    });
+    
+    // Filter out already-added investigations
+    const existingNames = investigations.map(i => i.investigation_name.toLowerCase());
+    const toAdd = newInvestigations.filter(i => !existingNames.includes(i.investigation_name.toLowerCase()));
+    
+    if (toAdd.length > 0) {
+      setInvestigations([...investigations, ...toAdd]);
+    }
+    setShowPanelSelector(false);
+  };
+  
+  // Drug-drug interaction check
+  const drugInteractions = medications.length >= 2 
+    ? checkInteractions(medications.map(m => m.medication_name)) 
+    : [];
   
   // Auto-fill dosing based on medication name and GFR
   const handleMedicationChange = (medicationName: string) => {
@@ -632,21 +769,45 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
               
               <div className="bg-gray-50 p-4 rounded-lg space-y-4">
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Medication Name</label>
+                  <div ref={medSearchRef} className="relative">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <Search className="w-3.5 h-3.5 inline mr-1" />
+                      Medication Name (BNF)
+                    </label>
                     <input
                       type="text"
-                      value={newMed.medication_name}
-                      onChange={(e) => handleMedicationChange(e.target.value)}
+                      value={medSearchQuery}
+                      onChange={(e) => handleMedSearch(e.target.value)}
+                      onFocus={() => { if (medSearchResults.length > 0) setShowMedDropdown(true); }}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-                      placeholder="e.g., Paracetamol"
-                      list="medication-suggestions"
+                      placeholder="Search BNF... e.g., Paracetamol, Amoxicillin"
                     />
-                    <datalist id="medication-suggestions">
-                      {medicationDosingService.getAvailableMedicationsWithGFRDosing().map(med => (
-                        <option key={med} value={med} />
-                      ))}
-                    </datalist>
+                    {/* BNF Search Results Dropdown */}
+                    {showMedDropdown && medSearchResults.length > 0 && (
+                      <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                        {medSearchResults.map((med, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => selectBNFMedication(med)}
+                            className="w-full px-3 py-2 text-left hover:bg-green-50 border-b border-gray-100 last:border-0"
+                          >
+                            <p className="font-medium text-gray-900 text-sm">{med.name}</p>
+                            <p className="text-xs text-gray-500">
+                              {med.category} &bull; {med.routes.join(', ')} &bull; {med.frequencies.slice(0, 2).join(', ')}
+                            </p>
+                            {med.warnings.length > 0 && (
+                              <p className="text-xs text-amber-600 mt-0.5">⚠ {med.warnings[0]}</p>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {selectedBNFMed && (
+                      <p className="text-xs text-green-700 mt-1">
+                        ✓ BNF: {selectedBNFMed.category} &bull; {selectedBNFMed.genericName}
+                      </p>
+                    )}
                   </div>
 
                   <div>
@@ -747,13 +908,66 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
 
                 <button
                   type="button"
-                  onClick={addMedication}
+                  onClick={() => {
+                    addMedication();
+                    setMedSearchQuery('');
+                    setSelectedBNFMed(null);
+                  }}
                   className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
                 >
                   <Plus className="w-4 h-4" />
                   Add Medication
                 </button>
+                
+                {/* BNF Medication Details Panel */}
+                {selectedBNFMed && (
+                  <div className="bg-blue-50 border border-blue-200 p-3 rounded-lg">
+                    <h5 className="font-medium text-blue-900 mb-2">
+                      <Activity className="w-4 h-4 inline mr-1" />
+                      BNF Details: {selectedBNFMed.name}
+                    </h5>
+                    <div className="grid grid-cols-2 gap-2 text-xs text-gray-700">
+                      <div><span className="font-medium">Generic:</span> {selectedBNFMed.genericName}</div>
+                      <div><span className="font-medium">Category:</span> {selectedBNFMed.category}</div>
+                      <div><span className="font-medium">Routes:</span> {selectedBNFMed.routes.join(', ')}</div>
+                      <div><span className="font-medium">Frequencies:</span> {selectedBNFMed.frequencies.join(', ')}</div>
+                      {selectedBNFMed.maxDailyDose && (
+                        <div className="col-span-2"><span className="font-medium">Max Daily Dose:</span> {selectedBNFMed.maxDailyDose}</div>
+                      )}
+                      {selectedBNFMed.contraindications.length > 0 && (
+                        <div className="col-span-2 text-red-700">
+                          <span className="font-medium">Contraindications:</span> {selectedBNFMed.contraindications.slice(0, 3).join(', ')}
+                        </div>
+                      )}
+                      {selectedBNFMed.warnings.length > 0 && (
+                        <div className="col-span-2 text-amber-700">
+                          <span className="font-medium">Warnings:</span> {selectedBNFMed.warnings.slice(0, 2).join('; ')}
+                        </div>
+                      )}
+                      {selectedBNFMed.monitoringRequired && selectedBNFMed.monitoringRequired.length > 0 && (
+                        <div className="col-span-2 text-purple-700">
+                          <span className="font-medium">Monitoring Required:</span> {selectedBNFMed.monitoringRequired.join(', ')}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
+
+              {/* Drug Interaction Warnings */}
+              {drugInteractions.length > 0 && (
+                <div className="bg-red-50 border border-red-200 p-3 rounded-lg">
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertTriangle className="w-5 h-5 text-red-600" />
+                    <h5 className="font-medium text-red-900">Drug Interaction Warnings</h5>
+                  </div>
+                  {drugInteractions.map((inter, idx) => (
+                    <p key={idx} className="text-sm text-red-800">
+                      <span className="font-medium">{inter.med1}</span> ↔ <span className="font-medium">{inter.med2}</span>: {inter.interaction}
+                    </p>
+                  ))}
+                </div>
+              )}
 
               {/* Medications List */}
               {medications.length > 0 && (
@@ -784,19 +998,98 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
           {/* Step 3: Investigations */}
           {currentStep === 3 && (
             <div className="space-y-6">
-              <h3 className="text-lg font-semibold text-gray-900">Investigations</h3>
+              <h3 className="text-lg font-semibold text-gray-900">
+                <Beaker className="w-5 h-5 inline mr-1" />
+                Investigations
+              </h3>
+              
+              {/* Quick Panel Selector */}
+              <div className="bg-purple-50 border border-purple-200 p-4 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <Info className="w-5 h-5 text-purple-600" />
+                    <h4 className="font-medium text-purple-900">Quick Investigation Panels</h4>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowPanelSelector(!showPanelSelector)}
+                    className="flex items-center gap-1 px-3 py-1.5 text-sm bg-purple-600 text-white rounded-md hover:bg-purple-700"
+                  >
+                    <ChevronDown className={`w-4 h-4 transition-transform ${showPanelSelector ? 'rotate-180' : ''}`} />
+                    {showPanelSelector ? 'Hide Panels' : 'Add Panel'}
+                  </button>
+                </div>
+                <p className="text-sm text-purple-700 mb-2">
+                  Quickly add standard investigation panels for common clinical scenarios.
+                </p>
+                {showPanelSelector && (
+                  <div className="grid grid-cols-2 gap-2 mt-3">
+                    {Object.keys(PREOP_PANELS).map((panelName) => (
+                      <button
+                        key={panelName}
+                        type="button"
+                        onClick={() => addInvestigationPanel(panelName)}
+                        className="text-left px-3 py-2 bg-white border border-purple-200 rounded-lg hover:bg-purple-100 transition"
+                      >
+                        <p className="text-sm font-medium text-gray-900">{panelName}</p>
+                        <p className="text-xs text-gray-500">{PREOP_PANELS[panelName].length} investigations</p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               
               <div className="bg-gray-50 p-4 rounded-lg space-y-4">
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Investigation Name</label>
+                  <div ref={invSearchRef} className="relative">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <Search className="w-3.5 h-3.5 inline mr-1" />
+                      Investigation Name
+                    </label>
                     <input
                       type="text"
-                      value={newInv.investigation_name}
-                      onChange={(e) => setNewInv({ ...newInv, investigation_name: e.target.value })}
+                      value={invSearchQuery}
+                      onChange={(e) => handleInvSearch(e.target.value)}
+                      onFocus={() => { if (invSearchResults.length > 0) setShowInvDropdown(true); }}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-                      placeholder="e.g., FBC, U&E, Chest X-ray"
+                      placeholder="Search... e.g., FBC, CXR, Blood culture"
                     />
+                    {/* Investigation Search Results Dropdown */}
+                    {showInvDropdown && invSearchResults.length > 0 && (
+                      <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                        {invSearchResults.map((inv, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => selectInvestigation(inv)}
+                            className="w-full px-3 py-2 text-left hover:bg-green-50 border-b border-gray-100 last:border-0"
+                          >
+                            <div className="flex items-center justify-between">
+                              <p className="font-medium text-gray-900 text-sm">{inv.name}</p>
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                                inv.type === 'lab' ? 'bg-blue-100 text-blue-700' :
+                                inv.type === 'imaging' ? 'bg-purple-100 text-purple-700' :
+                                inv.type === 'bedside' ? 'bg-green-100 text-green-700' :
+                                'bg-gray-100 text-gray-700'
+                              }`}>{inv.type}</span>
+                            </div>
+                            <p className="text-xs text-gray-500">
+                              {inv.abbreviation !== inv.name && `(${inv.abbreviation}) `}
+                              {inv.category} {inv.specimen ? `• ${inv.specimen}` : ''}
+                            </p>
+                            {inv.turnaroundTime && (
+                              <p className="text-xs text-gray-400">TAT: {inv.turnaroundTime}</p>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {selectedInvestigation && (
+                      <p className="text-xs text-green-700 mt-1">
+                        ✓ {selectedInvestigation.category} • {selectedInvestigation.abbreviation}
+                        {selectedInvestigation.specimen && ` • ${selectedInvestigation.specimen}`}
+                      </p>
+                    )}
                   </div>
 
                   <div>
@@ -808,7 +1101,7 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
                     >
                       <option value="lab">Laboratory</option>
                       <option value="imaging">Imaging</option>
-                      <option value="other">Other</option>
+                      <option value="other">Other (Bedside/Special)</option>
                     </select>
                   </div>
 
@@ -857,15 +1150,69 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
                       type="text"
                       value={newInv.target_range}
                       onChange={(e) => setNewInv({ ...newInv, target_range: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                      className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 ${
+                        selectedInvestigation?.normalRange ? 'border-green-300 bg-green-50' : 'border-gray-300'
+                      }`}
                       placeholder="e.g., 4.0-5.5 mmol/L"
                     />
                   </div>
                 </div>
+                
+                {/* Investigation Details Panel */}
+                {selectedInvestigation && (
+                  <div className="bg-blue-50 border border-blue-200 p-3 rounded-lg">
+                    <h5 className="font-medium text-blue-900 mb-2 text-sm">
+                      <Beaker className="w-3.5 h-3.5 inline mr-1" />
+                      {selectedInvestigation.name} ({selectedInvestigation.abbreviation})
+                    </h5>
+                    <div className="grid grid-cols-2 gap-2 text-xs text-gray-700">
+                      <div><span className="font-medium">Category:</span> {selectedInvestigation.category}</div>
+                      <div><span className="font-medium">Type:</span> {selectedInvestigation.type}</div>
+                      {selectedInvestigation.specimen && (
+                        <div><span className="font-medium">Specimen:</span> {selectedInvestigation.specimen}</div>
+                      )}
+                      {selectedInvestigation.turnaroundTime && (
+                        <div><span className="font-medium">TAT:</span> {selectedInvestigation.turnaroundTime}</div>
+                      )}
+                      {selectedInvestigation.normalRange && (
+                        <div className="col-span-2"><span className="font-medium">Normal Range:</span> {selectedInvestigation.normalRange}</div>
+                      )}
+                      {selectedInvestigation.panels && selectedInvestigation.panels.length > 0 && (
+                        <div className="col-span-2">
+                          <span className="font-medium">Includes:</span> {selectedInvestigation.panels.join(', ')}
+                        </div>
+                      )}
+                      {selectedInvestigation.preAnalytical && selectedInvestigation.preAnalytical.length > 0 && (
+                        <div className="col-span-2 text-amber-700">
+                          <span className="font-medium">⚠ Pre-analytical:</span> {selectedInvestigation.preAnalytical.join('; ')}
+                        </div>
+                      )}
+                      {selectedInvestigation.cost && (
+                        <div>
+                          <span className="font-medium">Cost:</span>{' '}
+                          <span className={
+                            selectedInvestigation.cost === 'low' ? 'text-green-600' :
+                            selectedInvestigation.cost === 'moderate' ? 'text-yellow-600' :
+                            selectedInvestigation.cost === 'high' ? 'text-orange-600' : 'text-red-600'
+                          }>
+                            {selectedInvestigation.cost}
+                          </span>
+                        </div>
+                      )}
+                      {selectedInvestigation.urgent && (
+                        <div className="text-red-600 font-medium">🚨 Available as urgent</div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 <button
                   type="button"
-                  onClick={addInvestigation}
+                  onClick={() => {
+                    addInvestigation();
+                    setInvSearchQuery('');
+                    setSelectedInvestigation(null);
+                  }}
                   className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
                 >
                   <Plus className="w-4 h-4" />
@@ -879,10 +1226,23 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
                   {investigations.map((inv, index) => (
                     <div key={index} className="flex items-center justify-between bg-white border border-gray-200 rounded-lg p-3">
                       <div className="flex-1">
-                        <p className="font-medium text-gray-900">{inv.investigation_name}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-gray-900">{inv.investigation_name}</p>
+                          {(() => {
+                            const dbInv = getInvestigationByName(inv.investigation_name);
+                            return dbInv ? (
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                                dbInv.type === 'lab' ? 'bg-blue-100 text-blue-700' :
+                                dbInv.type === 'imaging' ? 'bg-purple-100 text-purple-700' :
+                                'bg-gray-100 text-gray-700'
+                              }`}>{dbInv.abbreviation}</span>
+                            ) : null;
+                          })()}
+                        </div>
                         <p className="text-sm text-gray-600">
                           {inv.investigation_type} • {inv.frequency} • Repeat: {inv.repeat_count}x
                           {inv.target_value && ` • Target: ${inv.target_value}`}
+                          {inv.target_range && ` • Range: ${inv.target_range}`}
                         </p>
                       </div>
                       <button
