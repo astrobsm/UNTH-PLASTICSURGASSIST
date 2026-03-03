@@ -35,7 +35,9 @@ import {
   Bug,
   Armchair,
   Presentation,
-  Pill
+  Pill,
+  Shield,
+  PhoneCall
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import SyncStatusIndicator from './SyncStatusIndicator';
@@ -68,6 +70,8 @@ const navigation = [
   { name: 'Labs', href: '/labs', icon: FlaskConical },
   { name: 'Prescriptions', href: '/prescriptions', icon: Pill },
   { name: 'Patient Education', href: '/patient-education', icon: BookOpenCheck },
+  { name: 'Call Duty Roster', href: '/call-duty', icon: PhoneCall },
+  { name: 'Clinic Duties', href: '/clinic-duties', icon: Shield },
   { name: 'Shopping List', href: '/shopping-list', icon: ShoppingCart },
   { name: 'Chat', href: '/chat', icon: MessageSquare },
   { name: 'Video Conference', href: '/conference', icon: Video },
