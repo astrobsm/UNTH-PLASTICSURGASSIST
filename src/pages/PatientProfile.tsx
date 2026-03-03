@@ -14,6 +14,7 @@ import { NutritionalRiskAssessmentForm } from '../components/riskAssessments/Nut
 import { ProgressNoteModal } from '../components/ProgressNoteModal';
 import { PrescriptionModal } from '../components/PrescriptionModal';
 import { PatientActivityTimeline } from '../components/PatientActivityTimeline';
+import { ComprehensiveClinicalTimeline } from '../components/ComprehensiveClinicalTimeline';
 import { medicalTeamService, TeamMember } from '../services/medicalTeamService';
 import { logPatientAccess } from '../services/auditLoggingService';
 import { useAuthStore } from '../store/authStore';
@@ -134,6 +135,7 @@ export const PatientProfile: React.FC = () => {
 
   const tabs = [
     { id: 'summary', name: 'Summary' },
+    { id: 'clinical-timeline', name: 'Clinical Timeline' },
     { id: 'risk-assessment', name: 'Risk Assessment' },
     { id: 'transfer', name: 'Transfer' },
     { id: 'progress', name: 'Progress' },
@@ -146,6 +148,14 @@ export const PatientProfile: React.FC = () => {
     switch (activeTab) {
       case 'summary':
         return <PatientSummaryView patientId={id!} />;
+      
+      case 'clinical-timeline':
+        return (
+          <ComprehensiveClinicalTimeline
+            patientId={id!}
+            hospitalNumber={patient?.hospital_number || id!}
+          />
+        );
       
       case 'risk-assessment':
         return <RiskAssessmentView patientId={id!} hospitalNumber={patient?.hospital_number || id!} />;
