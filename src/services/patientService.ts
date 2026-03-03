@@ -26,7 +26,9 @@ function normalizeArrayField(value: any): string[] {
 }
 
 /**
- * Normalize patient data to ensure arrays are always arrays and computed fields exist
+ * Normalize patient data to ensure arrays are always arrays and computed fields exist.
+ * Handles all field name variants: snake_case, camelCase, and different naming conventions
+ * between frontend (dob/sex), registration form (date_of_birth/sex), and server (date_of_birth/gender).
  */
 function normalizePatientData(patient: any) {
   if (!patient) return patient;
@@ -37,8 +39,17 @@ function normalizePatientData(patient: any) {
   const fullName = patient.full_name || patient.fullName || `${firstName} ${lastName}`.trim() || 'Unknown';
   
   // Normalize dob / date_of_birth - ensure both fields are populated
-  const dob = patient.dob || patient.date_of_birth || '';
-  const dateOfBirth = patient.date_of_birth || patient.dob || '';
+  // Check all possible field name variants
+  const rawDob = patient.dob || patient.date_of_birth || patient.dateOfBirth || '';
+  
+  // If the dob is a Date object, convert to ISO date string (YYYY-MM-DD)
+  const dob = rawDob instanceof Date 
+    ? rawDob.toISOString().split('T')[0] 
+    : (typeof rawDob === 'string' && rawDob.includes('T') ? rawDob.split('T')[0] : rawDob);
+
+  // Normalize sex/gender - handle all variants
+  const sex = patient.sex || patient.gender || '';
+  const gender = patient.gender || patient.sex || '';
 
   return {
     ...patient,
@@ -46,12 +57,12 @@ function normalizePatientData(patient: any) {
     first_name: firstName,
     last_name: lastName,
     hospital_number: patient.hospital_number || patient.hospitalNumber || '',
-    gender: patient.gender || patient.sex || '',
-    sex: patient.sex || patient.gender || '',
+    gender: gender,
+    sex: sex,
     dob: dob,
-    date_of_birth: dateOfBirth,
+    date_of_birth: dob, // Use the same normalized value for both
     allergies: normalizeArrayField(patient.allergies),
-    comorbidities: normalizeArrayField(patient.comorbidities)
+    comorbidities: normalizeArrayField(patient.comorbidities || patient.chronic_conditions)
   };
 }
 
@@ -85,8 +96,20 @@ class PatientService {
         await db.patients.bulkPut(normalizedPatients);
         console.log(`✅ Synced ${patients.length} patients from server`);
       }
+
+      // Also include local-only patients (not yet synced to server)
+      const localPatients = await db.patients
+        .filter(p => !p.deleted && !p.synced)
+        .toArray();
       
-      return patients.map(normalizePatientData);
+      const serverNormalized = patients.map(normalizePatientData);
+      const localNormalized = localPatients.map(normalizePatientData);
+      
+      // Merge: server patients + local-only patients (avoid duplicates by id)
+      const serverIds = new Set(serverNormalized.map((p: any) => String(p.id)));
+      const uniqueLocalPatients = localNormalized.filter((p: any) => !serverIds.has(String(p.id)));
+      
+      return [...serverNormalized, ...uniqueLocalPatients];
     } catch (error) {
       console.error('Error fetching patients from API:', error);
       
@@ -222,12 +245,19 @@ class PatientService {
    */
   async updatePatient(id: string | number, patientData: any) {
     try {
+      // Normalize field names before sending (ensure server-compatible names)
+      const normalizedData = {
+        ...patientData,
+        date_of_birth: patientData.date_of_birth || patientData.dob || patientData.dateOfBirth || '',
+        gender: patientData.gender || patientData.sex || '',
+      };
+      
       // Update via API first
-      const updatedPatient = await apiClient.updatePatient(String(id), patientData);
+      const updatedPatient = await apiClient.updatePatient(String(id), normalizedData);
       
       // Update local cache
       if (updatedPatient) {
-        await db.patients.put({ ...updatedPatient, synced: true });
+        await db.patients.put(normalizePatientData({ ...updatedPatient, synced: true }));
       }
       
       return updatedPatient;
@@ -236,16 +266,19 @@ class PatientService {
       
       // Update IndexedDB only (will sync later)
       const localId = typeof id === 'string' ? (id.includes('-') ? id : parseInt(id, 10)) : Number(id);
-      await db.patients.update(localId, { 
-        ...patientData, 
-        synced: false, 
-        updated_at: new Date() 
+      const normalizedUpdate = normalizePatientData({
+        ...patientData,
+        date_of_birth: patientData.date_of_birth || patientData.dob || patientData.dateOfBirth || '',
+        gender: patientData.gender || patientData.sex || '',
+        synced: false,
+        updated_at: new Date()
       });
+      await db.patients.update(localId, normalizedUpdate);
       
       // Queue for sync when online
-      await syncService.queueAction('update', 'patients', localId as number, patientData);
+      await syncService.queueAction('update', 'patients', localId as number, normalizedUpdate);
       
-      return { ...patientData, id, synced: false };
+      return { ...normalizedUpdate, id, synced: false };
     }
   }
 

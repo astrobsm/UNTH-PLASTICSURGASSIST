@@ -231,10 +231,16 @@ export const PatientProfile: React.FC = () => {
                   </h1>
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs sm:text-sm text-gray-500">
                     <span>#{patient.hospital_number}</span>
-                    <span className="hidden sm:inline"></span>
-                    <span>{calculateAge(patient.dob || patient.date_of_birth) ?? 'N/A'}y, {patient.sex || patient.gender}</span>
-                    <span className="hidden sm:inline"></span>
-                    <span className="hidden sm:inline">{patient.phone}</span>
+                    <span className="hidden sm:inline">•</span>
+                    <span>
+                      {(() => {
+                        const age = calculateAge(patient.dob || patient.date_of_birth);
+                        return age !== null ? `${age}y` : 'Age N/A';
+                      })()}
+                      , {(patient.sex || patient.gender || 'N/A').charAt(0).toUpperCase() + (patient.sex || patient.gender || 'N/A').slice(1)}
+                    </span>
+                    <span className="hidden sm:inline">•</span>
+                    <span className="hidden sm:inline">{patient.phone || 'No phone'}</span>
                   </div>
                 </div>
               </div>
@@ -273,11 +279,38 @@ export const PatientProfile: React.FC = () => {
               <div className="p-4 space-y-3">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">Date of Birth:</span>
-                  <span className="font-medium">{patient.dob || patient.date_of_birth || 'N/A'}</span>
+                  <span className="font-medium">
+                    {(() => {
+                      const dob = patient.dob || patient.date_of_birth;
+                      if (!dob) return 'Not recorded';
+                      try {
+                        return new Date(dob).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+                      } catch {
+                        return dob;
+                      }
+                    })()}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Age:</span>
+                  <span className="font-medium">
+                    {(() => {
+                      const age = calculateAge(patient.dob || patient.date_of_birth);
+                      return age !== null ? `${age} years` : 'Not recorded';
+                    })()}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Sex:</span>
+                  <span className="font-medium capitalize">{patient.sex || patient.gender || 'Not recorded'}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Phone:</span>
+                  <span className="font-medium">{patient.phone || 'Not recorded'}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">Address:</span>
-                  <span className="font-medium text-right">{patient.address}</span>
+                  <span className="font-medium text-right">{patient.address || 'Not recorded'}</span>
                 </div>
                 {patient.allergies && Array.isArray(patient.allergies) && patient.allergies.length > 0 && (
                   <div>
@@ -472,20 +505,20 @@ export const PatientProfile: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Date of Birth</label>
                 <input
                   type="date"
-                  value={editFormData.dob || ''}
-                  onChange={(e) => setEditFormData({ ...editFormData, dob: e.target.value })}
+                  value={editFormData.dob || editFormData.date_of_birth || ''}
+                  onChange={(e) => setEditFormData({ ...editFormData, dob: e.target.value, date_of_birth: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
                 />
                 {(editFormData.dob || editFormData.date_of_birth) && (
-                  <p className="text-sm text-gray-500 mt-1">Age: {calculateAge(editFormData.dob || editFormData.date_of_birth) ?? 'N/A'} years</p>
+                  <p className="text-sm text-green-600 font-medium mt-1">Age: {calculateAge(editFormData.dob || editFormData.date_of_birth) ?? 'N/A'} years</p>
                 )}
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Sex</label>
                   <select
-                    value={editFormData.sex || 'Male'}
-                    onChange={(e) => setEditFormData({ ...editFormData, sex: e.target.value })}
+                    value={editFormData.sex || editFormData.gender || 'Male'}
+                    onChange={(e) => setEditFormData({ ...editFormData, sex: e.target.value, gender: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
                   >
                     <option value="Male">Male</option>

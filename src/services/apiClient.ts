@@ -335,8 +335,8 @@ class ApiClient {
 
   async getPatient(id: string) {
     try {
-      // Use /patients endpoint for individual patient, not /sync/patients
-      const data = await this.request(`/patients/${id}`);
+      // Use /sync/patients endpoint to match server routes
+      const data = await this.request(`/sync/patients/${id}`);
       return data?.patient || data;
     } catch (error) {
       console.error('Error fetching patient:', error);
@@ -345,7 +345,7 @@ class ApiClient {
   }
 
   async createPatient(patientData: any) {
-    const data = await this.request('/patients', {
+    const data = await this.request('/sync/patients', {
       method: 'POST',
       body: JSON.stringify(patientData)
     });
@@ -353,7 +353,7 @@ class ApiClient {
   }
 
   async updatePatient(id: string, patientData: any) {
-    const data = await this.request(`/patients/${id}`, {
+    const data = await this.request(`/sync/patients/${id}`, {
       method: 'PUT',
       body: JSON.stringify(patientData)
     });
@@ -361,7 +361,7 @@ class ApiClient {
   }
 
   async deletePatient(id: string) {
-    return this.request(`/patients/${id}`, {
+    return this.request(`/sync/patients/${id}`, {
       method: 'DELETE'
     });
   }

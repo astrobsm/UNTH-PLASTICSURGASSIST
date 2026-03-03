@@ -815,7 +815,9 @@ Please review patient file for complete clinical details or retry AI summary gen
         last_name: registrationData.last_name,
         other_names: registrationData.middle_name || '',
         date_of_birth: registrationData.date_of_birth,
+        dob: registrationData.date_of_birth, // Keep both field names for frontend compatibility
         gender: registrationData.sex === 'male' ? 'Male' : 'Female',
+        sex: registrationData.sex === 'male' ? 'Male' : 'Female', // Keep both field names
         phone: registrationData.phone || '',
         email: registrationData.email || '',
         address: registrationData.address || '',
