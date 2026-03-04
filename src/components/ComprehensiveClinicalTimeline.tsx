@@ -376,63 +376,110 @@ async function fetchInvestigationsAndResults(patientId: string): Promise<Timelin
   return events;
 }
 
+// Helper: convert a prescription batch record (with nested prescriptions array)
+// OR a flat single-prescription record into individual TimelineEvents.
+function prescriptionRecordToEvents(record: any, idPrefix: string): TimelineEvent[] {
+  const events: TimelineEvent[] = [];
+  const recordDate = record.prescribed_date || record.date || record.created_at || record.createdAt;
+  const recordAuthor = record.prescribed_by || record.prescriber || record.createdBy || record.prescriber_role;
+
+  // Check if this is a batch record containing a prescriptions array
+  const items = Array.isArray(record.prescriptions) ? record.prescriptions : null;
+
+  if (items && items.length > 0) {
+    // Batch format: explode each item into its own timeline event
+    for (let i = 0; i < items.length; i++) {
+      const rx = items[i];
+      // PrescriptionModal items: { medication, genericName, dosage, route, frequency, duration, instructions, indication }
+      // PrescriptionsPage items: { drugName, dose, route, frequency, duration, instructions, prescribedBy, prescribedAt }
+      const medName = rx.medication || rx.drugName || rx.medication_name || rx.genericName || 'Medication';
+      const dosage = rx.dosage || rx.dose || '';
+      const route = rx.route || '';
+      const frequency = rx.frequency || '';
+      const duration = rx.duration || '';
+      const instructions = rx.instructions || rx.special_instructions || '';
+      const indication = rx.indication || '';
+      const rxAuthor = rx.prescribedBy || recordAuthor;
+      const rxDate = rx.prescribedAt || recordDate;
+
+      events.push({
+        id: `${idPrefix}_${record.id || record.created_at}_${i}`,
+        type: 'prescription',
+        date: safeDate(rxDate),
+        title: `Prescription — ${medName}`,
+        subtitle: dosage ? `${dosage} ${frequency}`.trim() : undefined,
+        description: [medName, dosage, route, frequency, duration ? `for ${duration}` : ''].filter(Boolean).join(' ').trim(),
+        details: {
+          medication: medName,
+          dosage,
+          frequency,
+          route,
+          duration,
+          instructions,
+          indication,
+          status: rx.status || record.status || 'active',
+        },
+        author: rxAuthor,
+        status: rx.status || record.status || 'active',
+        tags: [rx.status || record.status || 'active'],
+      });
+    }
+  } else {
+    // Flat single-prescription record (legacy or API format)
+    const medName = record.medication_name || record.medication || 'Medication';
+    const dosage = record.dosage || record.dose || '';
+    events.push({
+      id: `${idPrefix}_${record.id || record.created_at}`,
+      type: 'prescription',
+      date: safeDate(recordDate),
+      title: `Prescription — ${medName}`,
+      subtitle: dosage ? `${dosage} ${record.frequency || ''}`.trim() : undefined,
+      description: [medName, dosage, record.route || '', record.frequency || '', record.duration ? `for ${record.duration}` : ''].filter(Boolean).join(' ').trim(),
+      details: {
+        medication: medName,
+        dosage,
+        frequency: record.frequency,
+        route: record.route,
+        duration: record.duration,
+        instructions: record.instructions || record.special_instructions,
+        status: record.status || 'active',
+      },
+      author: recordAuthor,
+      status: record.status || 'active',
+      tags: [record.status || 'active'],
+    });
+  }
+
+  return events;
+}
+
 async function fetchPrescriptions(patientId: string): Promise<TimelineEvent[]> {
   const events: TimelineEvent[] = [];
+
+  // Try API first
   try {
     const prescriptions = await apiClient.getPrescriptions(patientId);
     if (Array.isArray(prescriptions)) {
       for (const p of prescriptions) {
-        events.push({
-          id: `rx_${p.id || p.created_at}`,
-          type: 'prescription',
-          date: safeDate(p.prescribed_date || p.date || p.created_at),
-          title: `Prescription — ${p.medication_name || p.medication || 'Medication'}`,
-          subtitle: p.dosage ? `${p.dosage} ${p.frequency || ''}`.trim() : undefined,
-          description: `${p.medication_name || p.medication || 'N/A'} ${p.dosage || ''} ${p.route || ''} ${p.frequency || ''} — ${p.duration || ''}`.trim(),
-          details: {
-            medication: p.medication_name || p.medication,
-            dosage: p.dosage,
-            frequency: p.frequency,
-            route: p.route,
-            duration: p.duration,
-            instructions: p.instructions || p.special_instructions,
-            status: p.status,
-          },
-          author: p.prescribed_by || p.prescriber,
-          status: p.status,
-          tags: [p.status || 'active'],
-        });
+        events.push(...prescriptionRecordToEvents(p, 'rx'));
       }
     }
-  } catch { /* ignore */ }
+  } catch { /* ignore — will use local fallback */ }
 
-  // Fallback local
+  // Fallback: local IndexedDB
   try {
     const local = await db.prescriptions
       .filter((p: any) => String(p.patient_id) === String(patientId))
       .toArray();
     const apiIds = new Set(events.map(e => e.id));
     for (const p of local) {
-      const eid = `rx_${p.id}`;
-      if (apiIds.has(eid)) continue;
-      events.push({
-        id: eid,
-        type: 'prescription',
-        date: safeDate(p.prescribed_date || p.created_at),
-        title: `Prescription — ${p.medication_name || 'Medication'}`,
-        subtitle: p.dosage ? `${p.dosage} ${p.frequency || ''}`.trim() : undefined,
-        description: `${p.medication_name || 'N/A'} ${p.dosage || ''} ${p.route || ''} ${p.frequency || ''}`.trim(),
-        details: {
-          medication: p.medication_name,
-          dosage: p.dosage,
-          frequency: p.frequency,
-          route: p.route,
-          status: p.status,
-        },
-        author: p.prescribed_by,
-        status: p.status,
-        tags: [p.status || 'active'],
-      });
+      const newEvents = prescriptionRecordToEvents(p, 'rx');
+      for (const ev of newEvents) {
+        if (!apiIds.has(ev.id)) {
+          events.push(ev);
+          apiIds.add(ev.id);
+        }
+      }
     }
   } catch { /* ignore */ }
 
@@ -1308,6 +1355,7 @@ function renderEventDetails(event: TimelineEvent): React.ReactNode {
           <DetailRow label="Frequency" value={d.frequency} />
           <DetailRow label="Route" value={d.route} />
           <DetailRow label="Duration" value={d.duration} />
+          {d.indication && <DetailRow label="Indication" value={d.indication} />}
           <DetailRow label="Status" value={d.status} />
           {d.instructions && (
             <div className="col-span-2">
