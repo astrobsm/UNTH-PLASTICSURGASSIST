@@ -870,7 +870,7 @@ Please review patient file for complete clinical details or retry AI summary gen
       
       // Save to IndexedDB (either synced or pending sync)
       try {
-        await db.patients.put(fullPatientRecord);
+        await db.patients.put(fullPatientRecord as any);
       } catch (dbError) {
         console.error('Failed to save to IndexedDB:', dbError);
         throw new Error('Patient registration failed: Unable to save patient data');
@@ -902,37 +902,37 @@ Please review patient file for complete clinical details or retry AI summary gen
     try {
       // Build comprehensive patient data from registration
       const patientData = {
-        name: `${registrationData.firstName} ${registrationData.lastName}`,
-        age: registrationData.dateOfBirth ? this.calculateAge(new Date(registrationData.dateOfBirth)) : 'Not provided',
+        name: `${registrationData.first_name} ${registrationData.last_name}`,
+        age: registrationData.date_of_birth ? this.calculateAge(new Date(registrationData.date_of_birth)) : 'Not provided',
         sex: registrationData.sex,
-        hospital_number: registrationData.hospitalNumber,
-        admission_date: registrationData.admissionDate,
-        admission_type: registrationData.admissionType,
-        ward: registrationData.ward,
-        consultant: registrationData.consultant,
-        chief_complaint: registrationData.chiefComplaint,
-        presenting_complaint: registrationData.presentingComplaint,
-        history_presenting_complaint: registrationData.historyPresentingComplaint,
-        past_medical_history: registrationData.pastMedicalHistory,
-        past_surgical_history: registrationData.pastSurgicalHistory,
+        hospital_number: registrationData.hospital_number,
+        admission_date: registrationData.admission_date,
+        admission_type: registrationData.admission_type,
+        ward: registrationData.ward_id,
+        consultant: registrationData.consultant_in_charge,
+        chief_complaint: (registrationData as any).chief_complaint,
+        presenting_complaint: (registrationData as any).presenting_complaint,
+        history_presenting_complaint: (registrationData as any).history_presenting_complaint,
+        past_medical_history: registrationData.medical_history,
+        past_surgical_history: registrationData.surgical_history,
         allergies: registrationData.allergies,
-        current_medications: registrationData.currentMedications,
-        general_examination: registrationData.generalExamination,
-        systemic_examination: registrationData.systemicExamination,
-        local_examination: registrationData.localExamination,
-        vital_signs: registrationData.vitalSigns,
-        investigation_results: registrationData.investigationResults,
-        primary_diagnosis: registrationData.primaryDiagnosis,
-        differential_diagnoses: registrationData.differentialDiagnoses,
-        treatment_plan: registrationData.treatmentPlan,
-        current_problems: registrationData.currentProblems,
-        investigations_pending: registrationData.investigationsPending,
-        management_plan: registrationData.managementPlan
+        current_medications: registrationData.drug_history,
+        general_examination: (registrationData as any).general_examination,
+        systemic_examination: (registrationData as any).systemic_examination,
+        local_examination: (registrationData as any).local_examination,
+        vital_signs: (registrationData as any).vital_signs,
+        investigation_results: (registrationData as any).investigation_results,
+        primary_diagnosis: (registrationData as any).primary_diagnosis,
+        differential_diagnoses: (registrationData as any).differential_diagnoses,
+        treatment_plan: (registrationData as any).treatment_plan,
+        current_problems: (registrationData as any).current_problems,
+        investigations_pending: (registrationData as any).investigations_pending,
+        management_plan: (registrationData as any).management_plan
       };
 
       // Generate AI-powered admission summary
       await this.generatePatientSummary(patientId, 'admission', 
-        `Patient admitted to ${registrationData.ward} ward under ${registrationData.consultant}`);
+        `Patient admitted to ${registrationData.ward_id || 'unknown'} ward under ${registrationData.consultant_in_charge}`);
     } catch (error) {
       console.error('Error generating admission summary:', error);
       // Don't throw - admission can proceed without AI summary

@@ -27,7 +27,7 @@ export const PatientProfile: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editFormData, setEditFormData] = useState<Partial<Patient>>({});
-  const [activeTab, setActiveTab] = useState('summary');
+  const [activeTab, setActiveTab] = useState('timeline');
   const [upcomingPlans, setUpcomingPlans] = useState<any[]>([]);
   const [activeRiskAssessment, setActiveRiskAssessment] = useState<'summary' | 'dvt' | 'pressure' | 'nutrition'>('summary');
   const [showProgressNoteModal, setShowProgressNoteModal] = useState(false);
@@ -134,8 +134,8 @@ export const PatientProfile: React.FC = () => {
   }
 
   const tabs = [
+    { id: 'timeline', name: 'Timeline' },
     { id: 'summary', name: 'Summary' },
-    { id: 'clinical-timeline', name: 'Clinical Timeline' },
     { id: 'risk-assessment', name: 'Risk Assessment' },
     { id: 'transfer', name: 'Transfer' },
     { id: 'progress', name: 'Progress' },
@@ -146,16 +146,16 @@ export const PatientProfile: React.FC = () => {
 
   const renderTabContent = () => {
     switch (activeTab) {
-      case 'summary':
-        return <PatientSummaryView patientId={id!} />;
-      
-      case 'clinical-timeline':
+      case 'timeline':
         return (
           <ComprehensiveClinicalTimeline
             patientId={id!}
             hospitalNumber={patient?.hospital_number || id!}
           />
         );
+      
+      case 'summary':
+        return <PatientSummaryView patientId={id!} />;
       
       case 'risk-assessment':
         return <RiskAssessmentView patientId={id!} hospitalNumber={patient?.hospital_number || id!} />;
@@ -231,15 +231,15 @@ export const PatientProfile: React.FC = () => {
                   </h1>
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs sm:text-sm text-gray-500">
                     <span>#{patient.hospital_number}</span>
-                    <span className="hidden sm:inline">•</span>
+                    <span className="hidden sm:inline">&bull;</span>
                     <span>
                       {(() => {
                         const age = calculateAge(patient.dob || patient.date_of_birth);
                         return age !== null ? `${age}y` : 'Age N/A';
                       })()}
-                      , {(patient.sex || patient.gender || 'N/A').charAt(0).toUpperCase() + (patient.sex || patient.gender || 'N/A').slice(1)}
+                      , {patient.sex || patient.gender || 'Sex N/A'}
                     </span>
-                    <span className="hidden sm:inline">•</span>
+                    <span className="hidden sm:inline">&bull;</span>
                     <span className="hidden sm:inline">{patient.phone || 'No phone'}</span>
                   </div>
                 </div>
@@ -277,12 +277,21 @@ export const PatientProfile: React.FC = () => {
                 <h3 className="text-lg font-semibold text-gray-900">Patient Details</h3>
               </div>
               <div className="p-4 space-y-3">
+                {/* Missing data alert */}
+                {(!patient.dob && !patient.date_of_birth) || (!patient.sex && !patient.gender) ? (
+                  <button
+                    onClick={() => { setEditFormData({ ...patient }); setShowEditModal(true); }}
+                    className="w-full text-left p-2 bg-amber-50 border border-amber-200 rounded-md text-xs text-amber-800 hover:bg-amber-100 transition-colors"
+                  >
+                    ⚠️ Some patient details are missing. <span className="underline font-medium">Click to complete</span>
+                  </button>
+                ) : null}
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">Date of Birth:</span>
                   <span className="font-medium">
                     {(() => {
                       const dob = patient.dob || patient.date_of_birth;
-                      if (!dob) return 'Not recorded';
+                      if (!dob) return <span className="text-amber-600 italic">Not recorded</span>;
                       try {
                         return new Date(dob).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
                       } catch {
@@ -296,21 +305,21 @@ export const PatientProfile: React.FC = () => {
                   <span className="font-medium">
                     {(() => {
                       const age = calculateAge(patient.dob || patient.date_of_birth);
-                      return age !== null ? `${age} years` : 'Not recorded';
+                      return age !== null ? `${age} years` : <span className="text-amber-600 italic">Not recorded</span>;
                     })()}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">Sex:</span>
-                  <span className="font-medium capitalize">{patient.sex || patient.gender || 'Not recorded'}</span>
+                  <span className="font-medium capitalize">{patient.sex || patient.gender || <span className="text-amber-600 italic">Not recorded</span>}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">Phone:</span>
-                  <span className="font-medium">{patient.phone || 'Not recorded'}</span>
+                  <span className="font-medium">{patient.phone || <span className="text-amber-600 italic">Not recorded</span>}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">Address:</span>
-                  <span className="font-medium text-right">{patient.address || 'Not recorded'}</span>
+                  <span className="font-medium text-right">{patient.address || <span className="text-amber-600 italic">Not recorded</span>}</span>
                 </div>
                 {patient.allergies && Array.isArray(patient.allergies) && patient.allergies.length > 0 && (
                   <div>
@@ -517,10 +526,11 @@ export const PatientProfile: React.FC = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Sex</label>
                   <select
-                    value={editFormData.sex || editFormData.gender || 'Male'}
+                    value={editFormData.sex || editFormData.gender || ''}
                     onChange={(e) => setEditFormData({ ...editFormData, sex: e.target.value, gender: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
                   >
+                    <option value="">Select...</option>
                     <option value="Male">Male</option>
                     <option value="Female">Female</option>
                   </select>

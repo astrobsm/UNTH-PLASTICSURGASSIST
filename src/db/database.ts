@@ -53,15 +53,41 @@ export interface Patient {
   first_name: string;
   last_name: string;
   dob: string;
-  sex: 'male' | 'female' | 'other';
+  date_of_birth?: string; // Alias for dob (server uses this name)
+  sex: string;
+  gender?: string; // Alias for sex (server uses this name)
   phone?: string;
+  email?: string;
   address?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  other_names?: string;
+  full_name?: string;
   allergies?: string[];
   comorbidities?: string[];
+  blood_group?: string;
+  genotype?: string;
+  emergency_contact_name?: string;
+  emergency_contact_phone?: string;
+  emergency_contact_relationship?: string;
+  chronic_conditions?: string;
+  current_medications?: string;
+  // UNTH extras from registration
+  consultant_in_charge?: string;
+  resident_in_charge?: string;
+  ward_id?: string;
+  bed_number?: string;
+  patient_type?: string;
+  admission_type?: string;
+  referring_hospital?: string;
+  registration_date?: Date;
+  admission_date?: Date;
   created_at: Date;
   updated_at: Date;
   synced: boolean;
   deleted?: boolean;
+  [key: string]: any; // Allow additional dynamic fields from server
 }
 
 export interface TreatmentPlan {

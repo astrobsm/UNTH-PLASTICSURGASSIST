@@ -83,7 +83,7 @@ class PatientAssignmentService {
     patientId: string,
     patientName: string,
     hospitalNumber: string,
-    admissionType?: 'elective' | 'emergency',
+    admissionType?: string,
     specialization?: string
   ): Promise<PatientTeamAssignment | null> {
     try {

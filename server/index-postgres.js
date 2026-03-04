@@ -686,24 +686,41 @@ app.put('/api/sync/patients/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
     const patient = req.body;
     
+    // Use COALESCE to only update fields that are actually provided (non-null/non-empty)
+    // This prevents partial updates from wiping out existing data
     const result = await pool.query(`
       UPDATE patients SET
-        hospital_number = $1, first_name = $2, last_name = $3, other_names = $4,
-        date_of_birth = $5, gender = $6, phone = $7, email = $8,
-        address = $9, city = $10, state = $11, country = $12,
-        emergency_contact_name = $13, emergency_contact_phone = $14,
-        emergency_contact_relationship = $15, blood_group = $16, genotype = $17,
-        allergies = $18, chronic_conditions = $19, current_medications = $20,
+        hospital_number = COALESCE(NULLIF($1, ''), hospital_number),
+        first_name = COALESCE(NULLIF($2, ''), first_name),
+        last_name = COALESCE(NULLIF($3, ''), last_name),
+        other_names = COALESCE(NULLIF($4, ''), other_names),
+        date_of_birth = COALESCE(NULLIF($5, '')::date, date_of_birth),
+        gender = COALESCE(NULLIF($6, ''), gender),
+        phone = COALESCE(NULLIF($7, ''), phone),
+        email = COALESCE(NULLIF($8, ''), email),
+        address = COALESCE(NULLIF($9, ''), address),
+        city = COALESCE(NULLIF($10, ''), city),
+        state = COALESCE(NULLIF($11, ''), state),
+        country = COALESCE(NULLIF($12, ''), country),
+        emergency_contact_name = COALESCE(NULLIF($13, ''), emergency_contact_name),
+        emergency_contact_phone = COALESCE(NULLIF($14, ''), emergency_contact_phone),
+        emergency_contact_relationship = COALESCE(NULLIF($15, ''), emergency_contact_relationship),
+        blood_group = COALESCE(NULLIF($16, ''), blood_group),
+        genotype = COALESCE(NULLIF($17, ''), genotype),
+        allergies = COALESCE(NULLIF($18, ''), allergies),
+        chronic_conditions = COALESCE(NULLIF($19, ''), chronic_conditions),
+        current_medications = COALESCE(NULLIF($20, ''), current_medications),
         updated_by = $21, synced = true
       WHERE id = $22 AND deleted = false
       RETURNING *
     `, [
-      patient.hospital_number, patient.first_name, patient.last_name, patient.other_names,
-      patient.date_of_birth, patient.gender, patient.phone, patient.email,
-      patient.address, patient.city, patient.state, patient.country,
-      patient.emergency_contact_name, patient.emergency_contact_phone,
-      patient.emergency_contact_relationship, patient.blood_group, patient.genotype,
-      patient.allergies, patient.chronic_conditions, patient.current_medications,
+      patient.hospital_number || '', patient.first_name || '', patient.last_name || '', patient.other_names || '',
+      patient.date_of_birth || patient.dob || '', patient.gender || patient.sex || '',
+      patient.phone || '', patient.email || '',
+      patient.address || '', patient.city || '', patient.state || '', patient.country || '',
+      patient.emergency_contact_name || '', patient.emergency_contact_phone || '',
+      patient.emergency_contact_relationship || '', patient.blood_group || '', patient.genotype || '',
+      patient.allergies || '', patient.chronic_conditions || '', patient.current_medications || '',
       req.user.id, id
     ]);
     

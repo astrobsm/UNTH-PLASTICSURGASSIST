@@ -47,9 +47,12 @@ function normalizePatientData(patient: any) {
     ? rawDob.toISOString().split('T')[0] 
     : (typeof rawDob === 'string' && rawDob.includes('T') ? rawDob.split('T')[0] : rawDob);
 
-  // Normalize sex/gender - handle all variants
-  const sex = patient.sex || patient.gender || '';
-  const gender = patient.gender || patient.sex || '';
+  // Normalize sex/gender - handle all variants and capitalize
+  const rawSex = patient.sex || patient.gender || '';
+  const sex = rawSex ? rawSex.charAt(0).toUpperCase() + rawSex.slice(1).toLowerCase() : '';
+  
+  // Normalize address
+  const address = patient.address || '';
 
   return {
     ...patient,
@@ -57,13 +60,45 @@ function normalizePatientData(patient: any) {
     first_name: firstName,
     last_name: lastName,
     hospital_number: patient.hospital_number || patient.hospitalNumber || '',
-    gender: gender,
+    gender: sex,
     sex: sex,
     dob: dob,
     date_of_birth: dob, // Use the same normalized value for both
+    address: address,
+    phone: patient.phone || '',
     allergies: normalizeArrayField(patient.allergies),
     comorbidities: normalizeArrayField(patient.comorbidities || patient.chronic_conditions)
   };
+}
+
+/**
+ * Merge two patient records, keeping the most complete data from each.
+ * Non-empty values are preferred over empty/null/undefined values.
+ * The 'primary' record takes priority when both have values.
+ */
+function mergePatientData(primary: any, secondary: any): any {
+  if (!secondary) return primary;
+  if (!primary) return secondary;
+  
+  const merged = { ...secondary, ...primary };
+  
+  // For each key in secondary, if primary's value is empty/null/undefined, use secondary's
+  for (const key of Object.keys(secondary)) {
+    const primaryVal = primary[key];
+    const secondaryVal = secondary[key];
+    
+    // Skip non-data fields
+    if (['synced', 'deleted', 'updated_at', 'created_at'].includes(key)) continue;
+    
+    // If primary value is empty/null/undefined, use secondary value
+    if (primaryVal === null || primaryVal === undefined || primaryVal === '' || primaryVal === 'N/A') {
+      if (secondaryVal !== null && secondaryVal !== undefined && secondaryVal !== '' && secondaryVal !== 'N/A') {
+        merged[key] = secondaryVal;
+      }
+    }
+  }
+  
+  return merged;
 }
 
 class PatientService {
@@ -87,29 +122,48 @@ class PatientService {
         return this.getLocalPatients();
       }
       
-      // Update local IndexedDB for offline access
+      // Get all existing local patients for merge
+      const allLocalPatients = await db.patients.toArray();
+      const localPatientsMap = new Map<string, any>();
+      for (const lp of allLocalPatients) {
+        if (lp.id) localPatientsMap.set(String(lp.id), lp);
+        if (lp.hospital_number) localPatientsMap.set(lp.hospital_number, lp);
+      }
+
+      // Merge server data with local data (keep best values from both)
       if (patients.length > 0) {
-        const normalizedPatients = patients.map((p: any) => normalizePatientData({
-          ...p,
-          synced: true
-        }));
-        await db.patients.bulkPut(normalizedPatients);
-        console.log(`✅ Synced ${patients.length} patients from server`);
+        const mergedPatients = patients.map((serverPatient: any) => {
+          const localMatch = localPatientsMap.get(String(serverPatient.id)) 
+            || localPatientsMap.get(serverPatient.hospital_number);
+          
+          if (localMatch) {
+            // Merge: server is primary, but keep non-empty local fields
+            return normalizePatientData(mergePatientData(
+              { ...serverPatient, synced: true },
+              localMatch
+            ));
+          }
+          return normalizePatientData({ ...serverPatient, synced: true });
+        });
+        await db.patients.bulkPut(mergedPatients);
+        console.log(`✅ Synced ${patients.length} patients from server (merged with local)`);
       }
 
       // Also include local-only patients (not yet synced to server)
-      const localPatients = await db.patients
-        .filter(p => !p.deleted && !p.synced)
-        .toArray();
+      const localOnly = allLocalPatients.filter(p => 
+        !p.deleted && !p.synced && 
+        !patients.some((sp: any) => String(sp.id) === String(p.id) || sp.hospital_number === p.hospital_number)
+      );
       
-      const serverNormalized = patients.map(normalizePatientData);
-      const localNormalized = localPatients.map(normalizePatientData);
+      const allNormalized = [
+        ...patients.map((p: any) => {
+          const localMatch = localPatientsMap.get(String(p.id)) || localPatientsMap.get(p.hospital_number);
+          return normalizePatientData(localMatch ? mergePatientData({ ...p, synced: true }, localMatch) : p);
+        }),
+        ...localOnly.map(normalizePatientData)
+      ];
       
-      // Merge: server patients + local-only patients (avoid duplicates by id)
-      const serverIds = new Set(serverNormalized.map((p: any) => String(p.id)));
-      const uniqueLocalPatients = localNormalized.filter((p: any) => !serverIds.has(String(p.id)));
-      
-      return [...serverNormalized, ...uniqueLocalPatients];
+      return allNormalized;
     } catch (error) {
       console.error('Error fetching patients from API:', error);
       
@@ -160,40 +214,69 @@ class PatientService {
 
   /**
    * Get a single patient by ID
+   * Merges data from API and local IndexedDB to ensure the most complete record
    */
   async getPatient(id: string | number) {
+    // Always load local data first as baseline
+    const lookupId = typeof id === 'string' 
+      ? (id.includes('-') ? id : (parseInt(id, 10) || id)) 
+      : Number(id);
+    
+    let localPatient: any = null;
     try {
-      // Try API first (only if online)
+      localPatient = await db.patients.get(lookupId);
+      
+      // Also try lookup by hospital_number if direct ID lookup fails
+      if (!localPatient && typeof id === 'string') {
+        const byHospitalNum = await db.patients
+          .where('hospital_number')
+          .equals(id)
+          .first();
+        if (byHospitalNum) localPatient = byHospitalNum;
+      }
+    } catch (dbErr) {
+      console.warn('IndexedDB lookup failed:', dbErr);
+    }
+
+    // Try API if online
+    let apiPatient: any = null;
+    try {
       if (navigator.onLine) {
-        const patient = await apiClient.getPatient(String(id));
-        
-        // Update local cache
-        if (patient) {
-          const normalized = normalizePatientData({ ...patient, synced: true });
-          await db.patients.put(normalized);
-          return normalized;
-        }
-        
-        return patient;
+        apiPatient = await apiClient.getPatient(String(id));
       }
     } catch (error) {
-      // Only log if it's an unexpected error, not a 404/500 or network error
-      // These are common when patient exists locally but not on server
+      // Common when patient exists locally but not on server - silently fall through
       const errorMessage = error instanceof Error ? error.message : String(error);
       if (!errorMessage.includes('404') && !errorMessage.includes('not found') && !errorMessage.includes('500') && !errorMessage.includes('Internal server error')) {
         console.error('Error fetching patient from API:', errorMessage);
       }
     }
-    
-    // Fallback to IndexedDB
-    // Handle both UUID strings and numeric IDs
-    const lookupId = typeof id === 'string' 
-      ? (id.includes('-') ? id : (parseInt(id, 10) || id)) 
-      : Number(id);
-    
-    const localPatient = await db.patients.get(lookupId);
-    
-    return localPatient ? normalizePatientData(localPatient) : localPatient;
+
+    // Merge: prefer local data for fields that might be missing from server
+    let patient: any = null;
+    if (apiPatient && localPatient) {
+      // Merge: API is primary (latest from server), but keep local non-empty fields
+      patient = mergePatientData(apiPatient, localPatient);
+      patient.synced = true;
+    } else if (apiPatient) {
+      patient = { ...apiPatient, synced: true };
+    } else if (localPatient) {
+      patient = localPatient;
+    }
+
+    if (patient) {
+      const normalized = normalizePatientData(patient);
+      // Save merged data back to IndexedDB
+      try {
+        await db.patients.put(normalized);
+      } catch (putErr) {
+        console.warn('Failed to update local patient cache:', putErr);
+      }
+      console.log('📋 Loaded patient:', normalized.hospital_number, '| DOB:', normalized.dob, '| Sex:', normalized.sex);
+      return normalized;
+    }
+
+    return null;
   }
 
   /**
@@ -228,7 +311,7 @@ class PatientService {
       });
       
       // Queue for sync when online
-      await syncService.queueAction('create', 'patients', localId, patientData);
+      await syncService.queueAction('create', 'patients', localId as number, patientData);
       
       // Send notification even for local-only save
       await pushNotificationService.notifyPatientRegistered(
