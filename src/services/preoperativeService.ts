@@ -859,11 +859,26 @@ Date: ${new Date().toLocaleDateString()}
           console.warn('Could not fetch preoperative assessments from server:', e);
         }
       }
-      // Fallback to local
-      const assessment = await db.preoperative_assessments
+      // Fallback to local - try both string and numeric patient_id
+      let assessment = await db.preoperative_assessments
         .where('patient_id')
         .equals(patientId)
         .first();
+      if (!assessment) {
+        const numId = Number(patientId);
+        if (!isNaN(numId)) {
+          assessment = await db.preoperative_assessments
+            .where('patient_id')
+            .equals(numId)
+            .first();
+        }
+      }
+      if (!assessment) {
+        // Last resort: filter scan
+        assessment = await db.preoperative_assessments
+          .filter((a: any) => String(a.patient_id) === String(patientId))
+          .first() || undefined;
+      }
       return assessment || null;
     } catch (error) {
       console.error('Error getting assessment:', error);

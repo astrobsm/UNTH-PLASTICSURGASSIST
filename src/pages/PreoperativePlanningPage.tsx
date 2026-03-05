@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { PreoperativePlanningModule } from '../components/procedures/PreoperativePlanningModule';
 import { patientService } from '../services/patientService';
 import { preoperativeService, PreoperativeAssessment } from '../services/preoperativeService';
+import { useAuthStore } from '../store/authStore';
 import toast from 'react-hot-toast';
 import { ArrowLeft, ClipboardCheck, Users, Search, User, Calendar, Loader2, Eye, Plus, CheckCircle, AlertTriangle, FileText, Download } from 'lucide-react';
 import {
@@ -31,6 +32,7 @@ interface Patient {
 const PreoperativePlanningPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { user } = useAuthStore();
   const patientIdFromUrl = searchParams.get('patientId');
   
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(patientIdFromUrl);
@@ -200,7 +202,7 @@ const PreoperativePlanningPage: React.FC = () => {
         preop_instructions: `Fasting: NPO status - ${data.clinicalAssessment?.npo_status || 'NPO since midnight'}. ` +
           `Medications: ${(data.clinicalAssessment?.currentMedications || []).length > 0 ? data.clinicalAssessment.currentMedications.join(', ') : 'None on current medications'}. ` +
           `Investigations ordered: ${(data.generatedInvestigations || []).map((i: any) => i.name).join(', ') || 'As per protocol'}.`,
-        assessed_by: data.assessedBy || localStorage.getItem('userName') || 'Unknown',
+        assessed_by: data.assessedBy || user?.name || localStorage.getItem('userName') || 'Unknown',
         assessed_at: new Date(),
         updated_at: new Date(),
       };

@@ -615,16 +615,101 @@ async function fetchPreopAssessments(patientId: string): Promise<TimelineEvent[]
   try {
     const a = await preoperativeService.getAssessmentByPatient(patientId);
     if (a) {
+      const d = a as any;
+      
+      // Date: assessed_at is the primary field, fall back to assessment_date or updated_at
+      const assessDate = d.assessed_at || d.assessment_date || d.updated_at || d.created_at;
+      
+      // ASA class: check dedicated field first, then parse from comprehensive_summary
+      let asaClass = d.asa_class;
+      if (!asaClass && d.comprehensive_summary) {
+        const asaMatch = d.comprehensive_summary.match(/ASA\s*(?:Score|Class)[:\s]*(\d)/i);
+        if (asaMatch) asaClass = asaMatch[1];
+      }
+      
+      // Fitness for surgery
+      const fitness = d.fitness_for_surgery || d.fitness_status;
+      
+      // Airway assessment: it's an object, summarize it if present
+      let airwaySummary = 'Not assessed';
+      if (d.airway_assessment && typeof d.airway_assessment === 'object') {
+        const parts = Object.entries(d.airway_assessment)
+          .filter(([_, v]) => v !== null && v !== undefined && v !== '' && v !== false)
+          .map(([k, v]) => `${k.replace(/_/g, ' ')}: ${v}`);
+        airwaySummary = parts.length > 0 ? parts.join(', ') : 'Normal';
+      } else if (d.airway_assessment && typeof d.airway_assessment === 'string') {
+        airwaySummary = d.airway_assessment;
+      }
+      if (d.mallampati_score) {
+        airwaySummary = `Mallampati ${d.mallampati_score}` + (airwaySummary !== 'Normal' && airwaySummary !== 'Not assessed' ? `, ${airwaySummary}` : '');
+      }
+      
+      // Extract procedure and risk from comprehensive_summary
+      let procedure = 'N/A';
+      let anesthesia = 'N/A';
+      let overallRisk = d.cardiovascular_risk?.risk_level || 'N/A';
+      if (d.comprehensive_summary) {
+        const procMatch = d.comprehensive_summary.match(/Procedure:\s*([^.]+)/i);
+        if (procMatch) procedure = procMatch[1].trim();
+        const anesMatch = d.comprehensive_summary.match(/Anesthesia:\s*([^.]+)/i);
+        if (anesMatch) anesthesia = anesMatch[1].trim();
+        const riskMatch = d.comprehensive_summary.match(/Overall Risk:\s*([^.]+)/i);
+        if (riskMatch) overallRisk = riskMatch[1].trim();
+      }
+      
+      // Build meaningful description
+      const descParts = [
+        `Procedure: ${procedure}`,
+        asaClass ? `ASA ${asaClass}` : null,
+        `Risk: ${overallRisk}`,
+        d.dvt_risk?.risk_category ? `DVT: ${d.dvt_risk.risk_category}` : null,
+        d.bleeding_risk?.risk_level ? `Bleeding: ${d.bleeding_risk.risk_level}` : null,
+      ].filter(Boolean);
+      
+      // Determine severity from risk level
+      const severity: 'normal' | 'warning' | 'critical' | 'success' = 
+        overallRisk === 'high' ? 'critical' : 
+        overallRisk === 'intermediate' ? 'warning' : 'normal';
+      
       events.push({
-        id: `preop_${(a as any).id || (a as any).created_at}`,
+        id: `preop_${d.id || d.created_at}`,
         type: 'preop_assessment',
-        date: safeDate((a as any).assessment_date || (a as any).created_at),
+        date: safeDate(assessDate),
         title: 'Pre-operative Assessment',
-        subtitle: (a as any).asa_class ? `ASA Class ${(a as any).asa_class}` : undefined,
-        description: `Pre-op assessment. ASA: ${(a as any).asa_class || 'N/A'}. Airway: ${(a as any).airway_assessment || 'N/A'}. Fitness: ${(a as any).fitness_status || 'N/A'}`,
-        details: a as any,
-        author: (a as any).assessed_by || (a as any).assessor,
-        tags: ['Pre-op'],
+        subtitle: [
+          asaClass ? `ASA ${asaClass}` : null,
+          procedure !== 'N/A' ? procedure : null,
+        ].filter(Boolean).join(' — ') || undefined,
+        description: descParts.join('. '),
+        details: {
+          procedure,
+          anesthesia,
+          asa_class: asaClass,
+          overall_risk: overallRisk,
+          airway: airwaySummary,
+          mallampati_score: d.mallampati_score,
+          fitness_for_surgery: fitness,
+          fasting_status: d.fasting_status,
+          blood_available: d.blood_available,
+          icu_bed_reserved: d.icu_bed_reserved,
+          bleeding_risk: d.bleeding_risk?.risk_level,
+          bleeding_score: d.bleeding_risk?.risk_score,
+          dvt_risk: d.dvt_risk?.risk_category,
+          dvt_score: d.dvt_risk?.total_score,
+          dvt_prophylaxis: d.dvt_risk?.prophylaxis_recommendation,
+          cardiovascular_risk: d.cardiovascular_risk?.risk_level,
+          cardiac_event_risk: d.cardiovascular_risk?.cardiac_event_risk_percent ? `${d.cardiovascular_risk.cardiac_event_risk_percent}%` : undefined,
+          pressure_sore_risk: d.pressure_sore_risk?.risk_category,
+          braden_score: d.pressure_sore_risk?.braden_total,
+          comorbidities: (d.comorbidities_medications || []).map((c: any) => c.comorbidity).filter(Boolean).join(', ') || 'None',
+          medications: (d.current_medications || []).map((m: any) => m.drug_name).filter(Boolean).join(', ') || 'None',
+          insurance_covered: d.insurance_covered ? 'Yes' : 'No',
+          preop_instructions: d.preop_instructions,
+          comprehensive_summary: d.comprehensive_summary,
+        },
+        author: d.assessed_by || d.assessor,
+        severity,
+        tags: ['Pre-op', overallRisk !== 'N/A' ? `${overallRisk} risk` : ''].filter(Boolean),
       });
     }
   } catch { /* ignore */ }
@@ -1342,6 +1427,67 @@ function renderEventDetails(event: TimelineEvent): React.ReactNode {
             <div>
               <span className="font-semibold text-purple-700">P — Plan:</span>
               <p className="text-gray-700 mt-0.5 whitespace-pre-wrap">{d.plan}</p>
+            </div>
+          )}
+        </div>
+      );
+
+    case 'preop_assessment':
+      return (
+        <div className="space-y-3 text-sm">
+          {/* Procedure & Anesthesia */}
+          <div className="grid grid-cols-2 gap-2">
+            <DetailRow label="Procedure" value={d.procedure} />
+            <DetailRow label="Anesthesia" value={d.anesthesia} />
+            <DetailRow label="ASA Class" value={d.asa_class} />
+            <DetailRow label="Overall Risk" value={d.overall_risk} />
+            <DetailRow label="Fitness" value={d.fitness_for_surgery} />
+            <DetailRow label="Fasting Status" value={d.fasting_status} />
+          </div>
+          
+          {/* Airway */}
+          {d.airway && (
+            <div>
+              <span className="font-semibold text-gray-700">Airway Assessment:</span>
+              <span className="ml-1 text-gray-600">{d.airway}</span>
+              {d.mallampati_score && <span className="ml-2 text-gray-500">(Mallampati {d.mallampati_score})</span>}
+            </div>
+          )}
+          
+          {/* Risk Scores */}
+          <div className="grid grid-cols-2 gap-2 bg-gray-50 rounded p-2">
+            <div className="col-span-2 font-semibold text-gray-700 text-xs uppercase tracking-wide">Risk Scores</div>
+            <DetailRow label="Bleeding Risk" value={d.bleeding_risk ? `${d.bleeding_risk} (score: ${d.bleeding_score || 'N/A'})` : undefined} />
+            <DetailRow label="DVT Risk" value={d.dvt_risk ? `${d.dvt_risk} (score: ${d.dvt_score || 'N/A'})` : undefined} />
+            <DetailRow label="DVT Prophylaxis" value={d.dvt_prophylaxis} />
+            <DetailRow label="Cardiovascular Risk" value={d.cardiovascular_risk ? `${d.cardiovascular_risk} (event risk: ${d.cardiac_event_risk || 'N/A'})` : undefined} />
+            <DetailRow label="Pressure Sore Risk" value={d.pressure_sore_risk ? `${d.pressure_sore_risk} (Braden: ${d.braden_score || 'N/A'})` : undefined} />
+          </div>
+          
+          {/* Readiness */}
+          <div className="grid grid-cols-2 gap-2">
+            <DetailRow label="Blood Available" value={d.blood_available ? 'Yes' : d.blood_available === false ? 'No' : undefined} />
+            <DetailRow label="ICU Bed Reserved" value={d.icu_bed_reserved ? 'Yes' : d.icu_bed_reserved === false ? 'No' : undefined} />
+            <DetailRow label="Insurance Covered" value={d.insurance_covered} />
+          </div>
+          
+          {/* Comorbidities & Medications */}
+          <DetailRow label="Comorbidities" value={d.comorbidities} />
+          <DetailRow label="Current Medications" value={d.medications} />
+          
+          {/* Instructions */}
+          {d.preop_instructions && (
+            <div className="bg-blue-50 rounded p-2">
+              <span className="font-semibold text-blue-700">Pre-op Instructions:</span>
+              <p className="text-gray-700 mt-0.5 whitespace-pre-wrap">{d.preop_instructions}</p>
+            </div>
+          )}
+          
+          {/* Summary */}
+          {d.comprehensive_summary && (
+            <div className="bg-green-50 rounded p-2">
+              <span className="font-semibold text-green-700">Summary:</span>
+              <p className="text-gray-700 mt-0.5 whitespace-pre-wrap">{d.comprehensive_summary}</p>
             </div>
           )}
         </div>
