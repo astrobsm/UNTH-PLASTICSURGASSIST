@@ -10,23 +10,29 @@ import {
   Shield,
   AlertCircle,
   CheckCircle2,
-  Printer,
-  Edit3,
-  Save,
   X,
   BarChart3,
   User,
+  Edit3,
+  Save,
+  CalendarRange,
+  List,
 } from 'lucide-react';
-import { callDutyService, CallDutyShift, StaffMember } from '../services/callDutyService';
+import {
+  callDutyService,
+  CallDutyShift,
+  StaffMember,
+  DurationPreset,
+  DURATION_OPTIONS,
+  calcEndDate,
+  rosterKey,
+  parseRosterKey,
+  formatRosterLabel,
+} from '../services/callDutyService';
 import { useAuthStore } from '../store/authStore';
 import { format, parseISO, isSameDay } from 'date-fns';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
-
-const MONTH_NAMES = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-];
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -36,15 +42,23 @@ const ROLE_COLORS: Record<string, string> = {
   house_officer: 'bg-green-100 text-green-800 border-green-300',
 };
 
+/** Format date to "YYYY-MM-DD" for input[type=date] */
+function toDateInput(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export default function CallDutyPage() {
   const { user } = useAuthStore();
   const now = new Date();
 
-  // State
-  const [year, setYear] = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth()); // 0-indexed
+  // ── Duration / range state ──────────────────────────────────────────
+  const [durationPreset, setDurationPreset] = useState<DurationPreset>('1month');
+  const [startDate, setStartDate] = useState<Date>(() => new Date(now.getFullYear(), now.getMonth(), 1));
+  const [endDate, setEndDate] = useState<Date>(() => calcEndDate(new Date(now.getFullYear(), now.getMonth(), 1), '1month'));
+
+  // ── Core state ──────────────────────────────────────────────────────
   const [shifts, setShifts] = useState<CallDutyShift[]>([]);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -54,28 +68,47 @@ export default function CallDutyPage() {
   const [editingShiftId, setEditingShiftId] = useState<number | null>(null);
   const [showSummary, setShowSummary] = useState(false);
 
+  // ── Saved rosters list ──────────────────────────────────────────────
+  const [savedKeys, setSavedKeys] = useState<string[]>([]);
+  const [showSavedRosters, setShowSavedRosters] = useState(false);
+
   // Staff pools for edit dropdowns
   const [seniorRegs, setSeniorRegs] = useState<StaffMember[]>([]);
   const [registrars, setRegistrars] = useState<StaffMember[]>([]);
   const [houseOfficers, setHouseOfficers] = useState<StaffMember[]>([]);
   const [staffLoaded, setStaffLoaded] = useState(false);
 
-  // Print ref
+  // Ref
   const printRef = useRef<HTMLDivElement>(null);
+
+  // ── Current roster key ──────────────────────────────────────────────
+  const currentRosterKey = rosterKey(startDate, endDate);
+
+  // ── Recalculate end date when preset or start date changes ─────────
+  useEffect(() => {
+    if (durationPreset !== 'custom') {
+      setEndDate(calcEndDate(startDate, durationPreset));
+    }
+  }, [durationPreset, startDate]);
 
   // ── Data loading ──────────────────────────────────────────────────────
   const loadRoster = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const data = await callDutyService.getRoster(year, month);
+      const data = await callDutyService.getRosterByRange(startDate, endDate);
       setShifts(data);
     } catch (err: any) {
       setError(err.message || 'Failed to load roster');
     } finally {
       setLoading(false);
     }
-  }, [year, month]);
+  }, [startDate, endDate]);
+
+  const loadSavedKeys = useCallback(async () => {
+    const keys = await callDutyService.listRosterKeys();
+    setSavedKeys(keys);
+  }, []);
 
   const loadStaff = useCallback(async () => {
     if (staffLoaded) return;
@@ -98,16 +131,22 @@ export default function CallDutyPage() {
     loadRoster();
   }, [loadRoster]);
 
+  useEffect(() => {
+    loadSavedKeys();
+  }, [loadSavedKeys]);
+
   // ── Generate roster ───────────────────────────────────────────────────
   const handleGenerate = async () => {
     setGenerating(true);
     setError('');
     setSuccess('');
     try {
-      const newShifts = await callDutyService.generateMonthlyRoster(year, month, user?.id);
+      const newShifts = await callDutyService.generateRoster(startDate, endDate, user?.id);
       await callDutyService.saveRoster(newShifts);
       setShifts(newShifts);
-      setSuccess(`Roster generated for ${MONTH_NAMES[month]} ${year} — ${newShifts.length} shifts created.`);
+      await loadSavedKeys();
+      const label = formatRosterLabel(currentRosterKey);
+      setSuccess(`Roster generated for ${label} — ${newShifts.length} shifts created.`);
     } catch (err: any) {
       setError(err.message || 'Failed to generate roster');
     } finally {
@@ -115,14 +154,36 @@ export default function CallDutyPage() {
     }
   };
 
-  // ── Navigation ────────────────────────────────────────────────────────
-  const prevMonth = () => {
-    if (month === 0) { setMonth(11); setYear(y => y - 1); }
-    else setMonth(m => m - 1);
+  // ── Navigation (shift range forward/backward by duration) ──────────
+  const shiftRange = (direction: 'prev' | 'next') => {
+    const diffMs = endDate.getTime() - startDate.getTime();
+    const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+    const multiplier = direction === 'next' ? 1 : -1;
+    const newStart = new Date(startDate);
+    newStart.setDate(newStart.getDate() + (diffDays * multiplier));
+    const newEnd = new Date(endDate);
+    newEnd.setDate(newEnd.getDate() + (diffDays * multiplier));
+    setStartDate(newStart);
+    setEndDate(newEnd);
   };
-  const nextMonth = () => {
-    if (month === 11) { setMonth(0); setYear(y => y + 1); }
-    else setMonth(m => m + 1);
+
+  // ── Load a saved roster ─────────────────────────────────────────────
+  const loadSavedRoster = async (key: string) => {
+    const parsed = parseRosterKey(key);
+    if (parsed) {
+      setDurationPreset('custom');
+      setStartDate(parsed.start);
+      setEndDate(parsed.end);
+    } else {
+      // Legacy month key: "YYYY-MM"
+      const [yStr, mStr] = key.split('-');
+      const y = parseInt(yStr, 10);
+      const m = parseInt(mStr, 10) - 1;
+      setDurationPreset('1month');
+      setStartDate(new Date(y, m, 1));
+      setEndDate(new Date(y, m + 1, 0));
+    }
+    setShowSavedRosters(false);
   };
 
   // ── Edit shift ────────────────────────────────────────────────────────
@@ -146,30 +207,64 @@ export default function CallDutyPage() {
 
   // ── Summary / stats ──────────────────────────────────────────────────
   const summary = callDutyService.getStaffSummary(shifts);
+  const rangeLabel = formatRosterLabel(currentRosterKey);
+
+  // ── Compute total days in the range for calendar display ──────────
+  const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+
+  // ── Calendar: break range into month chunks ───────────────────────
+  const getMonthChunks = () => {
+    const chunks: { year: number; month: number; startDay: number; endDay: number }[] = [];
+    const cursor = new Date(startDate);
+    while (cursor < endDate) {
+      const y = cursor.getFullYear();
+      const m = cursor.getMonth();
+      const monthEnd = new Date(y, m + 1, 0);
+      const chunkEnd = monthEnd < endDate ? monthEnd : new Date(endDate.getTime() - 1);
+      chunks.push({
+        year: y,
+        month: m,
+        startDay: cursor.getDate(),
+        endDay: chunkEnd.getDate(),
+      });
+      // Move to 1st of next month
+      cursor.setFullYear(y);
+      cursor.setMonth(m + 1, 1);
+    }
+    return chunks;
+  };
+
+  const MONTH_NAMES_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  const getShiftForDate = (date: Date): CallDutyShift | undefined => {
+    return shifts.find(s => {
+      const start = parseISO(s.start_date);
+      const end = parseISO(s.end_date);
+      return date >= new Date(start.getFullYear(), start.getMonth(), start.getDate()) &&
+             date < new Date(end.getFullYear(), end.getMonth(), end.getDate());
+    });
+  };
 
   // ── PDF generation ────────────────────────────────────────────────────
   const generatePDF = () => {
-    const monthLabel = `${MONTH_NAMES[month]} ${year}`;
-    const title = `CALL DUTY ROSTER — ${monthLabel.toUpperCase()}`;
+    const title = `CALL DUTY ROSTER — ${rangeLabel.toUpperCase()}`;
     const deptName = 'PLASTIC SURGERY UNIT';
     const hospitalName = 'UNIVERSITY OF NIGERIA TEACHING HOSPITAL (UNTH), ENUGU';
 
-    // Build table rows
     const rows = shifts.map(s => {
-      const startDate = parseISO(s.start_date);
-      const endDate = parseISO(s.end_date);
+      const start = parseISO(s.start_date);
+      const end = parseISO(s.end_date);
       return `
         <tr>
           <td style="border:1px solid #333;padding:8px;text-align:center;font-weight:600;">${s.shift_number}</td>
-          <td style="border:1px solid #333;padding:8px;">${format(startDate, 'EEE, dd MMM yyyy')} 08:00</td>
-          <td style="border:1px solid #333;padding:8px;">${format(endDate, 'EEE, dd MMM yyyy')} 08:00</td>
+          <td style="border:1px solid #333;padding:8px;">${format(start, 'EEE, dd MMM yyyy')} 08:00</td>
+          <td style="border:1px solid #333;padding:8px;">${format(end, 'EEE, dd MMM yyyy')} 08:00</td>
           <td style="border:1px solid #333;padding:8px;font-weight:500;">${s.senior_registrar_name}</td>
           <td style="border:1px solid #333;padding:8px;font-weight:500;">${s.registrar_name}</td>
           <td style="border:1px solid #333;padding:8px;font-weight:500;">${s.house_officer_name}</td>
         </tr>`;
     }).join('');
 
-    // Build summary rows
     const summaryRows = Object.values(summary)
       .sort((a, b) => a.role.localeCompare(b.role) || a.name.localeCompare(b.name))
       .map(s => `
@@ -211,7 +306,7 @@ export default function CallDutyPage() {
           <h2>${deptName}</h2>
           <div class="line"></div>
           <h2>CALL DUTY ROSTER</h2>
-          <h3>${monthLabel}</h3>
+          <h3>${rangeLabel}</h3>
         </div>
 
         <table>
@@ -271,20 +366,6 @@ export default function CallDutyPage() {
     }
   };
 
-  // ── Calendar helpers ──────────────────────────────────────────────────
-  const daysInCurrentMonth = new Date(year, month + 1, 0).getDate();
-  const firstDayOfWeek = new Date(year, month, 1).getDay();
-
-  const getShiftForDay = (day: number): CallDutyShift | undefined => {
-    const target = new Date(year, month, day);
-    return shifts.find(s => {
-      const start = parseISO(s.start_date);
-      const end = parseISO(s.end_date);
-      return target >= new Date(start.getFullYear(), start.getMonth(), start.getDate()) &&
-             target < new Date(end.getFullYear(), end.getMonth(), end.getDate());
-    });
-  };
-
   // ── Render ────────────────────────────────────────────────────────────
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
@@ -315,43 +396,135 @@ export default function CallDutyPage() {
             <BarChart3 className="w-4 h-4" />
             Stats
           </button>
-        </div>
-      </div>
-
-      {/* Month Navigator */}
-      <div className="bg-white rounded-xl shadow-sm border p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <button onClick={prevMonth} className="p-2 hover:bg-gray-100 rounded-lg">
-            <ChevronLeft className="w-5 h-5" />
-          </button>
-          <h2 className="text-xl font-semibold text-gray-900 min-w-[200px] text-center">
-            {MONTH_NAMES[month]} {year}
-          </h2>
-          <button onClick={nextMonth} className="p-2 hover:bg-gray-100 rounded-lg">
-            <ChevronRight className="w-5 h-5" />
-          </button>
-        </div>
-
-        <div className="flex items-center gap-2 flex-wrap">
           <button
-            onClick={handleGenerate}
-            disabled={generating}
-            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2 text-sm font-medium"
+            onClick={() => { setShowSavedRosters(!showSavedRosters); loadSavedKeys(); }}
+            className="px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg flex items-center gap-1"
           >
-            {generating ? <RefreshCw className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-            {shifts.length > 0 ? 'Regenerate Roster' : 'Generate Roster'}
+            <List className="w-4 h-4" />
+            Saved Rosters
           </button>
-          {shifts.length > 0 && (
-            <button
-              onClick={generatePDF}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 text-sm font-medium"
-            >
-              <Download className="w-4 h-4" />
-              Download PDF
-            </button>
-          )}
         </div>
       </div>
+
+      {/* ─── Duration & Date Range Picker ─────────────────────────────── */}
+      <div className="bg-white rounded-xl shadow-sm border p-4 space-y-4">
+        {/* Duration presets */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-medium text-gray-700 mr-1">
+            <CalendarRange className="w-4 h-4 inline-block mr-1 -mt-0.5" />
+            Duration:
+          </span>
+          {DURATION_OPTIONS.map(opt => (
+            <button
+              key={opt.key}
+              onClick={() => setDurationPreset(opt.key)}
+              className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+                durationPreset === opt.key
+                  ? 'bg-green-600 text-white border-green-600'
+                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Date inputs + navigation */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <button onClick={() => shiftRange('prev')} className="p-2 hover:bg-gray-100 rounded-lg" title="Previous period">
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-2">
+              <div>
+                <label className="block text-xs text-gray-500 mb-0.5">Start Date</label>
+                <input
+                  type="date"
+                  value={toDateInput(startDate)}
+                  onChange={e => {
+                    const d = new Date(e.target.value + 'T00:00:00');
+                    if (!isNaN(d.getTime())) setStartDate(d);
+                  }}
+                  className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                />
+              </div>
+              <span className="text-gray-400 mt-4">→</span>
+              <div>
+                <label className="block text-xs text-gray-500 mb-0.5">End Date</label>
+                <input
+                  type="date"
+                  value={toDateInput(endDate)}
+                  onChange={e => {
+                    const d = new Date(e.target.value + 'T00:00:00');
+                    if (!isNaN(d.getTime())) {
+                      setEndDate(d);
+                      setDurationPreset('custom');
+                    }
+                  }}
+                  min={toDateInput(startDate)}
+                  className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                />
+              </div>
+            </div>
+
+            <button onClick={() => shiftRange('next')} className="p-2 hover:bg-gray-100 rounded-lg" title="Next period">
+              <ChevronRight className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm text-gray-500">{totalDays} days • {shifts.length} shifts</span>
+            <button
+              onClick={handleGenerate}
+              disabled={generating}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2 text-sm font-medium"
+            >
+              {generating ? <RefreshCw className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+              {shifts.length > 0 ? 'Regenerate Roster' : 'Generate Roster'}
+            </button>
+            {shifts.length > 0 && (
+              <button
+                onClick={generatePDF}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 text-sm font-medium"
+              >
+                <Download className="w-4 h-4" />
+                Download PDF
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Range summary */}
+        <div className="text-center text-sm font-medium text-gray-700">
+          {rangeLabel}
+        </div>
+      </div>
+
+      {/* Saved Rosters Dropdown */}
+      {showSavedRosters && savedKeys.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border p-4">
+          <h3 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+            <List className="w-4 h-4 text-green-600" />
+            Saved Rosters
+          </h3>
+          <div className="flex flex-wrap gap-2">
+            {savedKeys.map(key => (
+              <button
+                key={key}
+                onClick={() => loadSavedRoster(key)}
+                className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+                  key === currentRosterKey
+                    ? 'bg-green-100 text-green-800 border-green-300'
+                    : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+                }`}
+              >
+                {formatRosterLabel(key)}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Messages */}
       {error && (
@@ -372,7 +545,7 @@ export default function CallDutyPage() {
         <div className="bg-white rounded-xl shadow-sm border p-5">
           <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
             <BarChart3 className="w-5 h-5 text-green-600" />
-            Shift Distribution — {MONTH_NAMES[month]} {year}
+            Shift Distribution — {rangeLabel}
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {Object.values(summary)
@@ -403,9 +576,9 @@ export default function CallDutyPage() {
       {!loading && shifts.length === 0 && (
         <div className="bg-white rounded-xl shadow-sm border p-12 text-center">
           <Calendar className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-gray-700">No roster for {MONTH_NAMES[month]} {year}</h3>
+          <h3 className="text-lg font-semibold text-gray-700">No roster for {rangeLabel}</h3>
           <p className="text-gray-500 mt-2 mb-6">
-            Click <strong>Generate Roster</strong> to auto-assign 48-hour call duties
+            Select a duration and click <strong>Generate Roster</strong> to auto-assign 48-hour call duties
             evenly among Senior Registrars, Registrars, and House Officers.
           </p>
           <button
@@ -437,17 +610,17 @@ export default function CallDutyPage() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {shifts.map(shift => {
-                  const startDate = parseISO(shift.start_date);
-                  const endDate = parseISO(shift.end_date);
-                  const isToday = isSameDay(startDate, new Date()) || (new Date() >= startDate && new Date() < endDate);
+                  const shiftStart = parseISO(shift.start_date);
+                  const shiftEnd = parseISO(shift.end_date);
+                  const isToday = isSameDay(shiftStart, new Date()) || (new Date() >= shiftStart && new Date() < shiftEnd);
                   const isEditing = editingShiftId === shift.id;
 
                   return (
                     <ShiftRow
                       key={shift.id || shift.shift_number}
                       shift={shift}
-                      startDate={startDate}
-                      endDate={endDate}
+                      startDate={shiftStart}
+                      endDate={shiftEnd}
                       isToday={isToday}
                       isEditing={isEditing}
                       seniorRegs={seniorRegs}
@@ -467,51 +640,65 @@ export default function CallDutyPage() {
 
       {/* ─── Calendar View ──────────────────────────────────────────────── */}
       {!loading && shifts.length > 0 && viewMode === 'calendar' && (
-        <div className="bg-white rounded-xl shadow-sm border p-4">
-          {/* Day headers */}
-          <div className="grid grid-cols-7 gap-1 mb-2">
-            {DAY_NAMES.map(d => (
-              <div key={d} className="text-center text-xs font-semibold text-gray-500 py-1">{d}</div>
-            ))}
-          </div>
-          {/* Calendar grid */}
-          <div className="grid grid-cols-7 gap-1">
-            {/* Empty cells before 1st day */}
-            {Array.from({ length: firstDayOfWeek }).map((_, i) => (
-              <div key={`empty-${i}`} className="min-h-[80px]" />
-            ))}
-            {/* Day cells */}
-            {Array.from({ length: daysInCurrentMonth }).map((_, i) => {
-              const day = i + 1;
-              const shift = getShiftForDay(day);
-              const isToday = isSameDay(new Date(year, month, day), new Date());
-              return (
-                <div
-                  key={day}
-                  className={`min-h-[80px] border rounded-lg p-1 text-xs ${
-                    isToday ? 'border-green-500 bg-green-50' : 'border-gray-200'
-                  } ${shift ? '' : 'bg-gray-50'}`}
-                >
-                  <div className={`font-semibold mb-1 ${isToday ? 'text-green-700' : 'text-gray-700'}`}>{day}</div>
-                  {shift && (
-                    <div className="space-y-0.5">
-                      <div className="truncate text-purple-700" title={shift.senior_registrar_name}>
-                        <span className="font-semibold">SR:</span> {shift.senior_registrar_name.split(' ').slice(-1)}
-                      </div>
-                      <div className="truncate text-blue-700" title={shift.registrar_name}>
-                        <span className="font-semibold">R:</span> {shift.registrar_name.split(' ').slice(-1)}
-                      </div>
-                      <div className="truncate text-green-700" title={shift.house_officer_name}>
-                        <span className="font-semibold">HO:</span> {shift.house_officer_name.split(' ').slice(-1)}
-                      </div>
-                    </div>
-                  )}
+        <div className="space-y-4">
+          {getMonthChunks().map(chunk => {
+            const daysInThisMonth = new Date(chunk.year, chunk.month + 1, 0).getDate();
+            const firstDow = new Date(chunk.year, chunk.month, chunk.startDay).getDay();
+            const dayCount = chunk.endDay - chunk.startDay + 1;
+
+            return (
+              <div key={`${chunk.year}-${chunk.month}`} className="bg-white rounded-xl shadow-sm border p-4">
+                <h3 className="text-lg font-semibold text-gray-800 mb-3">
+                  {MONTH_NAMES_SHORT[chunk.month]} {chunk.year}
+                </h3>
+                {/* Day headers */}
+                <div className="grid grid-cols-7 gap-1 mb-2">
+                  {DAY_NAMES.map(d => (
+                    <div key={d} className="text-center text-xs font-semibold text-gray-500 py-1">{d}</div>
+                  ))}
                 </div>
-              );
-            })}
-          </div>
+                {/* Calendar grid */}
+                <div className="grid grid-cols-7 gap-1">
+                  {/* Empty cells before first day */}
+                  {Array.from({ length: firstDow }).map((_, i) => (
+                    <div key={`empty-${i}`} className="min-h-[80px]" />
+                  ))}
+                  {/* Day cells */}
+                  {Array.from({ length: dayCount }).map((_, i) => {
+                    const day = chunk.startDay + i;
+                    const date = new Date(chunk.year, chunk.month, day);
+                    const shift = getShiftForDate(date);
+                    const isToday = isSameDay(date, new Date());
+                    return (
+                      <div
+                        key={day}
+                        className={`min-h-[80px] border rounded-lg p-1 text-xs ${
+                          isToday ? 'border-green-500 bg-green-50' : 'border-gray-200'
+                        } ${shift ? '' : 'bg-gray-50'}`}
+                      >
+                        <div className={`font-semibold mb-1 ${isToday ? 'text-green-700' : 'text-gray-700'}`}>{day}</div>
+                        {shift && (
+                          <div className="space-y-0.5">
+                            <div className="truncate text-purple-700" title={shift.senior_registrar_name}>
+                              <span className="font-semibold">SR:</span> {shift.senior_registrar_name.split(' ').slice(-1)}
+                            </div>
+                            <div className="truncate text-blue-700" title={shift.registrar_name}>
+                              <span className="font-semibold">R:</span> {shift.registrar_name.split(' ').slice(-1)}
+                            </div>
+                            <div className="truncate text-green-700" title={shift.house_officer_name}>
+                              <span className="font-semibold">HO:</span> {shift.house_officer_name.split(' ').slice(-1)}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
           {/* Legend */}
-          <div className="flex items-center gap-4 mt-4 text-xs text-gray-500 justify-center">
+          <div className="flex items-center gap-4 text-xs text-gray-500 justify-center">
             <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-purple-200 border border-purple-400" /> Senior Registrar</span>
             <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-blue-200 border border-blue-400" /> Registrar</span>
             <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-green-200 border border-green-400" /> House Officer</span>
