@@ -138,7 +138,7 @@ export default function TeamAnalytics({ refreshTrigger }: TeamAnalyticsProps) {
       )}
 
       {/* Activity Analytics */}
-      {analytics?.byStaff && analytics.byStaff.length > 0 && (
+      {analytics?.byStaff && (
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-800">📋 Activity Tracking</h3>
@@ -155,6 +155,7 @@ export default function TeamAnalytics({ refreshTrigger }: TeamAnalyticsProps) {
             </select>
           </div>
           
+          {analytics.byStaff.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
@@ -211,12 +212,15 @@ export default function TeamAnalytics({ refreshTrigger }: TeamAnalyticsProps) {
               </tbody>
             </table>
           </div>
-          
-          {analytics.byStaff.length === 0 && (
-            <div className="text-center py-8 text-gray-500">
-              No activity data available for this period
-            </div>
+          ) : (
+          <div className="text-center py-8 text-gray-500">
+            No active clinical staff found. Ensure staff accounts are approved and active.
+          </div>
           )}
+          
+          <div className="mt-3 text-xs text-gray-400">
+            Data computed from ward rounds, surgeries, prescriptions, and lab orders within the selected period.
+          </div>
         </div>
       )}
 

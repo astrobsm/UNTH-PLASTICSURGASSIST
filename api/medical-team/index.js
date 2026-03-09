@@ -163,65 +163,78 @@ async function getStaffByRole(req, res) {
 
 /**
  * Get full team workload statistics
+ * Computes from real clinical data (ward rounds, admissions, prescriptions)
  */
 async function getTeamWorkload(res) {
-  // Ensure patient_assignments table exists
-  await ensurePatientAssignmentsTable();
+  // Get all active clinical staff
+  const staffResult = await query(`
+    SELECT id, full_name, email, role
+    FROM users
+    WHERE role IN ('consultant', 'senior_registrar', 'registrar', 'house_officer')
+      AND is_approved = TRUE AND is_active = TRUE
+    ORDER BY role, full_name
+  `);
 
-  const workloadQuery = `
-    WITH assignment_counts AS (
-      SELECT 
-        'consultant' as role,
-        consultant_id::text as user_id,
-        COUNT(*) as patient_count
-      FROM patient_assignments 
-      WHERE is_active = TRUE AND consultant_id IS NOT NULL
-      GROUP BY consultant_id
-      
-      UNION ALL
-      
-      SELECT 
-        'senior_registrar' as role,
-        senior_registrar_id::text as user_id,
-        COUNT(*) as patient_count
-      FROM patient_assignments 
-      WHERE is_active = TRUE AND senior_registrar_id IS NOT NULL
-      GROUP BY senior_registrar_id
-      
-      UNION ALL
-      
-      SELECT 
-        'registrar' as role,
-        registrar_id::text as user_id,
-        COUNT(*) as patient_count
-      FROM patient_assignments 
-      WHERE is_active = TRUE AND registrar_id IS NOT NULL
-      GROUP BY registrar_id
-      
-      UNION ALL
-      
-      SELECT 
-        'house_officer' as role,
-        house_officer_id::text as user_id,
-        COUNT(*) as patient_count
-      FROM patient_assignments 
-      WHERE is_active = TRUE AND house_officer_id IS NOT NULL
-      GROUP BY house_officer_id
-    )
-    SELECT 
-      u.id, u.full_name, u.email, u.role,
-      COALESCE(ac.patient_count, 0) as current_patients
-    FROM users u
-    LEFT JOIN assignment_counts ac ON u.id::text = ac.user_id AND u.role = ac.role
-    WHERE u.role IN ('consultant', 'senior_registrar', 'registrar', 'house_officer')
-      AND u.is_approved = TRUE 
-      AND u.is_active = TRUE
-    ORDER BY u.role, COALESCE(ac.patient_count, 0) ASC
-  `;
+  // Collect distinct patient IDs per user from multiple clinical sources
+  const userPatients = {}; // user_id -> Set of patient_ids
 
-  const result = await query(workloadQuery);
+  // Ward rounds in last 14 days = actively managing patients
+  try {
+    const wrResult = await query(`
+      SELECT user_id, patient_id FROM ward_rounds
+      WHERE round_date >= CURRENT_DATE - INTERVAL '14 days'
+        AND user_id IS NOT NULL AND patient_id IS NOT NULL
+    `);
+    for (const row of wrResult.rows) {
+      if (!userPatients[row.user_id]) userPatients[row.user_id] = new Set();
+      userPatients[row.user_id].add(row.patient_id);
+    }
+  } catch (e) { console.log('ward_rounds table not available for workload'); }
 
-  // Organize by role with statistics
+  // Active admissions created by the user
+  try {
+    const admResult = await query(`
+      SELECT created_by, patient_id FROM admissions
+      WHERE status = 'admitted' AND created_by IS NOT NULL AND patient_id IS NOT NULL
+    `);
+    for (const row of admResult.rows) {
+      if (!userPatients[row.created_by]) userPatients[row.created_by] = new Set();
+      userPatients[row.created_by].add(row.patient_id);
+    }
+  } catch (e) { console.log('admissions table not available for workload'); }
+
+  // Recent prescriptions (last 14 days)
+  try {
+    const rxResult = await query(`
+      SELECT prescribed_by, patient_id FROM prescriptions
+      WHERE prescribed_at >= NOW() - INTERVAL '14 days'
+        AND prescribed_by IS NOT NULL AND patient_id IS NOT NULL
+    `);
+    for (const row of rxResult.rows) {
+      if (!userPatients[row.prescribed_by]) userPatients[row.prescribed_by] = new Set();
+      userPatients[row.prescribed_by].add(row.patient_id);
+    }
+  } catch (e) { console.log('prescriptions table not available for workload'); }
+
+  // Also try patient_assignments if populated
+  try {
+    const paResult = await query(`
+      SELECT consultant_id, senior_registrar_id, registrar_id, house_officer_id, patient_id
+      FROM patient_assignments WHERE is_active = TRUE
+    `);
+    for (const row of paResult.rows) {
+      const roles = ['consultant_id', 'senior_registrar_id', 'registrar_id', 'house_officer_id'];
+      for (const col of roles) {
+        if (row[col] && row.patient_id) {
+          const uid = parseInt(row[col]);
+          if (!userPatients[uid]) userPatients[uid] = new Set();
+          userPatients[uid].add(row.patient_id);
+        }
+      }
+    }
+  } catch (e) { /* patient_assignments may not exist */ }
+
+  // Build workload response
   const workload = {
     consultant: { staff: [], totalPatients: 0, avgPatients: 0 },
     senior_registrar: { staff: [], totalPatients: 0, avgPatients: 0 },
@@ -229,16 +242,22 @@ async function getTeamWorkload(res) {
     house_officer: { staff: [], totalPatients: 0, avgPatients: 0 }
   };
 
-  for (const user of result.rows) {
+  for (const user of staffResult.rows) {
+    const patientSet = userPatients[user.id] || new Set();
+    const patientCount = patientSet.size;
     if (workload[user.role]) {
-      workload[user.role].staff.push(user);
-      workload[user.role].totalPatients += parseInt(user.current_patients) || 0;
+      workload[user.role].staff.push({
+        ...user,
+        current_patients: patientCount
+      });
+      workload[user.role].totalPatients += patientCount;
     }
   }
 
-  // Calculate averages
+  // Calculate averages and sort staff by workload
   for (const role of Object.keys(workload)) {
     const roleData = workload[role];
+    roleData.staff.sort((a, b) => a.current_patients - b.current_patients);
     roleData.avgPatients = roleData.staff.length > 0 
       ? Math.round(roleData.totalPatients / roleData.staff.length * 10) / 10 
       : 0;
@@ -398,86 +417,211 @@ async function getTeamActivities(req, res) {
 
 /**
  * Get comprehensive team analytics
+ * Computes activity counts from actual clinical data tables
  */
 async function getTeamAnalytics(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const staffId = url.searchParams.get('staff_id');
-  const period = url.searchParams.get('period') || '30'; // days
+  const period = parseInt(url.searchParams.get('period')) || 30;
 
-  await ensurePatientAssignmentsTable();
-
-  let analytics = {
-    summary: {},
-    byStaff: [],
-    activityBreakdown: []
-  };
-
-  // Get activity counts by staff
-  try {
-    const activityQuery = `
-      SELECT 
-        u.id, u.full_name, u.role,
-        COUNT(ta.id) as total_activities,
-        COUNT(CASE WHEN ta.activity_type = 'ward_round' THEN 1 END) as ward_rounds,
-        COUNT(CASE WHEN ta.activity_type = 'procedure' THEN 1 END) as procedures,
-        COUNT(CASE WHEN ta.activity_type = 'prescription' THEN 1 END) as prescriptions,
-        COUNT(CASE WHEN ta.activity_type = 'consultation' THEN 1 END) as consultations,
-        COUNT(CASE WHEN ta.activity_type = 'documentation' THEN 1 END) as documentation
-      FROM users u
-      LEFT JOIN team_activities ta ON (u.id = ta.user_id OR u.id = ta.assigned_staff_id)
-        AND ta.created_at >= NOW() - INTERVAL '${parseInt(period)} days'
-      WHERE u.role IN ('consultant', 'senior_registrar', 'registrar', 'house_officer')
-        AND u.is_approved = TRUE AND u.is_active = TRUE
-      ${staffId ? `AND u.id = ${parseInt(staffId)}` : ''}
-      GROUP BY u.id, u.full_name, u.role
-      ORDER BY total_activities DESC
-    `;
-
-    const activityResult = await query(activityQuery);
-    analytics.byStaff = activityResult.rows;
-  } catch (error) {
-    // Table might not exist
-    analytics.byStaff = [];
+  // Get all active clinical staff
+  let staffQuery = `
+    SELECT id, full_name, role
+    FROM users
+    WHERE role IN ('consultant', 'senior_registrar', 'registrar', 'house_officer')
+      AND is_approved = TRUE AND is_active = TRUE
+  `;
+  const staffParams = [];
+  if (staffId) {
+    staffQuery += ` AND id = $1`;
+    staffParams.push(parseInt(staffId));
   }
+  staffQuery += ' ORDER BY role, full_name';
 
-  // Get workload distribution
+  const staffResult = await query(staffQuery, staffParams);
+
+  // Count activities from actual clinical data tables
+  const wardRoundCounts = {};
+  const procedureCounts = {};
+  const prescriptionCounts = {};
+  const consultationCounts = {};
+
+  // Ward rounds
   try {
-    const workloadQuery = `
-      SELECT 
-        role,
-        COUNT(DISTINCT id) as staff_count,
-        SUM(current_patients) as total_patients,
-        ROUND(AVG(current_patients), 1) as avg_patients,
-        MAX(current_patients) as max_patients,
-        MIN(current_patients) as min_patients
-      FROM (
-        SELECT u.id, u.role,
-               COALESCE(
-                 CASE 
-                   WHEN u.role = 'senior_registrar' THEN (SELECT COUNT(*) FROM patient_assignments WHERE senior_registrar_id::text = u.id::text AND is_active = TRUE)
-                   WHEN u.role = 'registrar' THEN (SELECT COUNT(*) FROM patient_assignments WHERE registrar_id::text = u.id::text AND is_active = TRUE)
-                   WHEN u.role = 'house_officer' THEN (SELECT COUNT(*) FROM patient_assignments WHERE house_officer_id::text = u.id::text AND is_active = TRUE)
-                   WHEN u.role = 'consultant' THEN (SELECT COUNT(*) FROM patient_assignments WHERE consultant_id::text = u.id::text AND is_active = TRUE)
-                   ELSE 0
-                 END, 0
-               ) as current_patients
-        FROM users u
-        WHERE u.role IN ('consultant', 'senior_registrar', 'registrar', 'house_officer')
-          AND u.is_approved = TRUE AND u.is_active = TRUE
-      ) subq
-      GROUP BY role
-      ORDER BY role
-    `;
+    const result = await query(`
+      SELECT user_id, COUNT(*) as cnt FROM ward_rounds
+      WHERE round_date >= CURRENT_DATE - INTERVAL '${period} days'
+        AND user_id IS NOT NULL
+      GROUP BY user_id
+    `);
+    for (const row of result.rows) {
+      wardRoundCounts[row.user_id] = parseInt(row.cnt);
+    }
+  } catch (e) { console.log('ward_rounds not available for analytics'); }
 
-    const workloadResult = await query(workloadQuery);
-    analytics.summary = {
-      workloadDistribution: workloadResult.rows
+  // Procedures/Surgeries (using surgeries table with surgeon_id foreign key)
+  try {
+    const result = await query(`
+      SELECT surgeon_id as user_id, COUNT(*) as cnt FROM surgeries
+      WHERE scheduled_date >= NOW() - INTERVAL '${period} days'
+        AND surgeon_id IS NOT NULL
+      GROUP BY surgeon_id
+    `);
+    for (const row of result.rows) {
+      procedureCounts[row.user_id] = parseInt(row.cnt);
+    }
+  } catch (e) { console.log('surgeries not available for analytics'); }
+
+  // Also check procedures table (created_by if available, otherwise try matching by surgeon name)
+  try {
+    const result = await query(`
+      SELECT u.id as user_id, COUNT(p.id) as cnt 
+      FROM procedures p
+      JOIN users u ON LOWER(u.full_name) = LOWER(p.surgeon)
+      WHERE p.procedure_date >= CURRENT_DATE - INTERVAL '${period} days'
+        AND p.surgeon IS NOT NULL
+      GROUP BY u.id
+    `);
+    for (const row of result.rows) {
+      procedureCounts[row.user_id] = (procedureCounts[row.user_id] || 0) + parseInt(row.cnt);
+    }
+  } catch (e) { /* procedures table may not exist or surgeon matching failed */ }
+
+  // Prescriptions
+  try {
+    const result = await query(`
+      SELECT prescribed_by as user_id, COUNT(*) as cnt FROM prescriptions
+      WHERE prescribed_at >= NOW() - INTERVAL '${period} days'
+        AND prescribed_by IS NOT NULL
+      GROUP BY prescribed_by
+    `);
+    for (const row of result.rows) {
+      prescriptionCounts[row.user_id] = parseInt(row.cnt);
+    }
+  } catch (e) { console.log('prescriptions not available for analytics'); }
+
+  // Consultations (lab orders as proxy - ordering investigations is a key consultation activity)
+  try {
+    const result = await query(`
+      SELECT ordered_by as user_id, COUNT(*) as cnt FROM lab_orders
+      WHERE ordered_at >= NOW() - INTERVAL '${period} days'
+        AND ordered_by IS NOT NULL
+      GROUP BY ordered_by
+    `);
+    for (const row of result.rows) {
+      consultationCounts[row.user_id] = parseInt(row.cnt);
+    }
+  } catch (e) { console.log('lab_orders not available for analytics'); }
+
+  // Also count from team_activities table if it has data (legacy/explicit logs)
+  try {
+    const result = await query(`
+      SELECT 
+        COALESCE(ta.user_id, ta.assigned_staff_id) as user_id,
+        ta.activity_type,
+        COUNT(*) as cnt
+      FROM team_activities ta
+      WHERE ta.created_at >= NOW() - INTERVAL '${period} days'
+      GROUP BY COALESCE(ta.user_id, ta.assigned_staff_id), ta.activity_type
+    `);
+    for (const row of result.rows) {
+      const uid = row.user_id;
+      const cnt = parseInt(row.cnt);
+      switch (row.activity_type) {
+        case 'ward_round':
+          wardRoundCounts[uid] = (wardRoundCounts[uid] || 0) + cnt;
+          break;
+        case 'procedure':
+          procedureCounts[uid] = (procedureCounts[uid] || 0) + cnt;
+          break;
+        case 'prescription':
+          prescriptionCounts[uid] = (prescriptionCounts[uid] || 0) + cnt;
+          break;
+        case 'consultation':
+          consultationCounts[uid] = (consultationCounts[uid] || 0) + cnt;
+          break;
+      }
+    }
+  } catch (e) { /* team_activities table may not exist */ }
+
+  // Build byStaff analytics array
+  const byStaff = staffResult.rows.map(user => {
+    const wr = wardRoundCounts[user.id] || 0;
+    const proc = procedureCounts[user.id] || 0;
+    const pres = prescriptionCounts[user.id] || 0;
+    const cons = consultationCounts[user.id] || 0;
+    return {
+      id: user.id,
+      full_name: user.full_name,
+      role: user.role,
+      ward_rounds: wr,
+      procedures: proc,
+      prescriptions: pres,
+      consultations: cons,
+      documentation: 0,
+      total_activities: wr + proc + pres + cons
     };
-  } catch (error) {
-    analytics.summary = { workloadDistribution: [] };
+  });
+
+  // Sort by total activities desc
+  byStaff.sort((a, b) => b.total_activities - a.total_activities);
+
+  // Compute workload summary by role from clinical data
+  const workloadByRole = {};
+  const userPatients = {};
+
+  try {
+    const wrResult = await query(`
+      SELECT user_id, COUNT(DISTINCT patient_id) as patient_count FROM ward_rounds
+      WHERE round_date >= CURRENT_DATE - INTERVAL '14 days'
+        AND user_id IS NOT NULL
+      GROUP BY user_id
+    `);
+    for (const row of wrResult.rows) {
+      userPatients[row.user_id] = parseInt(row.patient_count);
+    }
+  } catch (e) { }
+
+  try {
+    const admResult = await query(`
+      SELECT created_by, COUNT(DISTINCT patient_id) as patient_count FROM admissions
+      WHERE status = 'admitted' AND created_by IS NOT NULL
+      GROUP BY created_by
+    `);
+    for (const row of admResult.rows) {
+      if (!userPatients[row.created_by]) {
+        userPatients[row.created_by] = parseInt(row.patient_count);
+      }
+    }
+  } catch (e) { }
+
+  // Group by role for summary
+  for (const user of staffResult.rows) {
+    const role = user.role;
+    if (!workloadByRole[role]) {
+      workloadByRole[role] = { role, staff_count: 0, total_patients: 0, patientCounts: [] };
+    }
+    const pc = userPatients[user.id] || 0;
+    workloadByRole[role].staff_count++;
+    workloadByRole[role].total_patients += pc;
+    workloadByRole[role].patientCounts.push(pc);
   }
 
-  return res.status(200).json({ analytics });
+  const workloadDistribution = Object.values(workloadByRole).map((item) => ({
+    role: item.role,
+    staff_count: item.staff_count,
+    total_patients: item.total_patients,
+    avg_patients: item.staff_count > 0 ? Math.round(item.total_patients / item.staff_count * 10) / 10 : 0,
+    max_patients: item.patientCounts.length > 0 ? Math.max(...item.patientCounts) : 0,
+    min_patients: item.patientCounts.length > 0 ? Math.min(...item.patientCounts) : 0
+  }));
+
+  return res.status(200).json({
+    analytics: {
+      byStaff,
+      summary: { workloadDistribution }
+    }
+  });
 }
 
 /**

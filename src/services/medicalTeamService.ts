@@ -63,13 +63,14 @@ class MedicalTeamService {
   async assignTeamToPatient(patientId: number, hospitalNumber: string): Promise<void> {
     try {
       const users = await db.users.toArray();
+      const activeUsers = users.filter(u => u.is_active !== false);
       
-      // Get one of each role for balanced distribution
-      const consultant = users.find(u => u.role === 'consultant');
-      const seniorRegistrar = users.find(u => u.role === 'senior_registrar');
-      const registrar = users.find(u => u.role === 'registrar');
-      const houseOfficer = users.find(u => u.role === 'house_officer');
-      const nurses = users.filter(u => u.role === 'nurse').slice(0, 2); // Assign 2 nurses
+      // Get one of each role for balanced distribution (only active users)
+      const consultant = activeUsers.find(u => u.role === 'consultant');
+      const seniorRegistrar = activeUsers.find(u => u.role === 'senior_registrar');
+      const registrar = activeUsers.find(u => u.role === 'registrar');
+      const houseOfficer = activeUsers.find(u => u.role === 'house_officer');
+      const nurses = activeUsers.filter(u => u.role === 'nurse').slice(0, 2); // Assign 2 nurses
 
       const assignment: MedicalTeamAssignment = {
         patient_id: patientId,
@@ -113,13 +114,14 @@ class MedicalTeamService {
 
       console.log(`📋 Assigning medical teams to ${unassignedPatients.length} patients...`);
       
-      // Get all medical staff
+      // Get all active medical staff (exclude inactive users)
       const users = await db.users.toArray();
-      const consultants = users.filter(u => u.role === 'consultant');
-      const seniorRegistrars = users.filter(u => u.role === 'senior_registrar');
-      const registrars = users.filter(u => u.role === 'registrar');
-      const houseOfficers = users.filter(u => u.role === 'house_officer');
-      const nurses = users.filter(u => u.role === 'nurse');
+      const activeUsers = users.filter(u => u.is_active !== false);
+      const consultants = activeUsers.filter(u => u.role === 'consultant');
+      const seniorRegistrars = activeUsers.filter(u => u.role === 'senior_registrar');
+      const registrars = activeUsers.filter(u => u.role === 'registrar');
+      const houseOfficers = activeUsers.filter(u => u.role === 'house_officer');
+      const nurses = activeUsers.filter(u => u.role === 'nurse');
 
       // Round-robin assignment for load balancing
       let consultantIndex = 0;
@@ -367,7 +369,7 @@ class MedicalTeamService {
    */
   private async getLocalStaffByRole(role: string): Promise<StaffByRole[]> {
     const users = await db.users.toArray();
-    const roleUsers = users.filter(u => u.role === role);
+    const roleUsers = users.filter(u => u.role === role && u.is_active !== false);
     
     // Get patient counts from local assignments
     const assignments = await db.patient_assignments.toArray();

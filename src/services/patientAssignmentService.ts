@@ -65,9 +65,9 @@ class PatientAssignmentService {
 
       const data = await response.json();
       return {
-        consultants: data.filter((m: TeamMember) => m.role === 'consultant'),
-        registrars: data.filter((m: TeamMember) => m.role === 'registrar'),
-        houseOfficers: data.filter((m: TeamMember) => m.role === 'house_officer')
+        consultants: data.filter((m: TeamMember) => m.role === 'consultant' && m.is_active !== false),
+        registrars: data.filter((m: TeamMember) => m.role === 'registrar' && m.is_active !== false),
+        houseOfficers: data.filter((m: TeamMember) => m.role === 'house_officer' && m.is_active !== false)
       };
     } catch (error) {
       console.error('Error fetching team members:', error);

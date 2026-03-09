@@ -545,7 +545,7 @@ Format the response as JSON with sections: mainContent, learningObjectives, keyT
     const users = await db.users.toArray();
     
     const targetUsers = users.filter(user => 
-      content.targetLevels.includes(user.role as any)
+      content.targetLevels.includes(user.role as any) && user.is_active !== false
     );
 
     for (const user of targetUsers) {
@@ -708,7 +708,7 @@ Format the response as JSON with sections: mainContent, learningObjectives, keyT
     } catch (error) {
       console.warn('Server pull failed for analytics, using local:', error);
     }
-    const users = await db.users.where('role').equals(cadre).toArray();
+    const users = await db.users.where('role').equals(cadre).filter(u => u.is_active !== false).toArray();
     const allProgress = await db.user_progress.toArray();
     
     const cadreProgress = allProgress.filter(p => 
