@@ -47,6 +47,7 @@ import {
 import Layout from '../components/Layout';
 import { UserApprovalManager } from '../components/UserApprovalManager';
 import { AISettingsPanel } from '../components/AISettingsPanel';
+import { userManagementService } from '../services/userManagementService';
 import BulkUserImport from '../components/BulkUserImport';
 import TeamAnalytics from '../components/TeamAnalytics';
 import { medicalTeamService } from '../services/medicalTeamService';
@@ -108,6 +109,13 @@ export default function Admin() {
   const [showUserModal, setShowUserModal] = useState(false);
   const [showBackupModal, setShowBackupModal] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  // Deactivation modal state
+  const [showDeactivateModal, setShowDeactivateModal] = useState(false);
+  const [deactivateTarget, setDeactivateTarget] = useState<{ id: string; name: string; currentStatus: string } | null>(null);
+  const [deactivatePassword, setDeactivatePassword] = useState('');
+  const [deactivateError, setDeactivateError] = useState('');
+  const [deactivating, setDeactivating] = useState(false);
+  const [showDeactivatePassword, setShowDeactivatePassword] = useState(false);
 
   useEffect(() => {
     loadAdminData();
@@ -224,19 +232,49 @@ export default function Admin() {
   };
 
   const handleDeleteUser = async (userId: string) => {
-    if (confirm('Are you sure you want to delete this user?')) {
-      setUsers(users.filter(u => u.id !== userId));
-      // In real app, would call API to delete user
+    const user = users.find(u => u.id === userId);
+    if (!user) return;
+    if (!confirm(`Are you sure you want to permanently delete ${user.name}? This cannot be undone.`)) return;
+    try {
+      await userManagementService.updateUserStatus(userId, false);
+      await loadUsers();
+      toast.success(`${user.name} has been deleted.`);
+    } catch (error: any) {
+      toast.error(`Failed to delete user: ${error.message}`);
     }
   };
 
-  const handleSuspendUser = async (userId: string) => {
-    setUsers(users.map(u => 
-      u.id === userId 
-        ? { ...u, status: u.status === 'suspended' ? 'active' : 'suspended' as const }
-        : u
-    ));
-    // In real app, would call API to update user status
+  const handleDeactivateUser = (userId: string) => {
+    const user = users.find(u => u.id === userId);
+    if (!user) return;
+    setDeactivateTarget({ id: userId, name: user.name, currentStatus: user.status });
+    setDeactivatePassword('');
+    setDeactivateError('');
+    setShowDeactivatePassword(false);
+    setShowDeactivateModal(true);
+  };
+
+  const handleDeactivateConfirm = async () => {
+    if (deactivatePassword !== 'blackvelvet') {
+      setDeactivateError('Incorrect password. Access denied.');
+      return;
+    }
+    if (!deactivateTarget) return;
+
+    const isCurrentlyActive = deactivateTarget.currentStatus === 'active';
+    const action = isCurrentlyActive ? 'deactivate' : 'activate';
+    setDeactivating(true);
+    try {
+      await userManagementService.updateUserStatus(deactivateTarget.id, !isCurrentlyActive);
+      setShowDeactivateModal(false);
+      setDeactivateTarget(null);
+      toast.success(`${deactivateTarget.name} ${action}d successfully! This applies across all devices.`);
+      await loadUsers();
+    } catch (error: any) {
+      setDeactivateError(`Failed to ${action} user: ${error.message}`);
+    } finally {
+      setDeactivating(false);
+    }
   };
 
   const handleDatabaseBackup = async () => {
@@ -538,16 +576,19 @@ export default function Admin() {
                       <Edit3 className="h-4 w-4 inline mr-1" /> Edit
                     </button>
                     <button
-                      onClick={() => handleSuspendUser(user.id)}
-                      className={`flex-1 px-3 py-2 text-sm rounded-lg ${
-                        user.status === 'suspended' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                      onClick={() => handleDeactivateUser(user.id)}
+                      className={`flex-1 px-3 py-2 text-sm rounded-lg font-medium ${
+                        user.status === 'active' 
+                          ? 'bg-red-50 text-red-700 border border-red-200 hover:bg-red-100' 
+                          : 'bg-green-50 text-green-700 border border-green-200 hover:bg-green-100'
                       }`}
                     >
-                      {user.status === 'suspended' ? 'Activate' : 'Suspend'}
+                      <Lock className="h-4 w-4 inline mr-1" />
+                      {user.status === 'active' ? 'Deactivate' : 'Activate'}
                     </button>
                     <button
                       onClick={() => handleDeleteUser(user.id)}
-                      className="px-3 py-2 text-sm bg-red-100 text-red-600 rounded-lg"
+                      className="px-3 py-2 text-sm bg-red-100 text-red-600 rounded-lg hover:bg-red-200"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -624,30 +665,119 @@ export default function Admin() {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {user.lastLogin ? format(new Date(user.lastLogin), 'MMM d, yyyy HH:mm') : 'Never'}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                        <button
-                          onClick={() => handleEditUser(user)}
-                          className="text-blue-600 hover:text-blue-900"
-                        >
-                          <Edit3 className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => handleSuspendUser(user.id)}
-                          className="text-yellow-600 hover:text-yellow-900"
-                        >
-                          {user.status === 'suspended' ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
-                        </button>
-                        <button
-                          onClick={() => handleDeleteUser(user.id)}
-                          className="text-red-600 hover:text-red-900"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleEditUser(user)}
+                            className="text-blue-600 hover:text-blue-900" title="Edit"
+                          >
+                            <Edit3 className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeactivateUser(user.id)}
+                            className={`px-3 py-1.5 rounded-md transition text-xs font-medium flex items-center gap-1 ${
+                              user.status === 'active'
+                                ? 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200'
+                                : 'bg-green-50 text-green-700 hover:bg-green-100 border border-green-200'
+                            }`}
+                            title={user.status === 'active' ? 'Deactivate User' : 'Activate User'}
+                          >
+                            <Lock className="h-3.5 w-3.5" />
+                            {user.status === 'active' ? 'Deactivate' : 'Activate'}
+                          </button>
+                          <button
+                            onClick={() => handleDeleteUser(user.id)}
+                            className="text-red-600 hover:text-red-900" title="Delete"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Deactivation Password Confirmation Modal */}
+      {showDeactivateModal && deactivateTarget && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div className="px-6 py-4 border-b flex items-center gap-3">
+              <div className={`p-2 rounded-full ${
+                deactivateTarget.currentStatus === 'active' ? 'bg-red-100' : 'bg-green-100'
+              }`}>
+                <Lock className={`h-5 w-5 ${
+                  deactivateTarget.currentStatus === 'active' ? 'text-red-600' : 'text-green-600'
+                }`} />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">
+                  {deactivateTarget.currentStatus === 'active' ? 'Deactivate' : 'Activate'} User
+                </h3>
+                <p className="text-sm text-gray-500">{deactivateTarget.name}</p>
+              </div>
+            </div>
+            <div className="p-6 space-y-4">
+              {deactivateTarget.currentStatus === 'active' && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  <p className="text-sm text-amber-800"><strong>Warning:</strong> Deactivating this user will:</p>
+                  <ul className="text-xs text-amber-700 mt-1 ml-4 list-disc space-y-0.5">
+                    <li>Prevent them from logging in on all devices</li>
+                    <li>Exclude them from clinic duties & rosters</li>
+                    <li>Exclude them from team analytics & assignments</li>
+                    <li>This change persists in the database across all devices</li>
+                  </ul>
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Enter admin password to confirm
+                </label>
+                <div className="relative">
+                  <input
+                    type={showDeactivatePassword ? 'text' : 'password'}
+                    value={deactivatePassword}
+                    onChange={(e) => { setDeactivatePassword(e.target.value); setDeactivateError(''); }}
+                    onKeyDown={(e) => e.key === 'Enter' && handleDeactivateConfirm()}
+                    placeholder="Enter password..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 pr-10"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowDeactivatePassword(!showDeactivatePassword)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    {showDeactivatePassword ? <XCircle className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+                {deactivateError && (
+                  <p className="text-sm text-red-600 mt-1">{deactivateError}</p>
+                )}
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={handleDeactivateConfirm}
+                  disabled={!deactivatePassword || deactivating}
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium text-white transition disabled:opacity-50 ${
+                    deactivateTarget.currentStatus === 'active'
+                      ? 'bg-red-600 hover:bg-red-700'
+                      : 'bg-green-600 hover:bg-green-700'
+                  }`}
+                >
+                  {deactivating ? 'Processing...' : deactivateTarget.currentStatus === 'active' ? 'Deactivate' : 'Activate'}
+                </button>
+                <button
+                  onClick={() => { setShowDeactivateModal(false); setDeactivateTarget(null); }}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50 transition"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
         </div>
