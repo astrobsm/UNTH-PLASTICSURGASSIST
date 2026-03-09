@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import PresentationSlide, { SlideData } from './PresentationSlide';
 import { patientService } from '../../services/patientService';
-import { admissionService, Admission } from '../../services/admissionService';
+import { admissionDischargeService, Admission } from '../../services/admissionDischargeService';
 import { labService } from '../../services/labService';
 import { wardRoundsService } from '../../services/wardRoundsService';
 
@@ -88,7 +88,7 @@ export default function MortalityReview() {
       let wardRounds: any[] = [];
       let labs: any[] = [];
 
-      try { admissions = await admissionService.getPatientAdmissions(Number(selectedPatientId)); } catch {}
+      try { admissions = await admissionDischargeService.getPatientAdmissions(Number(selectedPatientId)); } catch {}
       try { wardRounds = await wardRoundsService.getPatientWardRounds(selectedPatientId); } catch {}
       try { labs = await labService.getLabInvestigations(selectedPatientId); } catch {}
 

@@ -11,7 +11,7 @@ import {
   Activity,
 } from 'lucide-react';
 import PresentationSlide, { SlideData } from './PresentationSlide';
-import { admissionService, Admission } from '../../services/admissionService';
+import { admissionDischargeService, Admission } from '../../services/admissionDischargeService';
 import { riskAssessmentService, DVTRiskAssessment } from '../../services/riskAssessmentService';
 import { patientService } from '../../services/patientService';
 
@@ -85,7 +85,7 @@ export default function VTEAudit() {
       // Get active admissions
       let admissions: Admission[] = [];
       try {
-        admissions = await admissionService.getActiveAdmissions();
+        admissions = await admissionDischargeService.getActiveAdmissions();
       } catch {
         admissions = [];
       }
