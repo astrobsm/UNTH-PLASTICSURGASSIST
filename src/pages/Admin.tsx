@@ -55,8 +55,9 @@ import { getRecentAuditLogs, AuditLog as AuditLogType } from '../services/auditL
 import { db } from '../db/database';
 import { resetDatabase, fullDatabaseRecovery, triggerEmergencyRecovery } from '../utils/dbReset';
 import toast from 'react-hot-toast';
+import RotationManagement from '../components/admin/RotationManagement';
 
-type AdminTab = 'dashboard' | 'user-approvals' | 'users' | 'bulk-import' | 'team-analytics' | 'system' | 'database' | 'security' | 'analytics' | 'settings';
+type AdminTab = 'dashboard' | 'user-approvals' | 'users' | 'bulk-import' | 'team-analytics' | 'rotations' | 'system' | 'database' | 'security' | 'analytics' | 'settings';
 
 interface User {
   id: string;
@@ -415,6 +416,7 @@ export default function Admin() {
         <TabButton tab="users" label="Users" icon={Users} />
         <TabButton tab="bulk-import" label="Bulk Import" icon={UserPlus} />
         <TabButton tab="team-analytics" label="Team Analytics" icon={Activity} />
+        <TabButton tab="rotations" label="Rotations" icon={Calendar} />
         <TabButton tab="system" label="System" icon={Activity} />
         <TabButton tab="database" label="Database" icon={Database} />
         <TabButton tab="security" label="Security" icon={Shield} />
@@ -1072,6 +1074,11 @@ export default function Admin() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Rotations Tab */}
+      {activeTab === 'rotations' && (
+        <RotationManagement />
       )}
 
       {/* Settings Tab */}

@@ -12,7 +12,12 @@ import {
   Search,
   ArrowLeft,
   ClipboardCheck,
-  TrendingUp
+  TrendingUp,
+  Calendar,
+  Activity,
+  Target,
+  BarChart3,
+  AlertTriangle
 } from 'lucide-react';
 import { 
   medicalTrainingService, 
@@ -22,6 +27,7 @@ import {
 } from '../services/medicalTrainingService';
 import { performanceService } from '../services/performanceService';
 import { cbtService, CBTProgress } from '../services/cbtService';
+import { rotationConfigService, RotationConfig, TraineeAnalytics } from '../services/rotationConfigService';
 import CMEArticleViewer from '../components/training/CMEArticleViewer';
 import { CBTPage } from '../components/cbt';
 import { PerformanceDashboard } from '../components/performance';
@@ -42,6 +48,9 @@ const MedicalTrainingPage: React.FC = () => {
   const [showPerformance, setShowPerformance] = useState(false);
   const [cbtProgress, setCbtProgress] = useState<CBTProgress | null>(null);
   const [cbtWeeklyStatus, setCbtWeeklyStatus] = useState<{ attempted: boolean; lastAttemptDate: string | null }>({ attempted: false, lastAttemptDate: null });
+  const [activeRotation, setActiveRotation] = useState<RotationConfig | null>(null);
+  const [rotationDays, setRotationDays] = useState<{ daysRemaining: number; daysElapsed: number; totalDays: number; progressPercent: number; commencementDate: string | null; endDate: string | null }>({ daysRemaining: 0, daysElapsed: 0, totalDays: 0, progressPercent: 0, commencementDate: null, endDate: null });
+  const [myParticipation, setMyParticipation] = useState<TraineeAnalytics | null>(null);
 
   // Load CBT status for dashboard display
   useEffect(() => {
@@ -90,6 +99,35 @@ const MedicalTrainingPage: React.FC = () => {
     
     loadFromServer();
   }, []);
+
+  // Load rotation config and participation data
+  useEffect(() => {
+    const loadRotationData = async () => {
+      try {
+        // Load active rotation config for current level
+        const config = rotationConfigService.getActiveRotationConfig(activeTab as TrainingLevel);
+        setActiveRotation(config);
+
+        if (config) {
+          const days = rotationConfigService.getRotationDaysInfo(activeTab as TrainingLevel);
+          setRotationDays(days);
+        } else {
+          setRotationDays({ daysRemaining: 0, daysElapsed: 0, totalDays: 0, progressPercent: 0, commencementDate: null, endDate: null });
+        }
+
+        // Load user's participation analytics
+        const userId = localStorage.getItem('userId');
+        if (userId) {
+          const analytics = await rotationConfigService.getTraineeAnalytics(userId);
+          setMyParticipation(analytics);
+        }
+      } catch (error) {
+        console.warn('Failed to load rotation data:', error);
+      }
+    };
+
+    loadRotationData();
+  }, [activeTab]);
 
   const modules = useMemo(() => {
     return medicalTrainingService.getModulesByLevel(activeTab);
@@ -252,6 +290,185 @@ const MedicalTrainingPage: React.FC = () => {
               </div>
             </div>
           </div>
+          
+          {/* Rotation Period Banner */}
+          {activeRotation && (
+            <div className="mt-6 bg-white/15 backdrop-blur rounded-xl p-5 border border-white/20">
+              <div className="flex items-center gap-3 mb-3">
+                <Calendar className="h-6 w-6" />
+                <div>
+                  <h3 className="font-bold text-lg">Current Rotation Period</h3>
+                  <p className="text-sm text-green-100">
+                    {new Date(activeRotation.commencement_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                    {' '}&rarr;{' '}
+                    {new Date(activeRotation.end_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                  </p>
+                </div>
+              </div>
+              
+              {/* Progress Bar */}
+              <div className="mb-2">
+                <div className="flex justify-between text-sm mb-1">
+                  <span>Day {rotationDays.daysElapsed} of {rotationDays.totalDays}</span>
+                  <span className={`font-bold ${rotationDays.daysRemaining <= 7 ? 'text-red-300' : rotationDays.daysRemaining <= 14 ? 'text-yellow-300' : 'text-white'}`}>
+                    {rotationDays.daysRemaining} days remaining
+                  </span>
+                </div>
+                <div className="w-full bg-white/20 rounded-full h-3">
+                  <div 
+                    className={`h-3 rounded-full transition-all ${rotationDays.progressPercent >= 90 ? 'bg-red-400' : rotationDays.progressPercent >= 70 ? 'bg-yellow-400' : 'bg-white/70'}`}
+                    style={{ width: `${rotationDays.progressPercent}%` }}
+                  />
+                </div>
+                <p className="text-xs text-green-100 mt-1">{rotationDays.progressPercent}% elapsed</p>
+              </div>
+
+              {activeRotation.notes && (
+                <p className="text-xs text-green-100 italic mt-1">Note: {activeRotation.notes}</p>
+              )}
+            </div>
+          )}
+
+          {/* Participation Tracking Panel */}
+          {myParticipation && (
+            <div className="mt-4 bg-white/15 backdrop-blur rounded-xl p-5 border border-white/20">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <Activity className="h-6 w-6" />
+                  <div>
+                    <h3 className="font-bold text-lg">Your Participation Tracker</h3>
+                    <p className="text-sm text-green-100">Activity within this rotation period</p>
+                  </div>
+                </div>
+                <div className={`px-3 py-1.5 rounded-full text-sm font-bold ${
+                  myParticipation.signOutEligible 
+                    ? 'bg-green-400 text-green-900' 
+                    : myParticipation.overallScore >= 50 
+                      ? 'bg-yellow-400 text-yellow-900' 
+                      : 'bg-red-400 text-red-900'
+                }`}>
+                  {myParticipation.overallScore}% Overall
+                </div>
+              </div>
+
+              {/* Performance Breakdown Grid */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                {/* CBT */}
+                <div className="bg-white/10 rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-green-100 text-xs font-medium">CBT Tests</p>
+                    <span className="text-xs text-green-200">30%</span>
+                  </div>
+                  <p className={`text-xl font-bold ${myParticipation.cbtScore >= 70 ? 'text-yellow-300' : 'text-white'}`}>
+                    {myParticipation.cbtScore}%
+                  </p>
+                  <p className="text-xs text-green-200 mt-0.5">{myParticipation.cbtTestsCompleted}/{myParticipation.cbtTestsRequired} completed</p>
+                </div>
+
+                {/* Patient Care */}
+                <div className="bg-white/10 rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-green-100 text-xs font-medium">Patient Care</p>
+                    <span className="text-xs text-green-200">35%</span>
+                  </div>
+                  <p className={`text-xl font-bold ${myParticipation.patientCareScore >= 70 ? 'text-yellow-300' : 'text-white'}`}>
+                    {myParticipation.patientCareScore}%
+                  </p>
+                  <p className="text-xs text-green-200 mt-0.5">{myParticipation.patientEntries}/{myParticipation.patientEntriesRequired} entries</p>
+                </div>
+
+                {/* Duties */}
+                <div className="bg-white/10 rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-green-100 text-xs font-medium">Duties</p>
+                    <span className="text-xs text-green-200">25%</span>
+                  </div>
+                  <p className={`text-xl font-bold ${myParticipation.dutyPromptnessScore >= 70 ? 'text-yellow-300' : 'text-white'}`}>
+                    {myParticipation.dutyPromptnessScore}%
+                  </p>
+                  <p className="text-xs text-green-200 mt-0.5">{myParticipation.dutiesCompleted}/{myParticipation.dutiesRequired} done</p>
+                </div>
+
+                {/* Attendance */}
+                <div className="bg-white/10 rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-green-100 text-xs font-medium">Attendance</p>
+                    <span className="text-xs text-green-200">10%</span>
+                  </div>
+                  <p className={`text-xl font-bold ${myParticipation.attendanceScore >= 70 ? 'text-yellow-300' : 'text-white'}`}>
+                    {myParticipation.attendanceScore}%
+                  </p>
+                  <p className="text-xs text-green-200 mt-0.5">{myParticipation.loginDays}/{myParticipation.loginDaysRequired} days</p>
+                </div>
+              </div>
+
+              {/* Additional tracking: CME + Responsibilities + Sign-out */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {/* CME Progress */}
+                <div className="bg-white/10 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Book className="h-4 w-4 text-green-200" />
+                    <p className="text-green-100 text-xs font-medium">CME Topics</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 bg-white/20 rounded-full h-2">
+                      <div className="h-2 rounded-full bg-blue-400" style={{ width: `${myParticipation.cmeProgress}%` }} />
+                    </div>
+                    <span className="text-sm font-bold">{myParticipation.cmeProgress}%</span>
+                  </div>
+                  <p className="text-xs text-green-200 mt-1">{myParticipation.topicsCompleted}/{myParticipation.totalTopics} topics</p>
+                </div>
+
+                {/* Responsibilities */}
+                <div className="bg-white/10 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Target className="h-4 w-4 text-green-200" />
+                    <p className="text-green-100 text-xs font-medium">Responsibilities</p>
+                  </div>
+                  <div className="flex items-center gap-4 mt-1">
+                    <div className="text-center">
+                      <p className="text-lg font-bold">{myParticipation.assignedResponsibilities}</p>
+                      <p className="text-xs text-green-200">Assigned</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-lg font-bold text-yellow-300">{myParticipation.completedResponsibilities}</p>
+                      <p className="text-xs text-green-200">Done</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-lg font-bold text-red-300">{myParticipation.pendingResponsibilities}</p>
+                      <p className="text-xs text-green-200">Pending</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sign-out Eligibility */}
+                <div className={`rounded-lg p-3 ${myParticipation.signOutEligible ? 'bg-green-400/30 border border-green-300/30' : 'bg-red-500/20 border border-red-300/20'}`}>
+                  <div className="flex items-center gap-2 mb-1">
+                    {myParticipation.signOutEligible ? (
+                      <CheckCircle className="h-4 w-4 text-green-300" />
+                    ) : (
+                      <AlertTriangle className="h-4 w-4 text-red-300" />
+                    )}
+                    <p className="text-xs font-medium">Sign-out Status</p>
+                  </div>
+                  {myParticipation.signOutEligible ? (
+                    <p className="text-sm font-bold text-green-300 mt-1">ELIGIBLE FOR SIGN-OUT</p>
+                  ) : (
+                    <>
+                      <p className="text-sm font-bold text-red-300 mt-1">NOT YET ELIGIBLE</p>
+                      {myParticipation.requirementsNotMet.length > 0 && (
+                        <div className="mt-1.5 space-y-0.5">
+                          {myParticipation.requirementsNotMet.slice(0, 3).map((r, i) => (
+                            <p key={i} className="text-xs text-red-200">• {r}</p>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
           
           {/* CBT Status Card - Dashboard Summary */}
           <div className="mt-6 bg-white/15 backdrop-blur rounded-xl p-5 border border-white/20">

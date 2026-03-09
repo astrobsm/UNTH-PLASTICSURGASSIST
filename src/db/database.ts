@@ -1219,6 +1219,12 @@ export class PlasticSurgeonDB extends Dexie {
       notice_board: '++id, title, category, content, posted_by, posted_by_name, posted_by_role, is_pinned, is_active, created_at, updated_at'
     });
 
+    // Version 23: Add rotation config and assigned responsibilities tables
+    this.version(23).stores({
+      rotation_configs: '++id, level, department, commencement_date, end_date, is_active, created_by, created_at, updated_at',
+      assigned_responsibilities: '++id, rotation_config_id, user_id, user_name, title, description, priority, status, due_date, assigned_by, assigned_at, completed_at'
+    });
+
     // Add hooks to automatically track changes
     this.patients.hook('creating', (primKey, obj, trans) => {
       obj.created_at = new Date();

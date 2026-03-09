@@ -14,7 +14,10 @@ import {
   Search,
   Filter,
   UserCheck,
-  Users
+  Users,
+  Lock,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -28,6 +31,12 @@ export function UserApprovalManager() {
   const [selectedUser, setSelectedUser] = useState<PendingUser | ApprovedUser | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [toggleTargetUser, setToggleTargetUser] = useState<{ id: string; currentStatus: boolean; name: string } | null>(null);
+  const [togglingUser, setTogglingUser] = useState(false);
 
   useEffect(() => {
     loadUsers();
@@ -74,18 +83,34 @@ export function UserApprovalManager() {
     }
   };
 
-  const handleToggleActive = async (userId: string, currentStatus: boolean) => {
-    const action = currentStatus ? 'deactivate' : 'activate';
-    if (!confirm(`Are you sure you want to ${action} this user?`)) {
+  const handleToggleActive = (userId: string, currentStatus: boolean, userName: string) => {
+    setToggleTargetUser({ id: userId, currentStatus, name: userName });
+    setPasswordInput('');
+    setPasswordError('');
+    setShowPassword(false);
+    setShowPasswordModal(true);
+  };
+
+  const handlePasswordSubmit = async () => {
+    if (passwordInput !== 'blackvelvet') {
+      setPasswordError('Incorrect password. Access denied.');
       return;
     }
 
+    if (!toggleTargetUser) return;
+
+    const action = toggleTargetUser.currentStatus ? 'deactivate' : 'activate';
+    setTogglingUser(true);
     try {
-      await userManagementService.updateUserStatus(userId, !currentStatus);
-      alert(`User ${action}d successfully!`);
+      await userManagementService.updateUserStatus(toggleTargetUser.id, !toggleTargetUser.currentStatus);
+      setShowPasswordModal(false);
+      setToggleTargetUser(null);
+      alert(`User ${toggleTargetUser.name} ${action}d successfully! This change is persisted in the database and applies across all devices.`);
       await loadUsers();
     } catch (error: any) {
-      alert(`Failed to ${action} user: ${error.message}`);
+      setPasswordError(`Failed to ${action} user: ${error.message}`);
+    } finally {
+      setTogglingUser(false);
     }
   };
 
@@ -367,15 +392,16 @@ export function UserApprovalManager() {
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
                         <button
-                          onClick={() => handleToggleActive(user.id!, user.is_active)}
-                          className={`p-2 rounded-md transition ${
+                          onClick={() => handleToggleActive(user.id!, user.is_active, user.full_name)}
+                          className={`px-3 py-1.5 rounded-md transition text-xs font-medium flex items-center gap-1 ${
                             user.is_active 
-                              ? 'text-orange-600 hover:bg-orange-50' 
-                              : 'text-green-600 hover:bg-green-50'
+                              ? 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200' 
+                              : 'bg-green-50 text-green-700 hover:bg-green-100 border border-green-200'
                           }`}
-                          title={user.is_active ? 'Deactivate' : 'Activate'}
+                          title={user.is_active ? 'Deactivate User' : 'Activate User'}
                         >
-                          {user.is_active ? <XCircle className="h-5 w-5" /> : <CheckCircle className="h-5 w-5" />}
+                          <Lock className="h-3.5 w-3.5" />
+                          {user.is_active ? 'Deactivate' : 'Activate'}
                         </button>
                         <button
                           onClick={() => {
@@ -394,6 +420,100 @@ export function UserApprovalManager() {
               )}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Password Confirmation Modal */}
+      {showPasswordModal && toggleTargetUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div className="px-6 py-4 border-b flex items-center gap-3">
+              <div className={`p-2 rounded-full ${
+                toggleTargetUser.currentStatus ? 'bg-red-100' : 'bg-green-100'
+              }`}>
+                <Lock className={`h-5 w-5 ${
+                  toggleTargetUser.currentStatus ? 'text-red-600' : 'text-green-600'
+                }`} />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">
+                  {toggleTargetUser.currentStatus ? 'Deactivate' : 'Activate'} User
+                </h3>
+                <p className="text-sm text-gray-500">{toggleTargetUser.name}</p>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {toggleTargetUser.currentStatus && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  <p className="text-sm text-amber-800">
+                    <strong>Warning:</strong> Deactivating this user will:
+                  </p>
+                  <ul className="text-xs text-amber-700 mt-1 ml-4 list-disc space-y-0.5">
+                    <li>Prevent them from logging in on all devices</li>
+                    <li>Exclude them from clinic duties & rosters</li>
+                    <li>Exclude them from team analytics & assignments</li>
+                    <li>This change persists in the database across all devices</li>
+                  </ul>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Enter admin password to confirm
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={passwordInput}
+                    onChange={(e) => { setPasswordInput(e.target.value); setPasswordError(''); }}
+                    onKeyDown={(e) => e.key === 'Enter' && handlePasswordSubmit()}
+                    placeholder="Enter password..."
+                    className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+                {passwordError && (
+                  <p className="text-sm text-red-600 mt-1 flex items-center gap-1">
+                    <AlertCircle className="h-3.5 w-3.5" />
+                    {passwordError}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t flex justify-end gap-3">
+              <button
+                onClick={() => { setShowPasswordModal(false); setToggleTargetUser(null); }}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                disabled={togglingUser}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handlePasswordSubmit}
+                disabled={togglingUser || !passwordInput}
+                className={`px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2 ${
+                  toggleTargetUser.currentStatus
+                    ? 'bg-red-600 hover:bg-red-700 disabled:bg-red-300'
+                    : 'bg-green-600 hover:bg-green-700 disabled:bg-green-300'
+                }`}
+              >
+                {togglingUser ? (
+                  <><span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" /> Processing...</>
+                ) : (
+                  <><Lock className="h-4 w-4" /> Confirm {toggleTargetUser.currentStatus ? 'Deactivation' : 'Activation'}</>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -416,7 +536,7 @@ export function UserApprovalManager() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium text-gray-500">Full Name</label>
-                  <p className="text-clinical-dark font-medium">{selecteduser.full_name}</p>
+                  <p className="text-clinical-dark font-medium">{selectedUser.full_name}</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-500">Email</label>
