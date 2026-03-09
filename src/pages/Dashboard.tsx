@@ -4,7 +4,8 @@ import {
   FlaskConical, 
   ClipboardCheck,
   AlertTriangle,
-  TrendingUp 
+  TrendingUp,
+  Megaphone 
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
@@ -220,6 +221,10 @@ export default function Dashboard() {
             <Link to="/labs" className="btn-secondary w-full justify-start">
               <FlaskConical className="h-4 w-4 mr-2 flex-shrink-0" />
               <span className="truncate">Order Lab Tests</span>
+            </Link>
+            <Link to="/notice-board" className="btn-secondary w-full justify-start">
+              <Megaphone className="h-4 w-4 mr-2 flex-shrink-0" />
+              <span className="truncate">Notice Board</span>
             </Link>
           </div>
         </div>

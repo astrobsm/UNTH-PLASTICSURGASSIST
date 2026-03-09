@@ -218,6 +218,7 @@ export class PlasticSurgeonDB extends Dexie {
   audit_logs!: Table<any>; // For PHI access audit logs (HIPAA compliance)
   call_duty_roster!: Table<any>; // For 48-hour call duty roster
   clinic_duty_logs!: Table<any>; // For clinic duty tracking & logs
+  notice_board!: Table<any>; // For notice board posts and announcements
 
   constructor() {
     super('PlasticSurgeonDB');
@@ -1210,7 +1211,8 @@ export class PlasticSurgeonDB extends Dexie {
       pushSubscriptions: '++id, user_id, endpoint, created_at',
       audit_logs: '++id, user_id, resource_type, resource_id, action, timestamp, synced',
       call_duty_roster: '++id, start_date, end_date, month_key, shift_number, senior_registrar_id, senior_registrar_name, registrar_id, registrar_name, house_officer_id, house_officer_name, status, created_by, created_at',
-      clinic_duty_logs: '++id, user_id, user_name, user_role, duty_type, duty_category, patient_id, patient_name, description, notes, status, assigned_date, completed_date, week_number, year, created_at'
+      clinic_duty_logs: '++id, user_id, user_name, user_role, duty_type, duty_category, patient_id, patient_name, description, notes, status, assigned_date, completed_date, week_number, year, created_at',
+      notice_board: '++id, title, category, content, posted_by, posted_by_name, posted_by_role, is_pinned, is_active, created_at, updated_at'
     });
 
     // Add hooks to automatically track changes

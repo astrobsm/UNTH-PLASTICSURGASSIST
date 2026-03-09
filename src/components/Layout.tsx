@@ -37,7 +37,8 @@ import {
   Presentation,
   Pill,
   Shield,
-  PhoneCall
+  PhoneCall,
+  Megaphone
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import SyncStatusIndicator from './SyncStatusIndicator';
@@ -72,6 +73,7 @@ const navigation = [
   { name: 'Patient Education', href: '/patient-education', icon: BookOpenCheck },
   { name: 'Call Duty Roster', href: '/call-duty', icon: PhoneCall },
   { name: 'Clinic Duties', href: '/clinic-duties', icon: Shield },
+  { name: 'Notice Board', href: '/notice-board', icon: Megaphone },
   { name: 'Shopping List', href: '/shopping-list', icon: ShoppingCart },
   { name: 'Chat', href: '/chat', icon: MessageSquare },
   { name: 'Video Conference', href: '/conference', icon: Video },
