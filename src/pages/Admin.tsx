@@ -570,21 +570,21 @@ export default function Admin() {
                   </div>
                   <div className="flex items-center space-x-2 pt-2">
                     <button
-                      onClick={() => handleEditUser(user)}
-                      className="flex-1 px-3 py-2 text-sm bg-gray-100 rounded-lg hover:bg-gray-200"
-                    >
-                      <Edit3 className="h-4 w-4 inline mr-1" /> Edit
-                    </button>
-                    <button
                       onClick={() => handleDeactivateUser(user.id)}
-                      className={`flex-1 px-3 py-2 text-sm rounded-lg font-medium ${
+                      className={`flex-1 px-3 py-2.5 text-sm rounded-lg font-bold flex items-center justify-center gap-1 ${
                         user.status === 'active' 
-                          ? 'bg-red-50 text-red-700 border border-red-200 hover:bg-red-100' 
-                          : 'bg-green-50 text-green-700 border border-green-200 hover:bg-green-100'
+                          ? 'bg-red-600 text-white hover:bg-red-700' 
+                          : 'bg-green-600 text-white hover:bg-green-700'
                       }`}
                     >
-                      <Lock className="h-4 w-4 inline mr-1" />
-                      {user.status === 'active' ? 'Deactivate' : 'Activate'}
+                      <Lock className="h-4 w-4" />
+                      {user.status === 'active' ? 'DEACTIVATE' : 'ACTIVATE'}
+                    </button>
+                    <button
+                      onClick={() => handleEditUser(user)}
+                      className="px-3 py-2.5 text-sm bg-gray-100 rounded-lg hover:bg-gray-200"
+                    >
+                      <Edit3 className="h-4 w-4" />
                     </button>
                     <button
                       onClick={() => handleDeleteUser(user.id)}
@@ -652,15 +652,29 @@ export default function Admin() {
                         <div className="text-sm text-gray-500">{user.department}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                          user.status === 'active' 
-                            ? 'bg-green-100 text-green-800'
-                            : user.status === 'suspended'
-                            ? 'bg-red-100 text-red-800'
-                            : 'bg-gray-100 text-gray-800'
-                        }`}>
-                          {user.status}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                            user.status === 'active' 
+                              ? 'bg-green-100 text-green-800'
+                              : user.status === 'suspended'
+                              ? 'bg-red-100 text-red-800'
+                              : 'bg-gray-100 text-gray-800'
+                          }`}>
+                            {user.status}
+                          </span>
+                          <button
+                            onClick={() => handleDeactivateUser(user.id)}
+                            className={`px-3 py-1.5 rounded-md transition text-xs font-medium flex items-center gap-1 ${
+                              user.status === 'active'
+                                ? 'bg-red-100 text-red-700 hover:bg-red-200 border border-red-300'
+                                : 'bg-green-100 text-green-700 hover:bg-green-200 border border-green-300'
+                            }`}
+                            title={user.status === 'active' ? 'Deactivate User' : 'Activate User'}
+                          >
+                            <Lock className="h-3.5 w-3.5" />
+                            {user.status === 'active' ? 'Deactivate' : 'Activate'}
+                          </button>
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {user.lastLogin ? format(new Date(user.lastLogin), 'MMM d, yyyy HH:mm') : 'Never'}
