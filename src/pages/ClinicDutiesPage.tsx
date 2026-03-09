@@ -1,15 +1,17 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   ClipboardList,
   Plus,
   CheckCircle2,
   Clock,
   AlertCircle,
+  AlertTriangle,
   XCircle,
   ChevronDown,
   ChevronUp,
   Search,
   Filter,
+  Activity,
   Calendar,
   User,
   Users,
@@ -29,6 +31,7 @@ import {
   clinicDutyService,
   ClinicDutyLog,
   DutyCategory,
+  DutyDefinition,
   DutyType,
   DUTY_DEFINITIONS,
   getDutyDefinitionsForRole,
@@ -86,7 +89,7 @@ export default function ClinicDutiesPage() {
   const now = new Date();
 
   // Tabs
-  const [activeTab, setActiveTab] = useState<'log' | 'my_duties' | 'weekly_report' | 'duty_board'>('duty_board');
+  const [activeTab, setActiveTab] = useState<'log' | 'my_duties' | 'weekly_report' | 'duty_board' | 'tuesday_preview'>('tuesday_preview');
 
   // Filters
   const [roleFilter, setRoleFilter] = useState<DutyCategory | 'all'>('all');
@@ -304,6 +307,7 @@ export default function ClinicDutiesPage() {
       {/* Tabs */}
       <div className="flex gap-1 bg-gray-100 p-1 rounded-xl overflow-x-auto">
         {([
+          { id: 'tuesday_preview', label: 'Tuesday Clinic', icon: Calendar },
           { id: 'duty_board', label: 'Duty Board', icon: ClipboardList },
           { id: 'my_duties', label: 'My Duties', icon: User },
           { id: 'weekly_report', label: 'Weekly Report', icon: BarChart3 },
@@ -354,6 +358,11 @@ export default function ClinicDutiesPage() {
           }}
           onCancel={() => setShowNewForm(false)}
         />
+      )}
+
+      {/* ─── TUESDAY CLINIC PREVIEW TAB ─────────────────────────────────── */}
+      {activeTab === 'tuesday_preview' && (
+        <TuesdayClinicPreview />
       )}
 
       {/* ─── DUTY BOARD TAB ─────────────────────────────────────────────── */}
@@ -492,6 +501,450 @@ export default function ClinicDutiesPage() {
             </div>
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Tuesday Clinic Preview ─────────────────────────────────────────────────
+
+interface AutoAssignedDuty {
+  duty: DutyDefinition;
+  isRedistributed: boolean;
+}
+
+interface StaffAssignment {
+  staff: { id: string; full_name: string; role: string };
+  duties: AutoAssignedDuty[];
+}
+
+function getNextTuesday(offset: number): Date {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const day = today.getDay();
+  let daysToTuesday: number;
+  if (day === 2) {
+    daysToTuesday = 0;
+  } else if (day < 2) {
+    daysToTuesday = 2 - day;
+  } else {
+    daysToTuesday = 2 - day + 7;
+  }
+  const tuesday = new Date(today);
+  tuesday.setDate(today.getDate() + daysToTuesday + offset * 7);
+  return tuesday;
+}
+
+function TuesdayClinicPreview() {
+  const [loading, setLoading] = useState(true);
+  const [tuesdayOffset, setTuesdayOffset] = useState(0);
+  const [staffByRole, setStaffByRole] = useState<{
+    house_officers: { id: string; full_name: string; role: string }[];
+    registrars: { id: string; full_name: string; role: string }[];
+    senior_registrars: { id: string; full_name: string; role: string }[];
+  }>({ house_officers: [], registrars: [], senior_registrars: [] });
+  const [assignments, setAssignments] = useState<StaffAssignment[]>([]);
+  const [applying, setApplying] = useState(false);
+  const [applied, setApplied] = useState(false);
+  const [alreadyLogged, setAlreadyLogged] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  const clinicDate = useMemo(() => getNextTuesday(tuesdayOffset), [tuesdayOffset]);
+
+  const isToday = useMemo(() => {
+    const today = new Date();
+    return (
+      today.getFullYear() === clinicDate.getFullYear() &&
+      today.getMonth() === clinicDate.getMonth() &&
+      today.getDate() === clinicDate.getDate()
+    );
+  }, [clinicDate]);
+
+  const isPast = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return clinicDate < today;
+  }, [clinicDate]);
+
+  useEffect(() => {
+    loadAndAssign();
+  }, [clinicDate]);
+
+  const loadAndAssign = async () => {
+    setLoading(true);
+    setApplied(false);
+    setError('');
+    setSuccess('');
+    try {
+      const [srStaff, regStaff, hoStaff] = await Promise.all([
+        clinicDutyService.getStaffByRole('senior_registrar'),
+        clinicDutyService.getStaffByRole('junior_registrar'),
+        clinicDutyService.getStaffByRole('house_officer'),
+      ]);
+
+      setStaffByRole({
+        house_officers: hoStaff,
+        registrars: regStaff,
+        senior_registrars: srStaff,
+      });
+
+      // Check if duties already logged for this Tuesday
+      const dateStr = clinicDate.toISOString().split('T')[0];
+      const existing = await clinicDutyService.getLogs({
+        from_date: dateStr + 'T00:00:00.000Z',
+        to_date: dateStr + 'T23:59:59.999Z',
+      });
+      setAlreadyLogged(existing.length > 0);
+
+      // Build auto-assignment
+      const hoDuties = getDutyDefinitionsForRole('house_officer');
+      const regDuties = getDutyDefinitionsForRole('registrar');
+      const srDuties = getDutyDefinitionsForRole('senior_registrar');
+
+      const assignmentMap = new Map<string, StaffAssignment>();
+
+      // Initialize all staff in the map
+      [...hoStaff, ...regStaff, ...srStaff].forEach(s => {
+        assignmentMap.set(s.id, { staff: s, duties: [] });
+      });
+
+      // 1) Assign House Officer duties (round-robin among HOs)
+      if (hoStaff.length > 0) {
+        hoDuties.forEach((duty, idx) => {
+          const staff = hoStaff[idx % hoStaff.length];
+          assignmentMap.get(staff.id)!.duties.push({ duty, isRedistributed: false });
+        });
+      }
+
+      // 2) Assign Registrar duties
+      if (regStaff.length > 0) {
+        regDuties.forEach((duty, idx) => {
+          const staff = regStaff[idx % regStaff.length];
+          assignmentMap.get(staff.id)!.duties.push({ duty, isRedistributed: false });
+        });
+      } else {
+        // No registrars — redistribute registrar duties evenly to HOs + SRs
+        const pool = [...hoStaff, ...srStaff];
+        if (pool.length > 0) {
+          regDuties.forEach((duty, idx) => {
+            const staff = pool[idx % pool.length];
+            assignmentMap.get(staff.id)!.duties.push({ duty, isRedistributed: true });
+          });
+        }
+      }
+
+      // 3) Assign Senior Registrar duties (round-robin among SRs)
+      if (srStaff.length > 0) {
+        srDuties.forEach((duty, idx) => {
+          const staff = srStaff[idx % srStaff.length];
+          assignmentMap.get(staff.id)!.duties.push({ duty, isRedistributed: false });
+        });
+      }
+
+      // Sort: SRs first, then Registrars, then HOs
+      const roleOrder: Record<string, number> = { senior_registrar: 0, junior_registrar: 1, house_officer: 2 };
+      const sorted = Array.from(assignmentMap.values())
+        .filter(a => a.duties.length > 0)
+        .sort((a, b) => (roleOrder[a.staff.role] ?? 3) - (roleOrder[b.staff.role] ?? 3));
+
+      setAssignments(sorted);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load staff data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const applyAllDuties = async () => {
+    setApplying(true);
+    setError('');
+    try {
+      const dateStr = clinicDate.toISOString();
+      for (const { staff, duties } of assignments) {
+        for (const { duty } of duties) {
+          const cat: DutyCategory = staff.role === 'junior_registrar' ? 'registrar' : staff.role as DutyCategory;
+          await clinicDutyService.logDuty({
+            user_id: staff.id,
+            user_name: staff.full_name,
+            user_role: cat,
+            duty_type: duty.type,
+            duty_category: duty.category,
+            description: duty.description,
+            status: 'assigned',
+            assigned_date: dateStr,
+          });
+        }
+      }
+      setApplied(true);
+      setAlreadyLogged(true);
+      setSuccess(`All ${assignments.reduce((sum, a) => sum + a.duties.length, 0)} duties have been logged for ${format(clinicDate, 'EEEE, dd MMMM yyyy')}.`);
+    } catch (err: any) {
+      setError(err.message || 'Failed to apply duties');
+    } finally {
+      setApplying(false);
+    }
+  };
+
+  const getRoleBadge = (role: string) => {
+    if (role === 'senior_registrar') return { label: 'Senior Registrar', color: 'bg-purple-100 text-purple-800 border-purple-300' };
+    if (role === 'junior_registrar') return { label: 'Registrar', color: 'bg-blue-100 text-blue-800 border-blue-300' };
+    return { label: 'House Officer', color: 'bg-green-100 text-green-800 border-green-300' };
+  };
+
+  const totalDuties = assignments.reduce((sum, a) => sum + a.duties.length, 0);
+  const hasRedistribution = staffByRole.registrars.length === 0 && (staffByRole.house_officers.length > 0 || staffByRole.senior_registrars.length > 0);
+
+  return (
+    <div className="space-y-4">
+      {/* Date Navigation */}
+      <div className="bg-white rounded-xl shadow-sm border p-4">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setTuesdayOffset(o => o - 1)}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              title="Previous Tuesday"
+            >
+              <ChevronDown className="w-5 h-5 rotate-90" />
+            </button>
+            <div className="text-center">
+              <div className="text-lg font-bold text-gray-900 flex items-center gap-2 justify-center">
+                <Calendar className="w-5 h-5 text-green-600" />
+                Tuesday Clinic — {format(clinicDate, 'dd MMMM yyyy')}
+              </div>
+              <div className="text-sm text-gray-500">
+                {isToday ? (
+                  <span className="inline-flex items-center gap-1 text-green-600 font-semibold">
+                    <Flame className="w-4 h-4" /> Today is Clinic Day!
+                  </span>
+                ) : isPast ? (
+                  <span className="text-gray-400">Past clinic day</span>
+                ) : (
+                  <span>Upcoming clinic day</span>
+                )}
+              </div>
+            </div>
+            <button
+              onClick={() => setTuesdayOffset(o => o + 1)}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              title="Next Tuesday"
+            >
+              <ChevronDown className="w-5 h-5 -rotate-90" />
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            {tuesdayOffset !== 0 && (
+              <button
+                onClick={() => setTuesdayOffset(0)}
+                className="px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+              >
+                This Week
+              </button>
+            )}
+            <button
+              onClick={loadAndAssign}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              title="Refresh"
+            >
+              <RefreshCw className={`w-5 h-5 text-gray-500 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Messages */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center gap-2">
+          <AlertCircle className="w-5 h-5 flex-shrink-0" /> {error}
+          <button onClick={() => setError('')} className="ml-auto"><X className="w-4 h-4" /></button>
+        </div>
+      )}
+      {success && (
+        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg flex items-center gap-2">
+          <CheckCircle2 className="w-5 h-5 flex-shrink-0" /> {success}
+          <button onClick={() => setSuccess('')} className="ml-auto"><X className="w-4 h-4" /></button>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex justify-center py-12">
+          <RefreshCw className="w-8 h-8 text-green-600 animate-spin" />
+        </div>
+      ) : (
+        <>
+          {/* Staff Availability Summary */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="bg-white rounded-xl shadow-sm border p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-purple-50 text-purple-600">
+                  <Users className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-purple-700">{staffByRole.senior_registrars.length}</div>
+                  <div className="text-xs text-gray-500">Senior Registrar{staffByRole.senior_registrars.length !== 1 ? 's' : ''}</div>
+                </div>
+              </div>
+              {staffByRole.senior_registrars.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {staffByRole.senior_registrars.map(s => (
+                    <span key={s.id} className="text-xs bg-purple-50 text-purple-700 px-2 py-0.5 rounded-full">{s.full_name}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="bg-white rounded-xl shadow-sm border p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-blue-50 text-blue-600">
+                  <Users className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-blue-700">{staffByRole.registrars.length}</div>
+                  <div className="text-xs text-gray-500">Registrar{staffByRole.registrars.length !== 1 ? 's' : ''}</div>
+                </div>
+              </div>
+              {staffByRole.registrars.length > 0 ? (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {staffByRole.registrars.map(s => (
+                    <span key={s.id} className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">{s.full_name}</span>
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-2 text-xs text-orange-600 font-medium">No registrars — duties redistributed</div>
+              )}
+            </div>
+            <div className="bg-white rounded-xl shadow-sm border p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-green-50 text-green-600">
+                  <Users className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-green-700">{staffByRole.house_officers.length}</div>
+                  <div className="text-xs text-gray-500">House Officer{staffByRole.house_officers.length !== 1 ? 's' : ''}</div>
+                </div>
+              </div>
+              {staffByRole.house_officers.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {staffByRole.house_officers.map(s => (
+                    <span key={s.id} className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full">{s.full_name}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Redistribution Warning */}
+          {hasRedistribution && (
+            <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <div className="font-semibold text-orange-800">No Registrar Available</div>
+                <div className="text-sm text-orange-700 mt-1">
+                  Registrar duties (<em>Clerking &amp; Presentation of New Patients</em>) have been evenly
+                  redistributed among the available House Officers and Senior Registrar(s).
+                  Redistributed duties are marked with a <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 text-xs font-medium">Redistributed</span> badge.
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Summary Bar */}
+          <div className="bg-white rounded-xl shadow-sm border p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-4">
+              <div className="text-sm text-gray-600">
+                <span className="font-bold text-gray-900">{totalDuties}</span> duties across{' '}
+                <span className="font-bold text-gray-900">{assignments.length}</span> staff members
+              </div>
+            </div>
+            {!applied && !alreadyLogged && totalDuties > 0 && (
+              <button
+                onClick={applyAllDuties}
+                disabled={applying}
+                className="px-5 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2 text-sm font-medium transition-colors"
+              >
+                {applying ? (
+                  <><RefreshCw className="w-4 h-4 animate-spin" /> Applying...</>
+                ) : (
+                  <><CheckCircle2 className="w-4 h-4" /> Apply All Duties for {format(clinicDate, 'dd MMM')}</>
+                )}
+              </button>
+            )}
+            {(applied || alreadyLogged) && (
+              <span className="inline-flex items-center gap-1.5 px-4 py-2 bg-green-50 text-green-700 rounded-lg text-sm font-medium">
+                <CheckCircle2 className="w-4 h-4" /> Duties logged for this date
+              </span>
+            )}
+          </div>
+
+          {/* Assignment Cards — grouped by person */}
+          {assignments.length === 0 ? (
+            <div className="bg-white rounded-xl shadow-sm border p-12 text-center">
+              <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-gray-700">No staff available</h3>
+              <p className="text-gray-500 mt-2">Register staff members (House Officers, Registrars, Senior Registrars) to see auto-assigned clinic duties.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {assignments.map(({ staff, duties }) => {
+                const badge = getRoleBadge(staff.role);
+                const Icon = staff.role === 'senior_registrar' ? Stethoscope : staff.role === 'junior_registrar' ? Activity : User;
+                const roleBg = staff.role === 'senior_registrar' ? 'bg-purple-600' : staff.role === 'junior_registrar' ? 'bg-blue-600' : 'bg-green-600';
+                const roleIconBg = staff.role === 'senior_registrar' ? 'bg-purple-50 text-purple-600' : staff.role === 'junior_registrar' ? 'bg-blue-50 text-blue-600' : 'bg-green-50 text-green-600';
+
+                return (
+                  <div key={staff.id} className="bg-white rounded-xl shadow-sm border overflow-hidden">
+                    {/* Person header */}
+                    <div className={`px-5 py-3 ${roleBg} text-white flex items-center gap-3`}>
+                      <Icon className="w-5 h-5" />
+                      <div className="flex-1">
+                        <div className="font-semibold">{staff.full_name}</div>
+                        <div className="text-xs opacity-80">{badge.label} — {duties.length} {duties.length === 1 ? 'duty' : 'duties'}</div>
+                      </div>
+                    </div>
+                    {/* Duties list */}
+                    <div className="divide-y">
+                      {duties.map(({ duty, isRedistributed }, didx) => {
+                        const DutyIcon = DUTY_ICONS[duty.type] || ClipboardList;
+                        return (
+                          <div key={`${duty.type}-${didx}`} className="px-5 py-3 flex items-start gap-3 hover:bg-gray-50">
+                            <div className={`p-1.5 rounded-lg ${roleIconBg}`}>
+                              <DutyIcon className="w-4 h-4" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium text-gray-900 flex items-center gap-2 flex-wrap">
+                                {duty.label}
+                                {isRedistributed && (
+                                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 text-[10px] font-semibold uppercase tracking-wider">
+                                    <AlertTriangle className="w-3 h-3" /> Redistributed
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-sm text-gray-500 mt-0.5">{duty.description}</div>
+                            </div>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              {duty.time_slot && (
+                                <span className="px-2 py-1 rounded-full bg-orange-100 text-orange-700 text-xs font-medium flex items-center gap-1">
+                                  <Clock className="w-3 h-3" /> {duty.time_slot}
+                                </span>
+                              )}
+                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                duty.recurrence === 'daily' ? 'bg-yellow-100 text-yellow-700' :
+                                duty.recurrence === 'weekly' ? 'bg-blue-100 text-blue-700' :
+                                'bg-gray-100 text-gray-600'
+                              }`}>
+                                {duty.recurrence === 'as_needed' ? 'As needed' : duty.recurrence.charAt(0).toUpperCase() + duty.recurrence.slice(1)}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
