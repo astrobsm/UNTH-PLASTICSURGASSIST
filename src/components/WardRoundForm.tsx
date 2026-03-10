@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Save, User, Calendar, FileText, Activity, AlertCircle, TrendingUp, Pill, Stethoscope, ClipboardList, Users, Edit3, Camera, Image, Upload, Trash2, FileSearch, Loader2, TestTube } from 'lucide-react';
+import { X, Save, User, Calendar, FileText, Activity, AlertCircle, TrendingUp, Pill, Stethoscope, ClipboardList, Users, Edit3, Camera, Image, Upload, Trash2, FileSearch, Loader2, TestTube, Brain, Mic } from 'lucide-react';
 import { wardRoundsService, WardRound, ROUND_TYPES, RoundType, ClinicalImage } from '../services/wardRoundsService';
 import { db } from '../db/database';
 import { patientService } from '../services/patientService';
@@ -10,6 +10,9 @@ import { TreatmentPlanModificationPanel } from './TreatmentPlanModificationPanel
 import { InvestigationOrderingModal } from './InvestigationOrderingModal';
 import { MedicationOrderingModal } from './MedicationOrderingModal';
 import { MedicalTextInput } from './MedicalTextInput';
+import { ScribeRecordingPanel } from './ScribeRecordingPanel';
+import { ScribeNoteEditor } from './ScribeNoteEditor';
+import { medicalScribeService, StructuredNote, ScribeSession } from '../services/medicalScribeService';
 import Tesseract from 'tesseract.js';
 
 interface WardRoundFormProps {
@@ -45,6 +48,12 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
   const [ocrProgress, setOcrProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+
+  // AI Medical Scribe state
+  const [showScribePanel, setShowScribePanel] = useState(false);
+  const [showScribeEditor, setShowScribeEditor] = useState(false);
+  const [scribeNote, setScribeNote] = useState<StructuredNote | null>(null);
+  const [scribeSession, setScribeSession] = useState<ScribeSession | null>(null);
 
   const [formData, setFormData] = useState({
     patient_id: initialPatientId || '',
@@ -358,6 +367,43 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
     }
   };
 
+  // AI Scribe: apply structured note data to the ward round form
+  const handleScribeApplyToForm = (scribeFormData: Record<string, any>) => {
+    setFormData(prev => {
+      const updates: any = { ...prev };
+      
+      // Map scribe output fields to form fields
+      if (scribeFormData.chief_complaint) updates.chief_complaint = scribeFormData.chief_complaint;
+      if (scribeFormData.subjective_complaints) updates.subjective_complaints = scribeFormData.subjective_complaints;
+      if (scribeFormData.examination_findings) updates.examination_findings = scribeFormData.examination_findings;
+      if (scribeFormData.clinical_notes) updates.clinical_notes = scribeFormData.clinical_notes;
+      if (scribeFormData.clinical_impression) updates.clinical_impression = scribeFormData.clinical_impression;
+      if (scribeFormData.follow_up_plan) updates.follow_up_plan = scribeFormData.follow_up_plan;
+      if (scribeFormData.discharge_plan) updates.discharge_plan = scribeFormData.discharge_plan;
+      if (scribeFormData.wound_status) updates.wound_status = scribeFormData.wound_status;
+      if (scribeFormData.complications) updates.complications = scribeFormData.complications;
+      if (scribeFormData.progress_status) updates.progress_status = scribeFormData.progress_status;
+      
+      // Vitals
+      if (scribeFormData.temperature) updates.temperature = String(scribeFormData.temperature);
+      if (scribeFormData.pulse) updates.pulse = String(scribeFormData.pulse);
+      if (scribeFormData.blood_pressure) updates.blood_pressure = scribeFormData.blood_pressure;
+      if (scribeFormData.respiratory_rate) updates.respiratory_rate = String(scribeFormData.respiratory_rate);
+      if (scribeFormData.spo2) updates.spo2 = String(scribeFormData.spo2);
+      if (scribeFormData.pain_score !== undefined) updates.pain_score = scribeFormData.pain_score;
+      
+      return updates;
+    });
+    setShowScribeEditor(false);
+    setShowScribePanel(false);
+  };
+
+  const handleScribeNoteReady = (note: StructuredNote, session: ScribeSession) => {
+    setScribeNote(note);
+    setScribeSession(session);
+    setShowScribeEditor(true);
+  };
+
   // Clinical Image handling functions
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, imageType: ClinicalImage['type']) => {
     const files = e.target.files;
@@ -509,9 +555,23 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
               </p>
             )}
           </div>
-          <button onClick={onClose} className="text-white hover:text-gray-200">
-            <X className="w-6 h-6" />
-          </button>
+          <div className="flex items-center gap-2">
+            {selectedPatient && (
+              <button
+                type="button"
+                onClick={() => setShowScribePanel(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 text-white rounded-lg transition-colors text-sm font-medium"
+                title="AI Medical Scribe - Record and auto-fill"
+              >
+                <Brain className="w-4 h-4" />
+                <Mic className="w-4 h-4" />
+                AI Scribe
+              </button>
+            )}
+            <button onClick={onClose} className="text-white hover:text-gray-200">
+              <X className="w-6 h-6" />
+            </button>
+          </div>
         </div>
 
         {/* Tabs */}
@@ -1589,6 +1649,40 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
             }));
           }}
           onClose={() => setShowMedicationModal(false)}
+        />
+      )}
+
+      {/* AI Medical Scribe Recording Panel */}
+      {showScribePanel && selectedPatient && (
+        <ScribeRecordingPanel
+          patientId={formData.patient_id}
+          patientName={`${selectedPatient.first_name} ${selectedPatient.last_name}`}
+          hospitalNumber={selectedPatient.hospital_number || ''}
+          context="ward_round"
+          roundType={formData.round_type}
+          recordedBy={formData.reviewing_doctor || authUser?.name || 'Unknown'}
+          recordedByRole={formData.doctor_role || 'house_officer'}
+          wardRoundId={wardRoundId}
+          onNoteReady={handleScribeNoteReady}
+          onApplyToForm={handleScribeApplyToForm}
+          onClose={() => setShowScribePanel(false)}
+        />
+      )}
+
+      {/* AI Scribe Note Editor / Review */}
+      {showScribeEditor && scribeNote && (
+        <ScribeNoteEditor
+          note={scribeNote}
+          patientName={selectedPatient ? `${selectedPatient.first_name} ${selectedPatient.last_name}` : 'Patient'}
+          onSave={async (editedNote) => {
+            if (scribeSession) {
+              await medicalScribeService.updateStructuredNote(scribeSession.id, editedNote);
+            }
+            setShowScribeEditor(false);
+          }}
+          onApplyToForm={(scribeFormData) => handleScribeApplyToForm(scribeFormData)}
+          onClose={() => setShowScribeEditor(false)}
+          showApplyButton={true}
         />
       )}
     </div>

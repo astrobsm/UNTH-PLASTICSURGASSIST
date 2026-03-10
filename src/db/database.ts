@@ -1225,6 +1225,11 @@ export class PlasticSurgeonDB extends Dexie {
       assigned_responsibilities: '++id, rotation_config_id, user_id, user_name, title, description, priority, status, due_date, assigned_by, assigned_at, completed_at'
     });
 
+    // Version 24: Add AI Medical Scribe sessions table
+    this.version(24).stores({
+      scribe_sessions: 'id, patient_id, context, status, ward_round_id, recorded_by, created_at'
+    });
+
     // Add hooks to automatically track changes
     this.patients.hook('creating', (primKey, obj, trans) => {
       obj.created_at = new Date();

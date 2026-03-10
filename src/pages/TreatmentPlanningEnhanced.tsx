@@ -13,7 +13,9 @@ import {
   ChevronDown,
   ChevronUp,
   TestTube,
-  RefreshCw
+  RefreshCw,
+  Brain,
+  Mic
 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import { db } from '../db/database';
@@ -31,6 +33,8 @@ import { useAuthStore } from '../store/authStore';
 import { InvestigationOrderingModal } from '../components/InvestigationOrderingModal';
 import { MedicationOrderingModal } from '../components/MedicationOrderingModal';
 import { dataSyncService } from '../services/dataSyncService';
+import { ScribeRecordingPanel } from '../components/ScribeRecordingPanel';
+import { medicalScribeService, StructuredNote, ScribeSession } from '../services/medicalScribeService';
 import toast from 'react-hot-toast';
 
 export default function TreatmentPlanningEnhanced() {
@@ -67,6 +71,7 @@ export default function TreatmentPlanningEnhanced() {
     house_officer: '',
     review_notes: ''
   });
+  const [showReviewScribe, setShowReviewScribe] = useState(false);
 
   // Lab Work Form State
   const [showLabModal, setShowLabModal] = useState(false);
@@ -1119,11 +1124,24 @@ export default function TreatmentPlanningEnhanced() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                <div className="flex items-center gap-2 mb-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowReviewScribe(true)}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-md hover:bg-indigo-100 text-xs font-medium"
+                    title="Dictate review notes with AI Scribe"
+                  >
+                    <Brain className="w-3 h-3" />
+                    <Mic className="w-3 h-3" />
+                    Dictate with AI Scribe
+                  </button>
+                </div>
                 <textarea
                   value={newReview.review_notes}
                   onChange={(e) => setNewReview({ ...newReview, review_notes: e.target.value })}
                   rows={3}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  placeholder="Type or dictate review notes..."
                 />
               </div>
             </div>
@@ -1506,6 +1524,41 @@ export default function TreatmentPlanningEnhanced() {
             }
           }}
           onClose={() => setShowMedicationOrderingModal(false)}
+        />
+      )}
+
+      {/* AI Scribe for Review Dictation */}
+      {showReviewScribe && selectedPatient && (
+        <ScribeRecordingPanel
+          patientId={selectedPatient}
+          patientName={(() => {
+            const patient = patients.find(p => (p.id || p.serverId) === selectedPatient);
+            return patient ? `${patient.first_name} ${patient.last_name}` : 'Patient';
+          })()}
+          hospitalNumber={(() => {
+            const patient = patients.find(p => (p.id || p.serverId) === selectedPatient);
+            return patient?.hospital_number || '';
+          })()}
+          context="patient_review"
+          recordedBy={user?.name || 'Unknown'}
+          recordedByRole={user?.role || 'house_officer'}
+          onNoteReady={(note, session) => {
+            // Combine SOAP sections into review notes
+            const reviewText = [
+              note.subjective ? `S: ${note.subjective}` : '',
+              note.objective ? `O: ${note.objective}` : '',
+              note.assessment ? `A: ${note.assessment}` : '',
+              note.plan ? `P: ${note.plan}` : ''
+            ].filter(Boolean).join('\n\n');
+            setNewReview(prev => ({
+              ...prev,
+              review_notes: prev.review_notes
+                ? `${prev.review_notes}\n\n--- AI Scribe ---\n${reviewText}`
+                : reviewText
+            }));
+            setShowReviewScribe(false);
+          }}
+          onClose={() => setShowReviewScribe(false)}
         />
       )}
     </div>

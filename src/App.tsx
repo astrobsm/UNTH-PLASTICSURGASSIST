@@ -83,6 +83,7 @@ const PrescriptionsPage = lazyWithRetry(() => import('./pages/PrescriptionsPage'
 const CallDutyPage = lazyWithRetry(() => import('./pages/CallDutyPage'));
 const ClinicDutiesPage = lazyWithRetry(() => import('./pages/ClinicDutiesPage'));
 const NoticeBoardPage = lazyWithRetry(() => import('./pages/NoticeBoardPage'));
+const ScribeDashboard = lazyWithRetry(() => import('./pages/ScribeDashboard'));
 
 // Loading fallback component
 const PageLoader = () => (
@@ -220,6 +221,7 @@ function App() {
               <Route path="/chat/:roomId" element={<ChatRooms />} />
               <Route path="/departmental-meetings" element={<DepartmentalMeetingsPage />} />
               <Route path="/notice-board" element={<NoticeBoardPage />} />
+              <Route path="/ai-scribe" element={<ScribeDashboard />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/admin" element={<Admin />} />
             </Routes>

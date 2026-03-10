@@ -38,7 +38,8 @@ import {
   Pill,
   Shield,
   PhoneCall,
-  Megaphone
+  Megaphone,
+  Brain
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import SyncStatusIndicator from './SyncStatusIndicator';
@@ -61,6 +62,7 @@ const navigation = [
   { name: 'Dept. Meetings', href: '/departmental-meetings', icon: Presentation },
   { name: 'Blood Transfusion', href: '/blood-transfusion', icon: Droplet },
   { name: 'Ward Rounds', href: '/ward-rounds', icon: Activity },
+  { name: 'AI Medical Scribe', href: '/ai-scribe', icon: Brain },
   { name: 'Limb Salvage', href: '/limb-salvage', icon: Footprints },
   { name: 'Burn Care', href: '/burn-care', icon: Flame },
   { name: 'Wound Care', href: '/wound-care', icon: HeartPulse },
