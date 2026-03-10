@@ -687,19 +687,57 @@ class TreatmentPlanningService {
 
   // Get treatment plan by ID
   async getTreatmentPlan(planId: string): Promise<EnhancedTreatmentPlan | undefined> {
-    // Try server first
+    // Always get local data first to preserve local-only fields (lab_works, reviews, etc.)
+    const localPlan = await this.findPlanLocal(planId);
+
+    // Try server for latest base data
     if (navigator.onLine) {
       try {
         const plans = await apiClient.getTreatmentPlans();
         if (Array.isArray(plans)) {
-          const match = plans.find((p: any) => String(p.id) === String(planId));
-          if (match) return match as EnhancedTreatmentPlan;
+          const serverMatch = plans.find((p: any) => String(p.id) === String(planId));
+          if (serverMatch) {
+            // Parse server JSONB fields
+            const serverReviews = Array.isArray(serverMatch.follow_up_schedule)
+              ? serverMatch.follow_up_schedule
+              : (typeof serverMatch.follow_up_schedule === 'string' ? JSON.parse(serverMatch.follow_up_schedule || '[]') : []);
+            const serverProcedures = Array.isArray(serverMatch.procedures)
+              ? serverMatch.procedures
+              : (typeof serverMatch.procedures === 'string' ? JSON.parse(serverMatch.procedures || '[]') : []);
+            const serverMedications = Array.isArray(serverMatch.medications)
+              ? serverMatch.medications
+              : (typeof serverMatch.medications === 'string' ? JSON.parse(serverMatch.medications || '[]') : []);
+
+            // Merge: preserve local-only fields, use server for shared fields
+            const merged = {
+              ...serverMatch,
+              synced: true,
+              reviews: (localPlan?.reviews && localPlan.reviews.length > 0) ? localPlan.reviews : serverReviews,
+              lab_works: (localPlan?.lab_works && localPlan.lab_works.length > 0) ? localPlan.lab_works : (serverMatch.lab_works || []),
+              procedures: (localPlan?.procedures && localPlan.procedures.length > 0) ? localPlan.procedures : serverProcedures,
+              medications: (localPlan?.medications && localPlan.medications.length > 0) ? localPlan.medications : serverMedications,
+              discharge_timeline: localPlan?.discharge_timeline || serverMatch.discharge_timeline || null,
+              planned_discharge_date: localPlan?.planned_discharge_date || serverMatch.planned_discharge_date || null,
+              primary_consultant: localPlan?.primary_consultant || serverMatch.primary_consultant || '',
+              patient_name: localPlan?.patient_name || serverMatch.patient_name || [serverMatch.first_name, serverMatch.last_name].filter(Boolean).join(' ') || '',
+              hospital_number: localPlan?.hospital_number || serverMatch.hospital_number || '',
+              title: localPlan?.title || serverMatch.title || serverMatch.diagnosis || serverMatch.description || 'Treatment Plan',
+              id: serverMatch.id?.toString() || planId,
+              patient_id: serverMatch.patient_id?.toString() || localPlan?.patient_id?.toString() || '',
+              diagnosis: serverMatch.diagnosis || serverMatch.description || localPlan?.diagnosis || '',
+              admission_date: serverMatch.admission_date || localPlan?.admission_date || new Date(),
+              status: serverMatch.status || localPlan?.status || 'active'
+            };
+            // Save merged back to local DB
+            try { await db.treatment_plans.put(merged as any); } catch { /* ignore */ }
+            return merged as EnhancedTreatmentPlan;
+          }
         }
       } catch (e) {
         console.warn('Could not fetch treatment plan from server:', e);
       }
     }
-    return await this.findPlanLocal(planId);
+    return localPlan as EnhancedTreatmentPlan | undefined;
   }
 
   // Get all treatment plans for a patient
@@ -810,18 +848,62 @@ class TreatmentPlanningService {
       try {
         const serverPlans = await apiClient.getTreatmentPlans();
         if (Array.isArray(serverPlans) && serverPlans.length > 0) {
-          // Sync to local
+          // Merge server with local data to preserve local-only fields
+          const mergedAll: any[] = [];
           for (const plan of serverPlans) {
-            try { await db.treatment_plans.put({ ...plan, synced: true }); } catch { /* ignore */ }
+            try {
+              let existing: any = null;
+              try {
+                existing = await db.treatment_plans.get(plan.id);
+                if (!existing) {
+                  const numId = parseInt(String(plan.id));
+                  if (!isNaN(numId)) existing = await db.treatment_plans.get(numId);
+                }
+              } catch { /* ignore */ }
+
+              const serverReviews = Array.isArray(plan.follow_up_schedule)
+                ? plan.follow_up_schedule
+                : (typeof plan.follow_up_schedule === 'string' ? JSON.parse(plan.follow_up_schedule || '[]') : []);
+              const serverProcedures = Array.isArray(plan.procedures)
+                ? plan.procedures
+                : (typeof plan.procedures === 'string' ? JSON.parse(plan.procedures || '[]') : []);
+              const serverMedications = Array.isArray(plan.medications)
+                ? plan.medications
+                : (typeof plan.medications === 'string' ? JSON.parse(plan.medications || '[]') : []);
+
+              const merged = {
+                ...plan,
+                synced: true,
+                reviews: (existing?.reviews && existing.reviews.length > 0) ? existing.reviews : serverReviews,
+                lab_works: (existing?.lab_works && existing.lab_works.length > 0) ? existing.lab_works : (plan.lab_works || []),
+                procedures: (existing?.procedures && existing.procedures.length > 0) ? existing.procedures : serverProcedures,
+                medications: (existing?.medications && existing.medications.length > 0) ? existing.medications : serverMedications,
+                discharge_timeline: existing?.discharge_timeline || plan.discharge_timeline || null,
+                planned_discharge_date: existing?.planned_discharge_date || plan.planned_discharge_date || null,
+                primary_consultant: existing?.primary_consultant || plan.primary_consultant || '',
+                patient_name: existing?.patient_name || plan.patient_name || [plan.first_name, plan.last_name].filter(Boolean).join(' ') || '',
+                hospital_number: existing?.hospital_number || plan.hospital_number || '',
+                title: existing?.title || plan.title || plan.diagnosis || plan.description || 'Treatment Plan'
+              };
+              await db.treatment_plans.put(merged as any);
+              mergedAll.push(merged);
+            } catch {
+              mergedAll.push(plan);
+            }
           }
-          const activePlans = serverPlans.filter((p: any) => p.status === 'active');
+          const activePlans = mergedAll.filter((p: any) => p.status === 'active');
           return activePlans.map((plan: any) => ({
             ...plan,
             id: plan.id?.toString() || '',
             patient_id: plan.patient_id?.toString() || '',
             patient_name: plan.patient_name || '',
             hospital_number: plan.hospital_number || '',
-            admission_date: plan.admission_date || new Date()
+            admission_date: plan.admission_date || new Date(),
+            reviews: plan.reviews || [],
+            lab_works: plan.lab_works || [],
+            procedures: plan.procedures || [],
+            medications: plan.medications || [],
+            discharge_timeline: plan.discharge_timeline || null
           })) as EnhancedTreatmentPlan[];
         }
       } catch (e) {
@@ -836,7 +918,12 @@ class TreatmentPlanningService {
       patient_id: plan.patient_id.toString(),
       patient_name: plan.patient_name || '',
       hospital_number: plan.hospital_number || '',
-      admission_date: plan.admission_date || new Date()
+      admission_date: plan.admission_date || new Date(),
+      reviews: plan.reviews || [],
+      lab_works: plan.lab_works || [],
+      procedures: plan.procedures || [],
+      medications: plan.medications || [],
+      discharge_timeline: plan.discharge_timeline || null
     })) as EnhancedTreatmentPlan[];
   }
 

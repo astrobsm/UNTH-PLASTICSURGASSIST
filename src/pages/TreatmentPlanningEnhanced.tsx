@@ -112,6 +112,8 @@ export default function TreatmentPlanningEnhanced() {
   const [showMedicationOrderingModal, setShowMedicationOrderingModal] = useState(false);
   const [orderedInvestigations, setOrderedInvestigations] = useState<any[]>([]);
   const [orderedMedications, setOrderedMedications] = useState<any[]>([]);
+  // Server-side lab orders for the selected patient
+  const [serverLabOrders, setServerLabOrders] = useState<any[]>([]);
 
   useEffect(() => {
     loadPatients();
@@ -198,10 +200,33 @@ export default function TreatmentPlanningEnhanced() {
       } else {
         setSelectedPlan(null);
       }
+      // Also fetch lab orders from server for this patient
+      await loadServerLabOrders(selectedPatient);
     } catch (error) {
       console.error('Error loading treatment plans:', error);
       setTreatmentPlans([]);
       setSelectedPlan(null);
+    }
+  };
+
+  // Fetch lab orders from the server lab_orders table for the patient
+  const loadServerLabOrders = async (patientId: string) => {
+    if (!patientId || !navigator.onLine) {
+      setServerLabOrders([]);
+      return;
+    }
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) return;
+      const response = await fetch(`/api/lab-orders?patientId=${patientId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setServerLabOrders(data.labOrders || []);
+      }
+    } catch (error) {
+      console.warn('Could not fetch lab orders from server:', error);
     }
   };
 
@@ -636,7 +661,7 @@ export default function TreatmentPlanningEnhanced() {
             >
               <div className="flex items-center gap-2">
                 <Activity className="w-5 h-5 text-purple-600" />
-                <h3 className="font-semibold text-gray-900">Lab Works ({selectedPlan.lab_works?.length || 0})</h3>
+                <h3 className="font-semibold text-gray-900">Lab Works ({(selectedPlan.lab_works?.length || 0) + serverLabOrders.length})</h3>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0 relative z-10 pointer-events-auto">
                 <button
@@ -669,25 +694,59 @@ export default function TreatmentPlanningEnhanced() {
             </div>
             {expandedSections.labs && (
               <div className="p-4 border-t space-y-3">
+                {/* Local lab_works from the treatment plan */}
                 {selectedPlan.lab_works?.map((lab) => (
                   <div key={lab.id} className="p-3 bg-gray-50 rounded-lg">
                     <div className="flex justify-between items-start mb-2">
                       <div>
-                        <div className="font-medium text-gray-900">{lab.test_name || lab.test_type || 'Lab Test'}</div>
+                        <div className="font-medium text-gray-900">{lab.test_type || 'Lab Test'}</div>
                         <div className="text-sm text-gray-600">
                           Frequency: {lab.frequency || 'once'}
-                          {(lab.start_date || lab.timeline_start) && 
-                            ` | Start: ${format(new Date(lab.start_date || lab.timeline_start), 'MMM d, yyyy')}`}
+                          {lab.timeline_start && 
+                            ` | Start: ${format(new Date(lab.timeline_start), 'MMM d, yyyy')}`}
                         </div>
                       </div>
                       <span className={`px-2 py-1 rounded text-xs font-medium ${lab.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-purple-100 text-purple-800'}`}>
-                        {lab.status || lab.frequency || 'active'}
+                        {lab.status || 'active'}
                       </span>
                     </div>
-                    {lab.notes && <p className="text-sm text-gray-700">{lab.notes}</p>}
+                    {lab.results && lab.results.length > 0 && <p className="text-sm text-gray-700">{lab.results[lab.results.length - 1].notes || lab.results[lab.results.length - 1].result}</p>}
                   </div>
                 ))}
-                {(!selectedPlan.lab_works || selectedPlan.lab_works.length === 0) && (
+
+                {/* Server lab_orders for this patient */}
+                {serverLabOrders.map((order) => (
+                  <div key={`server-${order.id}`} className="p-3 bg-blue-50 rounded-lg border border-blue-100">
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <div className="font-medium text-gray-900">{order.test_name || order.test_type || 'Lab Order'}</div>
+                        <div className="text-sm text-gray-600">
+                          Priority: {order.priority || 'routine'}
+                          {order.ordered_at && ` | Ordered: ${format(new Date(order.ordered_at), 'MMM d, yyyy')}`}
+                        </div>
+                        {order.clinical_notes && <p className="text-sm text-gray-600 mt-1">{order.clinical_notes}</p>}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">Lab Order</span>
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${
+                          order.status === 'completed' ? 'bg-green-100 text-green-800' : 
+                          order.status === 'in_progress' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {order.status || 'pending'}
+                        </span>
+                      </div>
+                    </div>
+                    {order.results && (
+                      <div className="mt-2 p-2 bg-white rounded border text-sm">
+                        <span className="font-medium text-gray-700">Results: </span>
+                        <span className="text-gray-900">{typeof order.results === 'string' ? order.results : JSON.stringify(order.results)}</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                {(!selectedPlan.lab_works || selectedPlan.lab_works.length === 0) && serverLabOrders.length === 0 && (
                   <p className="text-gray-500 text-sm">No lab works ordered</p>
                 )}
               </div>
@@ -1392,9 +1451,25 @@ export default function TreatmentPlanningEnhanced() {
           })()}
           source="treatment_plan"
           existingInvestigations={orderedInvestigations}
-          onSave={(investigations) => {
+          onSave={async (investigations) => {
             setOrderedInvestigations(investigations);
-            // TODO: Save to treatment plan
+            // Save each investigation as a lab work entry on the treatment plan
+            if (selectedPlan) {
+              for (const inv of investigations) {
+                await treatmentPlanningService.addLabWork(selectedPlan.id, {
+                  test_type: inv.test_name || 'Investigation',
+                  patient_id: selectedPatient,
+                  frequency: 'once' as const,
+                  timeline_start: new Date(),
+                  scheduled_dates: [inv.ordered_date || new Date()],
+                  completed_dates: [],
+                  status: 'active'
+                });
+              }
+              await reloadSelectedPlan();
+              await loadServerLabOrders(selectedPatient);
+              toast.success(`${investigations.length} investigation(s) added to treatment plan`);
+            }
           }}
           onClose={() => setShowInvestigationOrderingModal(false)}
         />
@@ -1409,9 +1484,26 @@ export default function TreatmentPlanningEnhanced() {
             return patient ? `${patient.first_name} ${patient.last_name}` : 'Unknown Patient';
           })()}
           existingMedications={orderedMedications}
-          onSave={(medications) => {
+          onSave={async (medications) => {
             setOrderedMedications(medications);
-            // TODO: Save to treatment plan
+            // Save each medication to the treatment plan
+            if (selectedPlan) {
+              for (const med of medications) {
+                await treatmentPlanningService.addMedication(selectedPlan.id, {
+                  medication_name: med.medication_name || 'Medication',
+                  dosage: med.dosage || '',
+                  route: med.route || 'oral',
+                  frequency: med.frequency || '',
+                  patient_id: selectedPatient,
+                  timeline_start: med.start_date || new Date(),
+                  scheduled_times: [],
+                  administration_records: [],
+                  status: 'active'
+                });
+              }
+              await reloadSelectedPlan();
+              toast.success(`${medications.length} medication(s) added to treatment plan`);
+            }
           }}
           onClose={() => setShowMedicationOrderingModal(false)}
         />
