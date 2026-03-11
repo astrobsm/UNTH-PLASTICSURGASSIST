@@ -188,6 +188,34 @@ const getPreparationStatus = (
   return { riskAssessed, comorbidityChecked, investigationsOrdered, shoppingListDone, consentObtained, paymentConfirmed, preOpInstructionsGiven, fullyPrepared };
 };
 
+/** Mandatory pre-op labs that MUST have results before surgery date assignment */
+const MANDATORY_LABS = [
+  'HIV/HBsAg/HCV Screening',
+  'Full Blood Count (FBC)',
+  'Electrolytes, Urea & Creatinine (E/U/Cr)',
+];
+/** Age-conditional mandatory lab */
+const AGE_CONDITIONAL_LABS = [
+  { name: 'ECG (12-lead)', minAge: 40 },
+];
+
+/** Check if mandatory labs are complete for a patient */
+const areMandatoryLabsComplete = (
+  patientId: string,
+  patientDob: string,
+  investigationResults: PatientInvestigationResults
+): { complete: boolean; missing: string[] } => {
+  const results = investigationResults[patientId] || [];
+  const resultNames = results.filter(r => r.value.trim() !== '').map(r => r.name.toLowerCase());
+  const required = [...MANDATORY_LABS];
+  const age = patientDob ? calcAge(patientDob) : 0;
+  AGE_CONDITIONAL_LABS.forEach(lab => {
+    if (age >= lab.minAge) required.push(lab.name);
+  });
+  const missing = required.filter(lab => !resultNames.some(rn => rn.includes(lab.toLowerCase()) || lab.toLowerCase().includes(rn)));
+  return { complete: missing.length === 0, missing };
+};
+
 /** Standard pre-op investigations list */
 const STANDARD_INVESTIGATIONS = [
   'Full Blood Count (FBC)',
@@ -449,7 +477,7 @@ const BookingRegisterPage: React.FC = () => {
 
   const handleCancel = () => {
     if (selectedPatientId) { setShowPatientSelector(true); setSelectedPatientId(null); setViewMode('stages'); }
-    else navigate('/procedures');
+    else navigate('/booking-register');
   };
 
   // ─── Stage Toggle Handler ───
@@ -752,6 +780,13 @@ const BookingRegisterPage: React.FC = () => {
     const sp = stagePatients.find(s => s.patient.id === patientId);
     if (!sp) return;
 
+    // Check mandatory labs
+    const labCheck = areMandatoryLabsComplete(patientId, sp.patient.date_of_birth || '', investigationResults);
+    if (!labCheck.complete) {
+      toast.error('Missing mandatory labs: ' + labCheck.missing.join(', '));
+      return;
+    }
+
     // Check for abnormal investigations
     const patientInvResults = investigationResults[patientId] || [];
     const hasAbnormal = patientInvResults.some(r => r.flag === 'abnormal');
@@ -968,6 +1003,41 @@ const BookingRegisterPage: React.FC = () => {
       doc.save('Booked_Cases_' + (dateFrom || 'all') + '_to_' + (dateTo || 'all') + '.pdf');
       toast.success('Booked cases PDF downloaded');
     } catch (e) { console.error(e); toast.error('Failed to generate PDF'); }
+  };
+
+  /** Generate thermal (80mm) shopping list for a patient's surgical equipment */
+  const generateShoppingListThermal = (patientName: string, hospitalNumber: string, items: string[]) => {
+    try {
+      if (!items || items.length === 0) { toast.error('No items in shopping list'); return; }
+      const thermalWidth = 80;
+      const m = 4;
+      const estHeight = Math.max(120, 60 + items.length * 5);
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [thermalWidth, estHeight] });
+      doc.setFont('times', 'normal');
+      let y = 6;
+      doc.setFontSize(11); doc.setFont('times', 'bold');
+      doc.text('SHOPPING LIST', thermalWidth / 2, y, { align: 'center' }); y += 5;
+      doc.setFontSize(8); doc.setFont('times', 'normal');
+      doc.text('UNTH Plastic Surgery Unit', thermalWidth / 2, y, { align: 'center' }); y += 4;
+      doc.line(m, y, thermalWidth - m, y); y += 3;
+      doc.setFontSize(9);
+      doc.text('Patient: ' + (patientName || 'N/A'), m, y); y += 4;
+      doc.text('PT No: ' + (hospitalNumber || 'N/A'), m, y); y += 4;
+      doc.text('Date: ' + new Date().toLocaleDateString(), m, y); y += 4;
+      doc.line(m, y, thermalWidth - m, y); y += 3;
+      doc.setFontSize(8);
+      items.forEach((item, i) => {
+        const lines = doc.splitTextToSize('[ ] ' + (i + 1) + '. ' + item, thermalWidth - m * 2);
+        lines.forEach((l: string) => { doc.text(l, m, y); y += 3.5; });
+      });
+      y += 2;
+      doc.line(m, y, thermalWidth - m, y); y += 3;
+      doc.setFontSize(7);
+      doc.text('Total items: ' + items.length, m, y); y += 4;
+      doc.text('UNTH Burns, Plastic & Reconstructive Surgery', thermalWidth / 2, y, { align: 'center' });
+      doc.save('Shopping_List_' + (hospitalNumber || 'patient') + '.pdf');
+      toast.success('Shopping list thermal PDF downloaded');
+    } catch (e) { console.error(e); toast.error('Failed to generate shopping list'); }
   };
 
   //  Filtered booked cases 
@@ -1246,6 +1316,33 @@ const BookingRegisterPage: React.FC = () => {
                             <span>Abnormal investigation(s) detected{forceReadiness[sp.patient.id] ? ' — Force readiness applied by ' + forceReadiness[sp.patient.id].forcedBy : ' — cannot mark Ready without clinical override'}</span>
                           </div>
                         )}
+                        {/* Mandatory labs missing warning */}
+                        {(() => {
+                          const labCheck = areMandatoryLabsComplete(sp.patient.id, sp.patient.date_of_birth || '', investigationResults);
+                          if (labCheck.complete) return null;
+                          return (
+                            <div className="mt-2 flex items-center gap-2 text-xs text-orange-600 bg-orange-50 px-3 py-1.5 rounded-lg border border-orange-200">
+                              <FlaskConical className="w-3.5 h-3.5 flex-shrink-0" />
+                              <span>Mandatory labs missing: {labCheck.missing.join(', ')}</span>
+                            </div>
+                          );
+                        })()}
+                        {/* Quick action: Shopping List Thermal Print */}
+                        {sp.booking?.equipment_needed && sp.booking.equipment_needed.length > 0 && (
+                          <div className="mt-2">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const name = sp.patient.full_name || ((sp.patient.first_name || '') + ' ' + (sp.patient.last_name || '')).trim();
+                                generateShoppingListThermal(name, sp.patient.hospital_number, sp.booking!.equipment_needed);
+                              }}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-xs hover:bg-purple-100"
+                            >
+                              <Printer className="w-3.5 h-3.5" />
+                              Print Shopping List (Thermal)
+                            </button>
+                          </div>
+                        )}
                         {/* Approve Booking button */}
                         {(() => {
                           const pa = stageApprovals[sp.patient.id] || {};
@@ -1346,6 +1443,23 @@ const BookingRegisterPage: React.FC = () => {
                       <button onClick={() => generateThermalAssessment(existingAssessment)}
                         className="inline-flex items-center px-4 py-2 bg-white border border-green-300 text-green-700 rounded-lg hover:bg-green-50 text-sm font-medium">
                         <Printer className="w-4 h-4 mr-2" /> 80mm Print
+                      </button>
+                      <button onClick={() => {
+                        const equipment = existingAssessment.comprehensive_summary?.match(/Equipment:\s*([^.]+)/)?.[1]?.split(',').map((s: string) => s.trim()).filter(Boolean) || [];
+                        const patientName = patients.find(p => p.id === selectedPatientId)?.full_name || 'Patient';
+                        const hospNum = patients.find(p => p.id === selectedPatientId)?.hospital_number || '';
+                        if (equipment.length === 0) {
+                          toast.error('No equipment/shopping list items found. Add items via stage management first.');
+                          return;
+                        }
+                        generateShoppingListThermal(patientName, hospNum, equipment);
+                      }}
+                        className="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-medium">
+                        <ShoppingCart className="w-4 h-4 mr-2" /> Shopping List (Thermal)
+                      </button>
+                      <button onClick={() => generateAssessmentPDF(existingAssessment)}
+                        className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium">
+                        <Download className="w-4 h-4 mr-2" /> Complete Assessment (A4)
                       </button>
                     </div>
                   </div>

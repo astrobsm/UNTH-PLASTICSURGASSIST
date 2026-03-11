@@ -144,10 +144,15 @@ class PreSurgicalConferenceService {
       const response = await apiClient.get(`${this.baseUrl}/scheduled-patients`);
       // API returns { patients: [...] } - extract the array
       const patients = Array.isArray(response) ? response : (response?.patients || []);
+      // If API returns empty (no surgeries table entries), fallback to all patients
+      if (patients.length === 0) {
+        const localPatients = await patientService.getAllPatients();
+        return Array.isArray(localPatients) ? localPatients : [];
+      }
       return patients;
     } catch (error) {
       console.error('Error fetching scheduled patients:', error);
-      // Fallback to getting all patients with scheduled surgeries from local DB
+      // Fallback to getting all patients from local DB
       try {
         const patients = await patientService.getAllPatients();
         return Array.isArray(patients) ? patients : [];

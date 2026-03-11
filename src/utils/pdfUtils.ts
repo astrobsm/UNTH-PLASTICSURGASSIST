@@ -1,4 +1,4 @@
-﻿/**
+/**
  * PDF Utilities for Medical Document Generation
  * 
  * MANDATORY STANDARDS FOR ALL PDF DOCUMENTS:
@@ -42,19 +42,19 @@ import jsPDF from 'jspdf';
  */
 export const PDF_FONT_SIZES = {
   title: 16,           // Document title
-  sectionHeader: 13,   // Section headers
-  subHeader: 11,       // Sub-section headers
-  body: 11,            // Body text â€” Georgia 11pt
+  sectionHeader: 14,   // Section headers
+  subHeader: 12,       // Sub-section headers
+  body: 12,            // Body text â€” Georgia 11pt
   tableBody: 10,       // Minimum for tables
   small: 9,            // Footnotes/captions
   footer: 8            // Page footer
 };
 
-/** Line spacing multiplier (0.5 = tight) */
-export const PDF_LINE_SPACING = 0.5;
+/** Line spacing multiplier (2.0 = double-spaced) */
+export const PDF_LINE_SPACING = 2.0;
 
-/** Default line height in mm for body text at 11pt with 0.5 spacing */
-export const PDF_LINE_HEIGHT = 4.2;
+/** Default line height in mm for body text at 12pt with double spacing */
+export const PDF_LINE_HEIGHT = 8.5;
 
 /**
  * Standard margins - MINIMUM 20mm enforced

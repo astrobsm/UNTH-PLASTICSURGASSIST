@@ -47,7 +47,6 @@ const Login = lazyWithRetry(() => import('./pages/Login'));
 const Patients = lazyWithRetry(() => import('./pages/Patients'));
 const PatientProfile = lazyWithRetry(() => import('./pages/PatientProfile'));
 const TreatmentPlans = lazyWithRetry(() => import('./pages/TreatmentPlans'));
-const Procedures = lazyWithRetry(() => import('./pages/Procedures'));
 const Labs = lazyWithRetry(() => import('./pages/Labs'));
 const Education = lazyWithRetry(() => import('./pages/Education'));
 const MCQEducation = lazyWithRetry(() => import('./pages/MCQEducation'));
@@ -196,7 +195,6 @@ function App() {
               <Route path="/mdt" element={<MDTPage />} />
               <Route path="/blood-transfusion" element={<BloodTransfusionPage />} />
               <Route path="/ward-rounds" element={<WardRoundsPage />} />
-              <Route path="/procedures" element={<Procedures />} />
               <Route path="/booking-register" element={<BookingRegisterPage />} />
               <Route path="/preoperative-planning" element={<BookingRegisterPage />} />
               <Route path="/pre-surgical-conference" element={<PreSurgicalConferencePage />} />

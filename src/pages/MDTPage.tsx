@@ -14,7 +14,11 @@ import {
   FileText,
   AlertCircle,
   MapPin,
-  RefreshCw
+  RefreshCw,
+  Scan,
+  FileDown,
+  Layers,
+  X
 } from 'lucide-react';
 import { db } from '../db/database';
 import { patientService } from '../services/patientService';
@@ -23,11 +27,14 @@ import {
   MDTPatientTeam, 
   MDTSpecialty, 
   MDTMeeting,
-  MDTContactLog
+  MDTContactLog,
+  MDTTeamReview,
+  MDTWeeklyHarmonization
 } from '../services/mdtService';
 import { format } from 'date-fns';
 import { safeFormatDate } from '../utils/dateUtils';
 import { useAuthStore } from '../store/authStore';
+import { DocumentScannerModal } from '../components/DocumentScannerModal';
 
 const MDTPage: React.FC = () => {
   const { user } = useAuthStore();
@@ -39,7 +46,7 @@ const MDTPage: React.FC = () => {
   const [statistics, setStatistics] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
-  const [activeTab, setActiveTab] = useState<'team' | 'meetings' | 'contacts'>('team');
+  const [activeTab, setActiveTab] = useState<'team' | 'reviews' | 'meetings' | 'contacts'>('team');
   
   // Modal states
   const [showAddPatient, setShowAddPatient] = useState(false);
@@ -48,6 +55,10 @@ const MDTPage: React.FC = () => {
   const [showLogContact, setShowLogContact] = useState(false);
   const [showQuickContact, setShowQuickContact] = useState(false);
   const [selectedSpecialty, setSelectedSpecialty] = useState<MDTSpecialty | null>(null);
+  const [showOCRScan, setShowOCRScan] = useState(false);
+  const [showAddReview, setShowAddReview] = useState(false);
+  const [showHarmonizationResult, setShowHarmonizationResult] = useState<string | null>(null);
+  const [harmonizing, setHarmonizing] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -958,6 +969,7 @@ const MDTPage: React.FC = () => {
             <div className="flex gap-2 border-b border-gray-200">
               {[
                 { id: 'team', label: 'Team Members', icon: Users },
+                { id: 'reviews', label: 'Team Reviews', icon: FileText },
                 { id: 'meetings', label: 'MDT Meetings', icon: Calendar },
                 { id: 'contacts', label: 'Contact Log', icon: MessageSquare }
               ].map(tab => (
@@ -1059,6 +1071,127 @@ const MDTPage: React.FC = () => {
                     >
                       Add first specialty
                     </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'reviews' && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold text-gray-900">Team Member Reviews</h3>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setShowOCRScan(true)}
+                      className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700"
+                    >
+                      <Scan className="w-4 h-4" />
+                      OCR Scan Review
+                    </button>
+                    <button
+                      onClick={() => setShowAddReview(true)}
+                      className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Add Review
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (!selectedPatient) return;
+                        setHarmonizing(true);
+                        try {
+                          const result = await mdtService.harmonizeWeeklyPlans(selectedPatient.id, user?.email || 'Unknown');
+                          if (result) {
+                            setShowHarmonizationResult(result.harmonized_plan);
+                          } else {
+                            alert('No reviews found in the past week to harmonize.');
+                          }
+                        } catch (error) {
+                          console.error('Error harmonizing:', error);
+                          alert('Error generating weekly harmonization');
+                        } finally {
+                          setHarmonizing(false);
+                        }
+                      }}
+                      disabled={harmonizing}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      <Layers className="w-4 h-4" />
+                      {harmonizing ? 'Harmonizing...' : 'Harmonize Weekly'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Team Reviews List */}
+                {selectedPatient.team_reviews && selectedPatient.team_reviews.length > 0 ? (
+                  selectedPatient.team_reviews.sort((a: any, b: any) => 
+                    new Date(b.review_date).getTime() - new Date(a.review_date).getTime()
+                  ).map((review: any) => (
+                    <div key={review.id} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-start justify-between mb-3">
+                        <div>
+                          <h4 className="font-semibold text-gray-900">{review.specialty_name}</h4>
+                          <div className="flex items-center gap-3 mt-1 text-sm text-gray-600">
+                            <span className="flex items-center gap-1">
+                              <Calendar className="w-4 h-4" />
+                              {safeFormatDate(review.review_date, 'MMM dd, yyyy')}
+                            </span>
+                            <span>By: {review.reviewer_name}</span>
+                          </div>
+                        </div>
+                        {review.scanned_via_ocr && (
+                          <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs font-medium rounded flex items-center gap-1">
+                            <Scan className="w-3 h-3" />
+                            OCR Scanned
+                          </span>
+                        )}
+                      </div>
+                      <div className="space-y-2 text-sm">
+                        <div>
+                          <span className="text-gray-600 font-medium">Findings:</span>
+                          <p className="text-gray-900 mt-1 whitespace-pre-wrap">{review.review_text}</p>
+                        </div>
+                        {review.plan_text && (
+                          <div>
+                            <span className="text-gray-600 font-medium">Plan:</span>
+                            <p className="text-gray-900 mt-1 whitespace-pre-wrap">{review.plan_text}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-12 bg-gray-50 rounded-lg">
+                    <FileText className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                    <p className="text-gray-600 mb-3">No team reviews yet</p>
+                    <p className="text-sm text-gray-500">Scan physical folder reviews via OCR or add manually</p>
+                  </div>
+                )}
+
+                {/* Weekly Harmonizations */}
+                {selectedPatient.weekly_harmonizations && selectedPatient.weekly_harmonizations.length > 0 && (
+                  <div className="mt-6">
+                    <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                      <Layers className="w-5 h-5 text-blue-600" />
+                      Weekly Harmonizations
+                    </h4>
+                    {selectedPatient.weekly_harmonizations.sort((a: any, b: any) =>
+                      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                    ).map((h: any) => (
+                      <div key={h.id} className="border border-blue-200 rounded-lg p-4 bg-blue-50 mb-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium text-blue-900">
+                            Week: {safeFormatDate(h.week_start, 'MMM dd')} - {safeFormatDate(h.week_end, 'MMM dd, yyyy')}
+                          </span>
+                          <span className="text-xs text-blue-600">
+                            {h.reviews_included?.length || 0} reviews harmonized
+                          </span>
+                        </div>
+                        <pre className="text-sm text-gray-800 whitespace-pre-wrap font-sans bg-white p-3 rounded border border-blue-100 max-h-60 overflow-y-auto">
+                          {h.harmonized_plan}
+                        </pre>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
@@ -1272,6 +1405,131 @@ const MDTPage: React.FC = () => {
       {showQuickContact && <QuickContactModal />}
       {showScheduleMeeting && <ScheduleMeetingModal />}
       {showLogContact && <LogContactModal />}
+
+      {/* OCR Scan Review Modal */}
+      {showOCRScan && selectedPatient && (
+        <DocumentScannerModal
+          isOpen={showOCRScan}
+          onClose={() => setShowOCRScan(false)}
+          onFieldsExtracted={async (fields: any) => {
+            try {
+              const review: any = {
+                specialty_name: fields.specialty_name || fields.specialty || fields.department || 'General',
+                reviewer_name: fields.reviewer_name || fields.doctor_name || fields.consultant || 'Unknown',
+                review_date: fields.review_date || fields.date || new Date().toISOString(),
+                review_text: fields.review_text || fields.findings || fields.notes || fields.content || JSON.stringify(fields, null, 2),
+                plan_text: fields.plan_text || fields.plan || fields.management || '',
+                scanned_via_ocr: true,
+              };
+              await mdtService.addTeamReview(selectedPatient.id, review);
+              // Refresh patient data
+              const updatedTeam = await mdtService.getPatientTeam(selectedPatient.patient_id);
+              if (updatedTeam) {
+                setSelectedPatient(updatedTeam);
+              }
+              setShowOCRScan(false);
+            } catch (error) {
+              console.error('Error saving OCR review:', error);
+              alert('Error saving scanned review');
+            }
+          }}
+          documentType="general"
+          patientContext={{
+            name: selectedPatient.patient_name || '',
+            id: selectedPatient.patient_id || '',
+          }}
+        />
+      )}
+
+      {/* Add Review Manually Modal */}
+      {showAddReview && selectedPatient && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg w-full max-w-lg">
+            <div className="p-4 border-b flex items-center justify-between">
+              <h3 className="font-semibold text-lg">Add Team Review</h3>
+              <button onClick={() => setShowAddReview(false)} className="text-gray-500 hover:text-gray-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form
+              onSubmit={async (e: React.FormEvent<HTMLFormElement>) => {
+                e.preventDefault();
+                const form = e.currentTarget;
+                const formData = new FormData(form);
+                try {
+                  await mdtService.addTeamReview(selectedPatient.id, {
+                    specialty_name: formData.get('specialty_name') as string,
+                    reviewer_name: formData.get('reviewer_name') as string,
+                    review_date: formData.get('review_date') as string || new Date().toISOString(),
+                    review_text: formData.get('review_text') as string,
+                    plan_text: formData.get('plan_text') as string,
+                    scanned_via_ocr: false,
+                  });
+                  const updatedTeam = await mdtService.getPatientTeam(selectedPatient.patient_id);
+                  if (updatedTeam) {
+                    setSelectedPatient(updatedTeam);
+                  }
+                  setShowAddReview(false);
+                } catch (error) {
+                  console.error('Error adding review:', error);
+                  alert('Error saving review');
+                }
+              }}
+              className="p-4 space-y-4"
+            >
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Specialty</label>
+                <input name="specialty_name" required className="w-full px-3 py-2 border rounded-md" placeholder="e.g., Orthopedics" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Reviewer Name</label>
+                <input name="reviewer_name" required className="w-full px-3 py-2 border rounded-md" placeholder="Dr. Name" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Review Date</label>
+                <input name="review_date" type="date" required className="w-full px-3 py-2 border rounded-md" defaultValue={new Date().toISOString().split('T')[0]} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Findings / Review</label>
+                <textarea name="review_text" required rows={4} className="w-full px-3 py-2 border rounded-md" placeholder="Clinical findings and assessment..." />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Plan</label>
+                <textarea name="plan_text" rows={3} className="w-full px-3 py-2 border rounded-md" placeholder="Recommended management plan..." />
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button type="button" onClick={() => setShowAddReview(false)} className="px-4 py-2 border rounded-md text-gray-700 hover:bg-gray-50">Cancel</button>
+                <button type="submit" className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">Save Review</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Harmonization Result Modal */}
+      {showHarmonizationResult && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg w-full max-w-2xl max-h-[80vh] flex flex-col">
+            <div className="p-4 border-b flex items-center justify-between">
+              <h3 className="font-semibold text-lg flex items-center gap-2">
+                <Layers className="w-5 h-5 text-blue-600" />
+                Weekly Plan Harmonization
+              </h3>
+              <button onClick={() => setShowHarmonizationResult(null)} className="text-gray-500 hover:text-gray-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 overflow-y-auto flex-1">
+              <pre className="text-sm text-gray-800 whitespace-pre-wrap font-sans bg-blue-50 p-4 rounded-lg border border-blue-200">
+                {showHarmonizationResult}
+              </pre>
+            </div>
+            <div className="p-4 border-t flex justify-end">
+              <button onClick={() => setShowHarmonizationResult(null)} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

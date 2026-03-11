@@ -46,6 +46,27 @@ export interface MDTSpecialty {
   notes?: string;
 }
 
+export interface MDTTeamReview {
+  id: string;
+  specialty_name: string;
+  reviewer_name: string;
+  review_date: Date;
+  review_text: string;
+  plan_text: string;
+  scanned_via_ocr: boolean;
+  created_at: Date;
+}
+
+export interface MDTWeeklyHarmonization {
+  id: string;
+  week_start: Date;
+  week_end: Date;
+  reviews_included: string[]; // review IDs
+  harmonized_plan: string;
+  created_at: Date;
+  created_by: string;
+}
+
 export interface MDTPatientTeam {
   id: string;
   patient_id: string;
@@ -54,6 +75,8 @@ export interface MDTPatientTeam {
   primary_specialty: string; // Plastic Surgery
   is_active: boolean;
   specialties: MDTSpecialty[];
+  team_reviews?: MDTTeamReview[];
+  weekly_harmonizations?: MDTWeeklyHarmonization[];
   created_at: Date;
   updated_at: Date;
 }
@@ -159,6 +182,16 @@ class MDTService {
         specialties,
         updated_at: new Date()
       });
+
+      // Push to server immediately so other devices see the specialty
+      if (navigator.onLine) {
+        try {
+          await this.pushToServer();
+          console.log('✅ MDT specialty synced to server immediately');
+        } catch (error) {
+          console.warn('MDT specialty sync failed, will retry on periodic sync:', error);
+        }
+      }
     }
   }
 
@@ -192,12 +225,8 @@ class MDTService {
     }
   }
 
-  // Get patient's MDT team
+  // Get patient's MDT team (reads from local IndexedDB only - sync happens via Force Sync)
   async getPatientTeam(patientId: string): Promise<MDTPatientTeam | undefined> {
-    // Try sync from server first
-    if (navigator.onLine) {
-      try { await this.syncFromServer(); } catch { /* ignore */ }
-    }
     const teams = await db.mdt_patient_teams
       .where('patient_id')
       .equals(patientId)
@@ -206,12 +235,8 @@ class MDTService {
     return teams[0];
   }
 
-  // Get all active MDT patients
+  // Get all active MDT patients (reads from local IndexedDB only - sync happens via Force Sync)
   async getAllActiveMDTPatients(): Promise<MDTPatientTeam[]> {
-    // Try sync from server first
-    if (navigator.onLine) {
-      try { await this.syncFromServer(); } catch { /* ignore */ }
-    }
     const allTeams = await db.mdt_patient_teams.toArray();
     return allTeams.filter(team => team.is_active === true);
   }
@@ -278,9 +303,6 @@ class MDTService {
 
   // Get patient's MDT meetings
   async getPatientMeetings(patientId: string): Promise<MDTMeeting[]> {
-    if (navigator.onLine) {
-      try { await this.syncFromServer(); } catch { /* ignore */ }
-    }
     return await db.mdt_meetings
       .where('patient_id')
       .equals(patientId)
@@ -290,9 +312,6 @@ class MDTService {
 
   // Get upcoming meetings
   async getUpcomingMeetings(): Promise<MDTMeeting[]> {
-    if (navigator.onLine) {
-      try { await this.syncFromServer(); } catch { /* ignore */ }
-    }
     const now = new Date();
     const allMeetings = await db.mdt_meetings.toArray();
     
@@ -319,9 +338,6 @@ class MDTService {
 
   // Get contact history for patient
   async getPatientContactHistory(patientId: string): Promise<MDTContactLog[]> {
-    if (navigator.onLine) {
-      try { await this.syncFromServer(); } catch { /* ignore */ }
-    }
     return await db.mdt_contact_logs
       .where('patient_id')
       .equals(patientId)
@@ -361,6 +377,101 @@ class MDTService {
       return team.specialties.find((s: any) => s.id === specialtyId);
     }
     return undefined;
+  }
+
+  // Add team review (from OCR scan or manual entry)
+  async addTeamReview(teamId: string, review: Omit<MDTTeamReview, 'id' | 'created_at'>): Promise<void> {
+    const team = await db.mdt_patient_teams.get(teamId);
+    if (team) {
+      const newReview: MDTTeamReview = {
+        ...review,
+        id: `review_${Date.now()}`,
+        created_at: new Date()
+      };
+      const reviews = [...(team.team_reviews || []), newReview];
+      await db.mdt_patient_teams.update(teamId, {
+        team_reviews: reviews,
+        updated_at: new Date()
+      });
+
+      // Push to server
+      if (navigator.onLine) {
+        try { await this.pushToServer(); } catch { /* retry later */ }
+      }
+    }
+  }
+
+  // Harmonize weekly plans - collect all reviews from past week and generate summary
+  async harmonizeWeeklyPlans(teamId: string, createdBy: string): Promise<MDTWeeklyHarmonization | null> {
+    const team = await db.mdt_patient_teams.get(teamId);
+    if (!team || !team.team_reviews || team.team_reviews.length === 0) return null;
+
+    const now = new Date();
+    const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    // Get reviews from the past week
+    const weeklyReviews = team.team_reviews.filter((r: any) => 
+      new Date(r.review_date) >= oneWeekAgo && new Date(r.review_date) <= now
+    );
+
+    if (weeklyReviews.length === 0) return null;
+
+    // Group reviews by specialty
+    const bySpecialty: Record<string, MDTTeamReview[]> = {};
+    weeklyReviews.forEach((r: any) => {
+      if (!bySpecialty[r.specialty_name]) bySpecialty[r.specialty_name] = [];
+      bySpecialty[r.specialty_name].push(r);
+    });
+
+    // Build harmonized plan
+    let harmonizedPlan = `WEEKLY MDT HARMONIZED PLAN\nPatient: ${team.patient_name} (${team.hospital_number})\nWeek: ${format(oneWeekAgo, 'dd/MM/yyyy')} - ${format(now, 'dd/MM/yyyy')}\n\n`;
+
+    Object.entries(bySpecialty).forEach(([specialty, reviews]) => {
+      harmonizedPlan += `--- ${specialty.toUpperCase()} ---\n`;
+      reviews.forEach((r: any) => {
+        harmonizedPlan += `Date: ${format(new Date(r.review_date), 'dd/MM/yyyy')}\n`;
+        harmonizedPlan += `Reviewer: ${r.reviewer_name}\n`;
+        harmonizedPlan += `Findings: ${r.review_text}\n`;
+        if (r.plan_text) harmonizedPlan += `Plan: ${r.plan_text}\n`;
+        harmonizedPlan += '\n';
+      });
+    });
+
+    harmonizedPlan += `--- HARMONIZED SUMMARY ---\n`;
+    harmonizedPlan += `Total specialties reporting: ${Object.keys(bySpecialty).length}\n`;
+    harmonizedPlan += `Total reviews this week: ${weeklyReviews.length}\n`;
+    harmonizedPlan += `Specialties involved: ${Object.keys(bySpecialty).join(', ')}\n\n`;
+
+    // Combine all plans into a consolidated action plan
+    harmonizedPlan += `CONSOLIDATED ACTION ITEMS:\n`;
+    weeklyReviews.forEach((r: any, idx: number) => {
+      if (r.plan_text) {
+        harmonizedPlan += `${idx + 1}. [${r.specialty_name}] ${r.plan_text}\n`;
+      }
+    });
+
+    const harmonization: MDTWeeklyHarmonization = {
+      id: `harmonize_${Date.now()}`,
+      week_start: oneWeekAgo,
+      week_end: now,
+      reviews_included: weeklyReviews.map((r: any) => r.id),
+      harmonized_plan: harmonizedPlan,
+      created_at: now,
+      created_by: createdBy
+    };
+
+    const harmonizations = [...(team.weekly_harmonizations || []), harmonization];
+    await db.mdt_patient_teams.update(teamId, {
+      weekly_harmonizations: harmonizations,
+      updated_at: new Date()
+    });
+
+    // Push to server
+    if (navigator.onLine) {
+      try { await this.pushToServer(); } catch { /* retry later */ }
+    }
+
+    return harmonization;
   }
 
   // Get statistics
@@ -432,8 +543,22 @@ class MDTService {
               );
               
               if (existing) {
+                // Merge specialties: union of local + server (don't overwrite locally-added specialties)
+                const localSpecialties = Array.isArray(existing.specialties) ? existing.specialties : [];
+                const serverSpecialties = Array.isArray(normalizedTeam.specialties) ? normalizedTeam.specialties : [];
+                const mergedSpecialties = [...localSpecialties];
+                for (const serverSpec of serverSpecialties) {
+                  const alreadyExists = mergedSpecialties.some((ls: any) => 
+                    ls.id === serverSpec.id || 
+                    (ls.specialty_name === serverSpec.specialty_name && ls.consultant_name === serverSpec.consultant_name)
+                  );
+                  if (!alreadyExists) {
+                    mergedSpecialties.push(serverSpec);
+                  }
+                }
                 await db.mdt_patient_teams.update(existing.id, {
                   ...normalizedTeam,
+                  specialties: mergedSpecialties,
                   id: existing.id,
                   server_id: team.id
                 });

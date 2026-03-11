@@ -39,9 +39,12 @@ export default function DischargeDocumentsPreview({
     </div>
   );
 
+  // Document formatting: Georgia 12pt double-spaced
+  const docStyle = { fontFamily: 'Georgia, serif', fontSize: '12pt', lineHeight: '2' } as React.CSSProperties;
+
   // Discharge Summary Preview
   const DischargeSummaryPreview = () => (
-    <div className="bg-white p-6 border rounded-lg">
+    <div className="bg-white p-6 border rounded-lg" style={docStyle}>
       <HospitalHeader />
       <h3 className="text-lg font-bold text-center mb-4 bg-green-100 py-2">DISCHARGE SUMMARY</h3>
       
@@ -135,7 +138,7 @@ export default function DischargeDocumentsPreview({
 
   // Fitness Report Preview
   const FitnessReportPreview = () => (
-    <div className="bg-white p-6 border rounded-lg">
+    <div className="bg-white p-6 border rounded-lg" style={docStyle}>
       <HospitalHeader />
       <h3 className="text-lg font-bold text-center mb-4 bg-blue-100 py-2">MEDICAL REPORT OF FITNESS FOR DISCHARGE</h3>
       
@@ -207,7 +210,7 @@ export default function DischargeDocumentsPreview({
 
   // Discharge Instructions Preview
   const DischargeInstructionsPreview = () => (
-    <div className="bg-white p-6 border rounded-lg">
+    <div className="bg-white p-6 border rounded-lg" style={docStyle}>
       <HospitalHeader />
       <h3 className="text-lg font-bold text-center mb-4 bg-purple-100 py-2">DISCHARGE INSTRUCTIONS</h3>
       
@@ -320,7 +323,7 @@ export default function DischargeDocumentsPreview({
 
   // Meal Plan Preview
   const MealPlanPreview = () => (
-    <div className="bg-white p-6 border rounded-lg">
+    <div className="bg-white p-6 border rounded-lg" style={docStyle}>
       <HospitalHeader />
       <h3 className="text-lg font-bold text-center mb-4 bg-orange-100 py-2">7-DAY MEAL PLAN</h3>
       

@@ -17,7 +17,9 @@ import {
   Printer,
   FileDown,
   ClipboardList,
-  Eye
+  Eye,
+  Scan,
+  ShieldAlert
 } from 'lucide-react';
 import { db } from '../db/database';
 import { patientService } from '../services/patientService';
@@ -33,6 +35,8 @@ import {
 import { transfusionPdfService, TransfusionOrderData, TransfusionMonitoringEntry } from '../services/transfusionPdfService';
 import TransfusionChartUpload from './TransfusionChartUpload';
 import TransfusionVitalsChart from './TransfusionVitalsChart';
+import { DocumentScannerModal } from './DocumentScannerModal';
+import { createPDF, addPDFHeader, addSectionHeader, PDF_FONT_SIZES, PDF_LINE_HEIGHT, PDF_MARGINS, PDF_PAGE, addFooter } from '../utils/pdfUtils';
 import { format } from 'date-fns';
 
 // Helper component to display vitals
@@ -144,6 +148,7 @@ export default function BloodTransfusionForm({
     uploadedAt: Date;
   } | null>(null);
   const [uploadingConsent, setUploadingConsent] = useState(false);
+  const [showOCRScanner, setShowOCRScanner] = useState(false);
 
   const tabs = [
     { id: 'details', label: 'Patient & Indication', icon: FileText },
@@ -694,6 +699,86 @@ export default function BloodTransfusionForm({
         }
       }
     }
+  };
+
+  // OCR Scan monitoring chart handler
+  const handleOCRChartExtracted = (fields: Record<string, any>) => {
+    setShowOCRScanner(false);
+    // Parse extracted vitals from OCR and add them
+    const intervals = ['pre', '15min', '30min', '1hr', 'post'];
+    const vitalsTypes: ('pre' | 'during' | 'post')[] = ['pre', 'during', 'during', 'during', 'post'];
+    intervals.forEach((key, idx) => {
+      const temp = fields[`${key}_temperature`] || fields[`temperature_${key}`];
+      const pulse = fields[`${key}_pulse`] || fields[`pulse_${key}`];
+      const bpSys = fields[`${key}_bp_systolic`] || fields[`bp_systolic_${key}`];
+      const bpDia = fields[`${key}_bp_diastolic`] || fields[`bp_diastolic_${key}`];
+      const rr = fields[`${key}_respiratory_rate`] || fields[`respiratory_rate_${key}`];
+      const spo2 = fields[`${key}_spo2`] || fields[`spo2_${key}`];
+      if (temp || pulse || bpSys) {
+        const vitals: TransfusionVitals = {
+          type: vitalsTypes[idx],
+          temperature: parseFloat(temp) || 36.5,
+          pulse: parseInt(pulse) || 80,
+          bp_systolic: parseInt(bpSys) || 120,
+          bp_diastolic: parseInt(bpDia) || 80,
+          respiratory_rate: parseInt(rr) || 18,
+          spo2: parseFloat(spo2) || 98,
+          recorded_at: new Date(),
+          recorded_by: `OCR Scan - ${formData.administered_by}`
+        };
+        setFormData(prev => ({
+          ...prev,
+          vitals_monitoring: [...(prev.vitals_monitoring || []), vitals]
+        }));
+      }
+    });
+    // Also store any observations or adverse event notes
+    if (fields.observations || fields.adverse_events) {
+      setFormData(prev => ({
+        ...prev,
+        notes: `${prev.notes || ''}\n[OCR] ${fields.observations || ''} ${fields.adverse_events || ''}`.trim()
+      }));
+    }
+    alert('Monitoring chart data extracted via OCR and added to vitals.');
+  };
+
+  // Generate Adverse Event Report PDF
+  const generateAdverseEventReportPDF = () => {
+    if (!formData.complications || formData.complications.length === 0) {
+      alert('No adverse events/complications recorded. Record complications first.');
+      return;
+    }
+    const pdf = createPDF();
+    let y = addPDFHeader(pdf, 'TRANSFUSION ADVERSE EVENT REPORT');
+
+    pdf.setFont('times', 'bold');
+    pdf.setFontSize(PDF_FONT_SIZES.body);
+    pdf.text('Patient Information', PDF_MARGINS.left, y);
+    y += PDF_LINE_HEIGHT;
+    pdf.setFont('times', 'normal');
+    const patientName = selectedPatient ? `${selectedPatient.first_name} ${selectedPatient.last_name}` : formData.patient_name || '';
+    pdf.text(`Name: ${patientName}`, PDF_MARGINS.left, y); y += PDF_LINE_HEIGHT;
+    pdf.text(`Hospital No: ${formData.hospital_number}`, PDF_MARGINS.left, y); y += PDF_LINE_HEIGHT;
+    pdf.text(`Date of Transfusion: ${formData.transfusion_date ? format(new Date(formData.transfusion_date), 'dd MMM yyyy') : 'N/A'}`, PDF_MARGINS.left, y); y += PDF_LINE_HEIGHT;
+    pdf.text(`Blood Group: ${formData.blood_bags?.[0]?.blood_group || 'N/A'}`, PDF_MARGINS.left, y); y += PDF_LINE_HEIGHT;
+    pdf.text(`Units Transfused: ${formData.total_units}`, PDF_MARGINS.left, y); y += PDF_LINE_HEIGHT * 1.5;
+
+    formData.complications.forEach((comp, idx) => {
+      if (y > PDF_PAGE.height - 40) { pdf.addPage(); y = PDF_MARGINS.top; }
+      pdf.setFont('times', 'bold');
+      pdf.text(`Adverse Event #${idx + 1}`, PDF_MARGINS.left, y); y += PDF_LINE_HEIGHT;
+      pdf.setFont('times', 'normal');
+      pdf.text(`Type: ${comp.complication_type.replace(/_/g, ' ').toUpperCase()}`, PDF_MARGINS.left, y); y += PDF_LINE_HEIGHT;
+      pdf.text(`Severity: ${comp.severity.toUpperCase()}`, PDF_MARGINS.left, y); y += PDF_LINE_HEIGHT;
+      pdf.text(`Symptoms: ${comp.symptoms.join(', ')}`, PDF_MARGINS.left, y); y += PDF_LINE_HEIGHT;
+      const mgmtLines = pdf.splitTextToSize(`Management: ${comp.management}`, PDF_PAGE.contentWidth);
+      mgmtLines.forEach((line: string) => { pdf.text(line, PDF_MARGINS.left, y); y += PDF_LINE_HEIGHT; });
+      pdf.text(`Detected: ${comp.detected_at ? format(new Date(comp.detected_at), 'dd MMM yyyy HH:mm') : 'N/A'}`, PDF_MARGINS.left, y); y += PDF_LINE_HEIGHT;
+      pdf.text(`Resolved: ${comp.resolved ? (comp.resolved_at ? format(new Date(comp.resolved_at), 'dd MMM yyyy HH:mm') : 'Yes') : 'No - ONGOING'}`, PDF_MARGINS.left, y); y += PDF_LINE_HEIGHT * 1.5;
+    });
+
+    addFooter(pdf);
+    pdf.save(`Adverse_Event_Report_${formData.hospital_number}_${format(new Date(), 'yyyyMMdd')}.pdf`);
   };
 
   if (loading) {
@@ -1759,6 +1844,53 @@ export default function BloodTransfusionForm({
                       <span>Download Consent Form</span>
                     </button>
                   </div>
+
+                  {/* OCR Scan Monitoring Chart */}
+                  <div className="bg-white rounded-lg border border-green-200 p-4 shadow-sm">
+                    <div className="flex items-center mb-3">
+                      <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center mr-3">
+                        <Scan className="h-5 w-5 text-green-600" />
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-gray-900">OCR Scan Chart</h4>
+                        <p className="text-xs text-gray-500">Extract vitals from paper chart</p>
+                      </div>
+                    </div>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Scan a completed monitoring chart to auto-extract vitals data using AI-powered OCR.
+                    </p>
+                    <button
+                      onClick={() => setShowOCRScanner(true)}
+                      className="w-full bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center space-x-2"
+                    >
+                      <Scan className="h-4 w-4" />
+                      <span>Scan Chart (OCR)</span>
+                    </button>
+                  </div>
+
+                  {/* Adverse Event Report PDF */}
+                  <div className="bg-white rounded-lg border border-orange-200 p-4 shadow-sm">
+                    <div className="flex items-center mb-3">
+                      <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center mr-3">
+                        <ShieldAlert className="h-5 w-5 text-orange-600" />
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-gray-900">Adverse Event Report</h4>
+                        <p className="text-xs text-gray-500">Formal reaction report</p>
+                      </div>
+                    </div>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Generate formal adverse event report PDF for haemovigilance documentation.
+                    </p>
+                    <button
+                      onClick={generateAdverseEventReportPDF}
+                      disabled={!formData.complications || formData.complications.length === 0}
+                      className="w-full bg-orange-600 text-white py-2 px-4 rounded-lg hover:bg-orange-700 transition-colors flex items-center justify-center space-x-2 disabled:opacity-50"
+                    >
+                      <Download className="h-4 w-4" />
+                      <span>Download Report</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Document Details */}
@@ -1980,6 +2112,23 @@ export default function BloodTransfusionForm({
           </button>
         </div>
       </div>
+
+      {/* OCR Scanner Modal for Monitoring Charts */}
+      {showOCRScanner && (
+        <DocumentScannerModal
+          isOpen={showOCRScanner}
+          onClose={() => setShowOCRScanner(false)}
+          onFieldsExtracted={handleOCRChartExtracted}
+          documentType="general"
+          patientContext={{
+            name: selectedPatient ? `${selectedPatient.first_name} ${selectedPatient.last_name}` : formData.patient_name,
+            hospitalNumber: formData.hospital_number,
+            ward: selectedPatient?.ward_id,
+            diagnosis: formData.indication
+          }}
+          targetForm="lab_entry"
+        />
+      )}
     </div>
   );
 }

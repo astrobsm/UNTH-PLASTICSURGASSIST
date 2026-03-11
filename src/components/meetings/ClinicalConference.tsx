@@ -7,12 +7,14 @@ import {
   User,
   BookOpen,
   FileText,
+  Sparkles,
 } from 'lucide-react';
 import PresentationSlide, { SlideData } from './PresentationSlide';
 import { patientService } from '../../services/patientService';
 import { labService } from '../../services/labService';
 import { wardRoundsService } from '../../services/wardRoundsService';
 import { getTopicContent, getAvailableTopics, ClinicalTopicContent } from '../../utils/medicalContentDB';
+import { aiService } from '../../services/aiService';
 
 interface Presenter {
   name: string;
@@ -109,13 +111,68 @@ export default function ClinicalConference() {
     input.click();
   };
 
+  // ─── Generate AI-enhanced content from journals ──────
+  const generateAIContent = async (topicName: string): Promise<ClinicalTopicContent | null> => {
+    try {
+      const prompt = `Generate a comprehensive medical/surgical presentation content for the topic "${topicName}" in plastic, reconstructive, and burn surgery context.
+
+Return ONLY valid JSON (no markdown, no code fences) with this exact structure:
+{
+  "anatomy": ["point1", "point2", ...],
+  "pathology": ["point1", "point2", ...],
+  "pathophysiology": ["point1", "point2", ...],
+  "clinicalEvaluation": ["point1", "point2", ...],
+  "labEvaluation": ["point1", "point2", ...],
+  "treatmentPrinciples": ["point1", "point2", ...],
+  "takeHomePoints": ["point1", "point2", ...],
+  "references": ["Vancouver-style reference 1", "Vancouver-style reference 2", ...]
+}
+
+Requirements:
+- Each array should have 5-8 points that are detailed and evidence-based
+- Include current international journal references (PRS, JPRAS, Burns, Lancet, NEJM, Ann Surg, etc.)
+- References must be in Vancouver format with authors, title, journal, year, volume, pages
+- Content should reflect WHO guidelines and international best practices
+- Include recent advances and current evidence (2020-2025)
+- Be specific with surgical techniques, classification systems, and scoring tools where relevant`;
+
+      const response = await aiService.generateResponse(prompt);
+      // Parse JSON from response
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        return {
+          anatomy: parsed.anatomy || [],
+          pathology: parsed.pathology || [],
+          pathophysiology: parsed.pathophysiology || [],
+          clinicalEvaluation: parsed.clinicalEvaluation || [],
+          labEvaluation: parsed.labEvaluation || [],
+          treatmentPrinciples: parsed.treatmentPrinciples || [],
+          takeHomePoints: parsed.takeHomePoints || [],
+          references: parsed.references || [],
+        };
+      }
+      return null;
+    } catch (error) {
+      console.error('AI content generation failed:', error);
+      return null;
+    }
+  };
+
   // ─── Generate slides ───────────────────────────────
-  const generateSlides = async () => {
+  const generateSlides = async (useAI: boolean = false) => {
     if (!topic.trim()) return;
     setLoading(true);
 
     try {
-      const content: ClinicalTopicContent = getTopicContent(topic);
+      let content: ClinicalTopicContent;
+
+      if (useAI) {
+        const aiContent = await generateAIContent(topic);
+        content = aiContent || getTopicContent(topic);
+      } else {
+        content = getTopicContent(topic);
+      }
       const selectedPatient = patients.find(
         (p) => String(p.id) === selectedPatientId
       );
@@ -705,25 +762,45 @@ export default function ClinicalConference() {
         </div>
       </div>
 
-      {/* Generate Button */}
-      <button
-        onClick={generateSlides}
-        disabled={!topic.trim() || loading}
-        className="w-full py-4 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold text-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 shadow-lg"
-        style={{ fontFamily: 'Georgia, serif' }}
-      >
-        {loading ? (
-          <>
-            <RefreshCw className="w-5 h-5 animate-spin" />
-            Generating Slides...
-          </>
-        ) : (
-          <>
-            <BookOpen className="w-5 h-5" />
-            Generate Presentation
-          </>
-        )}
-      </button>
+      {/* Generate Buttons */}
+      <div className="flex gap-3">
+        <button
+          onClick={() => generateSlides(false)}
+          disabled={!topic.trim() || loading}
+          className="flex-1 py-4 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold text-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 shadow-lg"
+          style={{ fontFamily: 'Georgia, serif' }}
+        >
+          {loading ? (
+            <>
+              <RefreshCw className="w-5 h-5 animate-spin" />
+              Generating Slides...
+            </>
+          ) : (
+            <>
+              <BookOpen className="w-5 h-5" />
+              Generate Presentation
+            </>
+          )}
+        </button>
+        <button
+          onClick={() => generateSlides(true)}
+          disabled={!topic.trim() || loading}
+          className="flex-1 py-4 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold text-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 shadow-lg"
+          style={{ fontFamily: 'Georgia, serif' }}
+        >
+          {loading ? (
+            <>
+              <RefreshCw className="w-5 h-5 animate-spin" />
+              Generating...
+            </>
+          ) : (
+            <>
+              <Sparkles className="w-5 h-5" />
+              AI Journal-Based Presentation
+            </>
+          )}
+        </button>
+      </div>
     </div>
   );
 }

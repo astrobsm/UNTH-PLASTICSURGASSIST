@@ -76,6 +76,103 @@ const TreatmentPlanningPage: React.FC = () => {
     }
   };
 
+  // Normalize a plan to merge planned_* (enhanced) fields into legacy display fields
+  const normalizePlan = (plan: any): EnhancedTreatmentPlan => {
+    // Merge planned_reviews into reviews (legacy)
+    const legacyReviews = plan.reviews || [];
+    const plannedReviews = (plan.planned_reviews || []).map((pr: any) => ({
+      id: pr.id,
+      plan_id: plan.id,
+      review_date: pr.start_date || pr.review_date || new Date(),
+      scheduled_date: pr.start_date || pr.review_date || new Date(),
+      assigned_house_officer: pr.assigned_person_name || pr.assigned_to || '',
+      assigned_to: pr.assigned_person_name || pr.assigned_to || '',
+      assigned_role: pr.assigned_to || 'house_officer',
+      status: pr.status === 'active' ? 'pending' : pr.status || 'pending',
+      notes: `${pr.review_type || ''} review`,
+      completed_reviews: pr.completed_reviews || [],
+      missed_reviews: pr.missed_reviews || [],
+      created_at: pr.created_at || new Date(),
+      updated_at: pr.updated_at || new Date(),
+    }));
+    const mergedReviews = legacyReviews.length > 0 ? legacyReviews : plannedReviews;
+
+    // Merge planned_investigations into lab_works
+    const legacyLabs = plan.lab_works || [];
+    const plannedInvestigations = (plan.planned_investigations || []).map((inv: any) => ({
+      id: inv.id,
+      plan_id: plan.id,
+      patient_id: plan.patient_id,
+      test_type: inv.investigation_name || inv.test_type || 'Investigation',
+      frequency: inv.frequency || 'once',
+      timeline_start: inv.ordered_date || inv.timeline_start || new Date(),
+      scheduled_dates: inv.scheduled_dates || [],
+      completed_dates: [],
+      results: inv.results || [],
+      status: inv.status || 'active',
+      created_at: inv.created_at || new Date(),
+      updated_at: inv.updated_at || new Date(),
+    }));
+    const mergedLabs = legacyLabs.length > 0 ? legacyLabs : plannedInvestigations;
+
+    // Merge planned_procedures into procedures
+    const legacyProcedures = plan.procedures || [];
+    const plannedProcedures = (plan.planned_procedures || []).map((p: any) => ({
+      id: p.id,
+      plan_id: plan.id,
+      patient_id: plan.patient_id,
+      procedure_name: p.procedure_name || 'Procedure',
+      procedure_type: p.procedure_type || 'minor',
+      planned_date: p.proposed_date || p.planned_date || new Date(),
+      proposed_date: p.proposed_date || new Date(),
+      status: p.status || 'planned',
+      surgeon: p.surgeon || '',
+      location: p.location || '',
+      notes: p.notes || '',
+      created_at: p.created_at || new Date(),
+      updated_at: p.updated_at || new Date(),
+    }));
+    const mergedProcedures = legacyProcedures.length > 0 ? legacyProcedures : plannedProcedures;
+
+    // Merge planned_medications into medications
+    const legacyMeds = plan.medications || [];
+    const plannedMeds = (plan.planned_medications || []).map((m: any) => ({
+      id: m.id,
+      plan_id: plan.id,
+      patient_id: plan.patient_id,
+      medication_name: m.medication_name || 'Medication',
+      dosage: m.dosage || '',
+      route: m.route || 'oral',
+      frequency: m.frequency || '',
+      start_date: m.start_date || new Date(),
+      end_date: m.end_date,
+      timeline_start: m.start_date || new Date(),
+      scheduled_times: [],
+      administration_records: [],
+      status: m.status || 'active',
+      created_at: m.created_at || new Date(),
+      updated_at: m.updated_at || new Date(),
+    }));
+    const mergedMeds = legacyMeds.length > 0 ? legacyMeds : plannedMeds;
+
+    // Normalize discharge plan
+    const dischargePlan = plan.discharge_plan || plan.discharge_timeline || null;
+    const normalizedDischarge = dischargePlan ? {
+      ...dischargePlan,
+      planned_date: dischargePlan.initial_discharge_date || dischargePlan.current_discharge_date || dischargePlan.planned_date || dischargePlan.proposed_discharge_date,
+      discharge_criteria: dischargePlan.discharge_criteria || [],
+    } : null;
+
+    return {
+      ...plan,
+      reviews: mergedReviews,
+      lab_works: mergedLabs,
+      procedures: mergedProcedures,
+      medications: mergedMeds,
+      discharge_plan: normalizedDischarge,
+    };
+  };
+
   const loadData = async () => {
     setLoading(true);
     try {
@@ -83,7 +180,9 @@ const TreatmentPlanningPage: React.FC = () => {
         treatmentPlanningService.getActiveTreatmentPlans(),
         patientService.getAllPatients()
       ]);
-      setActivePlans(plansData);
+      // Normalize plans to merge enhanced fields into legacy display fields
+      const normalizedPlans = plansData.map(normalizePlan);
+      setActivePlans(normalizedPlans);
       setPatients(patientsData);
     } catch (error) {
       console.error('Error loading treatment planning data:', error);
@@ -217,7 +316,7 @@ const TreatmentPlanningPage: React.FC = () => {
           return (
             <div
               key={plan.id}
-              onClick={() => setSelectedPlan(plan)}
+              onClick={() => setSelectedPlan(normalizePlan(plan))}
               className={`bg-white rounded-lg shadow p-4 cursor-pointer transition-all ${
                 selectedPlan?.id === plan.id ? 'ring-2 ring-green-600' : 'hover:shadow-md'
               }`}
@@ -593,13 +692,7 @@ const TreatmentPlanningPage: React.FC = () => {
             // Reload the plan to show new lab work
             const updatedPlan = await treatmentPlanningService.getTreatmentPlan(selectedPlan.id);
             if (updatedPlan) {
-              setSelectedPlan({
-                ...updatedPlan,
-                reviews: updatedPlan.reviews || [],
-                lab_works: updatedPlan.lab_works || [],
-                procedures: updatedPlan.procedures || [],
-                medications: updatedPlan.medications || [],
-              } as EnhancedTreatmentPlan);
+              setSelectedPlan(normalizePlan(updatedPlan));
             }
             setShowAddLab(false);
           }}
