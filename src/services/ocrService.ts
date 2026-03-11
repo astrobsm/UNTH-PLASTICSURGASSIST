@@ -436,6 +436,155 @@ class OCRService {
     return 'general';
   }
 
+  // ──────────────────────────────────────────────────────────
+  // AI-Enhanced OCR Processing (ABBYY FineReader-style AI layering)
+  // ──────────────────────────────────────────────────────────
+
+  /**
+   * Process a document image with Tesseract OCR + AI post-processing.
+   * The AI layer corrects OCR errors, extracts structured clinical data,
+   * and maps values to the appropriate form fields — similar to ABBYY
+   * FineReader/FlexiCapture intelligent document processing.
+   */
+  async processDocumentWithAI(
+    imageSource: File | Blob | string | HTMLImageElement | HTMLCanvasElement,
+    documentType: DocumentType = 'general',
+    patientContext?: {
+      name?: string;
+      hospitalNumber?: string;
+      ward?: string;
+      diagnosis?: string;
+    },
+    onProgress?: (progress: OCRProgress) => void
+  ): Promise<AIEnhancedOCRResult> {
+    const startTime = Date.now();
+
+    // Step 1: Run Tesseract OCR
+    onProgress?.({ status: 'recognizing', progress: 0.1 });
+    const ocrResult = await this.extractText(imageSource, documentType, (p) => {
+      onProgress?.({ ...p, progress: p.progress * 0.5 }); // First 50% is OCR
+    });
+
+    onProgress?.({ status: 'recognizing', progress: 0.55 });
+
+    // Step 2: Auto-detect document type if not specified
+    const detectedType = documentType === 'general'
+      ? this.detectDocumentType(ocrResult.text)
+      : documentType;
+
+    // Step 3: AI post-processing — send to serverless endpoint
+    onProgress?.({ status: 'recognizing', progress: 0.6 });
+    let structuredData: any = null;
+    let aiConfidence = 0;
+
+    try {
+      const response = await fetch('/api/ai/ocr-process', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ocrText: ocrResult.text,
+          documentType: detectedType,
+          patientContext,
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.structured) {
+          structuredData = result.structured;
+          aiConfidence = result.structured.confidence || 0.8;
+        }
+      }
+    } catch (err) {
+      console.warn('AI post-processing failed, falling back to rule-based extraction:', err);
+    }
+
+    onProgress?.({ status: 'recognizing', progress: 0.85 });
+
+    // Step 4: If AI failed, use enhanced rule-based extraction
+    if (!structuredData) {
+      structuredData = this.ruleBasedExtraction(ocrResult.text, detectedType);
+      aiConfidence = 0.5;
+    }
+
+    onProgress?.({ status: 'recognizing', progress: 1.0 });
+
+    return {
+      ...ocrResult,
+      documentType: detectedType,
+      structuredData,
+      aiConfidence,
+      processingTime: Date.now() - startTime,
+      aiProcessed: structuredData !== null,
+    };
+  }
+
+  /**
+   * Rule-based fallback extraction for when AI is not available.
+   * Extracts vitals, lab values, medications from raw OCR text.
+   */
+  private ruleBasedExtraction(text: string, documentType: DocumentType): any {
+    const result: any = { confidence: 0.4 };
+
+    // Extract vitals
+    const vitals: any = {};
+    const tempMatch = text.match(/(?:temp|temperature|T)[:\s]*(\d{2,3}\.?\d?)\s*(?:°?[CF]?)/i);
+    if (tempMatch) vitals.temperature = parseFloat(tempMatch[1]);
+
+    const pulseMatch = text.match(/(?:pulse|PR|HR|heart rate)[:\s]*(\d{2,3})\s*(?:bpm|\/min)?/i);
+    if (pulseMatch) vitals.pulse = parseInt(pulseMatch[1]);
+
+    const bpMatch = text.match(/(?:BP|blood pressure)[:\s]*(\d{2,3})\s*\/\s*(\d{2,3})/i);
+    if (bpMatch) {
+      vitals.bp_systolic = parseInt(bpMatch[1]);
+      vitals.bp_diastolic = parseInt(bpMatch[2]);
+    }
+
+    const rrMatch = text.match(/(?:RR|respiratory rate|resp rate)[:\s]*(\d{1,2})/i);
+    if (rrMatch) vitals.respiratory_rate = parseInt(rrMatch[1]);
+
+    const spo2Match = text.match(/(?:SpO2|O2 sat|oxygen sat)[:\s]*(\d{2,3})\s*%?/i);
+    if (spo2Match) vitals.spo2 = parseInt(spo2Match[1]);
+
+    const painMatch = text.match(/(?:pain|pain score|VAS)[:\s]*(\d{1,2})\s*(?:\/10)?/i);
+    if (painMatch) vitals.pain_score = parseInt(painMatch[1]);
+
+    if (Object.keys(vitals).length > 0) result.vitals = vitals;
+
+    // Extract lab values using existing patterns
+    const labValues = this.extractLabValues(text);
+    if (Object.keys(labValues).length > 0) {
+      result.investigations = Object.entries(labValues).map(([name, data]) => ({
+        type: 'lab',
+        name: name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+        result: data.value,
+        unit: data.unit || '',
+        abnormal: false,
+      }));
+    }
+
+    // Extract medications (simple pattern matching)
+    const medPatterns = text.match(/(?:tab|cap|inj|syp|susp)\s+[\w\s]+\s+\d+\s*(?:mg|ml|g|mcg|iu)\s+(?:bd|tds|qds|od|prn|nocte|stat)/gi);
+    if (medPatterns) {
+      result.medications = medPatterns.map((m: string) => ({ name: m.trim() }));
+    }
+
+    // Extract SOAP-like sections
+    const subjectiveMatch = text.match(/(?:subjective|S[:\s]|complaints?[:\s])([\s\S]*?)(?=\n(?:O[:\s]|objective|assessment|plan|$))/i);
+    if (subjectiveMatch) result.subjective = subjectiveMatch[1].trim();
+
+    const objectiveMatch = text.match(/(?:objective|O[:\s]|examination[:\s]|findings?[:\s])([\s\S]*?)(?=\n(?:A[:\s]|assessment|plan|$))/i);
+    if (objectiveMatch) result.objective = objectiveMatch[1].trim();
+
+    const assessmentMatch = text.match(/(?:assessment|A[:\s]|impression[:\s]|diagnosis[:\s])([\s\S]*?)(?=\n(?:P[:\s]|plan|$))/i);
+    if (assessmentMatch) result.assessment = assessmentMatch[1].trim();
+
+    const planMatch = text.match(/(?:plan|P[:\s]|management[:\s])([\s\S]*?)$/i);
+    if (planMatch) result.plan = planMatch[1].trim();
+
+    return result;
+  }
+
   // Terminate worker when done
   async terminate(): Promise<void> {
     if (this.worker) {
@@ -445,6 +594,14 @@ class OCRService {
       console.log('🛑 OCR worker terminated');
     }
   }
+}
+
+// Extended result type for AI-enhanced processing
+export interface AIEnhancedOCRResult extends OCRResult {
+  documentType: DocumentType;
+  structuredData: any;
+  aiConfidence: number;
+  aiProcessed: boolean;
 }
 
 export const ocrService = new OCRService();

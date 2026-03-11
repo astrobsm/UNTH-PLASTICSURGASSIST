@@ -951,7 +951,9 @@ export const ComprehensiveClinicalTimeline: React.FC<ComprehensiveClinicalTimeli
   const [filterType, setFilterType] = useState<TimelineEventType | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [allExpanded, setAllExpanded] = useState(true); // Default: show all details
   const [sortAsc, setSortAsc] = useState(false);
+  const [sortBy, setSortBy] = useState<'date' | 'author' | 'type'>('date');
   const [dateRange, setDateRange] = useState<{ start: string; end: string }>({ start: '', end: '' });
 
   const loadAllEvents = useCallback(async () => {
@@ -989,6 +991,8 @@ export const ComprehensiveClinicalTimeline: React.FC<ComprehensiveClinicalTimeli
       });
 
       setEvents(unique);
+      // Auto-expand all events by default for comprehensive view
+      setExpandedIds(new Set(unique.map(e => e.id)));
     } catch (err) {
       console.error('Error loading clinical timeline:', err);
       setError('Failed to load some clinical data. Showing available records.');
@@ -1030,13 +1034,20 @@ export const ComprehensiveClinicalTimeline: React.FC<ComprehensiveClinicalTimeli
       if (isValid(end)) filtered = filtered.filter(e => e.date <= end);
     }
 
-    filtered.sort((a, b) => sortAsc
-      ? a.date.getTime() - b.date.getTime()
-      : b.date.getTime() - a.date.getTime()
-    );
+    filtered.sort((a, b) => {
+      let cmp = 0;
+      if (sortBy === 'date') {
+        cmp = a.date.getTime() - b.date.getTime();
+      } else if (sortBy === 'author') {
+        cmp = (a.author || '').localeCompare(b.author || '');
+      } else if (sortBy === 'type') {
+        cmp = (EVENT_META[a.type]?.label || a.type).localeCompare(EVENT_META[b.type]?.label || b.type);
+      }
+      return sortAsc ? cmp : -cmp;
+    });
 
     return filtered;
-  }, [events, filterType, searchQuery, sortAsc, dateRange]);
+  }, [events, filterType, searchQuery, sortAsc, sortBy, dateRange]);
 
   // ── Stats ──
   const stats = useMemo(() => {
@@ -1054,6 +1065,17 @@ export const ComprehensiveClinicalTimeline: React.FC<ComprehensiveClinicalTimeli
       next.has(id) ? next.delete(id) : next.add(id);
       return next;
     });
+    setAllExpanded(false); // User manually toggled, disable global state
+  };
+
+  const toggleExpandAll = () => {
+    if (allExpanded) {
+      setExpandedIds(new Set());
+      setAllExpanded(false);
+    } else {
+      setExpandedIds(new Set(filteredEvents.map(e => e.id)));
+      setAllExpanded(true);
+    }
   };
 
   const exportTimeline = () => {
@@ -1220,7 +1242,25 @@ export const ComprehensiveClinicalTimeline: React.FC<ComprehensiveClinicalTimeli
               className="flex items-center space-x-1 px-3 py-2 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition"
             >
               <Calendar className="h-3.5 w-3.5" />
-              <span>{sortAsc ? 'Oldest First' : 'Newest First'}</span>
+              <span>{sortAsc ? '↑ Asc' : '↓ Desc'}</span>
+            </button>
+            <select
+              value={sortBy}
+              onChange={e => setSortBy(e.target.value as 'date' | 'author' | 'type')}
+              className="px-2 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 bg-white"
+              title="Sort by"
+            >
+              <option value="date">Sort by Date</option>
+              <option value="author">Sort by Author</option>
+              <option value="type">Sort by Type</option>
+            </select>
+            <button
+              onClick={toggleExpandAll}
+              title={allExpanded ? 'Collapse all details' : 'Expand all details'}
+              className="flex items-center space-x-1 px-3 py-2 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition"
+            >
+              <LayoutList className="h-3.5 w-3.5" />
+              <span>{allExpanded ? 'Collapse All' : 'Expand All'}</span>
             </button>
           </div>
         </div>

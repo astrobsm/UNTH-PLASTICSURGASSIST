@@ -13,6 +13,7 @@ import { MedicalTextInput } from './MedicalTextInput';
 import { ScribeRecordingPanel } from './ScribeRecordingPanel';
 import { ScribeNoteEditor } from './ScribeNoteEditor';
 import { medicalScribeService, StructuredNote, ScribeSession } from '../services/medicalScribeService';
+import { DocumentScannerModal } from './DocumentScannerModal';
 import Tesseract from 'tesseract.js';
 
 interface WardRoundFormProps {
@@ -54,6 +55,10 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
   const [showScribeEditor, setShowScribeEditor] = useState(false);
   const [scribeNote, setScribeNote] = useState<StructuredNote | null>(null);
   const [scribeSession, setScribeSession] = useState<ScribeSession | null>(null);
+
+  // AI Document Scanner state
+  const [showDocumentScanner, setShowDocumentScanner] = useState(false);
+  const [scannerDocType, setScannerDocType] = useState<'general' | 'handwritten_note' | 'lab_report' | 'prescription' | 'imaging_report'>('general');
 
   const [formData, setFormData] = useState({
     patient_id: initialPatientId || '',
@@ -402,6 +407,69 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
     setScribeNote(note);
     setScribeSession(session);
     setShowScribeEditor(true);
+  };
+
+  // AI Document Scanner field handler
+  const handleScannerFieldsExtracted = (fields: Record<string, any>) => {
+    setFormData(prev => {
+      const updates: any = { ...prev };
+      
+      // Map SOAP fields
+      if (fields.subjective) updates.subjective = fields.subjective;
+      if (fields.objective || fields.findings || fields.examination_findings) {
+        updates.findings = fields.objective || fields.findings || fields.examination_findings;
+      }
+      if (fields.assessment) updates.assessment = fields.assessment;
+      if (fields.plan || fields.management_plan) {
+        updates.plan = fields.plan || fields.management_plan;
+      }
+      if (fields.clinical_status) updates.clinical_status = fields.clinical_status;
+      
+      // Map vitals
+      if (fields.vital_signs) {
+        const v = fields.vital_signs;
+        if (v.temperature) updates.temperature = String(v.temperature);
+        if (v.pulse) updates.pulse = String(v.pulse);
+        if (v.bloodPressure) updates.blood_pressure = v.bloodPressure;
+        else if (v.bp_systolic) updates.blood_pressure = `${v.bp_systolic}/${v.bp_diastolic || ''}`;
+        if (v.respiratoryRate) updates.respiratory_rate = String(v.respiratoryRate);
+        if (v.oxygenSaturation) updates.spo2 = String(v.oxygenSaturation);
+        if (v.painScore != null) updates.pain_score = v.painScore;
+        if (v.weight) updates.weight = String(v.weight);
+      }
+      
+      // Map medications
+      if (fields.medications && Array.isArray(fields.medications)) {
+        const newMeds = fields.medications.map((m: any) => ({
+          name: m.name || '',
+          dose: m.dose || '',
+          route: m.route || 'oral',
+          frequency: m.frequency || '',
+          duration: m.duration || '',
+        }));
+        updates.new_medications = [...prev.new_medications, ...newMeds];
+      }
+      
+      // Map investigations
+      if (fields.investigations && Array.isArray(fields.investigations)) {
+        const newInvs = fields.investigations.map((inv: any) => inv.name || inv.test_name || '').filter(Boolean);
+        updates.investigations_ordered = [...prev.investigations_ordered, ...newInvs];
+      }
+      
+      // Map diagnoses
+      if (fields.diagnoses && Array.isArray(fields.diagnoses) && fields.diagnoses.length > 0) {
+        updates.assessment = (prev.assessment ? prev.assessment + '\n\nDiagnoses: ' : 'Diagnoses: ') + fields.diagnoses.join(', ');
+      }
+      
+      // Map diet/activity/notes
+      if (fields.diet) updates.diet = fields.diet;
+      if (fields.activity) updates.activity = fields.activity;
+      if (fields.notes) {
+        updates.additional_notes = (prev.additional_notes || '') + '\n' + fields.notes;
+      }
+      
+      return updates;
+    });
   };
 
   // Clinical Image handling functions
@@ -980,6 +1048,31 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
                     Upload wound photographs, laboratory results, imaging studies, or handwritten notes. 
                     Use the OCR feature to extract text from handwritten notes for faster documentation.
                   </p>
+                </div>
+
+                {/* AI Document Scanner - ABBYY FineReader style */}
+                <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-300 rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
+                        <Brain className="h-5 w-5 text-green-600" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-green-800">🔬 AI Document Scanner</h3>
+                        <p className="text-xs text-green-600">
+                          Scan or photograph clinical documents — AI auto-identifies text and fills form fields
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowDocumentScanner(true)}
+                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-2 shadow-sm transition font-medium"
+                    >
+                      <FileSearch className="h-4 w-4" />
+                      <span>Scan Document</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Upload Buttons */}
@@ -1685,6 +1778,21 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
           showApplyButton={true}
         />
       )}
+
+      {/* AI Document Scanner Modal */}
+      <DocumentScannerModal
+        isOpen={showDocumentScanner}
+        onClose={() => setShowDocumentScanner(false)}
+        onFieldsExtracted={handleScannerFieldsExtracted}
+        documentType={scannerDocType}
+        patientContext={selectedPatient ? {
+          name: `${selectedPatient.first_name} ${selectedPatient.last_name}`,
+          hospitalNumber: selectedPatient.hospital_number,
+          ward: selectedPatient.ward,
+          diagnosis: selectedPatient.diagnosis,
+        } : undefined}
+        targetForm="ward_round"
+      />
     </div>
   );
 };

@@ -4,6 +4,8 @@ import { patientActivityService } from '../services/patientActivityService';
 import { apiClient } from '../services/apiClient';
 import { syncService } from '../db/syncService';
 import { db } from '../db/database';
+import { DocumentScannerModal } from './DocumentScannerModal';
+import { Brain } from 'lucide-react';
 
 interface ProgressNoteModalProps {
   isOpen: boolean;
@@ -46,8 +48,37 @@ export const ProgressNoteModal: React.FC<ProgressNoteModalProps> = ({
   });
   const [lmp, setLmp] = useState('');
   const [saving, setSaving] = useState(false);
+  const [showDocumentScanner, setShowDocumentScanner] = useState(false);
 
   const isFemale = patientSex?.toLowerCase() === 'female' || patientSex?.toLowerCase() === 'f';
+
+  // Handle OCR scanner results - map extracted fields to SOAP note + vitals
+  const handleScannerFieldsExtracted = (fields: Record<string, any>) => {
+    if (!fields) return;
+    // Map SOAP fields
+    const updatedNote = { ...note };
+    if (fields.subjective) updatedNote.subjective = (updatedNote.subjective ? updatedNote.subjective + '\n' : '') + fields.subjective;
+    if (fields.objective) updatedNote.objective = (updatedNote.objective ? updatedNote.objective + '\n' : '') + fields.objective;
+    if (fields.assessment) updatedNote.assessment = (updatedNote.assessment ? updatedNote.assessment + '\n' : '') + fields.assessment;
+    if (fields.plan) updatedNote.plan = (updatedNote.plan ? updatedNote.plan + '\n' : '') + fields.plan;
+    // Fallback: if general notes/findings present, append to objective
+    if (fields.notes) updatedNote.objective = (updatedNote.objective ? updatedNote.objective + '\n' : '') + fields.notes;
+    if (fields.findings) updatedNote.objective = (updatedNote.objective ? updatedNote.objective + '\n' : '') + fields.findings;
+    if (fields.diagnosis) updatedNote.assessment = (updatedNote.assessment ? updatedNote.assessment + '\n' : '') + fields.diagnosis;
+    setNote(updatedNote);
+
+    // Map vital signs
+    const updatedVitals = { ...vitalSigns };
+    if (fields.temperature) updatedVitals.temperature = fields.temperature;
+    if (fields.blood_pressure || fields.bloodPressure) updatedVitals.bloodPressure = fields.blood_pressure || fields.bloodPressure;
+    if (fields.pulse || fields.heart_rate) updatedVitals.pulse = fields.pulse || fields.heart_rate;
+    if (fields.respiratory_rate || fields.respiratoryRate) updatedVitals.respiratoryRate = fields.respiratory_rate || fields.respiratoryRate;
+    if (fields.oxygen_saturation || fields.spo2 || fields.oxygenSaturation) updatedVitals.oxygenSaturation = fields.oxygen_saturation || fields.spo2 || fields.oxygenSaturation;
+    if (fields.pain_score || fields.painScore) updatedVitals.painScore = fields.pain_score || fields.painScore;
+    setVitalSigns(updatedVitals);
+
+    setShowDocumentScanner(false);
+  };
 
   const handleSave = async () => {
     if (!note.subjective || !note.objective || !note.assessment || !note.plan) {
@@ -159,14 +190,24 @@ export const ProgressNoteModal: React.FC<ProgressNoteModalProps> = ({
                 {new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}
               </p>
             </div>
-            <button
-              onClick={handleClose}
-              className="text-gray-400 hover:text-gray-600"
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowDocumentScanner(true)}
+                className="flex items-center gap-1.5 px-3 py-2 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 border border-indigo-200 text-sm font-medium transition-colors"
+                title="Scan a document and auto-fill fields using AI OCR"
+              >
+                <Brain className="w-4 h-4" />
+                Scan Document
+              </button>
+              <button
+                onClick={handleClose}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
           </div>
 
           <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-2">
@@ -367,6 +408,15 @@ export const ProgressNoteModal: React.FC<ProgressNoteModalProps> = ({
           </div>
         </div>
       </div>
+
+      {/* AI Document Scanner Modal */}
+      <DocumentScannerModal
+        isOpen={showDocumentScanner}
+        onClose={() => setShowDocumentScanner(false)}
+        onFieldsExtracted={handleScannerFieldsExtracted}
+        targetForm="progress_note"
+        patientContext={{ name: patientName }}
+      />
     </div>
   );
 };

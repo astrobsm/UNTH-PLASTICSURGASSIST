@@ -237,29 +237,26 @@ class UNTHPatientService {
     { id: 'ward_10', name: 'Ward 10', type: 'general', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
     // Medical Wards
     { id: 'male_medical_ward', name: 'Male Medical Ward', type: 'medical', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
-    { id: 'male_medical_ext', name: 'Male Medical Ward Extension', type: 'medical', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
+    { id: 'male_medical_ext', name: 'Male Medical Extension', type: 'medical', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
     { id: 'female_medical_ward', name: 'Female Medical Ward', type: 'medical', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
     // Specialty Wards
-    { id: 'neuro_ward', name: 'Neuro Ward', type: 'neuro', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
-    { id: 'psychiatric_ward', name: 'Psychiatric Ward', type: 'psychiatric', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
-    { id: 'eye_ward', name: 'Eye Ward', type: 'eye', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
     { id: 'oncology_ward', name: 'Oncology Ward', type: 'oncology', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
+    { id: 'psychiatric_ward', name: 'Psychiatric Ward', type: 'psychiatric', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
     // Private Suites
-    { id: 'private_suite_white', name: 'Private Suite (White Room)', type: 'private', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
-    { id: 'private_suite_blue', name: 'Private Suite (Blue Room)', type: 'private', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
-    { id: 'private_suite_pink', name: 'Private Suite (Pink Room)', type: 'private', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
-    { id: 'private_suite_purple', name: 'Private Suite (Purple Room)', type: 'private', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
+    { id: 'private_suite_pink', name: 'Private Suite - Pink Room', type: 'private', capacity: 10, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
+    { id: 'private_suite_white', name: 'Private Suite - White Room', type: 'private', capacity: 10, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
+    { id: 'private_suite_purple', name: 'Private Suite - Purple Room', type: 'private', capacity: 10, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
+    { id: 'private_suite_blue', name: 'Private Suite - Blue Room', type: 'private', capacity: 10, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
     // Critical Care
     { id: 'icu', name: 'ICU', type: 'icu', capacity: 20, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
     { id: 'picu', name: 'PICU', type: 'pediatric', capacity: 15, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
-    // Emergency Wards
-    { id: 'medical_emergency_ward', name: 'Medical Emergency Ward', type: 'emergency', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
-    { id: 'surgical_emergency', name: 'Surgical Emergency Ward', type: 'emergency', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
+    // Emergency & Specialty
     { id: 'cher', name: 'CHER', type: 'emergency', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
+    { id: 'medical_emergency', name: 'Medical Emergency', type: 'emergency', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
+    { id: 'surgical_emergency', name: 'Surgical Emergency', type: 'emergency', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
     // Obstetric & Neonatal
-    { id: 'postnatal_ward', name: 'Postnatal Ward', type: 'obstetric', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
+    { id: 'newborn', name: 'New Born', type: 'pediatric', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
     { id: 'labour_ward', name: 'Labour Ward', type: 'labour', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
-    { id: 'newborn', name: 'Newborn', type: 'pediatric', capacity: 30, currentOccupancy: 0, supervisor: 'Ward Supervisor' },
   ];
 
   // Consulting units list
