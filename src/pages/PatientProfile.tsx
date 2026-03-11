@@ -101,6 +101,58 @@ export const PatientProfile: React.FC = () => {
         await medicalTeamService.assignTeamToPatient(Number(id), patient.hospital_number);
         team = await medicalTeamService.getPatientMedicalTeam(Number(id));
       }
+
+      // Fallback: build team from patient registration fields if still empty
+      if (team.length === 0) {
+        const fallbackTeam: TeamMember[] = [];
+        if (patient.consultant_in_charge) {
+          fallbackTeam.push({
+            id: 0,
+            name: patient.consultant_in_charge,
+            email: '',
+            role: 'consultant',
+            roleLabel: 'Consultant in Charge',
+            color: 'bg-blue-600',
+            priority: 1
+          });
+        }
+        if (patient.resident_in_charge) {
+          fallbackTeam.push({
+            id: 0,
+            name: patient.resident_in_charge,
+            email: '',
+            role: 'resident',
+            roleLabel: 'Resident in Charge',
+            color: 'bg-green-600',
+            priority: 2
+          });
+        }
+        // Also check latest admission for admitting doctor/consultant
+        if (fallbackTeam.length === 0) {
+          try {
+            const admissions = await db.admissions?.toArray() || [];
+            const patientAdmissions = admissions.filter(a => 
+              String(a.patient_id) === String(id) && a.status === 'active'
+            );
+            const latestAdm = patientAdmissions.sort((a, b) => 
+              new Date(b.admission_date || b.created_at).getTime() - new Date(a.admission_date || a.created_at).getTime()
+            )[0];
+            if (latestAdm?.admitting_consultant) {
+              fallbackTeam.push({
+                id: 0, name: latestAdm.admitting_consultant, email: '',
+                role: 'consultant', roleLabel: 'Admitting Consultant', color: 'bg-blue-600', priority: 1
+              });
+            }
+            if (latestAdm?.admitting_doctor) {
+              fallbackTeam.push({
+                id: 0, name: latestAdm.admitting_doctor, email: '',
+                role: 'resident', roleLabel: 'Admitting Doctor', color: 'bg-green-600', priority: 2
+              });
+            }
+          } catch { /* ignore */ }
+        }
+        team = fallbackTeam;
+      }
       
       setMedicalTeam(team);
     } catch (error) {

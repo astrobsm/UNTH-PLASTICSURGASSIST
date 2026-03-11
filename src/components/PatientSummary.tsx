@@ -41,6 +41,15 @@ export const PatientSummaryView: React.FC<PatientSummaryViewProps> = ({
         }));
         setSummaries(formattedSummaries);
         setSelectedSummary(formattedSummaries[0]);
+        
+        // Also regenerate in background to update with latest data
+        if (patient) {
+          try {
+            const freshSummary = await generateSummaryFromPatientData(patient, summaryType);
+            setSummaries(prev => [freshSummary, ...prev.slice(1)]);
+            setSelectedSummary(freshSummary);
+          } catch { /* keep existing if regeneration fails */ }
+        }
       } else if (patient) {
         // Generate initial summary from actual patient data
         const patientSummary = await generateSummaryFromPatientData(patient, summaryType);
@@ -59,9 +68,11 @@ export const PatientSummaryView: React.FC<PatientSummaryViewProps> = ({
   };
 
   const generateSummaryFromPatientData = async (patient: any, type: PatientSummary['summary_type']): Promise<PatientSummary> => {
-    // Get related data for the patient
-    const admissions = await db.admissions?.where('patient_id').equals(patient.id).toArray() || [];
-    const treatmentPlans = await db.treatment_plans?.where('patient_id').equals(patient.id).toArray() || [];
+    // Get related data for the patient (handle both number and string patient_id)
+    const allAdmissions = await db.admissions?.toArray() || [];
+    const admissions = allAdmissions.filter(a => String(a.patient_id) === String(patient.id));
+    const allTreatmentPlans = await db.treatment_plans?.toArray() || [];
+    const treatmentPlans = allTreatmentPlans.filter(tp => String(tp.patient_id) === String(patient.id));
     const latestAdmission = admissions.sort((a, b) => 
       new Date(b.admission_date || b.created_at).getTime() - new Date(a.admission_date || a.created_at).getTime()
     )[0];
@@ -107,9 +118,24 @@ export const PatientSummaryView: React.FC<PatientSummaryViewProps> = ({
     
     // Medications from treatment plans or prescriptions
     const medications: string[] = [];
-    const prescriptions = await db.prescriptions?.where('patient_id').equals(patient.id).toArray() || [];
-    prescriptions.filter(p => p.status === 'active').forEach(p => {
-      medications.push(`${p.medication_name} ${p.dosage || ''} ${p.frequency || ''}`.trim());
+    const allPrescriptions = await db.prescriptions?.toArray() || [];
+    const prescriptions = allPrescriptions.filter(p => String(p.patient_id) === String(patient.id));
+    prescriptions.forEach(p => {
+      // Handle bundled prescription format: { prescriptions: [{medication, dosage, ...}] }
+      if (p.prescriptions && Array.isArray(p.prescriptions)) {
+        p.prescriptions.forEach((med: any) => {
+          const name = med.medication || med.medication_name || med.name || '';
+          if (name) {
+            medications.push(`${name} ${med.dosage || ''} ${med.frequency || ''}`.trim());
+          }
+        });
+      } else if (p.medication_name || p.medication) {
+        // Handle individual prescription record format
+        const name = p.medication_name || p.medication;
+        if (!p.status || p.status === 'active') {
+          medications.push(`${name} ${p.dosage || ''} ${p.frequency || ''}`.trim());
+        }
+      }
     });
     
     // Build plan from treatment plans
