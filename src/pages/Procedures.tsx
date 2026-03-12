@@ -10,6 +10,8 @@ import { patientService } from '../services/patientService';
 import { schedulingService, SurgeryBooking } from '../services/schedulingService';
 import { logDataExport } from '../services/auditLoggingService';
 import { useAuthStore } from '../store/authStore';
+import { db } from '../db/database';
+import { syncService } from '../db/syncService';
 
 export const Procedures: React.FC = () => {
   const navigate = useNavigate();
@@ -385,13 +387,79 @@ const NewProcedureModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     }
     
     try {
-      // Save procedure with all assessments
-      console.log('New procedure with comprehensive assessment:', formData);
-      
-      // Log audit for HIPAA compliance (when user context is available)
       const { user } = useAuthStore.getState();
+      const procedureId = `proc-${Date.now()}`;
+
+      // Build procedure record (exclude File objects which can't be stored in IndexedDB)
+      const procedureRecord = {
+        patient_id: formData.patient_id,
+        procedure_name: formData.procedure_name,
+        procedure_type: formData.procedure_type,
+        scheduled_date: formData.scheduled_date,
+        scheduled_time: formData.scheduled_time,
+        operating_room: formData.operating_room,
+        surgeon: formData.surgeon,
+        anesthesia_type: formData.anesthesia_type,
+        estimated_duration: formData.estimated_duration,
+        urgency: formData.urgency,
+        notes: formData.notes,
+        status: 'scheduled',
+        // Surgical fitness scoring
+        surgical_fitness: {
+          age: formData.age,
+          asa_class: formData.asa_class,
+          functional_capacity: formData.functional_capacity,
+          cardiac_risk_factors: formData.cardiac_risk_factors,
+          respiratory_risk_factors: formData.respiratory_risk_factors,
+          renal_function: formData.renal_function,
+          diabetes: formData.diabetes,
+          smoking: formData.smoking,
+          obesity: formData.obesity,
+        },
+        // Bleeding risk
+        bleeding_risk: {
+          anticoagulant_use: formData.anticoagulant_use,
+          anticoagulant_type: formData.anticoagulant_type,
+          antiplatelet_use: formData.antiplatelet_use,
+          antiplatelet_type: formData.antiplatelet_type,
+          bleeding_disorder: formData.bleeding_disorder,
+          bleeding_disorder_type: formData.bleeding_disorder_type,
+          liver_disease: formData.liver_disease,
+          renal_impairment: formData.renal_impairment,
+          recent_bleeding: formData.recent_bleeding,
+          platelet_count: formData.platelet_count,
+          inr: formData.inr,
+        },
+        // DVT risk (Caprini)
+        dvt_risk: {
+          age_41_60: formData.age_41_60,
+          age_61_74: formData.age_61_74,
+          age_over_75: formData.age_over_75,
+          minor_surgery: formData.minor_surgery,
+          major_surgery_over_45min: formData.major_surgery_over_45min,
+          varicose_veins: formData.varicose_veins,
+          obesity_bmi_over_25: formData.obesity_bmi_over_25,
+          malignancy: formData.malignancy,
+          history_dvt_pe: formData.history_dvt_pe,
+          family_history_dvt: formData.family_history_dvt,
+          patient_confined_to_bed: formData.patient_confined_to_bed,
+        },
+        comorbidities: formData.comorbidities,
+        comorbidity_details: formData.comorbidity_details,
+        interfering_medications: formData.interfering_medications,
+        preop_investigations: formData.preop_investigations,
+        created_by: user?.name || 'Unknown',
+        created_at: new Date(),
+      };
+
+      // Save to IndexedDB
+      const localId = await db.procedures.add(procedureRecord as any);
+
+      // Queue for cloud sync
+      await syncService.queueAction('create', 'procedures', localId as number, procedureRecord);
+
+      // Log audit for HIPAA compliance
       if (user && formData.patient_id) {
-        const procedureId = `proc-${Date.now()}`;
         await logDataExport(
           user.id,
           user.name,
@@ -405,7 +473,7 @@ const NewProcedureModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
       onClose();
     } catch (error) {
       console.error('Error creating procedure:', error);
-      // Don't close on error - let user retry
+      alert('Failed to save procedure. Please try again.');
     }
   };
 
@@ -1328,23 +1396,40 @@ const ProcedureOverview: React.FC = () => {
   const loadProceduresAndStats = async () => {
     try {
       setLoading(true);
-      // Get today's procedures
+      // Get today's procedures from surgery bookings
       const today = new Date();
-      const allProcedures = await schedulingService.getSurgeryBookings(today);
+      const allBookings = await schedulingService.getSurgeryBookings(today);
       
-      // Filter for today's active/scheduled procedures
-      const todaysProcedures = allProcedures.filter(p => 
+      // Also load procedures from IndexedDB procedures table
+      const allDbProcedures = await db.procedures.toArray();
+      
+      // Filter for today's active/scheduled booking procedures
+      const todaysBookings = allBookings.filter(p => 
         p.status === 'scheduled' || p.status === 'confirmed' || p.status === 'in_progress'
       );
+
+      // Merge: convert DB procedures to display format if not already in bookings
+      const bookingIds = new Set(todaysBookings.map(b => b.id));
+      const additionalProcedures = allDbProcedures
+        .filter(p => !bookingIds.has(p.id) && (p as any).status !== 'cancelled')
+        .map(p => ({
+          ...p,
+          patient_name: (p as any).patient_name || '',
+          primary_surgeon: (p as any).surgeon || '',
+          procedure_name: (p as any).procedure_name || '',
+          date: (p as any).scheduled_date || new Date().toISOString(),
+          status: (p as any).status || 'scheduled',
+        }));
       
-      setProcedures(todaysProcedures);
+      const combinedProcedures = [...todaysBookings, ...additionalProcedures] as any[];
+      setProcedures(combinedProcedures);
       
       // Calculate stats from real data
-      const pendingWHO = todaysProcedures.filter(p => !p.pre_op_checklist_completed).length;
+      const pendingWHO = todaysBookings.filter(p => !p.pre_op_checklist_completed).length;
       const highRisk = 0; // Would need ASA grade tracking
       
       setStats({
-        todaysProcedures: todaysProcedures.length,
+        todaysProcedures: combinedProcedures.length,
         pendingWHOChecklists: pendingWHO,
         highRiskPatients: highRisk,
         woundCareDue: 0 // Would need separate wound care tracking
@@ -1669,11 +1754,28 @@ const IntraoperativeFindingsModal: React.FC<{ procedure: any; onClose: () => voi
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      console.log('Intraoperative findings:', { procedure_id: procedure.id, ...formData });
+      const { user } = useAuthStore.getState();
+      const findingsRecord = {
+        procedure_id: procedure.id,
+        ...formData,
+        recorded_by: user?.name || 'Unknown',
+        recorded_at: new Date(),
+      };
+
+      // Update procedure with intraop findings
+      if (procedure.id) {
+        await db.procedures.update(procedure.id, {
+          intraoperative_findings: findingsRecord,
+          status: 'completed',
+        } as any);
+        await syncService.queueAction('update', 'procedures', procedure.id, findingsRecord);
+      }
+
       alert('Intraoperative findings recorded successfully!');
       onClose();
     } catch (error) {
       console.error('Error recording findings:', error);
+      alert('Failed to save findings. Please try again.');
     }
   };
 
@@ -1911,11 +2013,30 @@ const RescheduleProcedureModal: React.FC<{ procedure: any; onClose: () => void }
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      console.log('Rescheduling procedure:', { procedure_id: procedure.id, ...formData });
+      const { user } = useAuthStore.getState();
+      const rescheduleRecord = {
+        procedure_id: procedure.id,
+        ...formData,
+        rescheduled_by: user?.name || 'Unknown',
+        rescheduled_at: new Date(),
+      };
+
+      // Update procedure with new schedule
+      if (procedure.id) {
+        await db.procedures.update(procedure.id, {
+          scheduled_date: formData.new_date,
+          scheduled_time: formData.new_time,
+          status: 'rescheduled',
+          reschedule_history: rescheduleRecord,
+        } as any);
+        await syncService.queueAction('update', 'procedures', procedure.id, rescheduleRecord);
+      }
+
       alert('Procedure rescheduled successfully!');
       onClose();
     } catch (error) {
       console.error('Error rescheduling:', error);
+      alert('Failed to reschedule. Please try again.');
     }
   };
 
@@ -2074,11 +2195,28 @@ const CancelProcedureModal: React.FC<{ procedure: any; onClose: () => void }> = 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      console.log('Cancelling procedure:', { procedure_id: procedure.id, ...formData });
+      const { user } = useAuthStore.getState();
+      const cancellationRecord = {
+        procedure_id: procedure.id,
+        ...formData,
+        cancelled_by: user?.name || 'Unknown',
+        cancelled_at: new Date(),
+      };
+
+      // Update procedure status to cancelled
+      if (procedure.id) {
+        await db.procedures.update(procedure.id, {
+          status: 'cancelled',
+          cancellation_details: cancellationRecord,
+        } as any);
+        await syncService.queueAction('update', 'procedures', procedure.id, cancellationRecord);
+      }
+
       alert('Procedure cancelled successfully!');
       onClose();
     } catch (error) {
       console.error('Error cancelling:', error);
+      alert('Failed to cancel procedure. Please try again.');
     }
   };
 
@@ -2238,11 +2376,27 @@ const PostoperativeTreatmentModal: React.FC<{ procedure: any; onClose: () => voi
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      console.log('Postop treatment plan:', { procedure_id: procedure.id, ...formData });
+      const { user } = useAuthStore.getState();
+      const postopPlanRecord = {
+        procedure_id: procedure.id,
+        ...formData,
+        documented_by: user?.name || 'Unknown',
+        documented_at: new Date(),
+      };
+
+      // Update procedure with postop treatment plan
+      if (procedure.id) {
+        await db.procedures.update(procedure.id, {
+          postoperative_plan: postopPlanRecord,
+        } as any);
+        await syncService.queueAction('update', 'procedures', procedure.id, postopPlanRecord);
+      }
+
       alert('Postoperative treatment plan documented successfully!');
       onClose();
     } catch (error) {
       console.error('Error saving plan:', error);
+      alert('Failed to save treatment plan. Please try again.');
     }
   };
 
@@ -2540,15 +2694,28 @@ const PostoperativeNoteModal: React.FC<{ procedure: any; onClose: () => void }> 
     }
 
     try {
-      console.log('Postoperative note:', {
+      const { user } = useAuthStore.getState();
+      const postopNoteRecord = {
         procedure_id: procedure.id,
         ...formData,
-        meal_plan: generatedMealPlan
-      });
+        meal_plan: generatedMealPlan,
+        documented_by: user?.name || 'Unknown',
+        documented_at: new Date(),
+      };
+
+      // Update procedure with postop note
+      if (procedure.id) {
+        await db.procedures.update(procedure.id, {
+          postoperative_note: postopNoteRecord,
+        } as any);
+        await syncService.queueAction('update', 'procedures', procedure.id, postopNoteRecord);
+      }
+
       alert('Postoperative note generated successfully!');
       onClose();
     } catch (error) {
       console.error('Error saving note:', error);
+      alert('Failed to save postoperative note. Please try again.');
     }
   };
 

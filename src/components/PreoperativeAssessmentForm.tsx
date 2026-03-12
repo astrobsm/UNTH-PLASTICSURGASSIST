@@ -14,6 +14,7 @@ import {
   Eye
 } from 'lucide-react';
 import { db } from '../db/database';
+import { syncService } from '../db/syncService';
 import { patientService } from '../services/patientService';
 import { 
   preoperativeService,
@@ -285,7 +286,9 @@ export default function PreoperativeAssessmentForm({
         updated_at: new Date()
       };
 
-      await db.preoperative_assessments.add(assessment);
+      const localId = await db.preoperative_assessments.add(assessment);
+      // Queue for cloud sync
+      await syncService.queueAction('create', 'preoperative_assessments', localId as number, assessment);
       alert('Preoperative assessment saved successfully!');
       if (onSave) onSave();
     } catch (error) {

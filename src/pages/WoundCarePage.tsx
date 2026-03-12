@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import { patientService } from '../services/patientService';
 import { db } from '../db/database';
+import { syncService } from '../db/syncService';
 import { sanitizeTextForPDF } from '../utils/pdfUtils';
 
 // ============================================
@@ -537,8 +538,11 @@ const WoundCarePage: React.FC = () => {
         updated_at: new Date()
       };
 
-      await db.wound_care.add(newAssessment as any);
+      const localId = await db.wound_care.add(newAssessment as any);
       
+      // Queue for cloud sync
+      await syncService.queueAction('create', 'wound_care', localId as number, newAssessment);
+
       setAssessments(prev => [newAssessment, ...prev]);
       setSelectedAssessment(newAssessment);
       setActiveTab('details');

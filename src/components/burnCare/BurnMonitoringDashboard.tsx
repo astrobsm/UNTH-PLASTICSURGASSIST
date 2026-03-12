@@ -36,6 +36,7 @@ import {
 } from '../../services/burnCareService';
 import BurnFollowUpAssessment from './BurnFollowUpAssessment';
 import { FollowUpAssessment } from '../../services/burnExpertAIService';
+import { db } from '../../db/database';
 
 interface BurnMonitoringDashboardProps {
   patient: BurnPatient;
@@ -84,22 +85,41 @@ const BurnMonitoringDashboard: React.FC<BurnMonitoringDashboardProps> = ({ patie
     a => a.severity === 'critical' && a.status === 'open'
   );
 
+  // Persist updated patient data to IndexedDB
+  const persistPatientData = async (updatedData: BurnPatient) => {
+    try {
+      if (updatedData.id) {
+        await db.burn_patients.update(updatedData.id as any, updatedData as any);
+      }
+    } catch (error) {
+      console.error('Error persisting burn patient data:', error);
+    }
+  };
+
   const acknowledgeAlert = (alertId: string) => {
-    setPatientData(prev => ({
-      ...prev,
-      activeAlerts: prev.activeAlerts.map(a =>
-        a.id === alertId ? { ...a, status: 'acknowledged', acknowledgedAt: new Date() } : a
-      )
-    }));
+    setPatientData(prev => {
+      const updated = {
+        ...prev,
+        activeAlerts: prev.activeAlerts.map(a =>
+          a.id === alertId ? { ...a, status: 'acknowledged', acknowledgedAt: new Date() } : a
+        )
+      } as BurnPatient;
+      persistPatientData(updated);
+      return updated;
+    });
   };
 
   const resolveAlert = (alertId: string) => {
-    setPatientData(prev => ({
-      ...prev,
-      activeAlerts: prev.activeAlerts.map(a =>
-        a.id === alertId ? { ...a, status: 'resolved', resolvedAt: new Date() } : a
-      )
-    }));
+    setPatientData(prev => {
+      const updated = {
+        ...prev,
+        activeAlerts: prev.activeAlerts.map(a =>
+          a.id === alertId ? { ...a, status: 'resolved', resolvedAt: new Date() } : a
+        )
+      } as BurnPatient;
+      persistPatientData(updated);
+      return updated;
+    });
   };
 
   // Add new vitals
@@ -114,14 +134,18 @@ const BurnMonitoringDashboard: React.FC<BurnMonitoringDashboardProps> = ({ patie
     // Generate alerts based on vitals
     const newAlerts = burnCareService.generateVitalAlerts(newVitals, patient.weight);
 
-    setPatientData(prev => ({
-      ...prev,
-      monitoring: {
-        ...prev.monitoring,
-        vitals: [...prev.monitoring.vitals, newVitals],
-      },
-      activeAlerts: [...prev.activeAlerts, ...newAlerts],
-    }));
+    setPatientData(prev => {
+      const updated = {
+        ...prev,
+        monitoring: {
+          ...prev.monitoring,
+          vitals: [...prev.monitoring.vitals, newVitals],
+        },
+        activeAlerts: [...prev.activeAlerts, ...newAlerts],
+      } as BurnPatient;
+      persistPatientData(updated);
+      return updated;
+    });
     setShowVitalsModal(false);
   };
 
@@ -144,24 +168,28 @@ const BurnMonitoringDashboard: React.FC<BurnMonitoringDashboardProps> = ({ patie
       patient.age < 18 ? 1.0 : 0.5
     );
 
-    setPatientData(prev => ({
-      ...prev,
-      monitoring: {
-        ...prev.monitoring,
-        urineOutputs: updatedOutputs,
-        fluidBalance: {
-          ...prev.monitoring.fluidBalance,
-          outputs: [...prev.monitoring.fluidBalance.outputs, {
-            id: uuidv4(),
-            timestamp: new Date(),
-            type: 'urine',
-            volumeML,
-            recordedBy: 'Current User',
-          }],
+    setPatientData(prev => {
+      const updated = {
+        ...prev,
+        monitoring: {
+          ...prev.monitoring,
+          urineOutputs: updatedOutputs,
+          fluidBalance: {
+            ...prev.monitoring.fluidBalance,
+            outputs: [...prev.monitoring.fluidBalance.outputs, {
+              id: uuidv4(),
+              timestamp: new Date(),
+              type: 'urine',
+              volumeML,
+              recordedBy: 'Current User',
+            }],
+          },
         },
-      },
-      activeAlerts: uoAlert ? [...prev.activeAlerts, uoAlert] : prev.activeAlerts,
-    }));
+        activeAlerts: uoAlert ? [...prev.activeAlerts, uoAlert] : prev.activeAlerts,
+      } as BurnPatient;
+      persistPatientData(updated);
+      return updated;
+    });
     setShowUrineModal(false);
   };
 
@@ -174,21 +202,25 @@ const BurnMonitoringDashboard: React.FC<BurnMonitoringDashboardProps> = ({ patie
       recordedBy: 'Current User',
     };
 
-    setPatientData(prev => ({
-      ...prev,
-      monitoring: {
-        ...prev.monitoring,
-        fluidBalance: {
-          ...prev.monitoring.fluidBalance,
-          inputs: [...prev.monitoring.fluidBalance.inputs, newInput],
+    setPatientData(prev => {
+      const updated = {
+        ...prev,
+        monitoring: {
+          ...prev.monitoring,
+          fluidBalance: {
+            ...prev.monitoring.fluidBalance,
+            inputs: [...prev.monitoring.fluidBalance.inputs, newInput],
+          },
         },
-      },
-      resuscitation: {
-        ...prev.resuscitation,
-        volumeGiven: prev.resuscitation.volumeGiven + input.volumeML,
-        remainingVolume: prev.resuscitation.remainingVolume - input.volumeML,
-      },
-    }));
+        resuscitation: {
+          ...prev.resuscitation,
+          volumeGiven: prev.resuscitation.volumeGiven + input.volumeML,
+          remainingVolume: prev.resuscitation.remainingVolume - input.volumeML,
+        },
+      } as BurnPatient;
+      persistPatientData(updated);
+      return updated;
+    });
     setShowFluidModal(false);
   };
 
@@ -959,6 +991,15 @@ const BurnMonitoringDashboard: React.FC<BurnMonitoringDashboardProps> = ({ patie
             currentUser="Current User"
             onSaveAssessment={(assessment) => {
               setFollowUpAssessments(prev => [...prev, assessment]);
+              // Persist follow-up assessment to patient record
+              setPatientData(prev => {
+                const updated = {
+                  ...prev,
+                  followUpAssessments: [...(prev as any).followUpAssessments || [], assessment],
+                } as BurnPatient;
+                persistPatientData(updated);
+                return updated;
+              });
               setShowFollowUpModal(false);
             }}
             onClose={() => setShowFollowUpModal(false)}

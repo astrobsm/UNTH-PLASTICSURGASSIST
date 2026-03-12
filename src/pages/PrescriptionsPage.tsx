@@ -21,6 +21,7 @@ import {
 } from '../data/bnfDrugDatabase';
 import { useAuthStore } from '../store/authStore';
 import { db } from '../db/database';
+import { syncService } from '../db/syncService';
 import { patientService } from '../services/patientService';
 import jsPDF from 'jspdf';
 
@@ -313,6 +314,9 @@ export default function PrescriptionsPage() {
         createdBy: user?.full_name || user?.username || 'Unknown',
       };
       await db.table('prescriptions').put(record);
+      // Queue for cloud sync
+      const localId = record.id || Date.now();
+      await syncService.queueAction('create', 'prescriptions', localId as number, record);
       alert('Prescriptions saved successfully!');
       loadSavedPrescriptions();
     } catch (err) {

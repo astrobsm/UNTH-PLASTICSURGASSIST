@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { diabeticFootService, DiabeticFootAssessment, RiskCategory } from '../../services/diabeticFootService';
 import { patientService } from '../../services/patientService';
+import { db } from '../../db/database';
 
 interface ProgressEntry {
   id: string;
@@ -97,6 +98,9 @@ export const ConservativeProgressMonitor: React.FC<ConservativeProgressMonitorPr
 
       const conservativePatients: ConservativePatient[] = [];
 
+      // Pre-load all foot assessment records with progress entries from IndexedDB
+      const allFootRecords = await db.diabetic_foot_assessments.toArray();
+
       patientMap.forEach((assessments, patientId) => {
         // Sort by date, most recent first
         assessments.sort((a, b) => 
@@ -118,10 +122,12 @@ export const ConservativeProgressMonitor: React.FC<ConservativeProgressMonitorPr
           (Date.now() - firstAssessmentDate.getTime()) / (1000 * 60 * 60 * 24)
         );
 
-        // Load progress entries from localStorage (would be database in production)
-        const storedProgress = localStorage.getItem(`limb_salvage_progress_${patientId}`);
-        const progressEntries: ProgressEntry[] = storedProgress 
-          ? JSON.parse(storedProgress)
+        // Load progress entries from pre-loaded IndexedDB data
+        const patientFootRecords = allFootRecords.filter(
+          (a: any) => String(a.patient_id) === String(patientId) && a.progress_entries
+        );
+        const progressEntries: ProgressEntry[] = patientFootRecords.length > 0
+          ? (patientFootRecords[patientFootRecords.length - 1] as any).progress_entries || []
           : [];
 
         // Determine trend and alert level
@@ -597,18 +603,37 @@ export const ConservativeProgressMonitor: React.FC<ConservativeProgressMonitorPr
       {showAddProgress && selectedPatient && (
         <ProgressEntryModal
           patient={selectedPatient}
-          onSave={(entry) => {
-            // Save progress entry
-            const existingEntries = JSON.parse(
-              localStorage.getItem(`limb_salvage_progress_${selectedPatient.patientId}`) || '[]'
-            );
-            existingEntries.push(entry);
-            localStorage.setItem(
-              `limb_salvage_progress_${selectedPatient.patientId}`,
-              JSON.stringify(existingEntries)
-            );
-            setShowAddProgress(false);
-            loadConservativePatients();
+          onSave={async (entry) => {
+            try {
+              // Save progress entry to IndexedDB via diabetic_foot_assessments
+              const allFootAssessments = await db.diabetic_foot_assessments.toArray();
+              const patientRecord = allFootAssessments.find(
+                (a: any) => String(a.patient_id) === String(selectedPatient.patientId)
+              );
+              
+              if (patientRecord) {
+                const existingEntries = (patientRecord as any).progress_entries || [];
+                existingEntries.push(entry);
+                await db.diabetic_foot_assessments.update(patientRecord.id as any, {
+                  progress_entries: existingEntries
+                } as any);
+              } else {
+                // Create a new record to store progress
+                await db.diabetic_foot_assessments.add({
+                  patient_id: selectedPatient.patientId,
+                  assessment_date: new Date(),
+                  progress_entries: [entry],
+                  status: 'conservative_monitoring',
+                  created_at: new Date(),
+                } as any);
+              }
+              
+              setShowAddProgress(false);
+              loadConservativePatients();
+            } catch (error) {
+              console.error('Error saving progress entry:', error);
+              alert('Failed to save progress entry. Please try again.');
+            }
           }}
           onClose={() => setShowAddProgress(false)}
         />

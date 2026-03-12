@@ -19,6 +19,8 @@ import {
 import { BurnPatient, BurnAlert, burnCareService } from '../services/burnCareService';
 import BurnAdmissionForm from '../components/burnCare/BurnAdmissionForm';
 import BurnMonitoringDashboard from '../components/burnCare/BurnMonitoringDashboard';
+import { db } from '../db/database';
+import { syncService } from '../db/syncService';
 
 interface BurnStats {
   activePatients: number;
@@ -53,9 +55,14 @@ const BurnCarePage: React.FC = () => {
   const loadBurnPatients = async () => {
     try {
       setLoading(true);
-      // In a production implementation, this would fetch from an API or IndexedDB
-      // For now, we start with an empty list - patients are added via the admission form
-      const burnPatients: BurnPatient[] = [];
+      // Load burn patients from IndexedDB
+      const storedPatients = await db.burn_patients.toArray();
+      const burnPatients: BurnPatient[] = storedPatients.map((p: any) => ({
+        ...p,
+        activeAlerts: p.activeAlerts || [],
+        monitoring: p.monitoring || { vitals: [], urineOutputs: [], fluidBalance: { inputs: [], outputs: [] } },
+        tbsaAssessment: p.tbsaAssessment || { totalTBSA: p.tbsa_percentage || 0 },
+      }));
       
       setPatients(burnPatients);
       
@@ -104,9 +111,31 @@ const BurnCarePage: React.FC = () => {
     setView('monitoring');
   };
 
-  const handleAdmissionComplete = (newPatient: BurnPatient) => {
-    setPatients(prev => [...prev, newPatient]);
-    setView('list');
+  const handleAdmissionComplete = async (newPatient: BurnPatient) => {
+    try {
+      // Save to IndexedDB
+      const burnRecord = {
+        ...newPatient,
+        patient_id: newPatient.patientId,
+        admission_date: newPatient.admissionDate || new Date(),
+        tbsa_percentage: newPatient.tbsaAssessment?.totalTBSA || 0,
+        mechanism: newPatient.mechanism || '',
+        baux_score: newPatient.bauxScore || 0,
+        disposition: newPatient.disposition || 'ward',
+        status: newPatient.status || 'active',
+        created_at: new Date(),
+      };
+      const localId = await db.burn_patients.add(burnRecord as any);
+      await syncService.queueAction('create', 'burn_patients', localId as number, burnRecord);
+
+      setPatients(prev => [...prev, newPatient]);
+      setView('list');
+      // Reload to get updated stats
+      loadBurnPatients();
+    } catch (error) {
+      console.error('Error saving burn patient:', error);
+      alert('Failed to save burn patient admission. Please try again.');
+    }
   };
 
   const getSeverityBadge = (patient: BurnPatient) => {
