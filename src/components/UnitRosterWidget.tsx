@@ -29,9 +29,9 @@ export default function UnitRosterWidget() {
     loadAvailableStaff();
   }, []);
 
-  // Auto-setup roster when staff are loaded and no active config exists
+  // Auto-setup roster when loading is done and no active config exists
   useEffect(() => {
-    if (!autoSetupDone && !loading && !rosterConfig && availableSeniorRegistrars.length > 0) {
+    if (!autoSetupDone && !loading && !rosterConfig) {
       autoSetupRoster();
     }
   }, [autoSetupDone, loading, rosterConfig, availableSeniorRegistrars, availableHouseOfficers]);
@@ -76,21 +76,24 @@ export default function UnitRosterWidget() {
   const autoSetupRoster = async () => {
     setAutoSetupDone(true);
     try {
-      const srs = availableSeniorRegistrars;
-      const hos = availableHouseOfficers;
-      if (srs.length === 0 && hos.length === 0) return;
-
       // Deactivate any existing configs
       const existing = await db.ps_unit_rosters.toArray();
       for (const config of existing) {
         await db.ps_unit_rosters.update(config.id!, { isActive: false, updatedAt: new Date().toISOString() });
       }
 
+      const srs = availableSeniorRegistrars;
+      const hos = availableHouseOfficers;
+
       const newConfig: UnitRosterConfig = {
         startDate: new Date().toISOString().split('T')[0],
         rotationWeeks: 2,
-        seniorRegistrars: srs.slice(0, 2).map(u => u.full_name),
-        houseOfficers: hos.slice(0, 2).map(u => u.full_name),
+        seniorRegistrars: srs.length > 0 
+          ? srs.slice(0, 2).map(u => u.full_name)
+          : ['TBD'],
+        houseOfficers: hos.length > 0
+          ? hos.slice(0, 2).map(u => u.full_name)
+          : ['TBD'],
         isActive: true,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),

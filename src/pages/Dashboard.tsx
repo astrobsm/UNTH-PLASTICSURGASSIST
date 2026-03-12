@@ -17,7 +17,7 @@ import { useAuthStore } from '../store/authStore';
 import { useState, useEffect } from 'react';
 import { db, Patient } from '../db/database';
 import { patientService } from '../services/patientService';
-import { admissionService, Admission } from '../services/admissionService';
+import { admissionDischargeService, Admission } from '../services/admissionDischargeService';
 import UnitRosterWidget from '../components/UnitRosterWidget';
 
 interface DashboardPatient {
@@ -66,16 +66,20 @@ export default function Dashboard() {
       const activePatientsList = allPatients.filter((p: any) => !p.deleted);
       const activePatients = activePatientsList.length;
 
-      // Get active admissions for ward/bed info
+      // Get active admissions for ward/bed info (server-synced)
       let activeAdmissions: Admission[] = [];
       try {
-        activeAdmissions = await admissionService.getActiveAdmissions();
+        activeAdmissions = await admissionDischargeService.getActiveAdmissions();
       } catch { /* admissions may not exist yet */ }
 
-      // Build admission lookup by patient_id
-      const admissionMap = new Map<string, Admission>();
+      // Build admission lookup by patient_id AND hospital_number
+      const admissionByPid = new Map<string, Admission>();
+      const admissionByHn = new Map<string, Admission>();
       for (const adm of activeAdmissions) {
-        admissionMap.set(String(adm.patient_id), adm);
+        admissionByPid.set(String(adm.patient_id), adm);
+        if (adm.hospital_number) {
+          admissionByHn.set(adm.hospital_number.trim().toLowerCase(), adm);
+        }
       }
 
       // Build dashboard patient list
@@ -85,7 +89,8 @@ export default function Dashboard() {
 
       for (const p of activePatientsList) {
         const pid = String(p.id || p.serverId || '');
-        const adm = admissionMap.get(pid);
+        const hn = (p.hospital_number || '').trim().toLowerCase();
+        const adm = admissionByPid.get(pid) || (hn ? admissionByHn.get(hn) : undefined);
         
         const ward = adm?.ward_location || p.ward_id || '';
         const bed = adm?.bed_number || p.bed_number || '';
