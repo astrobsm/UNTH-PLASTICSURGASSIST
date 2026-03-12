@@ -182,13 +182,14 @@ export const PatientSummaryView: React.FC<PatientSummaryViewProps> = ({
   const generateNewSummary = async () => {
     setIsGenerating(true);
     try {
-      const newSummary = await unthPatientService.generatePatientSummary(
-        patientId,
-        summaryType,
-        'Generate comprehensive clinical summary'
-      );
-      setSummaries(prev => [newSummary, ...prev]);
-      setSelectedSummary(newSummary);
+      const patient = await patientService.getPatient(patientId);
+      if (patient) {
+        const newSummary = await generateSummaryFromPatientData(patient, summaryType);
+        setSummaries(prev => [newSummary, ...prev]);
+        setSelectedSummary(newSummary);
+      } else {
+        alert('Patient not found.');
+      }
     } catch (error) {
       console.error('Failed to generate summary:', error);
       alert('Failed to generate summary. Please try again.');
@@ -490,7 +491,81 @@ export const QuickSummaryCard: React.FC<{ patientId: string }> = ({ patientId })
   if (!latestSummary) {
     return (
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 text-center">
-        <p className="text-gray-500">No recent summary available</p>
+        <p className="text-gray-500 mb-2">No recent summary available</p>
+        <button
+          onClick={async () => {
+            setIsLoading(true);
+            try {
+              const patient = await patientService.getPatient(patientId);
+              if (patient) {
+                const { PatientSummaryView } = await import('./PatientSummary');
+                // Generate from real data
+                const allAdmissions = await db.admissions?.toArray() || [];
+                const admissions = allAdmissions.filter(a => String(a.patient_id) === String(patient.id));
+                const allTreatmentPlans = await db.treatment_plans?.toArray() || [];
+                const treatmentPlans = allTreatmentPlans.filter(tp => String(tp.patient_id) === String(patient.id));
+                const latestAdmission = admissions.sort((a, b) =>
+                  new Date(b.admission_date || b.created_at).getTime() - new Date(a.admission_date || a.created_at).getTime()
+                )[0];
+                const allPrescriptions = await db.prescriptions?.toArray() || [];
+                const prescriptions = allPrescriptions.filter(p => String(p.patient_id) === String(patient.id));
+
+                const patientName = `${patient.first_name} ${patient.last_name}`;
+                const diagnosis = patient.primary_diagnosis || latestAdmission?.provisional_diagnosis || latestAdmission?.admitting_diagnosis || 'Not specified';
+                const ward = latestAdmission?.ward_location || latestAdmission?.ward || patient.ward || 'Not assigned';
+                const allergies = Array.isArray(patient.allergies) ? patient.allergies : (patient.allergies ? [patient.allergies] : []);
+
+                let content = `Patient ${patientName}`;
+                if (patient.hospital_number) content += ` (${patient.hospital_number})`;
+                if (latestAdmission) {
+                  content += ` admitted to ${ward}`;
+                  if (latestAdmission.admission_date) content += ` on ${new Date(latestAdmission.admission_date).toLocaleDateString()}`;
+                }
+                content += `. Primary Diagnosis: ${diagnosis}.`;
+
+                const keyPoints: string[] = [];
+                if (diagnosis !== 'Not specified') keyPoints.push(`Diagnosis: ${diagnosis}`);
+                if (ward !== 'Not assigned') keyPoints.push(`Location: ${ward}`);
+                if (patient.blood_group) keyPoints.push(`Blood Group: ${patient.blood_group}`);
+                if (allergies.length > 0) keyPoints.push(`Allergies: ${allergies.join(', ')}`);
+
+                const medications: string[] = [];
+                prescriptions.forEach((p: any) => {
+                  if (p.prescriptions && Array.isArray(p.prescriptions)) {
+                    p.prescriptions.forEach((med: any) => {
+                      const name = med.medication || med.medication_name || '';
+                      if (name) medications.push(`${name} ${med.dosage || ''} ${med.frequency || ''}`.trim());
+                    });
+                  } else if (p.medication_name) {
+                    medications.push(`${p.medication_name} ${p.dosage || ''} ${p.frequency || ''}`.trim());
+                  }
+                });
+
+                const summary = {
+                  id: `summary-${Date.now()}`,
+                  patient_id: patientId,
+                  summary_type: 'progress' as const,
+                  generated_by: 'system' as const,
+                  content,
+                  key_points: keyPoints.length > 0 ? keyPoints : ['Patient data loaded from database'],
+                  current_problems: diagnosis !== 'Not specified' ? [diagnosis] : [],
+                  medications: medications.length > 0 ? medications : ['No active medications'],
+                  investigations_pending: [] as string[],
+                  plan: ['Continue monitoring', 'Review treatment response'],
+                  generated_at: new Date(),
+                  generated_by_user: 'system',
+                  ai_confidence: undefined
+                };
+                try { await db.patient_summaries?.add(summary as any); } catch {}
+                setLatestSummary(summary as any);
+              }
+            } catch (e) { console.error(e); }
+            setIsLoading(false);
+          }}
+          className="text-sm text-green-600 hover:text-green-700 font-medium"
+        >
+          Generate Summary
+        </button>
       </div>
     );
   }
