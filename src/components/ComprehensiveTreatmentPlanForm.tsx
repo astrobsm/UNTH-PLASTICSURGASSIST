@@ -164,16 +164,44 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
     const defaultRoute = med.routes.length > 0 ? med.routes[0].toLowerCase() : 'oral';
     const defaultFrequency = med.frequencies.length > 0 ? med.frequencies[0] : '';
     
-    setNewMed(prev => ({
-      ...prev,
-      medication_name: med.name,
-      dosage: defaultDosage,
-      route: defaultRoute as any,
-      frequency: defaultFrequency,
-    }));
-    
-    // Apply GFR adjustment if available
-    handleMedicationChange(med.name);
+    // Check for GFR adjustment inline (avoid stale closure from handleMedicationChange)
+    if (patientGFR && typeof patientGFR === 'number') {
+      const recommendation = medicationDosingService.getDosingRecommendation(
+        med.name,
+        patientGFR,
+        defaultDosage,
+        defaultFrequency
+      );
+      setGfrRecommendation(recommendation);
+      
+      if (recommendation.adjustedDose && !recommendation.contraindicated) {
+        setNewMed(prev => ({
+          ...prev,
+          medication_name: med.name,
+          dosage: recommendation.adjustedDose,
+          route: defaultRoute as any,
+          frequency: recommendation.adjustedFrequency,
+          notes: recommendation.notes || prev.notes
+        }));
+      } else {
+        setNewMed(prev => ({
+          ...prev,
+          medication_name: med.name,
+          dosage: defaultDosage,
+          route: defaultRoute as any,
+          frequency: defaultFrequency,
+        }));
+      }
+    } else {
+      setNewMed(prev => ({
+        ...prev,
+        medication_name: med.name,
+        dosage: defaultDosage,
+        route: defaultRoute as any,
+        frequency: defaultFrequency,
+      }));
+      setGfrRecommendation(null);
+    }
   };
   
   // Investigation search handler
@@ -328,6 +356,16 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
     assigned_to: 'house_officer' as const,
     assigned_person_name: ''
   });
+
+  // Auto-fill assigned person name when staff data loads (default role is house_officer)
+  useEffect(() => {
+    if (medicalTeam.house_officer && houseOfficers.length > 0 && !newReview.assigned_person_name) {
+      const ho = houseOfficers.find(h => String(h.id) === medicalTeam.house_officer);
+      if (ho) {
+        setNewReview(prev => ({ ...prev, assigned_person_name: ho.full_name }));
+      }
+    }
+  }, [medicalTeam.house_officer, houseOfficers]);
 
   // Discharge Planning
   const [dischargePlan, setDischargePlan] = useState<Partial<DischargePlanning>>({
@@ -538,9 +576,22 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
         criteria_met: [],
         criteria_pending: dischargePlan.discharge_criteria || []
       },
-      // Legacy fields for compatibility
+      // Legacy fields for compatibility - populate lab_works from investigations for local display
       reviews: [],
-      lab_works: [],
+      lab_works: investigations.map((inv, i) => ({
+        id: `lab_${Date.now()}_${i}`,
+        plan_id: '',
+        patient_id: parseInt(basicInfo.patient_id),
+        test_type: inv.investigation_name,
+        frequency: inv.frequency || 'once',
+        timeline_start: inv.ordered_date || new Date(),
+        scheduled_dates: [],
+        completed_dates: [],
+        results: [],
+        status: inv.status || 'pending',
+        created_at: new Date(),
+        updated_at: new Date(),
+      })),
       procedures: [],
       medications: [],
       created_by: user?.email || 'Unknown'
@@ -593,7 +644,12 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6">
+        <form onSubmit={handleSubmit} onKeyDown={(e) => {
+          // Prevent Enter key from triggering implicit form submission on non-final steps
+          if (e.key === 'Enter' && currentStep < 6 && !(e.target as HTMLElement).matches('textarea')) {
+            e.preventDefault();
+          }
+        }} className="p-6">
           {/* Step 1: Basic Info & Medical Team */}
           {currentStep === 1 && (
             <div className="space-y-6">
@@ -1444,7 +1500,18 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
                     <label className="block text-sm font-medium text-gray-700 mb-1">Assigned To</label>
                     <select
                       value={newReview.assigned_to}
-                      onChange={(e) => setNewReview({ ...newReview, assigned_to: e.target.value as any })}
+                      onChange={(e) => {
+                        const role = e.target.value;
+                        let personName = '';
+                        if (role === 'house_officer' && medicalTeam.house_officer) {
+                          personName = houseOfficers.find(h => String(h.id) === medicalTeam.house_officer)?.full_name || '';
+                        } else if (role === 'registrar' && medicalTeam.registrar) {
+                          personName = registrars.find(r => String(r.id) === medicalTeam.registrar)?.full_name || '';
+                        } else if (role === 'senior_registrar' && medicalTeam.senior_registrar) {
+                          personName = seniorRegistrars.find(s => String(s.id) === medicalTeam.senior_registrar)?.full_name || '';
+                        }
+                        setNewReview({ ...newReview, assigned_to: role as any, assigned_person_name: personName });
+                      }}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
                     >
                       <option value="house_officer">House Officer</option>

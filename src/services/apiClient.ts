@@ -471,7 +471,10 @@ class ApiClient {
       objectives: planData.objectives || [],
       procedures: planData.planned_procedures || planData.procedures || [],
       medications: planData.planned_medications || planData.medications || [],
+      investigations: planData.planned_investigations || planData.investigations || [],
       followUpSchedule: planData.planned_reviews || planData.reviews || [],
+      medicalTeam: planData.medical_team || null,
+      dischargePlan: planData.discharge_plan || null,
       notes: planData.notes || '',
       status: planData.status || 'active'
     };

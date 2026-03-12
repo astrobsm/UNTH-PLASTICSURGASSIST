@@ -95,7 +95,8 @@ async function getPlan(id, res) {
 async function createPlan(data, user, res) {
   const {
     patientId, diagnosis, treatmentType, description, objectives,
-    procedures, medications, followUpSchedule, notes, status = 'draft'
+    procedures, medications, investigations, followUpSchedule,
+    medicalTeam, dischargePlan, notes, status = 'draft'
   } = data;
 
   const effectiveDiagnosis = diagnosis || description || treatmentType || 'Unspecified';
@@ -106,15 +107,19 @@ async function createPlan(data, user, res) {
   const result = await query(
     `INSERT INTO treatment_plans (
       patient_id, diagnosis, treatment_type, description, objectives,
-      procedures, medications, follow_up_schedule, notes, status, created_by
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      procedures, medications, investigations, follow_up_schedule,
+      medical_team, discharge_plan, notes, status, created_by
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
     RETURNING *`,
     [
       patientId, effectiveDiagnosis, treatmentType, description, 
       JSON.stringify(objectives || []),
       JSON.stringify(procedures || []),
       JSON.stringify(medications || []),
+      JSON.stringify(investigations || []),
       JSON.stringify(followUpSchedule || []),
+      medicalTeam ? JSON.stringify(medicalTeam) : null,
+      dischargePlan ? JSON.stringify(dischargePlan) : null,
       notes, status, user.id
     ]
   );
@@ -134,12 +139,15 @@ async function updatePlan(id, data, res) {
     objectives: 'objectives',
     procedures: 'procedures',
     medications: 'medications',
+    investigations: 'investigations',
     followUpSchedule: 'follow_up_schedule',
+    medicalTeam: 'medical_team',
+    dischargePlan: 'discharge_plan',
     notes: 'notes',
     status: 'status'
   };
 
-  const jsonFields = ['objectives', 'procedures', 'medications', 'followUpSchedule'];
+  const jsonFields = ['objectives', 'procedures', 'medications', 'investigations', 'followUpSchedule', 'medicalTeam', 'dischargePlan'];
 
   for (const [key, dbField] of Object.entries(fieldMap)) {
     if (data[key] !== undefined) {

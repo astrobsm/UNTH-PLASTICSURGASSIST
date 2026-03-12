@@ -880,14 +880,26 @@ class TreatmentPlanningService {
               const serverMedications = Array.isArray(plan.medications)
                 ? plan.medications
                 : (typeof plan.medications === 'string' ? JSON.parse(plan.medications || '[]') : []);
+              const serverInvestigations = Array.isArray(plan.investigations)
+                ? plan.investigations
+                : (typeof plan.investigations === 'string' ? JSON.parse(plan.investigations || '[]') : []);
+              const serverMedicalTeam = plan.medical_team
+                ? (typeof plan.medical_team === 'string' ? JSON.parse(plan.medical_team) : plan.medical_team)
+                : null;
+              const serverDischargePlan = plan.discharge_plan
+                ? (typeof plan.discharge_plan === 'string' ? JSON.parse(plan.discharge_plan) : plan.discharge_plan)
+                : null;
 
               const merged = {
                 ...plan,
                 synced: true,
                 reviews: (existing?.reviews && existing.reviews.length > 0) ? existing.reviews : serverReviews,
                 lab_works: (existing?.lab_works && existing.lab_works.length > 0) ? existing.lab_works : (plan.lab_works || []),
+                planned_investigations: (existing?.planned_investigations && existing.planned_investigations.length > 0) ? existing.planned_investigations : serverInvestigations,
                 procedures: (existing?.procedures && existing.procedures.length > 0) ? existing.procedures : serverProcedures,
                 medications: (existing?.medications && existing.medications.length > 0) ? existing.medications : serverMedications,
+                medical_team: existing?.medical_team || serverMedicalTeam,
+                discharge_plan: existing?.discharge_plan || serverDischargePlan,
                 discharge_timeline: existing?.discharge_timeline || plan.discharge_timeline || null,
                 planned_discharge_date: existing?.planned_discharge_date || plan.planned_discharge_date || null,
                 primary_consultant: existing?.primary_consultant || plan.primary_consultant || '',
