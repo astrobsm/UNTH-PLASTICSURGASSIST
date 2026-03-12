@@ -47,11 +47,15 @@ export const RiskAssessmentSummary: React.FC<RiskAssessmentSummaryProps> = ({
       setError(null);
 
       // Load ALL assessment types for the patient (including archived for history)
-      const [dvtAssessments, pressureSoreAssessments, nutritionalAssessments] = await Promise.all([
-        db.dvt_assessments.where('patient_id').equals(patientId).toArray(),
-        db.pressure_sore_assessments.where('patient_id').equals(patientId).toArray(),
-        db.nutritional_assessments.where('patient_id').equals(patientId).toArray()
+      // Use toArray + filter to handle string/number patient_id mismatch
+      const [allDvt, allPressure, allNutritional] = await Promise.all([
+        db.dvt_assessments.toArray(),
+        db.pressure_sore_assessments.toArray(),
+        db.nutritional_assessments.toArray()
       ]);
+      const dvtAssessments = allDvt.filter(a => String(a.patient_id) === String(patientId));
+      const pressureSoreAssessments = allPressure.filter(a => String(a.patient_id) === String(patientId));
+      const nutritionalAssessments = allNutritional.filter(a => String(a.patient_id) === String(patientId));
 
       // Convert to summary format — ALL assessments for chronological history
       const allAssessments: AssessmentSummary[] = [

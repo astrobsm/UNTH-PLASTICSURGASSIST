@@ -17,6 +17,7 @@ import { PatientActivityTimeline } from '../components/PatientActivityTimeline';
 import { PatientChronologicalTimeline } from '../components/PatientChronologicalTimeline';
 import { medicalTeamService, TeamMember } from '../services/medicalTeamService';
 import { logPatientAccess } from '../services/auditLoggingService';
+import { riskAssessmentService } from '../services/riskAssessmentService';
 import { useAuthStore } from '../store/authStore';
 
 export const PatientProfile: React.FC = () => {
@@ -623,8 +624,13 @@ const RiskAssessmentView: React.FC<{ patientId: string; hospitalNumber: string }
           <DVTRiskAssessmentForm 
             patientId={patientId}
             hospitalNumber={hospitalNumber}
-            onSave={(assessment) => {
-              console.log('DVT assessment saved:', assessment);
+            onSave={async (assessment) => {
+              try {
+                await riskAssessmentService.saveDVTAssessment(assessment);
+                console.log('DVT assessment saved:', assessment);
+              } catch (e) {
+                console.error('Error persisting DVT assessment:', e);
+              }
               setActiveAssessment('summary');
             }}
           />
@@ -633,8 +639,13 @@ const RiskAssessmentView: React.FC<{ patientId: string; hospitalNumber: string }
         return (
           <PressureSoreRiskAssessmentForm 
             patientId={patientId}
-            onSave={(assessment) => {
-              console.log('Pressure sore assessment saved:', assessment);
+            onSave={async (assessment) => {
+              try {
+                await riskAssessmentService.savePressureSoreAssessment(assessment);
+                console.log('Pressure sore assessment saved:', assessment);
+              } catch (e) {
+                console.error('Error persisting pressure sore assessment:', e);
+              }
               setActiveAssessment('summary');
             }}
           />
@@ -643,8 +654,13 @@ const RiskAssessmentView: React.FC<{ patientId: string; hospitalNumber: string }
         return (
           <NutritionalRiskAssessmentForm 
             patientId={patientId}
-            onSave={(assessment) => {
-              console.log('Nutritional assessment saved:', assessment);
+            onSave={async (assessment) => {
+              try {
+                await riskAssessmentService.saveNutritionalAssessment(assessment);
+                console.log('Nutritional assessment saved:', assessment);
+              } catch (e) {
+                console.error('Error persisting nutritional assessment:', e);
+              }
               setActiveAssessment('summary');
             }}
           />

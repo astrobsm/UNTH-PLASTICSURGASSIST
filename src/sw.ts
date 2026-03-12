@@ -24,7 +24,7 @@ import { CacheableResponsePlugin } from 'workbox-cacheable-response';
 declare const self: ServiceWorkerGlobalScope;
 
 // ─── Cache names ────────────────────────────────────────────
-const CACHE_VERSION = 'v5-2026-03-11b';
+const CACHE_VERSION = 'v5-2026-03-12';
 const API_CACHE = `api-cache-${CACHE_VERSION}`;
 const IMAGE_CACHE = `images-cache-${CACHE_VERSION}`;
 const FONT_CACHE = `fonts-cache-${CACHE_VERSION}`;
