@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Users, Clock, Shield, UserCheck, Settings, Plus, RotateCcw } from 'lucide-react';
+import { Calendar, Users, Clock, Shield, UserCheck, Settings, Plus, RotateCcw, Wand2 } from 'lucide-react';
 import { db } from '../db/database';
 import { PS_UNITS, getCurrentAssignments, getTodaySchedule, UnitRosterConfig } from '../config/psUnits';
 import { useAuthStore } from '../store/authStore';
+import { userManagementService, ApprovedUser } from '../services/userManagementService';
 
 export default function UnitRosterWidget() {
   const { user } = useAuthStore();
   const [rosterConfig, setRosterConfig] = useState<UnitRosterConfig | null>(null);
   const [showSetup, setShowSetup] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [availableSeniorRegistrars, setAvailableSeniorRegistrars] = useState<ApprovedUser[]>([]);
+  const [availableHouseOfficers, setAvailableHouseOfficers] = useState<ApprovedUser[]>([]);
 
   // Setup form state
   const [setupForm, setSetupForm] = useState({
@@ -21,6 +24,7 @@ export default function UnitRosterWidget() {
 
   useEffect(() => {
     loadRosterConfig();
+    loadAvailableStaff();
   }, []);
 
   const loadRosterConfig = async () => {
@@ -35,6 +39,29 @@ export default function UnitRosterWidget() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadAvailableStaff = async () => {
+    try {
+      const allUsers = await userManagementService.getAllApprovedUsers();
+      const activeUsers = allUsers.filter(u => u.is_active);
+      setAvailableSeniorRegistrars(activeUsers.filter(u => u.role === 'senior_registrar' || u.role === 'junior_registrar'));
+      setAvailableHouseOfficers(activeUsers.filter(u => u.role === 'house_officer'));
+    } catch (err) {
+      console.error('Error loading available staff:', err);
+    }
+  };
+
+  const handleAutoAssign = () => {
+    const srs = availableSeniorRegistrars;
+    const hos = availableHouseOfficers;
+    setSetupForm(prev => ({
+      ...prev,
+      seniorRegistrar1: srs.length > 0 ? srs[0].full_name : prev.seniorRegistrar1,
+      seniorRegistrar2: srs.length > 1 ? srs[1].full_name : prev.seniorRegistrar2,
+      houseOfficer1: hos.length > 0 ? hos[0].full_name : prev.houseOfficer1,
+      houseOfficer2: hos.length > 1 ? hos[1].full_name : prev.houseOfficer2,
+    }));
   };
 
   const handleSaveRoster = async () => {
@@ -130,50 +157,79 @@ export default function UnitRosterWidget() {
                 className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
               />
             </div>
-            <div className="hidden sm:block" />
+            <div className="flex items-end">
+              <button
+                onClick={handleAutoAssign}
+                className="px-3 py-1.5 text-sm bg-indigo-100 text-indigo-700 rounded-md hover:bg-indigo-200 flex items-center gap-1"
+                title="Auto-assign available registrars and house officers to units"
+              >
+                <Wand2 className="h-3.5 w-3.5" />
+                Auto-Assign Staff
+              </button>
+            </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Senior Registrar (Group A)</label>
-              <input
-                type="text"
+              <select
                 value={setupForm.seniorRegistrar1}
                 onChange={(e) => setSetupForm({ ...setupForm, seniorRegistrar1: e.target.value })}
-                placeholder="e.g. Dr. Smith"
                 className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
-              />
+              >
+                <option value="">-- Select --</option>
+                {availableSeniorRegistrars.map(u => (
+                  <option key={u.id} value={u.full_name} disabled={u.full_name === setupForm.seniorRegistrar2}>
+                    {u.full_name} ({u.role === 'senior_registrar' ? 'SR' : 'JR'})
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Senior Registrar (Group B)</label>
-              <input
-                type="text"
+              <select
                 value={setupForm.seniorRegistrar2}
                 onChange={(e) => setSetupForm({ ...setupForm, seniorRegistrar2: e.target.value })}
-                placeholder="e.g. Dr. Jones"
                 className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
-              />
+              >
+                <option value="">-- Select --</option>
+                {availableSeniorRegistrars.map(u => (
+                  <option key={u.id} value={u.full_name} disabled={u.full_name === setupForm.seniorRegistrar1}>
+                    {u.full_name} ({u.role === 'senior_registrar' ? 'SR' : 'JR'})
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">House Officer (Group A)</label>
-              <input
-                type="text"
+              <select
                 value={setupForm.houseOfficer1}
                 onChange={(e) => setSetupForm({ ...setupForm, houseOfficer1: e.target.value })}
-                placeholder="e.g. Dr. Ade"
                 className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
-              />
+              >
+                <option value="">-- Select --</option>
+                {availableHouseOfficers.map(u => (
+                  <option key={u.id} value={u.full_name} disabled={u.full_name === setupForm.houseOfficer2}>
+                    {u.full_name}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">House Officer (Group B)</label>
-              <input
-                type="text"
+              <select
                 value={setupForm.houseOfficer2}
                 onChange={(e) => setSetupForm({ ...setupForm, houseOfficer2: e.target.value })}
-                placeholder="e.g. Dr. Bello"
                 className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
-              />
+              >
+                <option value="">-- Select --</option>
+                {availableHouseOfficers.map(u => (
+                  <option key={u.id} value={u.full_name} disabled={u.full_name === setupForm.houseOfficer1}>
+                    {u.full_name}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
           <p className="text-xs text-gray-500">
-            Group A starts in PS-UNIT 1 and Group B in PS-UNIT 2. They swap every 2 weeks.
+            Group A starts in PS-UNIT 1 and Group B in PS-UNIT 2. They swap every 2 weeks. Click "Auto-Assign Staff" to automatically populate from registered users.
           </p>
           <div className="flex gap-2">
             <button

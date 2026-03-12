@@ -1,5 +1,5 @@
 ﻿import React, { useState, useEffect, useMemo } from 'react';
-import { Calendar, User, Activity, FileText, Plus, Search, TrendingUp, Clock, AlertCircle, ChevronDown, ChevronUp, Thermometer, Heart, Wind, Droplets, Stethoscope, Pill, TestTube, Eye, ClipboardList, ArrowLeft, X, FileDown } from 'lucide-react';
+import { Calendar, User, Activity, FileText, Plus, Search, TrendingUp, Clock, AlertCircle, ChevronDown, ChevronUp, Thermometer, Heart, Wind, Droplets, Stethoscope, Pill, TestTube, Eye, ClipboardList, ArrowLeft, X, FileDown, FileBarChart } from 'lucide-react';
 import WardRoundForm from '../components/WardRoundForm';
 import { wardRoundsService, WardRound, ROUND_TYPES } from '../services/wardRoundsService';
 import { db } from '../db/database';
@@ -29,6 +29,11 @@ export default function WardRounds() {
   const [dateTo, setDateTo] = useState('');
   const [expandedRoundIds, setExpandedRoundIds] = useState<Set<string>>(new Set());
   const [patientSearch, setPatientSearch] = useState('');
+
+  // Harmonised Summary state
+  const [showHarmonisedSummary, setShowHarmonisedSummary] = useState(false);
+  const [harmonisedSummary, setHarmonisedSummary] = useState('');
+  const [generatingSummary, setGeneratingSummary] = useState(false);
 
   useEffect(() => { loadData(); }, []);
 
@@ -65,6 +70,164 @@ export default function WardRounds() {
         console.error('Error deleting ward round:', error);
         alert('Failed to delete ward round entry');
       }
+    }
+  };
+
+  // Generate harmonised patient summary from all data
+  const generateHarmonisedSummary = async () => {
+    if (!selectedPatientId || !selectedPatient) return;
+    setGeneratingSummary(true);
+    try {
+      // Gather all patient data in parallel
+      const [
+        labInvestigations,
+        prescriptions,
+        admissions,
+        treatmentPlans,
+        progressNotes,
+        woundCareRecords,
+      ] = await Promise.all([
+        db.lab_investigations?.where('patient_id').equals(selectedPatientId).toArray().catch(() => []) || [],
+        db.prescriptions?.where('patient_id').equals(selectedPatientId).toArray().catch(() => []) || [],
+        db.admissions?.where('patient_id').equals(selectedPatientId).toArray().catch(() => []) || [],
+        db.treatment_plans?.where('patient_id').equals(selectedPatientId).toArray().catch(() => []) || [],
+        db.progress_notes?.where('patient_id').equals(selectedPatientId).toArray().catch(() => []) || [],
+        db.wound_care?.where('patient_id').equals(selectedPatientId).toArray().catch(() => []) || [],
+      ]);
+
+      const sortedRounds = [...patientRounds].sort((a, b) => new Date(a.round_date).getTime() - new Date(b.round_date).getTime());
+      const latestRound = sortedRounds[sortedRounds.length - 1] as any;
+
+      let summary = `═══════════════════════════════════════════════════\n`;
+      summary += `  HARMONISED PATIENT SUMMARY\n`;
+      summary += `  ${selectedPatient.name} (${selectedPatient.hospital_number})\n`;
+      summary += `  Generated: ${format(new Date(), 'dd MMM yyyy HH:mm')}\n`;
+      summary += `═══════════════════════════════════════════════════\n\n`;
+
+      // Demographics
+      summary += `▸ PATIENT DETAILS\n`;
+      summary += `  Name: ${selectedPatient.name}\n`;
+      summary += `  Hospital No: ${selectedPatient.hospital_number}\n\n`;
+
+      // Admission info
+      if (admissions && admissions.length > 0) {
+        const activeAdmission = admissions.find((a: any) => a.status === 'active') || admissions[admissions.length - 1];
+        summary += `▸ ADMISSION\n`;
+        summary += `  Date: ${safeFormatDate((activeAdmission as any).admission_date, 'dd MMM yyyy') || 'N/A'}\n`;
+        summary += `  Ward: ${(activeAdmission as any).ward_location || 'N/A'}\n`;
+        summary += `  Diagnosis: ${(activeAdmission as any).provisional_diagnosis || (activeAdmission as any).admitting_diagnosis || 'N/A'}\n\n`;
+      }
+
+      // Latest vitals
+      if (latestRound) {
+        summary += `▸ LATEST VITALS (${safeFormatDate(latestRound.round_date, 'dd MMM yyyy')})\n`;
+        if (latestRound.temperature) summary += `  Temperature: ${latestRound.temperature}°C\n`;
+        if (latestRound.pulse) summary += `  Pulse: ${latestRound.pulse} bpm\n`;
+        if (latestRound.bp_systolic || latestRound.blood_pressure) summary += `  BP: ${latestRound.bp_systolic ? `${latestRound.bp_systolic}/${latestRound.bp_diastolic}` : latestRound.blood_pressure} mmHg\n`;
+        if (latestRound.respiratory_rate) summary += `  RR: ${latestRound.respiratory_rate}/min\n`;
+        if (latestRound.spo2) summary += `  SpO2: ${latestRound.spo2}%\n`;
+        if (latestRound.pain_score > 0) summary += `  Pain Score: ${latestRound.pain_score}/10\n`;
+        summary += `  Status: ${latestRound.progress_status?.toUpperCase()}\n\n`;
+      }
+
+      // Ward Round History
+      summary += `▸ WARD ROUND HISTORY (${sortedRounds.length} entries)\n`;
+      sortedRounds.forEach((r: any) => {
+        summary += `  ${safeFormatDate(r.round_date, 'dd/MM/yyyy')} - ${roundTypeLabel(r.round_type)} | ${r.progress_status} | ${r.reviewing_doctor || r.reviewed_by || 'N/A'}\n`;
+        if (r.chief_complaint) summary += `    Complaint: ${r.chief_complaint}\n`;
+        if (r.clinical_notes) summary += `    Notes: ${r.clinical_notes}\n`;
+        if (r.assessment_notes) summary += `    Assessment: ${r.assessment_notes}\n`;
+        if (r.wound_status || r.wound_notes) summary += `    Wound: ${r.wound_status || ''} ${r.wound_notes || ''}\n`;
+        if (r.complications) summary += `    ⚠ Complications: ${r.complications}\n`;
+        if (r.follow_up_plan) summary += `    Plan: ${r.follow_up_plan}\n`;
+      });
+      summary += '\n';
+
+      // Lab Work
+      if (labInvestigations && labInvestigations.length > 0) {
+        summary += `▸ LABORATORY INVESTIGATIONS (${labInvestigations.length})\n`;
+        labInvestigations.forEach((lab: any) => {
+          summary += `  ${safeFormatDate(lab.ordered_date || lab.created_at, 'dd/MM/yyyy')} - ${lab.test_name || lab.investigation_name || 'Unknown'} [${(lab.status || 'pending').toUpperCase()}]`;
+          if (lab.result || lab.result_value) summary += ` → ${lab.result || lab.result_value}`;
+          summary += '\n';
+        });
+        summary += '\n';
+      }
+
+      // Medications from ward rounds
+      const allMeds: string[] = [];
+      sortedRounds.forEach((r: any) => {
+        if (r.new_medications?.length > 0) {
+          r.new_medications.forEach((m: any) => {
+            allMeds.push(`${m.name} ${m.dose} ${m.frequency} (${m.route})`);
+          });
+        }
+        if (r.medication_changes) allMeds.push(r.medication_changes);
+      });
+      if (prescriptions && prescriptions.length > 0) {
+        prescriptions.forEach((p: any) => {
+          allMeds.push(`${p.medication_name || p.drug_name || 'Unknown'} ${p.dosage || ''} ${p.frequency || ''} (${p.route || 'oral'})`);
+        });
+      }
+      if (allMeds.length > 0) {
+        summary += `▸ MEDICATIONS\n`;
+        [...new Set(allMeds)].forEach(med => summary += `  • ${med}\n`);
+        summary += '\n';
+      }
+
+      // Treatment Plans
+      if (treatmentPlans && treatmentPlans.length > 0) {
+        summary += `▸ TREATMENT PLANS\n`;
+        treatmentPlans.forEach((tp: any) => {
+          summary += `  ${tp.plan_name || tp.title || 'Treatment Plan'} - Status: ${tp.status || 'active'}\n`;
+          if (tp.current_phase) summary += `    Phase: ${tp.current_phase}\n`;
+          if (tp.description) summary += `    ${tp.description}\n`;
+        });
+        summary += '\n';
+      }
+
+      // Wound Care
+      if (woundCareRecords && woundCareRecords.length > 0) {
+        summary += `▸ WOUND CARE RECORDS (${woundCareRecords.length})\n`;
+        woundCareRecords.forEach((w: any) => {
+          summary += `  ${safeFormatDate(w.assessment_date || w.created_at, 'dd/MM/yyyy')} - ${w.wound_type || w.wound_location || 'Wound'}: ${w.wound_status || w.status || 'N/A'}\n`;
+        });
+        summary += '\n';
+      }
+
+      // Progress Notes
+      if (progressNotes && progressNotes.length > 0) {
+        summary += `▸ PROGRESS NOTES (${progressNotes.length})\n`;
+        progressNotes.slice(-5).forEach((pn: any) => {
+          summary += `  ${safeFormatDate(pn.note_date || pn.created_at, 'dd/MM/yyyy')} - ${pn.note_type || 'Note'}: ${(pn.content || pn.note || '').substring(0, 100)}${(pn.content || pn.note || '').length > 100 ? '...' : ''}\n`;
+        });
+        summary += '\n';
+      }
+
+      // Current Plan
+      if (latestRound) {
+        summary += `▸ CURRENT PLAN\n`;
+        if (latestRound.follow_up_plan) summary += `  Follow-up: ${latestRound.follow_up_plan}\n`;
+        if (latestRound.treatment_plan_changes) summary += `  Treatment changes: ${latestRound.treatment_plan_changes}\n`;
+        if (latestRound.dietary_modifications) summary += `  Diet: ${latestRound.dietary_modifications}\n`;
+        if (latestRound.activity_orders) summary += `  Activity: ${latestRound.activity_orders}\n`;
+        if (latestRound.nursing_instructions) summary += `  Nursing: ${latestRound.nursing_instructions}\n`;
+        if (latestRound.discharge_planning) summary += `  Discharge: ${latestRound.discharge_planning}\n`;
+        if (latestRound.next_review_date) summary += `  Next Review: ${safeFormatDate(latestRound.next_review_date, 'dd MMM yyyy')}\n`;
+        summary += '\n';
+      }
+
+      summary += `═══════════════════════════════════════════════════\n`;
+      summary += `  END OF HARMONISED SUMMARY\n`;
+      summary += `═══════════════════════════════════════════════════\n`;
+
+      setHarmonisedSummary(summary);
+      setShowHarmonisedSummary(true);
+    } catch (error) {
+      console.error('Error generating harmonised summary:', error);
+      alert('Failed to generate harmonised summary');
+    } finally {
+      setGeneratingSummary(false);
     }
   };
 
@@ -204,6 +367,13 @@ export default function WardRounds() {
           </div>
           <button onClick={() => { setSelectedRound(null); setShowForm(true); }} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm">
             <Plus className="w-4 h-4" /> New Round for Patient
+          </button>
+          <button 
+            onClick={generateHarmonisedSummary} 
+            disabled={generatingSummary}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm disabled:opacity-50"
+          >
+            <FileBarChart className="w-4 h-4" /> {generatingSummary ? 'Generating...' : 'Harmonised Summary'}
           </button>
         </div>
 
@@ -434,6 +604,39 @@ export default function WardRounds() {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Harmonised Summary Modal */}
+        {showHarmonisedSummary && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
+              <div className="bg-indigo-600 text-white px-6 py-4 flex justify-between items-center">
+                <div>
+                  <h2 className="text-xl font-bold flex items-center gap-2">
+                    <FileBarChart className="w-6 h-6" /> Harmonised Patient Summary
+                  </h2>
+                  <p className="text-indigo-200 text-sm">{selectedPatient?.name} — {selectedPatient?.hospital_number}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(harmonisedSummary);
+                      alert('Summary copied to clipboard!');
+                    }}
+                    className="px-3 py-1.5 bg-white bg-opacity-20 hover:bg-opacity-30 rounded text-sm"
+                  >
+                    Copy
+                  </button>
+                  <button onClick={() => setShowHarmonisedSummary(false)} className="text-white hover:text-gray-200">
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+              </div>
+              <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
+                <pre className="whitespace-pre-wrap font-mono text-sm text-gray-800 bg-gray-50 p-4 rounded-lg border">{harmonisedSummary}</pre>
+              </div>
+            </div>
           </div>
         )}
       </div>

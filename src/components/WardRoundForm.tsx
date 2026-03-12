@@ -14,6 +14,7 @@ import { ScribeRecordingPanel } from './ScribeRecordingPanel';
 import { ScribeNoteEditor } from './ScribeNoteEditor';
 import { medicalScribeService, StructuredNote, ScribeSession } from '../services/medicalScribeService';
 import { DocumentScannerModal } from './DocumentScannerModal';
+import { searchDrugs, BNFDrug } from '../data/bnfDrugDatabase';
 import Tesseract from 'tesseract.js';
 
 interface WardRoundFormProps {
@@ -59,6 +60,12 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
   // AI Document Scanner state
   const [showDocumentScanner, setShowDocumentScanner] = useState(false);
   const [scannerDocType, setScannerDocType] = useState<'general' | 'handwritten_note' | 'lab_report' | 'prescription' | 'imaging_report'>('general');
+
+  // BNF Medication Search state
+  const [bnfSearchQuery, setBnfSearchQuery] = useState('');
+  const [bnfSearchResults, setBnfSearchResults] = useState<BNFDrug[]>([]);
+  const [selectedBnfDrug, setSelectedBnfDrug] = useState<BNFDrug | null>(null);
+  const [showBnfDropdown, setShowBnfDropdown] = useState(false);
 
   const [formData, setFormData] = useState({
     patient_id: initialPatientId || '',
@@ -603,6 +610,7 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
     { id: 'clinical_images', label: 'Clinical Images', icon: Camera },
     { id: 'assessment', label: 'Clinical Assessment', icon: Stethoscope },
     { id: 'plan', label: 'Management Plan', icon: ClipboardList },
+    { id: 'lab_work', label: 'Lab Work', icon: TestTube },
     { id: 'medications', label: 'Medications', icon: Pill },
     { id: 'treatment_plan', label: 'Treatment Plan', icon: Edit3, show: !!patientTreatmentPlan },
     { id: 'followup', label: 'Follow-up', icon: TrendingUp }
@@ -1492,11 +1500,241 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
               </div>
             )}
 
+            {/* Lab Work / Investigations Tab */}
+            {activeTab === 'lab_work' && (
+              <div className="space-y-6">
+                <div className="bg-teal-50 border border-teal-200 rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-teal-900 mb-2 flex items-center gap-2">
+                    <TestTube className="w-5 h-5" />
+                    Request Lab Work / Investigations
+                  </h3>
+                  <p className="text-sm text-teal-700">Order investigations, track results and review lab work for this patient.</p>
+                </div>
+
+                {/* Quick Investigation Orders */}
+                <div>
+                  <h4 className="font-semibold text-gray-900 mb-3">Quick Order Common Investigations</h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {['FBC', 'E/U/Cr', 'LFT', 'RBS', 'Urinalysis', 'Blood Group & Cross-match', 'Wound Swab M/C/S', 'Clotting Profile', 'Serum Protein', 'HIV Screening', 'HBsAg', 'HCV'].map(test => {
+                      const isOrdered = formData.investigations_ordered.includes(test) || orderedInvestigations.some((inv: any) => inv.test_name === test);
+                      return (
+                        <button
+                          key={test}
+                          type="button"
+                          onClick={() => {
+                            if (!isOrdered) {
+                              setFormData(prev => ({
+                                ...prev,
+                                investigations_ordered: [...prev.investigations_ordered, test]
+                              }));
+                            }
+                          }}
+                          disabled={isOrdered}
+                          className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                            isOrdered
+                              ? 'bg-green-100 text-green-800 border border-green-300 cursor-default'
+                              : 'bg-white border border-gray-300 text-gray-700 hover:bg-teal-50 hover:border-teal-400'
+                          }`}
+                        >
+                          {isOrdered ? '✓ ' : '+ '}{test}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Full Investigation Ordering Modal */}
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setShowInvestigationModal(true)}
+                    className="w-full px-4 py-3 bg-teal-600 text-white rounded-lg hover:bg-teal-700 font-medium flex items-center justify-center gap-2"
+                  >
+                    <TestTube className="w-5 h-5" />
+                    Advanced Investigation Ordering & Results ({orderedInvestigations.length})
+                  </button>
+                </div>
+
+                {/* Ordered investigations summary */}
+                {orderedInvestigations.length > 0 && (
+                  <div>
+                    <h4 className="font-semibold text-gray-900 mb-2">Tracked Investigations</h4>
+                    <div className="space-y-2">
+                      {orderedInvestigations.map((inv: any, index: number) => (
+                        <div key={index} className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <span className="font-medium text-blue-900">{inv.test_name}</span>
+                              <span className="ml-2 text-xs px-2 py-1 rounded bg-blue-100 text-blue-700">
+                                {inv.priority?.toUpperCase()}
+                              </span>
+                            </div>
+                            <span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-700">
+                              {inv.status}
+                            </span>
+                          </div>
+                          {inv.results && inv.results.length > 0 && (
+                            <div className="mt-2 text-sm text-gray-700">
+                              <span className="font-medium">Results: </span>
+                              {inv.results.length} parameter(s) recorded
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Simple text-based investigation list */}
+                <div>
+                  <h4 className="font-semibold text-gray-900 mb-2">Additional Investigations</h4>
+                  <div className="flex gap-2 mb-2">
+                    <input
+                      type="text"
+                      value={newInvestigation}
+                      onChange={(e) => setNewInvestigation(e.target.value)}
+                      className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500"
+                      placeholder="Type investigation name and press Enter..."
+                      onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addInvestigation())}
+                    />
+                    <button
+                      type="button"
+                      onClick={addInvestigation}
+                      className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700"
+                    >
+                      Add
+                    </button>
+                  </div>
+                  {formData.investigations_ordered.length > 0 && (
+                    <div className="space-y-1">
+                      {formData.investigations_ordered.map((inv, index) => (
+                        <div key={index} className="flex items-center justify-between bg-teal-50 px-3 py-2 rounded border border-teal-200">
+                          <span className="text-teal-900">{inv}</span>
+                          <button
+                            type="button"
+                            onClick={() => setFormData(prev => ({
+                              ...prev,
+                              investigations_ordered: prev.investigations_ordered.filter((_, i) => i !== index)
+                            }))}
+                            className="text-red-600 hover:text-red-800"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Lab notes */}
+                <MedicalTextInput
+                  value={formData.lab_notes || ''}
+                  onChange={(value) => setFormData({ ...formData, lab_notes: value })}
+                  label="Lab Notes / Special Instructions"
+                  placeholder="Any special instructions for the lab, fasting requirements, timing, etc..."
+                  rows={3}
+                  context="general"
+                  showAIEnhance={false}
+                />
+              </div>
+            )}
+
             {/* Medications Tab */}
             {activeTab === 'medications' && (
               <div className="space-y-6">
+                {/* BNF Drug Search */}
+                <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-indigo-900 mb-2 flex items-center gap-2">
+                    <Pill className="w-5 h-5" />
+                    BNF Medication Search
+                  </h3>
+                  <p className="text-sm text-indigo-700 mb-3">Search the BNF database to find medications with dosing information.</p>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={bnfSearchQuery}
+                      onChange={(e) => {
+                        const q = e.target.value;
+                        setBnfSearchQuery(q);
+                        if (q.length >= 2) {
+                          setBnfSearchResults(searchDrugs(q).slice(0, 15));
+                          setShowBnfDropdown(true);
+                        } else {
+                          setBnfSearchResults([]);
+                          setShowBnfDropdown(false);
+                        }
+                        setSelectedBnfDrug(null);
+                      }}
+                      onFocus={() => {
+                        if (bnfSearchResults.length > 0) setShowBnfDropdown(true);
+                      }}
+                      className="w-full px-4 py-2 border border-indigo-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      placeholder="Search medication by name (e.g., Paracetamol, Amoxicillin, Metronidazole)..."
+                    />
+                    {showBnfDropdown && bnfSearchResults.length > 0 && (
+                      <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                        {bnfSearchResults.map((drug) => (
+                          <button
+                            key={drug.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedBnfDrug(drug);
+                              setBnfSearchQuery(drug.genericName);
+                              setShowBnfDropdown(false);
+                              // Pre-fill medication fields
+                              const defaultFormulation = drug.formulations[0];
+                              const defaultRoute = defaultFormulation?.route || 'oral';
+                              setNewMedication({
+                                name: drug.genericName,
+                                dose: drug.dosage.adult?.standard || defaultFormulation?.strength || '',
+                                frequency: drug.dosage.adult?.frequency || 'od',
+                                route: defaultRoute.toLowerCase()
+                              });
+                            }}
+                            className="w-full text-left px-4 py-2 hover:bg-indigo-50 border-b border-gray-100 last:border-b-0"
+                          >
+                            <div className="font-medium text-gray-900">{drug.genericName}</div>
+                            <div className="text-xs text-gray-500">
+                              {drug.brandNames.slice(0, 3).join(', ')} • {drug.category}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Selected Drug Details */}
+                  {selectedBnfDrug && (
+                    <div className="mt-3 bg-white border border-indigo-200 rounded-lg p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-semibold text-indigo-900">{selectedBnfDrug.genericName}</h4>
+                        <span className="text-xs px-2 py-1 bg-indigo-100 text-indigo-700 rounded">{selectedBnfDrug.category}</span>
+                      </div>
+                      {selectedBnfDrug.brandNames.length > 0 && (
+                        <p className="text-xs text-gray-600">Brands: {selectedBnfDrug.brandNames.join(', ')}</p>
+                      )}
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div><span className="text-gray-500">Adult dose:</span> <span className="font-medium">{selectedBnfDrug.dosage.adult?.standard || 'See BNF'}</span></div>
+                        <div><span className="text-gray-500">Max daily:</span> <span className="font-medium">{selectedBnfDrug.maxDailyDose || 'N/A'}</span></div>
+                        <div><span className="text-gray-500">Pregnancy:</span> <span className={`font-medium ${selectedBnfDrug.pregnancyCategory === 'X' || selectedBnfDrug.pregnancyCategory === 'D' ? 'text-red-600' : ''}`}>Category {selectedBnfDrug.pregnancyCategory}</span></div>
+                        <div><span className="text-gray-500">Renal:</span> <span className={`font-medium ${selectedBnfDrug.renalRisk === 'avoid' ? 'text-red-600' : selectedBnfDrug.renalRisk === 'dose_adjust' ? 'text-yellow-600' : ''}`}>{selectedBnfDrug.renalRisk}</span></div>
+                      </div>
+                      {selectedBnfDrug.contraindications.length > 0 && (
+                        <div className="text-xs">
+                          <span className="text-red-600 font-medium">Contraindications:</span> {selectedBnfDrug.contraindications.slice(0, 3).join(', ')}
+                        </div>
+                      )}
+                      {selectedBnfDrug.formulations.length > 0 && (
+                        <div className="text-xs">
+                          <span className="text-gray-500 font-medium">Formulations:</span> {selectedBnfDrug.formulations.map(f => f.form).slice(0, 4).join(', ')}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-3">New Medications</h3>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3">Add Medication</h3>
                   <div className="grid grid-cols-4 gap-2 mb-2">
                     <input
                       type="text"

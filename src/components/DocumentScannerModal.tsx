@@ -107,7 +107,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
     reader.onload = (ev) => {
       const dataUrl = ev.target?.result as string;
       setImagePreview(dataUrl);
-      processImage(file);
+      processImage(dataUrl);
     };
     reader.readAsDataURL(file);
   };

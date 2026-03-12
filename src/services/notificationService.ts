@@ -144,18 +144,21 @@ class NotificationService {
         break;
     }
 
-    const notification = new Notification(payload.title, options);
-    
-    // Handle notification click
-    notification.onclick = () => {
-      window.focus();
-      if (payload.url) {
-        window.location.href = payload.url;
-      }
-      notification.close();
-    };
-
-    return Promise.resolve();
+    // Use ServiceWorkerRegistration.showNotification for persistent notifications with actions
+    if (this.registration) {
+      await this.registration.showNotification(payload.title, options);
+    } else {
+      // Fallback: local Notification (no actions support)
+      const { actions, ...localOptions } = options as any;
+      const notification = new Notification(payload.title, localOptions);
+      notification.onclick = () => {
+        window.focus();
+        if (payload.url) {
+          window.location.href = payload.url;
+        }
+        notification.close();
+      };
+    }
   }
 
   // Schedule a local notification (using service worker)
