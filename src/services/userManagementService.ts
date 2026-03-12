@@ -116,6 +116,16 @@ class UserManagementService {
     }
   }
 
+  async deleteUser(userId: string): Promise<void> {
+    try {
+      await apiClient.deleteUser(userId);
+    } catch (error: any) {
+      // If API delete fails (404 / no endpoint), fall back to deactivation
+      console.warn('API deleteUser failed, falling back to deactivation:', error.message);
+      await apiClient.updateUserStatus(userId, false);
+    }
+  }
+
   async submitRegistrationRequest(userData: {
     name: string;
     email: string;

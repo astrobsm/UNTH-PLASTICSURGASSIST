@@ -56,6 +56,7 @@ import { db } from '../db/database';
 import { resetDatabase, fullDatabaseRecovery, triggerEmergencyRecovery } from '../utils/dbReset';
 import toast from 'react-hot-toast';
 import RotationManagement from '../components/admin/RotationManagement';
+import { UnitRosterConfig } from '../config/psUnits';
 
 type AdminTab = 'dashboard' | 'user-approvals' | 'users' | 'bulk-import' | 'team-analytics' | 'rotations' | 'system' | 'database' | 'security' | 'analytics' | 'settings';
 
@@ -235,11 +236,49 @@ export default function Admin() {
   const handleDeleteUser = async (userId: string) => {
     const user = users.find(u => u.id === userId);
     if (!user) return;
-    if (!confirm(`Are you sure you want to permanently delete ${user.name}? This cannot be undone.`)) return;
+
+    // Only allow deleting registrars and house officers
+    const deletableRoles = ['senior_registrar', 'junior_registrar', 'house_officer'];
+    if (!deletableRoles.includes(user.role)) {
+      toast.error('Only Registrars and House Officers can be deleted.');
+      return;
+    }
+
+    const password = prompt(`To permanently delete ${user.name} (${user.role.replace('_', ' ')}), enter admin password:`);
+    if (password !== 'blackvelvet') {
+      if (password !== null) toast.error('Incorrect password. Deletion cancelled.');
+      return;
+    }
+
     try {
-      await userManagementService.updateUserStatus(userId, false);
+      await userManagementService.deleteUser(userId);
+
+      // Also remove from any active PS Unit roster
+      try {
+        const rosters = await db.ps_unit_rosters.toArray();
+        for (const roster of rosters) {
+          const config = roster as UnitRosterConfig;
+          let changed = false;
+          if (config.seniorRegistrars?.includes(user.name)) {
+            config.seniorRegistrars = config.seniorRegistrars.filter((n: string) => n !== user.name);
+            changed = true;
+          }
+          if (config.houseOfficers?.includes(user.name)) {
+            config.houseOfficers = config.houseOfficers.filter((n: string) => n !== user.name);
+            changed = true;
+          }
+          if (changed && roster.id) {
+            await db.ps_unit_rosters.update(roster.id, {
+              seniorRegistrars: config.seniorRegistrars,
+              houseOfficers: config.houseOfficers,
+              updatedAt: new Date().toISOString()
+            });
+          }
+        }
+      } catch { /* roster table may not exist */ }
+
       await loadUsers();
-      toast.success(`${user.name} has been deleted.`);
+      toast.success(`${user.name} has been permanently deleted.`);
     } catch (error: any) {
       toast.error(`Failed to delete user: ${error.message}`);
     }

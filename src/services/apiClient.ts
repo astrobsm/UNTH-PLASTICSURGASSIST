@@ -284,6 +284,12 @@ class ApiClient {
     });
   }
 
+  async deleteUser(userId: string) {
+    return this.request(`/users/${encodeURIComponent(userId)}`, {
+      method: 'DELETE'
+    });
+  }
+
   // Bulk import users with auto-generated credentials
   async bulkImportUsers(users: Array<{
     fullName: string;
