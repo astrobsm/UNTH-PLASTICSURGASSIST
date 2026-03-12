@@ -410,13 +410,24 @@ class PatientService {
       
       console.log(`Found ${unsyncedPatients.length} unsynced patients. Queueing for sync...`);
       
-      // Queue each patient for sync
+      // Get existing queue items to avoid duplicates
+      const existingQueueItems = await db.sync_queue
+        .where('table').equals('patients')
+        .toArray();
+      const alreadyQueued = new Set(existingQueueItems.map(q => q.local_id));
+      
+      // Queue each patient for sync (skip if already in queue)
+      let queued = 0;
       for (const patient of unsyncedPatients) {
-        if (patient.id) {
+        if (patient.id && !alreadyQueued.has(patient.id)) {
           // Determine if it's a create or update based on whether it has a serverId
           const action = patient.serverId ? 'update' : 'create';
           await syncService.queueAction(action, 'patients', patient.id, patient);
+          queued++;
         }
+      }
+      if (queued < unsyncedPatients.length) {
+        console.log(`Skipped ${unsyncedPatients.length - queued} patients already in sync queue`);
       }
       
       // Trigger sync immediately if online

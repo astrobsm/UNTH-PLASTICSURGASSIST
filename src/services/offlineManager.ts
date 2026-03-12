@@ -382,6 +382,16 @@ class OfflineManager {
       });
 
       if (!response.ok) {
+        // Handle 409 Conflict - record already exists on server
+        if (response.status === 409) {
+          if (local_id && table) {
+            const tableRef = (db as any)[table];
+            if (tableRef) {
+              await tableRef.update(local_id, { synced: true });
+            }
+          }
+          return; // Treat as success
+        }
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.error || `HTTP ${response.status}`);
       }
@@ -425,6 +435,15 @@ class OfflineManager {
     });
 
     if (!response.ok) {
+      // Handle 409 Conflict - record already exists on server, mark as synced
+      if (response.status === 409 && action === 'create') {
+        const tableRef = (db as any)[table];
+        if (tableRef && local_id) {
+          await tableRef.update(local_id, { synced: true });
+          console.log(`✅ ${table} ${local_id} already on server, marked synced`);
+        }
+        return; // Treat as success
+      }
       const errorData = await response.json().catch(() => ({}));
       throw new Error(errorData.error || `HTTP ${response.status}`);
     }
