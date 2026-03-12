@@ -51,6 +51,7 @@ export interface Admission {
   provisional_diagnosis: string;
   admitting_doctor: string;
   admitting_consultant?: string;
+  admitting_unit?: string;
   vital_signs?: VitalSigns;
   allergies?: string;
   current_medications?: string;

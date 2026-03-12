@@ -72,6 +72,11 @@ const SPECIALTIES = [
 
 const CONSULTANTS = ['Dr Okwesili', 'Dr Nnadi', 'Dr Eze C. B'];
 
+const ADMITTING_UNITS = [
+  { id: 'PS-UNIT-1', name: 'PS-UNIT 1 (Dr Okwesili / Dr Nnadi)', consultants: ['Dr Okwesili', 'Dr Nnadi'] },
+  { id: 'PS-UNIT-2', name: 'PS-UNIT 2 (Dr Okwesili / Dr Eze C. B)', consultants: ['Dr Okwesili', 'Dr Eze C. B'] },
+];
+
 const CLINICS = ['Outpatient Clinic', 'Hand Clinic', 'Burns Clinic', 'Wound Clinic', 'Reconstructive Clinic'];
 
 // ============= HELPERS =============
@@ -867,6 +872,7 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
   const [presentingComplaint, setPresentingComplaint] = useState('');
   const [provisionalDiagnosis, setProvisionalDiagnosis] = useState('');
   const [admittingConsultant, setAdmittingConsultant] = useState('');
+  const [admittingUnit, setAdmittingUnit] = useState('');
   const [additionalNotes, setAdditionalNotes] = useState('');
   
   // Medical Team Assignment
@@ -936,7 +942,7 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedPatient || !wardLocation || !reasonsForAdmission || !provisionalDiagnosis || !admittingConsultant) {
+    if (!selectedPatient || !wardLocation || !reasonsForAdmission || !provisionalDiagnosis || !admittingConsultant || !admittingUnit) {
       alert('Please fill in all required fields');
       return;
     }
@@ -967,6 +973,7 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
         provisional_diagnosis: provisionalDiagnosis,
         admitting_doctor: 'Current User',
         admitting_consultant: admittingConsultant,
+        admitting_unit: admittingUnit,
         vital_signs: {
           temperature: temperature ? parseFloat(temperature) : undefined,
           blood_pressure: bloodPressure,
@@ -1078,6 +1085,26 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
+              Admitting Unit <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={admittingUnit}
+              onChange={(e) => {
+                setAdmittingUnit(e.target.value);
+                // Auto-clear consultant when unit changes
+                setAdmittingConsultant('');
+              }}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+              required
+            >
+              <option value="">-- Select Unit --</option>
+              {ADMITTING_UNITS.map((u) => (
+                <option key={u.id} value={u.id}>{u.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
               Admitting Consultant <span className="text-red-500">*</span>
             </label>
             <select
@@ -1087,7 +1114,10 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
               required
             >
               <option value="">-- Select Consultant --</option>
-              {CONSULTANTS.map((c) => (
+              {(admittingUnit
+                ? (ADMITTING_UNITS.find(u => u.id === admittingUnit)?.consultants || CONSULTANTS)
+                : CONSULTANTS
+              ).map((c) => (
                 <option key={c} value={c}>{c}</option>
               ))}
             </select>
