@@ -219,7 +219,7 @@ export default function UnitRosterWidget() {
                 <option value="">-- Select --</option>
                 {availableSeniorRegistrars.map(u => (
                   <option key={u.id} value={u.full_name} disabled={u.full_name === setupForm.seniorRegistrar2}>
-                    {u.full_name} ({u.role === 'senior_registrar' ? 'SR' : 'JR'})
+                    {u.full_name} ({u.role === 'senior_registrar' ? 'SR' : 'JR'}){u.phone ? ` — ${u.phone}` : ''}
                   </option>
                 ))}
               </select>
@@ -234,7 +234,7 @@ export default function UnitRosterWidget() {
                 <option value="">-- Select --</option>
                 {availableSeniorRegistrars.map(u => (
                   <option key={u.id} value={u.full_name} disabled={u.full_name === setupForm.seniorRegistrar1}>
-                    {u.full_name} ({u.role === 'senior_registrar' ? 'SR' : 'JR'})
+                    {u.full_name} ({u.role === 'senior_registrar' ? 'SR' : 'JR'}){u.phone ? ` — ${u.phone}` : ''}
                   </option>
                 ))}
               </select>
@@ -249,7 +249,7 @@ export default function UnitRosterWidget() {
                 <option value="">-- Select --</option>
                 {availableHouseOfficers.map(u => (
                   <option key={u.id} value={u.full_name} disabled={u.full_name === setupForm.houseOfficer2}>
-                    {u.full_name}
+                    {u.full_name}{u.phone ? ` — ${u.phone}` : ''}
                   </option>
                 ))}
               </select>
@@ -264,7 +264,7 @@ export default function UnitRosterWidget() {
                 <option value="">-- Select --</option>
                 {availableHouseOfficers.map(u => (
                   <option key={u.id} value={u.full_name} disabled={u.full_name === setupForm.houseOfficer1}>
-                    {u.full_name}
+                    {u.full_name}{u.phone ? ` — ${u.phone}` : ''}
                   </option>
                 ))}
               </select>
@@ -347,6 +347,10 @@ export default function UnitRosterWidget() {
                     <Users className="h-3.5 w-3.5 text-orange-500" />
                     {assignment?.seniorRegistrar || 'Not assigned'}
                   </p>
+                  {assignment?.seniorRegistrar && (() => {
+                    const sr = [...availableSeniorRegistrars].find(u => u.full_name === assignment.seniorRegistrar);
+                    return sr?.phone ? <p className="text-xs text-gray-500 ml-5">📞 {sr.phone}</p> : null;
+                  })()}
                 </div>
                 <div>
                   <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">House Officer</p>
@@ -354,6 +358,10 @@ export default function UnitRosterWidget() {
                     <Users className="h-3.5 w-3.5 text-purple-500" />
                     {assignment?.houseOfficer || 'Not assigned'}
                   </p>
+                  {assignment?.houseOfficer && (() => {
+                    const ho = [...availableHouseOfficers].find(u => u.full_name === assignment.houseOfficer);
+                    return ho?.phone ? <p className="text-xs text-gray-500 ml-5">📞 {ho.phone}</p> : null;
+                  })()}
                 </div>
               </div>
 
