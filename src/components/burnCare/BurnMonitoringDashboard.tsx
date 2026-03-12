@@ -37,6 +37,7 @@ import {
 import BurnFollowUpAssessment from './BurnFollowUpAssessment';
 import { FollowUpAssessment } from '../../services/burnExpertAIService';
 import { db } from '../../db/database';
+import { getCurrentUserName } from '../../utils/getCurrentUser';
 
 interface BurnMonitoringDashboardProps {
   patient: BurnPatient;
@@ -128,7 +129,7 @@ const BurnMonitoringDashboard: React.FC<BurnMonitoringDashboardProps> = ({ patie
       ...vitals,
       id: uuidv4(),
       timestamp: new Date(),
-      recordedBy: 'Current User',
+      recordedBy: getCurrentUserName(),
     };
 
     // Generate alerts based on vitals
@@ -157,7 +158,7 @@ const BurnMonitoringDashboard: React.FC<BurnMonitoringDashboardProps> = ({ patie
       volumeML,
       mlPerKgPerHr: burnCareService.calculateUrineOutputRate(volumeML, patient.weight),
       color,
-      recordedBy: 'Current User',
+      recordedBy: getCurrentUserName(),
     };
 
     const updatedOutputs = [...patientData.monitoring.urineOutputs, newUO];
@@ -181,7 +182,7 @@ const BurnMonitoringDashboard: React.FC<BurnMonitoringDashboardProps> = ({ patie
               timestamp: new Date(),
               type: 'urine',
               volumeML,
-              recordedBy: 'Current User',
+              recordedBy: getCurrentUserName(),
             }],
           },
         },
@@ -199,7 +200,7 @@ const BurnMonitoringDashboard: React.FC<BurnMonitoringDashboardProps> = ({ patie
       ...input,
       id: uuidv4(),
       timestamp: new Date(),
-      recordedBy: 'Current User',
+      recordedBy: getCurrentUserName(),
     };
 
     setPatientData(prev => {
@@ -988,7 +989,7 @@ const BurnMonitoringDashboard: React.FC<BurnMonitoringDashboardProps> = ({ patie
             initialTBSA={patient.tbsaAssessment.totalTBSA}
             initialRegions={patient.tbsaAssessment.regions}
             previousAssessments={followUpAssessments}
-            currentUser="Current User"
+            currentUser={getCurrentUserName()}
             onSaveAssessment={(assessment) => {
               setFollowUpAssessments(prev => [...prev, assessment]);
               // Persist follow-up assessment to patient record

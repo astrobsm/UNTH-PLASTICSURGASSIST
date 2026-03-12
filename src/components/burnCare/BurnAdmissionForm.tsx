@@ -31,6 +31,7 @@ import {
 } from '../../services/burnCareService';
 import { patientService } from '../../services/patientService';
 import AIBurnExpert from './AIBurnExpert';
+import { getCurrentUserName } from '../../utils/getCurrentUser';
 
 interface Patient {
   id: string;
@@ -283,7 +284,7 @@ const BurnAdmissionForm: React.FC<BurnAdmissionFormProps> = ({ onComplete, onCan
         totalTBSA: calculatedTBSA,
         regions: tbsaRegions,
         assessmentDate: new Date(),
-        assessedBy: 'Current User', // Would come from auth
+        assessedBy: getCurrentUserName(),
       },
       bauxScore,
       revisedBauxScore,

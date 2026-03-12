@@ -33,6 +33,7 @@ import {
   PDF_COLORS,
   PDF_FONT_SIZES
 } from '../utils/pdfUtils';
+import { getCurrentUserName } from '../utils/getCurrentUser';
 
 // ============= CONSTANTS =============
 
@@ -971,7 +972,7 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
         reasons_for_admission: reasonsForAdmission,
         presenting_complaint: presentingComplaint,
         provisional_diagnosis: provisionalDiagnosis,
-        admitting_doctor: 'Current User',
+        admitting_doctor: getCurrentUserName(),
         admitting_consultant: admittingConsultant,
         admitting_unit: admittingUnit,
         vital_signs: {
@@ -988,7 +989,7 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
         examination_findings: examinationFindings,
         initial_management_plan: initialManagementPlan,
         status: 'active',
-        created_by: 'Current User'
+        created_by: getCurrentUserName()
       });
 
       // Create medical team assignment

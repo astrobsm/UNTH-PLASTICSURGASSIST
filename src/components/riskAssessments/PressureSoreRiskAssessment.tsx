@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { PressureSoreRiskAssessment, PressureInjury, riskAssessmentService, ActionPlanItem } from '../../services/riskAssessmentService';
 import { Shield, AlertTriangle, CheckCircle, Clock, User, Calendar } from 'lucide-react';
+import { getCurrentUserName } from '../../utils/getCurrentUser';
 
 interface PressureSoreRiskAssessmentProps {
   patientId: string;
@@ -21,7 +22,7 @@ export const PressureSoreRiskAssessmentForm: React.FC<PressureSoreRiskAssessment
     patient_id: patientId,
     assessment_type: 'pressure_sore',
     assessment_date: new Date(),
-    assessed_by: 'Current User',
+    assessed_by: getCurrentUserName(),
     status: 'active',
     braden_subscores: {
       sensory_perception: 1,

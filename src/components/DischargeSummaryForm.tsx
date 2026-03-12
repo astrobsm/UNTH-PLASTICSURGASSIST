@@ -9,6 +9,7 @@ import {
   FollowUpAppointment,
   admissionDischargeService 
 } from '../services/admissionDischargeService';
+import { getCurrentUserName } from '../utils/getCurrentUser';
 
 interface DischargeSummaryFormProps {
   admission: Admission;
@@ -270,11 +271,11 @@ export default function DischargeSummaryForm({
       follow_up_appointments: followUpAppointments.filter(f => f.date),
       ai_generated_summary: aiSummary,
       ai_generated_instructions: aiInstructions,
-      discharging_doctor: 'Current User',
+      discharging_doctor: getCurrentUserName(),
       discharging_consultant: dischargingConsultant,
       patient_acknowledged: patientAcknowledged,
       relative_acknowledged: relativeAcknowledged,
-      created_by: 'Current User'
+      created_by: getCurrentUserName()
     };
 
     onComplete(dischargeData);

@@ -79,7 +79,17 @@ const TreatmentPlanningPage: React.FC = () => {
   // Normalize a plan to merge planned_* (enhanced) fields into legacy display fields
   const normalizePlan = (plan: any): EnhancedTreatmentPlan => {
     // Merge planned_reviews into reviews (legacy)
-    const legacyReviews = plan.reviews || [];
+    const rawLegacyReviews = plan.reviews || [];
+    // Normalize legacy reviews to ensure consistent field names
+    const legacyReviews = rawLegacyReviews.map((r: any) => ({
+      ...r,
+      id: r.id || `review_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+      review_date: r.review_date || r.start_date || r.scheduled_date || new Date(),
+      scheduled_date: r.scheduled_date || r.start_date || r.review_date || new Date(),
+      assigned_house_officer: r.assigned_house_officer || r.assigned_person_name || r.assigned_to || r.house_officer || '',
+      status: r.status === 'active' ? 'pending' : r.status || 'pending',
+      notes: r.notes || (r.review_type ? `${r.review_type} review` : ''),
+    }));
     const plannedReviews = (plan.planned_reviews || []).map((pr: any) => ({
       id: pr.id,
       plan_id: plan.id,

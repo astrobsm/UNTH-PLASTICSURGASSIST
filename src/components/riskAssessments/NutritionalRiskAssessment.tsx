@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { NutritionalRiskAssessment, riskAssessmentService, ActionPlanItem } from '../../services/riskAssessmentService';
 import { Scale, CheckCircle, Clock, User, Calendar, TrendingDown } from 'lucide-react';
+import { getCurrentUserName } from '../../utils/getCurrentUser';
 
 interface NutritionalRiskAssessmentProps {
   patientId: string;
@@ -21,7 +22,7 @@ export const NutritionalRiskAssessmentForm: React.FC<NutritionalRiskAssessmentPr
     patient_id: patientId,
     assessment_type: 'nutritional',
     assessment_date: new Date(),
-    assessed_by: 'Current User',
+    assessed_by: getCurrentUserName(),
     status: 'active',
     must_scores: {
       bmi_score: 0,

@@ -98,9 +98,13 @@ export const PatientProfile: React.FC = () => {
       
       // If still no team, try auto-assign
       if (team.length === 0) {
-        console.log('No team assigned, auto-assigning medical team...');
-        await medicalTeamService.assignTeamToPatient(Number(id), patient.hospital_number);
-        team = await medicalTeamService.getPatientMedicalTeam(Number(id));
+        try {
+          console.log('No team assigned, auto-assigning medical team...');
+          await medicalTeamService.assignTeamToPatient(Number(id), patient.hospital_number);
+          team = await medicalTeamService.getPatientMedicalTeam(Number(id));
+        } catch (autoAssignError) {
+          console.warn('Auto-assign failed, falling back to patient/admission data:', autoAssignError);
+        }
       }
 
       // Fallback: build team from patient registration fields if still empty
@@ -133,7 +137,9 @@ export const PatientProfile: React.FC = () => {
           try {
             const admissions = await db.admissions?.toArray() || [];
             const patientAdmissions = admissions.filter(a => 
-              String(a.patient_id) === String(id) && a.status === 'active'
+              (String(a.patient_id) === String(id) || 
+               String((a as any).hospital_number) === String(patient?.hospital_number)) && 
+              a.status === 'active'
             );
             const latestAdm = patientAdmissions.sort((a, b) => 
               new Date(b.admission_date || b.created_at).getTime() - new Date(a.admission_date || a.created_at).getTime()

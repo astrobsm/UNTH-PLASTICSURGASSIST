@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { procedureService, WHOSafetyChecklist } from '../../services/procedureService';
+import { getCurrentUserName } from '../../utils/getCurrentUser';
 
 interface WHOSafetyChecklistFormProps {
   procedureId: string;
@@ -82,7 +83,7 @@ export const WHOSafetyChecklistForm: React.FC<WHOSafetyChecklistFormProps> = ({
 
   const completePhase = async () => {
     const timestamp = new Date().toISOString();
-    const verifiedBy = 'Current User'; // Replace with actual user
+    const verifiedBy = getCurrentUserName();
 
     if (currentPhase === 'sign_in') {
       handleSignInChange('timestamp', timestamp);

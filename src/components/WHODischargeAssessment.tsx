@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Admission, WHODischargeScore, admissionDischargeService } from '../services/admissionDischargeService';
+import { getCurrentUserName } from '../utils/getCurrentUser';
 
 interface WHODischargeAssessmentProps {
   admission: Admission;
@@ -196,7 +197,7 @@ export default function WHODischargeAssessment({ admission, onComplete, onBack }
       admission_id: admission.id!,
       patient_id: admission.patient_id,
       assessment_date: new Date().toISOString().split('T')[0],
-      assessed_by: 'Current User', // TODO: Get from auth
+      assessed_by: getCurrentUserName(),
       vital_signs_stable: vitalSignsStable,
       pain_controlled: painControlled,
       oral_intake_adequate: oralIntakeAdequate,

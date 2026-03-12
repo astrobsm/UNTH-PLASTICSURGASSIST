@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { db } from '../db/database';
 import { patientService } from '../services/patientService';
-import { safeFormatDate } from '../utils/dateUtils';
+import { safeFormatDate, calculateAge } from '../utils/dateUtils';
 import {
   createPDF,
   sanitizeTextForPDF,
@@ -128,11 +128,12 @@ const PatientSummariesPage: React.FC = () => {
 
       // 1. Registration
       if (patient) {
+        const patientAge = calculateAge(patient.date_of_birth || patient.dob);
         entries.push({
           id: 'reg_' + patient.id, date: safeDate(patient.created_at || patient.registration_date),
           type: 'registration', title: 'Patient Registered',
-          summary: patient.first_name + ' ' + patient.last_name + ' (' + patient.hospital_number + '). Age: ' + (patient.age || 'N/A') + ', Gender: ' + (patient.gender || 'N/A'),
-          details: { 'Hospital Number': patient.hospital_number, 'Name': patient.first_name + ' ' + patient.last_name, 'Gender': patient.gender, 'Age': patient.age, 'DOB': safeFormatDate(patient.date_of_birth, 'MMM d, yyyy'), 'Phone': patient.phone, 'Address': patient.address, 'Diagnosis': patient.diagnosis, 'Blood Group': patient.blood_group, 'Next of Kin': patient.next_of_kin_name },
+          summary: patient.first_name + ' ' + patient.last_name + ' (' + patient.hospital_number + '). Age: ' + (patientAge != null ? patientAge + 'y' : 'N/A') + ', Gender: ' + (patient.gender || 'N/A'),
+          details: { 'Hospital Number': patient.hospital_number, 'Name': patient.first_name + ' ' + patient.last_name, 'Gender': patient.gender, 'Age': patientAge != null ? patientAge + ' years' : 'N/A', 'DOB': safeFormatDate(patient.date_of_birth, 'MMM d, yyyy'), 'Phone': patient.phone, 'Address': patient.address, 'Diagnosis': patient.diagnosis, 'Blood Group': patient.blood_group, 'Next of Kin': patient.next_of_kin_name },
         });
       }
 
@@ -142,8 +143,8 @@ const PatientSummariesPage: React.FC = () => {
         for (const a of all.filter(a => matchPid(a.patient_id))) {
           entries.push({ id: 'adm_' + a.id, date: safeDate(a.admission_date), type: 'admission',
             title: 'Admitted to ' + (a.ward_location || 'Ward'),
-            summary: 'Route: ' + (a.route_of_admission || 'N/A') + '. Status: ' + (a.status || 'active') + '. Dx: ' + (a.diagnosis || (a as any).admitting_diagnosis || 'N/A'),
-            details: { 'Ward': a.ward_location, 'Route': a.route_of_admission, 'Status': a.status, 'Diagnosis': a.diagnosis || (a as any).admitting_diagnosis, 'Consultant': (a as any).consultant || (a as any).admitting_consultant, 'Bed': (a as any).bed_number },
+            summary: 'Route: ' + (a.route_of_admission || 'N/A') + '. Status: ' + (a.status || 'active') + '. Dx: ' + ((a as any).provisional_diagnosis || a.diagnosis || (a as any).reasons_for_admission || 'N/A'),
+            details: { 'Ward': a.ward_location, 'Route': a.route_of_admission, 'Status': a.status, 'Diagnosis': (a as any).provisional_diagnosis || a.diagnosis || (a as any).reasons_for_admission, 'Consultant': (a as any).admitting_consultant || (a as any).consultant, 'Admitting Doctor': (a as any).admitting_doctor, 'Admitting Unit': (a as any).admitting_unit, 'Bed': (a as any).bed_number },
           });
         }
       } catch(e) { console.warn('admissions:', e); }

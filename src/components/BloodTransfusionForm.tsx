@@ -38,6 +38,7 @@ import TransfusionVitalsChart from './TransfusionVitalsChart';
 import { DocumentScannerModal } from './DocumentScannerModal';
 import { createPDF, addPDFHeader, addSectionHeader, PDF_FONT_SIZES, PDF_LINE_HEIGHT, PDF_MARGINS, PDF_PAGE, addFooter } from '../utils/pdfUtils';
 import { format } from 'date-fns';
+import { getCurrentUserName } from '../utils/getCurrentUser';
 
 // Helper component to display vitals
 function VitalsDisplay({ vitals }: { vitals: TransfusionVitals }) {
@@ -93,7 +94,7 @@ export default function BloodTransfusionForm({
     crossmatch_checked: false,
     adverse_events: false,
     status: 'planned',
-    administered_by: localStorage.getItem('user_name') || 'Current User'
+    administered_by: getCurrentUserName()
   });
 
   // Blood bag form
@@ -284,7 +285,7 @@ export default function BloodTransfusionForm({
         respiratory_rate: newVitals.respiratory_rate!,
         spo2: newVitals.spo2!,
         recorded_at: new Date(),
-        recorded_by: localStorage.getItem('user_name') || 'Current User'
+        recorded_by: getCurrentUserName()
       };
 
       await bloodTransfusionService.recordVitals(vitals);
@@ -530,7 +531,7 @@ export default function BloodTransfusionForm({
         '9. Administer emergency medications as ordered',
         '10. Complete transfusion reaction report form'
       ],
-      orderingPhysician: formData.administered_by || 'Current User',
+      orderingPhysician: formData.administered_by || getCurrentUserName(),
       orderDate: new Date()
     };
 

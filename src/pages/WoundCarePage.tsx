@@ -34,6 +34,7 @@ import { patientService } from '../services/patientService';
 import { db } from '../db/database';
 import { syncService } from '../db/syncService';
 import { sanitizeTextForPDF } from '../utils/pdfUtils';
+import { getCurrentUserName } from '../utils/getCurrentUser';
 
 // ============================================
 // TYPES & INTERFACES
@@ -532,7 +533,7 @@ const WoundCarePage: React.FC = () => {
         photos: capturedPhotos,
         dressing_protocol,
         assessment_date: new Date(),
-        assessed_by: 'Current User',
+        assessed_by: getCurrentUserName(),
         notes: formData.notes,
         created_at: new Date(),
         updated_at: new Date()

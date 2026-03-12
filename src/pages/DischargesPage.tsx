@@ -5,6 +5,7 @@ import { patientService } from '../services/patientService';
 import { admissionService, Admission } from '../services/admissionService';
 import { dischargeService, Discharge, DischargeInstructionsData, DischargeMedication } from '../services/dischargeService';
 import { calculateAge } from '../utils/dateUtils';
+import { getCurrentUserName } from '../utils/getCurrentUser';
 
 const DISCHARGE_STATUSES = [
   { value: 'improved', label: 'Improved' },
@@ -200,7 +201,7 @@ export default function DischargesPage() {
         warning_signs: warningSigns || undefined,
         emergency_contact_info: 'Emergency: Call hospital at +234-XXX-XXX-XXXX',
         ai_generated_instructions: aiGeneratedInstructions || undefined,
-        discharging_doctor: 'Current User', // TODO: Get from auth context
+        discharging_doctor: getCurrentUserName(), // TODO: Get from auth context
         discharging_consultant: dischargingConsultant
       };
 
@@ -268,7 +269,7 @@ export default function DischargesPage() {
           warning_signs: warningSigns || undefined,
           emergency_contact_info: 'Emergency: Call hospital at +234-XXX-XXX-XXXX',
           ai_generated_instructions: aiGeneratedInstructions || undefined,
-          discharging_doctor: 'Current User',
+          discharging_doctor: getCurrentUserName(),
           discharging_consultant: dischargingConsultant
         };
 

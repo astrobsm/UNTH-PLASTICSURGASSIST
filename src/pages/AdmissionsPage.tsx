@@ -5,6 +5,7 @@ import { admissionService, Admission, AdmissionStatistics } from '../services/ad
 import { patientAssignmentService } from '../services/patientAssignmentService';
 import { calculateAge, calculateAndFormatAge } from '../utils/dateUtils';
 import { PS_UNITS, getCurrentAssignments, getUnitTeam, UnitRosterConfig } from '../config/psUnits';
+import { getCurrentUserName } from '../utils/getCurrentUser';
 import { db } from '../db/database';
 
 interface Ward {
@@ -228,7 +229,7 @@ export default function AdmissionsPage() {
         reasons_for_admission: reasonsForAdmission,
         presenting_complaint: presentingComplaint,
         provisional_diagnosis: provisionalDiagnosis,
-        admitting_doctor: 'Current User', // TODO: Get from auth context
+        admitting_doctor: getCurrentUserName(),
         admitting_consultant: admittingConsultant,
         ps_unit: selectedUnit || undefined,
         assigned_senior_registrar: unitTeamInfo?.seniorRegistrar || undefined,

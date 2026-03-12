@@ -861,9 +861,19 @@ class TreatmentPlanningService {
                 }
               } catch { /* ignore */ }
 
-              const serverReviews = Array.isArray(plan.follow_up_schedule)
+              const rawServerReviews = Array.isArray(plan.follow_up_schedule)
                 ? plan.follow_up_schedule
                 : (typeof plan.follow_up_schedule === 'string' ? JSON.parse(plan.follow_up_schedule || '[]') : []);
+              // Normalize server reviews to have expected UI fields
+              const serverReviews = rawServerReviews.map((r: any) => ({
+                ...r,
+                id: r.id || `review_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+                review_date: r.review_date || r.start_date || r.scheduled_date || new Date(),
+                scheduled_date: r.scheduled_date || r.start_date || r.review_date || new Date(),
+                assigned_house_officer: r.assigned_house_officer || r.assigned_person_name || r.assigned_to || r.house_officer || '',
+                status: r.status === 'active' ? 'pending' : r.status || 'pending',
+                notes: r.notes || (r.review_type ? `${r.review_type} review` : ''),
+              }));
               const serverProcedures = Array.isArray(plan.procedures)
                 ? plan.procedures
                 : (typeof plan.procedures === 'string' ? JSON.parse(plan.procedures || '[]') : []);

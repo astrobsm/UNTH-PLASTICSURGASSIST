@@ -26,6 +26,7 @@ import {
   PreoperativeAssessment,
   ComorbidityMedication
 } from '../services/preoperativeService';
+import { getCurrentUserName } from '../utils/getCurrentUser';
 
 interface PreoperativeAssessmentFormProps {
   patientId: string;
@@ -212,7 +213,7 @@ export default function PreoperativeAssessmentForm({
         consent_document: consentDocument,
         payment_evidence: paymentEvidence,
         insurance_covered: insuranceCovered,
-        assessed_by: localStorage.getItem('user_id') || 'current_user',
+        assessed_by: getCurrentUserName(),
         assessed_at: new Date(),
         updated_at: new Date()
       };
@@ -281,7 +282,7 @@ export default function PreoperativeAssessmentForm({
         insurance_covered: insuranceCovered,
         comprehensive_summary: comprehensiveSummary,
         preop_instructions: preopInstructions,
-        assessed_by: localStorage.getItem('user_id') || 'current_user',
+        assessed_by: getCurrentUserName(),
         assessed_at: new Date(),
         updated_at: new Date()
       };
