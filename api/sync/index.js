@@ -12,7 +12,9 @@ export default async function handler(req, res) {
 
   const { method } = req;
   const url = new URL(req.url, `http://${req.headers.host}`);
-  const action = url.pathname.replace('/api/sync', '').split('/').filter(Boolean)[0];
+  const pathParts = url.pathname.replace('/api/sync', '').split('/').filter(Boolean);
+  const action = pathParts[0];
+  const subId = pathParts[1]; // e.g. patient ID for /sync/patients/40
 
   try {
     switch (method) {
@@ -27,6 +29,9 @@ export default async function handler(req, res) {
       case 'GET':
         // Handle /sync/patients, /sync/surgeries, etc.
         if (action === 'patients') {
+          if (subId) {
+            return await getSyncPatientById(subId, res);
+          }
           return await getSyncPatients(res);
         }
         if (action === 'surgeries' || action === 'surgery-bookings') {
@@ -125,6 +130,9 @@ export default async function handler(req, res) {
         if (action === 'education-user-progress' || action === 'education_user_progress') {
           return await getSyncEntity('education_user_progress', res);
         }
+        if (action === 'ps-unit-rosters' || action === 'ps_unit_rosters') {
+          return await getSyncEntity('ps_unit_rosters', res);
+        }
         return await getSyncStatus(auth.user, res);
       default:
         res.status(405).json({ error: 'Method not allowed' });
@@ -143,6 +151,36 @@ async function getSyncPatients(res) {
      FROM patients ORDER BY updated_at DESC LIMIT 500`
   );
   res.status(200).json(result.rows);
+}
+
+async function getSyncPatientById(id, res) {
+  const numericId = parseInt(id, 10);
+  let result;
+  if (!isNaN(numericId)) {
+    result = await query(
+      `SELECT id, hospital_number, first_name, last_name, date_of_birth, gender,
+              phone, email, address, blood_group, allergies, medical_history,
+              primary_diagnosis, secondary_diagnoses, ward, bed_number,
+              emergency_contact_name, emergency_contact_phone,
+              created_at, updated_at
+       FROM patients WHERE id = $1`, [numericId]
+    );
+  }
+  if (!result || result.rows.length === 0) {
+    // Try by hospital_number
+    result = await query(
+      `SELECT id, hospital_number, first_name, last_name, date_of_birth, gender,
+              phone, email, address, blood_group, allergies, medical_history,
+              primary_diagnosis, secondary_diagnoses, ward, bed_number,
+              emergency_contact_name, emergency_contact_phone,
+              created_at, updated_at
+       FROM patients WHERE hospital_number = $1`, [id]
+    );
+  }
+  if (result.rows.length === 0) {
+    return res.status(404).json({ error: 'Patient not found' });
+  }
+  res.status(200).json({ patient: result.rows[0] });
 }
 
 async function getSyncEntity(tableName, res) {
@@ -275,6 +313,30 @@ async function handlePush(data, user, res) {
              payload.created_by]
           );
           results.push({ entityId, status: 'synced' });
+          continue;
+        }
+      }
+
+      // Handle PS Unit Roster entities
+      if (entityType === 'ps_unit_rosters' && payload) {
+        try {
+          const { start_date, rotation_weeks, senior_registrars, house_officers, is_active } = payload;
+          if (start_date) {
+            // Deactivate all existing rosters first
+            await query('UPDATE ps_unit_rosters SET is_active = false, updated_at = CURRENT_TIMESTAMP');
+            // Insert the new active roster
+            await query(
+              `INSERT INTO ps_unit_rosters (start_date, rotation_weeks, senior_registrars, house_officers, is_active)
+               VALUES ($1, $2, $3, $4, $5)`,
+              [start_date, rotation_weeks || 2, JSON.stringify(senior_registrars || []),
+               JSON.stringify(house_officers || []), is_active !== false]
+            );
+            results.push({ entityId, status: 'synced' });
+            continue;
+          }
+        } catch (err) {
+          console.error('Error syncing roster:', err);
+          results.push({ entityId, status: 'error', message: err.message });
           continue;
         }
       }
@@ -487,7 +549,8 @@ async function handlePull(data, user, res) {
     educational_topics: { table: 'educational_topics', userField: null },
     weekly_contents: { table: 'weekly_contents', userField: null },
     topic_schedules: { table: 'topic_schedules', userField: null },
-    education_user_progress: { table: 'education_user_progress', userField: null }
+    education_user_progress: { table: 'education_user_progress', userField: null },
+    ps_unit_rosters: { table: 'ps_unit_rosters', userField: null }
   };
 
   for (const [entityName, config] of Object.entries(entityConfigs)) {

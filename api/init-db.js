@@ -1365,6 +1365,19 @@ async function createTables() {
     CREATE INDEX IF NOT EXISTS idx_procedures_date ON procedures(procedure_date);
     CREATE INDEX IF NOT EXISTS idx_who_checklist_patient ON who_safety_checklists(patient_id);
     CREATE INDEX IF NOT EXISTS idx_who_checklist_surgery ON who_safety_checklists(surgery_id);
+
+    -- PS Unit Rosters table (for cross-device roster sync)
+    CREATE TABLE IF NOT EXISTS ps_unit_rosters (
+      id SERIAL PRIMARY KEY,
+      start_date VARCHAR(50) NOT NULL,
+      rotation_weeks INTEGER DEFAULT 2,
+      senior_registrars JSONB DEFAULT '[]',
+      house_officers JSONB DEFAULT '[]',
+      is_active BOOLEAN DEFAULT TRUE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_ps_rosters_active ON ps_unit_rosters(is_active);
   `;
 
   await query(schema);

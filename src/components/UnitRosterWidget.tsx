@@ -4,12 +4,14 @@ import { db } from '../db/database';
 import { PS_UNITS, getCurrentAssignments, getTodaySchedule, UnitRosterConfig } from '../config/psUnits';
 import { useAuthStore } from '../store/authStore';
 import { userManagementService, ApprovedUser } from '../services/userManagementService';
+import { apiClient } from '../services/apiClient';
 
 export default function UnitRosterWidget() {
   const { user } = useAuthStore();
   const [rosterConfig, setRosterConfig] = useState<UnitRosterConfig | null>(null);
   const [showSetup, setShowSetup] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [staffLoading, setStaffLoading] = useState(true);
   const [availableSeniorRegistrars, setAvailableSeniorRegistrars] = useState<ApprovedUser[]>([]);
   const [availableHouseOfficers, setAvailableHouseOfficers] = useState<ApprovedUser[]>([]);
 
@@ -29,15 +31,47 @@ export default function UnitRosterWidget() {
     loadAvailableStaff();
   }, []);
 
-  // Auto-setup roster when loading is done and no active config exists
+  // Auto-setup roster only when BOTH roster config AND staff have finished loading
   useEffect(() => {
-    if (!autoSetupDone && !loading && !rosterConfig) {
+    if (!autoSetupDone && !loading && !staffLoading && !rosterConfig) {
       autoSetupRoster();
     }
-  }, [autoSetupDone, loading, rosterConfig, availableSeniorRegistrars, availableHouseOfficers]);
+  }, [autoSetupDone, loading, staffLoading, rosterConfig, availableSeniorRegistrars, availableHouseOfficers]);
 
   const loadRosterConfig = async () => {
     try {
+      // Try fetching from server first for cross-device sync
+      try {
+        const serverRosters = await apiClient.request('/sync/ps-unit-rosters');
+        if (Array.isArray(serverRosters) && serverRosters.length > 0) {
+          const active = serverRosters.find((r: any) => r.is_active);
+          if (active) {
+            const config: UnitRosterConfig = {
+              startDate: active.start_date,
+              rotationWeeks: active.rotation_weeks || 2,
+              seniorRegistrars: active.senior_registrars || [],
+              houseOfficers: active.house_officers || [],
+              isActive: active.is_active,
+              createdAt: active.created_at,
+              updatedAt: active.updated_at,
+            };
+            // Save to local DB for offline access
+            const existing = await db.ps_unit_rosters.toArray();
+            for (const c of existing) {
+              await db.ps_unit_rosters.update(c.id!, { isActive: false });
+            }
+            const localId = await db.ps_unit_rosters.add(config);
+            config.id = localId as number;
+            setRosterConfig(config);
+            setLoading(false);
+            return;
+          }
+        }
+      } catch (serverErr) {
+        console.log('Server roster fetch failed, falling back to local:', serverErr);
+      }
+
+      // Fall back to local IndexedDB
       const configs = await db.ps_unit_rosters.toArray();
       const active = configs.find((c: UnitRosterConfig) => c.isActive);
       if (active) {
@@ -58,6 +92,32 @@ export default function UnitRosterWidget() {
       setAvailableHouseOfficers(activeUsers.filter(u => u.role === 'house_officer'));
     } catch (err) {
       console.error('Error loading available staff:', err);
+    } finally {
+      setStaffLoading(false);
+    }
+  };
+
+  const pushRosterToServer = async (config: UnitRosterConfig) => {
+    try {
+      await apiClient.request('/sync/push', {
+        method: 'POST',
+        body: JSON.stringify({
+          changes: [{
+            entityType: 'ps_unit_rosters',
+            entityId: `roster-${config.startDate}`,
+            action: 'upsert',
+            payload: {
+              start_date: config.startDate,
+              rotation_weeks: config.rotationWeeks,
+              senior_registrars: config.seniorRegistrars,
+              house_officers: config.houseOfficers,
+              is_active: config.isActive,
+            }
+          }]
+        })
+      });
+    } catch (err) {
+      console.warn('Failed to push roster to server:', err);
     }
   };
 
@@ -85,15 +145,20 @@ export default function UnitRosterWidget() {
       const srs = availableSeniorRegistrars;
       const hos = availableHouseOfficers;
 
+      // Only auto-setup if we have real staff — never create TBD entries
+      if (srs.length === 0 && hos.length === 0) {
+        return; // Don't create a roster with TBD values
+      }
+
       const newConfig: UnitRosterConfig = {
         startDate: new Date().toISOString().split('T')[0],
         rotationWeeks: 2,
         seniorRegistrars: srs.length > 0 
           ? srs.slice(0, 2).map(u => u.full_name)
-          : ['TBD'],
+          : [],
         houseOfficers: hos.length > 0
           ? hos.slice(0, 2).map(u => u.full_name)
-          : ['TBD'],
+          : [],
         isActive: true,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -101,6 +166,7 @@ export default function UnitRosterWidget() {
 
       await db.ps_unit_rosters.add(newConfig);
       setRosterConfig(newConfig);
+      pushRosterToServer(newConfig);
     } catch (err) {
       console.error('Auto-setup roster error:', err);
     }
@@ -132,6 +198,7 @@ export default function UnitRosterWidget() {
       await db.ps_unit_rosters.add(newConfig);
       setRosterConfig(newConfig);
       setShowSetup(false);
+      pushRosterToServer(newConfig);
     } catch (err) {
       console.error('Error saving roster:', err);
       alert('Failed to save roster configuration.');
