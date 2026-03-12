@@ -646,7 +646,7 @@ export function addLabeledField(
 export function sanitizeTextForPDF(text: string): string {
   if (!text) return '';
   
-  let result = text;
+  let result = typeof text === 'string' ? text : String(text);
   
   // First, normalize unicode characters (converts composed characters to standard form)
   result = result.normalize('NFKC');

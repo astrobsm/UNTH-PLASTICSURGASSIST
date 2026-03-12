@@ -1316,15 +1316,32 @@ const BookingRegisterPage: React.FC = () => {
                             <span>Abnormal investigation(s) detected{forceReadiness[sp.patient.id] ? ' — Force readiness applied by ' + forceReadiness[sp.patient.id].forcedBy : ' — cannot mark Ready without clinical override'}</span>
                           </div>
                         )}
-                        {/* Mandatory labs missing warning */}
+                        {/* Mandatory labs missing warning — clickable to auto-order */}
                         {(() => {
                           const labCheck = areMandatoryLabsComplete(sp.patient.id, sp.patient.date_of_birth || '', investigationResults);
                           if (labCheck.complete) return null;
                           return (
-                            <div className="mt-2 flex items-center gap-2 text-xs text-orange-600 bg-orange-50 px-3 py-1.5 rounded-lg border border-orange-200">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const name = sp.patient.full_name || ((sp.patient.first_name || '') + ' ' + (sp.patient.last_name || '')).trim();
+                                navigate('/labs', {
+                                  state: {
+                                    prefill: {
+                                      patientId: sp.patient.id,
+                                      patientName: name,
+                                      hospitalNumber: sp.patient.hospital_number,
+                                      missingLabs: labCheck.missing,
+                                    },
+                                  },
+                                });
+                              }}
+                              className="mt-2 w-full flex items-center gap-2 text-xs text-orange-600 bg-orange-50 px-3 py-1.5 rounded-lg border border-orange-200 hover:bg-orange-100 hover:border-orange-300 transition-colors cursor-pointer text-left"
+                              title="Click to order these missing labs"
+                            >
                               <FlaskConical className="w-3.5 h-3.5 flex-shrink-0" />
-                              <span>Mandatory labs missing: {labCheck.missing.join(', ')}</span>
-                            </div>
+                              <span>Mandatory labs missing: {labCheck.missing.join(', ')} — <strong>click to order</strong></span>
+                            </button>
                           );
                         })()}
                         {/* Quick action: Shopping List Thermal Print */}

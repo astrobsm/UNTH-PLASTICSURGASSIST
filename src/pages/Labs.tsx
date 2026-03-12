@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { format } from 'date-fns';
 import { 
   TestTube, 
@@ -27,7 +28,8 @@ import {
   LabTrend,
   GFRCalculation,
   GFRTrend,
-  PatientDemographics
+  PatientDemographics,
+  COMMON_LAB_TESTS
 } from '../services/labService';
 import { db } from '../db/database';
 import { patientService } from '../services/patientService';
@@ -41,7 +43,9 @@ type LabTab = 'investigations' | 'results' | 'upload' | 'trends' | 'requests' | 
 
 export default function Labs() {
   const { user } = useAuthStore();
-  const [activeTab, setActiveTab] = useState<LabTab>('investigations');
+  const location = useLocation();
+  const prefill = (location.state as any)?.prefill as { patientId: string; patientName: string; hospitalNumber: string; missingLabs: string[] } | undefined;
+  const [activeTab, setActiveTab] = useState<LabTab>(prefill ? 'requests' : 'investigations');
   const [investigations, setInvestigations] = useState<LabInvestigation[]>([]);
   const [results, setResults] = useState<LabResult[]>([]);
   const [gfrCalculations, setGfrCalculations] = useState<GFRCalculation[]>([]);
@@ -301,6 +305,7 @@ export default function Labs() {
       {activeTab === 'requests' && (
         <RequestSection 
           onRefresh={loadLabData}
+          prefill={prefill}
         />
       )}
     </div>
@@ -1427,25 +1432,65 @@ const TrendsSection = ({ selectedPatient }: any) => {
 };
 
 // Request Section Component
-const RequestSection = ({ onRefresh }: any) => {
+const RequestSection = ({ onRefresh, prefill }: { onRefresh: () => void; prefill?: { patientId: string; patientName: string; hospitalNumber: string; missingLabs: string[] } }) => {
   const [formData, setFormData] = useState({
-    patient_id: '',
-    patient_name: '',
-    hospital_number: '',
+    patient_id: prefill?.patientId || '',
+    patient_name: prefill?.patientName || '',
+    hospital_number: prefill?.hospitalNumber || '',
     requested_by: '',
     urgency: 'routine',
-    clinical_indication: '',
+    clinical_indication: prefill ? 'Pre-operative mandatory labs' : '',
     special_instructions: ''
   });
   const [selectedTests, setSelectedTests] = useState<LabTest[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<LabCategory>('hematology');
   const [patients, setPatients] = useState<any[]>([]);
-  const [patientSearchQuery, setPatientSearchQuery] = useState('');
+  const [patientSearchQuery, setPatientSearchQuery] = useState(
+    prefill ? `${prefill.patientName} (${prefill.hospitalNumber})` : ''
+  );
   const [showPatientDropdown, setShowPatientDropdown] = useState(false);
 
   useEffect(() => {
     loadPatients();
   }, []);
+
+  // Auto-select tests from prefill missing labs
+  useEffect(() => {
+    if (!prefill?.missingLabs?.length) return;
+    const allTests: LabTest[] = [];
+    for (const cat of Object.values(COMMON_LAB_TESTS)) {
+      allTests.push(...cat);
+    }
+    const matched: LabTest[] = [];
+    for (const labName of prefill.missingLabs) {
+      const ln = labName.toLowerCase();
+      // Map mandatory lab names to actual test objects
+      if (ln.includes('hiv') || ln.includes('hbsag') || ln.includes('hcv')) {
+        const hiv = allTests.find(t => t.id === 'hiv');
+        const hbsag = allTests.find(t => t.id === 'hbsag');
+        const hcv = allTests.find(t => t.id === 'hcv');
+        if (hiv && !matched.some(m => m.id === hiv.id)) matched.push(hiv);
+        if (hbsag && !matched.some(m => m.id === hbsag.id)) matched.push(hbsag);
+        if (hcv && !matched.some(m => m.id === hcv.id)) matched.push(hcv);
+      } else if (ln.includes('full blood count') || ln.includes('fbc')) {
+        const fbc = allTests.find(t => t.id === 'fbc');
+        if (fbc && !matched.some(m => m.id === fbc.id)) matched.push(fbc);
+      } else if (ln.includes('electrolytes') || ln.includes('e/u/cr') || ln.includes('urea')) {
+        const ue = allTests.find(t => t.id === 'u_e');
+        if (ue && !matched.some(m => m.id === ue.id)) matched.push(ue);
+      } else if (ln.includes('ecg')) {
+        const echo = allTests.find(t => t.id === 'echo');
+        if (echo && !matched.some(m => m.id === echo.id)) matched.push(echo);
+      } else {
+        // Fuzzy match by test name
+        const found = allTests.find(t => t.test_name.toLowerCase().includes(ln) || ln.includes(t.test_name.toLowerCase()));
+        if (found && !matched.some(m => m.id === found.id)) matched.push(found);
+      }
+    }
+    if (matched.length > 0) {
+      setSelectedTests(matched);
+    }
+  }, [prefill]);
 
   const loadPatients = async () => {
     try {
