@@ -219,6 +219,7 @@ export class PlasticSurgeonDB extends Dexie {
   call_duty_roster!: Table<any>; // For 48-hour call duty roster
   clinic_duty_logs!: Table<any>; // For clinic duty tracking & logs
   notice_board!: Table<any>; // For notice board posts and announcements
+  ps_unit_rosters!: Table<any>; // For PS Unit rotation roster configs
 
   constructor() {
     super('PlasticSurgeonDB');
@@ -1228,6 +1229,11 @@ export class PlasticSurgeonDB extends Dexie {
     // Version 24: Add AI Medical Scribe sessions table
     this.version(24).stores({
       scribe_sessions: 'id, patient_id, context, status, ward_round_id, recorded_by, created_at'
+    });
+
+    // Version 25: Add PS Unit roster configuration table
+    this.version(25).stores({
+      ps_unit_rosters: '++id, isActive, startDate, createdAt'
     });
 
     // Add hooks to automatically track changes

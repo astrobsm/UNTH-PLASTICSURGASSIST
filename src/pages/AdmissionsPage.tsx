@@ -4,6 +4,8 @@ import { patientService } from '../services/patientService';
 import { admissionService, Admission, AdmissionStatistics } from '../services/admissionService';
 import { patientAssignmentService } from '../services/patientAssignmentService';
 import { calculateAge, calculateAndFormatAge } from '../utils/dateUtils';
+import { PS_UNITS, getCurrentAssignments, getUnitTeam, UnitRosterConfig } from '../config/psUnits';
+import { db } from '../db/database';
 
 interface Ward {
   name: string;
@@ -76,6 +78,9 @@ export default function AdmissionsPage() {
   const [presentingComplaint, setPresentingComplaint] = useState('');
   const [provisionalDiagnosis, setProvisionalDiagnosis] = useState('');
   const [admittingConsultant, setAdmittingConsultant] = useState('');
+  const [selectedUnit, setSelectedUnit] = useState<'PS-UNIT-1' | 'PS-UNIT-2' | ''>('');
+  const [unitTeamInfo, setUnitTeamInfo] = useState<{ consultants: string[]; seniorRegistrar: string; houseOfficer: string } | null>(null);
+  const [rosterConfig, setRosterConfig] = useState<UnitRosterConfig | null>(null);
 
   // Consult/Referral documents state
   const [consultDocuments, setConsultDocuments] = useState<Array<{
@@ -118,7 +123,30 @@ export default function AdmissionsPage() {
     loadPatients();
     loadAdmissions();
     loadStatistics();
+    loadRosterConfig();
   }, []);
+
+  const loadRosterConfig = async () => {
+    try {
+      const configs = await db.ps_unit_rosters.toArray();
+      const active = configs.find((c: UnitRosterConfig) => c.isActive);
+      if (active) setRosterConfig(active);
+    } catch { /* table may not exist yet */ }
+  };
+
+  const handleUnitSelect = (unitId: string) => {
+    if (unitId === 'PS-UNIT-1' || unitId === 'PS-UNIT-2') {
+      setSelectedUnit(unitId);
+      const team = getUnitTeam(unitId, rosterConfig);
+      setUnitTeamInfo(team);
+      // Auto-fill consultant with the unit's lead consultant
+      setAdmittingConsultant(team.consultants[0] || '');
+    } else {
+      setSelectedUnit('');
+      setUnitTeamInfo(null);
+      setAdmittingConsultant('');
+    }
+  };
 
   const loadPatients = async () => {
     const allPatients = await patientService.getAllPatients();
@@ -151,6 +179,8 @@ export default function AdmissionsPage() {
     setPresentingComplaint('');
     setProvisionalDiagnosis('');
     setAdmittingConsultant('');
+    setSelectedUnit('');
+    setUnitTeamInfo(null);
     setTemperature('');
     setBloodPressure('');
     setPulse('');
@@ -200,6 +230,9 @@ export default function AdmissionsPage() {
         provisional_diagnosis: provisionalDiagnosis,
         admitting_doctor: 'Current User', // TODO: Get from auth context
         admitting_consultant: admittingConsultant,
+        ps_unit: selectedUnit || undefined,
+        assigned_senior_registrar: unitTeamInfo?.seniorRegistrar || undefined,
+        assigned_house_officer: unitTeamInfo?.houseOfficer || undefined,
         vital_signs: {
           temperature: temperature ? parseFloat(temperature) : undefined,
           blood_pressure: bloodPressure,
@@ -440,7 +473,26 @@ export default function AdmissionsPage() {
               {/* Admission Details */}
               <div className="bg-gray-50 p-4 rounded-lg">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Admission Details</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* PS Unit Selection */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      PS Unit <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={selectedUnit}
+                      onChange={(e) => handleUnitSelect(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                      required
+                    >
+                      <option value="">-- Select Unit --</option>
+                      {PS_UNITS.map((unit) => (
+                        <option key={unit.id} value={unit.id}>{unit.name} ({unit.consultants.join(' & ')})</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Ward */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Ward Location <span className="text-red-500">*</span>
@@ -460,6 +512,8 @@ export default function AdmissionsPage() {
                       ))}
                     </select>
                   </div>
+
+                  {/* Bed */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Bed Number
@@ -476,6 +530,8 @@ export default function AdmissionsPage() {
                       ))}
                     </select>
                   </div>
+
+                  {/* Consultant (auto-filled from unit, still editable) */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Admitting Consultant <span className="text-red-500">*</span>
@@ -493,6 +549,27 @@ export default function AdmissionsPage() {
                     </select>
                   </div>
                 </div>
+
+                {/* Team info panel - shows when a unit is selected */}
+                {unitTeamInfo && selectedUnit && (
+                  <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <h4 className="text-sm font-semibold text-green-800 mb-2">Assigned Medical Team — {PS_UNITS.find(u => u.id === selectedUnit)?.name}</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
+                      <div>
+                        <span className="text-xs text-gray-500 uppercase">Consultants</span>
+                        <p className="font-medium text-gray-800">{unitTeamInfo.consultants.join(', ')}</p>
+                      </div>
+                      <div>
+                        <span className="text-xs text-gray-500 uppercase">Senior Registrar</span>
+                        <p className="font-medium text-gray-800">{unitTeamInfo.seniorRegistrar}</p>
+                      </div>
+                      <div>
+                        <span className="text-xs text-gray-500 uppercase">House Officer</span>
+                        <p className="font-medium text-gray-800">{unitTeamInfo.houseOfficer}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Route of Admission */}

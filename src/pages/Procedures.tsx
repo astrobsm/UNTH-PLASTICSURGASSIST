@@ -12,6 +12,7 @@ import { logDataExport } from '../services/auditLoggingService';
 import { useAuthStore } from '../store/authStore';
 import { db } from '../db/database';
 import { syncService } from '../db/syncService';
+import { PS_UNITS } from '../config/psUnits';
 
 export const Procedures: React.FC = () => {
   const navigate = useNavigate();
@@ -238,6 +239,7 @@ const NewProcedureModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     scheduled_date: '',
     scheduled_time: '',
     operating_room: '',
+    ps_unit: '' as string,
     surgeon: '',
     anesthesia_type: '',
     estimated_duration: '',
@@ -398,6 +400,7 @@ const NewProcedureModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         scheduled_date: formData.scheduled_date,
         scheduled_time: formData.scheduled_time,
         operating_room: formData.operating_room,
+        ps_unit: formData.ps_unit,
         surgeon: formData.surgeon,
         anesthesia_type: formData.anesthesia_type,
         estimated_duration: formData.estimated_duration,
@@ -564,15 +567,40 @@ const NewProcedureModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
       </div>
 
       <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">PS Unit</label>
+        <select
+          value={formData.ps_unit}
+          onChange={(e) => {
+            const unitId = e.target.value;
+            const unit = PS_UNITS.find(u => u.id === unitId);
+            setFormData({
+              ...formData,
+              ps_unit: unitId,
+              surgeon: unit ? unit.consultants[0] : formData.surgeon,
+            });
+          }}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+        >
+          <option value="">-- Select Unit --</option>
+          {PS_UNITS.map((unit) => (
+            <option key={unit.id} value={unit.id}>{unit.name} ({unit.consultants.join(' & ')})</option>
+          ))}
+        </select>
+      </div>
+
+      <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Surgeon</label>
-        <input
-          type="text"
+        <select
           required
           value={formData.surgeon}
           onChange={(e) => setFormData({ ...formData, surgeon: e.target.value })}
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-          placeholder="Primary surgeon name"
-        />
+        >
+          <option value="">-- Select Surgeon --</option>
+          <option value="Dr Okwesili">Dr Okwesili</option>
+          <option value="Dr Nnadi">Dr Nnadi</option>
+          <option value="Dr Eze C. B">Dr Eze C. B</option>
+        </select>
       </div>
 
       <div>

@@ -18,6 +18,7 @@ import { useState, useEffect } from 'react';
 import { db, Patient } from '../db/database';
 import { patientService } from '../services/patientService';
 import { admissionService, Admission } from '../services/admissionService';
+import UnitRosterWidget from '../components/UnitRosterWidget';
 
 interface DashboardPatient {
   id: number | string;
@@ -421,6 +422,9 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      {/* PS Unit Roster & Schedule */}
+      <UnitRosterWidget />
 
       {/* Recent Activities & Quick Actions */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
