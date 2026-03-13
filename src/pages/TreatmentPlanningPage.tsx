@@ -398,6 +398,7 @@ const TreatmentPlanningPage: React.FC = () => {
                 { id: 'discharge', label: 'Discharge', icon: Home }
               ].map(tab => (
                 <button
+                  type="button"
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as any)}
                   className={`flex items-center gap-2 px-4 py-3 border-b-2 font-medium transition-colors ${

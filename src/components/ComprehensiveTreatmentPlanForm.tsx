@@ -645,8 +645,9 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
         </div>
 
         <form onSubmit={handleSubmit} onKeyDown={(e) => {
-          // Prevent Enter key from triggering implicit form submission on non-final steps
-          if (e.key === 'Enter' && currentStep < 6 && !(e.target as HTMLElement).matches('textarea')) {
+          // Prevent Enter key from triggering implicit form submission on ALL steps.
+          // The form should ONLY submit via an explicit click on the "Create Treatment Plan" button.
+          if (e.key === 'Enter' && !(e.target as HTMLElement).matches('textarea')) {
             e.preventDefault();
           }
         }} className="p-6">

@@ -109,12 +109,33 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // Validate the file is actually an image
+    if (!file.type.startsWith('image/')) {
+      setError('Please select an image file (JPEG, PNG, etc.).');
+      return;
+    }
     
     const reader = new FileReader();
+    reader.onerror = () => {
+      setError('Failed to read the selected file. Please try again.');
+    };
     reader.onload = (ev) => {
       const dataUrl = ev.target?.result as string;
-      setImagePreview(dataUrl);
-      processImage(dataUrl);
+      if (!dataUrl) {
+        setError('Failed to read the selected file. Please try again.');
+        return;
+      }
+      // Validate the image can actually be loaded before processing
+      const img = new Image();
+      img.onload = () => {
+        setImagePreview(dataUrl);
+        processImage(dataUrl);
+      };
+      img.onerror = () => {
+        setError('The selected file could not be loaded as an image. Please try a different file.');
+      };
+      img.src = dataUrl;
     };
     reader.readAsDataURL(file);
   };

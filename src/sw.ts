@@ -24,7 +24,7 @@ import { CacheableResponsePlugin } from 'workbox-cacheable-response';
 declare const self: ServiceWorkerGlobalScope;
 
 // ─── Cache names ────────────────────────────────────────────
-const CACHE_VERSION = 'v5-2026-03-12';
+const CACHE_VERSION = 'v6-2026-03-13';
 const API_CACHE = `api-cache-${CACHE_VERSION}`;
 const IMAGE_CACHE = `images-cache-${CACHE_VERSION}`;
 const FONT_CACHE = `fonts-cache-${CACHE_VERSION}`;
@@ -392,4 +392,4 @@ self.addEventListener('message', async (event) => {
   }
 });
 
-console.log('🏥 Plastic Surgeon Assistant Service Worker v5.0 loaded');
+console.log('🏥 Plastic Surgeon Assistant Service Worker v6.0 loaded');

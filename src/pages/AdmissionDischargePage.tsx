@@ -160,6 +160,7 @@ export default function AdmissionDischargePage() {
             { id: 'stats', label: 'Statistics' }
           ].map(tab => (
             <button
+              type="button"
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
               className={`px-4 py-3 font-medium text-sm transition-colors ${
