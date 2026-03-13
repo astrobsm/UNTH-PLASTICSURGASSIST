@@ -442,45 +442,40 @@ export default function WardRounds() {
 
                   {/* Expanded documentation preview */}
                   {isExpanded && (
-                    <div className="border-t border-gray-100 px-4 pb-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                    <div className="border-t border-gray-100 px-4 pb-3">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-3">
 
-                        {/* Vitals */}
+                        {/* Vitals - single-line compact */}
                         {(r.temperature || r.pulse || r.bp_systolic || r.blood_pressure || r.respiratory_rate || r.spo2) && (
-                          <div className="bg-blue-50 rounded-lg p-3">
-                            <h4 className="text-sm font-semibold text-blue-800 mb-2 flex items-center gap-1"><Thermometer className="w-4 h-4" /> Vitals</h4>
-                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
-                              {r.temperature && <div><span className="text-gray-500">Temp:</span> <span className="font-medium">{r.temperature}{'\u00B0'}C</span></div>}
-                              {r.pulse && <div><span className="text-gray-500">Pulse:</span> <span className="font-medium">{r.pulse} bpm</span></div>}
-                              {(r.bp_systolic || r.blood_pressure) && <div><span className="text-gray-500">BP:</span> <span className="font-medium">{r.bp_systolic ? `${r.bp_systolic}/${r.bp_diastolic}` : r.blood_pressure} mmHg</span></div>}
-                              {r.respiratory_rate && <div><span className="text-gray-500">RR:</span> <span className="font-medium">{r.respiratory_rate}/min</span></div>}
-                              {r.spo2 && <div><span className="text-gray-500">SpO2:</span> <span className="font-medium">{r.spo2}%</span></div>}
-                              {r.pain_score > 0 && <div><span className="text-gray-500">Pain:</span> <span className="font-medium">{r.pain_score}/10</span></div>}
-                            </div>
+                          <div className="bg-blue-50 rounded p-2">
+                            <h4 className="text-xs font-semibold text-blue-800 mb-1 flex items-center gap-1"><Thermometer className="w-3 h-3" /> Vitals</h4>
+                            <p className="text-xs leading-snug">
+                              {[r.temperature && `T: ${r.temperature}°C`, r.pulse && `PR: ${r.pulse}/min`, (r.bp_systolic || r.blood_pressure) && `BP: ${r.bp_systolic ? `${r.bp_systolic}/${r.bp_diastolic}` : r.blood_pressure} mmHg`, r.respiratory_rate && `RR: ${r.respiratory_rate}/min`, r.spo2 && `SpO₂: ${r.spo2}%`, r.pain_score > 0 && `Pain: ${r.pain_score}/10`].filter(Boolean).join(' | ')}
+                            </p>
                           </div>
                         )}
 
                         {/* Subjective */}
                         {(r.subjective_complaints || r.sleep_quality || r.appetite || r.bowel_movement) && (
-                          <div className="bg-green-50 rounded-lg p-3">
-                            <h4 className="text-sm font-semibold text-green-800 mb-2 flex items-center gap-1"><User className="w-4 h-4" /> Subjective</h4>
-                            <div className="text-xs space-y-1">
-                              {r.subjective_complaints && <p><span className="text-gray-500">Complaints:</span> {r.subjective_complaints}</p>}
-                              {r.sleep_quality && r.sleep_quality !== 'good' && <p><span className="text-gray-500">Sleep:</span> {r.sleep_quality}</p>}
-                              {r.appetite && r.appetite !== 'good' && <p><span className="text-gray-500">Appetite:</span> {r.appetite}</p>}
-                              {r.bowel_movement && r.bowel_movement !== 'normal' && <p><span className="text-gray-500">Bowel:</span> {r.bowel_movement}</p>}
+                          <div className="bg-green-50 rounded p-2">
+                            <h4 className="text-xs font-semibold text-green-800 mb-1 flex items-center gap-1"><User className="w-3 h-3" /> Subjective</h4>
+                            <div className="text-xs leading-snug">
+                              {r.subjective_complaints && <p className="mb-0.5"><span className="text-gray-500">Complaints:</span> {r.subjective_complaints}</p>}
+                              {r.sleep_quality && r.sleep_quality !== 'good' && <span className="text-gray-500">Sleep: {r.sleep_quality} </span>}
+                              {r.appetite && r.appetite !== 'good' && <span className="text-gray-500">Appetite: {r.appetite} </span>}
+                              {r.bowel_movement && r.bowel_movement !== 'normal' && <span className="text-gray-500">Bowel: {r.bowel_movement}</span>}
                             </div>
                           </div>
                         )}
 
                         {/* Clinical Notes */}
                         {(round.clinical_notes || round.examination_findings) && (
-                          <div className="bg-purple-50 rounded-lg p-3">
-                            <h4 className="text-sm font-semibold text-purple-800 mb-2 flex items-center gap-1"><Stethoscope className="w-4 h-4" /> Clinical Assessment</h4>
-                            <div className="text-xs space-y-1">
-                              {round.clinical_notes && <p><span className="text-gray-500 font-medium">Notes:</span> {round.clinical_notes}</p>}
-                              {round.examination_findings && <p><span className="text-gray-500 font-medium">Examination:</span> {round.examination_findings}</p>}
-                              {r.general_appearance && <p><span className="text-gray-500 font-medium">Appearance:</span> {r.general_appearance}</p>}
+                          <div className="bg-purple-50 rounded p-2">
+                            <h4 className="text-xs font-semibold text-purple-800 mb-1 flex items-center gap-1"><Stethoscope className="w-3 h-3" /> Clinical Assessment</h4>
+                            <div className="text-xs leading-snug">
+                              {round.clinical_notes && <p className="mb-0.5"><span className="text-gray-500 font-medium">Notes:</span> {round.clinical_notes}</p>}
+                              {round.examination_findings && <p className="mb-0.5"><span className="text-gray-500 font-medium">Examination:</span> {round.examination_findings}</p>}
+                              {r.general_appearance && <p className="mb-0.5"><span className="text-gray-500 font-medium">Appearance:</span> {r.general_appearance}</p>}
                               {r.clinical_impression && <p><span className="text-gray-500 font-medium">Impression:</span> {r.clinical_impression}</p>}
                             </div>
                           </div>
@@ -488,40 +483,38 @@ export default function WardRounds() {
 
                         {/* Wound / Drain */}
                         {(r.wound_status || r.wound_notes || r.drain_output) && (
-                          <div className="bg-orange-50 rounded-lg p-3">
-                            <h4 className="text-sm font-semibold text-orange-800 mb-2 flex items-center gap-1"><Eye className="w-4 h-4" /> Wound / Drain</h4>
-                            <div className="text-xs space-y-1">
-                              {r.wound_status && <p><span className="text-gray-500">Status:</span> {r.wound_status}</p>}
-                              {round.wound_notes && <p><span className="text-gray-500">Notes:</span> {round.wound_notes}</p>}
-                              {r.drain_output && <p><span className="text-gray-500">Drain output:</span> {r.drain_output}</p>}
-                            </div>
+                          <div className="bg-orange-50 rounded p-2">
+                            <h4 className="text-xs font-semibold text-orange-800 mb-1 flex items-center gap-1"><Eye className="w-3 h-3" /> Wound / Drain</h4>
+                            <p className="text-xs leading-snug">
+                              {[r.wound_status && `Status: ${r.wound_status}`, round.wound_notes && `Notes: ${round.wound_notes}`, r.drain_output && `Drain output: ${r.drain_output}`].filter(Boolean).join(' | ')}
+                            </p>
                           </div>
                         )}
                       </div>
 
                       {/* Full width sections */}
-                      <div className="space-y-3 mt-4">
+                      <div className="space-y-2 mt-2">
                         {/* Assessment Notes */}
                         {round.assessment_notes && (
-                          <div className="bg-gray-50 rounded-lg p-3">
-                            <h4 className="text-sm font-semibold text-gray-700 mb-1">Assessment</h4>
-                            <p className="text-xs text-gray-600 whitespace-pre-wrap">{round.assessment_notes}</p>
+                          <div className="bg-gray-50 rounded p-2">
+                            <h4 className="text-xs font-semibold text-gray-700 mb-0.5">Assessment</h4>
+                            <p className="text-xs text-gray-600 leading-snug">{round.assessment_notes}</p>
                           </div>
                         )}
 
                         {/* Complications */}
                         {round.complications && (
-                          <div className="bg-red-50 rounded-lg p-3">
-                            <h4 className="text-sm font-semibold text-red-700 mb-1 flex items-center gap-1"><AlertCircle className="w-4 h-4" /> Complications</h4>
-                            <p className="text-xs text-red-600">{round.complications}</p>
+                          <div className="bg-red-50 rounded p-2">
+                            <h4 className="text-xs font-semibold text-red-700 mb-0.5 flex items-center gap-1"><AlertCircle className="w-3 h-3" /> Complications</h4>
+                            <p className="text-xs text-red-600 leading-snug">{round.complications}</p>
                           </div>
                         )}
 
                         {/* Medications */}
                         {(round.medication_changes || r.new_medications?.length > 0 || r.stop_medications?.length > 0) && (
-                          <div className="bg-indigo-50 rounded-lg p-3">
-                            <h4 className="text-sm font-semibold text-indigo-800 mb-1 flex items-center gap-1"><Pill className="w-4 h-4" /> Medication Changes</h4>
-                            <div className="text-xs space-y-1">
+                          <div className="bg-indigo-50 rounded p-2">
+                            <h4 className="text-xs font-semibold text-indigo-800 mb-0.5 flex items-center gap-1"><Pill className="w-3 h-3" /> Medication Changes</h4>
+                            <div className="text-xs leading-snug">
                               {round.medication_changes && <p>{round.medication_changes}</p>}
                               {r.new_medications?.length > 0 && (
                                 <div><span className="text-gray-500 font-medium">New:</span>
@@ -537,9 +530,9 @@ export default function WardRounds() {
 
                         {/* Investigations */}
                         {(round.lab_notes || r.investigations_ordered?.length > 0) && (
-                          <div className="bg-teal-50 rounded-lg p-3">
-                            <h4 className="text-sm font-semibold text-teal-800 mb-1 flex items-center gap-1"><TestTube className="w-4 h-4" /> Investigations</h4>
-                            <div className="text-xs space-y-1">
+                          <div className="bg-teal-50 rounded p-2">
+                            <h4 className="text-xs font-semibold text-teal-800 mb-0.5 flex items-center gap-1"><TestTube className="w-3 h-3" /> Investigations</h4>
+                            <div className="text-xs leading-snug">
                               {round.lab_notes && <p>{round.lab_notes}</p>}
                               {r.investigations_ordered?.length > 0 && <p><span className="text-gray-500 font-medium">Ordered:</span> {r.investigations_ordered.join(', ')}</p>}
                             </div>
@@ -548,9 +541,9 @@ export default function WardRounds() {
 
                         {/* Plan */}
                         {(round.follow_up_plan || round.plan_changes?.length > 0 || round.discharge_planning || r.treatment_plan_changes || r.dietary_modifications || r.activity_orders || r.nursing_instructions) && (
-                          <div className="bg-emerald-50 rounded-lg p-3">
-                            <h4 className="text-sm font-semibold text-emerald-800 mb-1 flex items-center gap-1"><ClipboardList className="w-4 h-4" /> Plan</h4>
-                            <div className="text-xs space-y-1">
+                          <div className="bg-emerald-50 rounded p-2">
+                            <h4 className="text-xs font-semibold text-emerald-800 mb-0.5 flex items-center gap-1"><ClipboardList className="w-3 h-3" /> Plan</h4>
+                            <div className="text-xs leading-snug">
                               {round.follow_up_plan && <p><span className="text-gray-500 font-medium">Follow-up:</span> {round.follow_up_plan}</p>}
                               {round.plan_changes?.length > 0 && <p><span className="text-gray-500 font-medium">Plan changes:</span> {round.plan_changes.join('; ')}</p>}
                               {r.treatment_plan_changes && <p><span className="text-gray-500 font-medium">Treatment plan:</span> {r.treatment_plan_changes}</p>}
@@ -565,8 +558,8 @@ export default function WardRounds() {
 
                         {/* Consultation */}
                         {round.consultation_requested && (
-                          <div className="bg-pink-50 rounded-lg p-3">
-                            <h4 className="text-sm font-semibold text-pink-800 mb-1">Consultation Requested</h4>
+                          <div className="bg-pink-50 rounded p-2">
+                            <h4 className="text-xs font-semibold text-pink-800 mb-0.5">Consultation Requested</h4>
                             <p className="text-xs">{round.consultation_specialty}{round.consultation_reason ? `  ${round.consultation_reason}` : ''}</p>
                           </div>
                         )}
@@ -578,8 +571,8 @@ export default function WardRounds() {
 
                         {/* Clinical Images */}
                         {round.clinical_images && round.clinical_images.length > 0 && (
-                          <div className="bg-gray-50 rounded-lg p-3">
-                            <h4 className="text-sm font-semibold text-gray-700 mb-2">Clinical Images ({round.clinical_images.length})</h4>
+                          <div className="bg-gray-50 rounded p-2">
+                            <h4 className="text-xs font-semibold text-gray-700 mb-1">Clinical Images ({round.clinical_images.length})</h4>
                             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
                               {round.clinical_images.map((img, i) => (
                                 <div key={img.id || i} className="relative">
@@ -593,9 +586,9 @@ export default function WardRounds() {
 
                         {/* OCR text */}
                         {r.ocr_extracted_text && (
-                          <div className="bg-yellow-50 rounded-lg p-3">
-                            <h4 className="text-sm font-semibold text-yellow-800 mb-1">Extracted Text (OCR)</h4>
-                            <p className="text-xs whitespace-pre-wrap">{r.ocr_extracted_text}</p>
+                          <div className="bg-yellow-50 rounded p-2">
+                            <h4 className="text-xs font-semibold text-yellow-800 mb-0.5">Extracted Text (OCR)</h4>
+                            <p className="text-xs leading-snug">{r.ocr_extracted_text}</p>
                           </div>
                         )}
                       </div>

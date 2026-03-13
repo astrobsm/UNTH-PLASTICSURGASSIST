@@ -112,16 +112,16 @@ async function getFullConferenceData(patientId, res) {
     shoppingListItems
   ] = await Promise.all([
     query(`SELECT id, test_type, test_name, results, status, ordered_at, completed_at,
-           (SELECT name FROM users WHERE id = lo.ordered_by) as ordered_by_name
+           (SELECT full_name FROM users WHERE id = lo.ordered_by) as ordered_by_name
            FROM lab_orders lo WHERE patient_id = $1 ORDER BY ordered_at DESC`, [patientId]),
     query(`SELECT id, medication_name, dosage, frequency, duration, route, instructions, 
            status, prescribed_at,
-           (SELECT name FROM users WHERE id = pr.prescribed_by) as prescribed_by_name
+           (SELECT full_name FROM users WHERE id = pr.prescribed_by) as prescribed_by_name
            FROM prescriptions pr WHERE patient_id = $1 AND status = 'active' 
            ORDER BY prescribed_at DESC`, [patientId]),
     query(`SELECT id, procedure_name, procedure_type, scheduled_date, estimated_duration,
            anesthesia_type, operating_room, pre_op_notes, required_equipment, status,
-           (SELECT name FROM users WHERE id = s.surgeon_id) as surgeon_name
+           (SELECT full_name FROM users WHERE id = s.surgeon_id) as surgeon_name
            FROM surgeries s WHERE patient_id = $1 AND status IN ('scheduled', 'pending', 'confirmed')
            ORDER BY scheduled_date ASC`, [patientId]),
     query(`SELECT id, assessment_date, asa_class, mallampati_score, airway_assessment,
@@ -131,7 +131,7 @@ async function getFullConferenceData(patientId, res) {
            FROM preoperative_assessments WHERE patient_id = $1 ORDER BY assessment_date DESC`, [patientId]),
     query(`SELECT id, round_date, findings, plan, vital_signs, current_medications,
            new_orders, consultant_instructions, nursing_notes,
-           (SELECT name FROM users WHERE id = wr.user_id) as round_by_name,
+           (SELECT full_name FROM users WHERE id = wr.user_id) as round_by_name,
            (SELECT role FROM users WHERE id = wr.user_id) as round_by_role
            FROM ward_rounds wr WHERE patient_id = $1 ORDER BY round_date DESC`, [patientId]),
     query(`SELECT * FROM shopping_lists WHERE patient_id = $1`, [patientId]).catch(() => ({ rows: [] }))
@@ -417,7 +417,7 @@ async function getClinicalPhotographs(patientId, res) {
 async function getLabResults(patientId, res) {
   const result = await query(
     `SELECT id, test_type, test_name, results, status, ordered_at, completed_at,
-     (SELECT name FROM users WHERE id = lo.ordered_by) as ordered_by_name
+     (SELECT full_name FROM users WHERE id = lo.ordered_by) as ordered_by_name
      FROM lab_orders lo WHERE patient_id = $1 ORDER BY ordered_at DESC`, [patientId]
   );
   res.status(200).json({ labResults: result.rows });
@@ -427,7 +427,7 @@ async function getMedications(patientId, res) {
   const result = await query(
     `SELECT id, medication_name, dosage, frequency, duration, route, instructions,
      status, prescribed_at,
-     (SELECT name FROM users WHERE id = pr.prescribed_by) as prescribed_by_name
+     (SELECT full_name FROM users WHERE id = pr.prescribed_by) as prescribed_by_name
      FROM prescriptions pr WHERE patient_id = $1 AND status = 'active'
      ORDER BY prescribed_at DESC`, [patientId]
   );
@@ -445,7 +445,7 @@ async function getPlannedProcedures(patientId, res) {
   const result = await query(
     `SELECT id, procedure_name, procedure_type, scheduled_date, estimated_duration,
      anesthesia_type, operating_room, pre_op_notes, required_equipment, status,
-     (SELECT name FROM users WHERE id = s.surgeon_id) as surgeon_name
+     (SELECT full_name FROM users WHERE id = s.surgeon_id) as surgeon_name
      FROM surgeries s WHERE patient_id = $1 AND status IN ('scheduled', 'pending', 'confirmed')
      ORDER BY scheduled_date ASC`, [patientId]
   );
@@ -459,7 +459,7 @@ async function getShoppingListStatus(patientId, res) {
 
 async function getPreparingTeam(patientId, res) {
   const [wardRounds, preOps] = await Promise.all([
-    query(`SELECT id, round_date, (SELECT name FROM users WHERE id = wr.user_id) as round_by_name,
+    query(`SELECT id, round_date, (SELECT full_name FROM users WHERE id = wr.user_id) as round_by_name,
            (SELECT role FROM users WHERE id = wr.user_id) as round_by_role
            FROM ward_rounds wr WHERE patient_id = $1 ORDER BY round_date DESC`, [patientId]),
     query(`SELECT id, assessment_date, assessed_by FROM preoperative_assessments WHERE patient_id = $1`, [patientId])

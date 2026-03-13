@@ -1444,8 +1444,8 @@ const MDTPage: React.FC = () => {
       {/* Add Review Manually Modal */}
       {showAddReview && selectedPatient && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg w-full max-w-lg">
-            <div className="p-4 border-b flex items-center justify-between">
+          <div className="bg-white rounded-lg w-full max-w-lg max-h-[85vh] flex flex-col">
+            <div className="p-4 border-b flex items-center justify-between flex-shrink-0">
               <h3 className="font-semibold text-lg">Add Team Review</h3>
               <button onClick={() => setShowAddReview(false)} className="text-gray-500 hover:text-gray-700">
                 <X className="w-5 h-5" />
@@ -1475,7 +1475,7 @@ const MDTPage: React.FC = () => {
                   alert('Error saving review');
                 }
               }}
-              className="p-4 space-y-4"
+              className="p-4 space-y-4 overflow-y-auto flex-1"
             >
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Specialty</label>

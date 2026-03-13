@@ -131,9 +131,9 @@ const PatientSummariesPage: React.FC = () => {
         const patientAge = calculateAge(patient.date_of_birth || patient.dob);
         entries.push({
           id: 'reg_' + patient.id, date: safeDate(patient.created_at || patient.registration_date),
-          type: 'registration', title: 'Patient Registered',
-          summary: patient.first_name + ' ' + patient.last_name + ' (' + patient.hospital_number + '). Age: ' + (patientAge != null ? patientAge + 'y' : 'N/A') + ', Gender: ' + (patient.gender || 'N/A'),
-          details: { 'Hospital Number': patient.hospital_number, 'Name': patient.first_name + ' ' + patient.last_name, 'Gender': patient.gender, 'Age': patientAge != null ? patientAge + ' years' : 'N/A', 'DOB': safeFormatDate(patient.date_of_birth, 'MMM d, yyyy'), 'Phone': patient.phone, 'Address': patient.address, 'Diagnosis': patient.diagnosis, 'Blood Group': patient.blood_group, 'Next of Kin': patient.next_of_kin_name },
+          type: 'registration', title: 'Patient Registration',
+          summary: patient.first_name + ' ' + patient.last_name + ' (MRN: ' + patient.hospital_number + '). ' + (patientAge != null ? patientAge + '-year-old' : 'Age not documented') + ' ' + (patient.gender || '') + (patient.diagnosis ? '. Presenting Dx: ' + patient.diagnosis : '') + (patient.blood_group ? '. Blood Group: ' + patient.blood_group : ''),
+          details: { 'Medical Record Number': patient.hospital_number, 'Patient Name': patient.first_name + ' ' + patient.last_name, 'Sex': patient.gender, 'Age': patientAge != null ? patientAge + ' years' : 'Not documented', 'Date of Birth': safeFormatDate(patient.date_of_birth, 'MMM d, yyyy'), 'Contact': patient.phone, 'Address': patient.address, 'Presenting Diagnosis': patient.diagnosis, 'Blood Group': patient.blood_group, 'Next of Kin': patient.next_of_kin_name },
         });
       }
 
@@ -143,8 +143,8 @@ const PatientSummariesPage: React.FC = () => {
         for (const a of all.filter(a => matchPid(a.patient_id))) {
           entries.push({ id: 'adm_' + a.id, date: safeDate(a.admission_date), type: 'admission',
             title: 'Admitted to ' + (a.ward_location || 'Ward'),
-            summary: 'Route: ' + (a.route_of_admission || 'N/A') + '. Status: ' + (a.status || 'active') + '. Dx: ' + ((a as any).provisional_diagnosis || a.diagnosis || (a as any).reasons_for_admission || 'N/A'),
-            details: { 'Ward': a.ward_location, 'Route': a.route_of_admission, 'Status': a.status, 'Diagnosis': (a as any).provisional_diagnosis || a.diagnosis || (a as any).reasons_for_admission, 'Consultant': (a as any).admitting_consultant || (a as any).consultant, 'Admitting Doctor': (a as any).admitting_doctor, 'Admitting Unit': (a as any).admitting_unit, 'Bed': (a as any).bed_number },
+            summary: 'Route of admission: ' + (a.route_of_admission || 'Not specified') + '. Status: ' + (a.status || 'active') + '. Provisional Dx: ' + ((a as any).provisional_diagnosis || a.diagnosis || (a as any).reasons_for_admission || 'Not specified'),
+            details: { 'Ward/Location': a.ward_location, 'Route of Admission': a.route_of_admission, 'Admission Status': a.status, 'Provisional Diagnosis': (a as any).provisional_diagnosis || a.diagnosis || (a as any).reasons_for_admission, 'Admitting Consultant': (a as any).admitting_consultant || (a as any).consultant, 'Admitting Doctor': (a as any).admitting_doctor, 'Unit': (a as any).admitting_unit, 'Bed Number': (a as any).bed_number },
           });
         }
       } catch(e) { console.warn('admissions:', e); }
@@ -154,10 +154,11 @@ const PatientSummariesPage: React.FC = () => {
         const all = await db.ward_rounds.toArray();
         for (const wr of all.filter((r: any) => matchPid(r.patient_id))) {
           const r = wr as any;
+          const vitalsStr = r.temperature ? 'T: ' + r.temperature + '°C, PR: ' + r.pulse + '/min, BP: ' + r.bp_systolic + '/' + r.bp_diastolic + ' mmHg, RR: ' + r.respiratory_rate + '/min, SpO2: ' + r.spo2 + '%' : null;
           entries.push({ id: 'wr_' + r.id, date: safeDate(r.round_date), type: 'ward_round',
             title: (r.round_type || 'Ward Round').replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
-            summary: 'By ' + (r.reviewing_doctor || 'Unknown') + '. Status: ' + (r.progress_status || 'N/A') + (r.chief_complaint ? '. CC: ' + r.chief_complaint : ''),
-            details: { 'Round Type': r.round_type, 'Doctor': r.reviewing_doctor, 'Progress': r.progress_status, 'Chief Complaint': r.chief_complaint, 'Clinical Notes': r.clinical_notes, 'Examination': r.examination_findings, 'Vitals': r.temperature ? 'T:' + r.temperature + ' P:' + r.pulse + ' BP:' + r.bp_systolic + '/' + r.bp_diastolic + ' RR:' + r.respiratory_rate + ' SpO2:' + r.spo2 : null, 'Follow-up': r.follow_up_plan, 'Med Changes': r.medication_changes, 'Wound Notes': r.wound_notes, 'Complications': r.complications },
+            summary: 'Reviewed by ' + (r.reviewing_doctor || 'Attending physician') + '. Clinical status: ' + (r.progress_status || 'Not documented') + (r.chief_complaint ? '. Presenting complaint: ' + r.chief_complaint : ''),
+            details: { 'Round Type': r.round_type, 'Reviewing Clinician': r.reviewing_doctor, 'Clinical Progress': r.progress_status, 'Presenting Complaint': r.chief_complaint, 'Clinical Notes': r.clinical_notes, 'Examination Findings': r.examination_findings, 'Vital Signs': vitalsStr, 'Management Plan': r.follow_up_plan, 'Medication Changes': r.medication_changes, 'Wound Assessment': r.wound_notes, 'Complications': r.complications },
           });
         }
       } catch(e) { console.warn('ward_rounds:', e); }
@@ -167,10 +168,12 @@ const PatientSummariesPage: React.FC = () => {
         const all = await db.treatment_plans.toArray();
         for (const p of all.filter(p => matchPid(p.patient_id))) {
           const revs = p.reviews || (p as any).follow_up_schedule || [];
+          const meds = (p as any).medications || [];
+          const procs = (p as any).procedures || [];
           entries.push({ id: 'tp_' + p.id, date: safeDate(p.created_at || (p as any).admission_date), type: 'treatment_plan',
             title: 'Treatment Plan: ' + ((p as any).diagnosis || p.title || 'Untitled'),
-            summary: 'Status: ' + (p.status || 'active') + '. ' + revs.length + ' reviews, ' + ((p as any).medications || []).length + ' medications, ' + ((p as any).procedures || []).length + ' procedures.',
-            details: { 'Diagnosis': (p as any).diagnosis, 'Treatment Type': (p as any).treatment_type, 'Description': (p as any).description, 'Status': p.status, 'Notes': (p as any).notes },
+            summary: 'Plan status: ' + (p.status || 'active') + '. ' + revs.length + ' clinical reviews, ' + meds.length + ' medications prescribed, ' + procs.length + ' procedures planned.',
+            details: { 'Working Diagnosis': (p as any).diagnosis, 'Treatment Modality': (p as any).treatment_type, 'Plan Description': (p as any).description, 'Current Status': p.status, 'Clinical Notes': (p as any).notes },
           });
         }
       } catch(e) { console.warn('treatment_plans:', e); }
@@ -181,8 +184,8 @@ const PatientSummariesPage: React.FC = () => {
         for (const p of all.filter(p => matchPid(p.patient_id))) {
           entries.push({ id: 'preop_' + p.id, date: safeDate(p.assessed_at || (p as any).created_at), type: 'preop_assessment',
             title: 'Pre-operative Assessment',
-            summary: 'Assessed by ' + (p.assessed_by || 'Unknown') + '. ASA: ' + ((p as any).asa_class || 'N/A') + '. Fitness: ' + ((p as any).fitness_status || 'N/A'),
-            details: { 'Assessed By': p.assessed_by, 'ASA Class': (p as any).asa_class, 'Fitness': (p as any).fitness_status, 'Allergies': (p as any).allergies, 'Comorbidities': (p as any).comorbidities, 'Airway': (p as any).airway_assessment, 'Anaesthesia Plan': (p as any).anaesthesia_plan },
+            summary: 'Assessed by ' + (p.assessed_by || 'Anaesthesia team') + '. ASA Classification: ' + ((p as any).asa_class ? 'ASA ' + (p as any).asa_class : 'Not graded') + '. Fitness for surgery: ' + ((p as any).fitness_status || (p as any).fitness_for_surgery || 'Pending'),
+            details: { 'Assessing Clinician': p.assessed_by || 'Not documented', 'ASA Classification': (p as any).asa_class ? 'ASA ' + (p as any).asa_class : 'Not graded', 'Fitness for Surgery': (p as any).fitness_status || (p as any).fitness_for_surgery, 'Drug Allergies': (p as any).allergies, 'Comorbidities': (p as any).comorbidities, 'Airway Assessment': (p as any).airway_assessment, 'Anaesthesia Plan': (p as any).anaesthesia_plan },
           });
         }
       } catch(e) { console.warn('preop_assessments:', e); }
@@ -192,9 +195,9 @@ const PatientSummariesPage: React.FC = () => {
         const all = await db.surgery_bookings.toArray();
         for (const b of all.filter(b => matchPid(b.patient_id))) {
           entries.push({ id: 'surg_' + b.id, date: safeDate(b.date), type: 'surgery_booking',
-            title: 'Surgery: ' + ((b as any).procedure_name || (b as any).procedure || 'Procedure'),
-            summary: 'Theatre ' + (b.theatre_number || 'N/A') + '. Surgeon: ' + (b.primary_surgeon || 'N/A') + '. Status: ' + (b.status || 'N/A'),
-            details: { 'Procedure': (b as any).procedure_name, 'Theatre': b.theatre_number, 'Surgeon': b.primary_surgeon, 'Status': b.status, 'Anaesthetist': (b as any).anaesthetist, 'Priority': (b as any).priority },
+            title: 'Surgical Booking: ' + ((b as any).procedure_name || (b as any).procedure || 'Procedure'),
+            summary: 'Operating Theatre ' + (b.theatre_number || 'TBD') + '. Lead Surgeon: ' + (b.primary_surgeon || 'Not assigned') + '. Booking Status: ' + (b.status || 'Pending'),
+            details: { 'Planned Procedure': (b as any).procedure_name, 'Operating Theatre': b.theatre_number, 'Lead Surgeon': b.primary_surgeon, 'Booking Status': b.status, 'Anaesthetist': (b as any).anaesthetist, 'Priority': (b as any).priority },
           });
         }
       } catch(e) { console.warn('surgery_bookings:', e); }
@@ -204,9 +207,9 @@ const PatientSummariesPage: React.FC = () => {
         const all = await db.lab_investigations.toArray();
         for (const l of all.filter(l => matchPid(l.patient_id))) {
           entries.push({ id: 'lab_' + l.id, date: safeDate(l.request_date), type: 'lab_investigation',
-            title: 'Lab: ' + ((l as any).test_name || (l as any).investigation_type || 'Investigation'),
-            summary: 'By ' + (l.requested_by || 'Unknown') + '. Status: ' + (l.status || 'pending') + '. Urgency: ' + (l.urgency || 'routine'),
-            details: { 'Test': (l as any).test_name || (l as any).investigation_type, 'Requested By': l.requested_by, 'Status': l.status, 'Urgency': l.urgency, 'Clinical Details': (l as any).clinical_details },
+            title: 'Investigation: ' + ((l as any).test_name || (l as any).investigation_type || 'Laboratory Test'),
+            summary: 'Ordered by ' + (l.requested_by || 'Requesting clinician') + '. Status: ' + (l.status || 'pending') + '. Priority: ' + (l.urgency || 'routine'),
+            details: { 'Investigation': (l as any).test_name || (l as any).investigation_type, 'Ordering Clinician': l.requested_by, 'Status': l.status, 'Priority': l.urgency, 'Clinical Information': (l as any).clinical_details },
           });
         }
       } catch(e) { console.warn('lab_investigations:', e); }
@@ -216,9 +219,9 @@ const PatientSummariesPage: React.FC = () => {
         const all = await db.lab_results.toArray();
         for (const r of all.filter(r => matchPid(r.patient_id))) {
           entries.push({ id: 'labres_' + r.id, date: safeDate(r.result_date), type: 'lab_result',
-            title: 'Lab Result: ' + ((r as any).test_name || 'Result'),
-            summary: 'Value: ' + ((r as any).result_value || (r as any).value || 'N/A') + '. ' + (r.abnormal_flag ? 'ABNORMAL' : 'Normal') + '. Range: ' + ((r as any).reference_range || 'N/A'),
-            details: { 'Test': (r as any).test_name, 'Value': (r as any).result_value || (r as any).value, 'Unit': (r as any).unit, 'Reference Range': (r as any).reference_range, 'Abnormal': r.abnormal_flag ? 'Yes' : 'No' },
+            title: 'Investigation Result: ' + ((r as any).test_name || 'Result'),
+            summary: 'Result: ' + ((r as any).result_value || (r as any).value || 'Pending') + ' ' + ((r as any).unit || '') + '. ' + (r.abnormal_flag ? '⚠ ABNORMAL' : 'Within normal limits') + '. Ref range: ' + ((r as any).reference_range || 'N/A'),
+            details: { 'Investigation': (r as any).test_name, 'Result Value': (r as any).result_value || (r as any).value, 'Unit': (r as any).unit, 'Reference Range': (r as any).reference_range, 'Interpretation': r.abnormal_flag ? 'Abnormal' : 'Normal' },
           });
         }
       } catch(e) { console.warn('lab_results:', e); }
@@ -276,9 +279,9 @@ const PatientSummariesPage: React.FC = () => {
         const all = await db.prescriptions.toArray();
         for (const r of all.filter(r => matchPid(r.patient_id))) {
           entries.push({ id: 'rx_' + r.id, date: safeDate(r.prescribed_date), type: 'prescription',
-            title: 'Rx: ' + (r.medication_name || 'Medication'),
-            summary: (r.dosage || '') + ' ' + (r.route || '') + ' ' + (r.frequency || '') + '. By ' + ((r as any).prescribed_by || 'Unknown') + '. ' + (r.status || 'active'),
-            details: { 'Medication': r.medication_name, 'Dosage': r.dosage, 'Route': r.route, 'Frequency': r.frequency, 'Duration': (r as any).duration, 'Status': r.status },
+            title: 'Prescription: ' + (r.medication_name || 'Medication'),
+            summary: (r.medication_name || '') + ' ' + (r.dosage || '') + ' ' + (r.route || '') + ' ' + (r.frequency || '') + '. Prescribed by ' + ((r as any).prescribed_by || 'Attending clinician') + '. Status: ' + (r.status || 'active'),
+            details: { 'Drug Name': r.medication_name, 'Dose': r.dosage, 'Route': r.route, 'Frequency': r.frequency, 'Duration': (r as any).duration, 'Prescription Status': r.status },
           });
         }
       } catch(e) { console.warn('prescriptions:', e); }
@@ -312,9 +315,9 @@ const PatientSummariesPage: React.FC = () => {
         const all = await db.discharges.toArray();
         for (const d of all.filter(d => matchPid(d.patient_id))) {
           entries.push({ id: 'dc_' + d.id, date: safeDate(d.discharge_date), type: 'discharge',
-            title: 'Discharged - ' + ((d as any).discharge_status || 'N/A'),
-            summary: 'Type: ' + ((d as any).discharge_type || 'N/A') + '. Follow-up: ' + ((d as any).follow_up_plan || 'N/A'),
-            details: { 'Status': (d as any).discharge_status, 'Type': (d as any).discharge_type, 'Summary': (d as any).discharge_summary, 'Follow-up Plan': (d as any).follow_up_plan, 'Condition': (d as any).condition_at_discharge },
+            title: 'Discharge — ' + ((d as any).discharge_status || 'Status not documented'),
+            summary: 'Discharge type: ' + ((d as any).discharge_type || 'Not specified') + '. Follow-up plan: ' + ((d as any).follow_up_plan || 'Not documented'),
+            details: { 'Discharge Status': (d as any).discharge_status, 'Discharge Type': (d as any).discharge_type, 'Discharge Summary': (d as any).discharge_summary, 'Follow-up Plan': (d as any).follow_up_plan, 'Condition at Discharge': (d as any).condition_at_discharge },
           });
         }
       } catch(e) { console.warn('discharges:', e); }
@@ -485,7 +488,7 @@ const PatientSummariesPage: React.FC = () => {
               </div>
               <div>
                 <h2 className="text-xl font-bold text-gray-900">{patientInfo.first_name} {patientInfo.last_name}</h2>
-                <p className="text-gray-600">{patientInfo.hospital_number} | {patientInfo.gender || 'N/A'} | Age: {patientInfo.age || 'N/A'}</p>
+                <p className="text-gray-600">{patientInfo.hospital_number} | {patientInfo.gender || 'N/A'} | Age: {calculateAge(patientInfo.date_of_birth || patientInfo.dob) != null ? calculateAge(patientInfo.date_of_birth || patientInfo.dob) + ' years' : 'N/A'} | Blood Group: {patientInfo.blood_group || 'N/A'}</p>
               </div>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">

@@ -4,6 +4,7 @@ import { PreoperativePlanningModule } from '../components/procedures/Preoperativ
 import { patientService } from '../services/patientService';
 import { preoperativeService, PreoperativeAssessment } from '../services/preoperativeService';
 import { schedulingService, SurgeryBooking } from '../services/schedulingService';
+import { db } from '../db/database';
 import toast from 'react-hot-toast';
 import { safeFormatDate } from '../utils/dateUtils';
 import {
@@ -356,6 +357,44 @@ const BookingRegisterPage: React.FC = () => {
 
   const loadStageData = async () => {
     try {
+      // Sync lab results from IndexedDB into investigationResults
+      const mergedResults = { ...investigationResults };
+      let resultsChanged = false;
+      try {
+        const allLabResults = await db.lab_results.toArray();
+        const allLabInvestigations = await db.lab_investigations.toArray();
+        for (const p of patients) {
+          const pid = String(p.id);
+          const existing = mergedResults[pid] || [];
+          const existingNames = new Set(existing.map(e => e.name.toLowerCase()));
+          // Add completed lab results  
+          const patientLabResults = allLabResults.filter(r => String(r.patient_id) === pid);
+          for (const r of patientLabResults) {
+            const testName = (r as any).test_name || '';
+            if (testName && !existingNames.has(testName.toLowerCase())) {
+              existing.push({ name: testName, value: (r as any).result_value || (r as any).value || 'Done', flag: (r as any).abnormal_flag ? 'abnormal' : 'normal', enteredBy: 'Lab System', enteredAt: (r as any).result_date || '' });
+              existingNames.add(testName.toLowerCase());
+              resultsChanged = true;
+            }
+          }
+          // Add completed lab investigations
+          const patientLabInvs = allLabInvestigations.filter(l => String(l.patient_id) === pid && l.status === 'completed');
+          for (const l of patientLabInvs) {
+            const testName = (l as any).test_name || (l as any).investigation_type || '';
+            if (testName && !existingNames.has(testName.toLowerCase())) {
+              existing.push({ name: testName, value: (l as any).results || 'Completed', flag: 'normal', enteredBy: l.requested_by || 'Lab System', enteredAt: (l as any).completed_date || '' });
+              existingNames.add(testName.toLowerCase());
+              resultsChanged = true;
+            }
+          }
+          if (existing.length > 0) mergedResults[pid] = existing;
+        }
+      } catch (e) { console.warn('Error syncing lab data from IndexedDB:', e); }
+      if (resultsChanged) {
+        setInvestigationResults(mergedResults);
+        localStorage.setItem(INVESTIGATION_RESULTS_KEY, JSON.stringify(mergedResults));
+      }
+
       const results: typeof stagePatients = [];
       for (const p of patients) {
         try {

@@ -22,7 +22,8 @@ import {
   Thermometer,
   Droplet,
   Zap,
-  X
+  X,
+  Save
 } from 'lucide-react';
 import { patientService } from '../../services/patientService';
 import { sanitizeTextForPDF } from '../../utils/pdfUtils';
@@ -832,23 +833,8 @@ export const PreoperativePlanningModule: React.FC<PreoperativePlanningModuleProp
             </div>
           </div>
           
-          {/* Action Buttons */}
+          {/* Action Buttons - removed from top, now only at bottom */}
           <div className="flex items-center space-x-3">
-            <button
-              onClick={() => setShowPrintModal(true)}
-              className="inline-flex items-center px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
-              disabled={formData.generatedInvestigations.length === 0}
-            >
-              <Printer className="w-5 h-5 mr-2" />
-              Print Lab Request
-            </button>
-            <button
-              onClick={navigateToShoppingList}
-              className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-            >
-              <ShoppingCart className="w-5 h-5 mr-2" />
-              Generate Shopping List
-            </button>
           </div>
         </div>
 
@@ -1567,17 +1553,6 @@ export const PreoperativePlanningModule: React.FC<PreoperativePlanningModuleProp
                     </div>
                   </div>
                 ))}
-
-                {/* Print Button */}
-                <div className="mt-6 flex justify-center">
-                  <button
-                    onClick={() => setShowPrintModal(true)}
-                    className="inline-flex items-center px-6 py-3 bg-gray-700 text-white rounded-lg hover:bg-gray-800"
-                  >
-                    <Printer className="w-5 h-5 mr-2" />
-                    Print Lab Request (Thermal 80mm)
-                  </button>
-                </div>
               </>
             )}
           </div>
@@ -1606,18 +1581,26 @@ export const PreoperativePlanningModule: React.FC<PreoperativePlanningModuleProp
         </button>
         <div className="flex space-x-3">
           <button
-            onClick={navigateToShoppingList}
-            className="inline-flex items-center px-6 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200"
+            onClick={() => setShowPrintModal(true)}
+            className="inline-flex items-center px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+            disabled={formData.generatedInvestigations.length === 0}
           >
-            <ShoppingCart className="w-5 h-5 mr-2" />
-            Go to Shopping List
+            <Printer className="w-5 h-5 mr-2" />
+            Print Documents
           </button>
           <button
             onClick={handleComplete}
-            className="inline-flex items-center px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+            className="inline-flex items-center px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
-            <CheckCircle className="w-5 h-5 mr-2" />
-            Complete Assessment
+            <Save className="w-5 h-5 mr-2" />
+            Save Assessment
+          </button>
+          <button
+            onClick={navigateToShoppingList}
+            className="inline-flex items-center px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+          >
+            <ShoppingCart className="w-5 h-5 mr-2" />
+            Proceed to Shopping List
           </button>
         </div>
       </div>

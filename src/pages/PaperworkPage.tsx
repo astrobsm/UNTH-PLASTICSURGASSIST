@@ -422,10 +422,42 @@ const PaperworkPage: React.FC = () => {
           const patientAdmissions = await admissionService.getPatientAdmissions(parseInt(patientId));
           const activeAdmission = patientAdmissions.find(a => a.status === 'active');
           
+          // Fetch treatment plans for medications and procedures
+          let dischargeMeds = '';
+          let proceduresList: string[] = [];
+          let hospitalCourse = '';
+          try {
+            const treatmentPlans = await treatmentPlanningService.getPatientTreatmentPlans(patientId);
+            const activePlan = treatmentPlans.find(p => p.status === 'active') || treatmentPlans[0];
+            if (activePlan) {
+              if (activePlan.medications && activePlan.medications.length > 0) {
+                dischargeMeds = activePlan.medications
+                  .filter(m => m.status === 'active')
+                  .map(m => `${m.medication_name} ${m.dosage} ${m.route} ${m.frequency}`)
+                  .join('\n');
+              }
+              if (activePlan.procedures && activePlan.procedures.length > 0) {
+                proceduresList = activePlan.procedures
+                  .filter((pr: any) => pr.status === 'completed' || pr.status === 'done')
+                  .map((pr: any) => pr.procedure_name || pr.name || 'Procedure');
+              }
+            }
+          } catch (e) { console.warn('Error fetching treatment plans for discharge:', e); }
+
+          // Fetch ward rounds for hospital course summary
+          try {
+            const wardRounds = await db.ward_rounds.where('patient_id').equals(parseInt(patientId)).toArray();
+            if (wardRounds.length > 0) {
+              const sorted = wardRounds.sort((a: any, b: any) => new Date(a.round_date).getTime() - new Date(b.round_date).getTime());
+              hospitalCourse = sorted.map((r: any) => {
+                const date = r.round_date ? format(new Date(r.round_date), 'dd/MM/yyyy') : '';
+                return `${date}: ${r.clinical_notes || r.findings || r.follow_up_plan || ''}`.trim();
+              }).filter(Boolean).join('\n');
+            }
+          } catch (e) { console.warn('Error fetching ward rounds for discharge:', e); }
+
           if (activeAdmission) {
-            // Auto-populate from admission record
             const patientName = patient.full_name || `${patient.first_name || ''} ${patient.last_name || ''}`.trim();
-            const patientAge = calculateAge(patient.date_of_birth || patient.dob);
             
             setFormData({
               ...formData,
@@ -435,17 +467,19 @@ const PaperworkPage: React.FC = () => {
               admission_date: activeAdmission.admission_date,
               admission_diagnosis: activeAdmission.provisional_diagnosis || '',
               final_diagnosis: activeAdmission.provisional_diagnosis || '',
-              hospital_course: activeAdmission.examination_findings || activeAdmission.initial_management_plan || '',
-              procedures_performed: [] // Will be added manually
+              hospital_course: hospitalCourse || activeAdmission.examination_findings || activeAdmission.initial_management_plan || '',
+              discharge_medications: dischargeMeds || '',
+              procedures_performed: proceduresList
             });
           } else {
-            // No active admission, just set patient info
             const patientName = patient.full_name || `${patient.first_name || ''} ${patient.last_name || ''}`.trim();
             setFormData({
               ...formData,
               patient_id: patientId,
               patient_name: patientName,
-              hospital_number: patient.hospital_number
+              hospital_number: patient.hospital_number,
+              discharge_medications: dischargeMeds || '',
+              procedures_performed: proceduresList
             });
           }
         } catch (error) {
@@ -725,10 +759,8 @@ const PaperworkPage: React.FC = () => {
           }
 
           // Fetch current status and prognosis from most recent ward round
-          const wardRounds = await db.ward_rounds
-            .where('patient_id')
-            .equals(patientId)
-            .toArray();
+          const allWardRounds = await db.ward_rounds.toArray();
+          const wardRounds = allWardRounds.filter(wr => String(wr.patient_id) === String(patientId));
           
           let currentStatusText = '';
           let prognosisText = '';

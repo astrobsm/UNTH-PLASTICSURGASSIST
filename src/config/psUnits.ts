@@ -112,16 +112,16 @@ export function getCurrentAssignments(
     unit1: {
       unit: PS_UNITS[0],
       consultants: PS_UNITS[0].consultants,
-      seniorRegistrar: srForUnit1 || 'TBD',
-      houseOfficer: hoForUnit1 || 'TBD',
+      seniorRegistrar: srForUnit1 || '',
+      houseOfficer: hoForUnit1 || '',
       rotationStartDate: fmt(currentBlockStart),
       rotationEndDate: fmt(currentBlockEnd),
     },
     unit2: {
       unit: PS_UNITS[1],
       consultants: PS_UNITS[1].consultants,
-      seniorRegistrar: srForUnit2 || 'TBD',
-      houseOfficer: hoForUnit2 || 'TBD',
+      seniorRegistrar: srForUnit2 || '',
+      houseOfficer: hoForUnit2 || '',
       rotationStartDate: fmt(currentBlockStart),
       rotationEndDate: fmt(currentBlockEnd),
     },
@@ -137,7 +137,7 @@ export function getUnitTeam(
 ): { consultants: string[]; seniorRegistrar: string; houseOfficer: string } {
   const unit = PS_UNIT_MAP[unitId];
   if (!config || !config.isActive) {
-    return { consultants: unit.consultants, seniorRegistrar: 'TBD', houseOfficer: 'TBD' };
+    return { consultants: unit.consultants, seniorRegistrar: '', houseOfficer: '' };
   }
   const assignments = getCurrentAssignments(config);
   const a = unitId === 'PS-UNIT-1' ? assignments.unit1 : assignments.unit2;

@@ -258,17 +258,25 @@ class OCRService {
 
         // Convert to grayscale and apply thresholding for handwritten notes
         if (documentType === 'handwritten_note') {
+          // Compute mean gray for adaptive Otsu-style threshold
+          let sum = 0;
+          const grayValues = new Uint8Array(data.length / 4);
           for (let i = 0; i < data.length; i += 4) {
             const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
-            // Adaptive thresholding
-            const threshold = gray > 180 ? 255 : 0;
-            data[i] = data[i + 1] = data[i + 2] = threshold;
+            grayValues[i / 4] = gray;
+            sum += gray;
+          }
+          const mean = sum / grayValues.length;
+          // Otsu-inspired: use weighted mean between global mean and a fixed ceiling
+          const otsuThreshold = Math.min(Math.max(mean * 0.85, 100), 200);
+          for (let i = 0; i < data.length; i += 4) {
+            const val = grayValues[i / 4] > otsuThreshold ? 255 : 0;
+            data[i] = data[i + 1] = data[i + 2] = val;
           }
         } else {
-          // For printed documents, just enhance contrast
+          // For printed documents, enhance contrast
           for (let i = 0; i < data.length; i += 4) {
             const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
-            // Increase contrast
             const enhanced = Math.min(255, Math.max(0, (gray - 128) * 1.5 + 128));
             data[i] = data[i + 1] = data[i + 2] = enhanced;
           }
