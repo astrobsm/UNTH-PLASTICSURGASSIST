@@ -32,6 +32,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
   targetForm = 'ward_round',
 }) => {
   const [step, setStep] = useState<ScanStep>('capture');
+  const [selectedDocType, setSelectedDocType] = useState<DocumentType>(documentType);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [progressText, setProgressText] = useState('');
@@ -49,6 +50,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
 
   const resetState = useCallback(() => {
     setStep('capture');
+    setSelectedDocType(documentType);
     setImagePreview(null);
     setProgress(0);
     setProgressText('');
@@ -149,7 +151,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
     try {
       const aiResult = await ocrService.processDocumentWithAI(
         imageSource,
-        documentType,
+        selectedDocType,
         patientContext,
         (p) => {
           setProgress(Math.round(p.progress * 100));
@@ -564,10 +566,11 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                         { value: 'imaging_report', label: 'Imaging Report', icon: '📷' },
                       ].map(dt => (
                         <button
+                          type="button"
                           key={dt.value}
-                          onClick={() => {/* documentType is controlled by parent, just visual */}}
+                          onClick={() => setSelectedDocType(dt.value as DocumentType)}
                           className={`px-3 py-1.5 rounded-lg text-sm border transition ${
-                            documentType === dt.value
+                            selectedDocType === dt.value
                               ? 'bg-green-600 text-white border-green-600'
                               : 'bg-white text-gray-700 border-gray-300 hover:border-green-400'
                           }`}

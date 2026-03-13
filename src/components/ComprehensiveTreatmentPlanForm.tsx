@@ -523,9 +523,7 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
+  const handleSubmit = async () => {
     // Validate required fields
     if (!basicInfo.patient_id) {
       alert('Please select a patient');
@@ -644,9 +642,8 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} onKeyDown={(e) => {
-          // Prevent Enter key from triggering implicit form submission on ALL steps.
-          // The form should ONLY submit via an explicit click on the "Create Treatment Plan" button.
+        <form onSubmit={(e) => e.preventDefault()} onKeyDown={(e) => {
+          // Block ALL native form submission from keyboard
           if (e.key === 'Enter' && !(e.target as HTMLElement).matches('textarea')) {
             e.preventDefault();
           }
@@ -1698,7 +1695,8 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
               </button>
             ) : (
               <button
-                type="submit"
+                type="button"
+                onClick={() => handleSubmit()}
                 className="px-6 py-2 text-white bg-green-600 rounded-md hover:bg-green-700"
               >
                 Create Treatment Plan

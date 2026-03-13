@@ -202,8 +202,10 @@ export default function Dashboard() {
     return `${Math.floor(seconds / 604800)} weeks ago`;
   };
 
-  // Filter patients by search and ward
+  // Filter patients by search, ward, and admission status (admitted only for admin)
   const filteredPatients = dashboardPatients.filter(p => {
+    // Only show admitted patients
+    if (p.admission_status !== 'active') return false;
     const matchesSearch = !patientSearch || 
       p.name.toLowerCase().includes(patientSearch.toLowerCase()) ||
       p.hospital_number.toLowerCase().includes(patientSearch.toLowerCase()) ||
@@ -280,7 +282,7 @@ export default function Dashboard() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <h3 className="text-base sm:text-lg font-semibold text-clinical-dark flex items-center gap-2">
             <UserCheck className="h-5 w-5 text-primary-600" />
-            {isAdmin ? 'All Patients & Assignments' : 'My Assigned Patients'}
+            {isAdmin ? 'Admitted Patients & Assignments' : 'My Assigned Patients'}
             <span className="text-sm font-normal text-gray-500">({filteredPatients.length})</span>
           </h3>
           <div className="flex flex-col sm:flex-row gap-2">
