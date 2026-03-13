@@ -80,6 +80,14 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
     fetchTeamAndAutoAssign();
   }, []);
   
+  // Basic Information (must be declared before the useEffect that depends on it)
+  const [basicInfo, setBasicInfo] = useState({
+    patient_id: '',
+    diagnosis: '',
+    admission_date: format(new Date(), 'yyyy-MM-dd'),
+    notes: ''
+  });
+
   // Auto-fetch existing treatment plan when patient changes
   useEffect(() => {
     if (!basicInfo.patient_id) {
@@ -200,14 +208,6 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
     fetchExisting();
     return () => { cancelled = true; };
   }, [basicInfo.patient_id]);
-
-  // Basic Information
-  const [basicInfo, setBasicInfo] = useState({
-    patient_id: '',
-    diagnosis: '',
-    admission_date: format(new Date(), 'yyyy-MM-dd'),
-    notes: ''
-  });
 
   // Medical Team
   const [medicalTeam, setMedicalTeam] = useState<MedicalTeamAssignment>({
