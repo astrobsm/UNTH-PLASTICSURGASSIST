@@ -109,21 +109,36 @@ registerRoute(
 );
 
 // ─── API GET → NetworkFirst with cache fallback ─────────────
+// Custom handler that catches no-response errors and returns empty JSON
+// instead of letting unhandled promise rejections flood the console.
+const apiGetStrategy = new NetworkFirst({
+  cacheName: API_CACHE,
+  networkTimeoutSeconds: 8,
+  plugins: [
+    new CacheableResponsePlugin({ statuses: [0, 200] }),
+    new ExpirationPlugin({
+      maxEntries: 300,
+      maxAgeSeconds: 7 * 24 * 60 * 60, // 7 days
+      purgeOnQuotaError: true,
+    }),
+  ],
+});
+
 registerRoute(
   ({ url, request }) =>
     url.pathname.startsWith('/api/') && request.method === 'GET',
-  new NetworkFirst({
-    cacheName: API_CACHE,
-    networkTimeoutSeconds: 4,
-    plugins: [
-      new CacheableResponsePlugin({ statuses: [0, 200] }),
-      new ExpirationPlugin({
-        maxEntries: 300,
-        maxAgeSeconds: 7 * 24 * 60 * 60, // 7 days
-        purgeOnQuotaError: true,
-      }),
-    ],
-  })
+  async (args) => {
+    try {
+      return await apiGetStrategy.handle(args);
+    } catch (_err) {
+      // Network failed and no cache hit — return empty JSON so the app
+      // can continue working offline without unhandled promise rejections.
+      return new Response(JSON.stringify([]), {
+        status: 503,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+  }
 );
 
 // ─── API Mutations → NetworkOnly + Background Sync ──────────

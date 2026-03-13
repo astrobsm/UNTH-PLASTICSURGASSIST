@@ -80,6 +80,9 @@ class DataSyncService {
   private listeners: Set<(status: SyncStatus) => void> = new Set();
   private lastFullSyncTime: Date | null = null;
   private entitySyncStatus: Map<SyncableEntity, EntitySyncStatus> = new Map();
+  private consecutiveFailures = 0;
+  private readonly MAX_SYNC_INTERVAL = 10 * 60 * 1000; // 10 min cap
+  private readonly BASE_SYNC_INTERVAL = 2 * 60 * 1000; // 2 min base
 
   // Entity to API endpoint mapping - only entities with backend APIs
   private readonly entityEndpoints: Record<SyncableEntity, string> = {
@@ -243,29 +246,46 @@ class DataSyncService {
   }
 
   /**
-   * Start periodic sync (every 2 minutes)
+   * Start periodic sync with exponential backoff on failures
    */
   private startPeriodicSync(): void {
-    this.syncInterval = setInterval(async () => {
-      if (this.isOnline && !this.isSyncing) {
-        const pendingCount = await this.getTotalPendingChanges();
-        if (pendingCount > 0) {
-          console.log(`⏰ Periodic sync: ${pendingCount} items pending`);
-          await this.performFullSync();
-        } else {
-          // Still pull from server to get updates from other devices
-          await this.pullAllFromCloud();
-          
-          // Always sync MDT data to keep it in sync across devices
+    const scheduleNext = () => {
+      // Exponential backoff: 2 min → 4 min → 8 min → 10 min cap
+      const delay = Math.min(
+        this.BASE_SYNC_INTERVAL * Math.pow(2, this.consecutiveFailures),
+        this.MAX_SYNC_INTERVAL
+      );
+      this.syncInterval = setTimeout(async () => {
+        if (this.isOnline && !this.isSyncing) {
           try {
-            await mdtService.pushToServer();
-            await mdtService.syncFromServer();
-          } catch (mdtError) {
-            console.warn('MDT periodic sync failed:', mdtError);
+            const pendingCount = await this.getTotalPendingChanges();
+            if (pendingCount > 0) {
+              console.log(`⏰ Periodic sync: ${pendingCount} items pending`);
+              await this.performFullSync();
+            } else {
+              // Pull from server to get updates from other devices
+              const pullResult = await this.pullAllFromCloud();
+
+              // Only sync MDT if pull didn't error on every entity
+              if (pullResult.errors.length === 0) {
+                try {
+                  await mdtService.pushToServer();
+                  await mdtService.syncFromServer();
+                } catch (mdtError) {
+                  console.warn('MDT periodic sync failed:', mdtError);
+                }
+              }
+            }
+            // Success — reset backoff
+            this.consecutiveFailures = 0;
+          } catch {
+            this.consecutiveFailures = Math.min(this.consecutiveFailures + 1, 4);
           }
         }
-      }
-    }, 2 * 60 * 1000); // Every 2 minutes
+        scheduleNext();
+      }, delay);
+    };
+    scheduleNext();
   }
 
   /**
@@ -751,7 +771,7 @@ class DataSyncService {
    */
   public destroy(): void {
     if (this.syncInterval) {
-      clearInterval(this.syncInterval);
+      clearTimeout(this.syncInterval);
     }
     this.retryTimeouts.forEach(timeout => clearTimeout(timeout));
     this.listeners.clear();
