@@ -88,6 +88,13 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
     if (!videoRef.current || !canvasRef.current) return;
     const video = videoRef.current;
     const canvas = canvasRef.current;
+
+    // Ensure the video is actually producing frames before capturing
+    if (!video.videoWidth || !video.videoHeight) {
+      setError('Camera is not ready yet. Please wait a moment and try again.');
+      return;
+    }
+
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     const ctx = canvas.getContext('2d');

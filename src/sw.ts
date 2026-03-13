@@ -142,13 +142,25 @@ registerRoute(
 );
 
 // ─── API Mutations → NetworkOnly + Background Sync ──────────
+const mutationStrategy = new NetworkOnly({ plugins: [bgSyncPlugin] });
 const mutationMethods: Array<'POST' | 'PUT' | 'PATCH' | 'DELETE'> = ['POST', 'PUT', 'PATCH', 'DELETE'];
 
 mutationMethods.forEach(method => {
   registerRoute(
     ({ url, request }) =>
       url.pathname.startsWith('/api/') && request.method === method,
-    new NetworkOnly({ plugins: [bgSyncPlugin] }),
+    async (args) => {
+      try {
+        return await mutationStrategy.handle(args);
+      } catch (_err) {
+        // Offline — bgSyncPlugin already queued the request.
+        // Return a synthetic 503 so the app doesn't see an unhandled rejection.
+        return new Response(JSON.stringify({ error: 'Queued for background sync' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+    },
     method
   );
 });

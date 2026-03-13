@@ -478,6 +478,12 @@ class DataSyncService {
         const errorMsg = `Failed to pull ${entity}: ${error instanceof Error ? error.message : error}`;
         result.errors.push(errorMsg);
         console.warn(`⚠️ ${errorMsg}`);
+
+        // If this is a network failure, abort remaining pulls — they'll all fail too
+        if (error instanceof TypeError && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError'))) {
+          console.warn('⏹️ Network down — skipping remaining entity pulls');
+          break;
+        }
       }
     }
 
