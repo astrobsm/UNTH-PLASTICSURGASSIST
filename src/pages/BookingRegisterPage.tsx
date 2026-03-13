@@ -176,12 +176,13 @@ const stageBadge = (status: PreparationStatus) => {
 const getPreparationStatus = (
   a: PreoperativeAssessment | null,
   b?: SurgeryBooking | null,
-  overrides?: ManualStageOverrides[string]
+  overrides?: ManualStageOverrides[string],
+  hasShoppingList?: boolean
 ): PreparationStatus => {
   const riskAssessed = overrides?.riskAssessed ?? !!(a?.bleeding_risk?.risk_level || a?.dvt_risk?.risk_category);
   const comorbidityChecked = overrides?.comorbidityChecked ?? !!(a?.comorbidities_medications && a.comorbidities_medications.length >= 0 && a.assessed_at);
   const investigationsOrdered = overrides?.investigationsOrdered ?? !!(a?.comprehensive_summary && a.comprehensive_summary.length > 30);
-  const shoppingListDone = overrides?.shoppingListDone ?? !!(b?.equipment_needed && b.equipment_needed.length > 0);
+  const shoppingListDone = overrides?.shoppingListDone ?? (hasShoppingList || !!(b?.equipment_needed && b.equipment_needed.length > 0));
   const consentObtained = overrides?.consentObtained ?? !!(a?.consent_document || b?.consent_obtained);
   const paymentConfirmed = overrides?.paymentConfirmed ?? !!(a?.payment_evidence);
   const preOpInstructionsGiven = overrides?.preOpInstructionsGiven ?? !!(a?.preop_instructions && a.preop_instructions.length > 10);
@@ -403,7 +404,13 @@ const BookingRegisterPage: React.FC = () => {
             const bookings = await schedulingService.getSurgeryBookings();
             const b = (bookings || []).find((bk: SurgeryBooking) => bk.patient_id === p.id);
             const overrides = stageOverrides[p.id];
-            const status = getPreparationStatus(a, b, overrides);
+            // Check shopping_lists table for this patient
+            let hasShoppingList = false;
+            try {
+              const slCount = await db.table('shopping_lists').where('patient_id').equals(p.id).count();
+              hasShoppingList = slCount > 0;
+            } catch { /* table may not exist yet */ }
+            const status = getPreparationStatus(a, b, overrides, hasShoppingList);
             results.push({ patient: p, assessment: a, booking: b, status });
           }
         } catch { /* no assessment */ }

@@ -572,6 +572,44 @@ class ApiClient {
     return data.results || [];
   }
 
+  // Blood Transfusions
+  async createBloodTransfusion(data: any) {
+    const res = await this.request('/sync/push', {
+      method: 'POST',
+      body: JSON.stringify({ changes: [{ entityType: 'blood_transfusions', entityId: data.id || `bt_${Date.now()}`, action: 'upsert', payload: data }] })
+    });
+    return res;
+  }
+
+  async getBloodTransfusions(patientId?: string) {
+    const data = await this.request('/sync/blood-transfusions');
+    const all = Array.isArray(data) ? data : [];
+    return patientId ? all.filter((t: any) => String(t.patient_id) === String(patientId)) : all;
+  }
+
+  async updateBloodTransfusion(id: string, updates: any) {
+    return this.request('/sync/push', {
+      method: 'POST',
+      body: JSON.stringify({ changes: [{ entityType: 'blood_transfusions', entityId: id, action: 'upsert', payload: { ...updates, id } }] })
+    });
+  }
+
+  // Shopping Lists
+  async createShoppingList(listData: any) {
+    return this.request('/sync/push', {
+      method: 'POST',
+      body: JSON.stringify({ changes: [{ entityType: 'shopping_lists', entityId: listData.id || `sl_${Date.now()}`, action: 'upsert', payload: listData }] })
+    });
+  }
+
+  async getShoppingLists(patientId?: string) {
+    try {
+      const data = await this.request('/sync/shopping-lists');
+      const all = Array.isArray(data) ? data : [];
+      return patientId ? all.filter((s: any) => String(s.patient_id) === String(patientId)) : all;
+    } catch { return []; }
+  }
+
   // Risk assessments
   async createRiskAssessment(assessmentData: any) {
     const data = await this.request('/risk-assessments', {

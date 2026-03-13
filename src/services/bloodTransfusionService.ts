@@ -191,6 +191,11 @@ class BloodTransfusionService {
     try {
       updates.updated_at = new Date();
       await db.blood_transfusions.update(parseInt(id), updates as any);
+      // Push update to server
+      if (navigator.onLine) {
+        const full = await db.blood_transfusions.get(parseInt(id));
+        if (full) pushTransfusionToServer({ ...full, id: String(id) }).catch(() => {});
+      }
     } catch (error) {
       console.error('Error updating transfusion:', error);
       throw new Error('Failed to update transfusion record');

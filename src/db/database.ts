@@ -220,6 +220,7 @@ export class PlasticSurgeonDB extends Dexie {
   clinic_duty_logs!: Table<any>; // For clinic duty tracking & logs
   notice_board!: Table<any>; // For notice board posts and announcements
   ps_unit_rosters!: Table<any>; // For PS Unit rotation roster configs
+  shopping_lists!: Table<any>; // For saved shopping lists with cloud persistence
 
   constructor() {
     super('PlasticSurgeonDB');
@@ -1234,6 +1235,11 @@ export class PlasticSurgeonDB extends Dexie {
     // Version 25: Add PS Unit roster configuration table
     this.version(25).stores({
       ps_unit_rosters: '++id, isActive, startDate, createdAt'
+    });
+
+    // Version 26: Add shopping_lists table for cloud persistence
+    this.version(26).stores({
+      shopping_lists: '++id, patient_id, patient_name, hospital_number, category, created_at, created_by'
     });
 
     // Add hooks to automatically track changes

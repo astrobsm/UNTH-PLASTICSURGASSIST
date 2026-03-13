@@ -23,6 +23,7 @@ import { useAuthStore } from '../store/authStore';
 import { db } from '../db/database';
 import { syncService } from '../db/syncService';
 import { patientService } from '../services/patientService';
+import { apiClient } from '../services/apiClient';
 import jsPDF from 'jspdf';
 
 // ─── TYPES ──────────────────────────────────────────────────────────────────
@@ -166,6 +167,17 @@ export default function PrescriptionsPage() {
 
   async function loadSavedPrescriptions() {
     try {
+      // Fetch from cloud first, merge into local DB
+      if (navigator.onLine && apiClient.getToken()) {
+        try {
+          const cloudData = await apiClient.getPrescriptions();
+          if (Array.isArray(cloudData) && cloudData.length > 0) {
+            for (const rx of cloudData) {
+              try { await db.table('prescriptions').put({ ...rx, synced: true }); } catch { /* ignore dups */ }
+            }
+          }
+        } catch (e) { console.warn('Failed to pull prescriptions from cloud:', e); }
+      }
       const items = await db.table('prescriptions').toArray();
       setSavedPrescriptions(items);
     } catch {
@@ -314,9 +326,19 @@ export default function PrescriptionsPage() {
         createdBy: user?.full_name || user?.username || 'Unknown',
       };
       await db.table('prescriptions').put(record);
-      // Queue for cloud sync
-      const localId = record.id || Date.now();
-      await syncService.queueAction('create', 'prescriptions', localId as number, record);
+      // Sync to cloud directly via apiClient
+      if (navigator.onLine && apiClient.getToken()) {
+        try {
+          await apiClient.createPrescription(record);
+        } catch (e) {
+          console.warn('Cloud sync failed, queuing for later:', e);
+          const localId = record.id || Date.now();
+          await syncService.queueAction('create', 'prescriptions', localId as number, record);
+        }
+      } else {
+        const localId = record.id || Date.now();
+        await syncService.queueAction('create', 'prescriptions', localId as number, record);
+      }
       alert('Prescriptions saved successfully!');
       loadSavedPrescriptions();
     } catch (err) {

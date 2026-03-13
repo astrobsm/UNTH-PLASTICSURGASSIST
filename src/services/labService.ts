@@ -461,6 +461,12 @@ class LabService {
 
   async updateInvestigationStatus(id: string, status: LabInvestigation['status']): Promise<void> {
     await db.lab_investigations.update(id, { status, updated_at: new Date() });
+    // Push status update to cloud
+    try {
+      await apiClient.updateLabInvestigation(id, { status, updated_at: new Date().toISOString() });
+    } catch (err) {
+      console.warn('Could not push investigation status to cloud:', err);
+    }
   }
 
   // Lab Results Management
@@ -477,6 +483,13 @@ class LabService {
 
     await db.lab_results.add(newResult);
     
+    // Push to cloud
+    try {
+      await apiClient.createLabResult({ ...newResult, created_at: now.toISOString(), updated_at: now.toISOString() });
+    } catch (err) {
+      console.warn('Could not push lab result to cloud:', err);
+    }
+    
     // Generate AI interpretation if not provided
     if (!result.ai_interpretation) {
       await this.generateAIInterpretation(id);
@@ -486,6 +499,24 @@ class LabService {
   }
 
   async getLabResults(patientId?: string, testName?: string): Promise<LabResult[]> {
+    // Fetch from cloud first and merge into local DB
+    try {
+      const cloudResults = await apiClient.getLabResults();
+      if (cloudResults && cloudResults.length > 0) {
+        for (const r of cloudResults) {
+          await db.lab_results.put({
+            ...r,
+            created_at: r.created_at ? new Date(r.created_at) : new Date(),
+            updated_at: r.updated_at ? new Date(r.updated_at) : new Date(),
+            result_date: r.result_date ? new Date(r.result_date) : new Date(),
+            synced: true
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('Could not fetch lab results from cloud:', err);
+    }
+
     let query = db.lab_results.orderBy('result_date').reverse();
     
     if (patientId) {

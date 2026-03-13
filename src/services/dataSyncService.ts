@@ -467,7 +467,8 @@ class DataSyncService {
       'lab_investigations',
       'surgeries',
       'ward_rounds',
-      'wound_care'
+      'wound_care',
+      'blood_transfusions'
     ];
 
     for (const entity of entitiesToPull) {

@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect } from 'react';
-import { Download, ShoppingCart, User, Search, Heart, Scissors, Plus, Minus, Trash2, MessageCircle, Loader2, Printer } from 'lucide-react';
+import { Download, ShoppingCart, User, Search, Heart, Scissors, Plus, Minus, Trash2, MessageCircle, Loader2, Printer, List, Calendar, Package } from 'lucide-react';
 import {
   createPDF,
   sanitizeTextForPDF,
@@ -10,6 +10,10 @@ import {
   sharePDFViaWhatsApp
 } from '../utils/pdfUtils';
 import { patientService } from '../services/patientService';
+import { db } from '../db/database';
+import { apiClient } from '../services/apiClient';
+import { useAuthStore } from '../store/authStore';
+import toast from 'react-hot-toast';
 
 interface Patient {
   id: string;
@@ -33,6 +37,7 @@ interface SelectedItem extends AvailableItem {
 }
 
 export default function ShoppingList() {
+  const { user } = useAuthStore();
   const [selectedCategory, setSelectedCategory] = useState<'wound_dressing' | 'surgery' | 'bedside_debridement'>('surgery');
   const [showPatientSelector, setShowPatientSelector] = useState(false);
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -45,10 +50,76 @@ export default function ShoppingList() {
   const [manualHospitalNumber, setManualHospitalNumber] = useState('');
   const [shareAction, setShareAction] = useState<'download' | 'whatsapp' | 'thermal'>('download');
   const [isSharing, setIsSharing] = useState(false);
+  const [savedLists, setSavedLists] = useState<any[]>([]);
+  const [showSavedLists, setShowSavedLists] = useState(false);
+  const [loadingSavedLists, setLoadingSavedLists] = useState(false);
 
   useEffect(() => {
     loadPatients();
+    loadSavedLists();
   }, []);
+
+  const loadSavedLists = async () => {
+    try {
+      setLoadingSavedLists(true);
+      // Fetch from cloud first
+      try {
+        const cloudLists = await apiClient.getShoppingLists();
+        if (cloudLists && cloudLists.length > 0) {
+          for (const list of cloudLists) {
+            await db.table('shopping_lists').put({ ...list, synced: true });
+          }
+        }
+      } catch (err) {
+        console.warn('Could not fetch shopping lists from cloud:', err);
+      }
+      // Load from local DB
+      const localLists = await db.table('shopping_lists').toArray();
+      setSavedLists(localLists.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
+    } catch (error) {
+      console.error('Error loading saved lists:', error);
+    } finally {
+      setLoadingSavedLists(false);
+    }
+  };
+
+  const saveShoppingList = async (patientId: string | null, patientName: string, hospitalNumber: string) => {
+    try {
+      const record = {
+        id: `sl_${Date.now()}`,
+        patient_id: patientId || '',
+        patient_name: patientName,
+        hospital_number: hospitalNumber,
+        category: selectedCategory,
+        items: selectedItems.map(item => ({
+          id: item.id,
+          name: item.name,
+          category: item.category,
+          quantity: item.quantity,
+          defaultUnit: item.defaultUnit
+        })),
+        total_items: selectedItems.length,
+        total_quantity: selectedItems.reduce((sum, item) => sum + item.quantity, 0),
+        created_at: new Date().toISOString(),
+        created_by: user?.name || 'Unknown'
+      };
+
+      // Save to local DB
+      await db.table('shopping_lists').put(record);
+
+      // Push to cloud
+      try {
+        await apiClient.createShoppingList(record);
+      } catch (err) {
+        console.warn('Could not push shopping list to cloud:', err);
+      }
+
+      toast.success('Shopping list saved');
+      loadSavedLists();
+    } catch (error) {
+      console.error('Error saving shopping list:', error);
+    }
+  };
 
   const loadPatients = async () => {
     try {
@@ -450,6 +521,9 @@ export default function ShoppingList() {
     const filename = `Thermal_ShoppingList_${sanitizedPatientName}_${new Date().toISOString().split('T')[0]}.pdf`;
     doc.save(filename);
     
+    // Persist shopping list to DB + cloud
+    await saveShoppingList(patient?.id || null, patientName, hospitalNum);
+    
     setShowPatientSelector(false);
     setPatientSearchTerm('');
     setShareAction('download');
@@ -599,6 +673,9 @@ export default function ShoppingList() {
     } else {
       doc.save(filename);
     }
+    
+    // Persist shopping list to DB + cloud
+    await saveShoppingList(patient?.id || null, patientName, hospitalNum);
     
     // Close modals and reset
     setShowPatientSelector(false);
@@ -829,6 +906,92 @@ export default function ShoppingList() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Saved Shopping Lists Section */}
+      <div className="mt-8">
+        <button
+          onClick={() => {
+            setShowSavedLists(!showSavedLists);
+            if (!showSavedLists) loadSavedLists();
+          }}
+          className="flex items-center gap-2 px-6 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium text-gray-700 shadow-sm"
+        >
+          <List className="w-5 h-5" />
+          {showSavedLists ? 'Hide' : 'View'} Saved Shopping Lists ({savedLists.length})
+        </button>
+
+        {showSavedLists && (
+          <div className="mt-4 bg-white rounded-lg shadow-md p-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <Package className="w-5 h-5 text-green-600" />
+              Saved Shopping Lists
+            </h2>
+
+            {loadingSavedLists ? (
+              <div className="text-center py-8 text-gray-500">
+                <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
+                Loading saved lists...
+              </div>
+            ) : savedLists.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <ShoppingCart className="w-10 h-10 mx-auto mb-2 text-gray-400" />
+                <p>No saved shopping lists yet</p>
+                <p className="text-sm">Generate a shopping list above to save it</p>
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-[500px] overflow-y-auto">
+                {savedLists.map((list: any) => (
+                  <div key={list.id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-semibold text-gray-900">{list.patient_name || 'Unknown Patient'}</span>
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                            list.category === 'surgery' ? 'bg-blue-100 text-blue-700' :
+                            list.category === 'wound_dressing' ? 'bg-green-100 text-green-700' :
+                            'bg-orange-100 text-orange-700'
+                          }`}>
+                            {list.category === 'wound_dressing' ? 'Wound Dressing' :
+                             list.category === 'bedside_debridement' ? 'Bedside Debridement' :
+                             'Surgery'}
+                          </span>
+                        </div>
+                        <div className="text-sm text-gray-600 flex items-center gap-4">
+                          <span>Hosp #: {list.hospital_number || 'N/A'}</span>
+                          <span className="flex items-center gap-1">
+                            <Calendar className="w-3 h-3" />
+                            {new Date(list.created_at).toLocaleDateString()} {new Date(list.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                          </span>
+                          <span>By: {list.created_by || 'Unknown'}</span>
+                        </div>
+                        {list.items && Array.isArray(list.items) && (
+                          <div className="mt-2 text-sm text-gray-700">
+                            <span className="font-medium">{list.total_items || list.items.length} items</span>
+                            <span className="mx-2">•</span>
+                            <span>Total qty: {list.total_quantity || list.items.reduce((s: number, i: any) => s + (i.quantity || 1), 0)}</span>
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {list.items.slice(0, 5).map((item: any, idx: number) => (
+                                <span key={idx} className="px-2 py-0.5 bg-gray-100 rounded text-xs text-gray-600">
+                                  {item.name} x{item.quantity}
+                                </span>
+                              ))}
+                              {list.items.length > 5 && (
+                                <span className="px-2 py-0.5 bg-gray-100 rounded text-xs text-gray-500">
+                                  +{list.items.length - 5} more
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Patient Selector Modal */}
