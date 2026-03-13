@@ -409,6 +409,36 @@ class TreatmentPlanningService {
     await db.treatment_plans.update(planId as any, updates);
   }
 
+  /**
+   * Update an existing treatment plan (full replacement).
+   * Syncs to server then updates local DB.
+   */
+  async updateTreatmentPlan(planId: string, data: any): Promise<string> {
+    const updates: any = {
+      ...data,
+      updated_at: new Date()
+    };
+    // Remove fields that shouldn't overwrite existing metadata
+    delete updates.created_at;
+
+    console.log('📝 Updating treatment plan:', planId, updates);
+
+    // Try to sync to server first
+    try {
+      if (navigator.onLine) {
+        await apiClient.updateTreatmentPlan(planId, updates);
+        console.log('✅ Treatment plan update synced to server');
+      }
+    } catch (error) {
+      console.warn('⚠️ Failed to sync treatment plan update to server:', error);
+    }
+
+    // Update locally
+    await this.updatePlanLocal(planId, { ...updates, synced: navigator.onLine });
+    toast.success('Treatment plan updated successfully');
+    return planId;
+  }
+
   // Create new treatment plan
   async createTreatmentPlan(data: any): Promise<string> {
     // Ensure all required array fields have defaults

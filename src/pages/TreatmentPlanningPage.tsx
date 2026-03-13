@@ -687,7 +687,11 @@ const TreatmentPlanningPage: React.FC = () => {
         <ComprehensiveTreatmentPlanForm
           onClose={() => setShowCreatePlan(false)}
           onSubmit={async (data) => {
-            await treatmentPlanningService.createTreatmentPlan(data);
+            if (data.existingPlanId) {
+              await treatmentPlanningService.updateTreatmentPlan(data.existingPlanId, data);
+            } else {
+              await treatmentPlanningService.createTreatmentPlan(data);
+            }
             setShowCreatePlan(false);
             loadData();
           }}

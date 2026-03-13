@@ -9,7 +9,8 @@ import {
   PlannedProcedureEnhanced,
   PlannedReview,
   MedicalTeamAssignment,
-  DischargePlanning
+  DischargePlanning,
+  treatmentPlanningService
 } from '../services/treatmentPlanningService';
 import { medicationDosingService, GFRDosingRecommendation } from '../services/medicationDosingService';
 import { investigationPdfService } from '../services/investigationPdfService';
@@ -31,6 +32,8 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
   const { user } = useAuthStore();
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [existingPlanId, setExistingPlanId] = useState<string | null>(null);
+  const [loadingExistingPlan, setLoadingExistingPlan] = useState(false);
   
   // Staff by role - fetched from server API
   const [seniorRegistrars, setSeniorRegistrars] = useState<StaffByRole[]>([]);
@@ -77,6 +80,127 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
     fetchTeamAndAutoAssign();
   }, []);
   
+  // Auto-fetch existing treatment plan when patient changes
+  useEffect(() => {
+    if (!basicInfo.patient_id) {
+      setExistingPlanId(null);
+      return;
+    }
+    let cancelled = false;
+    const fetchExisting = async () => {
+      setLoadingExistingPlan(true);
+      try {
+        const plans = await treatmentPlanningService.getPatientTreatmentPlans(basicInfo.patient_id);
+        if (cancelled) return;
+        // Find the most recent active plan
+        const activePlan = plans
+          .filter(p => p.status === 'active' || p.status === 'draft')
+          .sort((a, b) => new Date(b.updated_at || b.created_at || 0).getTime() - new Date(a.updated_at || a.created_at || 0).getTime())[0];
+        if (activePlan) {
+          setExistingPlanId(String(activePlan.id));
+          // Pre-populate basic info
+          setBasicInfo(prev => ({
+            ...prev,
+            diagnosis: activePlan.diagnosis || prev.diagnosis,
+            admission_date: activePlan.admission_date
+              ? format(new Date(activePlan.admission_date), 'yyyy-MM-dd')
+              : prev.admission_date,
+            notes: activePlan.notes || prev.notes
+          }));
+          // Pre-populate medical team
+          if (activePlan.medical_team) {
+            const mt = activePlan.medical_team as any;
+            setMedicalTeam(prev => ({
+              ...prev,
+              senior_registrar: mt.senior_registrar || prev.senior_registrar,
+              registrar: mt.registrar || prev.registrar,
+              house_officer: mt.house_officer || prev.house_officer,
+            }));
+          }
+          // Pre-populate medications
+          const meds = activePlan.planned_medications || activePlan.medications || [];
+          if (Array.isArray(meds) && meds.length > 0) {
+            setMedications(meds.map((m: any) => ({
+              medication_name: m.medication_name || m.name || '',
+              dosage: m.dosage || m.dose || '',
+              route: m.route || 'oral',
+              frequency: m.frequency || '',
+              duration: m.duration || '',
+              start_date: m.start_date ? new Date(m.start_date) : new Date(),
+              notes: m.notes || '',
+              status: m.status || 'active'
+            })));
+          }
+          // Pre-populate investigations
+          const invs = activePlan.planned_investigations || activePlan.investigations || [];
+          if (Array.isArray(invs) && invs.length > 0) {
+            setInvestigations(invs.map((inv: any) => ({
+              investigation_name: inv.investigation_name || inv.name || '',
+              investigation_type: inv.investigation_type || 'lab',
+              frequency: inv.frequency || 'once',
+              repeat_count: inv.repeat_count || 1,
+              target_value: inv.target_value || '',
+              target_range: inv.target_range || '',
+              ordered_date: inv.ordered_date ? new Date(inv.ordered_date) : new Date(),
+              notes: inv.notes || '',
+              status: inv.status || 'pending'
+            })));
+          }
+          // Pre-populate procedures
+          const procs = activePlan.planned_procedures || activePlan.procedures || [];
+          if (Array.isArray(procs) && procs.length > 0) {
+            setProcedures(procs.map((p: any) => ({
+              procedure_name: p.procedure_name || p.name || '',
+              procedure_type: p.procedure_type || 'minor',
+              proposed_date: p.proposed_date ? new Date(p.proposed_date) : new Date(),
+              proposed_time: p.proposed_time || '',
+              frequency: p.frequency,
+              repeat_count: p.repeat_count,
+              surgeon: p.surgeon || '',
+              location: p.location || '',
+              notes: p.notes || '',
+              status: p.status || 'planned'
+            })));
+          }
+          // Pre-populate reviews
+          const revs = activePlan.planned_reviews || activePlan.reviews || [];
+          if (Array.isArray(revs) && revs.length > 0) {
+            setReviews(revs.map((r: any) => ({
+              review_type: r.review_type || 'daily',
+              days_of_week: r.days_of_week || { monday: false, tuesday: false, wednesday: false, thursday: false, friday: false, saturday: false, sunday: false },
+              start_date: r.start_date ? new Date(r.start_date) : new Date(),
+              end_date: r.end_date ? new Date(r.end_date) : undefined,
+              assigned_to: r.assigned_to || 'house_officer',
+              assigned_person_name: r.assigned_person_name || '',
+              status: r.status || 'active'
+            })));
+          }
+          // Pre-populate discharge plan
+          if (activePlan.discharge_plan) {
+            const dp = activePlan.discharge_plan as any;
+            setDischargePlan({
+              initial_discharge_date: dp.initial_discharge_date ? new Date(dp.initial_discharge_date) : dischargePlan.initial_discharge_date,
+              current_discharge_date: dp.current_discharge_date ? new Date(dp.current_discharge_date) : dischargePlan.current_discharge_date,
+              discharge_criteria: dp.discharge_criteria || [],
+              extensions: dp.extensions || [],
+              status: dp.status || 'on_track'
+            });
+          }
+          console.log('📋 Loaded existing treatment plan for editing:', activePlan.id);
+        } else {
+          setExistingPlanId(null);
+        }
+      } catch (error) {
+        console.warn('Could not fetch existing treatment plans:', error);
+        setExistingPlanId(null);
+      } finally {
+        if (!cancelled) setLoadingExistingPlan(false);
+      }
+    };
+    fetchExisting();
+    return () => { cancelled = true; };
+  }, [basicInfo.patient_id]);
+
   // Basic Information
   const [basicInfo, setBasicInfo] = useState({
     patient_id: '',
@@ -542,6 +666,7 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
 
     const planData = {
       ...basicInfo,
+      existingPlanId: existingPlanId || undefined,
       patient_id: parseInt(basicInfo.patient_id),
       patient_name: `${patient.first_name} ${patient.last_name}`,
       hospital_number: patient.hospital_number,
@@ -682,6 +807,28 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
                   />
                 </div>
               </div>
+
+              {/* Existing plan banner */}
+              {loadingExistingPlan && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center gap-2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-600 border-t-transparent" />
+                  <span className="text-sm text-blue-700">Checking for existing treatment plans...</span>
+                </div>
+              )}
+              {existingPlanId && !loadingExistingPlan && (
+                <div className="bg-amber-50 border border-amber-300 rounded-lg p-4">
+                  <div className="flex items-start gap-2">
+                    <Info className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-amber-800">Existing Treatment Plan Found</p>
+                      <p className="text-sm text-amber-700 mt-1">
+                        This patient already has an active treatment plan (#{existingPlanId}). The form has been pre-populated with the existing data.
+                        Edit the fields as needed and submit to update the plan. No duplicate will be created.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Diagnosis *</label>
@@ -1699,7 +1846,7 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
                 onClick={() => handleSubmit()}
                 className="px-6 py-2 text-white bg-green-600 rounded-md hover:bg-green-700"
               >
-                Create Treatment Plan
+                {existingPlanId ? 'Update Treatment Plan' : 'Create Treatment Plan'}
               </button>
             )}
           </div>
