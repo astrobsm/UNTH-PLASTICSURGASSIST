@@ -521,10 +521,15 @@ class SyncService {
     const result = await db.lab_results?.get(localId);
     if (!result) return;
 
-    if (action === 'create') {
-      const response = await this.apiCall('POST', '/lab-results', result);
-      await db.lab_results.update(localId, { id: response.id, synced: true });
-      console.log('✅ Lab result synced to server:', response.id);
+    if (action === 'create' && result.investigation_id) {
+      // Results are attached to their parent lab order via PUT /lab-orders/{id}
+      const response = await this.apiCall('PUT', `/lab-orders/${result.investigation_id}`, {
+        results: result,
+        status: 'completed',
+        completedAt: new Date().toISOString()
+      });
+      await db.lab_results.update(localId, { synced: true });
+      console.log('✅ Lab result synced to server via lab order:', result.investigation_id);
     }
   }
 

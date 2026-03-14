@@ -555,21 +555,40 @@ class ApiClient {
     return data.labOrder || data.investigation || data;
   }
 
-  // Lab results
+  // Lab results - stored as part of lab orders (no standalone /lab-results endpoint)
   async createLabResult(resultData: any) {
-    const data = await this.request('/lab-results', {
-      method: 'POST',
-      body: JSON.stringify(resultData)
+    // Results are attached to their parent lab order via PUT /lab-orders/{id}
+    const investigationId = resultData.investigation_id;
+    if (!investigationId) {
+      console.warn('createLabResult: no investigation_id, skipping server push');
+      return resultData;
+    }
+    const data = await this.request(`/lab-orders/${investigationId}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        results: resultData,
+        status: 'completed',
+        completedAt: new Date().toISOString()
+      })
     });
-    return data.result;
+    return data.labOrder || data;
   }
 
   async getLabResults(investigationId?: string, since?: string) {
-    let query = '';
-    if (investigationId) query += `?investigationId=${investigationId}`;
-    if (since) query += (query ? '&' : '?') + `since=${since}`;
-    const data = await this.request(`/lab-results${query}`);
-    return data.results || [];
+    // Fetch completed lab orders and extract results
+    let query = '?status=completed';
+    if (investigationId) query = `?investigationId=${investigationId}`;
+    if (since) query += `&since=${since}`;
+    try {
+      const data = await this.request(`/lab-orders${query}`);
+      const orders = data.labOrders || data.investigations || [];
+      // Extract results from completed orders that have them
+      return orders
+        .filter((o: any) => o.results)
+        .map((o: any) => (typeof o.results === 'string' ? JSON.parse(o.results) : o.results));
+    } catch {
+      return [];
+    }
   }
 
   // Blood Transfusions

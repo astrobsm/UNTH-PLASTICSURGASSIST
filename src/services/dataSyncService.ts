@@ -140,8 +140,8 @@ class DataSyncService {
     this.loadSyncState();
     this.startPeriodicSync();
     
-    // Perform initial sync on startup
-    if (this.isOnline) {
+    // Perform initial sync on startup (only if authenticated)
+    if (this.isOnline && apiClient.getToken()) {
       setTimeout(() => this.performFullSync(), 3000);
     }
   }
@@ -256,7 +256,7 @@ class DataSyncService {
         this.MAX_SYNC_INTERVAL
       );
       this.syncInterval = setTimeout(async () => {
-        if (this.isOnline && !this.isSyncing) {
+        if (this.isOnline && !this.isSyncing && apiClient.getToken()) {
           try {
             const pendingCount = await this.getTotalPendingChanges();
             if (pendingCount > 0) {
@@ -457,6 +457,13 @@ class DataSyncService {
   }> {
     const result = { pulled: 0, errors: [] as string[] };
 
+    // Auth guard — skip pull if not authenticated
+    const token = apiClient.getToken();
+    if (!token) {
+      logger.log('🔒 Not authenticated, skipping pull');
+      return result;
+    }
+
     // Define entities to pull in order (dependencies first)
     const entitiesToPull: SyncableEntity[] = [
       'patients',       // Must be first - other entities reference patients
@@ -483,6 +490,12 @@ class DataSyncService {
         // If this is a network failure, abort remaining pulls — they'll all fail too
         if (error instanceof TypeError && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError'))) {
           console.warn('⏹️ Network down — skipping remaining entity pulls');
+          break;
+        }
+
+        // If this is an auth failure (401/403), abort remaining pulls
+        if (error instanceof Error && (error.message.includes('401') || error.message.includes('403') || error.message.includes('Not authenticated'))) {
+          console.warn('🔒 Auth failure — skipping remaining entity pulls');
           break;
         }
       }
