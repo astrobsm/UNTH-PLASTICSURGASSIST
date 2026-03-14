@@ -7,6 +7,11 @@ const API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL
     ? '/api'  // Production fallback: use relative path
     : 'http://localhost:3001/api');  // Development: direct to backend
 
+// Check if user is authenticated
+function isAuthenticated(): boolean {
+  return !!localStorage.getItem('auth_token');
+}
+
 // Get auth headers from localStorage
 function getAuthHeaders(): HeadersInit {
   const token = localStorage.getItem('auth_token');
@@ -502,6 +507,10 @@ class MDTService {
 
   // Sync MDT data from server
   async syncFromServer(): Promise<void> {
+    if (!isAuthenticated()) {
+      console.warn('[MDT SYNC] Skipping pull — no auth token');
+      return;
+    }
     try {
       // Fetch all MDT data from server using sync/pull endpoint
       const headers = getAuthHeaders();
@@ -609,6 +618,10 @@ class MDTService {
 
   // Push all local MDT data to server
   async pushToServer(): Promise<void> {
+    if (!isAuthenticated()) {
+      console.warn('[MDT SYNC] Skipping push — no auth token');
+      return;
+    }
     try {
       const headers = getAuthHeaders();
       
