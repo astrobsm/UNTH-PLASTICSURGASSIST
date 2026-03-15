@@ -128,7 +128,8 @@ function toServerFormat(round: Partial<WardRound>): any {
     patient_name: round.patient_name || '',
     hospital_number: round.hospital_number || '',
     round_type: round.round_type || 'house_officers_round',
-    round_time: round.round_time || ''
+    round_time: round.round_time || '',
+    clinical_images: round.clinical_images || []
   };
 
   const vitalSigns: any = {};
@@ -229,7 +230,7 @@ function fromServerFormat(row: any): WardRound {
     consultation_specialty: findingsObj.consultation_specialty || '',
     consultation_reason: findingsObj.consultation_reason || '',
     lmp: findingsObj.lmp || '',
-    clinical_images: row.clinical_images || [],
+    clinical_images: findingsObj.clinical_images || row.clinical_images || [],
     plan_changes: [],
     created_at: row.created_at ? new Date(row.created_at) : undefined,
     updated_at: row.updated_at ? new Date(row.updated_at) : undefined,
