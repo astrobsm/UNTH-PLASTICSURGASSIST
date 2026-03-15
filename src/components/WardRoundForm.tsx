@@ -635,6 +635,18 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
             {selectedPatient && (
               <button
                 type="button"
+                onClick={() => { setScannerDocType('general'); setShowDocumentScanner(true); }}
+                className="flex items-center gap-2 px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 text-white rounded-lg transition-colors text-sm font-medium"
+                title="Scan a document and auto-fill ward round fields"
+              >
+                <FileSearch className="w-4 h-4" />
+                <Camera className="w-4 h-4" />
+                Scan &amp; Autofill
+              </button>
+            )}
+            {selectedPatient && (
+              <button
+                type="button"
                 onClick={() => setShowScribePanel(true)}
                 className="flex items-center gap-2 px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 text-white rounded-lg transition-colors text-sm font-medium"
                 title="AI Medical Scribe - Record and auto-fill"
