@@ -590,6 +590,17 @@ class OCRService {
     const planMatch = text.match(/(?:plan|P[:\s]|management[:\s])([\s\S]*?)$/i);
     if (planMatch) result.plan = planMatch[1].trim();
 
+    // Always include the raw text so the user can apply it as a generic field
+    result.raw_text = text.trim();
+
+    // If no structured data was extracted, also set notes so it shows as a selectable field
+    const hasStructuredData = Object.keys(result).some(
+      k => !['confidence', 'raw_text'].includes(k) && result[k] != null
+    );
+    if (!hasStructuredData && text.trim()) {
+      result.notes = text.trim();
+    }
+
     return result;
   }
 

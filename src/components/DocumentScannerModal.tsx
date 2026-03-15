@@ -280,6 +280,11 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
       if (data.activity) extractedFields.activity = data.activity;
       if (data.fluid_balance) extractedFields.fluid_balance = data.fluid_balance;
       if (data.notes) extractedFields.notes = data.notes;
+      if (selectedFields.has('raw_text') && data.raw_text) {
+        extractedFields.notes = extractedFields.notes
+          ? extractedFields.notes + '\n' + data.raw_text
+          : data.raw_text;
+      }
     } else if (targetForm === 'prescription' && data.medications) {
       extractedFields.medications = data.medications;
       if (data.prescriber) extractedFields.prescriber = data.prescriber;
@@ -403,6 +408,9 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
     if (data.notes) otherFields.push({ key: 'notes', label: 'Additional Notes', value: data.notes });
     if (data.findings) otherFields.push({ key: 'findings', label: 'Findings', value: data.findings });
     if (data.impression) otherFields.push({ key: 'impression', label: 'Impression', value: data.impression });
+    if (data.raw_text && otherFields.length === 0 && sections.length === 0) {
+      otherFields.push({ key: 'raw_text', label: 'Raw Scanned Text', value: data.raw_text });
+    }
     if (otherFields.length > 0) sections.push({ title: 'Other', fields: otherFields });
 
     return (
