@@ -167,7 +167,7 @@ export default async function handler(req, res) {
 
     const openaiApiKey = process.env.OPENAI_API_KEY;
     if (!openaiApiKey) {
-      return res.status(500).json({ error: 'OpenAI API key not configured on server' });
+      return res.status(501).json({ error: 'AI not configured', fallback: true, message: 'No OPENAI_API_KEY — use client-side rule-based extraction' });
     }
 
     const docType = documentType || 'general';

@@ -118,17 +118,20 @@ export const OCRScanner: React.FC<OCRScannerProps> = ({
       });
       
       streamRef.current = stream;
-      
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-        setShowCamera(true);
-      }
+      setShowCamera(true);
     } catch (err) {
       console.error('Camera access failed:', err);
       setError('Unable to access camera. Please check permissions.');
     }
   }, []);
+
+  // Attach stream to video element after it renders
+  useEffect(() => {
+    if (showCamera && streamRef.current && videoRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+      videoRef.current.play().catch(() => {});
+    }
+  }, [showCamera]);
 
   // Stop camera
   const stopCamera = useCallback(() => {
@@ -288,6 +291,7 @@ export const OCRScanner: React.FC<OCRScannerProps> = ({
               autoPlay
               playsInline
               className="w-full max-h-96 object-contain"
+              style={{ minHeight: '240px' }}
             />
             <canvas ref={canvasRef} className="hidden" />
             

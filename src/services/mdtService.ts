@@ -5,7 +5,7 @@ import { format } from 'date-fns';
 const API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL 
   || ((import.meta as any).env?.PROD 
     ? '/api'  // Production fallback: use relative path
-    : 'http://localhost:3001/api');  // Development: direct to backend
+    : 'http://localhost:3005/api');  // Development: direct to backend
 
 // Get auth headers from localStorage
 function getAuthHeaders(): HeadersInit {

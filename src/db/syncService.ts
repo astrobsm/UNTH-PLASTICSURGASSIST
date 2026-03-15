@@ -6,7 +6,7 @@ import toast from 'react-hot-toast';
 const getApiBaseUrl = () => {
   return import.meta.env.PROD 
     ? '/api'  // Production: use relative path
-    : 'http://localhost:3001/api';  // Development
+    : 'http://localhost:3005/api';  // Development
 };
 
 interface SyncResult {

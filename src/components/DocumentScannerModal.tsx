@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   Camera, Upload, X, FileText, Loader2, CheckCircle, AlertTriangle,
   RotateCw, ZoomIn, ZoomOut, Scan, Brain, Clipboard, Eye
@@ -75,16 +75,20 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
         video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
       });
       streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play();
-      }
       setIsCameraActive(true);
     } catch (err) {
       console.error('Camera access failed:', err);
       setError('Camera access denied. Please use file upload instead.');
     }
   };
+
+  // Attach the stream to the video element after it renders
+  useEffect(() => {
+    if (isCameraActive && streamRef.current && videoRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+      videoRef.current.play().catch(() => {});
+    }
+  }, [isCameraActive]);
 
   const captureFromCamera = () => {
     if (!videoRef.current || !canvasRef.current) return;
@@ -474,6 +478,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                   <video
                     ref={videoRef}
                     className="w-full rounded-lg bg-black"
+                    style={{ minHeight: '240px' }}
                     autoPlay
                     playsInline
                     muted

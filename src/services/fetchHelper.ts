@@ -21,7 +21,7 @@ export interface FetchOptions extends Omit<RequestInit, 'priority'> {
 }
 
 // API Base URL
-const API_BASE_URL = (import.meta as any).env?.PROD ? '/api' : 'http://localhost:3001/api';
+const API_BASE_URL = (import.meta as any).env?.PROD ? '/api' : 'http://localhost:3005/api';
 
 /**
  * Extract entity type from URL

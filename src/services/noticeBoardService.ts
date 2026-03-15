@@ -26,7 +26,7 @@ export const NOTICE_CATEGORIES = [
 ] as const;
 
 const getApiBaseUrl = () => {
-  return import.meta.env.PROD ? '/api' : 'http://localhost:3001/api';
+  return import.meta.env.PROD ? '/api' : 'http://localhost:3005/api';
 };
 
 class NoticeBoardService {

@@ -125,7 +125,7 @@ class ChatService {
     return new Promise((resolve, reject) => {
       const wsUrl = import.meta.env.PROD
         ? `wss://${window.location.host}/ws/chat`
-        : `ws://localhost:3001/ws/chat`;
+        : `ws://localhost:3005/ws/chat`;
 
       this.socket = new WebSocket(wsUrl);
 

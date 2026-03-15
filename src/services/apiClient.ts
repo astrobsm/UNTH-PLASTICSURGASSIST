@@ -2,7 +2,7 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL 
   || (import.meta.env.PROD 
     ? '/api'  // Production fallback: use relative path (proxied by Nginx)
-    : 'http://localhost:3001/api');  // Development: direct to backend
+    : 'http://localhost:3005/api');  // Development: direct to backend
 
 // Sync state for cross-device sync
 interface SyncState {

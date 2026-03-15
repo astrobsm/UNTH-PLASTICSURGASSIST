@@ -401,7 +401,7 @@ class OfflineManager {
 
     // Otherwise, use the standard sync approach based on table and action
     const baseUrl = (import.meta as any).env?.VITE_API_BASE_URL 
-      || ((import.meta as any).env?.PROD ? '/api' : 'http://localhost:3001/api');
+      || ((import.meta as any).env?.PROD ? '/api' : 'http://localhost:3005/api');
     const tableName = table.replace(/_/g, '-');
 
     let endpoint: string;

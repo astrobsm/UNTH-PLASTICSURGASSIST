@@ -290,7 +290,7 @@ class VideoConferenceService {
     return new Promise((resolve, reject) => {
       const wsUrl = import.meta.env.PROD 
         ? `wss://${window.location.host}/ws/conference/${roomId}`
-        : `ws://localhost:3001/ws/conference/${roomId}`;
+        : `ws://localhost:3005/ws/conference/${roomId}`;
 
       this.signalingSocket = new WebSocket(wsUrl);
 
