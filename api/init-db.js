@@ -528,9 +528,22 @@ async function createTables() {
       primary_specialty VARCHAR(255) DEFAULT 'Plastic Surgery',
       is_active BOOLEAN DEFAULT TRUE,
       specialties JSONB DEFAULT '[]',
+      team_reviews JSONB DEFAULT '[]',
+      weekly_harmonizations JSONB DEFAULT '[]',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
+
+    -- Add team_reviews and weekly_harmonizations columns if they don't exist (for existing databases)
+    DO $$ 
+    BEGIN 
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'mdt_patient_teams' AND column_name = 'team_reviews') THEN
+        ALTER TABLE mdt_patient_teams ADD COLUMN team_reviews JSONB DEFAULT '[]';
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'mdt_patient_teams' AND column_name = 'weekly_harmonizations') THEN
+        ALTER TABLE mdt_patient_teams ADD COLUMN weekly_harmonizations JSONB DEFAULT '[]';
+      END IF;
+    END $$;
 
     -- MDT Meetings table
     CREATE TABLE IF NOT EXISTS mdt_meetings (

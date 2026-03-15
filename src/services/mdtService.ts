@@ -7,11 +7,6 @@ const API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL
     ? '/api'  // Production fallback: use relative path
     : 'http://localhost:3001/api');  // Development: direct to backend
 
-// Check if user is authenticated
-function isAuthenticated(): boolean {
-  return !!localStorage.getItem('auth_token');
-}
-
 // Get auth headers from localStorage
 function getAuthHeaders(): HeadersInit {
   const token = localStorage.getItem('auth_token');
@@ -507,10 +502,6 @@ class MDTService {
 
   // Sync MDT data from server
   async syncFromServer(): Promise<void> {
-    if (!isAuthenticated()) {
-      console.warn('[MDT SYNC] Skipping pull — no auth token');
-      return;
-    }
     try {
       // Fetch all MDT data from server using sync/pull endpoint
       const headers = getAuthHeaders();
@@ -540,7 +531,13 @@ class MDTService {
                 patient_id: String(team.patient_id),
                 specialties: typeof team.specialties === 'string' 
                   ? JSON.parse(team.specialties) 
-                  : (team.specialties || [])
+                  : (team.specialties || []),
+                team_reviews: typeof team.team_reviews === 'string'
+                  ? JSON.parse(team.team_reviews)
+                  : (team.team_reviews || []),
+                weekly_harmonizations: typeof team.weekly_harmonizations === 'string'
+                  ? JSON.parse(team.weekly_harmonizations)
+                  : (team.weekly_harmonizations || [])
               };
               
               // Use filter instead of where to avoid index issues
@@ -565,9 +562,34 @@ class MDTService {
                     mergedSpecialties.push(serverSpec);
                   }
                 }
+
+                // Merge team_reviews: union of local + server by review id
+                const localReviews = Array.isArray(existing.team_reviews) ? existing.team_reviews : [];
+                const serverReviews = Array.isArray(normalizedTeam.team_reviews) ? normalizedTeam.team_reviews : [];
+                const mergedReviews = [...localReviews];
+                for (const serverReview of serverReviews) {
+                  const alreadyExists = mergedReviews.some((lr: any) => lr.id === serverReview.id);
+                  if (!alreadyExists) {
+                    mergedReviews.push(serverReview);
+                  }
+                }
+
+                // Merge weekly_harmonizations: union of local + server by harmonization id
+                const localHarmonizations = Array.isArray(existing.weekly_harmonizations) ? existing.weekly_harmonizations : [];
+                const serverHarmonizations = Array.isArray(normalizedTeam.weekly_harmonizations) ? normalizedTeam.weekly_harmonizations : [];
+                const mergedHarmonizations = [...localHarmonizations];
+                for (const serverHarm of serverHarmonizations) {
+                  const alreadyExists = mergedHarmonizations.some((lh: any) => lh.id === serverHarm.id);
+                  if (!alreadyExists) {
+                    mergedHarmonizations.push(serverHarm);
+                  }
+                }
+
                 await db.mdt_patient_teams.update(existing.id, {
                   ...normalizedTeam,
                   specialties: mergedSpecialties,
+                  team_reviews: mergedReviews,
+                  weekly_harmonizations: mergedHarmonizations,
                   id: existing.id,
                   server_id: team.id
                 });
@@ -618,10 +640,6 @@ class MDTService {
 
   // Push all local MDT data to server
   async pushToServer(): Promise<void> {
-    if (!isAuthenticated()) {
-      console.warn('[MDT SYNC] Skipping push — no auth token');
-      return;
-    }
     try {
       const headers = getAuthHeaders();
       

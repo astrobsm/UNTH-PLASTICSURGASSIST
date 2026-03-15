@@ -1413,21 +1413,12 @@ const MDTPage: React.FC = () => {
           onClose={() => setShowOCRScan(false)}
           onFieldsExtracted={async (fields: any) => {
             try {
-              // Build review_text from SOAP fields if individual fields aren't present
-              const soapParts: string[] = [];
-              if (fields.subjective) soapParts.push(`Subjective: ${fields.subjective}`);
-              if (fields.objective || fields.examination_findings) soapParts.push(`Objective: ${fields.objective || fields.examination_findings}`);
-              if (fields.assessment) soapParts.push(`Assessment: ${fields.assessment}`);
-              if (fields.clinical_status) soapParts.push(`Clinical Status: ${fields.clinical_status}`);
-              if (fields.diagnoses && Array.isArray(fields.diagnoses)) soapParts.push(`Diagnoses: ${fields.diagnoses.join(', ')}`);
-              const soapText = soapParts.length > 0 ? soapParts.join('\n\n') : '';
-
               const review: any = {
                 specialty_name: fields.specialty_name || fields.specialty || fields.department || 'General',
-                reviewer_name: fields.reviewer_name || fields.doctor_name || fields.consultant || fields.author || 'Unknown',
+                reviewer_name: fields.reviewer_name || fields.doctor_name || fields.consultant || 'Unknown',
                 review_date: fields.review_date || fields.date || new Date().toISOString(),
-                review_text: fields.review_text || fields.findings || fields.notes || fields.content || soapText || JSON.stringify(fields, null, 2),
-                plan_text: fields.plan_text || fields.plan || fields.management_plan || fields.management || '',
+                review_text: fields.review_text || fields.findings || fields.notes || fields.content || JSON.stringify(fields, null, 2),
+                plan_text: fields.plan_text || fields.plan || fields.management || '',
                 scanned_via_ocr: true,
               };
               await mdtService.addTeamReview(selectedPatient.id, review);
@@ -1442,11 +1433,10 @@ const MDTPage: React.FC = () => {
               alert('Error saving scanned review');
             }
           }}
-          documentType="handwritten_note"
-          targetForm="review_note"
+          documentType="general"
           patientContext={{
             name: selectedPatient.patient_name || '',
-            hospitalNumber: selectedPatient.hospital_number || selectedPatient.patient_id || '',
+            id: selectedPatient.patient_id || '',
           }}
         />
       )}
