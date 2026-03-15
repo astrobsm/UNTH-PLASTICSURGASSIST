@@ -503,13 +503,13 @@ export const MedicationOrderingModal: React.FC<MedicationOrderingModalProps> = (
   const interactions = checkInteractions();
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0 sm:p-4">
+      <div className="bg-white rounded-none sm:rounded-lg shadow-xl sm:max-w-6xl w-full h-full sm:h-auto sm:max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900">Medication Ordering</h2>
-            <p className="text-sm text-gray-600 mt-1">{patientName}</p>
+        <div className="border-b border-gray-200 px-3 sm:px-6 py-3 sm:py-4 flex items-center justify-between flex-shrink-0">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-lg sm:text-2xl font-bold text-gray-900 truncate">Medication Ordering</h2>
+            <p className="text-xs sm:text-sm text-gray-600 mt-1 truncate">{patientName}</p>
           </div>
           <button
             onClick={onClose}
@@ -537,8 +537,8 @@ export const MedicationOrderingModal: React.FC<MedicationOrderingModalProps> = (
         )}
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto px-6 py-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-3 sm:py-4 scroll-touch">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
             {/* Left: Order Form */}
             <div className="space-y-4">
               <h3 className="text-lg font-semibold text-gray-900">Order New Medication</h3>
@@ -548,7 +548,7 @@ export const MedicationOrderingModal: React.FC<MedicationOrderingModalProps> = (
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Select Category
                 </label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {Object.entries(DRUG_DATABASE).map(([key, category]) => (
                     <button
                       key={key}
@@ -630,7 +630,7 @@ export const MedicationOrderingModal: React.FC<MedicationOrderingModalProps> = (
 
               {/* Prescription Details */}
               <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Dosage *
@@ -664,7 +664,7 @@ export const MedicationOrderingModal: React.FC<MedicationOrderingModalProps> = (
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Frequency *

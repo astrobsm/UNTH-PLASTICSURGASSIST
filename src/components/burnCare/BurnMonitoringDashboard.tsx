@@ -418,7 +418,7 @@ const BurnMonitoringDashboard: React.FC<BurnMonitoringDashboardProps> = ({ patie
             </div>
 
             {/* Quick Actions */}
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <button
                 onClick={() => setShowVitalsModal(true)}
                 className="p-4 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow text-center"
@@ -981,7 +981,7 @@ const BurnMonitoringDashboard: React.FC<BurnMonitoringDashboardProps> = ({ patie
 
       {/* Follow-Up Assessment Modal */}
       {showFollowUpModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-0 sm:p-4">
           <BurnFollowUpAssessment
             burnPatientId={patient.id}
             patientName={patient.patientId}
@@ -1041,7 +1041,7 @@ const VitalsModal: React.FC<{
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Record Vital Signs</h3>
         
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm text-gray-600 mb-1">Heart Rate (bpm)</label>
               <input
@@ -1062,7 +1062,7 @@ const VitalsModal: React.FC<{
             </div>
           </div>
           
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm text-gray-600 mb-1">Systolic BP</label>
               <input
@@ -1083,7 +1083,7 @@ const VitalsModal: React.FC<{
             </div>
           </div>
           
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm text-gray-600 mb-1">Resp Rate</label>
               <input

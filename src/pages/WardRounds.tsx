@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Calendar, User, Activity, FileText, Plus, Search, TrendingUp, Clock, AlertCircle, ChevronDown, ChevronUp, Thermometer, Heart, Wind, Droplets, Stethoscope, Pill, TestTube, Eye, ClipboardList, ArrowLeft, X, FileDown, FileBarChart } from 'lucide-react';
 import WardRoundForm from '../components/WardRoundForm';
 import { wardRoundsService, WardRound, ROUND_TYPES } from '../services/wardRoundsService';
@@ -98,21 +98,21 @@ export default function WardRounds() {
       const sortedRounds = [...patientRounds].sort((a, b) => new Date(a.round_date).getTime() - new Date(b.round_date).getTime());
       const latestRound = sortedRounds[sortedRounds.length - 1] as any;
 
-      let summary = `═══════════════════════════════════════════════════\n`;
+      let summary = `---------------------------------------------------\n`;
       summary += `  HARMONISED PATIENT SUMMARY\n`;
       summary += `  ${selectedPatient.name} (${selectedPatient.hospital_number})\n`;
       summary += `  Generated: ${format(new Date(), 'dd MMM yyyy HH:mm')}\n`;
-      summary += `═══════════════════════════════════════════════════\n\n`;
+      summary += `---------------------------------------------------\n\n`;
 
       // Demographics
-      summary += `▸ PATIENT DETAILS\n`;
+      summary += `? PATIENT DETAILS\n`;
       summary += `  Name: ${selectedPatient.name}\n`;
       summary += `  Hospital No: ${selectedPatient.hospital_number}\n\n`;
 
       // Admission info
       if (admissions && admissions.length > 0) {
         const activeAdmission = admissions.find((a: any) => a.status === 'active') || admissions[admissions.length - 1];
-        summary += `▸ ADMISSION\n`;
+        summary += `? ADMISSION\n`;
         summary += `  Date: ${safeFormatDate((activeAdmission as any).admission_date, 'dd MMM yyyy') || 'N/A'}\n`;
         summary += `  Ward: ${(activeAdmission as any).ward_location || 'N/A'}\n`;
         summary += `  Diagnosis: ${(activeAdmission as any).provisional_diagnosis || (activeAdmission as any).admitting_diagnosis || 'N/A'}\n\n`;
@@ -120,8 +120,8 @@ export default function WardRounds() {
 
       // Latest vitals
       if (latestRound) {
-        summary += `▸ LATEST VITALS (${safeFormatDate(latestRound.round_date, 'dd MMM yyyy')})\n`;
-        if (latestRound.temperature) summary += `  Temperature: ${latestRound.temperature}°C\n`;
+        summary += `? LATEST VITALS (${safeFormatDate(latestRound.round_date, 'dd MMM yyyy')})\n`;
+        if (latestRound.temperature) summary += `  Temperature: ${latestRound.temperature}�C\n`;
         if (latestRound.pulse) summary += `  Pulse: ${latestRound.pulse} bpm\n`;
         if (latestRound.bp_systolic || latestRound.blood_pressure) summary += `  BP: ${latestRound.bp_systolic ? `${latestRound.bp_systolic}/${latestRound.bp_diastolic}` : latestRound.blood_pressure} mmHg\n`;
         if (latestRound.respiratory_rate) summary += `  RR: ${latestRound.respiratory_rate}/min\n`;
@@ -131,24 +131,24 @@ export default function WardRounds() {
       }
 
       // Ward Round History
-      summary += `▸ WARD ROUND HISTORY (${sortedRounds.length} entries)\n`;
+      summary += `? WARD ROUND HISTORY (${sortedRounds.length} entries)\n`;
       sortedRounds.forEach((r: any) => {
         summary += `  ${safeFormatDate(r.round_date, 'dd/MM/yyyy')} - ${roundTypeLabel(r.round_type)} | ${r.progress_status} | ${r.reviewing_doctor || r.reviewed_by || 'N/A'}\n`;
         if (r.chief_complaint) summary += `    Complaint: ${r.chief_complaint}\n`;
         if (r.clinical_notes) summary += `    Notes: ${r.clinical_notes}\n`;
         if (r.assessment_notes) summary += `    Assessment: ${r.assessment_notes}\n`;
         if (r.wound_status || r.wound_notes) summary += `    Wound: ${r.wound_status || ''} ${r.wound_notes || ''}\n`;
-        if (r.complications) summary += `    ⚠ Complications: ${r.complications}\n`;
+        if (r.complications) summary += `    ? Complications: ${r.complications}\n`;
         if (r.follow_up_plan) summary += `    Plan: ${r.follow_up_plan}\n`;
       });
       summary += '\n';
 
       // Lab Work
       if (labInvestigations && labInvestigations.length > 0) {
-        summary += `▸ LABORATORY INVESTIGATIONS (${labInvestigations.length})\n`;
+        summary += `? LABORATORY INVESTIGATIONS (${labInvestigations.length})\n`;
         labInvestigations.forEach((lab: any) => {
           summary += `  ${safeFormatDate(lab.ordered_date || lab.created_at, 'dd/MM/yyyy')} - ${lab.test_name || lab.investigation_name || 'Unknown'} [${(lab.status || 'pending').toUpperCase()}]`;
-          if (lab.result || lab.result_value) summary += ` → ${lab.result || lab.result_value}`;
+          if (lab.result || lab.result_value) summary += ` ? ${lab.result || lab.result_value}`;
           summary += '\n';
         });
         summary += '\n';
@@ -170,14 +170,14 @@ export default function WardRounds() {
         });
       }
       if (allMeds.length > 0) {
-        summary += `▸ MEDICATIONS\n`;
-        [...new Set(allMeds)].forEach(med => summary += `  • ${med}\n`);
+        summary += `? MEDICATIONS\n`;
+        [...new Set(allMeds)].forEach(med => summary += `  � ${med}\n`);
         summary += '\n';
       }
 
       // Treatment Plans
       if (treatmentPlans && treatmentPlans.length > 0) {
-        summary += `▸ TREATMENT PLANS\n`;
+        summary += `? TREATMENT PLANS\n`;
         treatmentPlans.forEach((tp: any) => {
           summary += `  ${tp.plan_name || tp.title || 'Treatment Plan'} - Status: ${tp.status || 'active'}\n`;
           if (tp.current_phase) summary += `    Phase: ${tp.current_phase}\n`;
@@ -188,7 +188,7 @@ export default function WardRounds() {
 
       // Wound Care
       if (woundCareRecords && woundCareRecords.length > 0) {
-        summary += `▸ WOUND CARE RECORDS (${woundCareRecords.length})\n`;
+        summary += `? WOUND CARE RECORDS (${woundCareRecords.length})\n`;
         woundCareRecords.forEach((w: any) => {
           summary += `  ${safeFormatDate(w.assessment_date || w.created_at, 'dd/MM/yyyy')} - ${w.wound_type || w.wound_location || 'Wound'}: ${w.wound_status || w.status || 'N/A'}\n`;
         });
@@ -197,7 +197,7 @@ export default function WardRounds() {
 
       // Progress Notes
       if (progressNotes && progressNotes.length > 0) {
-        summary += `▸ PROGRESS NOTES (${progressNotes.length})\n`;
+        summary += `? PROGRESS NOTES (${progressNotes.length})\n`;
         progressNotes.slice(-5).forEach((pn: any) => {
           summary += `  ${safeFormatDate(pn.note_date || pn.created_at, 'dd/MM/yyyy')} - ${pn.note_type || 'Note'}: ${(pn.content || pn.note || '').substring(0, 100)}${(pn.content || pn.note || '').length > 100 ? '...' : ''}\n`;
         });
@@ -206,7 +206,7 @@ export default function WardRounds() {
 
       // Current Plan
       if (latestRound) {
-        summary += `▸ CURRENT PLAN\n`;
+        summary += `? CURRENT PLAN\n`;
         if (latestRound.follow_up_plan) summary += `  Follow-up: ${latestRound.follow_up_plan}\n`;
         if (latestRound.treatment_plan_changes) summary += `  Treatment changes: ${latestRound.treatment_plan_changes}\n`;
         if (latestRound.dietary_modifications) summary += `  Diet: ${latestRound.dietary_modifications}\n`;
@@ -217,9 +217,9 @@ export default function WardRounds() {
         summary += '\n';
       }
 
-      summary += `═══════════════════════════════════════════════════\n`;
+      summary += `---------------------------------------------------\n`;
       summary += `  END OF HARMONISED SUMMARY\n`;
-      summary += `═══════════════════════════════════════════════════\n`;
+      summary += `---------------------------------------------------\n`;
 
       setHarmonisedSummary(summary);
       setShowHarmonisedSummary(true);
@@ -450,7 +450,7 @@ export default function WardRounds() {
                           <div className="bg-blue-50 rounded p-2">
                             <h4 className="text-xs font-semibold text-blue-800 mb-1 flex items-center gap-1"><Thermometer className="w-3 h-3" /> Vitals</h4>
                             <p className="text-xs leading-snug">
-                              {[r.temperature && `T: ${r.temperature}°C`, r.pulse && `PR: ${r.pulse}/min`, (r.bp_systolic || r.blood_pressure) && `BP: ${r.bp_systolic ? `${r.bp_systolic}/${r.bp_diastolic}` : r.blood_pressure} mmHg`, r.respiratory_rate && `RR: ${r.respiratory_rate}/min`, r.spo2 && `SpO₂: ${r.spo2}%`, r.pain_score > 0 && `Pain: ${r.pain_score}/10`].filter(Boolean).join(' | ')}
+                              {[r.temperature && `T: ${r.temperature}�C`, r.pulse && `PR: ${r.pulse}/min`, (r.bp_systolic || r.blood_pressure) && `BP: ${r.bp_systolic ? `${r.bp_systolic}/${r.bp_diastolic}` : r.blood_pressure} mmHg`, r.respiratory_rate && `RR: ${r.respiratory_rate}/min`, r.spo2 && `SpO2: ${r.spo2}%`, r.pain_score > 0 && `Pain: ${r.pain_score}/10`].filter(Boolean).join(' | ')}
                             </p>
                           </div>
                         )}
@@ -602,14 +602,14 @@ export default function WardRounds() {
 
         {/* Harmonised Summary Modal */}
         {showHarmonisedSummary && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0 sm:p-4">
             <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
               <div className="bg-indigo-600 text-white px-6 py-4 flex justify-between items-center">
                 <div>
                   <h2 className="text-xl font-bold flex items-center gap-2">
                     <FileBarChart className="w-6 h-6" /> Harmonised Patient Summary
                   </h2>
-                  <p className="text-indigo-200 text-sm">{selectedPatient?.name} — {selectedPatient?.hospital_number}</p>
+                  <p className="text-indigo-200 text-sm">{selectedPatient?.name} � {selectedPatient?.hospital_number}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
@@ -735,7 +735,7 @@ export default function WardRounds() {
                   onClick={() => { setSelectedPatientId(p.id); setExpandedRoundIds(new Set()); }}
                   className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 hover:bg-green-50 border border-gray-200 hover:border-green-400 rounded-full text-sm transition-colors"
                 >
-                  <span className="font-medium text-gray-800 truncate max-w-[150px]">{p.name}</span>
+                  <span className="font-medium text-gray-800 truncate max-w-[120px] sm:max-w-[200px]">{p.name}</span>
                   <span className="text-xs text-gray-400">{p.hospital_number}</span>
                   <span className="bg-green-100 text-green-700 text-xs font-medium px-1.5 py-0.5 rounded-full">{count}</span>
                 </button>

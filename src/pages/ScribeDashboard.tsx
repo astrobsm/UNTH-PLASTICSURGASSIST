@@ -455,7 +455,7 @@ const ScribeDashboard: React.FC = () => {
 
       {/* ─── New Session Modal ────────────────────────────────────── */}
       {showNewSession && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0 sm:p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg">
             <div className="px-6 py-4 border-b flex items-center justify-between">
               <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">

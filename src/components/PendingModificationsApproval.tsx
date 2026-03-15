@@ -259,7 +259,7 @@ export const PendingModificationsApproval: React.FC<PendingModificationsApproval
                   </div>
 
                   {/* Proposed Changes */}
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {mod.original_value && (
                       <div className="bg-red-50 p-3 rounded-lg">
                         <h4 className="font-medium text-red-800 mb-2">Original</h4>

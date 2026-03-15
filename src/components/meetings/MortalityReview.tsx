@@ -129,7 +129,7 @@ export default function MortalityReview() {
           <div className="space-y-4">
             <div className="bg-red-50 border border-red-200 rounded-lg p-4">
               <h3 className="font-bold text-red-800 mb-2" style={{ fontSize: '22px' }}>Biodata</h3>
-              <div className="grid grid-cols-2 gap-3" style={{ fontSize: '18px' }}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" style={{ fontSize: '18px' }}>
                 <p><strong>Name:</strong> {patient.full_name || patient.name}</p>
                 <p><strong>Hospital No:</strong> {patient.hospital_number || 'N/A'}</p>
                 <p><strong>Age:</strong> {calcAge(patient.date_of_birth)} years</p>
@@ -151,7 +151,7 @@ export default function MortalityReview() {
               </div>
             )}
             {(patient.comorbidities?.length > 0 || patient.allergies?.length > 0) && (
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {patient.comorbidities?.length > 0 && (
                   <div>
                     <h4 className="font-bold text-orange-700" style={{ fontSize: '18px' }}>Comorbidities</h4>
@@ -447,7 +447,7 @@ export default function MortalityReview() {
           <div className="space-y-4">
             <div className="bg-red-50 border-l-4 border-red-600 p-4 rounded-r-lg">
               <h3 className="font-bold text-red-800 mb-3" style={{ fontSize: '22px' }}>Case Overview</h3>
-              <div className="grid grid-cols-2 gap-3" style={{ fontSize: '18px' }}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" style={{ fontSize: '18px' }}>
                 <p><strong>Patient:</strong> {patient.full_name || patient.name}</p>
                 <p><strong>Age:</strong> {calcAge(patient.date_of_birth)} years</p>
                 <p><strong>Diagnosis:</strong> {admissions[0]?.provisional_diagnosis || 'N/A'}</p>

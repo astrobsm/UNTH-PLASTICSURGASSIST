@@ -567,7 +567,7 @@ export const RiskAssessmentSummary: React.FC<RiskAssessmentSummaryProps> = ({
 
       {/* ── New Assessment Preview Modal ── */}
       {showNewAssessmentPreview && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-0 sm:p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col">
             <div className="px-6 py-4 border-b border-gray-200">
               <div className="flex items-center space-x-3">
@@ -610,7 +610,7 @@ export const RiskAssessmentSummary: React.FC<RiskAssessmentSummaryProps> = ({
                           {assessment.status === 'active' ? '● Active' : '○ Archived'}
                         </span>
                       </div>
-                      <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
                         <div>
                           <span className="text-gray-500">Score:</span>
                           <span className="ml-1 font-semibold text-gray-900">{assessment.score}</span>

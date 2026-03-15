@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ClipboardList, 
   AlertTriangle, 
@@ -1034,7 +1034,7 @@ export const PreoperativePlanning: React.FC<PreoperativePlanningProps> = ({
                     <span className="text-sm">{item.label}</span>
                   </label>
                 ))}
-                <div className="col-span-2 md:col-span-3 grid grid-cols-2 gap-4 mt-2">
+                <div className="col-span-2 md:col-span-3 grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
                   <div>
                     <label className="block text-sm text-gray-600">Blood Pressure</label>
                     <input
@@ -1108,7 +1108,7 @@ export const PreoperativePlanning: React.FC<PreoperativePlanningProps> = ({
               'Renal Function',
               <Droplet className="w-5 h-5 text-purple-500" />,
               <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <label className="flex items-center space-x-2">
                     <input
                       type="checkbox"
@@ -1138,7 +1138,7 @@ export const PreoperativePlanning: React.FC<PreoperativePlanningProps> = ({
                   </label>
                 </div>
                 {clinicalAssessment.renal.ckd && (
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-sm text-gray-600">CKD Stage</label>
                       <select
@@ -1166,7 +1166,7 @@ export const PreoperativePlanning: React.FC<PreoperativePlanningProps> = ({
                           ...prev,
                           renal: { ...prev.renal, lastCreatinine: e.target.value }
                         }))}
-                        placeholder="Î¼mol/L"
+                        placeholder="μmol/L"
                         className="w-full px-3 py-2 border rounded"
                       />
                     </div>
@@ -1179,7 +1179,7 @@ export const PreoperativePlanning: React.FC<PreoperativePlanningProps> = ({
                           ...prev,
                           renal: { ...prev.renal, lastEGFR: e.target.value }
                         }))}
-                        placeholder="mL/min/1.73m²"
+                        placeholder="mL/min/1.73m�"
                         className="w-full px-3 py-2 border rounded"
                       />
                     </div>
@@ -1277,7 +1277,7 @@ export const PreoperativePlanning: React.FC<PreoperativePlanningProps> = ({
               'Hematologic / Bleeding Risk',
               <Droplet className="w-5 h-5 text-red-600" />,
               <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <label className="flex items-center space-x-2">
                     <input
                       type="checkbox"
@@ -1546,7 +1546,7 @@ export const PreoperativePlanning: React.FC<PreoperativePlanningProps> = ({
             )}
 
             {/* Procedure Summary */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="p-4 bg-gray-50 rounded-lg">
                 <p className="text-sm text-gray-500">Procedure</p>
                 <p className="font-medium text-gray-900">

@@ -329,7 +329,7 @@ export const SpeechToTextInput: React.FC<SpeechToTextInputProps> = ({
       {isListening && (
         <div className="mt-2 p-2 bg-gray-50 rounded-lg text-xs text-gray-600">
           <p className="font-medium mb-1">Voice commands:</p>
-          <ul className="grid grid-cols-2 gap-1">
+          <ul className="grid grid-cols-1 sm:grid-cols-2 gap-1">
             <li>"period" / "full stop" → .</li>
             <li>"comma" → ,</li>
             <li>"new line" → ↵</li>

@@ -412,7 +412,7 @@ export default function VTEAudit() {
               </div>
 
               {/* Admission details */}
-              <div className="grid grid-cols-2 gap-2" style={{ fontSize: '16px' }}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2" style={{ fontSize: '16px' }}>
                 <p>
                   <strong>Admitted:</strong> {formatDate(d.admission.admission_date)}
                 </p>

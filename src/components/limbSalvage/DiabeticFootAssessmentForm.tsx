@@ -611,7 +611,7 @@ const Step2WoundGrade: React.FC<{ formData: any; setFormData: any }> = ({ formDa
       {/* University of Texas Classification */}
       <div className="bg-green-50 p-4 rounded-lg">
         <h4 className="font-medium text-green-900 mb-3">University of Texas Classification</h4>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Grade</label>
             <select
@@ -644,7 +644,7 @@ const Step2WoundGrade: React.FC<{ formData: any; setFormData: any }> = ({ formDa
       {/* WIfI Classification */}
       <div className="bg-orange-50 p-4 rounded-lg">
         <h4 className="font-medium text-orange-900 mb-3">WIfI Classification (Wound, Ischemia, foot Infection)</h4>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Wound (W)</label>
             <select
@@ -840,7 +840,7 @@ const Step3Comorbidities: React.FC<{ formData: any; setFormData: any }> = ({ for
       {/* Glycemic Control */}
       <div className="bg-yellow-50 p-4 rounded-lg">
         <h4 className="font-medium text-yellow-900 mb-3">Glycemic Control</h4>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">HbA1c (%)</label>
             <input
@@ -927,7 +927,7 @@ const Step4RenalStatus: React.FC<{ formData: any; setFormData: any }> = ({ formD
       {/* Patient Parameters for eGFR Calculation */}
       <div className="bg-indigo-50 p-4 rounded-lg">
         <h4 className="font-medium text-indigo-900 mb-3">Patient Parameters for eGFR Calculation</h4>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Age (years)</label>
             <input
@@ -965,7 +965,7 @@ const Step4RenalStatus: React.FC<{ formData: any; setFormData: any }> = ({ formD
       {/* Laboratory Values */}
       <div className="bg-blue-50 p-4 rounded-lg">
         <h4 className="font-medium text-blue-900 mb-3">Laboratory Values</h4>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Serum Creatinine (mg/dL)</label>
             <input
@@ -1053,7 +1053,7 @@ const Step4RenalStatus: React.FC<{ formData: any; setFormData: any }> = ({ formD
           </label>
 
           {formData.dialysisDependent && (
-            <div className="ml-8 grid grid-cols-2 gap-4">
+            <div className="ml-8 grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Dialysis Type</label>
                 <select
@@ -1187,7 +1187,7 @@ const Step5Sepsis: React.FC<{ formData: any; setFormData: any }> = ({ formData, 
       {/* qSOFA */}
       <div className="bg-orange-50 p-4 rounded-lg">
         <h4 className="font-medium text-orange-900 mb-3">qSOFA Criteria</h4>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <label className="flex items-center space-x-2 p-2 rounded bg-white">
             <input
               type="checkbox"
@@ -1219,7 +1219,7 @@ const Step5Sepsis: React.FC<{ formData: any; setFormData: any }> = ({ formData, 
       {/* Laboratory Markers */}
       <div className="bg-blue-50 p-4 rounded-lg">
         <h4 className="font-medium text-blue-900 mb-3">Inflammatory Markers</h4>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">CRP (mg/L)</label>
             <input
@@ -1336,7 +1336,7 @@ const Step6Vascular: React.FC<{ formData: any; setFormData: any }> = ({ formData
       <div className="bg-red-50 p-4 rounded-lg">
         <h4 className="font-medium text-red-900 mb-3">Arterial Doppler Findings</h4>
         
-        <div className="grid grid-cols-3 gap-4 mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">ABI - Right</label>
             <input
@@ -1380,7 +1380,7 @@ const Step6Vascular: React.FC<{ formData: any; setFormData: any }> = ({ formData
           {abiResult.note && <p className="text-sm mt-1">{abiResult.note}</p>}
         </div>
 
-        <div className="grid grid-cols-2 gap-4 mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Toe Pressure (mmHg)</label>
             <input
@@ -1408,7 +1408,7 @@ const Step6Vascular: React.FC<{ formData: any; setFormData: any }> = ({ formData
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-4 mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Dorsalis Pedis</label>
             <select
@@ -1447,7 +1447,7 @@ const Step6Vascular: React.FC<{ formData: any; setFormData: any }> = ({ formData
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <label className="flex items-center space-x-2">
             <input
               type="checkbox"
@@ -1471,7 +1471,7 @@ const Step6Vascular: React.FC<{ formData: any; setFormData: any }> = ({ formData
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-4 mt-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3">
           <label className="flex items-center space-x-2">
             <input
               type="checkbox"
@@ -1663,7 +1663,7 @@ const Step7Osteomyelitis: React.FC<{ formData: any; setFormData: any }> = ({ for
       {/* Clinical Findings */}
       <div className="bg-red-50 p-4 rounded-lg">
         <h4 className="font-medium text-red-900 mb-3">Clinical Findings</h4>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <label className="flex items-center space-x-2 p-3 bg-white rounded border">
             <input
               type="checkbox"
@@ -1706,7 +1706,7 @@ const Step7Osteomyelitis: React.FC<{ formData: any; setFormData: any }> = ({ for
       {/* Imaging */}
       <div className="bg-blue-50 p-4 rounded-lg">
         <h4 className="font-medium text-blue-900 mb-3">Imaging Studies</h4>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">X-Ray Findings</label>
             <select
@@ -1748,7 +1748,7 @@ const Step7Osteomyelitis: React.FC<{ formData: any; setFormData: any }> = ({ for
       {/* Bone Biopsy */}
       <div className="bg-purple-50 p-4 rounded-lg">
         <h4 className="font-medium text-purple-900 mb-3">Bone Biopsy (Gold Standard)</h4>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <label className="flex items-center space-x-2">
             <input
               type="checkbox"
@@ -1774,7 +1774,7 @@ const Step7Osteomyelitis: React.FC<{ formData: any; setFormData: any }> = ({ for
       {/* Laboratory & History */}
       <div className="bg-gray-50 p-4 rounded-lg">
         <h4 className="font-medium text-gray-900 mb-3">Laboratory & History</h4>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">ESR (mm/hr)</label>
             <input
@@ -2107,7 +2107,7 @@ const Step8Results: React.FC<{ formData: any; selectedPatient: any }> = ({ formD
       {/* Monitoring Plan */}
       <div className="bg-purple-50 border border-purple-200 p-4 rounded-lg">
         <h4 className="font-medium text-purple-900 mb-3">Monitoring Plan</h4>
-        <div className="grid grid-cols-2 gap-4 text-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
           <div>
             <p className="font-medium">Follow-up Frequency:</p>
             <p>{totalScore >= 200 ? 'Daily until stable' : 

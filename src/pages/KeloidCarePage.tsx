@@ -1765,7 +1765,7 @@ const CreatePlanModal: React.FC<CreatePlanModalProps> = ({ patients, onClose, on
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-0 sm:p-4">
       <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b bg-green-50">
@@ -1963,7 +1963,7 @@ const CreatePlanModal: React.FC<CreatePlanModalProps> = ({ patients, onClose, on
                   <Syringe className="h-5 w-5" />
                   Pre-Operative Triamcinolone Injections
                 </h3>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm text-blue-700 mb-1">Number of Sessions</label>
                     <input
@@ -2005,7 +2005,7 @@ const CreatePlanModal: React.FC<CreatePlanModalProps> = ({ patients, onClose, on
 
                 {formData.surgery_planned && (
                   <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm text-purple-700 mb-1">Surgery Date</label>
                         <input
@@ -2052,7 +2052,7 @@ const CreatePlanModal: React.FC<CreatePlanModalProps> = ({ patients, onClose, on
                     <Syringe className="h-5 w-5" />
                     Post-Operative Triamcinolone Injections
                   </h3>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm text-green-700 mb-1">Number of Sessions</label>
                       <input
@@ -2089,7 +2089,7 @@ const CreatePlanModal: React.FC<CreatePlanModalProps> = ({ patients, onClose, on
               {/* Silicone Therapy */}
               <div className="bg-blue-50 rounded-lg p-4">
                 <h3 className="font-semibold text-blue-900 mb-4">Silicone Sheet/Gel Therapy</h3>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm text-blue-700 mb-1">Start Date</label>
                     <input
@@ -2119,7 +2119,7 @@ const CreatePlanModal: React.FC<CreatePlanModalProps> = ({ patients, onClose, on
               {/* Compression Therapy */}
               <div className="bg-green-50 rounded-lg p-4">
                 <h3 className="font-semibold text-green-900 mb-4">Compression Therapy</h3>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm text-green-700 mb-1">Start Date</label>
                     <input
@@ -2186,7 +2186,7 @@ const CreatePlanModal: React.FC<CreatePlanModalProps> = ({ patients, onClose, on
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       <div>
                         <label className="block text-sm text-red-700 mb-1">Timing</label>
                         <input
@@ -2228,7 +2228,7 @@ const CreatePlanModal: React.FC<CreatePlanModalProps> = ({ patients, onClose, on
               {/* Summary */}
               <div className="bg-gray-50 rounded-lg p-4">
                 <h3 className="font-semibold text-gray-900 mb-3">Plan Summary</h3>
-                <div className="grid grid-cols-2 gap-4 text-sm">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                   <div>
                     <p className="text-gray-600">Patient:</p>
                     <p className="font-medium">{selectedPatient ? `${selectedPatient.first_name} ${selectedPatient.last_name}` : 'Not selected'}</p>
@@ -2324,7 +2324,7 @@ const RecordInjectionModal: React.FC<RecordInjectionModalProps> = ({
   });
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-0 sm:p-4">
       <div className="bg-white rounded-xl shadow-xl max-w-lg w-full">
         <div className="flex items-center justify-between p-6 border-b">
           <div>
@@ -2339,7 +2339,7 @@ const RecordInjectionModal: React.FC<RecordInjectionModalProps> = ({
         </div>
 
         <div className="p-6 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Date Given</label>
               <input
@@ -2362,7 +2362,7 @@ const RecordInjectionModal: React.FC<RecordInjectionModalProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Concentration</label>
               <select

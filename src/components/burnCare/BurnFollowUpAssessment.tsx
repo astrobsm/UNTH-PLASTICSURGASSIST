@@ -392,7 +392,7 @@ const BurnFollowUpAssessment: React.FC<BurnFollowUpAssessmentProps> = ({
                     </span>
                   </div>
                   
-                  <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                     <div>
                       <label className="text-gray-600 text-xs">Current Open (%)</label>
                       <input
@@ -497,7 +497,7 @@ const BurnFollowUpAssessment: React.FC<BurnFollowUpAssessmentProps> = ({
             
             {/* Camera controls */}
             {!isCameraActive ? (
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <button
                   onClick={startCamera}
                   disabled={isCameraLoading}
@@ -551,7 +551,7 @@ const BurnFollowUpAssessment: React.FC<BurnFollowUpAssessmentProps> = ({
             {capturedImages.length > 0 && (
               <div className="mt-4">
                 <h4 className="text-sm font-medium text-gray-700 mb-2">Captured Images ({capturedImages.length})</h4>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   {capturedImages.map((img) => (
                     <div key={img.id} className="relative rounded-lg overflow-hidden">
                       <img src={img.imageUrl} alt="Wound" className="w-full h-24 object-cover" />
@@ -576,7 +576,7 @@ const BurnFollowUpAssessment: React.FC<BurnFollowUpAssessmentProps> = ({
             
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
               <h4 className="font-medium text-yellow-800 mb-3">Check all signs present:</h4>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {[
                   { key: 'increasedPain', label: 'Increased Pain' },
                   { key: 'erythema', label: 'Spreading Erythema' },
@@ -618,7 +618,7 @@ const BurnFollowUpAssessment: React.FC<BurnFollowUpAssessmentProps> = ({
             {/* Graft Status */}
             <div>
               <h3 className="font-semibold text-gray-900 mb-3">Graft Assessment</h3>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm text-gray-600">Graft Status</label>
                   <select
@@ -754,7 +754,7 @@ const BurnFollowUpAssessment: React.FC<BurnFollowUpAssessmentProps> = ({
                 </div>
                 
                 {/* Progress Metrics */}
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="bg-gray-50 rounded-lg p-3 text-center">
                     <p className="text-2xl font-bold text-green-600">
                       {Math.round(aiAnalysis.comparisonToBaseline.tbsaReduction)}%
@@ -819,7 +819,7 @@ const BurnFollowUpAssessment: React.FC<BurnFollowUpAssessmentProps> = ({
             <h3 className="font-semibold text-gray-900">Assessment Summary</h3>
             
             {/* Quick Stats */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="bg-blue-50 rounded-lg p-3">
                 <p className="text-sm text-blue-600">Day Post-Injury</p>
                 <p className="text-2xl font-bold text-blue-800">{daysSinceInjury}</p>

@@ -617,43 +617,43 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
   ].filter(tab => tab.show !== false);
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] overflow-hidden">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0 sm:p-4">
+      <div className="bg-white rounded-none sm:rounded-lg shadow-xl w-full sm:max-w-6xl h-full sm:h-auto sm:max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="bg-gradient-to-r from-green-600 to-green-700 text-white px-6 py-4 flex justify-between items-center">
-          <div>
-            <h2 className="text-2xl font-bold">
+        <div className="bg-gradient-to-r from-green-600 to-green-700 text-white px-3 sm:px-6 py-3 sm:py-4 flex justify-between items-start sm:items-center flex-shrink-0">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-lg sm:text-2xl font-bold truncate">
               {wardRoundId ? 'Edit Ward Round' : 'New Ward Round'}
             </h2>
             {selectedPatient && (
-              <p className="text-green-100 text-sm mt-1">
-                Patient: {selectedPatient.first_name} {selectedPatient.last_name} • {selectedPatient.hospital_number}
+              <p className="text-green-100 text-xs sm:text-sm mt-1 truncate">
+                {selectedPatient.first_name} {selectedPatient.last_name} • {selectedPatient.hospital_number}
               </p>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0 ml-2">
             {selectedPatient && (
               <button
                 type="button"
                 onClick={() => { setScannerDocType('general'); setShowDocumentScanner(true); }}
-                className="flex items-center gap-2 px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 text-white rounded-lg transition-colors text-sm font-medium"
+                className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 text-white rounded-lg transition-colors text-xs sm:text-sm font-medium"
                 title="Scan a document and auto-fill ward round fields"
               >
-                <FileSearch className="w-4 h-4" />
                 <Camera className="w-4 h-4" />
-                Scan &amp; Autofill
+                <span className="hidden sm:inline">Scan &amp; Autofill</span>
+                <span className="sm:hidden">Scan</span>
               </button>
             )}
             {selectedPatient && (
               <button
                 type="button"
                 onClick={() => setShowScribePanel(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 text-white rounded-lg transition-colors text-sm font-medium"
+                className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 text-white rounded-lg transition-colors text-xs sm:text-sm font-medium"
                 title="AI Medical Scribe - Record and auto-fill"
               >
-                <Brain className="w-4 h-4" />
                 <Mic className="w-4 h-4" />
-                AI Scribe
+                <span className="hidden sm:inline">AI Scribe</span>
+                <span className="sm:hidden">Scribe</span>
               </button>
             )}
             <button onClick={onClose} className="text-white hover:text-gray-200">
@@ -663,15 +663,15 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
         </div>
 
         {/* Tabs */}
-        <div className="border-b border-gray-200 bg-gray-50">
-          <div className="flex overflow-x-auto">
+        <div className="border-b border-gray-200 bg-gray-50 flex-shrink-0">
+          <div className="tabs-touch-scroll">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               return (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-2 px-6 py-3 font-medium text-sm whitespace-nowrap transition-colors ${
+                  className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-6 py-2.5 sm:py-3 font-medium text-xs sm:text-sm whitespace-nowrap transition-colors ${
                     activeTab === tab.id
                       ? 'border-b-2 border-green-600 text-green-600 bg-white'
                       : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
@@ -686,8 +686,8 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
         </div>
 
         {/* Form Content */}
-        <form onSubmit={handleSubmit} className="overflow-y-auto max-h-[calc(90vh-200px)]">
-          <div className="p-6">
+        <form onSubmit={handleSubmit} className="overflow-y-auto flex-1 min-h-0 scroll-touch">
+          <div className="p-3 sm:p-6">
             {/* Patient Selection Tab */}
             {activeTab === 'patient' && (
               <div className="space-y-4">
@@ -716,7 +716,7 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
                 {selectedPatient && (
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                     <h3 className="font-semibold text-blue-900 mb-2">Patient Information</h3>
-                    <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-sm">
                       <div>
                         <span className="text-gray-600">Age:</span>
                         <span className="ml-2 font-medium">{selectedPatient.age} years</span>
@@ -737,7 +737,7 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Round Date *
@@ -798,7 +798,7 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
                 </div>
 
                 {/* Doctor Role */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Your Role *
@@ -870,7 +870,7 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
                   showWordCount
                 />
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Pain Score (0-10)
@@ -1747,7 +1747,7 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
 
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900 mb-3">Add Medication</h3>
-                  <div className="grid grid-cols-4 gap-2 mb-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
                     <input
                       type="text"
                       value={newMedication.name}
@@ -1817,7 +1817,7 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
               <div className="space-y-4">
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                   <h3 className="font-semibold text-blue-900 mb-2">Current Treatment Plan</h3>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-sm">
                     <div>
                       <span className="text-gray-600">Plan ID:</span>
                       <span className="ml-2 font-medium">{patientTreatmentPlan.id?.substring(0, 8)}...</span>
@@ -1935,17 +1935,17 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
           </div>
 
           {/* Footer */}
-          <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 flex justify-between">
+          <div className="border-t border-gray-200 px-3 sm:px-6 py-3 sm:py-4 bg-gray-50 flex justify-between flex-shrink-0 gap-3">
             <button
               type="button"
               onClick={onClose}
-              className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100"
+              className="px-4 sm:px-6 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 text-sm sm:text-base min-h-[44px]"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
+              className="px-4 sm:px-6 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2 text-sm sm:text-base min-h-[44px]"
             >
               <Save className="w-4 h-4" />
               Save Ward Round

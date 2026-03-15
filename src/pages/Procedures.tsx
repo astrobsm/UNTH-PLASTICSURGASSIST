@@ -515,7 +515,7 @@ const NewProcedureModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Scheduled Date</label>
           <input
@@ -539,7 +539,7 @@ const NewProcedureModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Operating Room</label>
           <input
@@ -649,7 +649,7 @@ const NewProcedureModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     <div className="space-y-4">
       <h4 className="font-semibold text-gray-900 border-b pb-2">Surgical Fitness Scoring & Risk Assessment</h4>
       
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Patient Age</label>
           <input
@@ -802,7 +802,7 @@ const NewProcedureModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         </label>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Platelet Count (×10⁹/L)</label>
           <input
@@ -973,7 +973,7 @@ const NewProcedureModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
       
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">Select Comorbidities</label>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {comorbidityOptions.map(comorbidity => (
             <label key={comorbidity} className="flex items-center gap-2 p-2 border rounded hover:bg-gray-50">
               <input
@@ -1127,7 +1127,7 @@ const NewProcedureModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     <div className="space-y-4">
       <h4 className="font-semibold text-gray-900 border-b pb-2">Preoperative Investigations</h4>
       
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <label className="flex items-center gap-2 p-3 border rounded hover:bg-gray-50">
           <input
             type="checkbox"
@@ -1271,7 +1271,7 @@ const NewProcedureModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
       </div>
 
       {formData.clinical_photos.length > 0 && (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {formData.clinical_photos.map((photo, index) => (
             <div key={index} className="border border-gray-200 rounded-lg p-3">
               <img
@@ -1305,8 +1305,8 @@ const NewProcedureModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   );
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0 sm:p-4">
+      <div className="bg-white rounded-none sm:rounded-lg shadow-xl sm:max-w-4xl w-full h-full sm:h-auto sm:max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-lg font-semibold text-gray-900">Schedule New Procedure</h3>
@@ -1808,8 +1808,8 @@ const IntraoperativeFindingsModal: React.FC<{ procedure: any; onClose: () => voi
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0 sm:p-4">
+      <div className="bg-white rounded-none sm:rounded-lg shadow-xl sm:max-w-4xl w-full h-full sm:h-auto sm:max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           <h3 className="text-xl font-semibold text-gray-900 mb-4">Record Intraoperative Findings</h3>
           <p className="text-sm text-gray-600 mb-6">
@@ -1817,7 +1817,7 @@ const IntraoperativeFindingsModal: React.FC<{ procedure: any; onClose: () => voi
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Surgical Approach</label>
                 <input
@@ -1874,7 +1874,7 @@ const IntraoperativeFindingsModal: React.FC<{ procedure: any; onClose: () => voi
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Tissue Excised</label>
                 <input
@@ -1898,7 +1898,7 @@ const IntraoperativeFindingsModal: React.FC<{ procedure: any; onClose: () => voi
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Implants/Prosthetics Used</label>
                 <input
@@ -2069,8 +2069,8 @@ const RescheduleProcedureModal: React.FC<{ procedure: any; onClose: () => void }
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0 sm:p-4">
+      <div className="bg-white rounded-none sm:rounded-lg shadow-xl sm:max-w-2xl w-full h-full sm:h-auto sm:max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           <h3 className="text-xl font-semibold text-gray-900 mb-4">Reschedule Procedure</h3>
           <p className="text-sm text-gray-600 mb-6">
@@ -2084,7 +2084,7 @@ const RescheduleProcedureModal: React.FC<{ procedure: any; onClose: () => void }
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">New Date *</label>
                 <input
@@ -2249,8 +2249,8 @@ const CancelProcedureModal: React.FC<{ procedure: any; onClose: () => void }> = 
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0 sm:p-4">
+      <div className="bg-white rounded-none sm:rounded-lg shadow-xl sm:max-w-2xl w-full h-full sm:h-auto sm:max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           <h3 className="text-xl font-semibold text-gray-900 mb-4 text-red-600">Cancel Procedure</h3>
           <p className="text-sm text-gray-600 mb-6">
@@ -2429,8 +2429,8 @@ const PostoperativeTreatmentModal: React.FC<{ procedure: any; onClose: () => voi
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0 sm:p-4">
+      <div className="bg-white rounded-none sm:rounded-lg shadow-xl sm:max-w-4xl w-full h-full sm:h-auto sm:max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           <h3 className="text-xl font-semibold text-gray-900 mb-4">Document Postoperative Treatment Plan</h3>
           <p className="text-sm text-gray-600 mb-6">
@@ -2748,8 +2748,8 @@ const PostoperativeNoteModal: React.FC<{ procedure: any; onClose: () => void }> 
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0 sm:p-4">
+      <div className="bg-white rounded-none sm:rounded-lg shadow-xl sm:max-w-6xl w-full h-full sm:h-auto sm:max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           <h3 className="text-xl font-semibold text-gray-900 mb-4">Generate Postoperative Note</h3>
           <p className="text-sm text-gray-600 mb-6">
@@ -2760,7 +2760,7 @@ const PostoperativeNoteModal: React.FC<{ procedure: any; onClose: () => void }> 
             {/* Patient Details */}
             <div className="border border-gray-200 rounded-lg p-4">
               <h4 className="font-semibold text-gray-900 mb-3">Patient Details</h4>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
                   <input
@@ -2833,7 +2833,7 @@ const PostoperativeNoteModal: React.FC<{ procedure: any; onClose: () => void }> 
             </div>
 
             {/* Surgical Details */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Indication for Surgery *</label>
                 <textarea
@@ -2907,7 +2907,7 @@ const PostoperativeNoteModal: React.FC<{ procedure: any; onClose: () => void }> 
             <div className="border-2 border-green-200 rounded-lg p-4 bg-green-50">
               <h4 className="font-semibold text-gray-900 mb-3">Nutrition & Meal Planning (African Foods)</h4>
               
-              <div className="grid grid-cols-2 gap-4 mb-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Meal Commencement *</label>
                   <input
@@ -2946,7 +2946,7 @@ const PostoperativeNoteModal: React.FC<{ procedure: any; onClose: () => void }> 
 
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">Comorbidities (Select all that apply) *</label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   {comorbidityOptions.map(comorbidity => (
                     <label key={comorbidity} className="flex items-center gap-2">
                       <input
@@ -2990,7 +2990,7 @@ const PostoperativeNoteModal: React.FC<{ procedure: any; onClose: () => void }> 
                   {generatedMealPlan.map((day: any) => (
                     <div key={day.day} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
                       <h5 className="font-medium text-gray-900 mb-2">Day {day.day}</h5>
-                      <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                         <div>
                           <strong>Breakfast:</strong> {day.breakfast}
                         </div>
@@ -3022,7 +3022,7 @@ const PostoperativeNoteModal: React.FC<{ procedure: any; onClose: () => void }> 
             )}
 
             {/* Ambulation & DVT Prophylaxis */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Ambulation Plan *</label>
                 <textarea

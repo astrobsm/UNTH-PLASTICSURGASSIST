@@ -358,7 +358,7 @@ const RotationManagement: React.FC = () => {
                         </button>
                       </div>
                       
-                      <div className="grid grid-cols-3 gap-4 text-sm mb-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm mb-3">
                         <div>
                           <span className="text-gray-500">Commencement</span>
                           <p className="font-semibold">{start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>

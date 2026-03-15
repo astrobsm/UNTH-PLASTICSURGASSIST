@@ -363,7 +363,7 @@ export const TreatmentPlanModificationPanel: React.FC<TreatmentPlanModificationP
             )}
 
             {modType !== 'remove' && (
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Medication Name *</label>
                   <input
@@ -467,8 +467,8 @@ export const TreatmentPlanModificationPanel: React.FC<TreatmentPlanModificationP
             )}
 
             {modType !== 'remove' && (
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="col-span-1 sm:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Investigation Name *</label>
                   <input
                     type="text"
@@ -560,8 +560,8 @@ export const TreatmentPlanModificationPanel: React.FC<TreatmentPlanModificationP
             )}
 
             {modType !== 'remove' && (
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="col-span-1 sm:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Procedure Name *</label>
                   <input
                     type="text"

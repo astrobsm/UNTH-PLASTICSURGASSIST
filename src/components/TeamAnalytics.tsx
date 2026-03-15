@@ -234,7 +234,7 @@ export default function TeamAnalytics({ refreshTrigger }: TeamAnalyticsProps) {
                 <div className={`inline-block px-3 py-1 rounded mb-2 ${getRoleBadgeColor(item.role)}`}>
                   {getRoleLabel(item.role)}
                 </div>
-                <div className="grid grid-cols-2 gap-2 text-sm mt-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm mt-3">
                   <div>
                     <div className="text-gray-500">Staff</div>
                     <div className="font-bold">{item.staff_count}</div>

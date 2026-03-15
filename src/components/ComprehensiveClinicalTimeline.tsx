@@ -1434,7 +1434,7 @@ function renderEventDetails(event: TimelineEvent): React.ReactNode {
           {d.vital_signs && (
             <div>
               <span className="font-medium text-gray-700">Vital Signs:</span>
-              <div className="grid grid-cols-3 gap-2 mt-1">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-1">
                 {d.vital_signs.temperature && <span className="text-gray-600">Temp: {d.vital_signs.temperature}</span>}
                 {d.vital_signs.bloodPressure && <span className="text-gray-600">BP: {d.vital_signs.bloodPressure}</span>}
                 {d.vital_signs.pulse && <span className="text-gray-600">PR: {d.vital_signs.pulse}</span>}
@@ -1476,7 +1476,7 @@ function renderEventDetails(event: TimelineEvent): React.ReactNode {
       return (
         <div className="space-y-3 text-sm">
           {/* Procedure & Anesthesia */}
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <DetailRow label="Procedure" value={d.procedure} />
             <DetailRow label="Anesthesia" value={d.anesthesia} />
             <DetailRow label="ASA Class" value={d.asa_class} />
@@ -1495,7 +1495,7 @@ function renderEventDetails(event: TimelineEvent): React.ReactNode {
           )}
           
           {/* Risk Scores */}
-          <div className="grid grid-cols-2 gap-2 bg-gray-50 rounded p-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-gray-50 rounded p-2">
             <div className="col-span-2 font-semibold text-gray-700 text-xs uppercase tracking-wide">Risk Scores</div>
             <DetailRow label="Bleeding Risk" value={d.bleeding_risk ? `${d.bleeding_risk} (score: ${d.bleeding_score || 'N/A'})` : undefined} />
             <DetailRow label="DVT Risk" value={d.dvt_risk ? `${d.dvt_risk} (score: ${d.dvt_score || 'N/A'})` : undefined} />
@@ -1505,7 +1505,7 @@ function renderEventDetails(event: TimelineEvent): React.ReactNode {
           </div>
           
           {/* Readiness */}
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <DetailRow label="Blood Available" value={d.blood_available ? 'Yes' : d.blood_available === false ? 'No' : undefined} />
             <DetailRow label="ICU Bed Reserved" value={d.icu_bed_reserved ? 'Yes' : d.icu_bed_reserved === false ? 'No' : undefined} />
             <DetailRow label="Insurance Covered" value={d.insurance_covered} />
@@ -1535,7 +1535,7 @@ function renderEventDetails(event: TimelineEvent): React.ReactNode {
 
     case 'prescription':
       return (
-        <div className="grid grid-cols-2 gap-2 text-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
           <DetailRow label="Medication" value={d.medication} />
           <DetailRow label="Dosage" value={d.dosage} />
           <DetailRow label="Frequency" value={d.frequency} />
@@ -1578,7 +1578,7 @@ function renderEventDetails(event: TimelineEvent): React.ReactNode {
     case 'lab_result':
       return (
         <div className="space-y-2 text-sm">
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <DetailRow label="Result" value={`${d.result_value} ${d.unit || ''}`} />
             <DetailRow label="Ref Range" value={d.reference_range} />
             <DetailRow label="Flag" value={d.abnormal_flag?.replace('_', ' ')} />
@@ -1595,7 +1595,7 @@ function renderEventDetails(event: TimelineEvent): React.ReactNode {
 
     case 'admission':
       return (
-        <div className="grid grid-cols-2 gap-2 text-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
           <DetailRow label="Ward" value={d.ward} />
           <DetailRow label="Route" value={d.route} />
           <DetailRow label="Diagnosis" value={d.diagnosis} />
@@ -1642,7 +1642,7 @@ function renderEventDetails(event: TimelineEvent): React.ReactNode {
     case 'risk_assessment':
       return (
         <div className="space-y-2 text-sm">
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <DetailRow label="Risk Level" value={d.risk_level} />
             <DetailRow label="Total Score" value={d.total_score?.toString()} />
             {d.bmi && <DetailRow label="BMI" value={d.bmi?.toString()} />}
@@ -1696,7 +1696,7 @@ function renderEventDetails(event: TimelineEvent): React.ReactNode {
 
     case 'wound_care':
       return (
-        <div className="grid grid-cols-2 gap-2 text-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
           <DetailRow label="Type" value={d.wound_type} />
           <DetailRow label="Location" value={d.wound_location} />
           <DetailRow label="Stage" value={d.wound_stage} />
@@ -1748,7 +1748,7 @@ function renderEventDetails(event: TimelineEvent): React.ReactNode {
 
     case 'burn_care':
       return (
-        <div className="grid grid-cols-2 gap-2 text-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
           <DetailRow label="Mechanism" value={d.mechanism} />
           <DetailRow label="TBSA %" value={d.tbsa_percentage?.toString()} />
           <DetailRow label="Baux Score" value={d.baux_score?.toString()} />
@@ -1759,7 +1759,7 @@ function renderEventDetails(event: TimelineEvent): React.ReactNode {
 
     case 'diabetic_foot':
       return (
-        <div className="grid grid-cols-2 gap-2 text-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
           {Object.entries(d).filter(([k, v]) => v !== undefined && v !== null && k !== 'id').map(([key, val]) => (
             <DetailRow key={key} label={key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())} value={String(val)} />
           ))}

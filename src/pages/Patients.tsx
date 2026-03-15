@@ -272,7 +272,7 @@ export const Patients: React.FC = () => {
                   </div>
                   <span className="text-xs text-gray-500">{item.admission_date ? new Date(item.admission_date).toLocaleDateString() : 'N/A'}</span>
                 </div>
-                <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-700">
+                <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-gray-700">
                   {item.ward_location && <div><span className="font-medium">Ward:</span> {item.ward_location}</div>}
                   {item.route_of_admission && <div><span className="font-medium">Route:</span> {item.route_of_admission}</div>}
                   {item.admitting_diagnosis && <div className="col-span-2"><span className="font-medium">Diagnosis:</span> {item.admitting_diagnosis}</div>}
@@ -293,7 +293,7 @@ export const Patients: React.FC = () => {
                   <span className="font-semibold text-indigo-900">Discharge #{idx + 1}</span>
                   <span className="text-xs text-gray-500">{item.discharge_date ? new Date(item.discharge_date).toLocaleDateString() : 'N/A'}</span>
                 </div>
-                <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-700">
+                <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-gray-700">
                   {item.discharge_status && <div><span className="font-medium">Status:</span> {item.discharge_status}</div>}
                   {item.discharge_type && <div><span className="font-medium">Type:</span> {item.discharge_type}</div>}
                   {item.discharge_diagnosis && <div className="col-span-2"><span className="font-medium">Diagnosis:</span> {item.discharge_diagnosis}</div>}
@@ -315,7 +315,7 @@ export const Patients: React.FC = () => {
                     item.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
                   }`}>{item.status || 'Active'}</span>
                 </div>
-                <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-700">
+                <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-gray-700">
                   {item.dosage && <div><span className="font-medium">Dosage:</span> {item.dosage}</div>}
                   {item.frequency && <div><span className="font-medium">Frequency:</span> {item.frequency}</div>}
                   {item.route && <div><span className="font-medium">Route:</span> {item.route}</div>}
@@ -337,7 +337,7 @@ export const Patients: React.FC = () => {
                   <span className="font-semibold text-purple-900">Ward Round #{idx + 1}</span>
                   <span className="text-xs text-gray-500">{item.date || item.round_date ? new Date(item.date || item.round_date).toLocaleDateString() : 'N/A'}</span>
                 </div>
-                <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-700">
+                <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-gray-700">
                   {item.ward_name && <div><span className="font-medium">Ward:</span> {item.ward_name}</div>}
                   {item.consultant && <div><span className="font-medium">Consultant:</span> {item.consultant}</div>}
                   {item.clinical_status && <div><span className="font-medium">Clinical Status:</span> {item.clinical_status}</div>}
@@ -362,7 +362,7 @@ export const Patients: React.FC = () => {
                     item.status === 'scheduled' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-700'
                   }`}>{item.status || 'Scheduled'}</span>
                 </div>
-                <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-700">
+                <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-gray-700">
                   {item.date && <div><span className="font-medium">Date:</span> {new Date(item.date).toLocaleDateString()}</div>}
                   {item.theatre_number && <div><span className="font-medium">Theatre:</span> {item.theatre_number}</div>}
                   {item.primary_surgeon && <div><span className="font-medium">Surgeon:</span> {item.primary_surgeon}</div>}
@@ -385,7 +385,7 @@ export const Patients: React.FC = () => {
                     item.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
                   }`}>{item.status || 'Pending'}</span>
                 </div>
-                <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-700">
+                <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-gray-700">
                   {item.procedure_type && <div><span className="font-medium">Type:</span> {item.procedure_type}</div>}
                   {item.scheduled_date && <div><span className="font-medium">Date:</span> {new Date(item.scheduled_date).toLocaleDateString()}</div>}
                   {item.surgeon && <div><span className="font-medium">Surgeon:</span> {item.surgeon}</div>}
@@ -407,7 +407,7 @@ export const Patients: React.FC = () => {
                     item.status === 'pending' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-700'
                   }`}>{item.status || 'Pending'}</span>
                 </div>
-                <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-700">
+                <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-gray-700">
                   {item.request_date && <div><span className="font-medium">Requested:</span> {new Date(item.request_date).toLocaleDateString()}</div>}
                   {item.requested_by && <div><span className="font-medium">By:</span> {item.requested_by}</div>}
                   {item.urgency && <div><span className="font-medium">Urgency:</span> {item.urgency}</div>}
@@ -431,7 +431,7 @@ export const Patients: React.FC = () => {
                     item.status === 'completed' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'
                   }`}>{item.status || 'Active'}</span>
                 </div>
-                <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-700">
+                <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-gray-700">
                   {item.diagnosis && <div className="col-span-2"><span className="font-medium">Diagnosis:</span> {item.diagnosis}</div>}
                   {item.created_at && <div><span className="font-medium">Created:</span> {new Date(item.created_at).toLocaleDateString()}</div>}
                   {item.goals && <div className="col-span-2"><span className="font-medium">Goals:</span> {typeof item.goals === 'string' ? item.goals : JSON.stringify(item.goals)}</div>}
@@ -450,7 +450,7 @@ export const Patients: React.FC = () => {
                   <span className="font-semibold text-pink-900">{item.wound_type || 'Wound Assessment'}</span>
                   <span className="text-xs text-gray-500">{item.assessment_date ? new Date(item.assessment_date).toLocaleDateString() : 'N/A'}</span>
                 </div>
-                <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-700">
+                <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-gray-700">
                   {item.wound_location && <div><span className="font-medium">Location:</span> {item.wound_location}</div>}
                   {item.wound_stage && <div><span className="font-medium">Stage:</span> {item.wound_stage}</div>}
                   {item.assessed_by && <div><span className="font-medium">Assessed by:</span> {item.assessed_by}</div>}
@@ -470,7 +470,7 @@ export const Patients: React.FC = () => {
                   <span className="font-semibold text-yellow-900">Pre-op Assessment #{idx + 1}</span>
                   <span className="text-xs text-gray-500">{item.assessed_at ? new Date(item.assessed_at).toLocaleDateString() : 'N/A'}</span>
                 </div>
-                <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-700">
+                <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-gray-700">
                   {item.assessed_by && <div><span className="font-medium">Assessed by:</span> {item.assessed_by}</div>}
                   {item.comprehensive_summary && <div className="col-span-2"><span className="font-medium">Summary:</span> {
                     typeof item.comprehensive_summary === 'string' 

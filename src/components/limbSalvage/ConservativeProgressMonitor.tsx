@@ -529,7 +529,7 @@ export const ConservativeProgressMonitor: React.FC<ConservativeProgressMonitorPr
                                   {entry.woundStatus.charAt(0).toUpperCase() + entry.woundStatus.slice(1)}
                                 </span>
                               </div>
-                              <div className="mt-2 grid grid-cols-3 gap-2 text-xs text-gray-600">
+                              <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs text-gray-600">
                                 <div>
                                   <span className="font-medium">Granulation:</span> {entry.granulationPercentage}%
                                 </div>
@@ -733,7 +733,7 @@ const ProgressEntryModal: React.FC<ProgressEntryModalProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Overall Wound Status *
             </label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               {(['improving', 'stable', 'deteriorating'] as const).map(status => (
                 <button
                   key={status}
@@ -762,7 +762,7 @@ const ProgressEntryModal: React.FC<ProgressEntryModalProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Wound Size (cm)
             </label>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="text-xs text-gray-500">Length</label>
                 <input
@@ -806,7 +806,7 @@ const ProgressEntryModal: React.FC<ProgressEntryModalProps> = ({
           </div>
 
           {/* Granulation & Pain */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Granulation Tissue: {entry.granulationPercentage}%
@@ -875,7 +875,7 @@ const ProgressEntryModal: React.FC<ProgressEntryModalProps> = ({
           </div>
 
           {/* Exudate */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Exudate Amount
@@ -909,7 +909,7 @@ const ProgressEntryModal: React.FC<ProgressEntryModalProps> = ({
           </div>
 
           {/* Compliance */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Offloading Compliance
@@ -945,7 +945,7 @@ const ProgressEntryModal: React.FC<ProgressEntryModalProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Recommended Action *
             </label>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <button
                 onClick={() => setEntry({ ...entry, recommendAction: 'continue' })}
                 className={`py-3 px-4 rounded-lg border-2 text-sm transition-colors ${

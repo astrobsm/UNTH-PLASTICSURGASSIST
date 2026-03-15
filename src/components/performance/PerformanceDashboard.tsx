@@ -690,7 +690,7 @@ const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({ level, onBa
             </div>
             <div className="p-6">
               <div className="bg-green-50 rounded-lg p-4 mb-4">
-                <div className="grid grid-cols-2 gap-4 text-sm">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                   <div>
                     <span className="text-gray-500">Overall Score</span>
                     <p className="font-bold text-green-600">{metrics.overallScore.toFixed(0)}%</p>

@@ -3214,7 +3214,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Co-morbidities <span className="text-red-500">*</span>
             </label>
-            <div className="grid grid-cols-2 gap-2 mt-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
               {/* None option */}
               <label className={`flex items-center p-2 rounded-md border ${
                 riskAssessmentData.clinical.comorbidities.includes('none') 

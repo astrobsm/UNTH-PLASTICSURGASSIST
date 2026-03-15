@@ -268,7 +268,7 @@ Requirements:
                 <h3 className="font-bold text-green-800 mb-2" style={{ fontSize: '22px' }}>
                   Patient Demographics
                 </h3>
-                <div className="grid grid-cols-2 gap-2" style={{ fontSize: '18px' }}>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2" style={{ fontSize: '18px' }}>
                   <p><strong>Name:</strong> {selectedPatient.full_name || selectedPatient.name}</p>
                   <p><strong>Hospital No:</strong> {selectedPatient.hospital_number || 'N/A'}</p>
                   <p><strong>Age:</strong> {age} years</p>
@@ -276,7 +276,7 @@ Requirements:
                 </div>
               </div>
               {(selectedPatient.allergies?.length > 0 || selectedPatient.comorbidities?.length > 0) && (
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {selectedPatient.allergies?.length > 0 && (
                     <div>
                       <h4 className="font-bold text-red-700" style={{ fontSize: '18px' }}>Allergies</h4>

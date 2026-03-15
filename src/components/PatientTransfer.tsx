@@ -92,7 +92,7 @@ export const PatientTransferForm: React.FC<PatientTransferFormProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Transfer Type *
             </label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {(['ward_transfer', 'emergency_admission', 'clinic_admission', 'inter_hospital'] as const).map(type => (
                 <label
                   key={type}

@@ -257,7 +257,7 @@ const CBTResults: React.FC<CBTResultsProps> = ({ test, attempt, onReturnToTests 
           {/* Score Display */}
           <div className="p-8 -mt-8">
             <div className="bg-white rounded-xl shadow-lg p-6 border">
-              <div className="grid grid-cols-3 gap-4 text-center">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
                 {/* Score */}
                 <div>
                   <div className={`text-4xl font-bold ${color}`}>
@@ -293,7 +293,7 @@ const CBTResults: React.FC<CBTResultsProps> = ({ test, attempt, onReturnToTests 
           
           {/* Statistics */}
           <div className="px-8 pb-6">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="bg-green-50 rounded-xl p-4 border border-green-200">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
@@ -325,7 +325,7 @@ const CBTResults: React.FC<CBTResultsProps> = ({ test, attempt, onReturnToTests 
             
             {/* Time Stats */}
             <div className="mt-4 bg-gray-50 rounded-xl p-4 border border-gray-200">
-              <div className="grid grid-cols-2 gap-4 text-center">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-center">
                 <div>
                   <div className="text-sm text-gray-500">Test Duration</div>
                   <div className="font-semibold text-gray-800">10 minutes</div>

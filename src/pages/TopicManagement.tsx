@@ -775,7 +775,7 @@ export default function TopicManagement() {
 
       {/* Topic Detail Modal */}
       {selectedTopic && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0 sm:p-4">
           <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <div className="flex items-start justify-between mb-4">
@@ -823,7 +823,7 @@ export default function TopicManagement() {
                         ))}
                       </div>
                     </div>
-                  )}                <div className="grid grid-cols-2 gap-4 pt-4 border-t">
+                  )}                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t">
                   <div>
                     <span className="text-sm font-medium text-gray-600">Difficulty:</span>
                     <p className="text-gray-900 capitalize">{selectedTopic.difficulty}</p>

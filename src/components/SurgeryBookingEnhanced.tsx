@@ -608,7 +608,7 @@ export default function SurgeryBookingEnhanced({ selectedDate, onRefresh }: Surg
               {/* Patient Demographics */}
               <div className="bg-gray-50 p-4 rounded-lg">
                 <h4 className="font-semibold text-gray-900 mb-3">Patient Information</h4>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <span className="text-sm text-gray-500">Name:</span>
                     <p className="font-medium">{selectedSurgery.patient_name}</p>
@@ -998,7 +998,7 @@ export default function SurgeryBookingEnhanced({ selectedDate, onRefresh }: Surg
                 {formData.operation_site_images.length > 0 && (
                   <div className="mt-3">
                     <p className="text-sm text-gray-600 mb-2">{formData.operation_site_images.length} image(s) uploaded</p>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                       {formData.operation_site_images.map((img, idx) => (
                         <div key={idx} className="relative">
                           <img src={img} alt={`Operation site ${idx + 1}`} className="h-24 w-full object-cover rounded" />
@@ -1032,7 +1032,7 @@ export default function SurgeryBookingEnhanced({ selectedDate, onRefresh }: Surg
                 {formData.xray_images.length > 0 && (
                   <div className="mt-3">
                     <p className="text-sm text-gray-600 mb-2">{formData.xray_images.length} imaging file(s) uploaded</p>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                       {formData.xray_images.map((img, idx) => (
                         <div key={idx} className="relative">
                           <img src={img} alt={`X-ray/CT ${idx + 1}`} className="h-24 w-full object-cover rounded" />

@@ -733,21 +733,21 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
   ];
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white border-b border-gray-200 p-6 z-10">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0 sm:p-4">
+      <div className="bg-white rounded-none sm:rounded-lg shadow-xl sm:max-w-4xl w-full h-full sm:h-auto sm:max-h-[90vh] overflow-y-auto scroll-touch flex flex-col">
+        <div className="sticky top-0 bg-white border-b border-gray-200 p-3 sm:p-6 z-10">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-2xl font-bold text-gray-900">Create Comprehensive Treatment Plan</h2>
+            <h2 className="text-lg sm:text-2xl font-bold text-gray-900 truncate">Create Comprehensive Treatment Plan</h2>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
               <X className="w-6 h-6" />
             </button>
           </div>
           
           {/* Progress Steps */}
-          <div className="flex items-center justify-between overflow-x-auto">
+          <div className="steps-scroll">
             {steps.map((step, index) => (
-              <div key={step.number} className="flex items-center">
-                <div className={`flex items-center justify-center w-8 h-8 rounded-full flex-shrink-0 ${
+              <div key={step.number} className="flex items-center flex-shrink-0">
+                <div className={`flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full flex-shrink-0 ${
                   currentStep >= step.number ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-600'
                 }`}>
                   {step.number}
@@ -772,13 +772,13 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
           if (e.key === 'Enter' && !(e.target as HTMLElement).matches('textarea')) {
             e.preventDefault();
           }
-        }} className="p-6">
+        }} className="p-3 sm:p-6 flex-1">
           {/* Step 1: Basic Info & Medical Team */}
           {currentStep === 1 && (
             <div className="space-y-6">
               <h3 className="text-lg font-semibold text-gray-900">Basic Information</h3>
               
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Patient *</label>
                   <select
@@ -969,7 +969,7 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
               </div>
               
               <div className="bg-gray-50 p-4 rounded-lg space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div ref={medSearchRef} className="relative">
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       <Search className="w-3.5 h-3.5 inline mr-1" />
@@ -1241,7 +1241,7 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
               </div>
               
               <div className="bg-gray-50 p-4 rounded-lg space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div ref={invSearchRef} className="relative">
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       <Search className="w-3.5 h-3.5 inline mr-1" />
@@ -1486,7 +1486,7 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
               <h3 className="text-lg font-semibold text-gray-900">Procedures</h3>
               
               <div className="bg-gray-50 p-4 rounded-lg space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Procedure Name</label>
                     <input
@@ -1625,7 +1625,7 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
               <h3 className="text-lg font-semibold text-gray-900">Planned Reviews</h3>
               
               <div className="bg-gray-50 p-4 rounded-lg space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Review Type</label>
                     <select
@@ -1754,7 +1754,7 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
             <div className="space-y-6">
               <h3 className="text-lg font-semibold text-gray-900">Discharge Planning</h3>
               
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Proposed Discharge Date *</label>
                   <input
@@ -1822,12 +1822,12 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
           )}
 
           {/* Navigation Buttons */}
-          <div className="flex justify-between mt-8 pt-6 border-t border-gray-200">
+          <div className="flex justify-between mt-6 sm:mt-8 pt-4 sm:pt-6 border-t border-gray-200">
             <button
               type="button"
               onClick={() => setCurrentStep(Math.max(1, currentStep - 1))}
               disabled={currentStep === 1}
-              className="px-6 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 sm:px-6 py-2.5 text-sm sm:text-base text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
             >
               Previous
             </button>
@@ -1836,7 +1836,7 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
               <button
                 type="button"
                 onClick={() => setCurrentStep(currentStep + 1)}
-                className="px-6 py-2 text-white bg-green-600 rounded-md hover:bg-green-700"
+                className="px-4 sm:px-6 py-2.5 text-sm sm:text-base text-white bg-green-600 rounded-md hover:bg-green-700 min-h-[44px]"
               >
                 Next
               </button>
@@ -1844,7 +1844,7 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
               <button
                 type="button"
                 onClick={() => handleSubmit()}
-                className="px-6 py-2 text-white bg-green-600 rounded-md hover:bg-green-700"
+                className="px-4 sm:px-6 py-2.5 text-sm sm:text-base text-white bg-green-600 rounded-md hover:bg-green-700 min-h-[44px]"
               >
                 {existingPlanId ? 'Update Treatment Plan' : 'Create Treatment Plan'}
               </button>

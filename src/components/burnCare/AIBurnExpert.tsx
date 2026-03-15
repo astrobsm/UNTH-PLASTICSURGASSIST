@@ -475,7 +475,7 @@ const AIBurnExpert: React.FC<AIBurnExpertProps> = ({
                       </div>
                     </div>
                   ) : !isCameraLoading && (
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <button
                         onClick={startCamera}
                         disabled={isCameraLoading}
@@ -566,7 +566,7 @@ const AIBurnExpert: React.FC<AIBurnExpertProps> = ({
               {imageAnalysis ? (
                 <>
                   {/* Summary Stats */}
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="p-4 bg-white rounded-lg border border-purple-200 text-center">
                       <div className="text-2xl font-bold text-purple-700">
                         {imageAnalysis.estimatedTBSA.toFixed(1)}%
@@ -675,7 +675,7 @@ const AIBurnExpert: React.FC<AIBurnExpertProps> = ({
                   </div>
 
                   {/* TBSA Breakdown */}
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="p-3 bg-white rounded-lg border text-center">
                       <div className="text-xl font-bold text-orange-600">{burnAnalysis.totalTBSA.toFixed(1)}%</div>
                       <div className="text-xs text-gray-600">Total TBSA</div>

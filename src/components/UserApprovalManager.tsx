@@ -520,7 +520,7 @@ export function UserApprovalManager() {
       {/* User Details Modal */}
       {showDetailsModal && selectedUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-none sm:rounded-lg shadow-xl sm:max-w-2xl w-full h-full sm:h-auto sm:max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
               <h3 className="text-xl font-bold text-clinical-dark">User Details</h3>
               <button
@@ -533,7 +533,7 @@ export function UserApprovalManager() {
             </div>
 
             <div className="p-6 space-y-6">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium text-gray-500">Full Name</label>
                   <p className="text-clinical-dark font-medium">{selectedUser.full_name}</p>

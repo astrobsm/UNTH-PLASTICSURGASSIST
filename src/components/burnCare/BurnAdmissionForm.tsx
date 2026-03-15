@@ -926,7 +926,7 @@ const BurnAdmissionForm: React.FC<BurnAdmissionFormProps> = ({ onComplete, onCan
 
                 <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
                   <h4 className="font-medium text-yellow-800 mb-2">Urine Output Targets</h4>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                     <div>
                       <span className="text-yellow-700">Adults:</span>
                       <span className="font-medium text-yellow-900 ml-2">0.5–1.0 mL/kg/hr</span>
@@ -1004,7 +1004,7 @@ const BurnAdmissionForm: React.FC<BurnAdmissionFormProps> = ({ onComplete, onCan
             {/* Summary Table */}
             <div className="bg-gray-50 rounded-lg p-4">
               <h4 className="font-medium text-gray-900 mb-3">Patient Summary</h4>
-              <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 sm:gap-x-8 gap-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-gray-600">Patient ID:</span>
                   <span className="font-medium">{patientId}</span>
@@ -1110,7 +1110,7 @@ const BurnAdmissionForm: React.FC<BurnAdmissionFormProps> = ({ onComplete, onCan
       {/* Progress Steps */}
       <div className="bg-white border-b">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between overflow-x-auto scrollbar-hide">
             {STEPS.map((step, index) => {
               const Icon = step.icon;
               const isActive = currentStep === step.id;

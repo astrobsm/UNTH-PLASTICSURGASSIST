@@ -798,7 +798,7 @@ const MCQEducation: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-4 text-center">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
                   <div>
                     <div className="text-2xl font-bold text-gray-900">{session.rawScore || 0}</div>
                     <div className="text-xs text-gray-600">Raw Score</div>

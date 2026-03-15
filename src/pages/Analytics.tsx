@@ -405,7 +405,7 @@ export default function Analytics() {
                                 </span>
                               </div>
 
-                              <div className="grid grid-cols-3 gap-4 mb-2 text-sm">
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-2 text-sm">
                                 <div>
                                   <span className="text-gray-600">Total Steps:</span>
                                   <span className="ml-2 font-medium text-gray-900">{plan.total_steps}</span>

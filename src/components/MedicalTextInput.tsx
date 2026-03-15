@@ -517,7 +517,7 @@ export const MedicalTextInput: React.FC<MedicalTextInputProps> = ({
       {isListening && (
         <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-lg text-xs text-green-700">
           <p className="font-medium mb-1">💡 Voice commands:</p>
-          <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-0.5">
             <span>"period" → .</span>
             <span>"comma" → ,</span>
             <span>"new line" → ↵</span>

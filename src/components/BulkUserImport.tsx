@@ -421,7 +421,7 @@ Dr. Mike Johnson,mike.johnson@hospital.com,consultant,Plastic Surgery`;
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Import Results</h3>
           
           {/* Summary */}
-          <div className="grid grid-cols-2 gap-4 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
             <div className="bg-green-50 rounded-lg p-4 text-center">
               <CheckCircle className="h-8 w-8 text-green-600 mx-auto mb-2" />
               <p className="text-2xl font-bold text-green-700">{importResult.success.length}</p>

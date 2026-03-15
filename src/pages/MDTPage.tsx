@@ -163,7 +163,7 @@ const MDTPage: React.FC = () => {
     };
 
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0 sm:p-4">
         <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
           <div className="p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Add Patient to MDT</h3>
@@ -238,12 +238,12 @@ const MDTPage: React.FC = () => {
     };
 
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0 sm:p-4">
+        <div className="bg-white rounded-none sm:rounded-lg shadow-xl sm:max-w-2xl w-full h-full sm:h-auto sm:max-h-[90vh] overflow-y-auto">
           <div className="p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Add Specialty to Team</h3>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Specialty Name</label>
                   <input
@@ -281,7 +281,7 @@ const MDTPage: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Contact Phone</label>
                   <input
@@ -355,7 +355,7 @@ const MDTPage: React.FC = () => {
     if (!selectedSpecialty) return null;
 
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0 sm:p-4">
         <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
           <div className="p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Contact</h3>
@@ -483,8 +483,8 @@ const MDTPage: React.FC = () => {
     };
 
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0 sm:p-4">
+        <div className="bg-white rounded-none sm:rounded-lg shadow-xl sm:max-w-2xl w-full h-full sm:h-auto sm:max-h-[90vh] overflow-y-auto">
           <div className="p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Schedule MDT Meeting</h3>
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -500,7 +500,7 @@ const MDTPage: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="col-span-1">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
                   <input
@@ -660,8 +660,8 @@ const MDTPage: React.FC = () => {
     };
 
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0 sm:p-4">
+        <div className="bg-white rounded-none sm:rounded-lg shadow-xl sm:max-w-2xl w-full h-full sm:h-auto sm:max-h-[90vh] overflow-y-auto">
           <div className="p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Log Contact</h3>
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -689,7 +689,7 @@ const MDTPage: React.FC = () => {
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Contact Type</label>
                   <select
@@ -716,7 +716,7 @@ const MDTPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Contact Date</label>
                   <input
@@ -1029,7 +1029,7 @@ const MDTPage: React.FC = () => {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                         <div>
                           <p className="text-gray-600">Consultant</p>
                           <p className="font-medium text-gray-900">{spec.consultant_name}</p>

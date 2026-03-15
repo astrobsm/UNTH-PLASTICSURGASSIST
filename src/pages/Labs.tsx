@@ -730,8 +730,8 @@ const InvestigationDetailModal = ({ investigation, onClose }: { investigation: L
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0 sm:p-4">
+      <div className="bg-white rounded-none sm:rounded-lg shadow-xl sm:max-w-2xl w-full h-full sm:h-auto sm:max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
           <div className="flex items-center space-x-3">
@@ -756,7 +756,7 @@ const InvestigationDetailModal = ({ investigation, onClose }: { investigation: L
               <FileText className="h-5 w-5 text-gray-600" />
               <span>Patient Information</span>
             </h3>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <span className="text-sm text-gray-500">Patient Name</span>
                 <p className="font-medium text-gray-900">{investigation.patient_name}</p>
@@ -784,7 +784,7 @@ const InvestigationDetailModal = ({ investigation, onClose }: { investigation: L
               <Brain className="h-5 w-5 text-blue-600" />
               <span>Clinical Details</span>
             </h3>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <span className="text-sm text-gray-500">Urgency</span>
                 <p className={`inline-block px-2 py-1 rounded text-sm font-medium ${getUrgencyColor(investigation.urgency)}`}>

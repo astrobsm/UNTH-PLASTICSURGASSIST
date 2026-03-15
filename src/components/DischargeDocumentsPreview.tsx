@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { format } from 'date-fns';
 import { createPDF, sanitizeTextForPDF, PDF_MARGINS, PDF_FONT_SIZES, PDF_COLORS, addFooter } from '../utils/pdfUtils';
 import { Discharge, admissionDischargeService } from '../services/admissionDischargeService';
@@ -48,7 +48,7 @@ export default function DischargeDocumentsPreview({
       <HospitalHeader />
       <h3 className="text-lg font-bold text-center mb-4 bg-green-100 py-2">DISCHARGE SUMMARY</h3>
       
-      <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4 text-sm">
         <div><strong>Patient Name:</strong> {discharge.patient_name}</div>
         <div><strong>Hospital No:</strong> {discharge.hospital_number}</div>
         <div><strong>Age/Gender:</strong> {discharge.age} years / {discharge.gender}</div>
@@ -121,7 +121,7 @@ export default function DischargeDocumentsPreview({
         </div>
 
         <div className="border-t pt-4 mt-6 text-xs">
-          <div className="grid grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
             <div>
               <p className="border-t border-gray-400 pt-2">Discharging Doctor</p>
               <p>{discharge.discharging_doctor}</p>
@@ -193,7 +193,7 @@ export default function DischargeDocumentsPreview({
 
         <div className="border-t pt-4 mt-6">
           <p className="mb-8">Issued on: {format(new Date(), 'dd MMMM yyyy')}</p>
-          <div className="grid grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
             <div>
               <p className="border-t border-gray-400 pt-2">Discharging Doctor</p>
               <p>{discharge.discharging_doctor}</p>
@@ -286,7 +286,7 @@ export default function DischargeDocumentsPreview({
         {/* Warning Signs */}
         <div className="bg-red-50 p-3 rounded border border-red-200">
           <h4 className="font-semibold text-red-700 flex items-center gap-2">
-             RETURN TO HOSPITAL IMMEDIATELY IF YOU EXPERIENCE:
+            � RETURN TO HOSPITAL IMMEDIATELY IF YOU EXPERIENCE:
           </h4>
           <ul className="mt-2 space-y-1">
             {discharge.warning_signs?.map((sign, i) => (
@@ -800,7 +800,7 @@ Follow-up: ${discharge.follow_up_appointments?.map(a => `${format(new Date(a.dat
             }`}
           >
             <span className="hidden sm:inline">{doc.name}</span>
-            {downloadedDocs.has(doc.type) && <span className="text-xs text-green-500">✓</span>}
+            {downloadedDocs.has(doc.type) && <span className="text-xs text-green-500">?</span>}
           </button>
         ))}
       </div>

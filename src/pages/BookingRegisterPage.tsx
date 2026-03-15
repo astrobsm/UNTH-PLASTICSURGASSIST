@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { PreoperativePlanningModule } from '../components/procedures/PreoperativePlanningModule';
 import { patientService } from '../services/patientService';
@@ -130,7 +130,7 @@ interface StageDocs {
   };
 }
 
-// ─── localStorage helpers ───
+// --- localStorage helpers ---
 const STAGE_OVERRIDES_KEY = 'booking_stage_overrides';
 const INVESTIGATION_RESULTS_KEY = 'booking_investigation_results';
 const FORCE_READINESS_KEY = 'booking_force_readiness';
@@ -526,7 +526,7 @@ const BookingRegisterPage: React.FC = () => {
     else navigate('/booking-register');
   };
 
-  // ─── Stage Toggle Handler ───
+  // --- Stage Toggle Handler ---
   const toggleStage = async (patientId: string, stageKey: string, currentValue: boolean, sp: typeof stagePatients[0]) => {
     // Special handling for "fullyPrepared" (Ready)
     if (stageKey === 'fullyPrepared' && !currentValue) {
@@ -601,7 +601,7 @@ const BookingRegisterPage: React.FC = () => {
     toast.success((currentValue ? 'Unmarked' : 'Marked') + ' as done');
   };
 
-  // ─── Investigation Modal Handlers ───
+  // --- Investigation Modal Handlers ---
   const openInvestigationModal = (patientId: string) => {
     const existing = investigationResults[patientId] || [];
     if (existing.length === 0) {
@@ -641,7 +641,7 @@ const BookingRegisterPage: React.FC = () => {
     setInvestigationEntries([...investigationEntries, { name: '', value: '', flag: 'normal' }]);
   };
 
-  // ─── Force Readiness Handler ───
+  // --- Force Readiness Handler ---
   const handleForceReadiness = (patientId: string) => {
     if (!forceReason.trim()) {
       toast.error('Please provide a clinical reason');
@@ -708,7 +708,7 @@ const BookingRegisterPage: React.FC = () => {
     loadStageData();
   };
 
-  // ─── Investigation Document Upload Handler ───
+  // --- Investigation Document Upload Handler ---
   const handleInvestigationDocUpload = (patientId: string, file: File) => {
     const reader = new FileReader();
     reader.onload = () => {
@@ -741,7 +741,7 @@ const BookingRegisterPage: React.FC = () => {
     }
   };
 
-  // ─── Stage Review Handlers ───
+  // --- Stage Review Handlers ---
   const openStageReview = (patientId: string, stageKey: string) => {
     // All stages (including investigationsOrdered) now open the stage review modal
     // The investigation modal can be launched from within the review modal
@@ -897,10 +897,10 @@ const BookingRegisterPage: React.FC = () => {
           notes: alreadyForced ? 'Force readiness: ' + (forceReadiness[patientId]?.reason || '') : '',
           status: 'scheduled',
         });
-        toast.success(patientName + ' booking approved — moved to Booked Cases!');
+        toast.success(patientName + ' booking approved � moved to Booked Cases!');
         loadBookedCases();
       } else {
-        toast.success('Booking approved — patient already in Booked Cases');
+        toast.success('Booking approved � patient already in Booked Cases');
       }
     } catch (err) {
       console.error('Failed to create booking on approval:', err);
@@ -924,7 +924,7 @@ const BookingRegisterPage: React.FC = () => {
     return labels[key] || key;
   };
 
-  // ─── Booked Case Document Upload Handlers ───
+  // --- Booked Case Document Upload Handlers ---
   const handleFileUpload = (bookingId: string, type: 'consent' | 'payment', file: File) => {
     const reader = new FileReader();
     reader.onload = () => {
@@ -940,7 +940,7 @@ const BookingRegisterPage: React.FC = () => {
     reader.readAsDataURL(file);
   };
 
-  // ─── Investigation results for a booked case patient ───
+  // --- Investigation results for a booked case patient ---
   const openBookedCaseInvestigations = (patientId: string) => {
     openInvestigationModal(patientId);
   };
@@ -1295,7 +1295,7 @@ const BookingRegisterPage: React.FC = () => {
                             <span className="text-xs text-gray-400">{done}/{total}</span>
                           </div>
                         </div>
-                        {/* Clickable preparation stage chips — click opens review panel */}
+                        {/* Clickable preparation stage chips � click opens review panel */}
                         <div className="mt-3 grid grid-cols-4 md:grid-cols-8 gap-1">
                           {[
                             { key: 'riskAssessed', label: 'Risk' },
@@ -1326,8 +1326,8 @@ const BookingRegisterPage: React.FC = () => {
                                 title={
                                   isReady ? 'Use Approve Booking button below' :
                                   isBlocked ? 'Blocked: abnormal investigation results' :
-                                  approval === 'accepted' ? 'Accepted — click to review' :
-                                  approval === 'rejected' ? 'Rejected — click to review' :
+                                  approval === 'accepted' ? 'Accepted � click to review' :
+                                  approval === 'rejected' ? 'Rejected � click to review' :
                                   'Click to review & accept/reject'
                                 }
                                 className={'text-center px-1 py-1.5 rounded text-[10px] font-medium transition-all cursor-pointer border relative ' +
@@ -1359,10 +1359,10 @@ const BookingRegisterPage: React.FC = () => {
                         {(investigationResults[sp.patient.id] || []).some(r => r.flag === 'abnormal') && (
                           <div className="mt-2 flex items-center gap-2 text-xs text-red-600 bg-red-50 px-3 py-1.5 rounded-lg border border-red-200">
                             <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-                            <span>Abnormal investigation(s) detected{forceReadiness[sp.patient.id] ? ' — Force readiness applied by ' + forceReadiness[sp.patient.id].forcedBy : ' — cannot mark Ready without clinical override'}</span>
+                            <span>Abnormal investigation(s) detected{forceReadiness[sp.patient.id] ? ' � Force readiness applied by ' + forceReadiness[sp.patient.id].forcedBy : ' � cannot mark Ready without clinical override'}</span>
                           </div>
                         )}
-                        {/* Mandatory labs missing warning — clickable to auto-order */}
+                        {/* Mandatory labs missing warning � clickable to auto-order */}
                         {(() => {
                           const labCheck = areMandatoryLabsComplete(sp.patient.id, sp.patient.date_of_birth || '', investigationResults);
                           if (labCheck.complete) return null;
@@ -1386,7 +1386,7 @@ const BookingRegisterPage: React.FC = () => {
                               title="Click to order these missing labs"
                             >
                               <FlaskConical className="w-3.5 h-3.5 flex-shrink-0" />
-                              <span>Mandatory labs missing: {labCheck.missing.join(', ')} — <strong>click to order</strong></span>
+                              <span>Mandatory labs missing: {labCheck.missing.join(', ')} � <strong>click to order</strong></span>
                             </button>
                           );
                         })()}
@@ -1420,7 +1420,7 @@ const BookingRegisterPage: React.FC = () => {
                               {alreadyBooked ? (
                                 <div className="flex items-center gap-2 text-xs text-green-700 bg-green-50 px-4 py-2 rounded-lg border border-green-200">
                                   <CheckCircle className="w-4 h-4" />
-                                  <span className="font-medium">Booking Approved — Patient in Booked Cases</span>
+                                  <span className="font-medium">Booking Approved � Patient in Booked Cases</span>
                                 </div>
                               ) : (
                                 <>
@@ -1810,7 +1810,7 @@ const BookingRegisterPage: React.FC = () => {
                           </div>
                         )}
 
-                        {/* ─── DOCUMENT UPLOADS & INVESTIGATIONS ─── */}
+                        {/* --- DOCUMENT UPLOADS & INVESTIGATIONS --- */}
                         <div className="border-t pt-4 mt-2 space-y-4">
                           <h4 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
                             <FileText className="w-4 h-4 text-primary-600" />
@@ -1973,7 +1973,7 @@ const BookingRegisterPage: React.FC = () => {
         </div>
       )}
 
-      {/* ─── STAGE REVIEW MODAL ─── */}
+      {/* --- STAGE REVIEW MODAL --- */}
       {stageReviewPanel && (() => {
         const { patientId, stage } = stageReviewPanel;
         const sp = stagePatients.find(s => s.patient.id === patientId);
@@ -1988,7 +1988,7 @@ const BookingRegisterPage: React.FC = () => {
                 <div className="space-y-3">
                   <p className="text-sm text-gray-600">Review the risk assessment scores for this patient.</p>
                   {sp?.assessment ? (
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {sp.assessment.bleeding_risk && (
                         <div className="bg-white p-3 rounded-lg border">
                           <div className="text-xs text-gray-500 mb-1">Bleeding Risk</div>
@@ -2364,7 +2364,7 @@ const BookingRegisterPage: React.FC = () => {
         );
       })()}
 
-      {/* ─── INVESTIGATION RESULTS MODAL ─── */}
+      {/* --- INVESTIGATION RESULTS MODAL --- */}
       {showInvestigationModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowInvestigationModal(null)}>
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
@@ -2492,7 +2492,7 @@ const BookingRegisterPage: React.FC = () => {
                 {investigationEntries.filter(e => e.flag === 'abnormal').length > 0 && (
                   <span className="text-red-600 font-medium flex items-center gap-1">
                     <AlertTriangle className="w-3.5 h-3.5" />
-                    {investigationEntries.filter(e => e.flag === 'abnormal').length} abnormal result(s) — patient cannot be marked Ready without override
+                    {investigationEntries.filter(e => e.flag === 'abnormal').length} abnormal result(s) � patient cannot be marked Ready without override
                   </span>
                 )}
               </div>
@@ -2511,7 +2511,7 @@ const BookingRegisterPage: React.FC = () => {
         </div>
       )}
 
-      {/* ─── FORCE READINESS MODAL ─── */}
+      {/* --- FORCE READINESS MODAL --- */}
       {showForceReadinessModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => { setShowForceReadinessModal(null); setForceReason(''); }}>
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>

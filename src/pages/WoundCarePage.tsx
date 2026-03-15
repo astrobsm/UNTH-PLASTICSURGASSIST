@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Activity,
   Camera,
@@ -318,7 +318,7 @@ const WoundCarePage: React.FC = () => {
            (p.hospital_number || '').toLowerCase().includes(searchLower);
   });
 
-  // ─── Camera Functions ────────────────────────────────
+  // --- Camera Functions --------------------------------
   const startCamera = async () => {
     setCameraError('');
     try {
@@ -347,7 +347,7 @@ const WoundCarePage: React.FC = () => {
       } else if (fileInputRef.current) {
         fileInputRef.current.click();
       }
-      setCameraError('Camera not available — use file upload instead.');
+      setCameraError('Camera not available � use file upload instead.');
     }
   };
 
@@ -404,7 +404,7 @@ const WoundCarePage: React.FC = () => {
       setFormData(prev => ({ ...prev, length: measurements.length, width: measurements.width }));
     }
     setTimeout(() => setIsAnalyzing(false), 2000);
-    // Don't stop camera — allow multiple captures
+    // Don't stop camera � allow multiple captures
   };
 
   // Cleanup camera on unmount
@@ -416,7 +416,7 @@ const WoundCarePage: React.FC = () => {
     };
   }, [cameraStream]);
 
-  // Handle photo capture (legacy — triggers file input)
+  // Handle photo capture (legacy � triggers file input)
   const handlePhotoCapture = async () => {
     if (fileInputRef.current) {
       fileInputRef.current.click();
@@ -717,7 +717,7 @@ const WoundCarePage: React.FC = () => {
         });
       } else {
         // Donor site specific warnings
-        const warnings = DONOR_SITE_WARNINGS.map(w => `* ¸ ${w}`);
+        const warnings = DONOR_SITE_WARNINGS.map(w => `* �� ${w}`);
         warnings.forEach(w => {
           const lines = doc.splitTextToSize(w, thermalWidth - margin * 2 - 2);
           lines.forEach((line: string) => {
@@ -807,7 +807,7 @@ const WoundCarePage: React.FC = () => {
       doc.setTextColor(100, 100, 100);
       doc.setFontSize(8);
       doc.setFont('helvetica', 'normal');
-      doc.text('Print at 100% scale (no scaling) • Cut along dashed lines • 0.5mm grid for precision', pageWidth / 2, 25, { align: 'center' });
+      doc.text('Print at 100% scale (no scaling) � Cut along dashed lines � 0.5mm grid for precision', pageWidth / 2, 25, { align: 'center' });
 
       // Draw multiple ruler strips on the page
       const startX = (pageWidth - rulerLength) / 2;
@@ -1001,7 +1001,7 @@ const WoundCarePage: React.FC = () => {
       doc.setTextColor(100, 100, 100);
       doc.setFontSize(8);
       doc.setFont('helvetica', 'normal');
-      doc.text('Print at 100% scale • Place beside wound for accurate AI measurement', pageWidth / 2, 25, { align: 'center' });
+      doc.text('Print at 100% scale � Place beside wound for accurate AI measurement', pageWidth / 2, 25, { align: 'center' });
 
       const gridSize = 150; // 15cm
       const startX = (pageWidth - gridSize) / 2;
@@ -1310,7 +1310,7 @@ const WoundCarePage: React.FC = () => {
               AI Measurement
             </button>
           </div>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label className="block text-xs text-gray-500 mb-1">Length (cm) *</label>
               <input
@@ -1347,7 +1347,7 @@ const WoundCarePage: React.FC = () => {
           </div>
           {formData.length > 0 && formData.width > 0 && (
             <p className="text-sm text-gray-500 mt-2">
-              Area: {calculateArea(formData.length, formData.width)} cm²
+              Area: {calculateArea(formData.length, formData.width)} cm�
             </p>
           )}
         </div>
@@ -1480,7 +1480,7 @@ const WoundCarePage: React.FC = () => {
 
           {/* Camera & Upload buttons */}
           {!showCamera && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <button
                 type="button"
                 onClick={startCamera}
@@ -1524,7 +1524,7 @@ const WoundCarePage: React.FC = () => {
 
           {/* Captured photos grid */}
           {capturedPhotos.length > 0 && (
-            <div className="grid grid-cols-3 gap-2 mt-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3">
               {capturedPhotos.map(photo => (
                 <div key={photo.id} className="relative">
                   <img src={photo.dataUrl} alt="Wound" className="w-full h-24 object-cover rounded-lg" />
@@ -1717,7 +1717,7 @@ const WoundCarePage: React.FC = () => {
 
           <div className="bg-white rounded-xl shadow-sm border p-4">
             <h4 className="font-semibold mb-3">Current Measurements</h4>
-            <div className="grid grid-cols-4 gap-2 text-center">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
               <div className="bg-gray-50 p-2 rounded-lg">
                 <p className="text-lg font-bold">{assessment.length.toFixed(2)}</p>
                 <p className="text-xs text-gray-500">Length (cm)</p>
@@ -1732,7 +1732,7 @@ const WoundCarePage: React.FC = () => {
               </div>
               <div className="bg-gray-50 p-2 rounded-lg">
                 <p className="text-lg font-bold">{assessment.area.toFixed(1)}</p>
-                <p className="text-xs text-gray-500">Area (cm²)</p>
+                <p className="text-xs text-gray-500">Area (cm�)</p>
               </div>
             </div>
           </div>
@@ -1812,7 +1812,7 @@ const WoundCarePage: React.FC = () => {
         {assessment.photos.length > 0 && (
           <div className="bg-white rounded-xl shadow-sm border p-4">
             <h4 className="font-semibold mb-3">Wound Photos</h4>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {assessment.photos.map(photo => (
                 <div key={photo.id} className="relative">
                   <img src={photo.dataUrl} alt="Wound" className="w-full h-32 object-cover rounded-lg" />
@@ -1890,7 +1890,7 @@ const WoundCarePage: React.FC = () => {
                       <h3 className="font-semibold">{assessment.patient_name}</h3>
                       <p className="text-sm text-gray-500">{assessment.location} - {assessment.wound_type}</p>
                       <p className="text-xs text-gray-400 mt-1">
-                        {assessment.length} x {assessment.width} cm | Area: {assessment.area} cm²
+                        {assessment.length} x {assessment.width} cm | Area: {assessment.area} cm�
                       </p>
                     </div>
                     <div className="text-right">
