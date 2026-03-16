@@ -178,15 +178,15 @@ export const PatientActivityTimeline: React.FC<PatientActivityTimelineProps> = (
         {stats && (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
             <div className="bg-gray-50 rounded-lg p-4">
-              <div className="text-2xl font-bold text-gray-900">{stats.total}</div>
+              <div className="text-lg sm:text-2xl font-bold text-gray-900">{stats.total}</div>
               <div className="text-sm text-gray-600">Total Activities</div>
             </div>
             <div className="bg-gray-50 rounded-lg p-4">
-              <div className="text-2xl font-bold text-gray-900">{Object.keys(stats.byType).length}</div>
+              <div className="text-lg sm:text-2xl font-bold text-gray-900">{Object.keys(stats.byType).length}</div>
               <div className="text-sm text-gray-600">Activity Types</div>
             </div>
             <div className="bg-gray-50 rounded-lg p-4">
-              <div className="text-2xl font-bold text-gray-900">{Object.keys(stats.byUser).length}</div>
+              <div className="text-lg sm:text-2xl font-bold text-gray-900">{Object.keys(stats.byUser).length}</div>
               <div className="text-sm text-gray-600">Team Members</div>
             </div>
             <div className="bg-gray-50 rounded-lg p-4">

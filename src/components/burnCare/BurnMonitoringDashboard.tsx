@@ -255,7 +255,7 @@ const BurnMonitoringDashboard: React.FC<BurnMonitoringDashboardProps> = ({ patie
             
             <div className="flex items-center gap-4">
               <div className="text-right">
-                <div className="text-2xl font-bold">{hoursSinceBurn}h</div>
+                <div className="text-lg sm:text-2xl font-bold">{hoursSinceBurn}h</div>
                 <div className="text-orange-100 text-xs">{getResuscitationPhase()}</div>
               </div>
               
@@ -323,7 +323,7 @@ const BurnMonitoringDashboard: React.FC<BurnMonitoringDashboardProps> = ({ patie
                     {latestVitals && latestVitals.heartRate > BURN_ALERT_THRESHOLDS.vitals.hrHigh ? 'HIGH' : 'NORMAL'}
                   </span>
                 </div>
-                <div className="text-2xl font-bold text-gray-900">
+                <div className="text-lg sm:text-2xl font-bold text-gray-900">
                   {latestVitals?.heartRate || '--'} <span className="text-sm font-normal text-gray-500">bpm</span>
                 </div>
                 <div className="text-xs text-gray-500">Heart Rate</div>
@@ -341,7 +341,7 @@ const BurnMonitoringDashboard: React.FC<BurnMonitoringDashboardProps> = ({ patie
                     {latestVitals && latestVitals.map < BURN_ALERT_THRESHOLDS.vitals.mapLow ? 'LOW' : 'OK'}
                   </span>
                 </div>
-                <div className="text-2xl font-bold text-gray-900">
+                <div className="text-lg sm:text-2xl font-bold text-gray-900">
                   {latestVitals?.map || '--'} <span className="text-sm font-normal text-gray-500">mmHg</span>
                 </div>
                 <div className="text-xs text-gray-500">MAP (target ≥65)</div>
@@ -359,7 +359,7 @@ const BurnMonitoringDashboard: React.FC<BurnMonitoringDashboardProps> = ({ patie
                     <Minus className="h-4 w-4 text-green-500" />
                   )}
                 </div>
-                <div className="text-2xl font-bold text-gray-900">
+                <div className="text-lg sm:text-2xl font-bold text-gray-900">
                   {lastHourUORate.toFixed(2)} <span className="text-sm font-normal text-gray-500">mL/kg/hr</span>
                 </div>
                 <div className="text-xs text-gray-500">Urine Output (target 0.5-1.0)</div>
@@ -373,7 +373,7 @@ const BurnMonitoringDashboard: React.FC<BurnMonitoringDashboardProps> = ({ patie
                     {Math.round((totalFluidsGiven / patient.resuscitation.totalVolume24h) * 100)}%
                   </span>
                 </div>
-                <div className="text-2xl font-bold text-gray-900">
+                <div className="text-lg sm:text-2xl font-bold text-gray-900">
                   {(totalFluidsGiven / 1000).toFixed(1)} <span className="text-sm font-normal text-gray-500">L</span>
                 </div>
                 <div className="text-xs text-gray-500">
@@ -488,21 +488,21 @@ const BurnMonitoringDashboard: React.FC<BurnMonitoringDashboardProps> = ({ patie
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-white rounded-lg shadow-sm p-4">
                 <div className="text-sm text-gray-600 mb-1">Baux Score</div>
-                <div className="text-2xl font-bold text-gray-900">{patient.bauxScore}</div>
+                <div className="text-lg sm:text-2xl font-bold text-gray-900">{patient.bauxScore}</div>
                 <div className="text-sm text-gray-500">
                   {burnCareService.interpretBauxScore(patient.bauxScore).mortality} mortality
                 </div>
               </div>
               <div className="bg-white rounded-lg shadow-sm p-4">
                 <div className="text-sm text-gray-600 mb-1">Revised Baux</div>
-                <div className="text-2xl font-bold text-gray-900">{patient.revisedBauxScore}</div>
+                <div className="text-lg sm:text-2xl font-bold text-gray-900">{patient.revisedBauxScore}</div>
                 <div className="text-sm text-gray-500">
                   {patient.inhalationInjury.confirmed ? '+17 for inhalation' : 'No modifier'}
                 </div>
               </div>
               <div className="bg-white rounded-lg shadow-sm p-4">
                 <div className="text-sm text-gray-600 mb-1">ABSI Score</div>
-                <div className="text-2xl font-bold text-gray-900">{patient.absiScore.totalScore}</div>
+                <div className="text-lg sm:text-2xl font-bold text-gray-900">{patient.absiScore.totalScore}</div>
                 <div className="text-sm text-gray-500">
                   {patient.absiScore.mortalityRisk} mortality risk
                 </div>
@@ -525,7 +525,7 @@ const BurnMonitoringDashboard: React.FC<BurnMonitoringDashboardProps> = ({ patie
             </div>
 
             {/* Vitals Table */}
-            <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+            <div className="bg-white rounded-lg shadow-sm overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-gray-50">
                   <tr>
@@ -616,19 +616,19 @@ const BurnMonitoringDashboard: React.FC<BurnMonitoringDashboardProps> = ({ patie
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-blue-50 rounded-lg p-4">
                 <div className="text-sm text-blue-600 mb-1">Total Input</div>
-                <div className="text-2xl font-bold text-blue-900">
+                <div className="text-lg sm:text-2xl font-bold text-blue-900">
                   {totalFluidsGiven.toLocaleString()} mL
                 </div>
               </div>
               <div className="bg-yellow-50 rounded-lg p-4">
                 <div className="text-sm text-yellow-600 mb-1">Total Output</div>
-                <div className="text-2xl font-bold text-yellow-900">
+                <div className="text-lg sm:text-2xl font-bold text-yellow-900">
                   {patientData.monitoring.urineOutputs.reduce((sum, uo) => sum + uo.volumeML, 0).toLocaleString()} mL
                 </div>
               </div>
               <div className="bg-green-50 rounded-lg p-4">
                 <div className="text-sm text-green-600 mb-1">Net Balance</div>
-                <div className="text-2xl font-bold text-green-900">
+                <div className="text-lg sm:text-2xl font-bold text-green-900">
                   +{(totalFluidsGiven - patientData.monitoring.urineOutputs.reduce((sum, uo) => sum + uo.volumeML, 0)).toLocaleString()} mL
                 </div>
               </div>
@@ -767,23 +767,23 @@ const BurnMonitoringDashboard: React.FC<BurnMonitoringDashboardProps> = ({ patie
             <div className="bg-white rounded-lg shadow-sm p-6">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                 <div className="text-center p-4 bg-gray-50 rounded-lg">
-                  <div className="text-3xl font-bold text-orange-600">{patient.tbsaAssessment.totalTBSA}%</div>
+                  <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-orange-600">{patient.tbsaAssessment.totalTBSA}%</div>
                   <div className="text-sm text-gray-600">Total TBSA</div>
                 </div>
                 <div className="text-center p-4 bg-gray-50 rounded-lg">
-                  <div className="text-3xl font-bold text-red-600">
+                  <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-red-600">
                     {patient.tbsaAssessment.regions.filter(r => r.depth === 'full_thickness').length}
                   </div>
                   <div className="text-sm text-gray-600">Full Thickness Regions</div>
                 </div>
                 <div className="text-center p-4 bg-gray-50 rounded-lg">
-                  <div className="text-3xl font-bold text-yellow-600">
+                  <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-yellow-600">
                     {patient.tbsaAssessment.regions.filter(r => r.isCircumferential).length}
                   </div>
                   <div className="text-sm text-gray-600">Circumferential</div>
                 </div>
                 <div className="text-center p-4 bg-gray-50 rounded-lg">
-                  <div className="text-3xl font-bold text-purple-600 capitalize">{patient.mechanism}</div>
+                  <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-purple-600 capitalize">{patient.mechanism}</div>
                   <div className="text-sm text-gray-600">Mechanism</div>
                 </div>
               </div>
@@ -841,17 +841,17 @@ const BurnMonitoringDashboard: React.FC<BurnMonitoringDashboardProps> = ({ patie
             {/* Stats */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="bg-white rounded-lg p-4 shadow-sm">
-                <div className="text-3xl font-bold text-purple-600">{followUpAssessments.length}</div>
+                <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-purple-600">{followUpAssessments.length}</div>
                 <div className="text-sm text-gray-600">Total Assessments</div>
               </div>
               <div className="bg-white rounded-lg p-4 shadow-sm">
-                <div className="text-3xl font-bold text-blue-600">
+                <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-blue-600">
                   {Math.floor((Date.now() - new Date(patient.timeOfBurn).getTime()) / (1000 * 60 * 60 * 24))}
                 </div>
                 <div className="text-sm text-gray-600">Days Since Injury</div>
               </div>
               <div className="bg-white rounded-lg p-4 shadow-sm">
-                <div className="text-3xl font-bold text-green-600">
+                <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-green-600">
                   {followUpAssessments.length > 0 
                     ? `${Math.round(followUpAssessments[followUpAssessments.length - 1].percentEpithelialized)}%`
                     : '0%'}
@@ -859,7 +859,7 @@ const BurnMonitoringDashboard: React.FC<BurnMonitoringDashboardProps> = ({ patie
                 <div className="text-sm text-gray-600">Epithelialized</div>
               </div>
               <div className="bg-white rounded-lg p-4 shadow-sm">
-                <div className={`text-3xl font-bold ${
+                <div className={`text-xl sm:text-2xl lg:text-3xl font-bold ${
                   followUpAssessments.length > 0 && followUpAssessments[followUpAssessments.length - 1].overallHealingStatus === 'improving'
                     ? 'text-green-600' 
                     : followUpAssessments.length > 0 && followUpAssessments[followUpAssessments.length - 1].overallHealingStatus === 'deteriorating'

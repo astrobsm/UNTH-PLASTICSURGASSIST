@@ -307,7 +307,7 @@ const TreatmentPlanningPage: React.FC = () => {
       {/* Header */}
       <div className="mb-6">
         <div className="flex items-center justify-between mb-2">
-          <h1 className="text-2xl font-bold text-gray-900">Enhanced Treatment Planning</h1>
+          <h1 className="text-lg sm:text-2xl font-bold text-gray-900">Enhanced Treatment Planning</h1>
           <button
             onClick={() => setShowCreatePlan(true)}
             className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"

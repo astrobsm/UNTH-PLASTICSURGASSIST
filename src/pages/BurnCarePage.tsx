@@ -198,7 +198,7 @@ const BurnCarePage: React.FC = () => {
                 <Flame className="h-8 w-8" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold">Burn Care Protocol</h1>
+                <h1 className="text-lg sm:text-2xl font-bold">Burn Care Protocol</h1>
                 <p className="text-orange-100 text-sm">WHO/ISBI Compliant Management</p>
               </div>
             </div>
@@ -220,7 +220,7 @@ const BurnCarePage: React.FC = () => {
             <div className="flex items-center gap-3">
               <Users className="h-8 w-8 text-orange-500" />
               <div>
-                <p className="text-2xl font-bold text-gray-900">{stats.activePatients}</p>
+                <p className="text-lg sm:text-2xl font-bold text-gray-900">{stats.activePatients}</p>
                 <p className="text-xs text-gray-500">Active Patients</p>
               </div>
             </div>
@@ -230,7 +230,7 @@ const BurnCarePage: React.FC = () => {
             <div className="flex items-center gap-3">
               <HeartPulse className="h-8 w-8 text-red-500" />
               <div>
-                <p className="text-2xl font-bold text-gray-900">{stats.icuPatients}</p>
+                <p className="text-lg sm:text-2xl font-bold text-gray-900">{stats.icuPatients}</p>
                 <p className="text-xs text-gray-500">ICU Patients</p>
               </div>
             </div>
@@ -240,7 +240,7 @@ const BurnCarePage: React.FC = () => {
             <div className="flex items-center gap-3">
               <Bed className="h-8 w-8 text-blue-500" />
               <div>
-                <p className="text-2xl font-bold text-gray-900">{stats.wardPatients}</p>
+                <p className="text-lg sm:text-2xl font-bold text-gray-900">{stats.wardPatients}</p>
                 <p className="text-xs text-gray-500">Ward Patients</p>
               </div>
             </div>
@@ -250,7 +250,7 @@ const BurnCarePage: React.FC = () => {
             <div className="flex items-center gap-3">
               <AlertTriangle className="h-8 w-8 text-red-600" />
               <div>
-                <p className="text-2xl font-bold text-gray-900">{stats.criticalAlerts}</p>
+                <p className="text-lg sm:text-2xl font-bold text-gray-900">{stats.criticalAlerts}</p>
                 <p className="text-xs text-gray-500">Critical Alerts</p>
               </div>
             </div>
@@ -260,7 +260,7 @@ const BurnCarePage: React.FC = () => {
             <div className="flex items-center gap-3">
               <Clock className="h-8 w-8 text-yellow-500" />
               <div>
-                <p className="text-2xl font-bold text-gray-900">{stats.pendingAssessments}</p>
+                <p className="text-lg sm:text-2xl font-bold text-gray-900">{stats.pendingAssessments}</p>
                 <p className="text-xs text-gray-500">Pending Reviews</p>
               </div>
             </div>
@@ -270,7 +270,7 @@ const BurnCarePage: React.FC = () => {
             <div className="flex items-center gap-3">
               <TrendingUp className="h-8 w-8 text-purple-500" />
               <div>
-                <p className="text-2xl font-bold text-gray-900">{stats.avgTBSA}%</p>
+                <p className="text-lg sm:text-2xl font-bold text-gray-900">{stats.avgTBSA}%</p>
                 <p className="text-xs text-gray-500">Avg TBSA</p>
               </div>
             </div>
@@ -313,7 +313,7 @@ const BurnCarePage: React.FC = () => {
 
         {/* Patient List */}
         <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200">
+          <div className="px-3 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
             <h2 className="text-lg font-semibold text-gray-900">Active Burn Patients</h2>
           </div>
           

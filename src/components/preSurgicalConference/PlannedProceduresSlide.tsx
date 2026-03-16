@@ -10,7 +10,7 @@ export default function PlannedProceduresSlide({ procedures }: Props) {
     return (
       <div className="flex flex-col items-center justify-center h-full">
         <Scissors className="h-24 w-24 text-gray-500 mb-4" />
-        <h2 className="text-2xl font-bold text-gray-400">No Planned Procedures</h2>
+        <h2 className="text-lg sm:text-2xl font-bold text-gray-400">No Planned Procedures</h2>
         <p className="text-gray-500 mt-2">No surgical procedures have been scheduled for this patient</p>
       </div>
     );
@@ -22,7 +22,7 @@ export default function PlannedProceduresSlide({ procedures }: Props) {
         <div className="w-20 h-20 bg-rose-600 rounded-full flex items-center justify-center mx-auto mb-4">
           <Scissors className="h-10 w-10 text-white" />
         </div>
-        <h1 className="text-3xl font-bold">Planned Procedures</h1>
+        <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold">Planned Procedures</h1>
         <p className="text-gray-400 mt-2">{procedures.length} procedure(s) scheduled</p>
       </div>
 

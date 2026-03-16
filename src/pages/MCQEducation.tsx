@@ -512,7 +512,7 @@ const MCQEducation: React.FC = () => {
               </div>
             </div>
             
-            <div className={`text-3xl font-bold ${getTimerColor()} flex items-center gap-2`}>
+            <div className={`text-xl sm:text-2xl lg:text-3xl font-bold ${getTimerColor()} flex items-center gap-2`}>
               <Clock className="w-8 h-8" />
               {formatTime(timeRemaining)}
             </div>
@@ -676,7 +676,7 @@ const MCQEducation: React.FC = () => {
         {/* Score Card */}
         <div className="bg-gradient-to-br from-green-50 to-blue-50 rounded-lg shadow-lg p-8 border-2 border-green-300">
           <div className="text-center">
-            <h2 className="text-3xl font-bold text-gray-900 mb-2">Test Completed!</h2>
+            <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 mb-2">Test Completed!</h2>
             <div className="text-6xl font-bold my-6 ${currentSession.passed ? 'text-green-600' : 'text-red-600'}">
               {currentSession.percentageScore}%
             </div>
@@ -686,15 +686,15 @@ const MCQEducation: React.FC = () => {
             
             <div className="flex justify-center gap-8 mt-6">
               <div className="text-center">
-                <div className="text-3xl font-bold text-green-600">{correctCount}</div>
+                <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-green-600">{correctCount}</div>
                 <div className="text-sm text-gray-600">Correct (+4 each)</div>
               </div>
               <div className="text-center">
-                <div className="text-3xl font-bold text-red-600">{wrongCount}</div>
+                <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-red-600">{wrongCount}</div>
                 <div className="text-sm text-gray-600">Wrong (-1 each)</div>
               </div>
               <div className="text-center">
-                <div className="text-3xl font-bold text-gray-600">{unansweredCount}</div>
+                <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-600">{unansweredCount}</div>
                 <div className="text-sm text-gray-600">Unanswered (0)</div>
               </div>
             </div>
@@ -793,24 +793,24 @@ const MCQEducation: React.FC = () => {
                       Level: {session.userLevel.replace('_', ' ').toUpperCase()}
                     </p>
                   </div>
-                  <div className={`text-3xl font-bold ${session.passed ? 'text-green-600' : 'text-red-600'}`}>
+                  <div className={`text-xl sm:text-2xl lg:text-3xl font-bold ${session.passed ? 'text-green-600' : 'text-red-600'}`}>
                     {session.percentageScore}%
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
                   <div>
-                    <div className="text-2xl font-bold text-gray-900">{session.rawScore || 0}</div>
+                    <div className="text-lg sm:text-2xl font-bold text-gray-900">{session.rawScore || 0}</div>
                     <div className="text-xs text-gray-600">Raw Score</div>
                   </div>
                   <div>
-                    <div className="text-2xl font-bold text-gray-900">
+                    <div className="text-lg sm:text-2xl font-bold text-gray-900">
                       {Object.keys(session.answers || {}).length}/{(session.questions || []).length}
                     </div>
                     <div className="text-xs text-gray-600">Attempted</div>
                   </div>
                   <div>
-                    <div className={`text-2xl font-bold ${session.passed ? 'text-green-600' : 'text-red-600'}`}>
+                    <div className={`text-lg sm:text-2xl font-bold ${session.passed ? 'text-green-600' : 'text-red-600'}`}>
                       {session.passed ? 'PASS' : 'FAIL'}
                     </div>
                     <div className="text-xs text-gray-600">Result</div>
@@ -965,7 +965,7 @@ const MCQEducation: React.FC = () => {
   return (
     <div className="container mx-auto px-4 py-6">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
+        <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 flex items-center gap-3">
           <Brain className="w-8 h-8 text-green-600" />
           Continuing Medical Education - MCQ Assessment
         </h1>

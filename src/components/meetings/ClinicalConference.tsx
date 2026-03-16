@@ -604,7 +604,7 @@ Requirements:
       <div className="bg-gradient-to-r from-green-700 to-green-600 rounded-xl p-6 text-white">
         <div className="flex items-center gap-3 mb-2">
           <BookOpen className="w-7 h-7" />
-          <h2 className="text-2xl font-bold" style={{ fontFamily: 'Georgia, serif' }}>
+          <h2 className="text-lg sm:text-2xl font-bold" style={{ fontFamily: 'Georgia, serif' }}>
             Clinical Conference
           </h2>
         </div>

@@ -78,19 +78,19 @@ export const Procedures: React.FC = () => {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="py-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900">Surgical Procedures</h1>
-                <p className="text-gray-600 mt-1">Comprehensive surgical management and documentation</p>
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+          <div className="py-3 sm:py-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+              <div className="min-w-0">
+                <h1 className="text-xl sm:text-2xl lg:text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 truncate">Surgical Procedures</h1>
+                <p className="text-gray-600 text-sm sm:text-base mt-1">Comprehensive surgical management and documentation</p>
               </div>
               
-              <div className="flex items-center space-x-4">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4">
                 <select
                   value={selectedPatientId}
                   onChange={(e) => setSelectedPatientId(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500"
+                  className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 text-sm"
                 >
                   <option value="">Select Patient</option>
                   {patients.map(patient => (
@@ -100,33 +100,35 @@ export const Procedures: React.FC = () => {
                   ))}
                 </select>
                 
-                <button 
-                  type="button"
-                  onClick={() => navigate('/booking-register')}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer"
-                >
-                  📋 Booking Register
-                </button>
-                
-                <button 
-                  type="button"
-                  onClick={() => {
-                    console.log('New Procedure button clicked');
-                    setModalKey(prev => prev + 1); // Force new component instance
-                    setShowNewProcedureModal(true);
-                  }}
-                  className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 cursor-pointer"
-                >
-                  + New Procedure
-                </button>
+                <div className="flex gap-2">
+                  <button 
+                    type="button"
+                    onClick={() => navigate('/booking-register')}
+                    className="flex-1 sm:flex-none px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer text-sm whitespace-nowrap"
+                  >
+                    📋 <span className="hidden sm:inline">Booking </span>Register
+                  </button>
+                  
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      console.log('New Procedure button clicked');
+                      setModalKey(prev => prev + 1);
+                      setShowNewProcedureModal(true);
+                    }}
+                    className="flex-1 sm:flex-none px-3 sm:px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 cursor-pointer text-sm whitespace-nowrap"
+                  >
+                    + New Procedure
+                  </button>
+                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-6">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 sm:gap-6">
           {/* Module Navigation */}
           <div className="lg:col-span-1">
             <div className="bg-white rounded-lg shadow-sm border border-gray-200">
@@ -1473,7 +1475,7 @@ const ProcedureOverview: React.FC = () => {
     <div className="space-y-6">
       {/* Current Procedures */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="px-6 py-4 border-b border-gray-200">
+        <div className="px-3 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
           <h3 className="text-lg font-semibold text-gray-900">Today's Procedures</h3>
         </div>
         
@@ -1727,7 +1729,7 @@ const ProcedureOverview: React.FC = () => {
 
       {/* Recent Activity */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="px-6 py-4 border-b border-gray-200">
+        <div className="px-3 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
           <h3 className="text-lg font-semibold text-gray-900">Recent Activity</h3>
         </div>
         

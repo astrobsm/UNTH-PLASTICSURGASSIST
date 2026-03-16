@@ -562,7 +562,7 @@ export default function MortalityReview() {
       <div className="bg-gradient-to-r from-red-700 to-red-600 rounded-xl p-6 text-white">
         <div className="flex items-center gap-3 mb-2">
           <AlertTriangle className="w-7 h-7" />
-          <h2 className="text-2xl font-bold" style={{ fontFamily: 'Georgia, serif' }}>
+          <h2 className="text-lg sm:text-2xl font-bold" style={{ fontFamily: 'Georgia, serif' }}>
             Mortality Review
           </h2>
         </div>

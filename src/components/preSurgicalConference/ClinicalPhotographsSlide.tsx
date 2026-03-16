@@ -17,7 +17,7 @@ export default function ClinicalPhotographsSlide({ photographs }: Props) {
     return (
       <div className="flex flex-col items-center justify-center h-full">
         <Camera className="h-24 w-24 text-gray-500 mb-4" />
-        <h2 className="text-2xl font-bold text-gray-400">No Clinical Photographs</h2>
+        <h2 className="text-lg sm:text-2xl font-bold text-gray-400">No Clinical Photographs</h2>
         <p className="text-gray-500 mt-2">No clinical photographs have been uploaded for this patient</p>
       </div>
     );
@@ -29,7 +29,7 @@ export default function ClinicalPhotographsSlide({ photographs }: Props) {
         <div className="w-20 h-20 bg-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
           <Camera className="h-10 w-10 text-white" />
         </div>
-        <h1 className="text-3xl font-bold">Clinical Photographs</h1>
+        <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold">Clinical Photographs</h1>
         <p className="text-gray-400 mt-2">{photographs.length} photograph(s) on record</p>
       </div>
 

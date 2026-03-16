@@ -608,7 +608,7 @@ export default function VTEAudit() {
       <div className="bg-gradient-to-r from-blue-700 to-blue-600 rounded-xl p-6 text-white">
         <div className="flex items-center gap-3 mb-2">
           <ShieldCheck className="w-7 h-7" />
-          <h2 className="text-2xl font-bold" style={{ fontFamily: 'Georgia, serif' }}>
+          <h2 className="text-lg sm:text-2xl font-bold" style={{ fontFamily: 'Georgia, serif' }}>
             VTE Prophylaxis Audit
           </h2>
         </div>
@@ -636,7 +636,7 @@ export default function VTEAudit() {
       {/* Live Preview */}
       {vteData.length > 0 && (
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+          <div className="px-3 sm:px-6 py-3 sm:py-4 border-b border-gray-100 flex items-center justify-between">
             <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
               <Activity className="w-5 h-5 text-blue-600" />
               Current Admissions ({vteData.length} patients)

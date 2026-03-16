@@ -456,7 +456,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-0 sm:p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+        <div className="flex items-center justify-between px-3 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
               <Scan className="h-5 w-5 text-green-600" />

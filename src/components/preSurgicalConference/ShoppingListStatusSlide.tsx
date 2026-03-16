@@ -22,7 +22,7 @@ export default function ShoppingListStatusSlide({ shoppingList }: Props) {
             <ShoppingCart className="h-12 w-12 text-white" />
           )}
         </div>
-        <h1 className="text-3xl font-bold">Shopping List Status</h1>
+        <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold">Shopping List Status</h1>
         <p className={`text-xl mt-2 ${isComplete ? 'text-green-400' : 'text-orange-400'}`}>
           {isComplete ? 'Complete - Ready for Surgery' : 'Incomplete - Items Pending'}
         </p>
@@ -32,7 +32,7 @@ export default function ShoppingListStatusSlide({ shoppingList }: Props) {
       <div className="bg-white/10 rounded-2xl p-8">
         <div className="flex items-center justify-between mb-4">
           <span className="text-lg font-medium">Procurement Progress</span>
-          <span className={`text-2xl font-bold ${isComplete ? 'text-green-400' : 'text-orange-400'}`}>
+          <span className={`text-lg sm:text-2xl font-bold ${isComplete ? 'text-green-400' : 'text-orange-400'}`}>
             {completionPercentage}%
           </span>
         </div>
@@ -74,7 +74,7 @@ export default function ShoppingListStatusSlide({ shoppingList }: Props) {
       {/* Items List */}
       {shoppingList.items && shoppingList.items.length > 0 && (
         <div className="bg-white/10 rounded-2xl overflow-hidden">
-          <div className="bg-white/5 px-6 py-4 border-b border-white/10">
+          <div className="bg-white/5 px-3 sm:px-6 py-3 sm:py-4 border-b border-white/10">
             <h3 className="text-lg font-bold flex items-center space-x-2">
               <Package className="h-5 w-5" />
               <span>Items List</span>

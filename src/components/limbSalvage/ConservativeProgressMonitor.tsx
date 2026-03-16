@@ -315,7 +315,7 @@ export const ConservativeProgressMonitor: React.FC<ConservativeProgressMonitorPr
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">Critical - Consider Amputation</p>
-              <p className="text-3xl font-bold text-red-600">{criticalCount}</p>
+              <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-red-600">{criticalCount}</p>
             </div>
             <AlertTriangle className="w-10 h-10 text-red-200" />
           </div>
@@ -331,7 +331,7 @@ export const ConservativeProgressMonitor: React.FC<ConservativeProgressMonitorPr
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">Warning - Needs Review</p>
-              <p className="text-3xl font-bold text-orange-600">{warningCount}</p>
+              <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-orange-600">{warningCount}</p>
             </div>
             <AlertCircle className="w-10 h-10 text-orange-200" />
           </div>
@@ -347,7 +347,7 @@ export const ConservativeProgressMonitor: React.FC<ConservativeProgressMonitorPr
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">Total on Conservative</p>
-              <p className="text-3xl font-bold text-green-600">{patients.length}</p>
+              <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-green-600">{patients.length}</p>
             </div>
             <Activity className="w-10 h-10 text-green-200" />
           </div>
@@ -388,7 +388,7 @@ export const ConservativeProgressMonitor: React.FC<ConservativeProgressMonitorPr
 
       {/* Patient List */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+        <div className="px-3 sm:px-6 py-3 sm:py-4 border-b border-gray-200 bg-gray-50">
           <h3 className="text-lg font-semibold text-gray-900">
             Conservative Management Patients
           </h3>

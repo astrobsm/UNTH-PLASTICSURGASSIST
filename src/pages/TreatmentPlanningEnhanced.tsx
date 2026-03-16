@@ -459,7 +459,7 @@ export default function TreatmentPlanningEnhanced() {
     <div className="p-6">
       <div className="mb-6 flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Enhanced Treatment Planning</h1>
+          <h1 className="text-lg sm:text-2xl font-bold text-gray-900">Enhanced Treatment Planning</h1>
           {lastSyncTime && (
             <p className="text-sm text-gray-500 mt-1">
               Last synced: {format(lastSyncTime, 'HH:mm:ss')}

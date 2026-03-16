@@ -568,13 +568,13 @@ const AIBurnExpert: React.FC<AIBurnExpertProps> = ({
                   {/* Summary Stats */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="p-4 bg-white rounded-lg border border-purple-200 text-center">
-                      <div className="text-2xl font-bold text-purple-700">
+                      <div className="text-lg sm:text-2xl font-bold text-purple-700">
                         {imageAnalysis.estimatedTBSA.toFixed(1)}%
                       </div>
                       <div className="text-xs text-gray-600">Estimated TBSA</div>
                     </div>
                     <div className="p-4 bg-white rounded-lg border border-purple-200 text-center">
-                      <div className="text-2xl font-bold text-purple-700">
+                      <div className="text-lg sm:text-2xl font-bold text-purple-700">
                         {imageAnalysis.affectedRegions}
                       </div>
                       <div className="text-xs text-gray-600">Affected Regions</div>

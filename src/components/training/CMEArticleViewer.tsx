@@ -289,7 +289,7 @@ const CMEArticleViewer: React.FC<CMEArticleViewerProps> = ({
                   : 'bg-amber-100 border border-amber-200'
               }`}>
                 <div className="text-center">
-                  <p className={`text-3xl font-bold ${
+                  <p className={`text-xl sm:text-2xl lg:text-3xl font-bold ${
                     getScore().correct === getScore().total ? 'text-green-700' : 'text-amber-700'
                   }`}>
                     {getScore().correct} / {getScore().total}

@@ -201,7 +201,7 @@ export const PrescriptionModal: React.FC<PrescriptionModalProps> = ({
           {/* Header */}
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h3 className="text-2xl font-bold text-gray-900">Prescribe Medication</h3>
+              <h3 className="text-lg sm:text-2xl font-bold text-gray-900">Prescribe Medication</h3>
               <p className="text-sm text-gray-600 mt-1">
                 Patient: <span className="font-medium">{patientName}</span>
               </p>

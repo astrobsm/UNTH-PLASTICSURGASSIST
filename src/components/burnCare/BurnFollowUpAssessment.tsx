@@ -665,7 +665,7 @@ const BurnFollowUpAssessment: React.FC<BurnFollowUpAssessmentProps> = ({
                   <div className="mt-3 p-4 bg-purple-50 border border-purple-200 rounded-lg">
                     <div className="flex items-center justify-between mb-2">
                       <span className="font-medium">Total Score</span>
-                      <span className="text-2xl font-bold text-purple-700">{vancouverScore.totalScore}/13</span>
+                      <span className="text-lg sm:text-2xl font-bold text-purple-700">{vancouverScore.totalScore}/13</span>
                     </div>
                     <p className="text-sm text-purple-600">{vancouverScore.interpretation}</p>
                   </div>
@@ -756,13 +756,13 @@ const BurnFollowUpAssessment: React.FC<BurnFollowUpAssessmentProps> = ({
                 {/* Progress Metrics */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="bg-gray-50 rounded-lg p-3 text-center">
-                    <p className="text-2xl font-bold text-green-600">
+                    <p className="text-lg sm:text-2xl font-bold text-green-600">
                       {Math.round(aiAnalysis.comparisonToBaseline.tbsaReduction)}%
                     </p>
                     <p className="text-xs text-gray-600">TBSA Reduction</p>
                   </div>
                   <div className="bg-gray-50 rounded-lg p-3 text-center">
-                    <p className="text-2xl font-bold text-blue-600">
+                    <p className="text-lg sm:text-2xl font-bold text-blue-600">
                       {Math.round(aiAnalysis.comparisonToBaseline.overallProgress)}%
                     </p>
                     <p className="text-xs text-gray-600">Overall Progress</p>
@@ -822,11 +822,11 @@ const BurnFollowUpAssessment: React.FC<BurnFollowUpAssessmentProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="bg-blue-50 rounded-lg p-3">
                 <p className="text-sm text-blue-600">Day Post-Injury</p>
-                <p className="text-2xl font-bold text-blue-800">{daysSinceInjury}</p>
+                <p className="text-lg sm:text-2xl font-bold text-blue-800">{daysSinceInjury}</p>
               </div>
               <div className="bg-green-50 rounded-lg p-3">
                 <p className="text-sm text-green-600">Images Captured</p>
-                <p className="text-2xl font-bold text-green-800">{capturedImages.length}</p>
+                <p className="text-lg sm:text-2xl font-bold text-green-800">{capturedImages.length}</p>
               </div>
             </div>
             

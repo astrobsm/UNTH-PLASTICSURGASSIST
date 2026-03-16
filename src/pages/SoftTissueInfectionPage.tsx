@@ -675,7 +675,7 @@ const SoftTissueInfectionPage: React.FC = () => {
             <Bug className="h-8 w-8 text-red-600" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Soft Tissue Infection / NEC Protocol</h1>
+            <h1 className="text-lg sm:text-2xl font-bold text-gray-900">Soft Tissue Infection / NEC Protocol</h1>
             <p className="text-sm text-gray-500">Cellulitis to Necrotizing Soft Tissue Infection & Gas Gangrene</p>
           </div>
         </div>
@@ -1614,7 +1614,7 @@ const SoftTissueInfectionPage: React.FC = () => {
                 </button>
               ) : (
                 <div className={`p-4 rounded-lg text-center ${cmeScore >= 70 ? 'bg-green-100' : 'bg-red-100'}`}>
-                  <p className="text-2xl font-bold">{cmeScore}%</p>
+                  <p className="text-lg sm:text-2xl font-bold">{cmeScore}%</p>
                   <p className="text-sm">{cmeScore >= 70 ? `Passed! You earned ${STI_CME_ARTICLE.cmeCredits} CME credits.` : `Score below passing grade (70%). Please review and retry.`}</p>
                   {cmeScore < 70 && (
                     <button onClick={() => { setCmeSubmitted(false); setCmeAnswers({}); setCmeScore(0); }}

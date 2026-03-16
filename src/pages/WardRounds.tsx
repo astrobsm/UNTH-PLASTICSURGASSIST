@@ -121,7 +121,7 @@ export default function WardRounds() {
       // Latest vitals
       if (latestRound) {
         summary += `? LATEST VITALS (${safeFormatDate(latestRound.round_date, 'dd MMM yyyy')})\n`;
-        if (latestRound.temperature) summary += `  Temperature: ${latestRound.temperature}°C\n`;
+        if (latestRound.temperature) summary += `  Temperature: ${latestRound.temperature}ï¿½C\n`;
         if (latestRound.pulse) summary += `  Pulse: ${latestRound.pulse} bpm\n`;
         if (latestRound.bp_systolic || latestRound.blood_pressure) summary += `  BP: ${latestRound.bp_systolic ? `${latestRound.bp_systolic}/${latestRound.bp_diastolic}` : latestRound.blood_pressure} mmHg\n`;
         if (latestRound.respiratory_rate) summary += `  RR: ${latestRound.respiratory_rate}/min\n`;
@@ -171,7 +171,7 @@ export default function WardRounds() {
       }
       if (allMeds.length > 0) {
         summary += `? MEDICATIONS\n`;
-        [...new Set(allMeds)].forEach(med => summary += `  • ${med}\n`);
+        [...new Set(allMeds)].forEach(med => summary += `  ï¿½ ${med}\n`);
         summary += '\n';
       }
 
@@ -450,7 +450,7 @@ export default function WardRounds() {
                           <div className="bg-blue-50 rounded p-2">
                             <h4 className="text-xs font-semibold text-blue-800 mb-1 flex items-center gap-1"><Thermometer className="w-3 h-3" /> Vitals</h4>
                             <p className="text-xs leading-snug">
-                              {[r.temperature && `T: ${r.temperature}°C`, r.pulse && `PR: ${r.pulse}/min`, (r.bp_systolic || r.blood_pressure) && `BP: ${r.bp_systolic ? `${r.bp_systolic}/${r.bp_diastolic}` : r.blood_pressure} mmHg`, r.respiratory_rate && `RR: ${r.respiratory_rate}/min`, r.spo2 && `SpO2: ${r.spo2}%`, r.pain_score > 0 && `Pain: ${r.pain_score}/10`].filter(Boolean).join(' | ')}
+                              {[r.temperature && `T: ${r.temperature}ï¿½C`, r.pulse && `PR: ${r.pulse}/min`, (r.bp_systolic || r.blood_pressure) && `BP: ${r.bp_systolic ? `${r.bp_systolic}/${r.bp_diastolic}` : r.blood_pressure} mmHg`, r.respiratory_rate && `RR: ${r.respiratory_rate}/min`, r.spo2 && `SpO2: ${r.spo2}%`, r.pain_score > 0 && `Pain: ${r.pain_score}/10`].filter(Boolean).join(' | ')}
                             </p>
                           </div>
                         )}
@@ -603,13 +603,13 @@ export default function WardRounds() {
         {/* Harmonised Summary Modal */}
         {showHarmonisedSummary && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0 sm:p-4">
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
-              <div className="bg-indigo-600 text-white px-6 py-4 flex justify-between items-center">
-                <div>
-                  <h2 className="text-xl font-bold flex items-center gap-2">
-                    <FileBarChart className="w-6 h-6" /> Harmonised Patient Summary
+            <div className="bg-white rounded-none sm:rounded-lg shadow-xl w-full sm:max-w-4xl h-full sm:h-auto sm:max-h-[90vh] overflow-hidden flex flex-col">
+              <div className="bg-indigo-600 text-white px-3 sm:px-6 py-3 sm:py-4 flex justify-between items-start sm:items-center flex-shrink-0">
+                <div className="min-w-0 flex-1">
+                  <h2 className="text-lg sm:text-xl font-bold flex items-center gap-2 truncate">
+                    <FileBarChart className="w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" /> Harmonised Patient Summary
                   </h2>
-                  <p className="text-indigo-200 text-sm">{selectedPatient?.name} — {selectedPatient?.hospital_number}</p>
+                  <p className="text-indigo-200 text-xs sm:text-sm truncate">{selectedPatient?.name} â€¢ {selectedPatient?.hospital_number}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
@@ -626,8 +626,8 @@ export default function WardRounds() {
                   </button>
                 </div>
               </div>
-              <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
-                <pre className="whitespace-pre-wrap font-mono text-sm text-gray-800 bg-gray-50 p-4 rounded-lg border">{harmonisedSummary}</pre>
+              <div className="p-3 sm:p-6 overflow-y-auto flex-1 min-h-0 scroll-touch">
+                <pre className="whitespace-pre-wrap font-mono text-xs sm:text-sm text-gray-800 bg-gray-50 p-3 sm:p-4 rounded-lg border">{harmonisedSummary}</pre>
               </div>
             </div>
           </div>

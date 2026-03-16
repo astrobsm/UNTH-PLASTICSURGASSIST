@@ -432,14 +432,14 @@ const RotationManagement: React.FC = () => {
                 <Users className="h-4 w-4" />
                 Total Trainees
               </div>
-              <p className="text-2xl font-bold text-gray-900">{filteredAnalytics.length}</p>
+              <p className="text-lg sm:text-2xl font-bold text-gray-900">{filteredAnalytics.length}</p>
             </div>
             <div className="bg-white rounded-xl border p-4">
               <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
                 <CheckCircle className="h-4 w-4 text-green-500" />
                 Sign-out Eligible
               </div>
-              <p className="text-2xl font-bold text-green-600">
+              <p className="text-lg sm:text-2xl font-bold text-green-600">
                 {filteredAnalytics.filter(a => a.signOutEligible).length}
               </p>
             </div>
@@ -448,7 +448,7 @@ const RotationManagement: React.FC = () => {
                 <TrendingUp className="h-4 w-4 text-blue-500" />
                 Avg Score
               </div>
-              <p className="text-2xl font-bold text-blue-600">
+              <p className="text-lg sm:text-2xl font-bold text-blue-600">
                 {filteredAnalytics.length > 0 
                   ? Math.round(filteredAnalytics.reduce((s, a) => s + a.overallScore, 0) / filteredAnalytics.length)
                   : 0}%
@@ -459,7 +459,7 @@ const RotationManagement: React.FC = () => {
                 <AlertTriangle className="h-4 w-4 text-red-500" />
                 Below Threshold
               </div>
-              <p className="text-2xl font-bold text-red-600">
+              <p className="text-lg sm:text-2xl font-bold text-red-600">
                 {filteredAnalytics.filter(a => a.overallScore < 70).length}
               </p>
             </div>

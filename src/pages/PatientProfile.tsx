@@ -503,7 +503,7 @@ export const PatientProfile: React.FC = () => {
       {showEditModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0 sm:p-4">
           <div className="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
-            <div className="px-6 py-4 border-b border-gray-200">
+            <div className="px-3 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900">Edit Patient Details</h3>
             </div>
             <div className="p-6 space-y-4">
@@ -689,7 +689,7 @@ const RiskAssessmentView: React.FC<{ patientId: string; hospitalNumber: string }
     <div className="space-y-6">
       {/* Assessment Navigation */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="px-6 py-4 border-b border-gray-200">
+        <div className="px-3 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
           <h3 className="text-lg font-semibold text-gray-900">Risk Assessment Module</h3>
           <p className="text-sm text-gray-600 mt-1">
             Evidence-based clinical assessments for patient safety and care planning
@@ -753,7 +753,7 @@ const UpcomingPlansView: React.FC<{ plans: any[] }> = ({ plans }) => {
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="px-6 py-4 border-b border-gray-200">
+        <div className="px-3 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
           <h3 className="text-lg font-semibold text-gray-900">Upcoming Treatment Plans</h3>
         </div>
         

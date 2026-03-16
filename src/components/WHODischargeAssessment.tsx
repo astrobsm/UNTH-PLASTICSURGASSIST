@@ -295,7 +295,7 @@ export default function WHODischargeAssessment({ admission, onComplete, onBack }
             <p className="text-sm mt-1">{recommendationDetails.description}</p>
           </div>
           <div className="text-right">
-            <div className="text-3xl font-bold">{totalScore}/33</div>
+            <div className="text-xl sm:text-2xl lg:text-3xl font-bold">{totalScore}/33</div>
             <div className="text-sm text-gray-600">Total Score</div>
           </div>
         </div>

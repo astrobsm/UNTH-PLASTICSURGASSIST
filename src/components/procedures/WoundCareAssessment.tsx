@@ -1409,7 +1409,7 @@ Anti-inflammatory drugs`}
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-      <div className="px-6 py-4 border-b border-gray-200">
+      <div className="px-3 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-xl font-bold text-gray-900">Wound Care Assessment</h2>

@@ -994,7 +994,7 @@ const PaperworkPage: React.FC = () => {
       {/* Header */}
       <div className="mb-6">
         <div className="flex items-center justify-between mb-2">
-          <h1 className="text-2xl font-bold text-gray-900">Paperwork & Documentation</h1>
+          <h1 className="text-lg sm:text-2xl font-bold text-gray-900">Paperwork & Documentation</h1>
           <div className="flex gap-2">
             <select
               value={documentType}

@@ -25,7 +25,7 @@ export default function ComorbiditiesSlide({ comorbidities }: Props) {
         <div className="w-24 h-24 bg-green-600 rounded-full flex items-center justify-center mb-4">
           <Heart className="h-12 w-12 text-white" />
         </div>
-        <h2 className="text-2xl font-bold text-green-400">No Known Comorbidities</h2>
+        <h2 className="text-lg sm:text-2xl font-bold text-green-400">No Known Comorbidities</h2>
         <p className="text-gray-400 mt-2">No comorbidities have been documented for this patient</p>
       </div>
     );
@@ -37,7 +37,7 @@ export default function ComorbiditiesSlide({ comorbidities }: Props) {
         <div className="w-20 h-20 bg-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
           <AlertCircle className="h-10 w-10 text-white" />
         </div>
-        <h1 className="text-3xl font-bold">Comorbidities</h1>
+        <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold">Comorbidities</h1>
         <p className="text-gray-400 mt-2">{comorbidities.length} condition(s) documented</p>
       </div>
 
@@ -74,7 +74,7 @@ export default function ComorbiditiesSlide({ comorbidities }: Props) {
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
             <span className="text-lg font-semibold">Total Comorbidities: </span>
-            <span className="text-3xl font-bold text-yellow-400">{comorbidities.length}</span>
+            <span className="text-xl sm:text-2xl lg:text-3xl font-bold text-yellow-400">{comorbidities.length}</span>
           </div>
           <div className="flex space-x-4">
             {['severe', 'moderate', 'mild'].map(level => {

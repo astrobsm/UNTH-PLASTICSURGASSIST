@@ -106,7 +106,7 @@ export default function Analytics() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+          <h1 className="text-lg sm:text-2xl font-bold text-gray-900 flex items-center gap-2">
             <BarChart3 className="w-8 h-8 text-green-600" />
             Analytics Dashboard
           </h1>
@@ -132,7 +132,7 @@ export default function Analytics() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Active Admissions</p>
-                <p className="text-2xl font-bold text-gray-900">{dashboardSummary.total_active_admissions}</p>
+                <p className="text-lg sm:text-2xl font-bold text-gray-900">{dashboardSummary.total_active_admissions}</p>
               </div>
               <Users className="w-8 h-8 text-blue-600" />
             </div>
@@ -142,7 +142,7 @@ export default function Analytics() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Avg Length of Stay</p>
-                <p className="text-2xl font-bold text-gray-900">{dashboardSummary.average_los_days.toFixed(1)} days</p>
+                <p className="text-lg sm:text-2xl font-bold text-gray-900">{dashboardSummary.average_los_days.toFixed(1)} days</p>
               </div>
               <Clock className="w-8 h-8 text-green-600" />
             </div>
@@ -152,7 +152,7 @@ export default function Analytics() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Plans On Track</p>
-                <p className="text-2xl font-bold text-green-600">{dashboardSummary.treatment_plans_on_track}</p>
+                <p className="text-lg sm:text-2xl font-bold text-green-600">{dashboardSummary.treatment_plans_on_track}</p>
               </div>
               <CheckCircle className="w-8 h-8 text-green-600" />
             </div>
@@ -162,7 +162,7 @@ export default function Analytics() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Plans Delayed</p>
-                <p className="text-2xl font-bold text-red-600">{dashboardSummary.treatment_plans_delayed}</p>
+                <p className="text-lg sm:text-2xl font-bold text-red-600">{dashboardSummary.treatment_plans_delayed}</p>
               </div>
               <AlertTriangle className="w-8 h-8 text-red-600" />
             </div>
@@ -249,33 +249,33 @@ export default function Analytics() {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Activities</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Patients Seen</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ward Rounds</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quality Score</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Compliance</th>
+                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Activities</th>
+                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Patients Seen</th>
+                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ward Rounds</th>
+                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quality Score</th>
+                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Compliance</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {filteredPerformance.map((user) => (
                       <tr key={user.user_id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        <td className="px-2 sm:px-4 py-2 sm:py-4 whitespace-nowrap">
                           <div className="flex items-center">
                             <User className="w-5 h-5 text-gray-400 mr-2" />
                             <span className="font-medium text-gray-900">{user.user_name}</span>
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        <td className="px-2 sm:px-4 py-2 sm:py-4 whitespace-nowrap">
                           <span className={`px-2 py-1 text-xs font-medium rounded-full ${getRoleColor(user.user_role)}`}>
                             {user.user_role}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{user.total_activities}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{user.patients_seen}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{user.ward_rounds_completed}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        <td className="px-2 sm:px-4 py-2 sm:py-4 whitespace-nowrap text-sm text-gray-900">{user.total_activities}</td>
+                        <td className="px-2 sm:px-4 py-2 sm:py-4 whitespace-nowrap text-sm text-gray-900">{user.patients_seen}</td>
+                        <td className="px-2 sm:px-4 py-2 sm:py-4 whitespace-nowrap text-sm text-gray-900">{user.ward_rounds_completed}</td>
+                        <td className="px-2 sm:px-4 py-2 sm:py-4 whitespace-nowrap">
                           <div className="flex items-center">
                             <div className="w-16 bg-gray-200 rounded-full h-2 mr-2">
                               <div
@@ -286,7 +286,7 @@ export default function Analytics() {
                             <span className="text-sm text-gray-900">{user.average_quality_score.toFixed(0)}%</span>
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        <td className="px-2 sm:px-4 py-2 sm:py-4 whitespace-nowrap">
                           <div className="flex items-center">
                             <div className="w-16 bg-gray-200 rounded-full h-2 mr-2">
                               <div

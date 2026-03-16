@@ -243,7 +243,7 @@ const CBTResults: React.FC<CBTResultsProps> = ({ test, attempt, onReturnToTests 
               )}
             </div>
             
-            <h1 className="text-3xl font-bold mb-2">
+            <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold mb-2">
               {passed ? 'Congratulations!' : 'Keep Trying!'}
             </h1>
             <p className="text-white/90">
@@ -302,7 +302,7 @@ const CBTResults: React.FC<CBTResultsProps> = ({ test, attempt, onReturnToTests 
                     </svg>
                   </div>
                   <div>
-                    <div className="text-2xl font-bold text-green-600">{correctAnswers}</div>
+                    <div className="text-lg sm:text-2xl font-bold text-green-600">{correctAnswers}</div>
                     <div className="text-sm text-green-700">Correct</div>
                   </div>
                 </div>
@@ -316,7 +316,7 @@ const CBTResults: React.FC<CBTResultsProps> = ({ test, attempt, onReturnToTests 
                     </svg>
                   </div>
                   <div>
-                    <div className="text-2xl font-bold text-red-600">{incorrectAnswers}</div>
+                    <div className="text-lg sm:text-2xl font-bold text-red-600">{incorrectAnswers}</div>
                     <div className="text-sm text-red-700">Incorrect</div>
                   </div>
                 </div>

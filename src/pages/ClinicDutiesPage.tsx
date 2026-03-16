@@ -287,7 +287,7 @@ export default function ClinicDutiesPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+          <h1 className="text-lg sm:text-2xl font-bold text-gray-900 flex items-center gap-2">
             <ClipboardList className="w-7 h-7 text-green-600" />
             Clinic Duties & Tracking
           </h1>
@@ -781,7 +781,7 @@ function TuesdayClinicPreview() {
                   <Users className="w-5 h-5" />
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-purple-700">{staffByRole.senior_registrars.length}</div>
+                  <div className="text-lg sm:text-2xl font-bold text-purple-700">{staffByRole.senior_registrars.length}</div>
                   <div className="text-xs text-gray-500">Senior Registrar{staffByRole.senior_registrars.length !== 1 ? 's' : ''}</div>
                 </div>
               </div>
@@ -799,7 +799,7 @@ function TuesdayClinicPreview() {
                   <Users className="w-5 h-5" />
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-blue-700">{staffByRole.registrars.length}</div>
+                  <div className="text-lg sm:text-2xl font-bold text-blue-700">{staffByRole.registrars.length}</div>
                   <div className="text-xs text-gray-500">Registrar{staffByRole.registrars.length !== 1 ? 's' : ''}</div>
                 </div>
               </div>
@@ -819,7 +819,7 @@ function TuesdayClinicPreview() {
                   <Users className="w-5 h-5" />
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-green-700">{staffByRole.house_officers.length}</div>
+                  <div className="text-lg sm:text-2xl font-bold text-green-700">{staffByRole.house_officers.length}</div>
                   <div className="text-xs text-gray-500">House Officer{staffByRole.house_officers.length !== 1 ? 's' : ''}</div>
                 </div>
               </div>
@@ -1093,7 +1093,7 @@ function StatCard({ label, value, color }: { label: string; value: number; color
   };
   return (
     <div className={`rounded-xl border p-4 ${colorMap[color]}`}>
-      <div className="text-2xl font-bold">{value}</div>
+      <div className="text-lg sm:text-2xl font-bold">{value}</div>
       <div className="text-xs font-medium mt-1">{label}</div>
     </div>
   );

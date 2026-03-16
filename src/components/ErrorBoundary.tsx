@@ -73,7 +73,7 @@ export class ErrorBoundary extends Component<Props, State> {
               <AlertTriangle className="w-8 h-8 text-red-600" />
             </div>
 
-            <h2 className="text-2xl font-bold text-gray-900 text-center mb-2">
+            <h2 className="text-lg sm:text-2xl font-bold text-gray-900 text-center mb-2">
               Something went wrong
             </h2>
 
@@ -133,7 +133,7 @@ export const ErrorFallback: React.FC<{ error: Error; resetError: () => void }> =
         <AlertTriangle className="w-8 h-8 text-red-600" />
       </div>
 
-      <h2 className="text-2xl font-bold text-gray-900 text-center mb-2">
+      <h2 className="text-lg sm:text-2xl font-bold text-gray-900 text-center mb-2">
         Error Loading Content
       </h2>
 

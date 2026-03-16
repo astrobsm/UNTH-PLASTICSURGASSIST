@@ -228,7 +228,7 @@ const ScribeDashboard: React.FC = () => {
             <Brain className="w-8 h-8 text-indigo-600" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">AI Medical Scribe</h1>
+            <h1 className="text-lg sm:text-2xl font-bold text-gray-900">AI Medical Scribe</h1>
             <p className="text-sm text-gray-500">Record ward rounds & reviews — AI structures your notes</p>
           </div>
         </div>
@@ -255,19 +255,19 @@ const ScribeDashboard: React.FC = () => {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
           <div className="bg-white rounded-xl border p-4">
             <div className="text-sm text-gray-500">Total Sessions</div>
-            <div className="text-2xl font-bold text-gray-900">{totalSessions}</div>
+            <div className="text-lg sm:text-2xl font-bold text-gray-900">{totalSessions}</div>
           </div>
           <div className="bg-white rounded-xl border p-4">
             <div className="text-sm text-gray-500">Finalized</div>
-            <div className="text-2xl font-bold text-green-600">{totalFinalized}</div>
+            <div className="text-lg sm:text-2xl font-bold text-green-600">{totalFinalized}</div>
           </div>
           <div className="bg-white rounded-xl border p-4">
             <div className="text-sm text-gray-500">Avg Duration</div>
-            <div className="text-2xl font-bold text-blue-600">{formatDuration(avgDuration)}</div>
+            <div className="text-lg sm:text-2xl font-bold text-blue-600">{formatDuration(avgDuration)}</div>
           </div>
           <div className="bg-white rounded-xl border p-4">
             <div className="text-sm text-gray-500">Avg AI Confidence</div>
-            <div className="text-2xl font-bold text-indigo-600">{avgConfidence}%</div>
+            <div className="text-lg sm:text-2xl font-bold text-indigo-600">{avgConfidence}%</div>
           </div>
         </div>
       )}
@@ -457,7 +457,7 @@ const ScribeDashboard: React.FC = () => {
       {showNewSession && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0 sm:p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg">
-            <div className="px-6 py-4 border-b flex items-center justify-between">
+            <div className="px-3 sm:px-6 py-3 sm:py-4 border-b flex items-center justify-between">
               <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                 <Mic className="w-5 h-5 text-indigo-600" />
                 New Scribe Session

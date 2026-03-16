@@ -828,7 +828,7 @@ export const PreoperativePlanningModule: React.FC<PreoperativePlanningModuleProp
               <ClipboardCheck className="w-8 h-8 text-primary-600" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Pre-operative Planning</h1>
+              <h1 className="text-lg sm:text-2xl font-bold text-gray-900">Pre-operative Planning</h1>
               <p className="text-gray-500">Comprehensive clinical assessment and investigation planning</p>
             </div>
           </div>

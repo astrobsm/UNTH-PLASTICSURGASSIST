@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Download, ShoppingCart, User, Search, Heart, Scissors, Plus, Minus, Trash2, MessageCircle, Loader2, Printer, List, Calendar, Package } from 'lucide-react';
 import {
   createPDF,
@@ -687,7 +687,7 @@ export default function ShoppingList() {
     <div className="max-w-7xl mx-auto px-4 py-8">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Surgical Shopping List Generator</h1>
+        <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 mb-2">Surgical Shopping List Generator</h1>
         <p className="text-gray-600">
           Select items with quantities to generate a comprehensive shopping list
         </p>
@@ -968,7 +968,7 @@ export default function ShoppingList() {
                         {list.items && Array.isArray(list.items) && (
                           <div className="mt-2 text-sm text-gray-700">
                             <span className="font-medium">{list.total_items || list.items.length} items</span>
-                            <span className="mx-2">•</span>
+                            <span className="mx-2">�</span>
                             <span>Total qty: {list.total_quantity || list.items.reduce((s: number, i: any) => s + (i.quantity || 1), 0)}</span>
                             <div className="mt-1 flex flex-wrap gap-1">
                               {list.items.slice(0, 5).map((item: any, idx: number) => (

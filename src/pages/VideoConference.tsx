@@ -422,7 +422,7 @@ const VideoConference: React.FC = () => {
       ) : (
         <div className="w-full h-full flex items-center justify-center bg-gray-700">
           <div className="w-16 h-16 rounded-full bg-gray-600 flex items-center justify-center">
-            <span className="text-2xl font-bold text-white">
+            <span className="text-lg sm:text-2xl font-bold text-white">
               {participant.name.charAt(0).toUpperCase()}
             </span>
           </div>
@@ -453,7 +453,7 @@ const VideoConference: React.FC = () => {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
         <div className="bg-gray-800 rounded-2xl p-8 max-w-md w-full">
-          <h1 className="text-2xl font-bold text-white mb-6 text-center">
+          <h1 className="text-lg sm:text-2xl font-bold text-white mb-6 text-center">
             Video Conference
           </h1>
 

@@ -260,7 +260,7 @@ const KeloidCarePage: React.FC = () => {
                 <Activity className="h-6 w-6 text-green-600" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Keloid Care Planning</h1>
+                <h1 className="text-lg sm:text-2xl font-bold text-gray-900">Keloid Care Planning</h1>
                 <p className="text-sm text-gray-500">Comprehensive multi-modality treatment management</p>
               </div>
             </div>
@@ -727,19 +727,19 @@ const OverviewTab: React.FC<{ plan: KeloidCarePlan }> = ({ plan }) => {
         </h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="text-center p-3 bg-green-50 rounded-lg">
-            <p className="text-3xl font-bold text-green-600">{complianceRate}%</p>
+            <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-green-600">{complianceRate}%</p>
             <p className="text-xs text-green-700 mt-1">Injection Compliance</p>
           </div>
           <div className="text-center p-3 bg-blue-50 rounded-lg">
-            <p className="text-3xl font-bold text-blue-600">{completedInjections}/{totalInjections}</p>
+            <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-blue-600">{completedInjections}/{totalInjections}</p>
             <p className="text-xs text-blue-700 mt-1">Injections Completed</p>
           </div>
           <div className="text-center p-3 bg-red-50 rounded-lg">
-            <p className="text-3xl font-bold text-red-600">{overdueInjections + missedInjections}</p>
+            <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-red-600">{overdueInjections + missedInjections}</p>
             <p className="text-xs text-red-700 mt-1">Overdue/Missed</p>
           </div>
           <div className={`text-center p-3 rounded-lg ${testStatus.complete ? 'bg-green-50' : 'bg-yellow-50'}`}>
-            <p className={`text-3xl font-bold ${testStatus.complete ? 'text-green-600' : 'text-yellow-600'}`}>
+            <p className={`text-xl sm:text-2xl lg:text-3xl font-bold ${testStatus.complete ? 'text-green-600' : 'text-yellow-600'}`}>
               {testStatus.complete ? '✓' : '!'}
             </p>
             <p className={`text-xs mt-1 ${testStatus.complete ? 'text-green-700' : 'text-yellow-700'}`}>
@@ -872,7 +872,7 @@ const OverviewTab: React.FC<{ plan: KeloidCarePlan }> = ({ plan }) => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
         <div className="bg-blue-50 rounded-lg p-4">
           <h4 className="font-medium text-blue-900 mb-2">Pre-Op Injections</h4>
-          <p className="text-2xl font-bold text-blue-600">{plan.preop_triamcinolone_count || 0}</p>
+          <p className="text-lg sm:text-2xl font-bold text-blue-600">{plan.preop_triamcinolone_count || 0}</p>
           <p className="text-sm text-blue-700">Every {plan.preop_injection_interval_weeks || 3} weeks</p>
           {plan.injection_stats && (
             <p className="text-xs text-blue-600 mt-1">{plan.injection_stats.preop_completed} completed</p>
@@ -887,7 +887,7 @@ const OverviewTab: React.FC<{ plan: KeloidCarePlan }> = ({ plan }) => {
         </div>
         <div className="bg-green-50 rounded-lg p-4">
           <h4 className="font-medium text-green-900 mb-2">Post-Op Injections</h4>
-          <p className="text-2xl font-bold text-green-600">{plan.postop_triamcinolone_count || 0}</p>
+          <p className="text-lg sm:text-2xl font-bold text-green-600">{plan.postop_triamcinolone_count || 0}</p>
           <p className="text-sm text-green-700">Every {plan.postop_injection_interval_weeks || 3} weeks</p>
           {plan.injection_stats && (
             <p className="text-xs text-green-600 mt-1">{plan.injection_stats.postop_completed} completed</p>

@@ -71,7 +71,7 @@ export default function BloodTransfusionPage() {
       <div className="mb-6">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 flex items-center space-x-3">
+            <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 flex items-center space-x-3">
               <Droplet className="h-8 w-8 text-red-600" />
               <span>Blood Transfusion Module</span>
             </h1>
@@ -125,7 +125,7 @@ export default function BloodTransfusionPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-blue-600 font-medium">Planned</p>
-              <p className="text-2xl font-bold text-blue-900">
+              <p className="text-lg sm:text-2xl font-bold text-blue-900">
                 {transfusions.filter(t => t.status === 'planned').length}
               </p>
             </div>
@@ -136,7 +136,7 @@ export default function BloodTransfusionPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-yellow-600 font-medium">In Progress</p>
-              <p className="text-2xl font-bold text-yellow-900">
+              <p className="text-lg sm:text-2xl font-bold text-yellow-900">
                 {transfusions.filter(t => t.status === 'in-progress').length}
               </p>
             </div>
@@ -147,7 +147,7 @@ export default function BloodTransfusionPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-green-600 font-medium">Completed</p>
-              <p className="text-2xl font-bold text-green-900">
+              <p className="text-lg sm:text-2xl font-bold text-green-900">
                 {transfusions.filter(t => t.status === 'completed').length}
               </p>
             </div>
@@ -158,7 +158,7 @@ export default function BloodTransfusionPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-red-600 font-medium">With Complications</p>
-              <p className="text-2xl font-bold text-red-900">
+              <p className="text-lg sm:text-2xl font-bold text-red-900">
                 {transfusions.filter(t => t.adverse_events).length}
               </p>
             </div>
@@ -197,25 +197,25 @@ export default function BloodTransfusionPage() {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Date
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Patient
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Indication
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Baseline Hb
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Units
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Status
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Actions
                   </th>
                 </tr>
@@ -223,13 +223,13 @@ export default function BloodTransfusionPage() {
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredTransfusions.map((transfusion) => (
                   <tr key={transfusion.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <td className="px-2 sm:px-4 py-2 sm:py-4 whitespace-nowrap text-sm text-gray-900">
                       {format(new Date(transfusion.transfusion_date), 'MMM d, yyyy')}
                       {transfusion.start_time && (
                         <div className="text-xs text-gray-500">Started: {transfusion.start_time}</div>
                       )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-2 sm:px-4 py-2 sm:py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">{transfusion.hospital_number}</div>
                       {transfusion.urgent && (
                         <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
@@ -237,19 +237,19 @@ export default function BloodTransfusionPage() {
                         </span>
                       )}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-900 max-w-xs truncate">
+                    <td className="px-2 sm:px-4 py-2 sm:py-4 text-sm text-gray-900 max-w-xs truncate">
                       {transfusion.indication}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <td className="px-2 sm:px-4 py-2 sm:py-4 whitespace-nowrap text-sm text-gray-900">
                       {transfusion.baseline_hb} g/dL
                       {transfusion.post_hb && (
                         <div className="text-xs text-green-600">Post: {transfusion.post_hb} g/dL</div>
                       )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <td className="px-2 sm:px-4 py-2 sm:py-4 whitespace-nowrap text-sm text-gray-900">
                       {transfusion.total_units} unit(s)
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-2 sm:px-4 py-2 sm:py-4 whitespace-nowrap">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(transfusion.status)}`}>
                         {transfusion.status.replace('-', ' ').toUpperCase()}
                       </span>
@@ -262,7 +262,7 @@ export default function BloodTransfusionPage() {
                         </div>
                       )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <td className="px-2 sm:px-4 py-2 sm:py-4 whitespace-nowrap text-sm font-medium">
                       <button
                         onClick={() => handleEditTransfusion(transfusion.id!)}
                         className="text-red-600 hover:text-red-900 flex items-center space-x-1"

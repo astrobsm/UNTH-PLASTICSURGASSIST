@@ -408,7 +408,7 @@ const PressureSorePage: React.FC = () => {
             <CircleDot className="h-8 w-8 text-purple-600" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Pressure Sore Management Protocol</h1>
+            <h1 className="text-lg sm:text-2xl font-bold text-gray-900">Pressure Sore Management Protocol</h1>
             <p className="text-sm text-gray-500">NPUAP/EPUAP Staging, Braden Scale, TIME Framework & Surgical Options</p>
           </div>
         </div>
@@ -507,7 +507,7 @@ const PressureSorePage: React.FC = () => {
               {TIME_FRAMEWORK.map((comp) => (
                 <div key={comp.acronym} className="bg-white border rounded-lg p-4 shadow-sm">
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="text-2xl font-bold text-purple-600">{comp.acronym}</span>
+                    <span className="text-lg sm:text-2xl font-bold text-purple-600">{comp.acronym}</span>
                     <span className="text-sm font-semibold text-gray-800">{comp.component}</span>
                   </div>
                   <p className="text-xs text-gray-600 mb-2">{comp.description}</p>
@@ -1371,7 +1371,7 @@ const PressureSorePage: React.FC = () => {
             <p className="text-sm text-gray-600 mb-1">{PS_CME_ARTICLE.authors}</p>
             <p className="text-sm text-gray-700 mb-4">{PS_CME_ARTICLE.abstract}</p>
 
-            <div className="grid grid-cols-2 gap-2 text-xs mb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs mb-4">
               <div className="bg-purple-50 p-2 rounded"><strong>CME Credits:</strong> {PS_CME_ARTICLE.cmeCredits}</div>
               <div className="bg-purple-50 p-2 rounded"><strong>Passing Score:</strong> 70%</div>
             </div>
@@ -1442,7 +1442,7 @@ const PressureSorePage: React.FC = () => {
               </button>
             ) : (
               <div className={`mt-6 p-4 rounded-lg text-center ${cmeScore >= 70 ? 'bg-green-100 border border-green-300' : 'bg-red-100 border border-red-300'}`}>
-                <p className="text-2xl font-bold">{cmeScore}%</p>
+                <p className="text-lg sm:text-2xl font-bold">{cmeScore}%</p>
                 <p className={`text-sm font-semibold ${cmeScore >= 70 ? 'text-green-800' : 'text-red-800'}`}>
                   {cmeScore >= 70 ? `PASSED — ${PS_CME_ARTICLE.cmeCredits} CME credits earned!` : 'Did not pass. Review the material and retake.'}
                 </p>

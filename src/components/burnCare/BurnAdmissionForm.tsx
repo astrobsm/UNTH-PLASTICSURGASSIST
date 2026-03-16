@@ -573,7 +573,7 @@ const BurnAdmissionForm: React.FC<BurnAdmissionFormProps> = ({ onComplete, onCan
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold text-gray-900">TBSA Assessment (Lund-Browder)</h3>
-              <div className="text-2xl font-bold text-orange-600">
+              <div className="text-lg sm:text-2xl font-bold text-orange-600">
                 {calculatedTBSA.toFixed(1)}% TBSA
               </div>
             </div>
@@ -877,7 +877,7 @@ const BurnAdmissionForm: React.FC<BurnAdmissionFormProps> = ({ onComplete, onCan
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="bg-blue-50 rounded-lg p-4">
                     <div className="text-sm text-blue-600 mb-1">Total 24hr Volume</div>
-                    <div className="text-2xl font-bold text-blue-900">
+                    <div className="text-lg sm:text-2xl font-bold text-blue-900">
                       {resuscitationPlan.totalVolume24h.toLocaleString()} mL
                     </div>
                     <div className="text-xs text-blue-600 mt-1">
@@ -887,7 +887,7 @@ const BurnAdmissionForm: React.FC<BurnAdmissionFormProps> = ({ onComplete, onCan
                   
                   <div className="bg-orange-50 rounded-lg p-4">
                     <div className="text-sm text-orange-600 mb-1">First 8 Hours</div>
-                    <div className="text-2xl font-bold text-orange-900">
+                    <div className="text-lg sm:text-2xl font-bold text-orange-900">
                       {resuscitationPlan.firstHalfVolume.toLocaleString()} mL
                     </div>
                     <div className="text-xs text-orange-600 mt-1">
@@ -897,7 +897,7 @@ const BurnAdmissionForm: React.FC<BurnAdmissionFormProps> = ({ onComplete, onCan
                   
                   <div className="bg-green-50 rounded-lg p-4">
                     <div className="text-sm text-green-600 mb-1">Next 16 Hours</div>
-                    <div className="text-2xl font-bold text-green-900">
+                    <div className="text-lg sm:text-2xl font-bold text-green-900">
                       {resuscitationPlan.secondHalfVolume.toLocaleString()} mL
                     </div>
                     <div className="text-xs text-green-600 mt-1">
@@ -954,7 +954,7 @@ const BurnAdmissionForm: React.FC<BurnAdmissionFormProps> = ({ onComplete, onCan
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-white border rounded-lg p-4">
                 <div className="text-sm text-gray-600 mb-1">Baux Score</div>
-                <div className="text-3xl font-bold text-gray-900">{bauxScore}</div>
+                <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">{bauxScore}</div>
                 <div className="text-sm text-gray-500">
                   {burnCareService.interpretBauxScore(bauxScore).prognosis}
                 </div>
@@ -962,7 +962,7 @@ const BurnAdmissionForm: React.FC<BurnAdmissionFormProps> = ({ onComplete, onCan
               
               <div className="bg-white border rounded-lg p-4">
                 <div className="text-sm text-gray-600 mb-1">Revised Baux</div>
-                <div className="text-3xl font-bold text-gray-900">{revisedBauxScore}</div>
+                <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">{revisedBauxScore}</div>
                 <div className="text-sm text-gray-500">
                   {inhalationAssessment.suspected ? '+17 for inhalation' : 'No inhalation modifier'}
                 </div>
@@ -970,7 +970,7 @@ const BurnAdmissionForm: React.FC<BurnAdmissionFormProps> = ({ onComplete, onCan
               
               <div className="bg-white border rounded-lg p-4">
                 <div className="text-sm text-gray-600 mb-1">ABSI Score</div>
-                <div className="text-3xl font-bold text-gray-900">{absiScore?.totalScore || 0}</div>
+                <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">{absiScore?.totalScore || 0}</div>
                 <div className="text-sm text-gray-500">
                   Mortality: {absiScore?.mortalityRisk || 'N/A'}
                 </div>
@@ -1100,7 +1100,7 @@ const BurnAdmissionForm: React.FC<BurnAdmissionFormProps> = ({ onComplete, onCan
               </div>
             </div>
             <div className="text-right">
-              <div className="text-2xl font-bold">{calculatedTBSA.toFixed(1)}%</div>
+              <div className="text-lg sm:text-2xl font-bold">{calculatedTBSA.toFixed(1)}%</div>
               <div className="text-orange-100 text-sm">TBSA</div>
             </div>
           </div>
@@ -1187,13 +1187,13 @@ const BurnAdmissionForm: React.FC<BurnAdmissionFormProps> = ({ onComplete, onCan
 
       {/* Patient Selector Modal */}
       {showPatientSelector && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-0 sm:p-4 z-50">
+          <div className="bg-white rounded-none sm:rounded-lg sm:max-w-2xl w-full h-full sm:h-auto sm:max-h-[80vh] overflow-hidden flex flex-col">
             {/* Header */}
-            <div className="bg-gradient-to-r from-orange-600 to-red-600 text-white p-6">
+            <div className="bg-gradient-to-r from-orange-600 to-red-600 text-white p-3 sm:p-6 flex-shrink-0">
               <div className="flex items-start justify-between mb-2">
-                <div>
-                  <h2 className="text-xl font-bold mb-1">Select Patient</h2>
+                <div className="min-w-0 flex-1">
+                  <h2 className="text-lg sm:text-xl font-bold mb-1">Select Patient</h2>
                   <p className="text-orange-100 text-sm">
                     Choose a patient from the database for burn admission
                   </p>

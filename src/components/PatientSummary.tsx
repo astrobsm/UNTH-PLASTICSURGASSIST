@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { unthPatientService, PatientSummary } from '../services/unthPatientService';
 import { patientService } from '../services/patientService';
 import { db } from '../db/database';
@@ -291,7 +291,7 @@ export const PatientSummaryView: React.FC<PatientSummaryViewProps> = ({
       <div className="lg:col-span-2">
         {selectedSummary ? (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-            <div className="px-6 py-4 border-b border-gray-200">
+            <div className="px-3 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
                   <span className="text-2xl">{getSummaryTypeIcon(selectedSummary.summary_type)}</span>

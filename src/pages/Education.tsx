@@ -215,7 +215,7 @@ const Education: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-clinical-dark">
+          <h1 className="text-lg sm:text-2xl font-bold text-clinical-dark">
             Continuing Medical Education
           </h1>
           <p className="text-clinical mt-1">
@@ -455,7 +455,7 @@ const Education: React.FC = () => {
                       <XCircle className="h-8 w-8 text-red-600" />
                     )}
                   </div>
-                  <h2 className="text-2xl font-bold text-clinical-dark mb-2">
+                  <h2 className="text-lg sm:text-2xl font-bold text-clinical-dark mb-2">
                     {currentSession.passed ? 'Congratulations!' : 'Test Complete'}
                   </h2>
                   <p className="text-clinical mb-4">

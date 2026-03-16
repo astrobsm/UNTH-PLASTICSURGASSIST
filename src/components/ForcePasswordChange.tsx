@@ -76,7 +76,7 @@ export default function ForcePasswordChange({
             <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <Lock className="h-8 w-8 text-yellow-600" />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900">Password Change Required</h1>
+            <h1 className="text-lg sm:text-2xl font-bold text-gray-900">Password Change Required</h1>
             <p className="text-gray-600 mt-2">
               Welcome, <span className="font-medium">{userName}</span>!
             </p>

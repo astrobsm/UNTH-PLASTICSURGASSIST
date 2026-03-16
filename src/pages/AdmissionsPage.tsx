@@ -293,7 +293,7 @@ export default function AdmissionsPage() {
       <div className="bg-white rounded-lg shadow-md">
         {/* Header */}
         <div className="border-b border-gray-200 bg-gradient-to-r from-green-600 to-green-700 text-white p-6 rounded-t-lg">
-          <h1 className="text-3xl font-bold">PLASTIC AND RECONSTRUCTIVE SURGERY UNIT</h1>
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold">PLASTIC AND RECONSTRUCTIVE SURGERY UNIT</h1>
           <h2 className="text-xl mt-2">Patient Admissions</h2>
         </div>
 
@@ -350,25 +350,25 @@ export default function AdmissionsPage() {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Patient
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Hospital Number
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Ward / Bed
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Admission Date
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Route
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Diagnosis
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Actions
                       </th>
                     </tr>
@@ -383,19 +383,19 @@ export default function AdmissionsPage() {
                     ) : (
                       filteredAdmissions.map((admission) => (
                         <tr key={admission.id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-2 sm:px-4 py-2 sm:py-4 whitespace-nowrap">
                             <div className="font-medium text-gray-900">{admission.patient_name}</div>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          <td className="px-2 sm:px-4 py-2 sm:py-4 whitespace-nowrap text-sm text-gray-500">
                             {admission.hospital_number}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          <td className="px-2 sm:px-4 py-2 sm:py-4 whitespace-nowrap text-sm text-gray-500">
                             {admission.ward_location} / {admission.bed_number || 'N/A'}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          <td className="px-2 sm:px-4 py-2 sm:py-4 whitespace-nowrap text-sm text-gray-500">
                             {new Date(admission.admission_date).toLocaleDateString()}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-2 sm:px-4 py-2 sm:py-4 whitespace-nowrap">
                             <span className={`px-2 py-1 text-xs rounded-full ${
                               admission.route_of_admission === 'clinic' ? 'bg-blue-100 text-blue-800' :
                               admission.route_of_admission === 'emergency' ? 'bg-red-100 text-red-800' :
@@ -404,10 +404,10 @@ export default function AdmissionsPage() {
                               {admission.route_of_admission.replace('_', ' ').toUpperCase()}
                             </span>
                           </td>
-                          <td className="px-6 py-4 text-sm text-gray-500">
+                          <td className="px-2 sm:px-4 py-2 sm:py-4 text-sm text-gray-500">
                             <div className="max-w-xs truncate">{admission.provisional_diagnosis}</div>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <td className="px-2 sm:px-4 py-2 sm:py-4 whitespace-nowrap text-sm font-medium">
                             <button className="text-green-600 hover:text-green-900 mr-3">View</button>
                             <button className="text-blue-600 hover:text-blue-900 mr-3">Transfer</button>
                             <button className="text-red-600 hover:text-red-900">Discharge</button>
@@ -970,19 +970,19 @@ export default function AdmissionsPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <div className="bg-blue-50 p-6 rounded-lg border border-blue-200">
                 <h4 className="text-sm font-medium text-blue-900 mb-2">Total Admissions</h4>
-                <p className="text-3xl font-bold text-blue-700">{statistics.total_admissions}</p>
+                <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-blue-700">{statistics.total_admissions}</p>
               </div>
               <div className="bg-green-50 p-6 rounded-lg border border-green-200">
                 <h4 className="text-sm font-medium text-green-900 mb-2">Active Admissions</h4>
-                <p className="text-3xl font-bold text-green-700">{statistics.active_admissions}</p>
+                <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-green-700">{statistics.active_admissions}</p>
               </div>
               <div className="bg-purple-50 p-6 rounded-lg border border-purple-200">
                 <h4 className="text-sm font-medium text-purple-900 mb-2">This Month</h4>
-                <p className="text-3xl font-bold text-purple-700">{statistics.admissions_this_month}</p>
+                <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-purple-700">{statistics.admissions_this_month}</p>
               </div>
               <div className="bg-orange-50 p-6 rounded-lg border border-orange-200">
                 <h4 className="text-sm font-medium text-orange-900 mb-2">Avg. Length of Stay</h4>
-                <p className="text-3xl font-bold text-orange-700">{statistics.average_length_of_stay.toFixed(1)} days</p>
+                <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-orange-700">{statistics.average_length_of_stay.toFixed(1)} days</p>
               </div>
 
               <div className="md:col-span-2 lg:col-span-2 bg-gray-50 p-6 rounded-lg border border-gray-200">

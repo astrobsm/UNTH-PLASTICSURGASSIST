@@ -1127,7 +1127,7 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
                       <Activity className="w-4 h-4 inline mr-1" />
                       BNF Details: {selectedBNFMed.name}
                     </h5>
-                    <div className="grid grid-cols-2 gap-2 text-xs text-gray-700">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-gray-700">
                       <div><span className="font-medium">Generic:</span> {selectedBNFMed.genericName}</div>
                       <div><span className="font-medium">Category:</span> {selectedBNFMed.category}</div>
                       <div><span className="font-medium">Routes:</span> {selectedBNFMed.routes.join(', ')}</div>
@@ -1224,7 +1224,7 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
                   Quickly add standard investigation panels for common clinical scenarios.
                 </p>
                 {showPanelSelector && (
-                  <div className="grid grid-cols-2 gap-2 mt-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3">
                     {Object.keys(PREOP_PANELS).map((panelName) => (
                       <button
                         key={panelName}
@@ -1366,7 +1366,7 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
                       <Beaker className="w-3.5 h-3.5 inline mr-1" />
                       {selectedInvestigation.name} ({selectedInvestigation.abbreviation})
                     </h5>
-                    <div className="grid grid-cols-2 gap-2 text-xs text-gray-700">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-gray-700">
                       <div><span className="font-medium">Category:</span> {selectedInvestigation.category}</div>
                       <div><span className="font-medium">Type:</span> {selectedInvestigation.type}</div>
                       {selectedInvestigation.specimen && (

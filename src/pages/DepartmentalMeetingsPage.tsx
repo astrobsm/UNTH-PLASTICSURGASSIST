@@ -42,7 +42,7 @@ export default function DepartmentalMeetingsPage() {
         <div className="flex items-center gap-3 mb-2">
           <BookOpen className="w-8 h-8" />
           <h1
-            className="text-2xl md:text-3xl font-bold"
+            className="text-2xl md:text-xl sm:text-2xl lg:text-3xl font-bold"
             style={{ fontFamily: 'Georgia, serif' }}
           >
             Departmental Clinical Meetings

@@ -108,7 +108,7 @@ const CBTPage: React.FC<CBTPageProps> = ({ level, onBack }) => {
         <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden">
           {/* Header */}
           <div className="bg-gradient-to-r from-green-500 to-green-600 p-6 text-white">
-            <h2 className="text-2xl font-bold">Ready to Start?</h2>
+            <h2 className="text-lg sm:text-2xl font-bold">Ready to Start?</h2>
             <p className="opacity-90 mt-1">{currentTest.title}</p>
           </div>
           
@@ -238,7 +238,7 @@ const CBTPage: React.FC<CBTPageProps> = ({ level, onBack }) => {
           Back to Training
         </button>
         
-        <h1 className="text-3xl font-bold text-gray-800">Computer-Based Tests</h1>
+        <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-800">Computer-Based Tests</h1>
         <p className="text-gray-600 mt-1">
           Weekly MCQ examinations for {cbtService.getLevelDisplayName(level)}s
         </p>

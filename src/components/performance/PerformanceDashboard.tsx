@@ -119,7 +119,7 @@ const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({ level, onBa
           
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
-              <h1 className="text-3xl font-bold">Performance Dashboard</h1>
+              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold">Performance Dashboard</h1>
               <p className="text-white/90 mt-1">
                 {getLevelDisplayName(level)} • {getRotationDuration(level)} Rotation
               </p>
@@ -149,7 +149,7 @@ const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({ level, onBa
                   />
                 </svg>
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-2xl font-bold">{metrics.overallScore.toFixed(0)}%</span>
+                  <span className="text-lg sm:text-2xl font-bold">{metrics.overallScore.toFixed(0)}%</span>
                   <span className="text-xs text-white/80">Overall</span>
                 </div>
               </div>
@@ -216,7 +216,7 @@ const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({ level, onBa
                   <span className="text-2xl">📝</span>
                 </div>
                 <div className="flex items-end gap-2">
-                  <span className={`text-3xl font-bold ${getScoreColor(metrics.cbtScore)}`}>
+                  <span className={`text-xl sm:text-2xl lg:text-3xl font-bold ${getScoreColor(metrics.cbtScore)}`}>
                     {metrics.cbtScore.toFixed(0)}%
                   </span>
                   <span className="text-gray-400 text-sm mb-1">/ 100%</span>
@@ -237,7 +237,7 @@ const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({ level, onBa
                   <span className="text-2xl">🏥</span>
                 </div>
                 <div className="flex items-end gap-2">
-                  <span className={`text-3xl font-bold ${getScoreColor(metrics.patientCareScore)}`}>
+                  <span className={`text-xl sm:text-2xl lg:text-3xl font-bold ${getScoreColor(metrics.patientCareScore)}`}>
                     {metrics.patientCareScore.toFixed(0)}%
                   </span>
                   <span className="text-gray-400 text-sm mb-1">/ 100%</span>
@@ -258,7 +258,7 @@ const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({ level, onBa
                   <span className="text-2xl">⏱️</span>
                 </div>
                 <div className="flex items-end gap-2">
-                  <span className={`text-3xl font-bold ${getScoreColor(metrics.dutyPromptnessScore)}`}>
+                  <span className={`text-xl sm:text-2xl lg:text-3xl font-bold ${getScoreColor(metrics.dutyPromptnessScore)}`}>
                     {metrics.dutyPromptnessScore.toFixed(0)}%
                   </span>
                   <span className="text-gray-400 text-sm mb-1">/ 100%</span>
@@ -279,7 +279,7 @@ const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({ level, onBa
                   <span className="text-2xl">📅</span>
                 </div>
                 <div className="flex items-end gap-2">
-                  <span className={`text-3xl font-bold ${getScoreColor(metrics.attendanceScore)}`}>
+                  <span className={`text-xl sm:text-2xl lg:text-3xl font-bold ${getScoreColor(metrics.attendanceScore)}`}>
                     {metrics.attendanceScore.toFixed(0)}%
                   </span>
                   <span className="text-gray-400 text-sm mb-1">/ 100%</span>

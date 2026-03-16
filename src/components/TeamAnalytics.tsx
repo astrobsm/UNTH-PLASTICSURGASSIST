@@ -115,7 +115,7 @@ export default function TeamAnalytics({ refreshTrigger }: TeamAnalyticsProps) {
                     </span>
                     <span className="text-xs text-gray-500">{roleData.staff.length} staff</span>
                   </div>
-                  <div className="text-2xl font-bold text-gray-800">{roleData.totalPatients}</div>
+                  <div className="text-lg sm:text-2xl font-bold text-gray-800">{roleData.totalPatients}</div>
                   <div className="text-sm text-gray-600">Total patients</div>
                   <div className="mt-2 text-xs text-gray-500">
                     Avg: {roleData.avgPatients} patients/staff

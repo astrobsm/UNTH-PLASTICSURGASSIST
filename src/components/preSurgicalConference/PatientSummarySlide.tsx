@@ -21,7 +21,7 @@ const PatientSummarySlide: React.FC<Props> = ({ patient, onExit }) => {
             <User className="h-7 w-7 text-white" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-white">Patient Clinical Summary</h1>
+            <h1 className="text-lg sm:text-2xl font-bold text-white">Patient Clinical Summary</h1>
             <p className="text-green-100 text-sm">Pre-Surgical Conference Presentation</p>
           </div>
         </div>
@@ -42,12 +42,12 @@ const PatientSummarySlide: React.FC<Props> = ({ patient, onExit }) => {
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center space-x-4">
                 <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center">
-                  <span className="text-3xl font-bold text-green-700">
+                  <span className="text-xl sm:text-2xl lg:text-3xl font-bold text-green-700">
                     {patient.full_name?.[0] || patient.first_name?.[0] || '?'}
                   </span>
                 </div>
                 <div>
-                  <h2 className="text-3xl font-bold text-gray-900">
+                  <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">
                     {patient.full_name || `${patient.first_name} ${patient.last_name}`}
                   </h2>
                   <p className="text-lg text-gray-500 font-mono">{patient.hospital_number}</p>
@@ -72,7 +72,7 @@ const PatientSummarySlide: React.FC<Props> = ({ patient, onExit }) => {
           <div className="bg-white rounded-2xl shadow-2xl p-8 mb-6">
             <div className="flex items-center space-x-3 mb-4">
               <FileText className="h-7 w-7 text-green-600" />
-              <h3 className="text-2xl font-bold text-gray-900">Primary Diagnosis</h3>
+              <h3 className="text-lg sm:text-2xl font-bold text-gray-900">Primary Diagnosis</h3>
             </div>
             <p className="text-xl text-gray-800 bg-green-50 p-4 rounded-xl border-l-4 border-green-500">
               {patient.primary_diagnosis || 'Not specified'}
@@ -84,7 +84,7 @@ const PatientSummarySlide: React.FC<Props> = ({ patient, onExit }) => {
             <div className="bg-red-50 rounded-2xl shadow-2xl p-8 mb-6 border-2 border-red-200">
               <div className="flex items-center space-x-3 mb-4">
                 <AlertTriangle className="h-7 w-7 text-red-600" />
-                <h3 className="text-2xl font-bold text-red-700">⚠️ Allergies</h3>
+                <h3 className="text-lg sm:text-2xl font-bold text-red-700">⚠️ Allergies</h3>
               </div>
               <p className="text-xl text-red-800 font-semibold">{patient.allergies}</p>
             </div>
@@ -95,7 +95,7 @@ const PatientSummarySlide: React.FC<Props> = ({ patient, onExit }) => {
             <div className="bg-white rounded-2xl shadow-2xl p-8">
               <div className="flex items-center space-x-3 mb-4">
                 <BedDouble className="h-7 w-7 text-blue-600" />
-                <h3 className="text-2xl font-bold text-gray-900">Medical History</h3>
+                <h3 className="text-lg sm:text-2xl font-bold text-gray-900">Medical History</h3>
               </div>
               <p className="text-lg text-gray-700 whitespace-pre-wrap leading-relaxed">
                 {patient.medical_history}

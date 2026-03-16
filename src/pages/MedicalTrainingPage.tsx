@@ -253,7 +253,7 @@ const MedicalTrainingPage: React.FC = () => {
           <div className="flex items-center gap-3 mb-4">
             <GraduationCap className="h-10 w-10" />
             <div>
-              <h1 className="text-3xl font-bold">Medical Training</h1>
+              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold">Medical Training</h1>
               <p className="text-green-100">Comprehensive CME for Surgical Practice</p>
             </div>
           </div>
@@ -265,7 +265,7 @@ const MedicalTrainingPage: React.FC = () => {
                 <Book className="h-8 w-8" />
                 <div>
                   <p className="text-green-100 text-sm">Total Topics</p>
-                  <p className="text-2xl font-bold">{totalTopics}</p>
+                  <p className="text-lg sm:text-2xl font-bold">{totalTopics}</p>
                 </div>
               </div>
             </div>
@@ -274,7 +274,7 @@ const MedicalTrainingPage: React.FC = () => {
                 <CheckCircle className="h-8 w-8" />
                 <div>
                   <p className="text-green-100 text-sm">Completed</p>
-                  <p className="text-2xl font-bold">{completedCount}</p>
+                  <p className="text-lg sm:text-2xl font-bold">{completedCount}</p>
                 </div>
               </div>
             </div>
@@ -283,7 +283,7 @@ const MedicalTrainingPage: React.FC = () => {
                 <Clock className="h-8 w-8" />
                 <div>
                   <p className="text-green-100 text-sm">Progress</p>
-                  <p className="text-2xl font-bold">
+                  <p className="text-lg sm:text-2xl font-bold">
                     {totalTopics > 0 ? Math.round((completedCount / totalTopics) * 100) : 0}%
                   </p>
                 </div>

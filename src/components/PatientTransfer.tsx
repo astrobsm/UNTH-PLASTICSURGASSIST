@@ -79,7 +79,7 @@ export const PatientTransferForm: React.FC<PatientTransferFormProps> = ({
   return (
     <div className="max-w-2xl mx-auto">
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="px-6 py-4 border-b border-gray-200">
+        <div className="px-3 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
           <h2 className="text-xl font-semibold text-gray-900">Patient Transfer - UNTH</h2>
           <p className="text-sm text-gray-600 mt-1">
             Transfer patient between wards or admit from emergency/clinic
@@ -354,7 +354,7 @@ export const TransferHistory: React.FC<{ patientId: string }> = ({ patientId }) 
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-      <div className="px-6 py-4 border-b border-gray-200">
+      <div className="px-3 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
         <h3 className="text-lg font-semibold text-gray-900">Transfer History</h3>
       </div>
       

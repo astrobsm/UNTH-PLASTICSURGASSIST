@@ -162,17 +162,17 @@ export function UserApprovalManager() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-clinical-dark">User Management</h2>
+          <h2 className="text-lg sm:text-2xl font-bold text-clinical-dark">User Management</h2>
           <p className="text-sm text-clinical mt-1">Manage user registrations and approvals</p>
         </div>
         <div className="flex items-center gap-4">
           <div className="bg-blue-50 px-4 py-2 rounded-lg">
             <div className="text-sm text-blue-600 font-medium">Pending Requests</div>
-            <div className="text-2xl font-bold text-blue-900">{pendingUsers.length}</div>
+            <div className="text-lg sm:text-2xl font-bold text-blue-900">{pendingUsers.length}</div>
           </div>
           <div className="bg-green-50 px-4 py-2 rounded-lg">
             <div className="text-sm text-green-600 font-medium">Active Users</div>
-            <div className="text-2xl font-bold text-green-900">{approvedUsers.filter(u => u.is_active).length}</div>
+            <div className="text-lg sm:text-2xl font-bold text-green-900">{approvedUsers.filter(u => u.is_active).length}</div>
           </div>
         </div>
       </div>
@@ -240,16 +240,16 @@ export function UserApprovalManager() {
 
       {/* Pending Requests Table */}
       {activeView === 'pending' && (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="bg-white rounded-lg shadow overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Department</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Requested</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Department</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Requested</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -279,7 +279,7 @@ export function UserApprovalManager() {
                         {user.role.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
+                    <td className="px-2 sm:px-4 py-2 sm:py-4 text-sm text-gray-600">
                       {user.phone && (
                         <div className="flex items-center gap-1">
                           <Phone className="h-4 w-4" />
@@ -287,7 +287,7 @@ export function UserApprovalManager() {
                         </div>
                       )}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
+                    <td className="px-2 sm:px-4 py-2 sm:py-4 text-sm text-gray-600">
                       {user.department && (
                         <div className="flex items-center gap-1">
                           <Building className="h-4 w-4" />
@@ -295,7 +295,7 @@ export function UserApprovalManager() {
                         </div>
                       )}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
+                    <td className="px-2 sm:px-4 py-2 sm:py-4 text-sm text-gray-600">
                       {format(new Date(user.requested_at), 'MMM dd, yyyy')}
                     </td>
                     <td className="px-6 py-4">
@@ -336,16 +336,16 @@ export function UserApprovalManager() {
 
       {/* Approved Users Table */}
       {activeView === 'approved' && (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="bg-white rounded-lg shadow overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Login</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Approved</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Login</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Approved</th>
+                <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -383,10 +383,10 @@ export function UserApprovalManager() {
                         {user.is_active ? 'Active' : 'Inactive'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
+                    <td className="px-2 sm:px-4 py-2 sm:py-4 text-sm text-gray-600">
                       {user.last_login ? format(new Date(user.last_login), 'MMM dd, yyyy HH:mm') : 'Never'}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
+                    <td className="px-2 sm:px-4 py-2 sm:py-4 text-sm text-gray-600">
                       {user.created_at ? format(new Date(user.created_at), 'MMM dd, yyyy') : '-'}
                     </td>
                     <td className="px-6 py-4">
@@ -427,7 +427,7 @@ export function UserApprovalManager() {
       {showPasswordModal && toggleTargetUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
-            <div className="px-6 py-4 border-b flex items-center gap-3">
+            <div className="px-3 sm:px-6 py-3 sm:py-4 border-b flex items-center gap-3">
               <div className={`p-2 rounded-full ${
                 toggleTargetUser.currentStatus ? 'bg-red-100' : 'bg-green-100'
               }`}>

@@ -332,7 +332,7 @@ export default function Settings() {
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Page Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
+        <h1 className="text-lg sm:text-2xl font-bold text-gray-900">Settings</h1>
         <p className="text-gray-500 mt-1">Manage sync, data, and app preferences</p>
       </div>
 
@@ -363,7 +363,7 @@ export default function Settings() {
 
       {/* ──────────────────────── SYNC SECTION ──────────────────────── */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100 bg-gray-50">
+        <div className="px-3 sm:px-6 py-3 sm:py-4 border-b border-gray-100 bg-gray-50">
           <div className="flex items-center gap-2">
             <Cloud className="h-5 w-5 text-primary-600" />
             <h2 className="text-lg font-semibold text-gray-900">Cloud Sync</h2>
@@ -599,7 +599,7 @@ export default function Settings() {
 
       {/* ──────────────────────── DEVICES SECTION ──────────────────────── */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100 bg-gray-50">
+        <div className="px-3 sm:px-6 py-3 sm:py-4 border-b border-gray-100 bg-gray-50">
           <div className="flex items-center gap-2">
             <Smartphone className="h-5 w-5 text-primary-600" />
             <h2 className="text-lg font-semibold text-gray-900">Cross-Device Sync</h2>
@@ -650,7 +650,7 @@ export default function Settings() {
 
       {/* ──────────────────────── LOCAL DATA SECTION ──────────────────────── */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100 bg-gray-50">
+        <div className="px-3 sm:px-6 py-3 sm:py-4 border-b border-gray-100 bg-gray-50">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <HardDrive className="h-5 w-5 text-primary-600" />
@@ -715,7 +715,7 @@ export default function Settings() {
 
       {/* ──────────────────────── ACCOUNT SECTION ──────────────────────── */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100 bg-gray-50">
+        <div className="px-3 sm:px-6 py-3 sm:py-4 border-b border-gray-100 bg-gray-50">
           <div className="flex items-center gap-2">
             <Shield className="h-5 w-5 text-primary-600" />
             <h2 className="text-lg font-semibold text-gray-900">Account</h2>

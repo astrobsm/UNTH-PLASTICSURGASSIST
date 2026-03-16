@@ -179,7 +179,7 @@ const LimbSalvagePage: React.FC = () => {
               <Footprints className="w-8 h-8 text-primary-600" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Diabetic Foot - Limb Salvage Module</h1>
+              <h1 className="text-lg sm:text-2xl font-bold text-gray-900">Diabetic Foot - Limb Salvage Module</h1>
               <p className="text-gray-500">Comprehensive assessment for limb salvage decision-making</p>
             </div>
           </div>
@@ -255,7 +255,7 @@ const LimbSalvagePage: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-500">Low Risk</p>
-                  <p className="text-2xl font-bold text-green-600">
+                  <p className="text-lg sm:text-2xl font-bold text-green-600">
                     {assessments.filter(a => a.riskCategory === 'low_risk_limb_salvage_likely').length}
                   </p>
                 </div>
@@ -266,7 +266,7 @@ const LimbSalvagePage: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-500">Moderate Risk</p>
-                  <p className="text-2xl font-bold text-yellow-600">
+                  <p className="text-lg sm:text-2xl font-bold text-yellow-600">
                     {assessments.filter(a => a.riskCategory === 'moderate_risk_limb_salvage_possible').length}
                   </p>
                 </div>
@@ -277,7 +277,7 @@ const LimbSalvagePage: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-500">High Risk</p>
-                  <p className="text-2xl font-bold text-orange-600">
+                  <p className="text-lg sm:text-2xl font-bold text-orange-600">
                     {assessments.filter(a => a.riskCategory === 'high_risk_consider_amputation').length}
                   </p>
                 </div>
@@ -288,7 +288,7 @@ const LimbSalvagePage: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-500">Critical</p>
-                  <p className="text-2xl font-bold text-red-600">
+                  <p className="text-lg sm:text-2xl font-bold text-red-600">
                     {assessments.filter(a => a.riskCategory === 'critical_amputation_recommended').length}
                   </p>
                 </div>
@@ -328,23 +328,23 @@ const LimbSalvagePage: React.FC = () => {
           </div>
 
           {/* Assessments Table */}
-          <div className="bg-white rounded-lg shadow overflow-hidden">
+          <div className="bg-white rounded-lg shadow overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Patient
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Date
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Score
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Risk Category
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Status
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -364,7 +364,7 @@ const LimbSalvagePage: React.FC = () => {
                 ) : (
                   filteredAssessments.map((assessment) => (
                     <tr key={assessment.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-2 sm:px-4 py-2 sm:py-4 whitespace-nowrap">
                         <div className="flex items-center">
                           <div className="flex-shrink-0 h-10 w-10 bg-gray-100 rounded-full flex items-center justify-center">
                             <User className="w-5 h-5 text-gray-500" />
@@ -377,22 +377,22 @@ const LimbSalvagePage: React.FC = () => {
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-2 sm:px-4 py-2 sm:py-4 whitespace-nowrap">
                         <div className="flex items-center text-sm text-gray-900">
                           <Calendar className="w-4 h-4 mr-2 text-gray-400" />
                           {new Date(assessment.assessmentDate).toLocaleDateString()}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-2 sm:px-4 py-2 sm:py-4 whitespace-nowrap">
                         <div className="text-lg font-bold text-gray-900">{assessment.totalScore}</div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-2 sm:px-4 py-2 sm:py-4 whitespace-nowrap">
                         {getRiskBadge(assessment.riskCategory)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-2 sm:px-4 py-2 sm:py-4 whitespace-nowrap">
                         {getStatusBadge(assessment.status)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <td className="px-2 sm:px-4 py-2 sm:py-4 whitespace-nowrap text-right text-sm font-medium">
                         <button className="text-primary-600 hover:text-primary-900 mr-3">
                           View
                         </button>

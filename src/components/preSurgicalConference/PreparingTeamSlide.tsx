@@ -10,7 +10,7 @@ export default function PreparingTeamSlide({ team }: Props) {
     return (
       <div className="flex flex-col items-center justify-center h-full">
         <Users className="h-24 w-24 text-gray-500 mb-4" />
-        <h2 className="text-2xl font-bold text-gray-400">No Team Members Recorded</h2>
+        <h2 className="text-lg sm:text-2xl font-bold text-gray-400">No Team Members Recorded</h2>
         <p className="text-gray-500 mt-2">Team preparation records have not been logged</p>
       </div>
     );
@@ -35,7 +35,7 @@ export default function PreparingTeamSlide({ team }: Props) {
         <div className="w-20 h-20 bg-indigo-600 rounded-full flex items-center justify-center mx-auto mb-4">
           <Users className="h-10 w-10 text-white" />
         </div>
-        <h1 className="text-3xl font-bold">Patient Preparation Team</h1>
+        <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold">Patient Preparation Team</h1>
         <p className="text-gray-400 mt-2">
           {team.length} team member(s) involved in patient preparation
         </p>

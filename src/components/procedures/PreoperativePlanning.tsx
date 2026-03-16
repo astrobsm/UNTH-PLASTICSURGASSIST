@@ -875,7 +875,7 @@ export const PreoperativePlanning: React.FC<PreoperativePlanningProps> = ({
           <div className="flex items-center space-x-3">
             <ClipboardList className="w-8 h-8" />
             <div>
-              <h2 className="text-2xl font-bold">Pre-operative Planning Module</h2>
+              <h2 className="text-lg sm:text-2xl font-bold">Pre-operative Planning Module</h2>
               <p className="text-green-100">Comprehensive assessment and investigation planning</p>
             </div>
           </div>
@@ -1402,11 +1402,11 @@ export const PreoperativePlanning: React.FC<PreoperativePlanningProps> = ({
               </div>
               <div className="p-4 bg-gray-50 rounded-lg text-center">
                 <p className="text-sm text-gray-600">Cardiac Risk (RCRI)</p>
-                <p className="text-2xl font-bold text-gray-900">{riskAssessment.cardiacRiskIndex}</p>
+                <p className="text-lg sm:text-2xl font-bold text-gray-900">{riskAssessment.cardiacRiskIndex}</p>
               </div>
               <div className="p-4 bg-gray-50 rounded-lg text-center">
                 <p className="text-sm text-gray-600">DVT Risk (Caprini)</p>
-                <p className="text-2xl font-bold text-gray-900">{riskAssessment.capriniDVTScore}</p>
+                <p className="text-lg sm:text-2xl font-bold text-gray-900">{riskAssessment.capriniDVTScore}</p>
               </div>
               <div className="p-4 bg-gray-50 rounded-lg text-center">
                 <p className="text-sm text-gray-600">Bleeding Risk</p>

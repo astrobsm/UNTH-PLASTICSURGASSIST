@@ -13,7 +13,7 @@ export default function LabResultsSlide({ labResults, categorizedResults }: Prop
     return (
       <div className="flex flex-col items-center justify-center h-full">
         <FlaskConical className="h-24 w-24 text-gray-500 mb-4" />
-        <h2 className="text-2xl font-bold text-gray-400">No Laboratory Results</h2>
+        <h2 className="text-lg sm:text-2xl font-bold text-gray-400">No Laboratory Results</h2>
         <p className="text-gray-500 mt-2">No lab results have been recorded for this patient</p>
       </div>
     );
@@ -25,7 +25,7 @@ export default function LabResultsSlide({ labResults, categorizedResults }: Prop
         <div className="w-20 h-20 bg-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
           <FlaskConical className="h-10 w-10 text-white" />
         </div>
-        <h1 className="text-3xl font-bold">Laboratory Results</h1>
+        <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold">Laboratory Results</h1>
         <p className="text-gray-400 mt-2">{labResults.length} tests across {categories.length} categories</p>
       </div>
 

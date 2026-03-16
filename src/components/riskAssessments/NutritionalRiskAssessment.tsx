@@ -248,7 +248,7 @@ export const NutritionalRiskAssessmentForm: React.FC<NutritionalRiskAssessmentPr
 
   return (
     <div className="max-w-5xl mx-auto bg-white rounded-lg shadow-sm border border-gray-200">
-      <div className="px-6 py-4 border-b border-gray-200">
+      <div className="px-3 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <Scale className="h-6 w-6 text-orange-600" />
@@ -599,19 +599,19 @@ export const NutritionalRiskAssessmentForm: React.FC<NutritionalRiskAssessmentPr
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
               <div className="text-center">
-                <div className="text-2xl font-bold text-orange-600">{assessment.must_scores?.bmi_score || 0}</div>
+                <div className="text-lg sm:text-2xl font-bold text-orange-600">{assessment.must_scores?.bmi_score || 0}</div>
                 <div className="text-sm text-gray-600">BMI Score</div>
               </div>
               <div className="text-center">
-                <div className="text-2xl font-bold text-orange-600">{assessment.must_scores?.weight_loss_score || 0}</div>
+                <div className="text-lg sm:text-2xl font-bold text-orange-600">{assessment.must_scores?.weight_loss_score || 0}</div>
                 <div className="text-sm text-gray-600">Weight Loss Score</div>
               </div>
               <div className="text-center">
-                <div className="text-2xl font-bold text-orange-600">{assessment.must_scores?.acute_disease_score || 0}</div>
+                <div className="text-lg sm:text-2xl font-bold text-orange-600">{assessment.must_scores?.acute_disease_score || 0}</div>
                 <div className="text-sm text-gray-600">Acute Disease Score</div>
               </div>
               <div className="text-center bg-white rounded border-2 border-orange-300 p-2">
-                <div className="text-3xl font-bold text-orange-700">{calculatedRisk.score}</div>
+                <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-orange-700">{calculatedRisk.score}</div>
                 <div className="text-sm text-gray-600">Total MUST Score</div>
               </div>
             </div>

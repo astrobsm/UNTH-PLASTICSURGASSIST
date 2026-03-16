@@ -282,7 +282,7 @@ export const RiskAssessmentSummary: React.FC<RiskAssessmentSummaryProps> = ({
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-      <div className="px-6 py-4 border-b border-gray-200">
+      <div className="px-3 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold text-gray-900">Risk Assessments</h3>
           <div className="flex space-x-2">
@@ -569,7 +569,7 @@ export const RiskAssessmentSummary: React.FC<RiskAssessmentSummaryProps> = ({
       {showNewAssessmentPreview && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-0 sm:p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col">
-            <div className="px-6 py-4 border-b border-gray-200">
+            <div className="px-3 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
               <div className="flex items-center space-x-3">
                 <div className={getAssessmentColor(showNewAssessmentPreview)}>
                   {getAssessmentIcon(showNewAssessmentPreview)}

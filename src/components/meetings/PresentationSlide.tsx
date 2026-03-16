@@ -270,7 +270,7 @@ export default function PresentationSlide({
       {editingField === 'content' && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[80vh] flex flex-col">
-            <div className="flex items-center justify-between px-6 py-4 border-b">
+            <div className="flex items-center justify-between px-3 sm:px-6 py-3 sm:py-4 border-b">
               <h3 className="text-lg font-bold text-gray-800">Edit Slide Content</h3>
               <div className="flex items-center gap-2">
                 <button onClick={saveEdit} className="flex items-center gap-1 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition">

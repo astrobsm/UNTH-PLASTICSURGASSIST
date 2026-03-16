@@ -794,10 +794,10 @@ export default function BloodTransfusionForm({
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0 sm:p-4 overflow-y-auto">
       <div className="bg-white rounded-none sm:rounded-lg shadow-xl sm:max-w-7xl w-full h-full sm:h-auto sm:max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-gray-200 bg-red-50">
+        <div className="px-3 sm:px-6 py-3 sm:py-4 border-b border-gray-200 bg-red-50">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-2xl font-bold text-gray-900 flex items-center space-x-2">
+              <h2 className="text-lg sm:text-2xl font-bold text-gray-900 flex items-center space-x-2">
                 <Droplet className="h-6 w-6 text-red-600" />
                 <span>Blood Transfusion Record</span>
               </h2>

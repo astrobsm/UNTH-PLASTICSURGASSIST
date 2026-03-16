@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { patientService } from '../services/patientService';
 import { MedicalTextInput } from '../components/MedicalTextInput';
@@ -146,7 +146,7 @@ export default function AdmissionDischargePage() {
       <div className="bg-white rounded-lg shadow-md">
         {/* Header */}
         <div className="border-b border-gray-200 bg-gradient-to-r from-green-600 to-green-700 text-white p-6 rounded-t-lg">
-          <h1 className="text-2xl font-bold">Admission & Discharge Management</h1>
+          <h1 className="text-lg sm:text-2xl font-bold">Admission & Discharge Management</h1>
           <p className="text-green-100 mt-1">Plastic and Reconstructive Surgery Unit</p>
         </div>
 
@@ -280,7 +280,7 @@ function ActivePatientsTab({ admissions, searchTerm, setSearchTerm, onDischarge,
     }
   };
 
-  // ── PDF Document Generation Helpers ──
+  // -- PDF Document Generation Helpers --
   const generatePreopEducationPDF = async (admission: Admission, assessment: PreoperativeAssessment | null) => {
     setGeneratingPdf('preop-education');
     try {
@@ -391,7 +391,7 @@ function ActivePatientsTab({ admissions, searchTerm, setSearchTerm, onDischarge,
       ], y);
       y = addSeparator(doc, y);
 
-      y = addWarningBox(doc, 'SEEK IMMEDIATE MEDICAL ATTENTION if you experience: severe/increasing pain not relieved by medication, heavy bleeding from the wound, fever above 38.5°C, difficulty breathing, severe nausea/vomiting, or any sudden change in your condition.', y);
+      y = addWarningBox(doc, 'SEEK IMMEDIATE MEDICAL ATTENTION if you experience: severe/increasing pain not relieved by medication, heavy bleeding from the wound, fever above 38.5�C, difficulty breathing, severe nausea/vomiting, or any sudden change in your condition.', y);
 
       y = addSectionHeader(doc, 'Follow-Up', y);
       y = addBodyText(doc, 'Please attend your follow-up appointment as scheduled. If you need to reschedule, contact the Plastic Surgery Unit during office hours.', y);
@@ -646,7 +646,7 @@ function ActivePatientsTab({ admissions, searchTerm, setSearchTerm, onDischarge,
                         </div>
                       </td>
                     </tr>
-                    {/* ── EXPANDED DETAIL ROW: Preop Planning + Document Downloads ── */}
+                    {/* -- EXPANDED DETAIL ROW: Preop Planning + Document Downloads -- */}
                     {isExpanded && (
                       <tr>
                         <td colSpan={8} className="px-4 py-4 bg-gray-50 border-t border-b border-green-200">
@@ -654,7 +654,7 @@ function ActivePatientsTab({ admissions, searchTerm, setSearchTerm, onDischarge,
                             {/* Preoperative Assessment */}
                             <div className="bg-white p-4 rounded-lg border border-gray-200">
                               <h4 className="text-md font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                                <span className="text-lg">📋</span> Preoperative Planning
+                                <span className="text-lg">??</span> Preoperative Planning
                               </h4>
                               {loadingPreop === admission.id ? (
                                 <div className="flex items-center gap-2 text-gray-500">
@@ -759,14 +759,14 @@ function ActivePatientsTab({ admissions, searchTerm, setSearchTerm, onDischarge,
                             {(admission.vital_signs || admission.allergies || admission.comorbidities) && (
                               <div className="bg-white p-4 rounded-lg border border-gray-200">
                                 <h4 className="text-md font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                                  <span className="text-lg">🩺</span> Clinical Details
+                                  <span className="text-lg">??</span> Clinical Details
                                 </h4>
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
                                   {admission.vital_signs && (
                                     <div>
                                       <span className="font-medium text-gray-700">Vital Signs:</span>
                                       <div className="text-gray-600">
-                                        {admission.vital_signs.temperature && <span>Temp: {admission.vital_signs.temperature}°C | </span>}
+                                        {admission.vital_signs.temperature && <span>Temp: {admission.vital_signs.temperature}�C | </span>}
                                         {admission.vital_signs.blood_pressure && <span>BP: {admission.vital_signs.blood_pressure} | </span>}
                                         {admission.vital_signs.pulse && <span>HR: {admission.vital_signs.pulse} | </span>}
                                         {admission.vital_signs.respiratory_rate && <span>RR: {admission.vital_signs.respiratory_rate} | </span>}
@@ -793,7 +793,7 @@ function ActivePatientsTab({ admissions, searchTerm, setSearchTerm, onDischarge,
                             {/* Document Downloads */}
                             <div className="bg-white p-4 rounded-lg border border-gray-200">
                               <h4 className="text-md font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                                <span className="text-lg">📄</span> Download Documents
+                                <span className="text-lg">??</span> Download Documents
                               </h4>
                               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                                 <button
@@ -801,7 +801,7 @@ function ActivePatientsTab({ admissions, searchTerm, setSearchTerm, onDischarge,
                                   disabled={generatingPdf !== null}
                                   className="flex flex-col items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 disabled:opacity-50 transition-colors"
                                 >
-                                  <span className="text-2xl">📘</span>
+                                  <span className="text-2xl">??</span>
                                   <span className="text-xs font-medium text-blue-800 text-center">
                                     {generatingPdf === 'preop-education' ? 'Generating...' : 'Pre-Op Education'}
                                   </span>
@@ -811,7 +811,7 @@ function ActivePatientsTab({ admissions, searchTerm, setSearchTerm, onDischarge,
                                   disabled={generatingPdf !== null}
                                   className="flex flex-col items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 disabled:opacity-50 transition-colors"
                                 >
-                                  <span className="text-2xl">📗</span>
+                                  <span className="text-2xl">??</span>
                                   <span className="text-xs font-medium text-green-800 text-center">
                                     {generatingPdf === 'postop-education' ? 'Generating...' : 'Post-Op Education'}
                                   </span>
@@ -821,7 +821,7 @@ function ActivePatientsTab({ admissions, searchTerm, setSearchTerm, onDischarge,
                                   disabled={generatingPdf !== null}
                                   className="flex flex-col items-center gap-2 p-3 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 disabled:opacity-50 transition-colors"
                                 >
-                                  <span className="text-2xl">📝</span>
+                                  <span className="text-2xl">??</span>
                                   <span className="text-xs font-medium text-purple-800 text-center">
                                     {generatingPdf === 'counselling' ? 'Generating...' : 'Counselling Record'}
                                   </span>
@@ -831,7 +831,7 @@ function ActivePatientsTab({ admissions, searchTerm, setSearchTerm, onDischarge,
                                   disabled={generatingPdf !== null}
                                   className="flex flex-col items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 disabled:opacity-50 transition-colors"
                                 >
-                                  <span className="text-2xl">✍️</span>
+                                  <span className="text-2xl">??</span>
                                   <span className="text-xs font-medium text-red-800 text-center">
                                     {generatingPdf === 'consent' ? 'Generating...' : 'Consent Form'}
                                   </span>
@@ -1326,7 +1326,7 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Vital Signs</h3>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Temp (°C)</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Temp (�C)</label>
             <input type="number" step="0.1" value={temperature} onChange={(e) => setTemperature(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="37.0" />
           </div>
@@ -1492,7 +1492,7 @@ function DischargeTab({ activeAdmissions, onSuccess }: DischargeTabProps) {
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold ${
                   currentStep >= step.num ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-600'
                 }`}>
-                  {currentStep > step.num ? '✓' : step.num}
+                  {currentStep > step.num ? '?' : step.num}
                 </div>
                 <span className={`mt-1 text-xs ${currentStep >= step.num ? 'text-green-600' : 'text-gray-500'}`}>
                   {step.title}
@@ -1701,20 +1701,20 @@ function StatisticsTab({ statistics }: StatisticsTabProps) {
       {/* Key Metrics */}
       <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
         <h4 className="text-sm font-medium text-blue-800">Total Admissions</h4>
-        <p className="text-3xl font-bold text-blue-600">{statistics.total_admissions}</p>
+        <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-blue-600">{statistics.total_admissions}</p>
       </div>
       <div className="bg-green-50 p-4 rounded-lg border border-green-200">
         <h4 className="text-sm font-medium text-green-800">Active Patients</h4>
-        <p className="text-3xl font-bold text-green-600">{statistics.active_admissions}</p>
+        <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-green-600">{statistics.active_admissions}</p>
       </div>
       <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
         <h4 className="text-sm font-medium text-purple-800">This Month</h4>
-        <p className="text-3xl font-bold text-purple-600">{statistics.admissions_this_month}</p>
+        <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-purple-600">{statistics.admissions_this_month}</p>
         <p className="text-xs text-purple-600">{statistics.discharges_this_month} discharged</p>
       </div>
       <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
         <h4 className="text-sm font-medium text-orange-800">Avg. Length of Stay</h4>
-        <p className="text-3xl font-bold text-orange-600">{statistics.average_length_of_stay.toFixed(1)}</p>
+        <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-orange-600">{statistics.average_length_of_stay.toFixed(1)}</p>
         <p className="text-xs text-orange-600">days</p>
       </div>
 

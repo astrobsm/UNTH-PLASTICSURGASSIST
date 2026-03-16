@@ -179,7 +179,7 @@ export default function TreatmentPlanBuilder({ planId }: TreatmentPlanBuilderPro
     <div className="space-y-6">
       {/* Header with sync status */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-clinical-dark">
+        <h1 className="text-lg sm:text-2xl font-bold text-clinical-dark">
           {plan ? 'Treatment Plan Builder' : 'Create Treatment Plan'}
         </h1>
         

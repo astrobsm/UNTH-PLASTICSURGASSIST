@@ -10,7 +10,7 @@ export default function AnaesthetistCommentsSlide({ comments }: Props) {
     return (
       <div className="flex flex-col items-center justify-center h-full">
         <Stethoscope className="h-24 w-24 text-gray-500 mb-4" />
-        <h2 className="text-2xl font-bold text-gray-400">No Anaesthetist Review</h2>
+        <h2 className="text-lg sm:text-2xl font-bold text-gray-400">No Anaesthetist Review</h2>
         <p className="text-gray-500 mt-2">Patient has not been reviewed by an anaesthetist yet</p>
         <div className="mt-6 bg-yellow-900/30 border border-yellow-600 rounded-xl p-4 max-w-md">
           <div className="flex items-center space-x-2 text-yellow-400">
@@ -34,7 +34,7 @@ export default function AnaesthetistCommentsSlide({ comments }: Props) {
         <div className="w-20 h-20 bg-teal-600 rounded-full flex items-center justify-center mx-auto mb-4">
           <Stethoscope className="h-10 w-10 text-white" />
         </div>
-        <h1 className="text-3xl font-bold">Anaesthetist Assessment</h1>
+        <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold">Anaesthetist Assessment</h1>
         <p className="text-gray-400 mt-2">{comments.length} review(s) on record</p>
       </div>
 

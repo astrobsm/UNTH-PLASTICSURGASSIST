@@ -836,7 +836,7 @@ const MDTPage: React.FC = () => {
       {/* Header */}
       <div className="mb-6">
         <div className="flex items-center justify-between mb-2">
-          <h1 className="text-2xl font-bold text-gray-900">Multidisciplinary Team (MDT)</h1>
+          <h1 className="text-lg sm:text-2xl font-bold text-gray-900">Multidisciplinary Team (MDT)</h1>
           <div className="flex items-center gap-2">
             <button
               onClick={handleForceSync}
@@ -866,7 +866,7 @@ const MDTPage: React.FC = () => {
               <Users className="w-5 h-5 text-blue-600" />
               <span className="font-semibold text-blue-900">MDT Patients</span>
             </div>
-            <p className="text-2xl font-bold text-blue-700">{statistics.totalMDTPatients}</p>
+            <p className="text-lg sm:text-2xl font-bold text-blue-700">{statistics.totalMDTPatients}</p>
           </div>
 
           <div className="bg-green-50 p-4 rounded-lg">
@@ -874,7 +874,7 @@ const MDTPage: React.FC = () => {
               <Calendar className="w-5 h-5 text-green-600" />
               <span className="font-semibold text-green-900">Upcoming Meetings</span>
             </div>
-            <p className="text-2xl font-bold text-green-700">{statistics.upcomingMeetings}</p>
+            <p className="text-lg sm:text-2xl font-bold text-green-700">{statistics.upcomingMeetings}</p>
           </div>
 
           <div className="bg-yellow-50 p-4 rounded-lg">
@@ -882,7 +882,7 @@ const MDTPage: React.FC = () => {
               <AlertCircle className="w-5 h-5 text-yellow-600" />
               <span className="font-semibold text-yellow-900">Pending Follow-ups</span>
             </div>
-            <p className="text-2xl font-bold text-yellow-700">{statistics.pendingFollowUps}</p>
+            <p className="text-lg sm:text-2xl font-bold text-yellow-700">{statistics.pendingFollowUps}</p>
           </div>
 
           <div className="bg-purple-50 p-4 rounded-lg">
@@ -890,7 +890,7 @@ const MDTPage: React.FC = () => {
               <FileText className="w-5 h-5 text-purple-600" />
               <span className="font-semibold text-purple-900">Active Specialties</span>
             </div>
-            <p className="text-2xl font-bold text-purple-700">{statistics.activeSpecialties.size}</p>
+            <p className="text-lg sm:text-2xl font-bold text-purple-700">{statistics.activeSpecialties.size}</p>
           </div>
         </div>
       )}

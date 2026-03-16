@@ -183,7 +183,7 @@ export default function NotificationManager() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-clinical-dark">Clinical Notifications</h1>
+          <h1 className="text-lg sm:text-2xl font-bold text-clinical-dark">Clinical Notifications</h1>
           <p className="text-clinical mt-1">
             Manage push notifications for clinical alerts and reminders
           </p>

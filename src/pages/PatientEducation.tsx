@@ -1,4 +1,4 @@
-癤퓁mport { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Download, BookOpen, AlertCircle, Info, FileText, Heart, Activity, User, Search, MessageCircle, Loader2, Printer } from 'lucide-react';
 import jsPDF from 'jspdf';
 import {
@@ -306,7 +306,7 @@ export default function PatientEducation() {
               'Inability to urinate after 8 hours',
               'Severe nausea or vomiting',
               'Loss of bowel or bladder control',
-              'Fever above 38째C (100.4째F)'
+              'Fever above 38캜 (100.4캟)'
             ]
           }
         ],
@@ -513,7 +513,7 @@ export default function PatientEducation() {
             points: [
               'Foul-smelling drainage from graft or donor site',
               'Increasing redness, warmth, or swelling',
-              'Fever above 38째C (100.4째F)',
+              'Fever above 38캜 (100.4캟)',
               'Graft appears dark, black, or blue',
               'Separation of graft from wound bed',
               'Severe or worsening pain not controlled by medication',
@@ -623,7 +623,7 @@ export default function PatientEducation() {
           {
             title: 'Warning Signs - Seek Medical Attention:',
             points: [
-              'Fever above 38째C (100.4째F)',
+              'Fever above 38캜 (100.4캟)',
               'Increasing redness, warmth, or swelling at incision',
               'Pus or foul-smelling drainage from wound',
               'Wound edges separating or opening',
@@ -1151,7 +1151,7 @@ export default function PatientEducation() {
             points: [
               'Increasing pain, redness, or swelling around wound',
               'Yellow, green, or foul-smelling discharge',
-              'Fever above 38째C (100.4째F)',
+              'Fever above 38캜 (100.4캟)',
               'Wound edges separating or opening',
               'Black or dark tissue appearing in wound',
               'Excessive bleeding that does not stop',
@@ -1919,7 +1919,7 @@ export default function PatientEducation() {
               'Increased redness or warmth around wound',
               'Swelling that is worsening',
               'Yellow, green, or foul-smelling drainage',
-              'Fever above 38째C (100.4째F)',
+              'Fever above 38캜 (100.4캟)',
               'Red streaks spreading from wound',
               'Feeling generally unwell or weak'
             ]
@@ -2035,7 +2035,7 @@ export default function PatientEducation() {
           {
             title: 'Emergency Warning Signs - Return to Hospital If:',
             points: [
-              'Fever above 38째C (100.4째F) that does not resolve',
+              'Fever above 38캜 (100.4캟) that does not resolve',
               'Increasing pain not controlled by medication',
               'Signs of wound infection (redness, swelling, discharge)',
               'Graft or flap appears dark, blue, or black',
@@ -2614,7 +2614,7 @@ export default function PatientEducation() {
     <div className="max-w-7xl mx-auto px-4 py-8">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Patient Education Center</h1>
+        <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 mb-2">Patient Education Center</h1>
         <p className="text-gray-600">
           Evidence-based educational materials and instructions based on WHO guidelines
         </p>
@@ -2705,7 +2705,7 @@ export default function PatientEducation() {
             <div className="sticky top-0 bg-white border-b border-gray-200 p-6">
               <div className="flex items-start justify-between">
                 <div>
-                  <h2 className="text-2xl font-bold text-gray-900 mb-1">
+                  <h2 className="text-lg sm:text-2xl font-bold text-gray-900 mb-1">
                     {selectedTopicData.title}
                   </h2>
                   <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded">

@@ -1130,7 +1130,7 @@ const BookingRegisterPage: React.FC = () => {
             <ClipboardCheck className="w-8 h-8 text-primary-600" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Booking Register</h1>
+            <h1 className="text-lg sm:text-2xl font-bold text-gray-900">Booking Register</h1>
             <p className="text-gray-500">Surgical planning & booked cases management</p>
           </div>
         </div>
@@ -1920,7 +1920,7 @@ const BookingRegisterPage: React.FC = () => {
 
                           {/* Investigation detail table */}
                           {(investigationResults[bk.patient_id] || []).length > 0 && (
-                            <div className="bg-white rounded-lg border overflow-hidden">
+                            <div className="bg-white rounded-lg border overflow-x-auto">
                               <table className="w-full text-xs">
                                 <thead className="bg-gray-50">
                                   <tr>
@@ -2515,7 +2515,7 @@ const BookingRegisterPage: React.FC = () => {
       {showForceReadinessModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => { setShowForceReadinessModal(null); setForceReason(''); }}>
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
-            <div className="px-6 py-4 border-b">
+            <div className="px-3 sm:px-6 py-3 sm:py-4 border-b">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-red-100 rounded-lg"><AlertTriangle className="w-5 h-5 text-red-600" /></div>
                 <div>

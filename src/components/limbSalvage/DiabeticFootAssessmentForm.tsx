@@ -2059,7 +2059,7 @@ const Step8Results: React.FC<{ formData: any; selectedPatient: any }> = ({ formD
       {/* Recommended Intervention */}
       <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
         <h4 className="font-medium text-blue-900 mb-2">Recommended Intervention</h4>
-        <p className="text-2xl font-bold text-blue-800">{risk.intervention}</p>
+        <p className="text-lg sm:text-2xl font-bold text-blue-800">{risk.intervention}</p>
       </div>
 
       {/* Score Breakdown */}

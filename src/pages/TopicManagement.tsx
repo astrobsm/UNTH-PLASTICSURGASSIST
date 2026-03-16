@@ -234,7 +234,7 @@ export default function TopicManagement() {
       <div className="bg-white rounded-lg shadow-md p-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 flex items-center space-x-2">
+            <h1 className="text-lg sm:text-2xl font-bold text-gray-900 flex items-center space-x-2">
               <BookOpen className="h-8 w-8 text-green-600" />
               <span>Topic Management System</span>
             </h1>

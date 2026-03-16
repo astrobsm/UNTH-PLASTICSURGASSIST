@@ -618,7 +618,7 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0 sm:p-4">
-      <div className="bg-white rounded-none sm:rounded-lg shadow-xl w-full sm:max-w-6xl h-full sm:h-auto sm:max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="bg-white rounded-none sm:rounded-lg shadow-xl w-full sm:max-w-6xl h-full sm:h-auto sm:max-h-[90vh] overflow-y-auto sm:overflow-hidden flex flex-col">
         {/* Header */}
         <div className="bg-gradient-to-r from-green-600 to-green-700 text-white px-3 sm:px-6 py-3 sm:py-4 flex justify-between items-start sm:items-center flex-shrink-0">
           <div className="min-w-0 flex-1">
@@ -1725,7 +1725,7 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
                       {selectedBnfDrug.brandNames.length > 0 && (
                         <p className="text-xs text-gray-600">Brands: {selectedBnfDrug.brandNames.join(', ')}</p>
                       )}
-                      <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                         <div><span className="text-gray-500">Adult dose:</span> <span className="font-medium">{selectedBnfDrug.dosage.adult?.standard || 'See BNF'}</span></div>
                         <div><span className="text-gray-500">Max daily:</span> <span className="font-medium">{selectedBnfDrug.maxDailyDose || 'N/A'}</span></div>
                         <div><span className="text-gray-500">Pregnancy:</span> <span className={`font-medium ${selectedBnfDrug.pregnancyCategory === 'X' || selectedBnfDrug.pregnancyCategory === 'D' ? 'text-red-600' : ''}`}>Category {selectedBnfDrug.pregnancyCategory}</span></div>

@@ -372,7 +372,7 @@ export default function CallDutyPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+          <h1 className="text-lg sm:text-2xl font-bold text-gray-900 flex items-center gap-2">
             <Shield className="w-7 h-7 text-green-600" />
             Call Duty Roster
           </h1>

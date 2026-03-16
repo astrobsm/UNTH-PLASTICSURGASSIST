@@ -424,12 +424,12 @@ Dr. Mike Johnson,mike.johnson@hospital.com,consultant,Plastic Surgery`;
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
             <div className="bg-green-50 rounded-lg p-4 text-center">
               <CheckCircle className="h-8 w-8 text-green-600 mx-auto mb-2" />
-              <p className="text-2xl font-bold text-green-700">{importResult.success.length}</p>
+              <p className="text-lg sm:text-2xl font-bold text-green-700">{importResult.success.length}</p>
               <p className="text-sm text-green-600">Successfully Imported</p>
             </div>
             <div className="bg-red-50 rounded-lg p-4 text-center">
               <XCircle className="h-8 w-8 text-red-600 mx-auto mb-2" />
-              <p className="text-2xl font-bold text-red-700">{importResult.failed.length}</p>
+              <p className="text-lg sm:text-2xl font-bold text-red-700">{importResult.failed.length}</p>
               <p className="text-sm text-red-600">Failed</p>
             </div>
           </div>
@@ -461,7 +461,7 @@ Dr. Mike Johnson,mike.johnson@hospital.com,consultant,Plastic Surgery`;
           {importResult.success.length > 0 && (
             <div className="mb-6">
               <h4 className="text-sm font-medium text-gray-700 mb-2">Successfully Created Users</h4>
-              <div className="bg-gray-50 rounded-lg overflow-hidden">
+              <div className="bg-gray-50 rounded-lg overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-100">
                     <tr>
@@ -490,7 +490,7 @@ Dr. Mike Johnson,mike.johnson@hospital.com,consultant,Plastic Surgery`;
           {importResult.failed.length > 0 && (
             <div>
               <h4 className="text-sm font-medium text-gray-700 mb-2">Failed Imports</h4>
-              <div className="bg-red-50 rounded-lg overflow-hidden">
+              <div className="bg-red-50 rounded-lg overflow-x-auto">
                 <table className="min-w-full divide-y divide-red-200">
                   <thead className="bg-red-100">
                     <tr>

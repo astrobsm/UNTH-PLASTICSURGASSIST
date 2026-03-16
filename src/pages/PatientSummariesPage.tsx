@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   FileText, Download, Loader, User, Calendar, Activity, AlertCircle, 
   TrendingUp, Printer, Clock, Stethoscope, Pill, Scissors, 
@@ -154,7 +154,7 @@ const PatientSummariesPage: React.FC = () => {
         const all = await db.ward_rounds.toArray();
         for (const wr of all.filter((r: any) => matchPid(r.patient_id))) {
           const r = wr as any;
-          const vitalsStr = r.temperature ? 'T: ' + r.temperature + '°C, PR: ' + r.pulse + '/min, BP: ' + r.bp_systolic + '/' + r.bp_diastolic + ' mmHg, RR: ' + r.respiratory_rate + '/min, SpO2: ' + r.spo2 + '%' : null;
+          const vitalsStr = r.temperature ? 'T: ' + r.temperature + '�C, PR: ' + r.pulse + '/min, BP: ' + r.bp_systolic + '/' + r.bp_diastolic + ' mmHg, RR: ' + r.respiratory_rate + '/min, SpO2: ' + r.spo2 + '%' : null;
           entries.push({ id: 'wr_' + r.id, date: safeDate(r.round_date), type: 'ward_round',
             title: (r.round_type || 'Ward Round').replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
             summary: 'Reviewed by ' + (r.reviewing_doctor || 'Attending physician') + '. Clinical status: ' + (r.progress_status || 'Not documented') + (r.chief_complaint ? '. Presenting complaint: ' + r.chief_complaint : ''),
@@ -220,7 +220,7 @@ const PatientSummariesPage: React.FC = () => {
         for (const r of all.filter(r => matchPid(r.patient_id))) {
           entries.push({ id: 'labres_' + r.id, date: safeDate(r.result_date), type: 'lab_result',
             title: 'Investigation Result: ' + ((r as any).test_name || 'Result'),
-            summary: 'Result: ' + ((r as any).result_value || (r as any).value || 'Pending') + ' ' + ((r as any).unit || '') + '. ' + (r.abnormal_flag ? '⚠ ABNORMAL' : 'Within normal limits') + '. Ref range: ' + ((r as any).reference_range || 'N/A'),
+            summary: 'Result: ' + ((r as any).result_value || (r as any).value || 'Pending') + ' ' + ((r as any).unit || '') + '. ' + (r.abnormal_flag ? '? ABNORMAL' : 'Within normal limits') + '. Ref range: ' + ((r as any).reference_range || 'N/A'),
             details: { 'Investigation': (r as any).test_name, 'Result Value': (r as any).result_value || (r as any).value, 'Unit': (r as any).unit, 'Reference Range': (r as any).reference_range, 'Interpretation': r.abnormal_flag ? 'Abnormal' : 'Normal' },
           });
         }
@@ -315,7 +315,7 @@ const PatientSummariesPage: React.FC = () => {
         const all = await db.discharges.toArray();
         for (const d of all.filter(d => matchPid(d.patient_id))) {
           entries.push({ id: 'dc_' + d.id, date: safeDate(d.discharge_date), type: 'discharge',
-            title: 'Discharge — ' + ((d as any).discharge_status || 'Status not documented'),
+            title: 'Discharge � ' + ((d as any).discharge_status || 'Status not documented'),
             summary: 'Discharge type: ' + ((d as any).discharge_type || 'Not specified') + '. Follow-up plan: ' + ((d as any).follow_up_plan || 'Not documented'),
             details: { 'Discharge Status': (d as any).discharge_status, 'Discharge Type': (d as any).discharge_type, 'Discharge Summary': (d as any).discharge_summary, 'Follow-up Plan': (d as any).follow_up_plan, 'Condition at Discharge': (d as any).condition_at_discharge },
           });
@@ -445,7 +445,7 @@ const PatientSummariesPage: React.FC = () => {
     <div className="p-6">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Patient Summaries</h1>
+        <h1 className="text-lg sm:text-2xl font-bold text-gray-900 mb-2">Patient Summaries</h1>
         <p className="text-gray-600">Comprehensive patient care timeline from registration to current date</p>
       </div>
 
@@ -493,7 +493,7 @@ const PatientSummariesPage: React.FC = () => {
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
               <div className="bg-blue-50 p-3 rounded-lg text-center">
-                <p className="text-2xl font-bold text-blue-700">{timeline.length}</p>
+                <p className="text-lg sm:text-2xl font-bold text-blue-700">{timeline.length}</p>
                 <p className="text-xs text-blue-600 font-medium">Total Records</p>
               </div>
               {Object.entries(typeCounts).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([type, count]) => {
@@ -501,7 +501,7 @@ const PatientSummariesPage: React.FC = () => {
                 return (
                   <div key={type} className={((conf?.bgColor || 'bg-gray-50') + ' p-3 rounded-lg text-center cursor-pointer hover:opacity-80 ' + (filterType === type ? 'ring-2 ring-green-600' : ''))}
                     onClick={() => setFilterType(filterType === type ? 'all' : type)}>
-                    <p className={'text-2xl font-bold ' + (conf?.textColor || 'text-gray-700')}>{count}</p>
+                    <p className={'text-lg sm:text-2xl font-bold ' + (conf?.textColor || 'text-gray-700')}>{count}</p>
                     <p className={'text-xs font-medium ' + (conf?.textColor || 'text-gray-600')}>{conf?.label || type}</p>
                   </div>
                 );

@@ -197,7 +197,7 @@ export default function PreSurgicalConferencePage() {
             <Presentation className="h-8 w-8 text-white" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Pre-Surgical Conference</h1>
+            <h1 className="text-lg sm:text-2xl font-bold text-gray-900">Pre-Surgical Conference</h1>
             <p className="text-gray-600">Review and present patient cases before surgery</p>
           </div>
         </div>
@@ -293,7 +293,7 @@ export default function PreSurgicalConferencePage() {
               <div className="bg-gradient-to-br from-green-600 to-green-800 rounded-xl shadow-sm p-6 text-white">
                 <div className="flex items-start justify-between">
                   <div>
-                    <h2 className="text-2xl font-bold">
+                    <h2 className="text-lg sm:text-2xl font-bold">
                       {conferenceData.patient.full_name || 
                         `${conferenceData.patient.first_name} ${conferenceData.patient.last_name}`}
                     </h2>
@@ -393,7 +393,7 @@ function StatCard({
   return (
     <div className={`rounded-xl border p-4 ${colorClasses[color] || colorClasses.blue}`}>
       <p className="text-sm font-medium opacity-80">{label}</p>
-      <p className="text-2xl font-bold mt-1">{value}</p>
+      <p className="text-lg sm:text-2xl font-bold mt-1">{value}</p>
     </div>
   );
 }

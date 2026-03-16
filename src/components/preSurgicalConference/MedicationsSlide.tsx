@@ -14,7 +14,7 @@ export default function MedicationsSlide({ medications, categorizedMedications }
     return (
       <div className="flex flex-col items-center justify-center h-full">
         <Pill className="h-24 w-24 text-gray-500 mb-4" />
-        <h2 className="text-2xl font-bold text-gray-400">No Current Medications</h2>
+        <h2 className="text-lg sm:text-2xl font-bold text-gray-400">No Current Medications</h2>
         <p className="text-gray-500 mt-2">No medications have been prescribed for this patient</p>
       </div>
     );
@@ -26,7 +26,7 @@ export default function MedicationsSlide({ medications, categorizedMedications }
         <div className="w-20 h-20 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
           <Pill className="h-10 w-10 text-white" />
         </div>
-        <h1 className="text-3xl font-bold">Current Medications</h1>
+        <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold">Current Medications</h1>
         <p className="text-gray-400 mt-2">
           {activeMedications.length} active medications across {categories.length} categories
         </p>

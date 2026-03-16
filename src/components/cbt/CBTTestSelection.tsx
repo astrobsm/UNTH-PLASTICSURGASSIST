@@ -63,7 +63,7 @@ const CBTTestSelection: React.FC<CBTTestSelectionProps> = ({ level, onStartTest,
       <div className={`bg-gradient-to-r ${getLevelColor(level)} rounded-xl p-6 text-white`}>
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-bold">
+            <h2 className="text-lg sm:text-2xl font-bold">
               {cbtService.getLevelDisplayName(level)} CBT
             </h2>
             <p className="opacity-90 mt-1">
@@ -72,11 +72,11 @@ const CBTTestSelection: React.FC<CBTTestSelectionProps> = ({ level, onStartTest,
           </div>
           <div className="flex items-center gap-6">
             <div className="text-center">
-              <div className="text-3xl font-bold">{progress.completedTests}</div>
+              <div className="text-xl sm:text-2xl lg:text-3xl font-bold">{progress.completedTests}</div>
               <div className="text-sm opacity-90">of {progress.totalTests} Tests</div>
             </div>
             <div className="text-center">
-              <div className="text-3xl font-bold">{progress.averageScore.toFixed(0)}%</div>
+              <div className="text-xl sm:text-2xl lg:text-3xl font-bold">{progress.averageScore.toFixed(0)}%</div>
               <div className="text-sm opacity-90">Average Score</div>
             </div>
           </div>
