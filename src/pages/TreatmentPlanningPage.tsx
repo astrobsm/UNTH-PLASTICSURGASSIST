@@ -33,7 +33,6 @@ const TreatmentPlanningPage: React.FC = () => {
   const [selectedPlan, setSelectedPlan] = useState<EnhancedTreatmentPlan | null>(null);
   const [patients, setPatients] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'reviews' | 'labs' | 'procedures' | 'medications' | 'discharge'>('reviews');
   const [serverLabOrders, setServerLabOrders] = useState<any[]>([]);
   
   // Modal states
@@ -439,296 +438,278 @@ const TreatmentPlanningPage: React.FC = () => {
               </span>
             </div>
 
-            {/* Tabs */}
-            <div className="flex gap-2 border-b border-gray-200">
-              {[
-                { id: 'reviews', label: 'Reviews', icon: User },
-                { id: 'labs', label: 'Lab Work', icon: Activity },
-                { id: 'procedures', label: 'Procedures', icon: FileText },
-                { id: 'medications', label: 'Medications', icon: Pill },
-                { id: 'discharge', label: 'Discharge', icon: Home }
-              ].map(tab => (
-                <button
-                  type="button"
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id as any)}
-                  className={`flex items-center gap-2 px-4 py-3 border-b-2 font-medium transition-colors ${
-                    activeTab === tab.id
-                      ? 'border-green-600 text-green-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  <tab.icon className="w-4 h-4" />
-                  {tab.label}
-                </button>
-              ))}
-            </div>
           </div>
 
-          {/* Tab Content */}
-          <div className="p-6">
-            {activeTab === 'reviews' && (
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold text-gray-900">Scheduled Reviews</h3>
-                  <button
-                    onClick={() => setShowAddReview(true)}
-                    className="flex items-center gap-1 px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Add Review
-                  </button>
-                </div>
+          {/* All Sections — Vertically Stacked & Scrollable */}
+          <div className="divide-y divide-gray-200 max-h-[70vh] overflow-y-auto">
 
-                <div className="space-y-3">
-                  {selectedPlan.reviews?.map(review => (
-                    <div
-                      key={review.id}
-                      className={`p-4 rounded-lg border ${
-                        review.status === 'overdue'
-                          ? 'border-red-200 bg-red-50'
-                          : review.status === 'completed'
-                          ? 'border-green-200 bg-green-50'
-                          : 'border-gray-200 bg-gray-50'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <Calendar className="w-4 h-4 text-gray-500" />
-                          <span className="font-medium">
-                            {safeFormatDate(review.review_date, 'MMM d, yyyy')}
-                          </span>
-                        </div>
-                        <span
-                          className={`px-2 py-1 text-xs font-medium rounded ${
-                            review.status === 'completed'
-                              ? 'bg-green-100 text-green-700'
-                              : review.status === 'overdue'
-                              ? 'bg-red-100 text-red-700'
-                              : 'bg-yellow-100 text-yellow-700'
-                          }`}
-                        >
-                          {review.status}
+            {/* Reviews Section */}
+            <div className="p-4 sm:p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                  <User className="w-4 h-4 text-green-600" />
+                  Scheduled Reviews
+                </h3>
+                <button
+                  onClick={() => setShowAddReview(true)}
+                  className="flex items-center gap-1 px-3 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Review
+                </button>
+              </div>
+              <div className="space-y-3">
+                {selectedPlan.reviews?.map(review => (
+                  <div
+                    key={review.id}
+                    className={`p-3 sm:p-4 rounded-lg border ${
+                      review.status === 'overdue'
+                        ? 'border-red-200 bg-red-50'
+                        : review.status === 'completed'
+                        ? 'border-green-200 bg-green-50'
+                        : 'border-gray-200 bg-gray-50'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="w-4 h-4 text-gray-500" />
+                        <span className="font-medium text-sm">
+                          {safeFormatDate(review.review_date, 'MMM d, yyyy')}
                         </span>
-                      </div>
-                      <p className="text-sm text-gray-700 mb-2">
-                        <span className="font-medium">House Officer:</span> {review.assigned_house_officer}
-                      </p>
-                      {review.notes && (
-                        <p className="text-sm text-gray-600 italic">{review.notes}</p>
-                      )}
-                      {review.status === 'overdue' && review.delay_reason && (
-                        <div className="mt-2 p-2 bg-red-100 rounded text-sm text-red-700">
-                          <span className="font-medium">Delay Reason:</span> {review.delay_reason}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-
-                  {(!selectedPlan.reviews || selectedPlan.reviews.length === 0) && (
-                    <p className="text-center text-gray-500 py-8">No reviews scheduled</p>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {activeTab === 'labs' && (
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold text-gray-900">Lab Work ({(selectedPlan.lab_works?.length || 0) + serverLabOrders.length})</h3>
-                  <button
-                    onClick={() => setShowAddLab(true)}
-                    className="flex items-center gap-1 px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Add Lab
-                  </button>
-                </div>
-                <div className="space-y-3">
-                  {/* Local lab_works from treatment plan */}
-                  {selectedPlan.lab_works?.map(lab => (
-                    <div key={lab.id} className="p-4 rounded-lg border border-gray-200 bg-gray-50">
-                      <div className="font-medium text-gray-900">{lab.test_type || 'Lab Test'}</div>
-                      <div className="text-sm text-gray-600 mt-1">
-                        Frequency: {lab.frequency || 'once'} | Start: {safeFormatDate(lab.timeline_start, 'MMM d, yyyy')}
-                      </div>
-                      {lab.results && lab.results.length > 0 && <p className="text-sm text-gray-600 mt-2">{lab.results[lab.results.length - 1].result}</p>}
-                    </div>
-                  ))}
-
-                  {/* Server lab orders for this patient */}
-                  {serverLabOrders.map(order => (
-                    <div key={`server-${order.id}`} className="p-4 rounded-lg border border-blue-200 bg-blue-50">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <div className="font-medium text-gray-900">{order.test_name || order.test_type || 'Lab Order'}</div>
-                          <div className="text-sm text-gray-600 mt-1">
-                            Priority: {order.priority || 'routine'} | Ordered: {safeFormatDate(order.ordered_at, 'MMM d, yyyy')}
-                          </div>
-                          {order.clinical_notes && <p className="text-sm text-gray-600 mt-1">{order.clinical_notes}</p>}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">Lab Order</span>
-                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                            order.status === 'completed' ? 'bg-green-100 text-green-800' : 
-                            order.status === 'in_progress' ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-gray-100 text-gray-800'
-                          }`}>
-                            {order.status || 'pending'}
-                          </span>
-                        </div>
-                      </div>
-                      {order.results && (
-                        <div className="mt-2 p-2 bg-white rounded border text-sm">
-                          <span className="font-medium text-gray-700">Results: </span>
-                          <span className="text-gray-900">{typeof order.results === 'string' ? order.results : JSON.stringify(order.results)}</span>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-
-                  {(!selectedPlan.lab_works || selectedPlan.lab_works.length === 0) && serverLabOrders.length === 0 && (
-                    <p className="text-center text-gray-500 py-8">No lab work ordered</p>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {activeTab === 'procedures' && (
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold text-gray-900">Planned Procedures</h3>
-                  <button
-                    onClick={() => setShowAddProcedure(true)}
-                    className="flex items-center gap-1 px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Add Procedure
-                  </button>
-                </div>
-                <div className="space-y-3">
-                  {selectedPlan.procedures?.map(procedure => (
-                    <div
-                      key={procedure.id}
-                      className={`p-4 rounded-lg border ${
-                        procedure.status === 'overdue'
-                          ? 'border-red-200 bg-red-50'
-                          : procedure.status === 'completed'
-                          ? 'border-green-200 bg-green-50'
-                          : 'border-gray-200 bg-gray-50'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between mb-2">
-                        <div>
-                          <div className="font-medium text-gray-900">{procedure.procedure_name}</div>
-                          <div className="text-sm text-gray-600 mt-1">
-                            Planned: {safeFormatDate(procedure.planned_date, 'MMM d, yyyy')}
-                            {procedure.surgeon && ` | Surgeon: ${procedure.surgeon}`}
-                          </div>
-                        </div>
-                        <span
-                          className={`px-2 py-1 text-xs font-medium rounded ${
-                            procedure.status === 'completed'
-                              ? 'bg-green-100 text-green-700'
-                              : procedure.status === 'overdue'
-                              ? 'bg-red-100 text-red-700'
-                              : 'bg-yellow-100 text-yellow-700'
-                          }`}
-                        >
-                          {procedure.status}
-                        </span>
-                      </div>
-                      {procedure.notes && <p className="text-sm text-gray-600">{procedure.notes}</p>}
-                    </div>
-                  ))}
-                  {(!selectedPlan.procedures || selectedPlan.procedures.length === 0) && (
-                    <p className="text-center text-gray-500 py-8">No procedures planned</p>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {activeTab === 'medications' && (
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold text-gray-900">Medications</h3>
-                  <button
-                    onClick={() => setShowAddMedication(true)}
-                    className="flex items-center gap-1 px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Add Medication
-                  </button>
-                </div>
-                <div className="space-y-3">
-                  {selectedPlan.medications?.map(med => (
-                    <div key={med.id} className="p-4 rounded-lg border border-gray-200 bg-gray-50">
-                      <div className="font-medium text-gray-900">{med.medication_name}</div>
-                      <div className="text-sm text-gray-600 mt-1">
-                        {med.dosage} {med.route} {med.frequency}
-                      </div>
-                      <div className="text-sm text-gray-600">
-                        Start: {safeFormatDate(med.start_date, 'MMM d, yyyy')}
-                        {med.end_date && ` | End: ${safeFormatDate(med.end_date, 'MMM d, yyyy')}`}
                       </div>
                       <span
-                        className={`inline-block mt-2 px-2 py-1 text-xs font-medium rounded ${
-                          med.status === 'active'
-                            ? 'bg-blue-100 text-blue-700'
-                            : 'bg-gray-100 text-gray-700'
+                        className={`px-2 py-1 text-xs font-medium rounded ${
+                          review.status === 'completed'
+                            ? 'bg-green-100 text-green-700'
+                            : review.status === 'overdue'
+                            ? 'bg-red-100 text-red-700'
+                            : 'bg-yellow-100 text-yellow-700'
                         }`}
                       >
-                        {med.status}
+                        {review.status}
                       </span>
                     </div>
-                  ))}
-                  {(!selectedPlan.medications || selectedPlan.medications.length === 0) && (
-                    <p className="text-center text-gray-500 py-8">No medications prescribed</p>
-                  )}
-                </div>
+                    <p className="text-sm text-gray-700 mb-1">
+                      <span className="font-medium">House Officer:</span> {review.assigned_house_officer}
+                    </p>
+                    {review.notes && (
+                      <p className="text-sm text-gray-600 italic">{review.notes}</p>
+                    )}
+                    {review.status === 'overdue' && review.delay_reason && (
+                      <div className="mt-2 p-2 bg-red-100 rounded text-sm text-red-700">
+                        <span className="font-medium">Delay Reason:</span> {review.delay_reason}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {(!selectedPlan.reviews || selectedPlan.reviews.length === 0) && (
+                  <p className="text-center text-gray-500 py-4">No reviews scheduled</p>
+                )}
               </div>
-            )}
+            </div>
 
-            {activeTab === 'discharge' && (
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold text-gray-900">Discharge Planning</h3>
-                  <button
-                    onClick={() => setShowSetDischarge(true)}
-                    className="flex items-center gap-1 px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Set Discharge
-                  </button>
-                </div>
-                <div className="space-y-4">
-                  {selectedPlan.discharge_plan && (
-                    <div className="p-4 rounded-lg border border-gray-200 bg-gray-50">
-                      <div className="font-medium text-gray-900 mb-2">Discharge Information</div>
-                      {selectedPlan.discharge_plan.planned_date && (
-                        <p className="text-sm text-gray-600">
-                          <span className="font-medium">Planned Date:</span>{' '}
-                          {safeFormatDate(selectedPlan.discharge_plan.planned_date, 'MMM d, yyyy')}
-                        </p>
-                      )}
-                      {selectedPlan.discharge_plan.discharge_criteria && (
-                        <div className="mt-3">
-                          <p className="text-sm font-medium text-gray-700 mb-1">Discharge Criteria:</p>
-                          <ul className="list-disc list-inside text-sm text-gray-600">
-                            {selectedPlan.discharge_plan.discharge_criteria.map((criteria: string, idx: number) => (
-                              <li key={idx}>{criteria}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  {!selectedPlan.discharge_plan && (
-                    <p className="text-center text-gray-500 py-8">No discharge plan set</p>
-                  )}
-                </div>
+            {/* Lab Work Section */}
+            <div className="p-4 sm:p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-blue-600" />
+                  Lab Work ({(selectedPlan.lab_works?.length || 0) + serverLabOrders.length})
+                </h3>
+                <button
+                  onClick={() => setShowAddLab(true)}
+                  className="flex items-center gap-1 px-3 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Lab
+                </button>
               </div>
-            )}
+              <div className="space-y-3">
+                {selectedPlan.lab_works?.map(lab => (
+                  <div key={lab.id} className="p-3 sm:p-4 rounded-lg border border-gray-200 bg-gray-50">
+                    <div className="font-medium text-gray-900">{lab.test_type || 'Lab Test'}</div>
+                    <div className="text-sm text-gray-600 mt-1">
+                      Frequency: {lab.frequency || 'once'} | Start: {safeFormatDate(lab.timeline_start, 'MMM d, yyyy')}
+                    </div>
+                    {lab.results && lab.results.length > 0 && <p className="text-sm text-gray-600 mt-2">{lab.results[lab.results.length - 1].result}</p>}
+                  </div>
+                ))}
+                {serverLabOrders.map(order => (
+                  <div key={`server-${order.id}`} className="p-3 sm:p-4 rounded-lg border border-blue-200 bg-blue-50">
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2">
+                      <div>
+                        <div className="font-medium text-gray-900">{order.test_name || order.test_type || 'Lab Order'}</div>
+                        <div className="text-sm text-gray-600 mt-1">
+                          Priority: {order.priority || 'routine'} | Ordered: {safeFormatDate(order.ordered_at, 'MMM d, yyyy')}
+                        </div>
+                        {order.clinical_notes && <p className="text-sm text-gray-600 mt-1">{order.clinical_notes}</p>}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">Lab Order</span>
+                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                          order.status === 'completed' ? 'bg-green-100 text-green-800' : 
+                          order.status === 'in_progress' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {order.status || 'pending'}
+                        </span>
+                      </div>
+                    </div>
+                    {order.results && (
+                      <div className="mt-2 p-2 bg-white rounded border text-sm">
+                        <span className="font-medium text-gray-700">Results: </span>
+                        <span className="text-gray-900">{typeof order.results === 'string' ? order.results : JSON.stringify(order.results)}</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {(!selectedPlan.lab_works || selectedPlan.lab_works.length === 0) && serverLabOrders.length === 0 && (
+                  <p className="text-center text-gray-500 py-4">No lab work ordered</p>
+                )}
+              </div>
+            </div>
+
+            {/* Procedures Section */}
+            <div className="p-4 sm:p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-purple-600" />
+                  Planned Procedures
+                </h3>
+                <button
+                  onClick={() => setShowAddProcedure(true)}
+                  className="flex items-center gap-1 px-3 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Procedure
+                </button>
+              </div>
+              <div className="space-y-3">
+                {selectedPlan.procedures?.map(procedure => (
+                  <div
+                    key={procedure.id}
+                    className={`p-3 sm:p-4 rounded-lg border ${
+                      procedure.status === 'overdue'
+                        ? 'border-red-200 bg-red-50'
+                        : procedure.status === 'completed'
+                        ? 'border-green-200 bg-green-50'
+                        : 'border-gray-200 bg-gray-50'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <div className="font-medium text-gray-900">{procedure.procedure_name}</div>
+                        <div className="text-sm text-gray-600 mt-1">
+                          Planned: {safeFormatDate(procedure.planned_date, 'MMM d, yyyy')}
+                          {procedure.surgeon && ` | Surgeon: ${procedure.surgeon}`}
+                        </div>
+                      </div>
+                      <span
+                        className={`px-2 py-1 text-xs font-medium rounded ${
+                          procedure.status === 'completed'
+                            ? 'bg-green-100 text-green-700'
+                            : procedure.status === 'overdue'
+                            ? 'bg-red-100 text-red-700'
+                            : 'bg-yellow-100 text-yellow-700'
+                        }`}
+                      >
+                        {procedure.status}
+                      </span>
+                    </div>
+                    {procedure.notes && <p className="text-sm text-gray-600">{procedure.notes}</p>}
+                  </div>
+                ))}
+                {(!selectedPlan.procedures || selectedPlan.procedures.length === 0) && (
+                  <p className="text-center text-gray-500 py-4">No procedures planned</p>
+                )}
+              </div>
+            </div>
+
+            {/* Medications Section */}
+            <div className="p-4 sm:p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                  <Pill className="w-4 h-4 text-orange-600" />
+                  Medications
+                </h3>
+                <button
+                  onClick={() => setShowAddMedication(true)}
+                  className="flex items-center gap-1 px-3 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Medication
+                </button>
+              </div>
+              <div className="space-y-3">
+                {selectedPlan.medications?.map(med => (
+                  <div key={med.id} className="p-3 sm:p-4 rounded-lg border border-gray-200 bg-gray-50">
+                    <div className="font-medium text-gray-900">{med.medication_name}</div>
+                    <div className="text-sm text-gray-600 mt-1">
+                      {med.dosage} {med.route} {med.frequency}
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      Start: {safeFormatDate(med.start_date, 'MMM d, yyyy')}
+                      {med.end_date && ` | End: ${safeFormatDate(med.end_date, 'MMM d, yyyy')}`}
+                    </div>
+                    <span
+                      className={`inline-block mt-2 px-2 py-1 text-xs font-medium rounded ${
+                        med.status === 'active'
+                          ? 'bg-blue-100 text-blue-700'
+                          : 'bg-gray-100 text-gray-700'
+                      }`}
+                    >
+                      {med.status}
+                    </span>
+                  </div>
+                ))}
+                {(!selectedPlan.medications || selectedPlan.medications.length === 0) && (
+                  <p className="text-center text-gray-500 py-4">No medications prescribed</p>
+                )}
+              </div>
+            </div>
+
+            {/* Discharge Section */}
+            <div className="p-4 sm:p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                  <Home className="w-4 h-4 text-teal-600" />
+                  Discharge Planning
+                </h3>
+                <button
+                  onClick={() => setShowSetDischarge(true)}
+                  className="flex items-center gap-1 px-3 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700"
+                >
+                  <Plus className="w-4 h-4" />
+                  Set Discharge
+                </button>
+              </div>
+              <div className="space-y-4">
+                {selectedPlan.discharge_plan && (
+                  <div className="p-3 sm:p-4 rounded-lg border border-gray-200 bg-gray-50">
+                    <div className="font-medium text-gray-900 mb-2">Discharge Information</div>
+                    {selectedPlan.discharge_plan.planned_date && (
+                      <p className="text-sm text-gray-600">
+                        <span className="font-medium">Planned Date:</span>{' '}
+                        {safeFormatDate(selectedPlan.discharge_plan.planned_date, 'MMM d, yyyy')}
+                      </p>
+                    )}
+                    {selectedPlan.discharge_plan.discharge_criteria && (
+                      <div className="mt-3">
+                        <p className="text-sm font-medium text-gray-700 mb-1">Discharge Criteria:</p>
+                        <ul className="list-disc list-inside text-sm text-gray-600">
+                          {selectedPlan.discharge_plan.discharge_criteria.map((criteria: string, idx: number) => (
+                            <li key={idx}>{criteria}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {!selectedPlan.discharge_plan && (
+                  <p className="text-center text-gray-500 py-4">No discharge plan set</p>
+                )}
+              </div>
+            </div>
+
           </div>
         </div>
       )}
@@ -755,7 +736,6 @@ const TreatmentPlanningPage: React.FC = () => {
           planId={selectedPlan.id}
           onClose={() => setShowAddLab(false)}
           onSuccess={async () => {
-            // Reload the plan to show new lab work
             const updatedPlan = await treatmentPlanningService.getTreatmentPlan(selectedPlan.id);
             if (updatedPlan) {
               setSelectedPlan(normalizePlan(updatedPlan));
@@ -764,6 +744,388 @@ const TreatmentPlanningPage: React.FC = () => {
           }}
         />
       )}
+      {showAddProcedure && selectedPlan && (
+        <AddProcedureModal
+          planId={selectedPlan.id}
+          onClose={() => setShowAddProcedure(false)}
+          onSuccess={async () => {
+            const updatedPlan = await treatmentPlanningService.getTreatmentPlan(selectedPlan.id);
+            if (updatedPlan) {
+              setSelectedPlan(normalizePlan(updatedPlan));
+            }
+            setShowAddProcedure(false);
+          }}
+        />
+      )}
+      {showAddMedication && selectedPlan && (
+        <AddMedicationModal
+          planId={selectedPlan.id}
+          onClose={() => setShowAddMedication(false)}
+          onSuccess={async () => {
+            const updatedPlan = await treatmentPlanningService.getTreatmentPlan(selectedPlan.id);
+            if (updatedPlan) {
+              setSelectedPlan(normalizePlan(updatedPlan));
+            }
+            setShowAddMedication(false);
+          }}
+        />
+      )}
+      {showSetDischarge && selectedPlan && (
+        <SetDischargeModal
+          planId={selectedPlan.id}
+          onClose={() => setShowSetDischarge(false)}
+          onSuccess={async () => {
+            const updatedPlan = await treatmentPlanningService.getTreatmentPlan(selectedPlan.id);
+            if (updatedPlan) {
+              setSelectedPlan(normalizePlan(updatedPlan));
+            }
+            setShowSetDischarge(false);
+          }}
+        />
+      )}
+    </div>
+  );
+};
+
+// Add Procedure Modal Component
+const AddProcedureModal: React.FC<{ planId: string; onClose: () => void; onSuccess: () => void }> = ({ planId, onClose, onSuccess }) => {
+  const [formData, setFormData] = useState({
+    procedure_name: '',
+    procedure_type: 'minor',
+    planned_date: format(new Date(), 'yyyy-MM-dd'),
+    surgeon: '',
+    location: '',
+    notes: ''
+  });
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.procedure_name) return;
+
+    try {
+      await treatmentPlanningService.addProcedure(planId, {
+        procedure_name: formData.procedure_name,
+        procedure_type: formData.procedure_type,
+        planned_date: new Date(formData.planned_date),
+        proposed_date: new Date(formData.planned_date),
+        surgeon: formData.surgeon,
+        location: formData.location,
+        notes: formData.notes,
+        status: 'planned'
+      });
+      onSuccess();
+    } catch (error) {
+      console.error('Error adding procedure:', error);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+        <div className="p-4 sm:p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Add Procedure</h3>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Procedure Name *</label>
+              <input
+                type="text"
+                value={formData.procedure_name}
+                onChange={(e) => setFormData({ ...formData, procedure_name: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                placeholder="e.g., Wound debridement, Skin grafting"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Procedure Type</label>
+              <select
+                value={formData.procedure_type}
+                onChange={(e) => setFormData({ ...formData, procedure_type: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                title="Procedure type"
+              >
+                <option value="minor">Minor</option>
+                <option value="intermediate">Intermediate</option>
+                <option value="major">Major</option>
+                <option value="emergency">Emergency</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Planned Date</label>
+              <input
+                type="date"
+                value={formData.planned_date}
+                onChange={(e) => setFormData({ ...formData, planned_date: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Surgeon</label>
+              <input
+                type="text"
+                value={formData.surgeon}
+                onChange={(e) => setFormData({ ...formData, surgeon: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                placeholder="Surgeon name"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+              <input
+                type="text"
+                value={formData.location}
+                onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                placeholder="e.g., Main Theatre, Minor OT"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+              <textarea
+                value={formData.notes}
+                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                rows={2}
+                placeholder="Special instructions, pre-op requirements..."
+              />
+            </div>
+            <div className="flex justify-end gap-3 mt-6">
+              <button type="button" onClick={onClose} className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200">
+                Cancel
+              </button>
+              <button type="submit" className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">
+                Add Procedure
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Add Medication Modal Component
+const AddMedicationModal: React.FC<{ planId: string; onClose: () => void; onSuccess: () => void }> = ({ planId, onClose, onSuccess }) => {
+  const [formData, setFormData] = useState({
+    medication_name: '',
+    dosage: '',
+    route: 'oral',
+    frequency: '',
+    start_date: format(new Date(), 'yyyy-MM-dd'),
+    end_date: '',
+    notes: ''
+  });
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.medication_name) return;
+
+    try {
+      await treatmentPlanningService.addMedication(planId, {
+        medication_name: formData.medication_name,
+        dosage: formData.dosage,
+        route: formData.route,
+        frequency: formData.frequency,
+        start_date: new Date(formData.start_date),
+        end_date: formData.end_date ? new Date(formData.end_date) : undefined,
+        timeline_start: new Date(formData.start_date),
+        status: 'active'
+      });
+      onSuccess();
+    } catch (error) {
+      console.error('Error adding medication:', error);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+        <div className="p-4 sm:p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Add Medication</h3>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Medication Name *</label>
+              <input
+                type="text"
+                value={formData.medication_name}
+                onChange={(e) => setFormData({ ...formData, medication_name: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                placeholder="e.g., Amoxicillin, Metronidazole"
+                required
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Dosage</label>
+                <input
+                  type="text"
+                  value={formData.dosage}
+                  onChange={(e) => setFormData({ ...formData, dosage: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                  placeholder="e.g., 500mg"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Route</label>
+                <select
+                  value={formData.route}
+                  onChange={(e) => setFormData({ ...formData, route: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                  title="Route of administration"
+                >
+                  <option value="oral">Oral</option>
+                  <option value="iv">IV</option>
+                  <option value="im">IM</option>
+                  <option value="sc">SC</option>
+                  <option value="topical">Topical</option>
+                  <option value="rectal">Rectal</option>
+                  <option value="inhaled">Inhaled</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Frequency</label>
+              <select
+                value={formData.frequency}
+                onChange={(e) => setFormData({ ...formData, frequency: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                title="Medication frequency"
+              >
+                <option value="">Select frequency</option>
+                <option value="stat">STAT</option>
+                <option value="od">OD (Once daily)</option>
+                <option value="bd">BD (Twice daily)</option>
+                <option value="tds">TDS (Three times daily)</option>
+                <option value="qds">QDS (Four times daily)</option>
+                <option value="prn">PRN (As needed)</option>
+                <option value="nocte">Nocte (At night)</option>
+                <option value="mane">Mane (Morning)</option>
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                <input
+                  type="date"
+                  value={formData.start_date}
+                  onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                <input
+                  type="date"
+                  value={formData.end_date}
+                  onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+              <textarea
+                value={formData.notes}
+                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                rows={2}
+                placeholder="Special instructions..."
+              />
+            </div>
+            <div className="flex justify-end gap-3 mt-6">
+              <button type="button" onClick={onClose} className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200">
+                Cancel
+              </button>
+              <button type="submit" className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">
+                Add Medication
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Set Discharge Modal Component
+const SetDischargeModal: React.FC<{ planId: string; onClose: () => void; onSuccess: () => void }> = ({ planId, onClose, onSuccess }) => {
+  const [formData, setFormData] = useState({
+    planned_date: format(new Date(), 'yyyy-MM-dd'),
+    discharge_criteria: '',
+    discharge_instructions: '',
+    follow_up_date: ''
+  });
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.planned_date) return;
+
+    try {
+      const criteria = formData.discharge_criteria
+        .split('\n')
+        .map(c => c.trim())
+        .filter(c => c.length > 0);
+
+      await treatmentPlanningService.setDischargeTimeline(planId, {
+        planned_date: new Date(formData.planned_date),
+        initial_discharge_date: new Date(formData.planned_date),
+        current_discharge_date: new Date(formData.planned_date),
+        discharge_criteria: criteria,
+        status: 'planning',
+        delays: []
+      });
+      onSuccess();
+    } catch (error) {
+      console.error('Error setting discharge:', error);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+        <div className="p-4 sm:p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Set Discharge Plan</h3>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Planned Discharge Date *</label>
+              <input
+                type="date"
+                value={formData.planned_date}
+                onChange={(e) => setFormData({ ...formData, planned_date: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Discharge Criteria (one per line)</label>
+              <textarea
+                value={formData.discharge_criteria}
+                onChange={(e) => setFormData({ ...formData, discharge_criteria: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                rows={4}
+                placeholder={"Wound healing satisfactory\nPain controlled on oral analgesics\nMobilizing independently\nFollow-up appointment scheduled"}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Follow-up Date</label>
+              <input
+                type="date"
+                value={formData.follow_up_date}
+                onChange={(e) => setFormData({ ...formData, follow_up_date: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+              />
+            </div>
+            <div className="flex justify-end gap-3 mt-6">
+              <button type="button" onClick={onClose} className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200">
+                Cancel
+              </button>
+              <button type="submit" className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">
+                Set Discharge
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
     </div>
   );
 };
