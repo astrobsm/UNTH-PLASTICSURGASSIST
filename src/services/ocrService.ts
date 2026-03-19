@@ -487,18 +487,25 @@ class OCRService {
 
     try {
       const token = localStorage.getItem('auth_token');
-      const response = await fetch('/api/ai/ocr-process', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          ocrText: ocrResult.text,
-          documentType: detectedType,
-          patientContext,
-        }),
-      });
+      // Retry up to 2 times for transient 503 errors (Vercel cold starts)
+      let response: Response | null = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        response = await fetch('/api/ai/ocr-process', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            ocrText: ocrResult.text,
+            documentType: detectedType,
+            patientContext,
+          }),
+        });
+        if (response.status !== 503 || attempt === 2) break;
+        // Wait before retry: 1s, then 2s
+        await new Promise(r => setTimeout(r, (attempt + 1) * 1000));
+      }
 
       if (response.ok) {
         const result = await response.json();

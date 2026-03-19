@@ -142,13 +142,49 @@ registerRoute(
 );
 
 // ─── API Mutations → NetworkOnly + Background Sync ──────────
+// Endpoints that need real-time responses (not suitable for background sync)
+const REALTIME_POST_PREFIXES = [
+  '/api/ai/',        // OCR / AI processing — needs immediate structured data
+  '/api/auth/',      // Login / register — needs immediate auth response
+  '/api/init-db',    // DB initialization — needs confirmation
+];
+
+const isRealtimeEndpoint = (pathname: string) =>
+  REALTIME_POST_PREFIXES.some(prefix => pathname.startsWith(prefix));
+
 const mutationStrategy = new NetworkOnly({ plugins: [bgSyncPlugin] });
+const realtimeStrategy = new NetworkOnly(); // No bgSync — let errors propagate
 const mutationMethods: Array<'POST' | 'PUT' | 'PATCH' | 'DELETE'> = ['POST', 'PUT', 'PATCH', 'DELETE'];
 
+// Register real-time endpoints FIRST (Workbox uses first-match)
 mutationMethods.forEach(method => {
   registerRoute(
     ({ url, request }) =>
-      url.pathname.startsWith('/api/') && request.method === method,
+      url.pathname.startsWith('/api/') &&
+      request.method === method &&
+      isRealtimeEndpoint(url.pathname),
+    async (args) => {
+      try {
+        return await realtimeStrategy.handle(args);
+      } catch (_err) {
+        // Network failed — return error without queuing for background sync
+        return new Response(JSON.stringify({ error: 'Network unavailable' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+    },
+    method
+  );
+});
+
+// Background-syncable mutations (everything else under /api/)
+mutationMethods.forEach(method => {
+  registerRoute(
+    ({ url, request }) =>
+      url.pathname.startsWith('/api/') &&
+      request.method === method &&
+      !isRealtimeEndpoint(url.pathname),
     async (args) => {
       try {
         return await mutationStrategy.handle(args);
