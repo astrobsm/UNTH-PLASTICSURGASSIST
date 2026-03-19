@@ -23,6 +23,7 @@ import {
   MedicationAdministration,
   DischargeTimeline
 } from '../services/treatmentPlanningService';
+import { medicalTeamService } from '../services/medicalTeamService';
 import { format, isPast } from 'date-fns';
 import { safeFormatDate } from '../utils/dateUtils';
 import { ComprehensiveTreatmentPlanForm } from '../components/ComprehensiveTreatmentPlanForm';
@@ -213,6 +214,35 @@ const TreatmentPlanningPage: React.FC = () => {
       assigned_house_officer: '',
       notes: ''
     });
+    const [houseOfficers, setHouseOfficers] = useState<any[]>([]);
+    const [loadingHO, setLoadingHO] = useState(true);
+
+    useEffect(() => {
+      const loadHouseOfficer = async () => {
+        setLoadingHO(true);
+        try {
+          // Get the assigned house officer for this patient
+          if (selectedPlan?.patient_id) {
+            const team = await medicalTeamService.getPatientMedicalTeam(Number(selectedPlan.patient_id));
+            const assignedHO = team.find(m => m.role === 'house_officer');
+            if (assignedHO) {
+              setFormData(prev => ({
+                ...prev,
+                assigned_house_officer: assignedHO.full_name || assignedHO.name || ''
+              }));
+            }
+          }
+          // Also load all house officers for the dropdown
+          const allHO = await medicalTeamService.getStaffByRole('house_officer');
+          setHouseOfficers(allHO);
+        } catch (err) {
+          console.error('Error loading house officers:', err);
+        } finally {
+          setLoadingHO(false);
+        }
+      };
+      loadHouseOfficer();
+    }, [selectedPlan?.patient_id]);
 
     const handleSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
@@ -251,14 +281,35 @@ const TreatmentPlanningPage: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Assigned House Officer</label>
-                <input
-                  type="text"
-                  required
-                  value={formData.assigned_house_officer}
-                  onChange={(e) => setFormData({ ...formData, assigned_house_officer: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-                  placeholder="Dr. Name"
-                />
+                {loadingHO ? (
+                  <div className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-400">Loading staff...</div>
+                ) : houseOfficers.length > 0 ? (
+                  <select
+                    required
+                    value={formData.assigned_house_officer}
+                    onChange={(e) => setFormData({ ...formData, assigned_house_officer: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                  >
+                    <option value="">Select House Officer</option>
+                    {houseOfficers.map((ho) => (
+                      <option key={ho.id} value={ho.full_name}>
+                        Dr. {ho.full_name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    required
+                    value={formData.assigned_house_officer}
+                    onChange={(e) => setFormData({ ...formData, assigned_house_officer: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                    placeholder="Dr. Name"
+                  />
+                )}
+                {formData.assigned_house_officer && (
+                  <p className="text-xs text-green-600 mt-1">Auto-filled from patient assignment</p>
+                )}
               </div>
 
               <div>
