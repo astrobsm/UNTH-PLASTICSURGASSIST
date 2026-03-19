@@ -159,11 +159,23 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { ocrText, documentType, patientContext } = req.body;
+    // Parse body — handle both pre-parsed and raw body cases
+    let body = req.body;
+    if (typeof body === 'string') {
+      try { body = JSON.parse(body); } catch { /* already parsed */ }
+    }
+    if (!body || typeof body !== 'object') {
+      return res.status(400).json({ error: 'Request body is required (JSON with ocrText field)' });
+    }
+
+    const { ocrText, documentType, patientContext } = body;
 
     if (!ocrText || typeof ocrText !== 'string') {
-      return res.status(400).json({ error: 'ocrText is required and must be a string' });
+      return res.status(400).json({ error: 'ocrText is required and must be a string', receivedType: typeof ocrText, bodyKeys: Object.keys(body) });
     }
+
+    // Trim excessively long OCR text to avoid token limits
+    const trimmedText = ocrText.length > 15000 ? ocrText.substring(0, 15000) + '\n[...truncated]' : ocrText;
 
     const openaiApiKey = process.env.OPENAI_API_KEY;
     if (!openaiApiKey) {
@@ -173,7 +185,7 @@ export default async function handler(req, res) {
     const docType = documentType || 'general';
     
     // Build user message with context
-    let userMessage = `Document type: ${docType}\n\nRaw OCR Text:\n---\n${ocrText}\n---`;
+    let userMessage = `Document type: ${docType}\n\nRaw OCR Text:\n---\n${trimmedText}\n---`;
     
     if (patientContext) {
       userMessage += `\n\nPatient Context:\n- Name: ${patientContext.name || 'Unknown'}\n- Hospital Number: ${patientContext.hospitalNumber || 'Unknown'}\n- Ward: ${patientContext.ward || 'Unknown'}\n- Diagnosis: ${patientContext.diagnosis || 'Unknown'}`;

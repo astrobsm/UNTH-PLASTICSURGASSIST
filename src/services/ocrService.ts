@@ -486,9 +486,13 @@ class OCRService {
     let aiConfidence = 0;
 
     try {
+      const token = localStorage.getItem('auth_token');
       const response = await fetch('/api/ai/ocr-process', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           ocrText: ocrResult.text,
           documentType: detectedType,
@@ -501,6 +505,13 @@ class OCRService {
         if (result.success && result.structured) {
           structuredData = result.structured;
           aiConfidence = result.structured.confidence || 0.8;
+        }
+      } else {
+        const errData = await response.json().catch(() => ({}));
+        console.warn(`AI OCR returned ${response.status}:`, errData);
+        // If AI not configured (501), silently fall through to rule-based
+        if (errData.fallback) {
+          console.log('AI not configured, using rule-based extraction');
         }
       }
     } catch (err) {
@@ -593,12 +604,15 @@ class OCRService {
     // Always include the raw text so the user can apply it as a generic field
     result.raw_text = text.trim();
 
-    // If no structured data was extracted, also set notes so it shows as a selectable field
+    // If no structured data was extracted, also set notes/findings so it shows as selectable
     const hasStructuredData = Object.keys(result).some(
       k => !['confidence', 'raw_text'].includes(k) && result[k] != null
     );
     if (!hasStructuredData && text.trim()) {
       result.notes = text.trim();
+      result.findings = text.trim();
+      result.content_summary = text.trim();
+      result.review_text = text.trim();
     }
 
     return result;
