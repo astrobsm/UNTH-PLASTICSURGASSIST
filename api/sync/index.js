@@ -139,6 +139,10 @@ export default async function handler(req, res) {
     }
   } catch (error) {
     console.error('Sync API error:', error);
+    // If a table doesn't exist yet, return empty array for GET requests
+    if (error.message && error.message.includes('does not exist') && method === 'GET') {
+      return res.status(200).json([]);
+    }
     res.status(500).json({ error: 'Internal server error', message: error.message });
   }
 }

@@ -37,6 +37,9 @@ export default async function handler(req, res) {
     }
   } catch (error) {
     console.error('STI Protocol API error:', error);
+    if (error.message && error.message.includes('does not exist') && method === 'GET') {
+      return res.status(200).json({ assessments: [], treatmentPlans: [], debridements: [], orders: [] });
+    }
     res.status(500).json({ error: 'Internal server error', message: error.message });
   }
 }

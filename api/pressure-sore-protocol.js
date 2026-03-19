@@ -38,6 +38,10 @@ export default async function handler(req, res) {
     }
   } catch (error) {
     console.error('Pressure Sore Protocol API error:', error);
+    // If tables don't exist yet, return empty results for GET requests
+    if (error.message && error.message.includes('does not exist') && method === 'GET') {
+      return res.status(200).json({ wounds: [], treatmentPlans: [], progress: [], orders: [] });
+    }
     res.status(500).json({ error: 'Internal server error', message: error.message });
   }
 }
