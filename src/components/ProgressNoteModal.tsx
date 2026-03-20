@@ -1,11 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { patientActivityService } from '../services/patientActivityService';
 import { apiClient } from '../services/apiClient';
 import { syncService } from '../db/syncService';
 import { db } from '../db/database';
 import { DocumentScannerModal } from './DocumentScannerModal';
-import { Brain } from 'lucide-react';
+import { ScribeRecordingPanel } from './ScribeRecordingPanel';
+import { speechToTextService } from '../services/speechToTextService';
+import { Brain, Mic, MicOff, Wand2 } from 'lucide-react';
+import type { StructuredNote, ScribeSession } from '../services/medicalScribeService';
 
 interface ProgressNoteModalProps {
   isOpen: boolean;
@@ -15,6 +18,8 @@ interface ProgressNoteModalProps {
   patientSex?: string;
   onSuccess: () => void;
 }
+
+type SOAPField = 'subjective' | 'objective' | 'assessment' | 'plan';
 
 interface ProgressNote {
   subjective: string;
@@ -50,7 +55,119 @@ export const ProgressNoteModal: React.FC<ProgressNoteModalProps> = ({
   const [saving, setSaving] = useState(false);
   const [showDocumentScanner, setShowDocumentScanner] = useState(false);
 
+  // --- Speech-to-text per-field dictation ---
+  const [activeVoiceField, setActiveVoiceField] = useState<SOAPField | null>(null);
+  const [interimText, setInterimText] = useState('');
+  const noteRef = useRef(note);
+  noteRef.current = note;
+
+  // --- AI Medical Scribe ---
+  const [showScribePanel, setShowScribePanel] = useState(false);
+
   const isFemale = patientSex?.toLowerCase() === 'female' || patientSex?.toLowerCase() === 'f';
+
+  // Stop dictation when modal closes or field changes
+  useEffect(() => {
+    return () => {
+      if (activeVoiceField) {
+        speechToTextService.stopListening();
+      }
+    };
+  }, []);
+
+  // Toggle speech-to-text for a specific SOAP field
+  const toggleDictation = useCallback((field: SOAPField) => {
+    if (activeVoiceField === field) {
+      // Stop dictation for this field
+      speechToTextService.stopListening();
+      setActiveVoiceField(null);
+      setInterimText('');
+      return;
+    }
+
+    // Stop any existing dictation first
+    if (activeVoiceField) {
+      speechToTextService.stopListening();
+    }
+
+    setActiveVoiceField(field);
+    setInterimText('');
+
+    const started = speechToTextService.startListening({
+      language: 'en-US',
+      continuous: true,
+      interimResults: true,
+      onResult: (result) => {
+        if (result.isFinal) {
+          // Append finalized text to the field
+          setNote(prev => ({
+            ...prev,
+            [field]: prev[field] ? prev[field] + ' ' + result.transcript : result.transcript
+          }));
+          setInterimText('');
+        } else {
+          setInterimText(result.transcript);
+        }
+      },
+      onError: (error) => {
+        console.error('Speech recognition error:', error);
+        setActiveVoiceField(null);
+        setInterimText('');
+      },
+      onEnd: () => {
+        setActiveVoiceField(null);
+        setInterimText('');
+      }
+    });
+
+    if (!started) {
+      setActiveVoiceField(null);
+      alert('Speech recognition is not supported in this browser. Please use Chrome or Edge.');
+    }
+  }, [activeVoiceField]);
+
+  // Handle scribe note ready — auto-fill SOAP fields and vitals
+  const handleScribeNoteReady = useCallback((structuredNote: StructuredNote, _session: ScribeSession) => {
+    // Fill SOAP fields
+    setNote(prev => ({
+      subjective: structuredNote.subjective || prev.subjective,
+      objective: structuredNote.objective || prev.objective,
+      assessment: structuredNote.assessment || prev.assessment,
+      plan: structuredNote.plan || prev.plan,
+    }));
+
+    // Fill vitals from extracted data
+    const v = structuredNote.vitals;
+    setVitalSigns(prev => ({
+      temperature: v.temperature ? String(v.temperature) : prev.temperature,
+      bloodPressure: v.bp_systolic && v.bp_diastolic ? `${v.bp_systolic}/${v.bp_diastolic}` : prev.bloodPressure,
+      pulse: v.pulse ? String(v.pulse) : prev.pulse,
+      respiratoryRate: v.respiratory_rate ? String(v.respiratory_rate) : prev.respiratoryRate,
+      oxygenSaturation: v.spo2 ? String(v.spo2) : prev.oxygenSaturation,
+      painScore: v.pain_score !== undefined ? String(v.pain_score) : prev.painScore,
+    }));
+
+    setShowScribePanel(false);
+  }, []);
+
+  // Handle "Apply to Form" from scribe panel
+  const handleScribeApplyToForm = useCallback((formData: Record<string, any>) => {
+    setNote(prev => ({
+      subjective: formData.chief_complaint || prev.subjective,
+      objective: formData.examination_findings || prev.objective,
+      assessment: formData.clinical_notes || prev.assessment,
+      plan: formData.follow_up_plan || prev.plan,
+    }));
+
+    if (formData.temperature) setVitalSigns(prev => ({ ...prev, temperature: formData.temperature }));
+    if (formData.blood_pressure) setVitalSigns(prev => ({ ...prev, bloodPressure: formData.blood_pressure }));
+    if (formData.pulse) setVitalSigns(prev => ({ ...prev, pulse: formData.pulse }));
+    if (formData.respiratory_rate) setVitalSigns(prev => ({ ...prev, respiratoryRate: formData.respiratory_rate }));
+    if (formData.spo2) setVitalSigns(prev => ({ ...prev, oxygenSaturation: formData.spo2 }));
+    if (formData.pain_score !== undefined) setVitalSigns(prev => ({ ...prev, painScore: String(formData.pain_score) }));
+
+    setShowScribePanel(false);
+  }, []);
 
   // Handle OCR scanner results - map extracted fields to SOAP note + vitals
   const handleScannerFieldsExtracted = (fields: Record<string, any>) => {
@@ -156,6 +273,12 @@ export const ProgressNoteModal: React.FC<ProgressNoteModalProps> = ({
   };
 
   const handleClose = () => {
+    // Stop any active dictation
+    if (activeVoiceField) {
+      speechToTextService.stopListening();
+      setActiveVoiceField(null);
+      setInterimText('');
+    }
     setNote({ subjective: '', objective: '', assessment: '', plan: '' });
     setVitalSigns({
       temperature: '',
@@ -166,6 +289,7 @@ export const ProgressNoteModal: React.FC<ProgressNoteModalProps> = ({
       painScore: ''
     });
     setLmp('');
+    setShowScribePanel(false);
     onClose();
   };
 
@@ -192,12 +316,20 @@ export const ProgressNoteModal: React.FC<ProgressNoteModalProps> = ({
             </div>
             <div className="flex items-center gap-2">
               <button
+                onClick={() => setShowScribePanel(true)}
+                className="flex items-center gap-1.5 px-3 py-2 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 border border-red-200 text-sm font-medium transition-colors"
+                title="AI Medical Scribe — Record speech and auto-fill SOAP notes"
+              >
+                <Mic className="w-4 h-4" />
+                <span className="hidden sm:inline">AI Scribe</span>
+              </button>
+              <button
                 onClick={() => setShowDocumentScanner(true)}
                 className="flex items-center gap-1.5 px-3 py-2 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 border border-indigo-200 text-sm font-medium transition-colors"
                 title="Scan a document and auto-fill fields using AI OCR"
               >
                 <Brain className="w-4 h-4" />
-                Scan Document
+                <span className="hidden sm:inline">Scan Document</span>
               </button>
               <button
                 onClick={handleClose}
@@ -320,66 +452,162 @@ export const ProgressNoteModal: React.FC<ProgressNoteModalProps> = ({
             <div className="space-y-4">
               {/* Subjective */}
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">
-                  S - Subjective (Patient's Complaints & History)
-                  <span className="text-red-500 ml-1">*</span>
-                </label>
-                <textarea
-                  required
-                  value={note.subjective}
-                  onChange={(e) => setNote({ ...note, subjective: e.target.value })}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-purple-500 focus:border-purple-500"
-                  placeholder="Patient reports... Chief complaint... History of present illness..."
-                />
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-semibold text-gray-900">
+                    S - Subjective (Patient's Complaints & History)
+                    <span className="text-red-500 ml-1">*</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => toggleDictation('subjective')}
+                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                      activeVoiceField === 'subjective'
+                        ? 'bg-red-100 text-red-700 border border-red-300 animate-pulse'
+                        : 'bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200'
+                    }`}
+                    title={activeVoiceField === 'subjective' ? 'Stop dictation' : 'Dictate with voice'}
+                  >
+                    {activeVoiceField === 'subjective' ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+                    {activeVoiceField === 'subjective' ? 'Stop' : 'Dictate'}
+                  </button>
+                </div>
+                <div className="relative">
+                  <textarea
+                    required
+                    value={note.subjective}
+                    onChange={(e) => setNote({ ...note, subjective: e.target.value })}
+                    rows={3}
+                    className={`w-full px-3 py-2 border rounded-md focus:ring-purple-500 focus:border-purple-500 ${
+                      activeVoiceField === 'subjective' ? 'border-red-400 ring-1 ring-red-300' : 'border-gray-300'
+                    }`}
+                    placeholder="Patient reports... Chief complaint... History of present illness..."
+                  />
+                  {activeVoiceField === 'subjective' && interimText && (
+                    <div className="absolute bottom-1 left-1 right-1 px-2 py-1 bg-red-50 text-red-600 text-xs rounded border border-red-200 italic truncate">
+                      {interimText}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Objective */}
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">
-                  O - Objective (Physical Examination & Findings)
-                  <span className="text-red-500 ml-1">*</span>
-                </label>
-                <textarea
-                  required
-                  value={note.objective}
-                  onChange={(e) => setNote({ ...note, objective: e.target.value })}
-                  rows={4}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-purple-500 focus:border-purple-500"
-                  placeholder="General appearance... Examination findings... Lab results... Imaging..."
-                />
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-semibold text-gray-900">
+                    O - Objective (Physical Examination & Findings)
+                    <span className="text-red-500 ml-1">*</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => toggleDictation('objective')}
+                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                      activeVoiceField === 'objective'
+                        ? 'bg-red-100 text-red-700 border border-red-300 animate-pulse'
+                        : 'bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200'
+                    }`}
+                    title={activeVoiceField === 'objective' ? 'Stop dictation' : 'Dictate with voice'}
+                  >
+                    {activeVoiceField === 'objective' ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+                    {activeVoiceField === 'objective' ? 'Stop' : 'Dictate'}
+                  </button>
+                </div>
+                <div className="relative">
+                  <textarea
+                    required
+                    value={note.objective}
+                    onChange={(e) => setNote({ ...note, objective: e.target.value })}
+                    rows={4}
+                    className={`w-full px-3 py-2 border rounded-md focus:ring-purple-500 focus:border-purple-500 ${
+                      activeVoiceField === 'objective' ? 'border-red-400 ring-1 ring-red-300' : 'border-gray-300'
+                    }`}
+                    placeholder="General appearance... Examination findings... Lab results... Imaging..."
+                  />
+                  {activeVoiceField === 'objective' && interimText && (
+                    <div className="absolute bottom-1 left-1 right-1 px-2 py-1 bg-red-50 text-red-600 text-xs rounded border border-red-200 italic truncate">
+                      {interimText}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Assessment */}
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">
-                  A - Assessment (Clinical Impression & Diagnosis)
-                  <span className="text-red-500 ml-1">*</span>
-                </label>
-                <textarea
-                  required
-                  value={note.assessment}
-                  onChange={(e) => setNote({ ...note, assessment: e.target.value })}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-purple-500 focus:border-purple-500"
-                  placeholder="Working diagnosis... Differential diagnosis... Clinical progress..."
-                />
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-semibold text-gray-900">
+                    A - Assessment (Clinical Impression & Diagnosis)
+                    <span className="text-red-500 ml-1">*</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => toggleDictation('assessment')}
+                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                      activeVoiceField === 'assessment'
+                        ? 'bg-red-100 text-red-700 border border-red-300 animate-pulse'
+                        : 'bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200'
+                    }`}
+                    title={activeVoiceField === 'assessment' ? 'Stop dictation' : 'Dictate with voice'}
+                  >
+                    {activeVoiceField === 'assessment' ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+                    {activeVoiceField === 'assessment' ? 'Stop' : 'Dictate'}
+                  </button>
+                </div>
+                <div className="relative">
+                  <textarea
+                    required
+                    value={note.assessment}
+                    onChange={(e) => setNote({ ...note, assessment: e.target.value })}
+                    rows={3}
+                    className={`w-full px-3 py-2 border rounded-md focus:ring-purple-500 focus:border-purple-500 ${
+                      activeVoiceField === 'assessment' ? 'border-red-400 ring-1 ring-red-300' : 'border-gray-300'
+                    }`}
+                    placeholder="Working diagnosis... Differential diagnosis... Clinical progress..."
+                  />
+                  {activeVoiceField === 'assessment' && interimText && (
+                    <div className="absolute bottom-1 left-1 right-1 px-2 py-1 bg-red-50 text-red-600 text-xs rounded border border-red-200 italic truncate">
+                      {interimText}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Plan */}
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">
-                  P - Plan (Management & Follow-up)
-                  <span className="text-red-500 ml-1">*</span>
-                </label>
-                <textarea
-                  required
-                  value={note.plan}
-                  onChange={(e) => setNote({ ...note, plan: e.target.value })}
-                  rows={4}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-purple-500 focus:border-purple-500"
-                  placeholder="Treatment plan... Medications... Investigations... Follow-up... Consultations..."
-                />
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-semibold text-gray-900">
+                    P - Plan (Management & Follow-up)
+                    <span className="text-red-500 ml-1">*</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => toggleDictation('plan')}
+                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                      activeVoiceField === 'plan'
+                        ? 'bg-red-100 text-red-700 border border-red-300 animate-pulse'
+                        : 'bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200'
+                    }`}
+                    title={activeVoiceField === 'plan' ? 'Stop dictation' : 'Dictate with voice'}
+                  >
+                    {activeVoiceField === 'plan' ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+                    {activeVoiceField === 'plan' ? 'Stop' : 'Dictate'}
+                  </button>
+                </div>
+                <div className="relative">
+                  <textarea
+                    required
+                    value={note.plan}
+                    onChange={(e) => setNote({ ...note, plan: e.target.value })}
+                    rows={4}
+                    className={`w-full px-3 py-2 border rounded-md focus:ring-purple-500 focus:border-purple-500 ${
+                      activeVoiceField === 'plan' ? 'border-red-400 ring-1 ring-red-300' : 'border-gray-300'
+                    }`}
+                    placeholder="Treatment plan... Medications... Investigations... Follow-up... Consultations..."
+                  />
+                  {activeVoiceField === 'plan' && interimText && (
+                    <div className="absolute bottom-1 left-1 right-1 px-2 py-1 bg-red-50 text-red-600 text-xs rounded border border-red-200 italic truncate">
+                      {interimText}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -417,6 +645,21 @@ export const ProgressNoteModal: React.FC<ProgressNoteModalProps> = ({
         targetForm="progress_note"
         patientContext={{ name: patientName }}
       />
+
+      {/* AI Medical Scribe Recording Panel */}
+      {showScribePanel && (
+        <ScribeRecordingPanel
+          patientId={patientId}
+          patientName={patientName}
+          hospitalNumber=""
+          context="patient_review"
+          recordedBy={user?.name || 'Unknown'}
+          recordedByRole={user?.role || 'unknown'}
+          onNoteReady={handleScribeNoteReady}
+          onApplyToForm={handleScribeApplyToForm}
+          onClose={() => setShowScribePanel(false)}
+        />
+      )}
     </div>
   );
 };
