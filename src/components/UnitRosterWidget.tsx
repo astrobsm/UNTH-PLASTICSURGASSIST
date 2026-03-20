@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Users, Clock, Shield, UserCheck, Settings, Plus, RotateCcw, Wand2 } from 'lucide-react';
+import { Calendar, Users, Clock, Shield, UserCheck, Settings, Plus, RotateCcw, Wand2, Phone, MessageCircle } from 'lucide-react';
 import { db } from '../db/database';
 import { PS_UNITS, getCurrentAssignments, getTodaySchedule, UnitRosterConfig } from '../config/psUnits';
 import { useAuthStore } from '../store/authStore';
@@ -14,6 +14,7 @@ export default function UnitRosterWidget() {
   const [staffLoading, setStaffLoading] = useState(true);
   const [availableSeniorRegistrars, setAvailableSeniorRegistrars] = useState<ApprovedUser[]>([]);
   const [availableHouseOfficers, setAvailableHouseOfficers] = useState<ApprovedUser[]>([]);
+  const [allActiveUsers, setAllActiveUsers] = useState<ApprovedUser[]>([]);
 
   // Setup form state
   const [setupForm, setSetupForm] = useState({
@@ -88,6 +89,7 @@ export default function UnitRosterWidget() {
     try {
       const allUsers = await userManagementService.getAllApprovedUsers();
       const activeUsers = allUsers.filter(u => u.is_active);
+      setAllActiveUsers(activeUsers);
       setAvailableSeniorRegistrars(activeUsers.filter(u => u.role === 'senior_registrar' || u.role === 'junior_registrar'));
       setAvailableHouseOfficers(activeUsers.filter(u => u.role === 'house_officer'));
     } catch (err) {
@@ -95,6 +97,36 @@ export default function UnitRosterWidget() {
     } finally {
       setStaffLoading(false);
     }
+  };
+
+  // Format phone number for tel: and wa.me links
+  const formatPhoneForLink = (phone: string): string => {
+    return phone.replace(/[\s\-()]/g, '').replace(/^0/, '+234');
+  };
+
+  const PhoneLinks = ({ phone }: { phone: string }) => {
+    const cleaned = formatPhoneForLink(phone);
+    return (
+      <span className="inline-flex items-center gap-1.5 ml-1">
+        <a
+          href={`tel:${cleaned}`}
+          className="inline-flex items-center gap-0.5 text-xs text-blue-600 hover:text-blue-800 hover:underline"
+          title={`Call ${phone}`}
+        >
+          <Phone className="h-3 w-3" />
+          {phone}
+        </a>
+        <a
+          href={`https://wa.me/${cleaned.replace('+', '')}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center text-xs text-green-600 hover:text-green-800"
+          title={`WhatsApp ${phone}`}
+        >
+          <MessageCircle className="h-3 w-3" />
+        </a>
+      </span>
+    );
   };
 
   const pushRosterToServer = async (config: UnitRosterConfig) => {
@@ -416,12 +448,22 @@ export default function UnitRosterWidget() {
               {/* Consultants */}
               <div className="mb-2">
                 <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Consultants</p>
-                {unit.consultants.map((c, i) => (
-                  <div key={i} className="flex items-center gap-1.5 text-sm text-gray-800">
-                    <UserCheck className="h-3.5 w-3.5 text-primary-500" />
-                    {c}
-                  </div>
-                ))}
+                {unit.consultants.map((c, i) => {
+                  const consultantUser = allActiveUsers.find(u => u.full_name === c);
+                  return (
+                    <div key={i}>
+                      <div className="flex items-center gap-1.5 text-sm text-gray-800">
+                        <UserCheck className="h-3.5 w-3.5 text-primary-500" />
+                        {c}
+                      </div>
+                      {consultantUser?.phone && (
+                        <div className="ml-5">
+                          <PhoneLinks phone={consultantUser.phone} />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
 
               {/* Rotating Staff */}
@@ -433,8 +475,8 @@ export default function UnitRosterWidget() {
                     {assignment?.seniorRegistrar || 'Not assigned'}
                   </p>
                   {assignment?.seniorRegistrar && (() => {
-                    const sr = [...availableSeniorRegistrars].find(u => u.full_name === assignment.seniorRegistrar);
-                    return sr?.phone ? <p className="text-xs text-gray-500 ml-5">📞 {sr.phone}</p> : null;
+                    const sr = availableSeniorRegistrars.find(u => u.full_name === assignment.seniorRegistrar);
+                    return sr?.phone ? <div className="ml-5"><PhoneLinks phone={sr.phone} /></div> : null;
                   })()}
                 </div>
                 <div>
@@ -444,8 +486,8 @@ export default function UnitRosterWidget() {
                     {assignment?.houseOfficer || 'Not assigned'}
                   </p>
                   {assignment?.houseOfficer && (() => {
-                    const ho = [...availableHouseOfficers].find(u => u.full_name === assignment.houseOfficer);
-                    return ho?.phone ? <p className="text-xs text-gray-500 ml-5">📞 {ho.phone}</p> : null;
+                    const ho = availableHouseOfficers.find(u => u.full_name === assignment.houseOfficer);
+                    return ho?.phone ? <div className="ml-5"><PhoneLinks phone={ho.phone} /></div> : null;
                   })()}
                 </div>
               </div>
