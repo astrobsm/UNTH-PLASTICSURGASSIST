@@ -217,7 +217,25 @@ export default function UnitRosterWidget() {
   };
 
   const todaySchedule = getTodaySchedule();
-  const assignments = rosterConfig?.isActive ? getCurrentAssignments(rosterConfig) : null;
+  const rawAssignments = rosterConfig?.isActive ? getCurrentAssignments(rosterConfig) : null;
+
+  // Filter out deactivated staff from assignments (only after staff list has loaded)
+  const assignments = rawAssignments && !staffLoading ? {
+    unit1: {
+      ...rawAssignments.unit1,
+      seniorRegistrar: availableSeniorRegistrars.some(u => u.full_name === rawAssignments.unit1.seniorRegistrar)
+        ? rawAssignments.unit1.seniorRegistrar : '',
+      houseOfficer: availableHouseOfficers.some(u => u.full_name === rawAssignments.unit1.houseOfficer)
+        ? rawAssignments.unit1.houseOfficer : '',
+    },
+    unit2: {
+      ...rawAssignments.unit2,
+      seniorRegistrar: availableSeniorRegistrars.some(u => u.full_name === rawAssignments.unit2.seniorRegistrar)
+        ? rawAssignments.unit2.seniorRegistrar : '',
+      houseOfficer: availableHouseOfficers.some(u => u.full_name === rawAssignments.unit2.houseOfficer)
+        ? rawAssignments.unit2.houseOfficer : '',
+    },
+  } : rawAssignments;
 
   const isAdmin = user?.role === 'admin';
 
