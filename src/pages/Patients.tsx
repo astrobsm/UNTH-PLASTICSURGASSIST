@@ -1,11 +1,20 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { db } from '../db/database';
 import { Patient } from '../db/database';
 import { PatientRegistrationForm } from '../components/PatientRegistrationForm';
 import patientService from '../services/patientService';
 import { apiClient } from '../services/apiClient';
 import { preoperativeService } from '../services/preoperativeService';
+import { patientActions } from '../components/Layout';
+import {
+  ChevronDown,
+  Clock,
+  Pill,
+  CalendarDays,
+  MoreVertical,
+  X,
+} from 'lucide-react';
 
 // Data category definitions
 interface DataCategory {
@@ -29,6 +38,7 @@ const DATA_CATEGORIES: DataCategory[] = [
 ];
 
 export const Patients: React.FC = () => {
+  const navigate = useNavigate();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -43,6 +53,32 @@ export const Patients: React.FC = () => {
 
   // MDT patient tracking
   const [mdtPatientIds, setMdtPatientIds] = useState<Set<string | number>>(new Set());
+
+  // Action dropdown state
+  const [actionDropdownPatientId, setActionDropdownPatientId] = useState<number | string | null>(null);
+  const actionDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Timeline state
+  const [timelinePatientId, setTimelinePatientId] = useState<number | string | null>(null);
+  const [timelineData, setTimelineData] = useState<any[]>([]);
+  const [loadingTimeline, setLoadingTimeline] = useState(false);
+
+  // Current medications state
+  const [medsPatientId, setMedsPatientId] = useState<number | string | null>(null);
+  const [currentMeds, setCurrentMeds] = useState<any[]>([]);
+  const [upcomingPlans, setUpcomingPlans] = useState<any[]>([]);
+  const [loadingMeds, setLoadingMeds] = useState(false);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (actionDropdownRef.current && !actionDropdownRef.current.contains(e.target as Node)) {
+        setActionDropdownPatientId(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   // Fetch category data for a patient
   const fetchCategoryData = useCallback(async (patientId: string | number, category: string) => {
@@ -246,6 +282,105 @@ export const Patients: React.FC = () => {
     loadPatients(); // Refresh the patient list
     alert(`Patient registered successfully! Patient ID: ${patientId}`);
   };
+
+  // Fetch chronological timeline for a patient (aggregate all record types)
+  const fetchTimeline = useCallback(async (patientId: string | number) => {
+    setLoadingTimeline(true);
+    setTimelineData([]);
+    const pid = String(patientId);
+    const all: any[] = [];
+
+    const categories = ['admissions', 'discharges', 'prescriptions', 'ward_rounds', 'surgeries', 'procedures', 'lab_investigations', 'treatment_plans', 'wound_care', 'preop_assessments'];
+    const results = await Promise.allSettled(categories.map(cat => fetchCategoryData(patientId, cat)));
+
+    results.forEach((res, idx) => {
+      if (res.status === 'fulfilled' && Array.isArray(res.value)) {
+        res.value.forEach((item: any) => {
+          const dateStr = item.created_at || item.admission_date || item.discharge_date || item.date || item.round_date || item.prescribed_date || item.request_date || item.assessment_date || item.assessed_at || item.scheduled_date;
+          all.push({
+            ...item,
+            _category: categories[idx],
+            _categoryLabel: DATA_CATEGORIES[idx]?.label || categories[idx],
+            _categoryIcon: DATA_CATEGORIES[idx]?.icon || '📄',
+            _categoryColor: DATA_CATEGORIES[idx]?.color || '',
+            _sortDate: dateStr ? new Date(dateStr).getTime() : 0,
+            _displayDate: dateStr ? new Date(dateStr).toLocaleString() : 'N/A',
+          });
+        });
+      }
+    });
+
+    // Sort newest first
+    all.sort((a, b) => b._sortDate - a._sortDate);
+    setTimelineData(all);
+    setLoadingTimeline(false);
+  }, [fetchCategoryData]);
+
+  // Toggle timeline
+  const toggleTimeline = useCallback((patientId: number | string) => {
+    if (timelinePatientId === patientId) {
+      setTimelinePatientId(null);
+      setTimelineData([]);
+    } else {
+      setTimelinePatientId(patientId);
+      setMedsPatientId(null);
+      setExpandedPatientId(null);
+      fetchTimeline(patientId);
+    }
+  }, [timelinePatientId, fetchTimeline]);
+
+  // Fetch current medications & upcoming plans
+  const fetchMedsAndPlans = useCallback(async (patientId: string | number) => {
+    setLoadingMeds(true);
+    const pid = String(patientId);
+    try {
+      // Fetch prescriptions
+      let meds: any[] = [];
+      try {
+        const serverData = await apiClient.getPrescriptions(pid);
+        if (Array.isArray(serverData) && serverData.length > 0) meds = serverData;
+      } catch {}
+      if (meds.length === 0) {
+        meds = await db.prescriptions?.where('patient_id').equals(pid).toArray() || [];
+      }
+      const activeMeds = meds.filter((m: any) => !m.status || m.status === 'active');
+      setCurrentMeds(activeMeds);
+
+      // Fetch upcoming plans from treatment_plans + surgery_bookings
+      let plans: any[] = [];
+      try {
+        const tpData = await apiClient.getTreatmentPlans(pid);
+        if (Array.isArray(tpData)) plans.push(...tpData.filter((p: any) => p.status === 'active' || !p.status));
+      } catch {}
+      try {
+        const surgeries = await apiClient.getSurgeries(pid);
+        if (Array.isArray(surgeries)) {
+          plans.push(...surgeries.filter((s: any) => s.status === 'scheduled' || !s.status).map((s: any) => ({
+            ...s,
+            title: s.procedure_name || s.surgery_type || 'Scheduled Surgery',
+            _type: 'surgery',
+          })));
+        }
+      } catch {}
+      setUpcomingPlans(plans);
+    } catch (error) {
+      console.error('Error fetching meds/plans:', error);
+    } finally {
+      setLoadingMeds(false);
+    }
+  }, []);
+
+  // Toggle medications/plans view
+  const toggleMedsPlans = useCallback((patientId: number | string) => {
+    if (medsPatientId === patientId) {
+      setMedsPatientId(null);
+    } else {
+      setMedsPatientId(patientId);
+      setTimelinePatientId(null);
+      setExpandedPatientId(null);
+      fetchMedsAndPlans(patientId);
+    }
+  }, [medsPatientId, fetchMedsAndPlans]);
 
   // Render category data records
   const renderCategoryRecords = (category: string, data: any[]) => {
@@ -610,7 +745,7 @@ export const Patients: React.FC = () => {
                   <div className="flex items-start sm:items-center gap-3">
                     {/* Patient Avatar - links to profile */}
                     <Link to={`/patients/${patient.id}`} className="flex-shrink-0">
-                      <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-600 rounded-full flex items-center justify-center text-white font-semibold text-sm sm:text-base hover:bg-green-700 transition-colors">
+                      <div className="w-10 h-10 sm:w-12 sm:h-12 bg-navy-900 rounded-full flex items-center justify-center text-white font-semibold text-sm sm:text-base hover:bg-navy-700 transition-colors shadow-md">
                         {patient.first_name?.[0]}{patient.last_name?.[0]}
                       </div>
                     </Link>
@@ -660,38 +795,18 @@ export const Patients: React.FC = () => {
 
                       {/* Allergies and Comorbidities */}
                       {(patient.allergies?.length || patient.comorbidities?.length) && (
-                        <div className="mt-2 flex items-center space-x-4">
+                        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
                           {patient.allergies && Array.isArray(patient.allergies) && patient.allergies.length > 0 && (
                             <div className="flex items-center space-x-1">
                               <span className="text-xs text-red-600 font-medium">Allergies:</span>
-                              <div className="flex space-x-1">
+                              <div className="flex flex-wrap gap-1">
                                 {patient.allergies.slice(0, 2).map((allergy: any, index: number) => (
                                   <span key={index} className="inline-block bg-red-100 text-red-800 text-xs px-2 py-0.5 rounded-full">
                                     {typeof allergy === 'object' && allergy !== null ? (allergy.name || allergy.allergen || JSON.stringify(allergy)) : String(allergy)}
                                   </span>
                                 ))}
                                 {patient.allergies.length > 2 && (
-                                  <span className="text-xs text-red-600">
-                                    +{patient.allergies.length - 2} more
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                          
-                          {patient.comorbidities && patient.comorbidities.length > 0 && (
-                            <div className="flex items-center space-x-1">
-                              <span className="text-xs text-yellow-600 font-medium">Conditions:</span>
-                              <div className="flex space-x-1">
-                                {patient.comorbidities.slice(0, 2).map((condition: any, index: number) => (
-                                  <span key={index} className="inline-block bg-yellow-100 text-yellow-800 text-xs px-2 py-0.5 rounded-full">
-                                    {typeof condition === 'object' && condition !== null ? (condition.condition || condition.name || JSON.stringify(condition)) : String(condition)}
-                                  </span>
-                                ))}
-                                {patient.comorbidities.length > 2 && (
-                                  <span className="text-xs text-yellow-600">
-                                    +{patient.comorbidities.length - 2} more
-                                  </span>
+                                  <span className="text-xs text-red-600">+{patient.allergies.length - 2}</span>
                                 )}
                               </div>
                             </div>
@@ -701,11 +816,86 @@ export const Patients: React.FC = () => {
                     </div>
                     
                     {/* Action Buttons */}
-                    <div className="flex items-center gap-2 flex-shrink-0">
+                    <div className="flex items-center gap-1.5 flex-shrink-0 relative" ref={actionDropdownPatientId === patient.id ? actionDropdownRef : undefined}>
+                      {/* Patient Actions Dropdown */}
+                      <button
+                        onClick={() => setActionDropdownPatientId(actionDropdownPatientId === patient.id ? null : patient.id!)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1 ${
+                          actionDropdownPatientId === patient.id
+                            ? 'bg-navy-900 text-white shadow-lg'
+                            : 'bg-sky-100 text-navy-900 hover:bg-sky-200 border border-sky-300'
+                        }`}
+                        title="Patient actions"
+                      >
+                        <MoreVertical className="h-4 w-4" />
+                        <span className="hidden sm:inline">Actions</span>
+                        <ChevronDown className={`h-3 w-3 transition-transform ${actionDropdownPatientId === patient.id ? 'rotate-180' : ''}`} />
+                      </button>
+
+                      {/* Actions Dropdown Menu */}
+                      {actionDropdownPatientId === patient.id && (
+                        <div className="absolute right-0 top-full mt-1 w-64 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 max-h-80 overflow-y-auto animate-in fade-in slide-in-from-top-2">
+                          <div className="p-2 border-b border-gray-100">
+                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider px-2">Patient Actions</p>
+                          </div>
+                          <div className="p-1">
+                            {patientActions.map((action) => (
+                              <button
+                                key={action.name}
+                                onClick={() => {
+                                  setActionDropdownPatientId(null);
+                                  navigate(`${action.href}?patient=${patient.id}`);
+                                }}
+                                className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-gray-700 hover:bg-sky-50 hover:text-navy-900 rounded-lg transition-colors"
+                              >
+                                <action.icon className="h-4 w-4 text-navy-600 flex-shrink-0" />
+                                <span>{action.name}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Timeline Button */}
+                      <button
+                        onClick={() => toggleTimeline(patient.id!)}
+                        className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1 ${
+                          timelinePatientId === patient.id
+                            ? 'bg-purple-600 text-white shadow-md'
+                            : 'bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200'
+                        }`}
+                        title="View chronological timeline"
+                      >
+                        <Clock className="h-4 w-4" />
+                        <span className="hidden sm:inline">Timeline</span>
+                      </button>
+
+                      {/* Meds & Plans Button */}
+                      <button
+                        onClick={() => toggleMedsPlans(patient.id!)}
+                        className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1 ${
+                          medsPatientId === patient.id
+                            ? 'bg-emerald-600 text-white shadow-md'
+                            : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
+                        }`}
+                        title="Current medications & plans"
+                      >
+                        <Pill className="h-4 w-4" />
+                        <span className="hidden sm:inline">Meds</span>
+                      </button>
+
                       {/* View Records Button */}
                       <button
-                        onClick={() => togglePatientExpand(patient.id!)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1 ${
+                        onClick={() => {
+                          if (expandedPatientId === patient.id) {
+                            togglePatientExpand(patient.id!);
+                          } else {
+                            setTimelinePatientId(null);
+                            setMedsPatientId(null);
+                            togglePatientExpand(patient.id!);
+                          }
+                        }}
+                        className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1 ${
                           expandedPatientId === patient.id
                             ? 'bg-green-600 text-white shadow-md'
                             : 'bg-gray-100 text-gray-700 hover:bg-green-100 hover:text-green-700'
@@ -715,38 +905,13 @@ export const Patients: React.FC = () => {
                         <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
-                        <span className="hidden sm:inline">Records</span>
+                        <span className="hidden lg:inline">Records</span>
                       </button>
-
-                      {/* MDT Button */}
-                      {mdtPatientIds.has(patient.id!) ? (
-                        <Link
-                          to="/mdt"
-                          className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1 bg-blue-600 text-white hover:bg-blue-700 shadow-md"
-                          title="View MDT reviews"
-                        >
-                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                          </svg>
-                          <span className="hidden sm:inline">MDT</span>
-                        </Link>
-                      ) : (
-                        <button
-                          disabled
-                          className="px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1 bg-gray-200 text-gray-400 cursor-not-allowed"
-                          title="Patient not in MDT"
-                        >
-                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                          </svg>
-                          <span className="hidden sm:inline">MDT</span>
-                        </button>
-                      )}
 
                       {/* Profile Link */}
                       <Link
                         to={`/patients/${patient.id}`}
-                        className="p-1.5 rounded-lg text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors"
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-navy-900 hover:bg-sky-50 transition-colors"
                         title="View full profile"
                       >
                         <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
@@ -808,6 +973,140 @@ export const Patients: React.FC = () => {
                     )}
                   </div>
                 )}
+
+                {/* Chronological Timeline Panel */}
+                {timelinePatientId === patient.id && (
+                  <div className="border-t-2 border-purple-300 bg-gradient-to-b from-purple-50 to-white">
+                    <div className="p-3 sm:p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-bold text-purple-900 flex items-center gap-2">
+                          <Clock className="h-4 w-4" />
+                          Patient Timeline
+                        </h4>
+                        <button onClick={() => setTimelinePatientId(null)} className="text-gray-400 hover:text-gray-600" title="Close timeline">
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                      {loadingTimeline ? (
+                        <div className="flex items-center justify-center py-8">
+                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-600"></div>
+                          <span className="ml-2 text-sm text-gray-500">Loading timeline...</span>
+                        </div>
+                      ) : timelineData.length === 0 ? (
+                        <p className="text-center text-gray-500 text-sm py-6">No recorded actions yet for this patient.</p>
+                      ) : (
+                        <div className="relative max-h-96 overflow-y-auto pr-2">
+                          {/* Timeline line */}
+                          <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-purple-200" />
+                          <div className="space-y-3">
+                            {timelineData.map((item, idx) => (
+                              <div key={idx} className="relative pl-10">
+                                {/* Timeline dot */}
+                                <div className="absolute left-2.5 top-2 w-3 h-3 rounded-full border-2 border-purple-400 bg-white" />
+                                <div className={`rounded-lg border p-3 text-xs ${item._categoryColor || 'bg-gray-50 border-gray-200'}`}>
+                                  <div className="flex items-center justify-between mb-1">
+                                    <span className="font-semibold flex items-center gap-1">
+                                      <span>{item._categoryIcon}</span>
+                                      {item._categoryLabel}
+                                    </span>
+                                    <span className="text-gray-500">{item._displayDate}</span>
+                                  </div>
+                                  <div className="text-gray-700">
+                                    {item.title || item.medication_name || item.drug_name || item.procedure_name || item.surgery_type || item.test_name || item.investigation_type || item.wound_type || item.admitting_diagnosis || item.discharge_diagnosis || item.notes || item.plan || 'Record entry'}
+                                  </div>
+                                  {item.status && (
+                                    <span className={`mt-1 inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
+                                      item.status === 'active' ? 'bg-green-100 text-green-700' : 
+                                      item.status === 'completed' ? 'bg-blue-100 text-blue-700' :
+                                      item.status === 'scheduled' ? 'bg-yellow-100 text-yellow-700' :
+                                      'bg-gray-100 text-gray-600'
+                                    }`}>{item.status}</span>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Current Medications & Upcoming Plans Panel */}
+                {medsPatientId === patient.id && (
+                  <div className="border-t-2 border-emerald-300 bg-gradient-to-b from-emerald-50 to-white">
+                    <div className="p-3 sm:p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-bold text-emerald-900 flex items-center gap-2">
+                          <Pill className="h-4 w-4" />
+                          Medications & Upcoming Plans
+                        </h4>
+                        <button onClick={() => setMedsPatientId(null)} className="text-gray-400 hover:text-gray-600" title="Close medications">
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                      {loadingMeds ? (
+                        <div className="flex items-center justify-center py-8">
+                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-600"></div>
+                          <span className="ml-2 text-sm text-gray-500">Loading...</span>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {/* Current Medications */}
+                          <div>
+                            <h5 className="text-xs font-bold text-emerald-800 uppercase tracking-wider mb-2 flex items-center gap-1">
+                              <Pill className="h-3.5 w-3.5" /> Current Medications
+                            </h5>
+                            {currentMeds.length === 0 ? (
+                              <p className="text-xs text-gray-500 py-3 text-center bg-white rounded-lg border border-gray-200">No active medications</p>
+                            ) : (
+                              <div className="space-y-2 max-h-60 overflow-y-auto">
+                                {currentMeds.map((med, idx) => (
+                                  <div key={idx} className="bg-white rounded-lg border border-emerald-200 p-2.5 text-xs">
+                                    <div className="font-semibold text-emerald-900">{med.medication_name || med.drug_name || 'Medication'}</div>
+                                    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-gray-600">
+                                      {med.dosage && <span>{med.dosage}</span>}
+                                      {med.route && <span>• {med.route}</span>}
+                                      {med.frequency && <span>• {med.frequency}</span>}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Upcoming Plans */}
+                          <div>
+                            <h5 className="text-xs font-bold text-blue-800 uppercase tracking-wider mb-2 flex items-center gap-1">
+                              <CalendarDays className="h-3.5 w-3.5" /> Upcoming Plans
+                            </h5>
+                            {upcomingPlans.length === 0 ? (
+                              <p className="text-xs text-gray-500 py-3 text-center bg-white rounded-lg border border-gray-200">No upcoming plans</p>
+                            ) : (
+                              <div className="space-y-2 max-h-60 overflow-y-auto">
+                                {upcomingPlans.map((plan, idx) => (
+                                  <div key={idx} className={`bg-white rounded-lg border p-2.5 text-xs ${plan._type === 'surgery' ? 'border-red-200' : 'border-teal-200'}`}>
+                                    <div className={`font-semibold ${plan._type === 'surgery' ? 'text-red-900' : 'text-teal-900'}`}>
+                                      {plan.title || 'Treatment Plan'}
+                                    </div>
+                                    <div className="mt-1 text-gray-600">
+                                      {plan._type === 'surgery' && plan.date && <span>Date: {new Date(plan.date).toLocaleDateString()}</span>}
+                                      {plan.diagnosis && <span>{plan.diagnosis}</span>}
+                                      {plan.primary_surgeon && <span> • Surgeon: {plan.primary_surgeon}</span>}
+                                    </div>
+                                    <span className={`mt-1 inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
+                                      plan._type === 'surgery' ? 'bg-red-100 text-red-700' : 'bg-teal-100 text-teal-700'
+                                    }`}>{plan._type === 'surgery' ? 'Surgery' : 'Treatment'}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -816,10 +1115,10 @@ export const Patients: React.FC = () => {
 
       {/* Statistics Footer */}
       {!loading && filteredPatients.length > 0 && (
-        <div className="mt-4 sm:mt-6 card p-4 sm:p-6">
+        <div className="mt-4 sm:mt-6 bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border border-sky-200 p-4 sm:p-6">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6">
             <div className="text-center">
-              <div className="stat-value text-green-600">{filteredPatients.length}</div>
+              <div className="stat-value text-navy-900">{filteredPatients.length}</div>
               <div className="stat-label">Total Patients</div>
             </div>
             <div className="text-center">

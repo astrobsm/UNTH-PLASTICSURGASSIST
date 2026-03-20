@@ -9,7 +9,7 @@
     @apply border-gray-200;
   }
   body {
-    @apply bg-clinical-light text-clinical-dark font-sans;
+    @apply bg-sky-100 text-clinical-dark font-sans;
     font-feature-settings: "rlig" 1, "calt" 1;
     -webkit-tap-highlight-color: transparent;
   }
@@ -54,7 +54,7 @@
   }
   
   .card {
-    @apply rounded-lg border border-gray-200 bg-white text-clinical-dark shadow-sm;
+    @apply rounded-xl border border-sky-200 bg-white/90 backdrop-blur-sm text-clinical-dark shadow-sm;
   }
   
   /* Mobile-first form inputs */
