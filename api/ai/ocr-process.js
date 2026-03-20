@@ -170,12 +170,25 @@ export default async function handler(req, res) {
 
     const { ocrText, documentType, patientContext } = body;
 
-    if (!ocrText || typeof ocrText !== 'string') {
+    if (typeof ocrText !== 'string') {
       return res.status(400).json({ error: 'ocrText is required and must be a string', receivedType: typeof ocrText, bodyKeys: Object.keys(body) });
     }
 
+    // Handle empty / whitespace-only OCR text gracefully
+    const cleanedText = ocrText.trim();
+    if (!cleanedText) {
+      return res.status(200).json({
+        success: false,
+        error: 'OCR text is empty — no text was extracted from the document',
+        fallback: true,
+        structured: null,
+        rawText: '',
+        processedAt: new Date().toISOString(),
+      });
+    }
+
     // Trim excessively long OCR text to avoid token limits
-    const trimmedText = ocrText.length > 15000 ? ocrText.substring(0, 15000) + '\n[...truncated]' : ocrText;
+    const trimmedText = cleanedText.length > 15000 ? cleanedText.substring(0, 15000) + '\n[...truncated]' : cleanedText;
 
     const openaiApiKey = process.env.OPENAI_API_KEY;
     if (!openaiApiKey) {

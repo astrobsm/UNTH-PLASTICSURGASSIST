@@ -72,12 +72,20 @@ const bgSyncPlugin = new BackgroundSyncPlugin('offlineMutationQueue', {
     while ((entry = await queue.shiftRequest())) {
       try {
         const response = await fetch(entry.request.clone());
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        if (!response.ok) {
+          // 4xx errors are permanent client errors — discard them, don't retry
+          if (response.status >= 400 && response.status < 500) {
+            console.warn(`[SW] Discarding queued request (${response.status}):`, entry.request.url);
+            failedCount++;
+            continue; // Drop this entry, move to next
+          }
+          throw new Error(`HTTP ${response.status}`);
+        }
         syncedCount++;
       } catch (error) {
         failedCount++;
         await queue.unshiftRequest(entry);
-        throw error; // Let Workbox retry later
+        throw error; // Let Workbox retry later (only 5xx / network errors)
       }
     }
 
