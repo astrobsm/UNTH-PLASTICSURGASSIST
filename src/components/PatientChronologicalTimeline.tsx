@@ -23,6 +23,15 @@ interface TimelineEvent {
   details?: TimelineDetail[];
 }
 
+// Safely convert any value to a renderable string (prevents React Error #31)
+function safeTxt(v: any): string {
+  if (v === null || v === undefined) return '';
+  if (typeof v === 'string') return v;
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+  if (typeof v === 'object') return JSON.stringify(v);
+  return String(v);
+}
+
 export function PatientChronologicalTimeline({ patientId, hospitalNumber }: PatientChronologicalTimelineProps) {
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,20 +84,20 @@ export function PatientChronologicalTimeline({ patientId, hospitalNumber }: Pati
           timelineEvents.push({
             id: `wr_${r.id}`, date: safeDate(r.round_date || r.date || r.created_at), type: 'ward_round',
             title: (r.round_type || 'Ward Round').replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
-            description: (r.clinical_notes || r.assessment || r.plan || 'Ward round documented'),
-            author: r.reviewing_doctor || r.doctor_name || r.consultant,
+            description: safeTxt(r.clinical_notes || r.assessment || r.plan || 'Ward round documented'),
+            author: safeTxt(r.reviewing_doctor || r.doctor_name || r.consultant),
             details: [
-              ...(r.chief_complaint ? [{ label: 'Chief Complaint', value: r.chief_complaint }] : []),
-              ...(r.clinical_notes ? [{ label: 'Clinical Notes', value: r.clinical_notes }] : []),
-              ...(r.examination_findings ? [{ label: 'Examination', value: r.examination_findings }] : []),
-              ...(r.assessment ? [{ label: 'Assessment', value: r.assessment }] : []),
-              ...(r.plan ? [{ label: 'Plan', value: r.plan }] : []),
-              ...(r.clinical_status ? [{ label: 'Clinical Status', value: r.clinical_status }] : []),
+              ...(r.chief_complaint ? [{ label: 'Chief Complaint', value: safeTxt(r.chief_complaint) }] : []),
+              ...(r.clinical_notes ? [{ label: 'Clinical Notes', value: safeTxt(r.clinical_notes) }] : []),
+              ...(r.examination_findings ? [{ label: 'Examination', value: safeTxt(r.examination_findings) }] : []),
+              ...(r.assessment ? [{ label: 'Assessment', value: safeTxt(r.assessment) }] : []),
+              ...(r.plan ? [{ label: 'Plan', value: safeTxt(r.plan) }] : []),
+              ...(r.clinical_status ? [{ label: 'Clinical Status', value: safeTxt(r.clinical_status) }] : []),
               ...(r.temperature ? [{ label: 'Temp', value: r.temperature + '°C' }] : []),
-              ...(r.blood_pressure ? [{ label: 'BP', value: r.blood_pressure }] : []),
+              ...(r.blood_pressure ? [{ label: 'BP', value: safeTxt(r.blood_pressure) }] : []),
               ...(r.pulse ? [{ label: 'Pulse', value: r.pulse + ' bpm' }] : []),
               ...(r.spo2 ? [{ label: 'SpO₂', value: r.spo2 + '%' }] : []),
-              ...(r.follow_up_plan ? [{ label: 'Follow-up', value: r.follow_up_plan }] : []),
+              ...(r.follow_up_plan ? [{ label: 'Follow-up', value: safeTxt(r.follow_up_plan) }] : []),
             ],
           });
         }
@@ -102,17 +111,17 @@ export function PatientChronologicalTimeline({ patientId, hospitalNumber }: Pati
           timelineEvents.push({
             id: `wrc_${r.id}`, date: safeDate(r.round_date || r.created_at), type: 'ward_round',
             title: 'Clinical Ward Round',
-            description: (r.clinical_notes || r.assessment || 'Clinical ward round documented') + (r.chief_complaint ? '. CC: ' + r.chief_complaint : ''),
-            author: r.reviewed_by || r.reviewing_doctor,
+            description: safeTxt(r.clinical_notes || r.assessment || 'Clinical ward round documented') + (r.chief_complaint ? '. CC: ' + r.chief_complaint : ''),
+            author: safeTxt(r.reviewed_by || r.reviewing_doctor),
             details: [
-              ...(r.chief_complaint ? [{ label: 'Chief Complaint', value: r.chief_complaint }] : []),
-              ...(r.clinical_notes ? [{ label: 'Clinical Notes', value: r.clinical_notes }] : []),
-              ...(r.examination_findings ? [{ label: 'Examination', value: r.examination_findings }] : []),
-              ...(r.assessment ? [{ label: 'Assessment', value: r.assessment }] : []),
-              ...(r.plan ? [{ label: 'Plan', value: r.plan }] : []),
-              ...(r.clinical_status ? [{ label: 'Status', value: r.clinical_status }] : []),
+              ...(r.chief_complaint ? [{ label: 'Chief Complaint', value: safeTxt(r.chief_complaint) }] : []),
+              ...(r.clinical_notes ? [{ label: 'Clinical Notes', value: safeTxt(r.clinical_notes) }] : []),
+              ...(r.examination_findings ? [{ label: 'Examination', value: safeTxt(r.examination_findings) }] : []),
+              ...(r.assessment ? [{ label: 'Assessment', value: safeTxt(r.assessment) }] : []),
+              ...(r.plan ? [{ label: 'Plan', value: safeTxt(r.plan) }] : []),
+              ...(r.clinical_status ? [{ label: 'Status', value: safeTxt(r.clinical_status) }] : []),
               ...(r.temperature ? [{ label: 'Temp', value: r.temperature + '°C' }] : []),
-              ...(r.blood_pressure ? [{ label: 'BP', value: r.blood_pressure }] : []),
+              ...(r.blood_pressure ? [{ label: 'BP', value: safeTxt(r.blood_pressure) }] : []),
               ...(r.pulse ? [{ label: 'Pulse', value: r.pulse + ' bpm' }] : []),
             ],
           });
@@ -575,7 +584,7 @@ function TimelineCard({
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-2 text-sm font-medium text-gray-900">
               {getEventIcon(event.type)}
-              <span>{event.title}</span>
+              <span>{safeTxt(event.title)}</span>
             </div>
             <div className="flex items-center gap-1">
               <span className="text-xs text-gray-500 whitespace-nowrap">
@@ -588,9 +597,9 @@ function TimelineCard({
               )}
             </div>
           </div>
-          <p className={`text-sm text-gray-600 ${expanded ? '' : 'line-clamp-2'}`}>{event.description}</p>
+          <p className={`text-sm text-gray-600 ${expanded ? '' : 'line-clamp-2'}`}>{safeTxt(event.description)}</p>
           {event.author && (
-            <p className="text-xs text-gray-400 mt-1">By: {event.author}</p>
+            <p className="text-xs text-gray-400 mt-1">By: {safeTxt(event.author)}</p>
           )}
         </div>
 

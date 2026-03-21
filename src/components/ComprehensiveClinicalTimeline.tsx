@@ -104,6 +104,15 @@ function truncate(s: string, len = 200): string {
   return s.length > len ? s.slice(0, len) + '…' : s;
 }
 
+// Safely convert any value to a renderable string (prevents React Error #31)
+function safeTxt(v: any): string {
+  if (v === null || v === undefined) return '';
+  if (typeof v === 'string') return v;
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+  if (typeof v === 'object') return JSON.stringify(v);
+  return String(v);
+}
+
 // ─── Event styling maps ────────────────────────────────────────
 
 const EVENT_META: Record<TimelineEventType, {
@@ -1084,11 +1093,11 @@ export const ComprehensiveClinicalTimeline: React.FC<ComprehensiveClinicalTimeli
       ...filteredEvents.map(e => [
         fmtDate(e.date),
         EVENT_META[e.type]?.label || e.type,
-        `"${e.title.replace(/"/g, '""')}"`,
-        `"${e.description.replace(/"/g, '""')}"`,
-        e.author || '',
-        e.status || '',
-        (e.tags || []).join('; '),
+        `"${safeTxt(e.title).replace(/"/g, '""')}"`,
+        `"${safeTxt(e.description).replace(/"/g, '""')}"`,
+        safeTxt(e.author),
+        safeTxt(e.status),
+        (e.tags || []).map(t => safeTxt(t)).join('; '),
       ].join(','))
     ].join('\n');
 
@@ -1334,7 +1343,7 @@ export const ComprehensiveClinicalTimeline: React.FC<ComprehensiveClinicalTimeli
                           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1">
                             <div className="flex items-center space-x-2 flex-wrap">
                               <h4 className="text-sm font-semibold text-gray-900 leading-tight">
-                                {event.title}
+                                {safeTxt(event.title)}
                               </h4>
                               {getSeverityIcon(event.severity)}
                               <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${meta.bgColor} ${meta.textColor}`}>
@@ -1342,7 +1351,7 @@ export const ComprehensiveClinicalTimeline: React.FC<ComprehensiveClinicalTimeli
                               </span>
                               {event.status && (
                                 <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
-                                  {event.status}
+                                  {safeTxt(event.status)}
                                 </span>
                               )}
                             </div>
@@ -1353,28 +1362,28 @@ export const ComprehensiveClinicalTimeline: React.FC<ComprehensiveClinicalTimeli
                           </div>
 
                           {event.subtitle && (
-                            <p className="text-xs text-gray-500 mt-0.5">{event.subtitle}</p>
+                            <p className="text-xs text-gray-500 mt-0.5">{safeTxt(event.subtitle)}</p>
                           )}
 
                           <p className="text-sm text-gray-700 mt-1 leading-relaxed">
-                            {event.description}
+                            {safeTxt(event.description)}
                           </p>
 
                           <div className="flex items-center flex-wrap gap-2 mt-2">
                             {event.author && (
                               <div className="flex items-center space-x-1 text-xs text-gray-500">
                                 <User className="h-3 w-3" />
-                                <span>{event.author}</span>
+                                <span>{safeTxt(event.author)}</span>
                                 {event.authorRole && (
                                   <span className="px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">
-                                    {event.authorRole}
+                                    {safeTxt(event.authorRole)}
                                   </span>
                                 )}
                               </div>
                             )}
                             {(event.tags || []).map(tag => (
                               <span key={tag} className="px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded text-xs">
-                                {tag}
+                                {safeTxt(tag)}
                               </span>
                             ))}
                             {event.details && (
@@ -1444,29 +1453,29 @@ function renderEventDetails(event: TimelineEvent): React.ReactNode {
               </div>
             </div>
           )}
-          {d.lmp && <div><span className="font-medium text-gray-700">LMP:</span> <span className="text-gray-600">{d.lmp}</span></div>}
+          {d.lmp && <div><span className="font-medium text-gray-700">LMP:</span> <span className="text-gray-600">{safeTxt(d.lmp)}</span></div>}
           {d.subjective && (
             <div>
               <span className="font-semibold text-purple-700">S — Subjective:</span>
-              <p className="text-gray-700 mt-0.5 whitespace-pre-wrap">{d.subjective}</p>
+              <p className="text-gray-700 mt-0.5 whitespace-pre-wrap">{safeTxt(d.subjective)}</p>
             </div>
           )}
           {d.objective && (
             <div>
               <span className="font-semibold text-purple-700">O — Objective:</span>
-              <p className="text-gray-700 mt-0.5 whitespace-pre-wrap">{d.objective}</p>
+              <p className="text-gray-700 mt-0.5 whitespace-pre-wrap">{safeTxt(d.objective)}</p>
             </div>
           )}
           {d.assessment && (
             <div>
               <span className="font-semibold text-purple-700">A — Assessment:</span>
-              <p className="text-gray-700 mt-0.5 whitespace-pre-wrap">{d.assessment}</p>
+              <p className="text-gray-700 mt-0.5 whitespace-pre-wrap">{safeTxt(d.assessment)}</p>
             </div>
           )}
           {d.plan && (
             <div>
               <span className="font-semibold text-purple-700">P — Plan:</span>
-              <p className="text-gray-700 mt-0.5 whitespace-pre-wrap">{d.plan}</p>
+              <p className="text-gray-700 mt-0.5 whitespace-pre-wrap">{safeTxt(d.plan)}</p>
             </div>
           )}
         </div>
@@ -1489,8 +1498,8 @@ function renderEventDetails(event: TimelineEvent): React.ReactNode {
           {d.airway && (
             <div>
               <span className="font-semibold text-gray-700">Airway Assessment:</span>
-              <span className="ml-1 text-gray-600">{d.airway}</span>
-              {d.mallampati_score && <span className="ml-2 text-gray-500">(Mallampati {d.mallampati_score})</span>}
+              <span className="ml-1 text-gray-600">{safeTxt(d.airway)}</span>
+              {d.mallampati_score && <span className="ml-2 text-gray-500">(Mallampati {safeTxt(d.mallampati_score)})</span>}
             </div>
           )}
           
@@ -1519,7 +1528,7 @@ function renderEventDetails(event: TimelineEvent): React.ReactNode {
           {d.preop_instructions && (
             <div className="bg-blue-50 rounded p-2">
               <span className="font-semibold text-blue-700">Pre-op Instructions:</span>
-              <p className="text-gray-700 mt-0.5 whitespace-pre-wrap">{d.preop_instructions}</p>
+              <p className="text-gray-700 mt-0.5 whitespace-pre-wrap">{safeTxt(d.preop_instructions)}</p>
             </div>
           )}
           
@@ -1527,7 +1536,7 @@ function renderEventDetails(event: TimelineEvent): React.ReactNode {
           {d.comprehensive_summary && (
             <div className="bg-green-50 rounded p-2">
               <span className="font-semibold text-green-700">Summary:</span>
-              <p className="text-gray-700 mt-0.5 whitespace-pre-wrap">{d.comprehensive_summary}</p>
+              <p className="text-gray-700 mt-0.5 whitespace-pre-wrap">{safeTxt(d.comprehensive_summary)}</p>
             </div>
           )}
         </div>
@@ -1587,7 +1596,7 @@ function renderEventDetails(event: TimelineEvent): React.ReactNode {
           {d.ai_interpretation && (
             <div>
               <span className="font-medium text-gray-700">AI Interpretation:</span>
-              <p className="text-gray-600 mt-0.5 bg-white/60 rounded p-2">{d.ai_interpretation}</p>
+              <p className="text-gray-600 mt-0.5 bg-white/60 rounded p-2">{safeTxt(d.ai_interpretation)}</p>
             </div>
           )}
         </div>
@@ -1780,7 +1789,7 @@ function DetailRow({ label, value }: { label: string; value?: string | null }) {
   return (
     <div>
       <span className="font-medium text-gray-700">{label}:</span>{' '}
-      <span className="text-gray-600">{value}</span>
+      <span className="text-gray-600">{safeTxt(value)}</span>
     </div>
   );
 }

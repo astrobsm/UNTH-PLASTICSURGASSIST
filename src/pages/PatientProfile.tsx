@@ -19,6 +19,7 @@ import { medicalTeamService, TeamMember } from '../services/medicalTeamService';
 import { logPatientAccess } from '../services/auditLoggingService';
 import { riskAssessmentService } from '../services/riskAssessmentService';
 import { useAuthStore } from '../store/authStore';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 
 export const PatientProfile: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -469,7 +470,9 @@ export const PatientProfile: React.FC = () => {
 
             {/* Tab Content */}
             <div className="min-h-96">
-              {renderTabContent()}
+              <ErrorBoundary>
+                {renderTabContent()}
+              </ErrorBoundary>
             </div>
           </div>
         </div>
