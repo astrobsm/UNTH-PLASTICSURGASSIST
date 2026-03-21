@@ -30,11 +30,13 @@ export interface ActionPlanItem {
   notes?: string;
 }
 
-// DVT Risk Assessment (Caprini Score for VTE Risk)
+// DVT Risk Assessment (Caprini Score for Adults / UK Guidelines for Pediatrics)
 export interface DVTRiskAssessment extends BaseRiskAssessment {
   assessment_type: 'dvt';
+  assessment_mode?: 'adult' | 'pediatric'; // auto-detected from patient DOB
+  patient_dob?: string; // stored for reference
   risk_factors: {
-    // 1 Point Risk Factors
+    // 1 Point Risk Factors (Adult Caprini)
     age_41_60: boolean;
     minor_surgery: boolean;
     bmi_over_25: boolean;
@@ -77,6 +79,30 @@ export interface DVTRiskAssessment extends BaseRiskAssessment {
     elective_arthroplasty: boolean;
     hip_pelvis_fracture: boolean;
     acute_spinal_injury: boolean;
+
+    // Pediatric Risk Factors (UK NICE / RCPCH VTE Guidelines)
+    ped_age_over_13?: boolean;
+    ped_central_venous_catheter?: boolean;
+    ped_immobility_reduced_mobility?: boolean;
+    ped_previous_vte?: boolean;
+    ped_family_history_vte?: boolean;
+    ped_active_malignancy?: boolean;
+    ped_chemotherapy?: boolean;
+    ped_significant_surgery?: boolean;
+    ped_lower_limb_surgery?: boolean;
+    ped_obesity?: boolean;
+    ped_dehydration?: boolean;
+    ped_acute_infection_sepsis?: boolean;
+    ped_inflammatory_condition?: boolean;
+    ped_nephrotic_syndrome?: boolean;
+    ped_sickle_cell_disease?: boolean;
+    ped_congenital_heart_disease?: boolean;
+    ped_inherited_thrombophilia?: boolean;
+    ped_oral_contraceptives?: boolean;
+    ped_prolonged_travel?: boolean;
+    ped_burns?: boolean;
+    ped_trauma?: boolean;
+    ped_critical_care_admission?: boolean;
   };
   clinical_signs: {
     localized_tenderness: boolean;
@@ -95,6 +121,36 @@ export interface DVTRiskAssessment extends BaseRiskAssessment {
     compression_stockings: boolean;
     sequential_compression_device: boolean;
   };
+  // Auto-generated prophylaxis recommendation
+  prophylaxis_recommendation?: DVTProphylaxisRecommendation;
+}
+
+// Prophylaxis Recommendation (auto-generated and saved)
+export interface DVTProphylaxisRecommendation {
+  id: string;
+  assessment_id: string;
+  patient_id: string;
+  mode: 'adult' | 'pediatric';
+  score: number;
+  risk_level: string;
+  guideline_used: string; // 'Caprini Score (2005)' or 'NICE/RCPCH UK Pediatric VTE Guidelines'
+  pharmacological: {
+    recommended: boolean;
+    drug: string;
+    dose: string;
+    frequency: string;
+    duration: string;
+    notes: string;
+  };
+  mechanical: {
+    recommended: boolean;
+    measures: string[];
+  };
+  monitoring: string[];
+  contraindication_check: string[];
+  special_considerations: string[];
+  generated_at: Date;
+  generated_by: string;
 }
 
 // Pressure Sore Risk Assessment (Braden Scale)
@@ -321,6 +377,306 @@ class RiskAssessmentService {
     
     return { score, riskLevel, interpretation };
   }
+
+  /**
+   * Calculate Pediatric DVT risk using UK NICE/RCPCH VTE Guidelines
+   * Reference: NICE NG89 and RCPCH Clinical Practice Guidelines for VTE in children
+   */
+  async calculatePediatricDVTRisk(assessment: Partial<DVTRiskAssessment>): Promise<{ score: number; riskLevel: string; interpretation: string }> {
+    const factors = assessment.risk_factors!;
+    let score = 0;
+
+    // High-risk factors (2 points each)
+    if (factors.ped_central_venous_catheter) score += 2;
+    if (factors.ped_previous_vte) score += 2;
+    if (factors.ped_active_malignancy) score += 2;
+    if (factors.ped_critical_care_admission) score += 2;
+    if (factors.ped_inherited_thrombophilia) score += 2;
+    if (factors.ped_nephrotic_syndrome) score += 2;
+
+    // Moderate-risk factors (1 point each)
+    if (factors.ped_age_over_13) score += 1;
+    if (factors.ped_immobility_reduced_mobility) score += 1;
+    if (factors.ped_family_history_vte) score += 1;
+    if (factors.ped_chemotherapy) score += 1;
+    if (factors.ped_significant_surgery) score += 1;
+    if (factors.ped_lower_limb_surgery) score += 1;
+    if (factors.ped_obesity) score += 1;
+    if (factors.ped_dehydration) score += 1;
+    if (factors.ped_acute_infection_sepsis) score += 1;
+    if (factors.ped_inflammatory_condition) score += 1;
+    if (factors.ped_sickle_cell_disease) score += 1;
+    if (factors.ped_congenital_heart_disease) score += 1;
+    if (factors.ped_oral_contraceptives) score += 1;
+    if (factors.ped_prolonged_travel) score += 1;
+    if (factors.ped_burns) score += 1;
+    if (factors.ped_trauma) score += 1;
+
+    let riskLevel: string;
+    let interpretation: string;
+
+    if (score >= 5) {
+      riskLevel = 'high';
+      interpretation = 'High pediatric VTE risk (Score ≥5). Pharmacological prophylaxis strongly recommended per NICE/RCPCH guidelines. Specialist hematology input advised.';
+    } else if (score >= 3) {
+      riskLevel = 'moderate';
+      interpretation = 'Moderate pediatric VTE risk (Score 3-4). Consider pharmacological prophylaxis. Mechanical prophylaxis recommended. Daily reassessment required.';
+    } else if (score >= 1) {
+      riskLevel = 'low';
+      interpretation = 'Low pediatric VTE risk (Score 1-2). Mechanical prophylaxis and early mobilization recommended. Pharmacological prophylaxis not routinely required.';
+    } else {
+      riskLevel = 'very_low';
+      interpretation = 'Very low pediatric VTE risk (Score 0). Encourage early mobilization and hydration. No specific VTE prophylaxis required.';
+    }
+
+    return { score, riskLevel, interpretation };
+  }
+
+  /**
+   * Generate auto prophylaxis recommendation based on score and age group
+   */
+  generateProphylaxisRecommendation(
+    assessmentId: string,
+    patientId: string,
+    mode: 'adult' | 'pediatric',
+    score: number,
+    riskLevel: string,
+    assessedBy: string
+  ): DVTProphylaxisRecommendation {
+    if (mode === 'pediatric') {
+      return this.generatePediatricProphylaxis(assessmentId, patientId, score, riskLevel, assessedBy);
+    }
+    return this.generateAdultProphylaxis(assessmentId, patientId, score, riskLevel, assessedBy);
+  }
+
+  private generateAdultProphylaxis(
+    assessmentId: string, patientId: string, score: number, riskLevel: string, assessedBy: string
+  ): DVTProphylaxisRecommendation {
+    const base: DVTProphylaxisRecommendation = {
+      id: `proph_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      assessment_id: assessmentId,
+      patient_id: patientId,
+      mode: 'adult',
+      score,
+      risk_level: riskLevel,
+      guideline_used: 'Caprini Score for VTE Risk Assessment (2005)',
+      pharmacological: { recommended: false, drug: '', dose: '', frequency: '', duration: '', notes: '' },
+      mechanical: { recommended: false, measures: [] },
+      monitoring: [],
+      contraindication_check: [
+        'Active or recent major bleeding',
+        'Severe thrombocytopenia (platelets < 50,000)',
+        'Coagulopathy (INR > 1.5)',
+        'Planned spinal/epidural procedure within 12h',
+        'Allergy to heparin or LMWH',
+        'History of HIT'
+      ],
+      special_considerations: [],
+      generated_at: new Date(),
+      generated_by: assessedBy
+    };
+
+    if (score >= 5) {
+      // High risk — Caprini ≥5
+      base.pharmacological = {
+        recommended: true,
+        drug: 'Enoxaparin (LMWH)',
+        dose: '40 mg SC once daily',
+        frequency: 'Once daily',
+        duration: 'Until fully mobile or discharge (consider extended 4-5 weeks for major surgery/malignancy)',
+        notes: 'Start 6-12 hours post-op if no contraindications. For Caprini ≥9: consider extended prophylaxis for 4-5 weeks post-discharge.'
+      };
+      base.mechanical = {
+        recommended: true,
+        measures: ['Intermittent Pneumatic Compression (IPC)', 'Graduated Compression Stockings (GCS 15-20 mmHg)']
+      };
+      base.monitoring = [
+        'Anti-Xa levels if renal impairment or extremes of body weight',
+        'Platelet count at baseline and day 5-7 (HIT screening)',
+        'Daily assessment for signs of DVT/PE',
+        'Hb/Hct if bleeding suspected'
+      ];
+      base.special_considerations = [
+        'For Caprini ≥9: high VTE risk (>40%). Consider IVC filter if anticoagulation contraindicated.',
+        'Start mechanical prophylaxis in OR and continue until fully mobile.',
+        'Ensure adequate hydration and encourage early ambulation.'
+      ];
+    } else if (score >= 3) {
+      // Moderate risk — Caprini 3-4
+      base.pharmacological = {
+        recommended: true,
+        drug: 'Enoxaparin (LMWH)',
+        dose: '40 mg SC once daily',
+        frequency: 'Once daily',
+        duration: 'Until fully mobile or discharge (typically 7-10 days)',
+        notes: 'Start 6-12 hours post-op. Alternative: Unfractionated Heparin 5000 units SC q8-12h.'
+      };
+      base.mechanical = {
+        recommended: true,
+        measures: ['Graduated Compression Stockings (GCS 15-20 mmHg)', 'Intermittent Pneumatic Compression (IPC)']
+      };
+      base.monitoring = [
+        'Daily clinical assessment for DVT symptoms',
+        'Platelet count at baseline and day 5-7',
+        'Monitor for bleeding complications'
+      ];
+    } else if (score >= 1) {
+      // Low risk — Caprini 1-2
+      base.pharmacological = {
+        recommended: false,
+        drug: 'Not routinely required',
+        dose: '-',
+        frequency: '-',
+        duration: '-',
+        notes: 'Pharmacological prophylaxis not routinely indicated for Caprini 1-2. Early mobilization is key.'
+      };
+      base.mechanical = {
+        recommended: true,
+        measures: ['Graduated Compression Stockings (GCS)', 'Sequential Compression Devices (SCD)']
+      };
+      base.monitoring = [
+        'Observe for VTE symptoms during hospital stay',
+        'Reassess if clinical status changes'
+      ];
+    } else {
+      // Very low risk — Caprini 0
+      base.pharmacological = {
+        recommended: false,
+        drug: 'No pharmacological prophylaxis needed',
+        dose: '-',
+        frequency: '-',
+        duration: '-',
+        notes: 'Very low VTE risk. No pharmacological or mechanical prophylaxis required routinely.'
+      };
+      base.mechanical = { recommended: false, measures: ['Early and frequent ambulation'] };
+      base.monitoring = ['Routine clinical observation'];
+    }
+
+    return base;
+  }
+
+  private generatePediatricProphylaxis(
+    assessmentId: string, patientId: string, score: number, riskLevel: string, assessedBy: string
+  ): DVTProphylaxisRecommendation {
+    const base: DVTProphylaxisRecommendation = {
+      id: `proph_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      assessment_id: assessmentId,
+      patient_id: patientId,
+      mode: 'pediatric',
+      score,
+      risk_level: riskLevel,
+      guideline_used: 'NICE NG89 / RCPCH UK Pediatric VTE Risk Assessment Guidelines',
+      pharmacological: { recommended: false, drug: '', dose: '', frequency: '', duration: '', notes: '' },
+      mechanical: { recommended: false, measures: [] },
+      monitoring: [],
+      contraindication_check: [
+        'Active bleeding or high bleeding risk',
+        'Severe thrombocytopenia (platelets < 50,000)',
+        'Coagulopathy',
+        'Recent CNS surgery or hemorrhagic stroke',
+        'Neonates: consider risk-benefit ratio carefully',
+        'Allergy to heparin or LMWH',
+        'Body weight < 5 kg (relative contraindication for LMWH)'
+      ],
+      special_considerations: [
+        'All pediatric VTE prophylaxis decisions should involve senior clinical review.',
+        'Weight-based dosing is essential in children.'
+      ],
+      generated_at: new Date(),
+      generated_by: assessedBy
+    };
+
+    if (score >= 5) {
+      // High risk pediatric
+      base.pharmacological = {
+        recommended: true,
+        drug: 'Enoxaparin (LMWH)',
+        dose: 'Age >2 months: 0.5 mg/kg SC once daily. Neonates/infants <2 months: 0.75 mg/kg SC once daily.',
+        frequency: 'Once daily',
+        duration: 'Until risk factors resolved or senior review (typically 7-14 days or until mobile)',
+        notes: 'NICE/RCPCH recommends pharmacological prophylaxis for high-risk pediatric patients. Consult pediatric hematology. Monitor anti-Xa levels. Adjust dose for renal impairment.'
+      };
+      base.mechanical = {
+        recommended: true,
+        measures: [
+          'Anti-embolism stockings (if age-appropriate size available)',
+          'Intermittent Pneumatic Compression (if appropriate for child size)',
+          'Early mobilization and encourage movement'
+        ]
+      };
+      base.monitoring = [
+        'Anti-Xa levels 4 hours post 2nd or 3rd dose (target prophylactic: 0.2-0.4 IU/mL)',
+        'Platelet count at baseline and day 5-7',
+        'Daily assessment for VTE symptoms',
+        'Renal function monitoring',
+        'Weight-based dose recalculation if weight changes'
+      ];
+      base.special_considerations = [
+        'Pediatric hematology consultation recommended for high-risk patients.',
+        'Central venous catheter-related thrombosis: consider catheter removal vs anticoagulation.',
+        'For post-pubertal females on OCP: consider temporary discontinuation.',
+        'Ensure adequate hydration.'
+      ];
+    } else if (score >= 3) {
+      // Moderate risk pediatric
+      base.pharmacological = {
+        recommended: true,
+        drug: 'Enoxaparin (LMWH)',
+        dose: 'Age >2 months: 0.5 mg/kg SC once daily. Neonates/infants < 2 months: 0.75 mg/kg SC once daily.',
+        frequency: 'Once daily',
+        duration: 'Until risk factors resolved or discharge (typically 5-7 days)',
+        notes: 'Consider pharmacological prophylaxis per NICE NG89. Discuss with senior clinician. Weekly reassessment.'
+      };
+      base.mechanical = {
+        recommended: true,
+        measures: [
+          'Anti-embolism stockings (age/size appropriate)',
+          'Early mobilization',
+          'Adequate oral/IV hydration'
+        ]
+      };
+      base.monitoring = [
+        'Daily clinical assessment for DVT/PE symptoms',
+        'Anti-Xa levels if pharmacological prophylaxis started',
+        'Platelet count monitoring'
+      ];
+      base.special_considerations = [
+        'Reassess daily — step down prophylaxis if risk factors resolve.',
+        'Weight-based dosing essential. Recalculate if weight changes.',
+        'Consider underlying thrombophilia screening if strong family history.'
+      ];
+    } else if (score >= 1) {
+      // Low risk pediatric
+      base.pharmacological = {
+        recommended: false,
+        drug: 'Not routinely required',
+        dose: '-',
+        frequency: '-',
+        duration: '-',
+        notes: 'Pharmacological prophylaxis not routinely recommended for low-risk pediatric patients. Focus on non-pharmacological measures.'
+      };
+      base.mechanical = {
+        recommended: true,
+        measures: [
+          'Early mobilization and encourage play/activity',
+          'Adequate hydration (oral preferred)',
+          'Anti-embolism stockings if immobility expected > 48 hours (size permitting)'
+        ]
+      };
+      base.monitoring = ['Reassess VTE risk if clinical condition changes', 'Standard clinical observations'];
+    } else {
+      // Very low risk pediatric
+      base.pharmacological = {
+        recommended: false, drug: 'No prophylaxis needed', dose: '-', frequency: '-', duration: '-',
+        notes: 'Very low VTE risk. Routine prophylaxis not indicated for pediatric patients at this risk level.'
+      };
+      base.mechanical = { recommended: false, measures: ['Encourage normal activity and adequate hydration'] };
+      base.monitoring = ['Routine clinical care'];
+    }
+
+    return base;
+  }
+
   
   /**
    * Calculate pressure sore risk using Braden Scale

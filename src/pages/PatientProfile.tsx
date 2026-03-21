@@ -218,7 +218,7 @@ export const PatientProfile: React.FC = () => {
         return <PatientSummaryView patientId={id!} />;
       
       case 'risk-assessment':
-        return <RiskAssessmentView patientId={id!} hospitalNumber={patient?.hospital_number || id!} />;
+        return <RiskAssessmentView patientId={id!} hospitalNumber={patient?.hospital_number || id!} patientDob={patient?.dob || patient?.date_of_birth} />;
       
       case 'transfer':
         return (
@@ -605,7 +605,7 @@ export const PatientProfile: React.FC = () => {
 };
 
 // Helper Components
-const RiskAssessmentView: React.FC<{ patientId: string; hospitalNumber: string }> = ({ patientId, hospitalNumber }) => {
+const RiskAssessmentView: React.FC<{ patientId: string; hospitalNumber: string; patientDob?: string }> = ({ patientId, hospitalNumber, patientDob }) => {
   const [activeAssessment, setActiveAssessment] = useState<'summary' | 'dvt' | 'pressure' | 'nutrition'>('summary');
 
   const assessmentTabs = [
@@ -633,6 +633,7 @@ const RiskAssessmentView: React.FC<{ patientId: string; hospitalNumber: string }
           <DVTRiskAssessmentForm 
             patientId={patientId}
             hospitalNumber={hospitalNumber}
+            patientDob={patientDob}
             onSave={async (assessment) => {
               try {
                 await riskAssessmentService.saveDVTAssessment(assessment);

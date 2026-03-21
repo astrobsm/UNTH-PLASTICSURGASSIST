@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import { DVTRiskAssessment, riskAssessmentService, ActionPlanItem } from '../../services/riskAssessmentService';
+import React, { useState, useEffect, useMemo } from 'react';
+import { DVTRiskAssessment, DVTProphylaxisRecommendation, riskAssessmentService, ActionPlanItem } from '../../services/riskAssessmentService';
 import { patientActivityService } from '../../services/patientActivityService';
 import { useAuthStore } from '../../store/authStore';
-import { AlertTriangle, CheckCircle, Clock, User, Calendar, Activity } from 'lucide-react';
+import { isPediatric, calculateAge } from '../../utils/dateUtils';
+import { AlertTriangle, CheckCircle, Clock, User, Calendar, Activity, Baby, Shield, Eye, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface DVTRiskAssessmentProps {
   patientId: string;
   hospitalNumber: string;
+  patientDob?: string;
   existingAssessment?: DVTRiskAssessment;
   onSave?: (assessment: DVTRiskAssessment) => void;
   onCancel?: () => void;
@@ -16,20 +18,32 @@ interface DVTRiskAssessmentProps {
 export const DVTRiskAssessmentForm: React.FC<DVTRiskAssessmentProps> = ({
   patientId,
   hospitalNumber,
+  patientDob,
   existingAssessment,
   onSave,
   onCancel,
   readOnly = false
 }) => {
   const { user } = useAuthStore();
+  
+  // Auto-detect assessment mode based on patient DOB
+  const assessmentMode = useMemo<'adult' | 'pediatric'>(() => {
+    if (existingAssessment?.assessment_mode) return existingAssessment.assessment_mode;
+    return isPediatric(patientDob) ? 'pediatric' : 'adult';
+  }, [patientDob, existingAssessment]);
+
+  const patientAge = useMemo(() => calculateAge(patientDob), [patientDob]);
+
   const [assessment, setAssessment] = useState<Partial<DVTRiskAssessment>>({
     patient_id: patientId,
     assessment_type: 'dvt',
+    assessment_mode: assessmentMode,
+    patient_dob: patientDob,
     assessment_date: new Date(),
     assessed_by: user?.name || 'Current User',
     status: 'active',
     risk_factors: {
-      // 1 Point Risk Factors
+      // 1 Point Risk Factors (Adult - Caprini)
       age_41_60: false,
       minor_surgery: false,
       bmi_over_25: false,
@@ -45,7 +59,7 @@ export const DVTRiskAssessmentForm: React.FC<DVTRiskAssessmentProps> = ({
       inflammatory_bowel: false,
       medical_patient_bedrest: false,
       
-      // 2 Point Risk Factors
+      // 2 Point Risk Factors (Adult)
       age_61_74: false,
       arthroscopic_surgery: false,
       malignancy: false,
@@ -55,7 +69,7 @@ export const DVTRiskAssessmentForm: React.FC<DVTRiskAssessmentProps> = ({
       immobilizing_cast: false,
       central_venous_access: false,
       
-      // 3 Point Risk Factors
+      // 3 Point Risk Factors (Adult)
       age_over_75: false,
       personal_history_vte: false,
       family_history_vte: false,
@@ -67,11 +81,35 @@ export const DVTRiskAssessmentForm: React.FC<DVTRiskAssessmentProps> = ({
       heparin_thrombocytopenia: false,
       other_thrombophilia: false,
       
-      // 5 Point Risk Factors
+      // 5 Point Risk Factors (Adult)
       stroke_1month: false,
       elective_arthroplasty: false,
       hip_pelvis_fracture: false,
-      acute_spinal_injury: false
+      acute_spinal_injury: false,
+
+      // Pediatric Risk Factors (UK NICE/RCPCH)
+      ped_age_over_13: false,
+      ped_central_venous_catheter: false,
+      ped_immobility_reduced_mobility: false,
+      ped_previous_vte: false,
+      ped_family_history_vte: false,
+      ped_active_malignancy: false,
+      ped_chemotherapy: false,
+      ped_significant_surgery: false,
+      ped_lower_limb_surgery: false,
+      ped_obesity: false,
+      ped_dehydration: false,
+      ped_acute_infection_sepsis: false,
+      ped_inflammatory_condition: false,
+      ped_nephrotic_syndrome: false,
+      ped_sickle_cell_disease: false,
+      ped_congenital_heart_disease: false,
+      ped_inherited_thrombophilia: false,
+      ped_oral_contraceptives: false,
+      ped_prolonged_travel: false,
+      ped_burns: false,
+      ped_trauma: false,
+      ped_critical_care_admission: false
     },
     clinical_signs: {
       localized_tenderness: false,
@@ -100,6 +138,8 @@ export const DVTRiskAssessmentForm: React.FC<DVTRiskAssessmentProps> = ({
 
   const [aiRecommendations, setAiRecommendations] = useState<string[]>([]);
   const [actionPlan, setActionPlan] = useState<ActionPlanItem[]>([]);
+  const [prophylaxisRecommendation, setProphylaxisRecommendation] = useState<DVTProphylaxisRecommendation | null>(null);
+  const [showProphylaxisDetails, setShowProphylaxisDetails] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -112,6 +152,9 @@ export const DVTRiskAssessmentForm: React.FC<DVTRiskAssessmentProps> = ({
       });
       setAiRecommendations(existingAssessment.ai_recommendations || []);
       setActionPlan(existingAssessment.action_plan || []);
+      if (existingAssessment.prophylaxis_recommendation) {
+        setProphylaxisRecommendation(existingAssessment.prophylaxis_recommendation);
+      }
     }
   }, [existingAssessment]);
 
@@ -119,12 +162,31 @@ export const DVTRiskAssessmentForm: React.FC<DVTRiskAssessmentProps> = ({
     if (assessment.risk_factors) {
       calculateRisk();
     }
-  }, [assessment.risk_factors]);
+  }, [assessment.risk_factors, assessmentMode]);
 
   const calculateRisk = async () => {
     try {
-      const riskData = await riskAssessmentService.calculateDVTRisk(assessment);
+      let riskData: { score: number; riskLevel: string; interpretation: string };
+      
+      if (assessmentMode === 'pediatric') {
+        riskData = await riskAssessmentService.calculatePediatricDVTRisk(assessment);
+      } else {
+        riskData = await riskAssessmentService.calculateDVTRisk(assessment);
+      }
+      
       setCalculatedRisk(riskData);
+
+      // Auto-generate prophylaxis recommendation
+      const assessmentId = assessment.id || riskAssessmentService.generateAssessmentId();
+      const prophylaxis = riskAssessmentService.generateProphylaxisRecommendation(
+        assessmentId,
+        patientId,
+        assessmentMode,
+        riskData.score,
+        riskData.riskLevel,
+        user?.name || 'Current User'
+      );
+      setProphylaxisRecommendation(prophylaxis);
       
       // Generate AI recommendations
       const aiAnalysis = await riskAssessmentService.generateAIRecommendations(
@@ -149,7 +211,7 @@ export const DVTRiskAssessmentForm: React.FC<DVTRiskAssessmentProps> = ({
           description: action,
           priority: 'high' as const,
           assigned_to: 'Medical Team',
-          due_date: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+          due_date: new Date(Date.now() + 24 * 60 * 60 * 1000),
           status: 'pending' as const
         }))
       ];
@@ -199,11 +261,14 @@ export const DVTRiskAssessmentForm: React.FC<DVTRiskAssessmentProps> = ({
       const completeAssessment: DVTRiskAssessment = {
         ...assessment,
         id: assessment.id || riskAssessmentService.generateAssessmentId(),
+        assessment_mode: assessmentMode,
+        patient_dob: patientDob,
         score: calculatedRisk.score,
         risk_level: calculatedRisk.riskLevel as 'low' | 'moderate' | 'high' | 'very_high',
         ai_recommendations: aiRecommendations,
         action_plan: actionPlan,
-        next_assessment_due: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+        prophylaxis_recommendation: prophylaxisRecommendation || undefined,
+        next_assessment_due: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         created_at: assessment.created_at || new Date(),
         updated_at: new Date()
       } as DVTRiskAssessment;
@@ -300,6 +365,44 @@ export const DVTRiskAssessmentForm: React.FC<DVTRiskAssessmentProps> = ({
     }
   };
 
+  // Pediatric Risk Factor Categories (UK NICE/RCPCH Guidelines)
+  const pediatricCategories = {
+    highRisk: {
+      title: 'High-Risk Factors (2 Points Each)',
+      color: 'red',
+      factors: [
+        { key: 'ped_central_venous_catheter', label: 'Central venous catheter in situ' },
+        { key: 'ped_previous_vte', label: 'Previous VTE' },
+        { key: 'ped_active_malignancy', label: 'Active malignancy' },
+        { key: 'ped_critical_care_admission', label: 'Critical care / ICU / HDU admission' },
+        { key: 'ped_inherited_thrombophilia', label: 'Known inherited thrombophilia' },
+        { key: 'ped_nephrotic_syndrome', label: 'Nephrotic syndrome' }
+      ]
+    },
+    moderateRisk: {
+      title: 'Moderate-Risk Factors (1 Point Each)',
+      color: 'yellow',
+      factors: [
+        { key: 'ped_age_over_13', label: 'Age > 13 years (pubertal/post-pubertal)' },
+        { key: 'ped_immobility_reduced_mobility', label: 'Immobility / significantly reduced mobility' },
+        { key: 'ped_family_history_vte', label: 'First-degree family history of VTE' },
+        { key: 'ped_chemotherapy', label: 'Receiving chemotherapy' },
+        { key: 'ped_significant_surgery', label: 'Significant surgery (>45 min or complex)' },
+        { key: 'ped_lower_limb_surgery', label: 'Lower limb surgery / orthopaedic procedure' },
+        { key: 'ped_obesity', label: 'Obesity (BMI > 95th centile for age)' },
+        { key: 'ped_dehydration', label: 'Dehydration' },
+        { key: 'ped_acute_infection_sepsis', label: 'Acute infection / sepsis' },
+        { key: 'ped_inflammatory_condition', label: 'Active inflammatory condition (e.g., IBD, SLE)' },
+        { key: 'ped_sickle_cell_disease', label: 'Sickle cell disease' },
+        { key: 'ped_congenital_heart_disease', label: 'Congenital heart disease' },
+        { key: 'ped_oral_contraceptives', label: 'Oral contraceptive pill / estrogen therapy' },
+        { key: 'ped_prolonged_travel', label: 'Prolonged travel (>4 hours)' },
+        { key: 'ped_burns', label: 'Burns' },
+        { key: 'ped_trauma', label: 'Significant trauma' }
+      ]
+    }
+  };
+
   const clinicalSignLabels = {
     localized_tenderness: 'Localized tenderness along deep venous system',
     swelling: 'Leg swelling',
@@ -324,8 +427,25 @@ export const DVTRiskAssessmentForm: React.FC<DVTRiskAssessmentProps> = ({
       <div className="px-3 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <Activity className="h-6 w-6 text-red-600" />
-            <h2 className="text-xl font-semibold text-gray-900">DVT Risk Assessment</h2>
+            {assessmentMode === 'pediatric' ? (
+              <Baby className="h-6 w-6 text-purple-600" />
+            ) : (
+              <Activity className="h-6 w-6 text-red-600" />
+            )}
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900">DVT Risk Assessment</h2>
+              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium mt-1 ${
+                assessmentMode === 'pediatric' 
+                  ? 'bg-purple-100 text-purple-800' 
+                  : 'bg-blue-100 text-blue-800'
+              }`}>
+                {assessmentMode === 'pediatric' ? (
+                  <><Baby className="h-3 w-3 mr-1" /> Pediatric — UK NICE/RCPCH Guidelines</>
+                ) : (
+                  <><Shield className="h-3 w-3 mr-1" /> Adult — Caprini Score (2005)</>
+                )}
+              </span>
+            </div>
           </div>
           {calculatedRisk && (
             <div className={`px-3 py-1 rounded-full text-sm font-medium ${getRiskColor(calculatedRisk.riskLevel)}`}>
@@ -334,11 +454,17 @@ export const DVTRiskAssessmentForm: React.FC<DVTRiskAssessmentProps> = ({
           )}
         </div>
         
-        <div className="mt-2 flex items-center space-x-6 text-sm text-gray-500">
+        <div className="mt-2 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm text-gray-500">
           <span className="flex items-center">
             <User className="h-4 w-4 mr-1" />
             Patient ID: {patientId}
           </span>
+          {patientAge !== null && (
+            <span className="flex items-center">
+              <User className="h-4 w-4 mr-1" />
+              Age: {patientAge} years {assessmentMode === 'pediatric' ? '(Pediatric)' : '(Adult)'}
+            </span>
+          )}
           <span className="flex items-center">
             <Calendar className="h-4 w-4 mr-1" />
             {new Date(assessment.assessment_date!).toLocaleDateString()}
@@ -351,8 +477,61 @@ export const DVTRiskAssessmentForm: React.FC<DVTRiskAssessmentProps> = ({
       </div>
 
       <div className="p-6 space-y-8">
-        
-        {/* Caprini Score Risk Factors */}
+
+        {/* === PEDIATRIC FORM (UK NICE/RCPCH Guidelines) === */}
+        {assessmentMode === 'pediatric' && (
+          <div>
+            <h3 className="text-lg font-semibold text-purple-900 mb-2">Pediatric VTE Risk Assessment</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Based on UK NICE NG89 and RCPCH guidelines for VTE risk assessment in children and young people (&lt;18 years).
+            </p>
+
+            {/* High-Risk Factors (2 points each) */}
+            <div className="mb-6">
+              <h4 className="text-sm font-semibold text-red-700 mb-2 bg-red-50 px-3 py-2 rounded">
+                {pediatricCategories.highRisk.title}
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {pediatricCategories.highRisk.factors.map((factor) => (
+                  <label key={factor.key} className="flex items-center space-x-3 p-2 bg-gray-50 rounded hover:bg-gray-100 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={assessment.risk_factors?.[factor.key as keyof DVTRiskAssessment['risk_factors']] || false}
+                      onChange={(e) => handleRiskFactorChange(factor.key as keyof DVTRiskAssessment['risk_factors'], e.target.checked)}
+                      disabled={readOnly}
+                      className="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded"
+                    />
+                    <span className="text-sm text-gray-700">{factor.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Moderate-Risk Factors (1 point each) */}
+            <div className="mb-6">
+              <h4 className="text-sm font-semibold text-yellow-700 mb-2 bg-yellow-50 px-3 py-2 rounded">
+                {pediatricCategories.moderateRisk.title}
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {pediatricCategories.moderateRisk.factors.map((factor) => (
+                  <label key={factor.key} className="flex items-center space-x-3 p-2 bg-gray-50 rounded hover:bg-gray-100 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={assessment.risk_factors?.[factor.key as keyof DVTRiskAssessment['risk_factors']] || false}
+                      onChange={(e) => handleRiskFactorChange(factor.key as keyof DVTRiskAssessment['risk_factors'], e.target.checked)}
+                      disabled={readOnly}
+                      className="h-4 w-4 text-yellow-600 focus:ring-yellow-500 border-gray-300 rounded"
+                    />
+                    <span className="text-sm text-gray-700">{factor.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* === ADULT FORM (Caprini Score) === */}
+        {assessmentMode === 'adult' && (
         <div>
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Caprini DVT Risk Assessment (Surgical Patients)</h3>
           <p className="text-sm text-gray-600 mb-4">Select all risk factors that apply to calculate the Caprini score for VTE prophylaxis.</p>
@@ -433,6 +612,7 @@ export const DVTRiskAssessmentForm: React.FC<DVTRiskAssessmentProps> = ({
             </div>
           </div>
         </div>
+        )}
 
         {/* Clinical Signs */}
         <div>
@@ -478,7 +658,9 @@ export const DVTRiskAssessmentForm: React.FC<DVTRiskAssessmentProps> = ({
             <h3 className="text-lg font-semibold text-blue-900 mb-3">Risk Assessment Results</h3>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-blue-800">Wells Score:</span>
+                <span className="text-blue-800">
+                  {assessmentMode === 'pediatric' ? 'Pediatric VTE Score:' : 'Caprini Score:'}
+                </span>
                 <span className="font-semibold text-blue-900">{calculatedRisk.score}</span>
               </div>
               <div className="flex items-center justify-between">
@@ -487,10 +669,175 @@ export const DVTRiskAssessmentForm: React.FC<DVTRiskAssessmentProps> = ({
                   {calculatedRisk.riskLevel.toUpperCase()}
                 </span>
               </div>
+              <div className="flex items-center justify-between">
+                <span className="text-blue-800">Guidelines:</span>
+                <span className="text-sm text-blue-700">
+                  {assessmentMode === 'pediatric' ? 'NICE NG89 / RCPCH' : 'Caprini Score (2005)'}
+                </span>
+              </div>
               <div className="mt-3 p-3 bg-white rounded border">
                 <p className="text-sm text-gray-700">{calculatedRisk.interpretation}</p>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* DVT Prophylaxis Recommendation (Auto-Generated) */}
+        {prophylaxisRecommendation && (
+          <div className={`border rounded-lg p-6 ${
+            prophylaxisRecommendation.pharmacological.recommended 
+              ? 'bg-red-50 border-red-200' 
+              : 'bg-green-50 border-green-200'
+          }`}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className={`text-lg font-semibold flex items-center ${
+                prophylaxisRecommendation.pharmacological.recommended ? 'text-red-900' : 'text-green-900'
+              }`}>
+                <Shield className="h-5 w-5 mr-2" />
+                DVT Prophylaxis Recommendation
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowProphylaxisDetails(!showProphylaxisDetails)}
+                className="flex items-center text-sm text-blue-600 hover:text-blue-800"
+              >
+                <Eye className="h-4 w-4 mr-1" />
+                {showProphylaxisDetails ? 'Hide Details' : 'Preview Details'}
+                {showProphylaxisDetails ? <ChevronUp className="h-4 w-4 ml-1" /> : <ChevronDown className="h-4 w-4 ml-1" />}
+              </button>
+            </div>
+
+            {/* Summary Row */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+              <div className="bg-white rounded p-2 text-center border">
+                <div className="text-xs text-gray-500">Mode</div>
+                <div className="text-sm font-medium capitalize">{prophylaxisRecommendation.mode}</div>
+              </div>
+              <div className="bg-white rounded p-2 text-center border">
+                <div className="text-xs text-gray-500">Score</div>
+                <div className="text-sm font-medium">{prophylaxisRecommendation.score}</div>
+              </div>
+              <div className="bg-white rounded p-2 text-center border">
+                <div className="text-xs text-gray-500">Risk Level</div>
+                <div className={`text-sm font-medium ${getRiskColor(prophylaxisRecommendation.risk_level).split(' ')[0]}`}>
+                  {prophylaxisRecommendation.risk_level.toUpperCase()}
+                </div>
+              </div>
+              <div className="bg-white rounded p-2 text-center border">
+                <div className="text-xs text-gray-500">Guideline</div>
+                <div className="text-xs font-medium">{prophylaxisRecommendation.mode === 'pediatric' ? 'NICE/RCPCH' : 'Caprini'}</div>
+              </div>
+            </div>
+
+            {/* Pharmacological Prophylaxis */}
+            <div className="bg-white rounded-lg border p-4 mb-3">
+              <h4 className="text-sm font-semibold text-gray-800 mb-2 flex items-center">
+                💊 Pharmacological Prophylaxis
+                <span className={`ml-2 px-2 py-0.5 rounded-full text-xs ${
+                  prophylaxisRecommendation.pharmacological.recommended 
+                    ? 'bg-red-100 text-red-700' 
+                    : 'bg-gray-100 text-gray-600'
+                }`}>
+                  {prophylaxisRecommendation.pharmacological.recommended ? 'RECOMMENDED' : 'Not Required'}
+                </span>
+              </h4>
+              {prophylaxisRecommendation.pharmacological.recommended && (
+                <div className="space-y-1 text-sm">
+                  <div><span className="font-medium text-gray-700">Drug:</span> {prophylaxisRecommendation.pharmacological.drug}</div>
+                  <div><span className="font-medium text-gray-700">Dose:</span> {prophylaxisRecommendation.pharmacological.dose}</div>
+                  <div><span className="font-medium text-gray-700">Frequency:</span> {prophylaxisRecommendation.pharmacological.frequency}</div>
+                  <div><span className="font-medium text-gray-700">Duration:</span> {prophylaxisRecommendation.pharmacological.duration}</div>
+                  {prophylaxisRecommendation.pharmacological.notes && (
+                    <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
+                      <strong>Note:</strong> {prophylaxisRecommendation.pharmacological.notes}
+                    </div>
+                  )}
+                </div>
+              )}
+              {!prophylaxisRecommendation.pharmacological.recommended && (
+                <p className="text-sm text-gray-600">{prophylaxisRecommendation.pharmacological.notes}</p>
+              )}
+            </div>
+
+            {/* Mechanical Prophylaxis */}
+            <div className="bg-white rounded-lg border p-4 mb-3">
+              <h4 className="text-sm font-semibold text-gray-800 mb-2 flex items-center">
+                🦵 Mechanical Prophylaxis
+                <span className={`ml-2 px-2 py-0.5 rounded-full text-xs ${
+                  prophylaxisRecommendation.mechanical.recommended 
+                    ? 'bg-blue-100 text-blue-700' 
+                    : 'bg-gray-100 text-gray-600'
+                }`}>
+                  {prophylaxisRecommendation.mechanical.recommended ? 'RECOMMENDED' : 'Not Required'}
+                </span>
+              </h4>
+              <ul className="space-y-1">
+                {prophylaxisRecommendation.mechanical.measures.map((measure, i) => (
+                  <li key={i} className="flex items-start text-sm">
+                    <span className="text-blue-500 mr-2 mt-0.5">•</span>
+                    <span className="text-gray-700">{measure}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Expanded Details */}
+            {showProphylaxisDetails && (
+              <div className="space-y-3 mt-3">
+                {/* Monitoring */}
+                {prophylaxisRecommendation.monitoring.length > 0 && (
+                  <div className="bg-white rounded-lg border p-4">
+                    <h4 className="text-sm font-semibold text-gray-800 mb-2">📋 Monitoring Requirements</h4>
+                    <ul className="space-y-1">
+                      {prophylaxisRecommendation.monitoring.map((item, i) => (
+                        <li key={i} className="flex items-start text-sm">
+                          <span className="text-green-500 mr-2 mt-0.5">✓</span>
+                          <span className="text-gray-700">{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Contraindication Check */}
+                {prophylaxisRecommendation.contraindication_check.length > 0 && (
+                  <div className="bg-white rounded-lg border border-red-200 p-4">
+                    <h4 className="text-sm font-semibold text-red-800 mb-2">⚠️ Contraindication Checklist</h4>
+                    <p className="text-xs text-red-600 mb-2">Review and exclude the following before commencing prophylaxis:</p>
+                    <ul className="space-y-1">
+                      {prophylaxisRecommendation.contraindication_check.map((item, i) => (
+                        <li key={i} className="flex items-start text-sm">
+                          <span className="text-red-500 mr-2 mt-0.5">✗</span>
+                          <span className="text-gray-700">{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Special Considerations */}
+                {prophylaxisRecommendation.special_considerations.length > 0 && (
+                  <div className="bg-white rounded-lg border border-purple-200 p-4">
+                    <h4 className="text-sm font-semibold text-purple-800 mb-2">🔍 Special Considerations</h4>
+                    <ul className="space-y-1">
+                      {prophylaxisRecommendation.special_considerations.map((item, i) => (
+                        <li key={i} className="flex items-start text-sm">
+                          <span className="text-purple-500 mr-2 mt-0.5">•</span>
+                          <span className="text-gray-700">{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Meta info */}
+                <div className="text-xs text-gray-400 text-right">
+                  Generated by: {prophylaxisRecommendation.generated_by} | 
+                  Guideline: {prophylaxisRecommendation.guideline_used} | 
+                  {new Date(prophylaxisRecommendation.generated_at).toLocaleString()}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

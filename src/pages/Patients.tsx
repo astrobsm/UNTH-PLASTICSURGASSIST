@@ -844,7 +844,7 @@ export const Patients: React.FC = () => {
                                 key={action.name}
                                 onClick={() => {
                                   setActionDropdownPatientId(null);
-                                  navigate(`${action.href}?patient=${patient.id}`);
+                                  navigate(`/patient-action?action=${encodeURIComponent(action.href.replace('/', ''))}&patient=${patient.id}&name=${encodeURIComponent(action.name)}`);
                                 }}
                                 className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-gray-700 hover:bg-sky-50 hover:text-navy-900 rounded-lg transition-colors"
                               >
