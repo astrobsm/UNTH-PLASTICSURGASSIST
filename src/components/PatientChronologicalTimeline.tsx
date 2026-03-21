@@ -299,7 +299,36 @@ export function PatientChronologicalTimeline({ patientId, hospitalNumber }: Pati
               { label: 'Risk Level', value: d.risk_level || 'Unknown' },
               { label: 'Score', value: String(d.score ?? 'N/A') },
               ...(dv.prophylaxis ? [{ label: 'Prophylaxis', value: dv.prophylaxis }] : []),
-              ...(dv.risk_factors ? [{ label: 'Risk Factors', value: Array.isArray(dv.risk_factors) ? dv.risk_factors.join(', ') : dv.risk_factors }] : []),
+              ...(dv.risk_factors ? [{ label: 'Risk Factors', value: (() => {
+                if (typeof dv.risk_factors === 'string') return dv.risk_factors;
+                if (Array.isArray(dv.risk_factors)) return dv.risk_factors.join(', ');
+                if (typeof dv.risk_factors === 'object' && dv.risk_factors !== null) {
+                  const labels: Record<string, string> = {
+                    age_41_60: 'Age 41-60', age_61_74: 'Age 61-74', age_over_75: 'Age >75',
+                    minor_surgery: 'Minor Surgery', bmi_over_25: 'BMI >25', swollen_legs: 'Swollen Legs',
+                    varicose_veins: 'Varicose Veins', pregnancy_postpartum: 'Pregnancy/Postpartum',
+                    oral_contraceptives: 'OCP/HRT', sepsis_1month: 'Sepsis <1 month',
+                    serious_lung_disease: 'Serious Lung Disease', abnormal_pulmonary: 'Abnormal Pulmonary',
+                    acute_mi: 'Acute MI', chf_1month: 'CHF <1 month',
+                    inflammatory_bowel: 'IBD', medical_patient_bedrest: 'Medical Patient on Bed Rest',
+                    arthroscopic_surgery: 'Arthroscopic Surgery', malignancy: 'Malignancy',
+                    major_surgery_45min: 'Major Surgery >45min', laparoscopic_45min: 'Laparoscopic >45min',
+                    patient_confined_bed: 'Confined to Bed', immobilizing_cast: 'Immobilizing Cast',
+                    central_venous_access: 'Central Venous Access', personal_history_vte: 'Previous VTE',
+                    family_history_vte: 'Family History VTE', factor_v_leiden: 'Factor V Leiden',
+                    prothrombin_mutation: 'Prothrombin Mutation', elevated_homocysteine: 'Elevated Homocysteine',
+                    lupus_anticoagulant: 'Lupus Anticoagulant', anticardiolipin_antibodies: 'Anticardiolipin Antibodies',
+                    heparin_thrombocytopenia: 'HIT', other_thrombophilia: 'Other Thrombophilia',
+                    stroke_1month: 'Stroke <1 month', elective_arthroplasty: 'Elective Arthroplasty',
+                    hip_pelvis_fracture: 'Hip/Pelvis Fracture', acute_spinal_injury: 'Acute Spinal Cord Injury',
+                  };
+                  return Object.entries(dv.risk_factors)
+                    .filter(([, v]) => v === true)
+                    .map(([k]) => labels[k] || k.replace(/_/g, ' '))
+                    .join(', ') || 'None identified';
+                }
+                return String(dv.risk_factors);
+              })() }] : []),
               ...(dv.recommendations ? [{ label: 'Recommendations', value: dv.recommendations }] : []),
             ].filter(d => d.value && d.value !== 'N/A'),
           });
@@ -570,19 +599,22 @@ function TimelineCard({
           <div className="border-t border-gray-100 bg-gray-50 px-3 py-2 rounded-b-lg">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
               {event.details!.map((detail, idx) => {
-                const isLongText = detail.value.length > 80;
+                const safeValue = typeof detail.value === 'object' && detail.value !== null
+                  ? JSON.stringify(detail.value)
+                  : String(detail.value ?? '');
+                const isLongText = safeValue.length > 80;
                 if (isLongText) {
                   return (
                     <div key={idx} className="col-span-1 sm:col-span-2 py-1">
                       <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{detail.label}</span>
-                      <p className="text-sm text-gray-800 mt-0.5 whitespace-pre-wrap">{detail.value}</p>
+                      <p className="text-sm text-gray-800 mt-0.5 whitespace-pre-wrap">{safeValue}</p>
                     </div>
                   );
                 }
                 return (
                   <div key={idx} className="flex items-baseline gap-1.5 py-0.5">
                     <span className="text-xs font-semibold text-gray-500 shrink-0">{detail.label}:</span>
-                    <span className="text-sm text-gray-800">{detail.value}</span>
+                    <span className="text-sm text-gray-800">{safeValue}</span>
                   </div>
                 );
               })}
