@@ -27,6 +27,14 @@ export function onSWUpdate(listener: (available: boolean) => void) {
 export function getSWRegistration() { return swRegistration; }
 
 if ('serviceWorker' in navigator) {
+  // Reload page when a new SW takes control (after user clicks "Update Now")
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (refreshing) return;
+    refreshing = true;
+    window.location.reload();
+  });
+
   window.addEventListener('load', async () => {
     try {
       const registration = await navigator.serviceWorker.register(
@@ -35,6 +43,13 @@ if ('serviceWorker' in navigator) {
       );
       swRegistration = registration;
       console.log('✅ Service Worker registered:', registration.scope);
+
+      // ── Check if there's already a waiting SW (e.g. from a previous visit) ──
+      if (registration.waiting) {
+        swUpdateAvailable = true;
+        swUpdateListeners.forEach(l => l(true));
+        console.log('🔄 Update was already waiting — prompting user');
+      }
 
       // ── Handle updates ──
       registration.addEventListener('updatefound', () => {
@@ -68,8 +83,15 @@ if ('serviceWorker' in navigator) {
         }
       }
 
-      // ── Check for update every 30 minutes ──
-      setInterval(() => { registration.update(); }, 30 * 60 * 1000);
+      // ── Check for update every 5 minutes ──
+      setInterval(() => { registration.update(); }, 5 * 60 * 1000);
+
+      // ── Also check when tab becomes visible ──
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+          registration.update();
+        }
+      });
 
     } catch (error) {
       console.error('❌ Service Worker registration failed:', error);
@@ -99,11 +121,27 @@ if ('serviceWorker' in navigator) {
 export function activateNewSW() {
   if (swRegistration?.waiting) {
     swRegistration.waiting.postMessage({ type: 'SKIP_WAITING' });
-    // Reload once new SW takes over
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      window.location.reload();
-    });
   }
+}
+
+// Manually trigger an update check
+export async function checkForUpdates(): Promise<boolean> {
+  if (swRegistration) {
+    try {
+      await swRegistration.update();
+      // After update(), check if a new worker is waiting
+      if (swRegistration.waiting) {
+        swUpdateAvailable = true;
+        swUpdateListeners.forEach(l => l(true));
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Update check failed:', error);
+      return false;
+    }
+  }
+  return false;
 }
 
 // ─── Initialize offline manager ──────────────────────────────

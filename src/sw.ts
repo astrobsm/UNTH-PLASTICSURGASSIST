@@ -24,7 +24,10 @@ import { CacheableResponsePlugin } from 'workbox-cacheable-response';
 declare const self: ServiceWorkerGlobalScope;
 
 // ─── Cache names ────────────────────────────────────────────
-const CACHE_VERSION = 'v6-2026-03-13';
+// Use a build timestamp to ensure caches bust on every deployment.
+// This value is replaced at build time by Vite's define or stays as Date.now()
+// fallback. Either way, each new SW file has a unique hash from Workbox.
+const CACHE_VERSION = `v7-${Date.now()}`;
 const API_CACHE = `api-cache-${CACHE_VERSION}`;
 const IMAGE_CACHE = `images-cache-${CACHE_VERSION}`;
 const FONT_CACHE = `fonts-cache-${CACHE_VERSION}`;
@@ -34,9 +37,11 @@ const STATIC_CACHE = `static-cache-${CACHE_VERSION}`;
 precacheAndRoute(self.__WB_MANIFEST);
 cleanupOutdatedCaches();
 
-// ─── Skip waiting + claim clients immediately ───────────────
+// ─── Install: do NOT auto-skipWaiting — wait for user prompt ─
 self.addEventListener('install', () => {
-  self.skipWaiting();
+  // New SW installs in background; stays in 'waiting' state
+  // until the user clicks "Update Now" and we receive SKIP_WAITING message.
+  console.log('[SW] New service worker installed, waiting for activation...');
 });
 
 self.addEventListener('activate', (event) => {
