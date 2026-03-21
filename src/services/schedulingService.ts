@@ -153,6 +153,14 @@ export interface SurgeryBooking {
   consent_obtained: boolean;
   notes: string;
   status: 'scheduled' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled' | 'postponed';
+  // Surgery category for theatre capacity planning
+  case_category?: 'minor' | 'intermediate' | 'major' | 'super_major';
+  // Priority flags
+  is_emergency?: boolean;
+  is_infected?: boolean;
+  is_hiv_positive?: boolean;
+  is_diabetic?: boolean;
+  patient_age_at_booking?: number;
   created_at: Date;
   updated_at: Date;
 }

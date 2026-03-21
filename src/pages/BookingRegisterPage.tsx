@@ -12,7 +12,8 @@ import {
   Eye, Plus, CheckCircle, AlertTriangle, FileText, Download, BookOpen,
   ShoppingCart, Shield, Printer, Filter, ChevronDown, ChevronUp,
   Image, CreditCard, Clock, MapPin, Stethoscope, ListChecks,
-  Upload, X, CalendarDays, Lock, Unlock, FlaskConical, Ban
+  Upload, X, CalendarDays, Lock, Unlock, FlaskConical, Ban,
+  ChevronLeft, ChevronRight, AlertOctagon, Baby, Droplets, Bug, Heart
 } from 'lucide-react';
 import {
   createPDF, addPDFHeader, addSectionHeader, addBodyText, addBulletList,
@@ -34,7 +35,8 @@ interface Patient {
   consulting_unit?: string;
 }
 
-type TabKey = 'surgical-planning' | 'booked-cases';
+type TabKey = 'surgical-planning' | 'booked-cases' | 'theatre-calendar';
+type CaseCategory = 'minor' | 'intermediate' | 'major' | 'super_major';
 
 interface PreparationStatus {
   riskAssessed: boolean;
@@ -238,6 +240,82 @@ const STANDARD_INVESTIGATIONS = [
 ];
 
 // 
+//  THEATRE CAPACITY LOGIC
+// 
+// Slot weights: minor=1, intermediate=2, major=2, super_major=4. Daily max = 4 slots.
+const CASE_WEIGHTS: Record<CaseCategory, number> = { minor: 1, intermediate: 2, major: 2, super_major: 4 };
+const MAX_DAILY_SLOTS = 4;
+
+const CASE_CATEGORY_LABELS: Record<CaseCategory, string> = {
+  minor: 'Minor', intermediate: 'Intermediate', major: 'Major', super_major: 'Super Major',
+};
+
+/** Calculate used slots for a given day's bookings */
+const getDayUsedSlots = (dayBookings: SurgeryBooking[]): number => {
+  return dayBookings.reduce((sum, bk) => {
+    const cat = (bk as any).case_category as CaseCategory | undefined;
+    if (cat && CASE_WEIGHTS[cat]) return sum + CASE_WEIGHTS[cat];
+    // Emergencies don't count against normal slots ceiling
+    if ((bk as any).is_emergency) return sum;
+    return sum + 1; // default to minor
+  }, 0);
+};
+
+/** Get remaining slots and which categories can still be booked */
+const getDayAvailability = (dayBookings: SurgeryBooking[]): {
+  usedSlots: number;
+  remainingSlots: number;
+  availableCategories: CaseCategory[];
+  emergencyCount: number;
+} => {
+  const nonEmergency = dayBookings.filter(bk => !(bk as any).is_emergency);
+  const emergencyCount = dayBookings.length - nonEmergency.length;
+  const usedSlots = getDayUsedSlots(nonEmergency);
+  const remainingSlots = Math.max(0, MAX_DAILY_SLOTS - usedSlots);
+  const availableCategories: CaseCategory[] = [];
+  if (remainingSlots >= 1) availableCategories.push('minor');
+  if (remainingSlots >= 2) { availableCategories.push('intermediate'); availableCategories.push('major'); }
+  if (remainingSlots >= 4) availableCategories.push('super_major');
+  return { usedSlots, remainingSlots, availableCategories, emergencyCount };
+};
+
+/** Check if a specific category can be booked on a day */
+const canBookCategoryOnDay = (dayBookings: SurgeryBooking[], category: CaseCategory): boolean => {
+  const { availableCategories } = getDayAvailability(dayBookings);
+  return availableCategories.includes(category);
+};
+
+/** Priority sort: emergency > children<10 > diabetic > normal > infected > HIV+ last */
+const prioritySortBookings = (bookings: SurgeryBooking[]): SurgeryBooking[] => {
+  return [...bookings].sort((a, b) => {
+    const pa = getPriorityScore(a);
+    const pb = getPriorityScore(b);
+    return pa - pb; // lower score = higher priority (done first)
+  });
+};
+
+const getPriorityScore = (bk: SurgeryBooking): number => {
+  const b = bk as any;
+  if (b.is_emergency) return 0;
+  if (b.patient_age_at_booking != null && b.patient_age_at_booking < 10) return 1;
+  if (b.is_diabetic) return 2;
+  if (b.is_infected && b.is_hiv_positive) return 5;
+  if (b.is_hiv_positive) return 4;
+  if (b.is_infected) return 4;
+  return 3; // normal
+};
+
+const getPriorityLabel = (bk: SurgeryBooking): { label: string; cls: string; icon: React.ReactNode } | null => {
+  const b = bk as any;
+  if (b.is_emergency) return { label: 'EMERGENCY', cls: 'bg-red-100 text-red-700 border-red-300', icon: <AlertOctagon className="w-3 h-3" /> };
+  if (b.patient_age_at_booking != null && b.patient_age_at_booking < 10) return { label: 'Child <10', cls: 'bg-purple-100 text-purple-700 border-purple-300', icon: <Baby className="w-3 h-3" /> };
+  if (b.is_diabetic) return { label: 'Diabetic', cls: 'bg-orange-100 text-orange-700 border-orange-300', icon: <Droplets className="w-3 h-3" /> };
+  if (b.is_infected) return { label: 'Infected', cls: 'bg-amber-100 text-amber-700 border-amber-300', icon: <Bug className="w-3 h-3" /> };
+  if (b.is_hiv_positive) return { label: 'HIV+', cls: 'bg-amber-100 text-amber-700 border-amber-300', icon: <Heart className="w-3 h-3" /> };
+  return null;
+};
+
+// 
 //  BOOKING REGISTER PAGE
 // 
 const BookingRegisterPage: React.FC = () => {
@@ -300,6 +378,10 @@ const BookingRegisterPage: React.FC = () => {
   const [uploadTarget, setUploadTarget] = useState<{ bookingId: string; type: 'consent' | 'payment' } | null>(null);
   const [investigationUploadTarget, setInvestigationUploadTarget] = useState<string | null>(null);
 
+  //  Theatre calendar state 
+  const [calendarMonth, setCalendarMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
+  const [selectedCalendarDay, setSelectedCalendarDay] = useState<string | null>(null);
+
   //  Effects 
   useEffect(() => { loadPatients(); }, []);
 
@@ -320,7 +402,7 @@ const BookingRegisterPage: React.FC = () => {
   }, [searchQuery, patients]);
 
   useEffect(() => {
-    if (activeTab === 'booked-cases') loadBookedCases();
+    if (activeTab === 'booked-cases' || activeTab === 'theatre-calendar') loadBookedCases();
   }, [activeTab]);
 
   useEffect(() => {
@@ -526,6 +608,26 @@ const BookingRegisterPage: React.FC = () => {
     else navigate('/booking-register');
   };
 
+  /** Extract priority and case info from patient + assessment data for booking creation */
+  const extractBookingMeta = (patient: Patient, assessment: PreoperativeAssessment | null) => {
+    const age = patient.date_of_birth ? calcAge(patient.date_of_birth) : undefined;
+    const comorbidities = (assessment?.comorbidities_medications || []).map(c => c.comorbidity.toLowerCase());
+    const summary = (assessment?.comprehensive_summary || '').toLowerCase();
+    const isDiabetic = comorbidities.some(c => c.includes('diabet'));
+    const isInfected = comorbidities.some(c => c.includes('infect') || c.includes('sepsis') || c.includes('abscess'));
+    const isHivPositive = comorbidities.some(c => c.includes('hiv'));
+    const urgencyMatch = assessment?.comprehensive_summary?.match(/Urgency:\s*(\w+)/i);
+    const isEmergency = urgencyMatch?.[1]?.toLowerCase() === 'emergency' || summary.includes('emergency');
+    return {
+      case_category: 'minor' as CaseCategory, // default, user can update later
+      is_emergency: isEmergency,
+      is_infected: isInfected,
+      is_hiv_positive: isHivPositive,
+      is_diabetic: isDiabetic,
+      patient_age_at_booking: age,
+    };
+  };
+
   // --- Stage Toggle Handler ---
   const toggleStage = async (patientId: string, stageKey: string, currentValue: boolean, sp: typeof stagePatients[0]) => {
     // Special handling for "fullyPrepared" (Ready)
@@ -579,7 +681,8 @@ const BookingRegisterPage: React.FC = () => {
             consent_obtained: sp.status.consentObtained,
             notes: alreadyForced ? 'Force readiness: ' + (forceReadiness[patientId]?.reason || '') : '',
             status: 'scheduled',
-          });
+            ...extractBookingMeta(sp.patient, sp.assessment),
+          } as any);
           toast.success(patientName + ' moved to Booked Cases!');
           loadBookedCases(); // Refresh booked cases
         }
@@ -700,7 +803,8 @@ const BookingRegisterPage: React.FC = () => {
         consent_obtained: sp.status.consentObtained,
         notes: 'Force readiness: ' + forceReason,
         status: 'scheduled',
-      }).then(() => {
+        ...extractBookingMeta(sp.patient, sp.assessment),
+      } as any).then(() => {
         toast.success(patientName + ' moved to Booked Cases');
         loadBookedCases();
       }).catch(err => console.error('Booking creation failed:', err));
@@ -896,11 +1000,12 @@ const BookingRegisterPage: React.FC = () => {
           consent_obtained: sp.status.consentObtained,
           notes: alreadyForced ? 'Force readiness: ' + (forceReadiness[patientId]?.reason || '') : '',
           status: 'scheduled',
-        });
-        toast.success(patientName + ' booking approved — moved to Booked Cases!');
+          ...extractBookingMeta(sp.patient, sp.assessment),
+        } as any);
+        toast.success(patientName + ' booking approved ï¿½ moved to Booked Cases!');
         loadBookedCases();
       } else {
-        toast.success('Booking approved — patient already in Booked Cases');
+        toast.success('Booking approved ï¿½ patient already in Booked Cases');
       }
     } catch (err) {
       console.error('Failed to create booking on approval:', err);
@@ -1086,7 +1191,7 @@ const BookingRegisterPage: React.FC = () => {
     } catch (e) { console.error(e); toast.error('Failed to generate shopping list'); }
   };
 
-  //  Filtered booked cases 
+  //  Filtered booked cases (with priority ordering per day)
   const filteredBookedCases = useMemo(() => {
     let list = allBookings.filter(b => b.status === 'scheduled' || b.status === 'confirmed');
     if (dateFrom) {
@@ -1097,7 +1202,19 @@ const BookingRegisterPage: React.FC = () => {
       const to = new Date(dateTo); to.setHours(23,59,59,999);
       list = list.filter(b => new Date(b.date) <= to);
     }
-    return list.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    // Group by date, priority-sort within each day, then flatten
+    const byDay = new Map<string, SurgeryBooking[]>();
+    list.forEach(bk => {
+      const key = new Date(bk.date).toISOString().slice(0,10);
+      if (!byDay.has(key)) byDay.set(key, []);
+      byDay.get(key)!.push(bk);
+    });
+    const sortedDays = [...byDay.keys()].sort();
+    const result: SurgeryBooking[] = [];
+    for (const day of sortedDays) {
+      result.push(...prioritySortBookings(byDay.get(day)!));
+    }
+    return result;
   }, [allBookings, dateFrom, dateTo]);
 
   //  Filtered stage patients 
@@ -1109,6 +1226,35 @@ const BookingRegisterPage: React.FC = () => {
       return name.toLowerCase().includes(q) || (sp.patient.hospital_number || '').toLowerCase().includes(q);
     });
   }, [stagePatients, stageSearch]);
+
+  //  Bookings grouped by day (for calendar view) 
+  const bookingsByDay = useMemo(() => {
+    const map = new Map<string, SurgeryBooking[]>();
+    const active = allBookings.filter(b => b.status === 'scheduled' || b.status === 'confirmed');
+    active.forEach(bk => {
+      const key = new Date(bk.date).toISOString().slice(0, 10);
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(bk);
+    });
+    return map;
+  }, [allBookings]);
+
+  //  Calendar grid for current month 
+  const calendarDays = useMemo(() => {
+    const year = calendarMonth.getFullYear();
+    const month = calendarMonth.getMonth();
+    const firstDay = new Date(year, month, 1).getDay(); // 0=Sun
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const grid: Array<{ date: string; day: number; isToday: boolean; isPast: boolean } | null> = [];
+    for (let i = 0; i < firstDay; i++) grid.push(null); // padding
+    const today = new Date(); today.setHours(0,0,0,0);
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dt = new Date(year, month, d);
+      const dateStr = dt.toISOString().slice(0, 10);
+      grid.push({ date: dateStr, day: d, isToday: dt.getTime() === today.getTime(), isPast: dt < today });
+    }
+    return grid;
+  }, [calendarMonth]);
 
   // 
   //  RENDER
@@ -1165,6 +1311,18 @@ const BookingRegisterPage: React.FC = () => {
                 {filteredBookedCases.length}
               </span>
             )}
+          </div>
+        </button>
+        <button
+          onClick={() => setActiveTab('theatre-calendar')}
+          className={'px-6 py-3 text-sm font-medium border-b-2 transition-colors ' +
+            (activeTab === 'theatre-calendar'
+              ? 'border-primary-600 text-primary-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300')}
+        >
+          <div className="flex items-center gap-2">
+            <CalendarDays className="w-4 h-4" />
+            Theatre Calendar
           </div>
         </button>
       </div>
@@ -1295,7 +1453,7 @@ const BookingRegisterPage: React.FC = () => {
                             <span className="text-xs text-gray-400">{done}/{total}</span>
                           </div>
                         </div>
-                        {/* Clickable preparation stage chips — click opens review panel */}
+                        {/* Clickable preparation stage chips ï¿½ click opens review panel */}
                         <div className="mt-3 grid grid-cols-4 md:grid-cols-8 gap-1">
                           {[
                             { key: 'riskAssessed', label: 'Risk' },
@@ -1326,8 +1484,8 @@ const BookingRegisterPage: React.FC = () => {
                                 title={
                                   isReady ? 'Use Approve Booking button below' :
                                   isBlocked ? 'Blocked: abnormal investigation results' :
-                                  approval === 'accepted' ? 'Accepted — click to review' :
-                                  approval === 'rejected' ? 'Rejected — click to review' :
+                                  approval === 'accepted' ? 'Accepted ï¿½ click to review' :
+                                  approval === 'rejected' ? 'Rejected ï¿½ click to review' :
                                   'Click to review & accept/reject'
                                 }
                                 className={'text-center px-1 py-1.5 rounded text-[10px] font-medium transition-all cursor-pointer border relative ' +
@@ -1359,10 +1517,10 @@ const BookingRegisterPage: React.FC = () => {
                         {(investigationResults[sp.patient.id] || []).some(r => r.flag === 'abnormal') && (
                           <div className="mt-2 flex items-center gap-2 text-xs text-red-600 bg-red-50 px-3 py-1.5 rounded-lg border border-red-200">
                             <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-                            <span>Abnormal investigation(s) detected{forceReadiness[sp.patient.id] ? ' — Force readiness applied by ' + forceReadiness[sp.patient.id].forcedBy : ' — cannot mark Ready without clinical override'}</span>
+                            <span>Abnormal investigation(s) detected{forceReadiness[sp.patient.id] ? ' ï¿½ Force readiness applied by ' + forceReadiness[sp.patient.id].forcedBy : ' ï¿½ cannot mark Ready without clinical override'}</span>
                           </div>
                         )}
-                        {/* Mandatory labs missing warning — clickable to auto-order */}
+                        {/* Mandatory labs missing warning ï¿½ clickable to auto-order */}
                         {(() => {
                           const labCheck = areMandatoryLabsComplete(sp.patient.id, sp.patient.date_of_birth || '', investigationResults);
                           if (labCheck.complete) return null;
@@ -1386,7 +1544,7 @@ const BookingRegisterPage: React.FC = () => {
                               title="Click to order these missing labs"
                             >
                               <FlaskConical className="w-3.5 h-3.5 flex-shrink-0" />
-                              <span>Mandatory labs missing: {labCheck.missing.join(', ')} — <strong>click to order</strong></span>
+                              <span>Mandatory labs missing: {labCheck.missing.join(', ')} ï¿½ <strong>click to order</strong></span>
                             </button>
                           );
                         })()}
@@ -1420,7 +1578,7 @@ const BookingRegisterPage: React.FC = () => {
                               {alreadyBooked ? (
                                 <div className="flex items-center gap-2 text-xs text-green-700 bg-green-50 px-4 py-2 rounded-lg border border-green-200">
                                   <CheckCircle className="w-4 h-4" />
-                                  <span className="font-medium">Booking Approved — Patient in Booked Cases</span>
+                                  <span className="font-medium">Booking Approved ï¿½ Patient in Booked Cases</span>
                                 </div>
                               ) : (
                                 <>
@@ -1700,6 +1858,8 @@ const BookingRegisterPage: React.FC = () => {
                   if (bk.operation_site_images) opImages = JSON.parse(bk.operation_site_images);
                 } catch { /* */ }
                 if (!opImages.length && bk.operation_site_image) opImages = [bk.operation_site_image];
+                const priority = getPriorityLabel(bk);
+                const caseCat = (bk as any).case_category as CaseCategory | undefined;
 
                 return (
                   <div key={bk.id} className="bg-white rounded-lg shadow-sm border overflow-hidden">
@@ -1720,6 +1880,16 @@ const BookingRegisterPage: React.FC = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
+                        {priority && (
+                          <span className={'flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium rounded-full border ' + priority.cls}>
+                            {priority.icon} {priority.label}
+                          </span>
+                        )}
+                        {caseCat && (
+                          <span className="px-2 py-0.5 text-[10px] font-medium rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                            {CASE_CATEGORY_LABELS[caseCat]}
+                          </span>
+                        )}
                         <span className={'px-3 py-1 text-xs font-medium rounded-full border ' +
                           (bk.status === 'confirmed' ? 'bg-green-100 text-green-700 border-green-300' :
                            bk.status === 'scheduled' ? 'bg-blue-100 text-blue-700 border-blue-300' :
@@ -1758,6 +1928,12 @@ const BookingRegisterPage: React.FC = () => {
                             <div className="text-xs text-gray-500 uppercase tracking-wider font-medium">Theatre</div>
                             <div className="text-sm text-gray-800">{bk.theatre_number || 'N/A'}</div>
                           </div>
+                          {caseCat && (
+                            <div className="space-y-2">
+                              <div className="text-xs text-gray-500 uppercase tracking-wider font-medium">Case Category</div>
+                              <div className="text-sm text-gray-800 font-medium">{CASE_CATEGORY_LABELS[caseCat]} ({CASE_WEIGHTS[caseCat]} slot{CASE_WEIGHTS[caseCat] > 1 ? 's' : ''})</div>
+                            </div>
+                          )}
                         </div>
 
                         {/* Status indicators */}
@@ -1970,6 +2146,185 @@ const BookingRegisterPage: React.FC = () => {
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {/* 
+           TAB 3: THEATRE CALENDAR
+          */}
+      {activeTab === 'theatre-calendar' && (
+        <div>
+          {/* Calendar header */}
+          <div className="flex items-center justify-between mb-4">
+            <button onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1))}
+              className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"><ChevronLeft className="w-5 h-5" /></button>
+            <h2 className="text-lg font-semibold text-gray-800">
+              {calendarMonth.toLocaleString('default', { month: 'long', year: 'numeric' })}
+            </h2>
+            <button onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1))}
+              className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"><ChevronRight className="w-5 h-5" /></button>
+          </div>
+
+          {/* Capacity rules legend */}
+          <div className="bg-white rounded-lg border p-4 mb-4">
+            <h3 className="text-sm font-semibold text-gray-700 mb-2">Daily Theatre Capacity (4 slots max)</h3>
+            <div className="flex flex-wrap gap-3 text-xs text-gray-600">
+              <span className="px-2 py-1 bg-blue-50 rounded border border-blue-200">4 Minor</span>
+              <span className="text-gray-400">or</span>
+              <span className="px-2 py-1 bg-blue-50 rounded border border-blue-200">2 Minor + 1 Intermediate</span>
+              <span className="text-gray-400">or</span>
+              <span className="px-2 py-1 bg-blue-50 rounded border border-blue-200">1 Major + 1 Intermediate + 1 Minor</span>
+              <span className="text-gray-400">or</span>
+              <span className="px-2 py-1 bg-blue-50 rounded border border-blue-200">2 Major</span>
+              <span className="text-gray-400">or</span>
+              <span className="px-2 py-1 bg-blue-50 rounded border border-blue-200">1 Super Major</span>
+            </div>
+            <div className="flex flex-wrap gap-3 mt-3 text-xs">
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-green-400 inline-block" /> Open (4 slots)</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-yellow-400 inline-block" /> Partial</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-400 inline-block" /> Full</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-gray-200 inline-block" /> Past</span>
+            </div>
+            <div className="mt-3 text-xs text-gray-500">
+              <strong>Priority order:</strong> Emergency &gt; Children &lt;10 &gt; Diabetic &gt; Normal &gt; Infected / HIV+ (last)
+            </div>
+          </div>
+
+          {/* Calendar grid */}
+          <div className="bg-white rounded-lg border overflow-hidden">
+            {/* Day headers */}
+            <div className="grid grid-cols-7 bg-gray-50 border-b">
+              {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d => (
+                <div key={d} className="text-center text-xs font-medium text-gray-500 py-2">{d}</div>
+              ))}
+            </div>
+            {/* Day cells */}
+            <div className="grid grid-cols-7">
+              {calendarDays.map((cell, idx) => {
+                if (!cell) return <div key={'empty-' + idx} className="border-b border-r min-h-[90px] bg-gray-50" />;
+                const dayBookings = bookingsByDay.get(cell.date) || [];
+                const avail = getDayAvailability(dayBookings);
+                const isWeekend = new Date(cell.date).getDay() === 0 || new Date(cell.date).getDay() === 6;
+                const isSelected = selectedCalendarDay === cell.date;
+
+                let bgColor = 'bg-green-50 hover:bg-green-100';
+                if (cell.isPast) bgColor = 'bg-gray-50';
+                else if (avail.remainingSlots === 0) bgColor = 'bg-red-50 hover:bg-red-100';
+                else if (avail.usedSlots > 0) bgColor = 'bg-yellow-50 hover:bg-yellow-100';
+                if (isSelected) bgColor = 'bg-primary-50 ring-2 ring-primary-500';
+
+                return (
+                  <button key={cell.date}
+                    onClick={() => setSelectedCalendarDay(isSelected ? null : cell.date)}
+                    className={'border-b border-r min-h-[90px] p-1.5 text-left transition-colors ' + bgColor + (cell.isPast ? ' opacity-60' : '')}
+                  >
+                    <div className={'text-xs font-medium mb-1 ' + (cell.isToday ? 'text-primary-600 font-bold' : isWeekend ? 'text-red-500' : 'text-gray-700')}>
+                      {cell.day}
+                      {cell.isToday && <span className="ml-1 text-[10px] bg-primary-100 text-primary-700 px-1 rounded">Today</span>}
+                    </div>
+                    {!cell.isPast && (
+                      <div className="space-y-0.5">
+                        {avail.emergencyCount > 0 && (
+                          <div className="text-[10px] px-1 bg-red-100 text-red-700 rounded truncate flex items-center gap-0.5">
+                            <AlertOctagon className="w-2.5 h-2.5" /> {avail.emergencyCount} emerg
+                          </div>
+                        )}
+                        {dayBookings.length > 0 && (
+                          <div className="text-[10px] text-gray-600">{avail.usedSlots}/{MAX_DAILY_SLOTS} slots</div>
+                        )}
+                        {avail.remainingSlots > 0 ? (
+                          <div className="text-[10px] text-green-700">{avail.remainingSlots} avail</div>
+                        ) : dayBookings.length > 0 ? (
+                          <div className="text-[10px] text-red-600 font-medium">FULL</div>
+                        ) : null}
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Selected day detail panel */}
+          {selectedCalendarDay && (() => {
+            const dayBookings = bookingsByDay.get(selectedCalendarDay) || [];
+            const sorted = prioritySortBookings(dayBookings);
+            const avail = getDayAvailability(dayBookings);
+            const dateObj = new Date(selectedCalendarDay + 'T00:00:00');
+            return (
+              <div className="mt-4 bg-white rounded-lg border shadow-sm">
+                <div className="p-4 border-b bg-gray-50 flex items-center justify-between">
+                  <div>
+                    <h3 className="font-semibold text-gray-800">
+                      {dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                    </h3>
+                    <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
+                      <span>Slots used: <strong className="text-gray-700">{avail.usedSlots}/{MAX_DAILY_SLOTS}</strong></span>
+                      <span>Remaining: <strong className={avail.remainingSlots > 0 ? 'text-green-700' : 'text-red-600'}>{avail.remainingSlots}</strong></span>
+                      {avail.emergencyCount > 0 && <span className="text-red-600 font-medium">{avail.emergencyCount} Emergency</span>}
+                    </div>
+                  </div>
+                  <button onClick={() => setSelectedCalendarDay(null)} className="text-gray-400 hover:text-gray-600">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Available categories */}
+                {avail.remainingSlots > 0 && (
+                  <div className="px-4 py-3 border-b bg-green-50">
+                    <div className="text-xs text-green-700 font-medium mb-1">Can book:</div>
+                    <div className="flex flex-wrap gap-2">
+                      {avail.availableCategories.map(cat => (
+                        <span key={cat} className="px-2 py-0.5 bg-green-100 text-green-800 text-xs rounded border border-green-300">
+                          {CASE_CATEGORY_LABELS[cat]} ({CASE_WEIGHTS[cat]} slot{CASE_WEIGHTS[cat] > 1 ? 's' : ''})
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Booked cases for this day */}
+                {sorted.length === 0 ? (
+                  <div className="p-8 text-center text-gray-500 text-sm">No cases booked for this day</div>
+                ) : (
+                  <div className="divide-y">
+                    {sorted.map((bk, idx) => {
+                      const priority = getPriorityLabel(bk);
+                      const cat = (bk as any).case_category as CaseCategory | undefined;
+                      return (
+                        <div key={bk.id} className="p-3 flex items-center justify-between hover:bg-gray-50">
+                          <div className="flex items-center gap-3">
+                            <div className="text-xs font-bold text-gray-400 w-5 text-right">{idx + 1}</div>
+                            <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
+                              <User className="w-4 h-4 text-primary-600" />
+                            </div>
+                            <div>
+                              <div className="text-sm font-medium text-gray-900">{bk.patient_name || 'Unknown'}</div>
+                              <div className="text-xs text-gray-500">
+                                {bk.procedure_name || 'No procedure'} â€¢ #{bk.hospital_number || 'N/A'}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {priority && (
+                              <span className={'flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium rounded-full border ' + priority.cls}>
+                                {priority.icon} {priority.label}
+                              </span>
+                            )}
+                            {cat && (
+                              <span className="px-2 py-0.5 text-[10px] font-medium rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                                {CASE_CATEGORY_LABELS[cat]}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -2492,7 +2847,7 @@ const BookingRegisterPage: React.FC = () => {
                 {investigationEntries.filter(e => e.flag === 'abnormal').length > 0 && (
                   <span className="text-red-600 font-medium flex items-center gap-1">
                     <AlertTriangle className="w-3.5 h-3.5" />
-                    {investigationEntries.filter(e => e.flag === 'abnormal').length} abnormal result(s) — patient cannot be marked Ready without override
+                    {investigationEntries.filter(e => e.flag === 'abnormal').length} abnormal result(s) ï¿½ patient cannot be marked Ready without override
                   </span>
                 )}
               </div>
