@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { patientService } from '../services/patientService';
 import { MedicalTextInput } from '../components/MedicalTextInput';
+import MedicalAutocompleteTextarea from '../components/MedicalAutocompleteTextarea';
 import { 
   admissionDischargeService, 
   Admission, 
@@ -391,7 +392,7 @@ function ActivePatientsTab({ admissions, searchTerm, setSearchTerm, onDischarge,
       ], y);
       y = addSeparator(doc, y);
 
-      y = addWarningBox(doc, 'SEEK IMMEDIATE MEDICAL ATTENTION if you experience: severe/increasing pain not relieved by medication, heavy bleeding from the wound, fever above 38.5°C, difficulty breathing, severe nausea/vomiting, or any sudden change in your condition.', y);
+      y = addWarningBox(doc, 'SEEK IMMEDIATE MEDICAL ATTENTION if you experience: severe/increasing pain not relieved by medication, heavy bleeding from the wound, fever above 38.5ï¿½C, difficulty breathing, severe nausea/vomiting, or any sudden change in your condition.', y);
 
       y = addSectionHeader(doc, 'Follow-Up', y);
       y = addBodyText(doc, 'Please attend your follow-up appointment as scheduled. If you need to reschedule, contact the Plastic Surgery Unit during office hours.', y);
@@ -766,7 +767,7 @@ function ActivePatientsTab({ admissions, searchTerm, setSearchTerm, onDischarge,
                                     <div>
                                       <span className="font-medium text-gray-700">Vital Signs:</span>
                                       <div className="text-gray-600">
-                                        {admission.vital_signs.temperature && <span>Temp: {admission.vital_signs.temperature}°C | </span>}
+                                        {admission.vital_signs.temperature && <span>Temp: {admission.vital_signs.temperature}ï¿½C | </span>}
                                         {admission.vital_signs.blood_pressure && <span>BP: {admission.vital_signs.blood_pressure} | </span>}
                                         {admission.vital_signs.pulse && <span>HR: {admission.vital_signs.pulse} | </span>}
                                         {admission.vital_signs.respiratory_rate && <span>RR: {admission.vital_signs.respiratory_rate} | </span>}
@@ -1326,7 +1327,7 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Vital Signs</h3>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Temp (°C)</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Temp (ï¿½C)</label>
             <input type="number" step="0.1" value={temperature} onChange={(e) => setTemperature(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="37.0" />
           </div>
@@ -1371,22 +1372,22 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Current Medications</label>
-            <textarea value={currentMedications} onChange={(e) => setCurrentMedications(e.target.value)}
+            <MedicalAutocompleteTextarea value={currentMedications} onChange={setCurrentMedications}
               rows={2} className="w-full px-3 py-2 border border-gray-300 rounded-md" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Past Medical History</label>
-            <textarea value={pastMedicalHistory} onChange={(e) => setPastMedicalHistory(e.target.value)}
+            <MedicalAutocompleteTextarea value={pastMedicalHistory} onChange={setPastMedicalHistory}
               rows={2} className="w-full px-3 py-2 border border-gray-300 rounded-md" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Examination Findings</label>
-            <textarea value={examinationFindings} onChange={(e) => setExaminationFindings(e.target.value)}
+            <MedicalAutocompleteTextarea value={examinationFindings} onChange={setExaminationFindings}
               rows={2} className="w-full px-3 py-2 border border-gray-300 rounded-md" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Initial Management Plan</label>
-            <textarea value={initialManagementPlan} onChange={(e) => setInitialManagementPlan(e.target.value)}
+            <MedicalAutocompleteTextarea value={initialManagementPlan} onChange={setInitialManagementPlan}
               rows={2} className="w-full px-3 py-2 border border-gray-300 rounded-md" />
           </div>
         </div>

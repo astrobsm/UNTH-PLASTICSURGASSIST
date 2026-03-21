@@ -24,6 +24,7 @@ import {
 import { speechToTextService, SpeechRecognitionResult } from '../services/speechToTextService';
 import { aiTextEnhancementService, TextContext } from '../services/aiTextEnhancementService';
 import { ocrService, OCRProgress, DocumentType } from '../services/ocrService';
+import { medicalDictionary } from '../services/medicalDictionaryService';
 
 interface MedicalTextInputProps {
   value: string;
@@ -96,6 +97,13 @@ export const MedicalTextInput: React.FC<MedicalTextInputProps> = ({
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const preRecordingValueRef = useRef<string>('');
   const currentValueRef = useRef<string>(value);
+
+  // Autocomplete state
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [selectedSuggestionIdx, setSelectedSuggestionIdx] = useState(0);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const suggestionsRef = useRef<HTMLDivElement>(null);
+  const wordInfoRef = useRef<{ word: string; startIndex: number } | null>(null);
 
   // Keep currentValueRef in sync with value prop
   useEffect(() => {
@@ -278,6 +286,62 @@ export const MedicalTextInput: React.FC<MedicalTextInputProps> = ({
     }
   }, [originalValue, onChange]);
 
+  // ─── Autocomplete helpers ───
+  const updateSuggestions = useCallback((text: string, cursorPos: number) => {
+    const wordInfo = medicalDictionary.extractCurrentWord(text, cursorPos);
+    wordInfoRef.current = wordInfo;
+    if (!wordInfo || wordInfo.word.length < 2) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+    const results = medicalDictionary.getSuggestions(wordInfo.word, 6);
+    if (results.length === 1 && results[0].toLowerCase() === wordInfo.word.toLowerCase()) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+    setSuggestions(results);
+    setSelectedSuggestionIdx(0);
+    setShowSuggestions(results.length > 0);
+  }, []);
+
+  const applySuggestion = useCallback((suggestion: string) => {
+    const wordInfo = wordInfoRef.current;
+    if (!wordInfo) return;
+    const before = value.slice(0, wordInfo.startIndex);
+    const after = value.slice(wordInfo.startIndex + wordInfo.word.length);
+    const newValue = before + suggestion + (after.startsWith(' ') ? after : ' ' + after);
+    onChange(newValue);
+    setSuggestions([]);
+    setShowSuggestions(false);
+    requestAnimationFrame(() => {
+      if (textareaRef.current) {
+        const pos = wordInfo.startIndex + suggestion.length + 1;
+        textareaRef.current.selectionStart = pos;
+        textareaRef.current.selectionEnd = pos;
+        textareaRef.current.focus();
+      }
+    });
+  }, [value, onChange]);
+
+  const handleAutocompleteKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (!showSuggestions || suggestions.length === 0) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setSelectedSuggestionIdx(prev => (prev + 1) % suggestions.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setSelectedSuggestionIdx(prev => (prev - 1 + suggestions.length) % suggestions.length);
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      applySuggestion(suggestions[selectedSuggestionIdx]);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setShowSuggestions(false);
+    }
+  }, [showSuggestions, suggestions, selectedSuggestionIdx, applySuggestion]);
+
   // Calculate word count
   const wordCount = value.trim() ? value.trim().split(/\s+/).length : 0;
 
@@ -307,14 +371,18 @@ export const MedicalTextInput: React.FC<MedicalTextInputProps> = ({
           id={id}
           name={name}
           value={displayValue}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => {
+            onChange(e.target.value);
+            updateSuggestions(e.target.value, e.target.selectionStart ?? e.target.value.length);
+          }}
+          onKeyDown={handleAutocompleteKeyDown}
           placeholder={placeholder}
           rows={rows}
           disabled={disabled || isListening || isScanning}
           required={required}
           maxLength={maxLength}
           onFocus={() => setShowToolbar(true)}
-          onBlur={() => setTimeout(() => setShowToolbar(false), 200)}
+          onBlur={() => setTimeout(() => { setShowToolbar(false); setShowSuggestions(false); }, 200)}
           className={`
             w-full px-3 py-2 pr-28
             border rounded-lg
@@ -327,6 +395,37 @@ export const MedicalTextInput: React.FC<MedicalTextInputProps> = ({
           `}
           style={{ minHeight: `${rows * 24}px`, resize: 'vertical' }}
         />
+
+        {/* Medical Autocomplete Suggestions */}
+        {showSuggestions && suggestions.length > 0 && (
+          <div
+            ref={suggestionsRef}
+            className="absolute left-0 right-0 z-50 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto"
+            style={{ top: `${(rows * 24) + 8}px` }}
+          >
+            {suggestions.map((suggestion, index) => (
+              <button
+                key={suggestion}
+                type="button"
+                className={`w-full text-left px-3 py-2 text-sm cursor-pointer transition-colors ${
+                  index === selectedSuggestionIdx
+                    ? 'bg-green-50 text-green-800 font-medium'
+                    : 'text-gray-700 hover:bg-gray-50'
+                }`}
+                onMouseDown={(e) => { e.preventDefault(); applySuggestion(suggestion); }}
+                onMouseEnter={() => setSelectedSuggestionIdx(index)}
+              >
+                <span className="flex items-center gap-2">
+                  <span className="text-green-500 text-xs">●</span>
+                  {suggestion}
+                </span>
+              </button>
+            ))}
+            <div className="px-3 py-1 text-[10px] text-gray-400 border-t border-gray-100">
+              ↑↓ navigate · Tab select · Esc dismiss
+            </div>
+          </div>
+        )}
 
         {/* Toolbar - Always visible on right side */}
         <div className="absolute right-2 top-2 flex flex-col gap-1.5">

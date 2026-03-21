@@ -116,12 +116,40 @@ export default defineConfig({
   build: {
     sourcemap: false,
     minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: false,
+        drop_debugger: true,
+        passes: 2,
+      },
+    },
+    cssCodeSplit: true,
     rollupOptions: {
       output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom', 'react-router-dom'],
-          ui: ['@tanstack/react-query', 'react-hot-toast', 'lucide-react'],
-          db: ['dexie']
+        manualChunks(id) {
+          // Core React
+          if (id.includes('react-dom')) return 'vendor-react';
+          if (id.includes('react-router')) return 'vendor-react';
+          if (id.includes('node_modules/react/')) return 'vendor-react';
+          // UI libraries
+          if (id.includes('lucide-react')) return 'vendor-ui';
+          if (id.includes('react-hot-toast')) return 'vendor-ui';
+          if (id.includes('@tanstack/react-query')) return 'vendor-ui';
+          // Database
+          if (id.includes('dexie')) return 'vendor-db';
+          // Date utilities
+          if (id.includes('date-fns')) return 'vendor-datefns';
+          // PDF/Canvas (only needed for document generation)
+          if (id.includes('html2canvas')) return 'vendor-pdf';
+          if (id.includes('jspdf')) return 'vendor-pdf';
+          // Sanitization
+          if (id.includes('dompurify')) return 'vendor-sanitize';
+          // State management
+          if (id.includes('zustand')) return 'vendor-state';
+          // UUID
+          if (id.includes('uuid')) return 'vendor-utils';
+          // Drug database (large static data)
+          if (id.includes('bnfDrugDatabase') || id.includes('drugInteractions')) return 'data-drugs';
         }
       }
     }

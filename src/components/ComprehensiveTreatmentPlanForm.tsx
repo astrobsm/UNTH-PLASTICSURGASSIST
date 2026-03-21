@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Plus, Trash2, AlertTriangle, Info, FileDown, Printer, Search, ChevronDown, Beaker, Activity } from 'lucide-react';
+import MedicalAutocompleteTextarea from './MedicalAutocompleteTextarea';
 import { format } from 'date-fns';
 import { useAuthStore } from '../store/authStore';
 import { db } from '../db/database';
@@ -832,10 +833,10 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Diagnosis *</label>
-                <textarea
+                <MedicalAutocompleteTextarea
                   required
                   value={basicInfo.diagnosis}
-                  onChange={(e) => setBasicInfo({ ...basicInfo, diagnosis: e.target.value })}
+                  onChange={(val) => setBasicInfo({ ...basicInfo, diagnosis: val })}
                   rows={3}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
                   placeholder="Enter diagnosis..."

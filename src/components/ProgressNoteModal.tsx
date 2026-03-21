@@ -9,6 +9,7 @@ import { ScribeRecordingPanel } from './ScribeRecordingPanel';
 import { speechToTextService } from '../services/speechToTextService';
 import { Brain, Mic, MicOff, Wand2 } from 'lucide-react';
 import type { StructuredNote, ScribeSession } from '../services/medicalScribeService';
+import MedicalAutocompleteTextarea from './MedicalAutocompleteTextarea';
 
 interface ProgressNoteModalProps {
   isOpen: boolean;
@@ -472,10 +473,10 @@ export const ProgressNoteModal: React.FC<ProgressNoteModalProps> = ({
                   </button>
                 </div>
                 <div className="relative">
-                  <textarea
+                  <MedicalAutocompleteTextarea
                     required
                     value={note.subjective}
-                    onChange={(e) => setNote({ ...note, subjective: e.target.value })}
+                    onChange={(val) => setNote({ ...note, subjective: val })}
                     rows={3}
                     className={`w-full px-3 py-2 border rounded-md focus:ring-purple-500 focus:border-purple-500 ${
                       activeVoiceField === 'subjective' ? 'border-red-400 ring-1 ring-red-300' : 'border-gray-300'
@@ -512,10 +513,10 @@ export const ProgressNoteModal: React.FC<ProgressNoteModalProps> = ({
                   </button>
                 </div>
                 <div className="relative">
-                  <textarea
+                  <MedicalAutocompleteTextarea
                     required
                     value={note.objective}
-                    onChange={(e) => setNote({ ...note, objective: e.target.value })}
+                    onChange={(val) => setNote({ ...note, objective: val })}
                     rows={4}
                     className={`w-full px-3 py-2 border rounded-md focus:ring-purple-500 focus:border-purple-500 ${
                       activeVoiceField === 'objective' ? 'border-red-400 ring-1 ring-red-300' : 'border-gray-300'
@@ -552,10 +553,10 @@ export const ProgressNoteModal: React.FC<ProgressNoteModalProps> = ({
                   </button>
                 </div>
                 <div className="relative">
-                  <textarea
+                  <MedicalAutocompleteTextarea
                     required
                     value={note.assessment}
-                    onChange={(e) => setNote({ ...note, assessment: e.target.value })}
+                    onChange={(val) => setNote({ ...note, assessment: val })}
                     rows={3}
                     className={`w-full px-3 py-2 border rounded-md focus:ring-purple-500 focus:border-purple-500 ${
                       activeVoiceField === 'assessment' ? 'border-red-400 ring-1 ring-red-300' : 'border-gray-300'
@@ -592,10 +593,10 @@ export const ProgressNoteModal: React.FC<ProgressNoteModalProps> = ({
                   </button>
                 </div>
                 <div className="relative">
-                  <textarea
+                  <MedicalAutocompleteTextarea
                     required
                     value={note.plan}
-                    onChange={(e) => setNote({ ...note, plan: e.target.value })}
+                    onChange={(val) => setNote({ ...note, plan: val })}
                     rows={4}
                     className={`w-full px-3 py-2 border rounded-md focus:ring-purple-500 focus:border-purple-500 ${
                       activeVoiceField === 'plan' ? 'border-red-400 ring-1 ring-red-300' : 'border-gray-300'

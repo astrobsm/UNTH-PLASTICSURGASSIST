@@ -5,11 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
 import App from './App.tsx';
 import './index.css';
-import { cmeArticleScheduler } from './services/cmeArticleScheduler';
-import { mcqGenerationService } from './services/mcqGenerationService';
 import { offlineManager } from './services/offlineManager';
-import { medicationDosingService } from './services/medicationDosingService';
-import { reviewNotificationService } from './services/reviewNotificationService';
 
 // ─── App Version ─────────────────────────────────────────────
 const APP_VERSION = '5.0.0';
@@ -208,9 +204,10 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   </React.StrictMode>,
 );
 
-// ─── Start background services AFTER React mounts ───────────
-setTimeout(() => {
+// ─── Start background services AFTER React mounts (dynamically imported) ─────
+setTimeout(async () => {
   try {
+    const { cmeArticleScheduler } = await import('./services/cmeArticleScheduler');
     cmeArticleScheduler.start();
     console.log('CME Article Scheduler started');
   } catch (error) {
@@ -218,6 +215,7 @@ setTimeout(() => {
   }
   
   try {
+    const { medicationDosingService } = await import('./services/medicationDosingService');
     medicationDosingService.startMedicationMonitoring();
     console.log('Medication end date monitoring started');
   } catch (error) {
@@ -225,6 +223,7 @@ setTimeout(() => {
   }
   
   try {
+    const { reviewNotificationService } = await import('./services/reviewNotificationService');
     reviewNotificationService.startMonitoring();
     reviewNotificationService.cleanupOldNotificationMarkers();
     console.log('Review notification monitoring started');
@@ -232,17 +231,14 @@ setTimeout(() => {
     console.error('Error starting Review notification monitoring:', error);
   }
 
-  mcqGenerationService.initializeWACSTopics().then(() => {
+  try {
+    const { mcqGenerationService } = await import('./services/mcqGenerationService');
+    await mcqGenerationService.initializeWACSTopics();
     console.log('WACS topics initialized');
-    
-    try {
-      mcqGenerationService.startWeeklyTestNotificationScheduler();
-      console.log('MCQ Test Notification Scheduler started');
-      mcqGenerationService.autoScheduleNextWeekTest();
-    } catch (error) {
-      console.error('Error starting MCQ scheduler:', error);
-    }
-  }).catch(error => {
-    console.error('Error initializing WACS topics:', error);
-  });
-}, 100);
+    mcqGenerationService.startWeeklyTestNotificationScheduler();
+    console.log('MCQ Test Notification Scheduler started');
+    mcqGenerationService.autoScheduleNextWeekTest();
+  } catch (error) {
+    console.error('Error initializing WACS/MCQ services:', error);
+  }
+}, 2000);

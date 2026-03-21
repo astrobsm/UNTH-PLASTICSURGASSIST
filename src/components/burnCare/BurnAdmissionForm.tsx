@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import MedicalAutocompleteTextarea from '../MedicalAutocompleteTextarea';
 import { 
   ArrowLeft, 
   ArrowRight, 
@@ -538,9 +539,9 @@ const BurnAdmissionForm: React.FC<BurnAdmissionFormProps> = ({ onComplete, onCan
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Circumstance / History
               </label>
-              <textarea
+              <MedicalAutocompleteTextarea
                 value={circumstance}
-                onChange={(e) => setCircumstance(e.target.value)}
+                onChange={setCircumstance}
                 rows={3}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                 placeholder="Describe how the burn occurred..."

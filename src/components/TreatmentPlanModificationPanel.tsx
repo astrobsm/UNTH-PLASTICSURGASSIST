@@ -4,6 +4,7 @@ import {
   Pill, TestTube, Activity, Calendar, FileText, 
   CheckCircle, XCircle, Edit, Send
 } from 'lucide-react';
+import MedicalAutocompleteTextarea from './MedicalAutocompleteTextarea';
 import { useAuthStore } from '../store/authStore';
 import { 
   treatmentPlanningService, 
@@ -612,9 +613,9 @@ export const TreatmentPlanModificationPanel: React.FC<TreatmentPlanModificationP
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Diagnosis</label>
-              <textarea
+              <MedicalAutocompleteTextarea
                 value={generalChanges.diagnosis}
-                onChange={(e) => setGeneralChanges({ ...generalChanges, diagnosis: e.target.value })}
+                onChange={(val) => setGeneralChanges({ ...generalChanges, diagnosis: val })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500"
                 rows={3}
                 placeholder="Update diagnosis..."
@@ -622,9 +623,9 @@ export const TreatmentPlanModificationPanel: React.FC<TreatmentPlanModificationP
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-              <textarea
+              <MedicalAutocompleteTextarea
                 value={generalChanges.notes}
-                onChange={(e) => setGeneralChanges({ ...generalChanges, notes: e.target.value })}
+                onChange={(val) => setGeneralChanges({ ...generalChanges, notes: val })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500"
                 rows={3}
                 placeholder="Additional notes..."
@@ -639,9 +640,9 @@ export const TreatmentPlanModificationPanel: React.FC<TreatmentPlanModificationP
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Reason for Modification *
             </label>
-            <textarea
+            <MedicalAutocompleteTextarea
               value={reason}
-              onChange={(e) => setReason(e.target.value)}
+              onChange={setReason}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500"
               rows={2}
               placeholder="Explain why this change is needed..."

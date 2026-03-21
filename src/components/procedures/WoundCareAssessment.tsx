@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import MedicalAutocompleteTextarea from '../MedicalAutocompleteTextarea';
 import { procedureService, WoundCareAssessment } from '../../services/procedureService';
 import { aiWoundMeasurement, WoundMeasurementResult, CalibrationReference } from '../../services/aiWoundMeasurement';
 import {
@@ -714,9 +715,9 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
         <label className="block text-sm font-medium text-gray-700 mb-2">
           Wound Location
         </label>
-        <textarea
+        <MedicalAutocompleteTextarea
           value={assessment.wound_location || ''}
-          onChange={(e) => handleInputChange('wound_location', e.target.value)}
+          onChange={(val) => handleInputChange('wound_location', val)}
           rows={2}
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500"
           placeholder="Describe exact anatomical location of the wound..."

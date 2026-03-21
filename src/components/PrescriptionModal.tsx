@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import MedicalAutocompleteTextarea from './MedicalAutocompleteTextarea';
 import { useAuthStore } from '../store/authStore';
 import { MEDICATION_DATABASE } from '../data/medicationDatabase';
 import { patientActivityService } from '../services/patientActivityService';
@@ -346,9 +347,9 @@ export const PrescriptionModal: React.FC<PrescriptionModalProps> = ({
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Special Instructions
                     </label>
-                    <textarea
+                    <MedicalAutocompleteTextarea
                       value={prescription.instructions}
-                      onChange={(e) => handlePrescriptionChange(index, 'instructions', e.target.value)}
+                      onChange={(val) => handlePrescriptionChange(index, 'instructions', val)}
                       rows={2}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md"
                       placeholder="Take with food, avoid alcohol, etc."

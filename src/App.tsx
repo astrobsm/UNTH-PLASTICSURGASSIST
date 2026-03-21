@@ -3,15 +3,12 @@ import { useState, useEffect, lazy, Suspense } from 'react';
 import { useLocation } from 'react-router-dom';
 import Layout from './components/Layout';
 import ErrorBoundary from './components/ErrorBoundary';
-import { syncService } from './db/syncService';
 import { patientService } from './services/patientService';
 import ForcePasswordChange from './components/ForcePasswordChange';
 import { useAuthStore } from './store/authStore';
 import { PWAInstallPrompt } from './components/PWAInstallPrompt';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { SWUpdateBanner } from './components/SWUpdateBanner';
-import { notificationService } from './services/notificationBackgroundService';
-import { pushNotificationService } from './services/pushNotificationService';
 import { initializeCSRFToken } from './utils/csrf';
 import { logger } from './utils/logger';
 
@@ -113,13 +110,14 @@ function App() {
 
     // Request notification permissions for MCQ reminders and patient notifications
     if (user) {
-      notificationService.requestNotificationPermission();
-      
-      // Request push notification permission and subscribe
-      pushNotificationService.requestPermission().then((granted) => {
-        if (granted) {
-          console.log('✅ Push notifications enabled for patient alerts');
-        }
+      // Dynamically import notification services to reduce initial bundle
+      import('./services/notificationBackgroundService').then(({ notificationService }) => {
+        notificationService.requestNotificationPermission();
+      });
+      import('./services/pushNotificationService').then(({ pushNotificationService }) => {
+        pushNotificationService.requestPermission().then((granted) => {
+          if (granted) console.log('✅ Push notifications enabled for patient alerts');
+        });
       });
       
       // Sync any unsynced local data when user logs in
