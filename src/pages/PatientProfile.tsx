@@ -320,8 +320,8 @@ export const PatientProfile: React.FC = () => {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 sm:gap-6">
-          {/* Sidebar - Quick Info - Hidden on mobile, show in tabs */}
-          <div className="hidden lg:block lg:col-span-1 space-y-6">
+          {/* Sidebar - Quick Info */}
+          <div className="lg:col-span-1 space-y-4 sm:space-y-6">
             {/* Quick Summary Card */}
             <QuickSummaryCard patientId={id!} />
             
