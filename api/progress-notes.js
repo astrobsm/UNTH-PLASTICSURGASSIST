@@ -54,7 +54,7 @@ async function ensureTable() {
   await query(`
     CREATE TABLE IF NOT EXISTS progress_notes (
       id SERIAL PRIMARY KEY,
-      patient_id INTEGER REFERENCES patients(id) ON DELETE CASCADE,
+      patient_id INTEGER,
       patient_name VARCHAR(255),
       author VARCHAR(255),
       author_role VARCHAR(100),
@@ -62,6 +62,7 @@ async function ensureTable() {
       vital_signs JSONB DEFAULT '{}',
       lmp VARCHAR(100),
       soap JSONB DEFAULT '{}',
+      clinical_images JSONB DEFAULT '[]',
       status VARCHAR(50) DEFAULT 'active',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -70,6 +71,10 @@ async function ensureTable() {
     CREATE INDEX IF NOT EXISTS idx_progress_notes_date ON progress_notes(date DESC);
     CREATE INDEX IF NOT EXISTS idx_progress_notes_author ON progress_notes(author);
   `);
+  // Add clinical_images column if table already existed without it
+  try {
+    await query(`ALTER TABLE progress_notes ADD COLUMN IF NOT EXISTS clinical_images JSONB DEFAULT '[]'`);
+  } catch(e) { /* column may already exist */ }
   tableEnsured = true;
 }
 
@@ -108,7 +113,7 @@ async function getProgressNote(id, res) {
 async function createProgressNote(body, user, res) {
   const {
     patient_id, patient_name, author, author_role,
-    date, vital_signs, lmp, soap
+    date, vital_signs, lmp, soap, clinical_images
   } = body;
 
   if (!patient_id) {
@@ -117,8 +122,8 @@ async function createProgressNote(body, user, res) {
 
   const result = await query(
     `INSERT INTO progress_notes 
-     (patient_id, patient_name, author, author_role, date, vital_signs, lmp, soap)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     (patient_id, patient_name, author, author_role, date, vital_signs, lmp, soap, clinical_images)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      RETURNING *`,
     [
       parseInt(patient_id, 10),
@@ -128,7 +133,8 @@ async function createProgressNote(body, user, res) {
       date ? new Date(date) : new Date(),
       JSON.stringify(vital_signs || {}),
       lmp || null,
-      JSON.stringify(soap || {})
+      JSON.stringify(soap || {}),
+      JSON.stringify(clinical_images || [])
     ]
   );
 

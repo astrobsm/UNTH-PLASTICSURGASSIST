@@ -458,13 +458,16 @@ export function PatientChronologicalTimeline({ patientId, hospitalNumber }: Pati
         }
       } catch(e) { console.warn('Timeline transfusions:', e); }
 
-      // 17. Progress Notes (from localStorage fallback and server)
+      // 17. Progress Notes (from IndexedDB + API + localStorage)
       try {
-        const localNotes: any[] = JSON.parse(localStorage.getItem('progressNotes') || '[]');
-        for (const pn of localNotes.filter((n: any) => matchPid(n.patient_id))) {
+        const seenNoteIds = new Set<string>();
+        const addProgressNote = (pn: any, source: string) => {
+          const noteKey = pn.id ? `pn_${pn.id}` : `pn_${source}_${pn.date || Math.random()}`;
+          if (seenNoteIds.has(noteKey)) return;
+          seenNoteIds.add(noteKey);
           const soap = pn.soap || {};
           timelineEvents.push({
-            id: `pn_local_${pn.date || Math.random()}`, date: safeDate(pn.date || pn.created_at), type: 'ward_round',
+            id: noteKey, date: safeDate(pn.date || pn.created_at), type: 'ward_round',
             title: 'Progress Note (SOAP)',
             description: soap.subjective ? soap.subjective.substring(0, 120) + (soap.subjective.length > 120 ? '...' : '') : 'Progress note documented',
             author: pn.author,
@@ -479,9 +482,28 @@ export function PatientChronologicalTimeline({ patientId, hospitalNumber }: Pati
               ...(pn.vital_signs?.respiratoryRate ? [{ label: 'Resp Rate', value: pn.vital_signs.respiratoryRate + ' rpm' }] : []),
               ...(pn.vital_signs?.oxygenSaturation ? [{ label: 'SpO₂', value: pn.vital_signs.oxygenSaturation + '%' }] : []),
               ...(pn.vital_signs?.painScore ? [{ label: 'Pain', value: pn.vital_signs.painScore + '/10' }] : []),
+              ...(pn.clinical_images?.length ? [{ label: 'Images', value: `${pn.clinical_images.length} clinical image(s) attached` }] : []),
             ],
           });
-        }
+        };
+
+        // Source 1: IndexedDB (synced from server)
+        try {
+          if (db.progress_notes) {
+            const dbNotes = await db.progress_notes.toArray();
+            for (const pn of dbNotes.filter((n: any) => matchPid(n.patient_id))) {
+              addProgressNote(pn, 'db');
+            }
+          }
+        } catch(e) { console.warn('Timeline progress notes (IndexedDB):', e); }
+
+        // Source 2: localStorage fallback (for notes saved before IndexedDB table existed)
+        try {
+          const localNotes: any[] = JSON.parse(localStorage.getItem('progressNotes') || '[]');
+          for (const pn of localNotes.filter((n: any) => matchPid(n.patient_id))) {
+            addProgressNote(pn, 'local');
+          }
+        } catch(e) { /* ignore localStorage errors */ }
       } catch(e) { console.warn('Timeline progress notes:', e); }
 
       // Sort by date descending

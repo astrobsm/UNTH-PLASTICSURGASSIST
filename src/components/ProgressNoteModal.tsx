@@ -7,7 +7,7 @@ import { db } from '../db/database';
 import { DocumentScannerModal } from './DocumentScannerModal';
 import { ScribeRecordingPanel } from './ScribeRecordingPanel';
 import { speechToTextService } from '../services/speechToTextService';
-import { Brain, Mic, MicOff, Wand2 } from 'lucide-react';
+import { Brain, Camera, ImagePlus, Mic, MicOff, Trash2, Wand2 } from 'lucide-react';
 import type { StructuredNote, ScribeSession } from '../services/medicalScribeService';
 import MedicalAutocompleteTextarea from './MedicalAutocompleteTextarea';
 
@@ -55,6 +55,56 @@ export const ProgressNoteModal: React.FC<ProgressNoteModalProps> = ({
   const [lmp, setLmp] = useState('');
   const [saving, setSaving] = useState(false);
   const [showDocumentScanner, setShowDocumentScanner] = useState(false);
+
+  // --- Clinical Image Capture ---
+  const [clinicalImages, setClinicalImages] = useState<string[]>([]);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
+
+  const compressImage = useCallback((file: File, maxDim = 800, quality = 0.6): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let w = img.width, h = img.height;
+          if (w > maxDim || h > maxDim) {
+            if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
+            else { w = Math.round(w * maxDim / h); h = maxDim; }
+          }
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) { reject(new Error('Canvas not supported')); return; }
+          ctx.drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = () => reject(new Error('Failed to load image'));
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.readAsDataURL(file);
+    });
+  }, []);
+
+  const handleImageCapture = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    for (let i = 0; i < files.length; i++) {
+      try {
+        const compressed = await compressImage(files[i]);
+        setClinicalImages(prev => [...prev, compressed]);
+      } catch (err) {
+        console.error('Image compression error:', err);
+      }
+    }
+    e.target.value = '';
+  }, [compressImage]);
+
+  const removeImage = useCallback((index: number) => {
+    setClinicalImages(prev => prev.filter((_, i) => i !== index));
+  }, []);
 
   // --- Speech-to-text per-field dictation ---
   const [activeVoiceField, setActiveVoiceField] = useState<SOAPField | null>(null);
@@ -221,6 +271,7 @@ export const ProgressNoteModal: React.FC<ProgressNoteModalProps> = ({
         vital_signs: vitalSigns,
         lmp: isFemale ? lmp : undefined,
         soap: note,
+        clinical_images: clinicalImages,
         created_at: new Date(),
         updated_at: new Date()
       };
@@ -290,6 +341,7 @@ export const ProgressNoteModal: React.FC<ProgressNoteModalProps> = ({
       painScore: ''
     });
     setLmp('');
+    setClinicalImages([]);
     setShowScribePanel(false);
     onClose();
   };
@@ -447,6 +499,64 @@ export const ProgressNoteModal: React.FC<ProgressNoteModalProps> = ({
                   />
                 </div>
               </div>
+            </div>
+
+            {/* Clinical Image Capture */}
+            <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-lg">
+              <h4 className="font-semibold text-emerald-900 mb-3">Clinical Images (Optional)</h4>
+              <div className="flex flex-wrap gap-2 mb-3">
+                <button
+                  type="button"
+                  onClick={() => cameraInputRef.current?.click()}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm font-medium transition-colors"
+                >
+                  <Camera className="w-4 h-4" />
+                  Snap Photo
+                </button>
+                <button
+                  type="button"
+                  onClick={() => galleryInputRef.current?.click()}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-white text-emerald-700 rounded-lg hover:bg-emerald-100 border border-emerald-300 text-sm font-medium transition-colors"
+                >
+                  <ImagePlus className="w-4 h-4" />
+                  Upload from Gallery
+                </button>
+                {/* Hidden file inputs */}
+                <input
+                  ref={cameraInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handleImageCapture}
+                  className="hidden"
+                />
+                <input
+                  ref={galleryInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handleImageCapture}
+                  className="hidden"
+                />
+              </div>
+              <p className="text-xs text-emerald-700 mb-2">Images are compressed for storage. Max 800px, JPEG quality 60%.</p>
+              {clinicalImages.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {clinicalImages.map((img, idx) => (
+                    <div key={idx} className="relative group w-20 h-20 rounded-lg overflow-hidden border border-emerald-300">
+                      <img src={img} alt={`Clinical ${idx + 1}`} className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => removeImage(idx)}
+                        className="absolute top-0.5 right-0.5 bg-red-600 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="Remove image"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* SOAP Note */}
