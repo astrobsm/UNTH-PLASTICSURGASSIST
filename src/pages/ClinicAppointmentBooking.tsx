@@ -9,6 +9,8 @@ interface ClinicDate {
   dayName: string;
   dayOfWeek: number;
   doctors: string[];
+  schedule: { label: string; start: string; end: string }[];
+  scheduleLabel: string;
 }
 
 interface TimeSlot {
@@ -116,7 +118,8 @@ export default function ClinicAppointmentBooking() {
     setError('');
   };
 
-  // Separate morning vs afternoon slots
+  // Separate morning vs afternoon slots (only relevant for Tuesday)
+  const isTuesday = selectedDate?.dayOfWeek === 2;
   const morningSlots = slots.filter(s => {
     const hour = parseInt(s.time.split(':')[0]);
     return hour < 14;
@@ -225,15 +228,15 @@ export default function ClinicAppointmentBooking() {
               <h3 className="font-semibold text-green-900 mb-2">Clinic Schedule</h3>
               <div className="grid sm:grid-cols-2 gap-3 text-sm text-green-800">
                 <div>
-                  <p className="font-medium">Morning Session</p>
-                  <p>9:00 AM – 1:30 PM</p>
+                  <p className="font-medium">Tuesday</p>
+                  <p>9:00 AM – 1:30 PM, 2:00 PM – 4:00 PM</p>
                 </div>
                 <div>
-                  <p className="font-medium">Afternoon Session</p>
-                  <p>2:00 PM – 4:00 PM</p>
+                  <p className="font-medium">Wednesday</p>
+                  <p>10:00 AM – 2:00 PM</p>
                 </div>
               </div>
-              <p className="text-xs text-green-600 mt-2">Break: 1:30 PM – 2:00 PM (No bookings)</p>
+              <p className="text-xs text-green-600 mt-2">Tuesday has a break: 1:30 PM – 2:00 PM</p>
             </div>
           </div>
         )}
@@ -254,10 +257,10 @@ export default function ClinicAppointmentBooking() {
               </div>
             ) : (
               <>
-                {/* Morning */}
+                {/* Morning / Main session */}
                 <div className="mb-6">
                   <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                    <Clock className="w-4 h-4" /> Morning Session (9:00 AM – 1:30 PM)
+                    <Clock className="w-4 h-4" /> {isTuesday ? 'Morning Session (9:00 AM – 1:30 PM)' : 'Clinic Session (10:00 AM – 2:00 PM)'}
                   </h3>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                     {morningSlots.map(slot => (
@@ -280,18 +283,19 @@ export default function ClinicAppointmentBooking() {
                   </div>
                 </div>
 
-                {/* Break indicator */}
-                <div className="flex items-center gap-3 mb-6 px-3">
-                  <div className="flex-1 h-px bg-amber-300" />
-                  <span className="text-xs text-amber-600 font-medium">Break: 1:30 PM – 2:00 PM</span>
-                  <div className="flex-1 h-px bg-amber-300" />
-                </div>
+                {/* Break indicator + Afternoon (Tuesday only) */}
+                {isTuesday && afternoonSlots.length > 0 && (
+                  <>
+                    <div className="flex items-center gap-3 mb-6 px-3">
+                      <div className="flex-1 h-px bg-amber-300" />
+                      <span className="text-xs text-amber-600 font-medium">Break: 1:30 PM – 2:00 PM</span>
+                      <div className="flex-1 h-px bg-amber-300" />
+                    </div>
 
-                {/* Afternoon */}
-                <div className="mb-6">
-                  <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                    <Clock className="w-4 h-4" /> Afternoon Session (2:00 PM – 4:00 PM)
-                  </h3>
+                    <div className="mb-6">
+                      <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                        <Clock className="w-4 h-4" /> Afternoon Session (2:00 PM – 4:00 PM)
+                      </h3>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                     {afternoonSlots.map(slot => (
                       <button
@@ -311,7 +315,9 @@ export default function ClinicAppointmentBooking() {
                       </button>
                     ))}
                   </div>
-                </div>
+                    </div>
+                  </>
+                )}
 
                 {selectedSlot && (
                   <div className="flex justify-end">
@@ -477,7 +483,7 @@ export default function ClinicAppointmentBooking() {
       <footer className="border-t border-gray-200 bg-white mt-12">
         <div className="max-w-4xl mx-auto px-4 py-4 text-center text-xs text-gray-500">
           <p>Plastic Surgery Unit — University of Nigeria Teaching Hospital (UNTH)</p>
-          <p className="mt-1">Clinic Days: Tuesdays & Wednesdays | 9:00 AM – 4:00 PM</p>
+          <p className="mt-1">Clinic Days: Tuesdays (9:00 AM – 4:00 PM) & Wednesdays (10:00 AM – 2:00 PM)</p>
         </div>
       </footer>
     </div>

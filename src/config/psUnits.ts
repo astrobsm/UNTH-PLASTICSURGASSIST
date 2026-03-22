@@ -53,7 +53,7 @@ export const PS_UNITS: PSUnit[] = [
     name: 'PS-UNIT 2',
     consultants: ['Dr Okwesili', 'Dr Eze C. B'],
     schedule: {
-      clinic: { day: 'Wednesday', startTime: '10:00 AM', endTime: '3:00 PM' },
+      clinic: { day: 'Wednesday', startTime: '10:00 AM', endTime: '2:00 PM' },
       theatre: { day: 'Thursday' },
       wardRounds: { day: 'Wednesday', startTime: '8:30 AM', endTime: '10:00 AM' },
     },

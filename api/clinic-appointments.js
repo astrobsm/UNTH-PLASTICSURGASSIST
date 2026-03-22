@@ -31,48 +31,47 @@ const CLINIC_CONFIG = {
   tuesday: {
     dayOfWeek: 2,
     doctors: ['Dr. Nnadi', 'Dr. Onyia'],
-    assignMode: 'random'
+    assignMode: 'random',
+    schedule: [
+      { label: 'Morning Session', start: '09:00', end: '13:30' },
+      { label: 'Afternoon Session', start: '14:00', end: '16:00' }
+    ],
+    scheduleLabel: '9:00 AM – 1:30 PM, 2:00 PM – 4:00 PM'
   },
   wednesday: {
     dayOfWeek: 3,
     doctors: ['Dr. Eze'],
-    assignMode: 'fixed'
+    assignMode: 'fixed',
+    schedule: [
+      { label: 'Clinic Session', start: '10:00', end: '14:00' }
+    ],
+    scheduleLabel: '10:00 AM – 2:00 PM'
   }
 };
 
-// Generate 20-minute time slots
-function generateTimeSlots() {
+// Generate 20-minute time slots for a given day of week
+function generateTimeSlots(dayOfWeek) {
+  const config = dayOfWeek === 3 ? CLINIC_CONFIG.wednesday : CLINIC_CONFIG.tuesday;
   const slots = [];
-  // Morning session: 9:00 AM – 1:30 PM
-  let hour = 9, min = 0;
-  while (hour < 13 || (hour === 13 && min < 30)) {
-    const startH = String(hour).padStart(2, '0');
-    const startM = String(min).padStart(2, '0');
-    let endMin = min + 20;
-    let endHour = hour;
-    if (endMin >= 60) { endMin -= 60; endHour += 1; }
-    const endH = String(endHour).padStart(2, '0');
-    const endM = String(endMin).padStart(2, '0');
-    // Don't create slot if it would end after 13:30
-    if (endHour > 13 || (endHour === 13 && endMin > 30)) break;
-    slots.push(`${startH}:${startM}-${endH}:${endM}`);
-    min += 20;
-    if (min >= 60) { min -= 60; hour += 1; }
-  }
-  // Afternoon session: 2:00 PM – 4:00 PM
-  hour = 14; min = 0;
-  while (hour < 16) {
-    const startH = String(hour).padStart(2, '0');
-    const startM = String(min).padStart(2, '0');
-    let endMin = min + 20;
-    let endHour = hour;
-    if (endMin >= 60) { endMin -= 60; endHour += 1; }
-    const endH = String(endHour).padStart(2, '0');
-    const endM = String(endMin).padStart(2, '0');
-    if (endHour > 16) break;
-    slots.push(`${startH}:${startM}-${endH}:${endM}`);
-    min += 20;
-    if (min >= 60) { min -= 60; hour += 1; }
+  for (const session of config.schedule) {
+    const [startHour, startMin] = session.start.split(':').map(Number);
+    const [endHour, endMin] = session.end.split(':').map(Number);
+    const endTotalMin = endHour * 60 + endMin;
+    let hour = startHour, min = startMin;
+    while (true) {
+      let slotEndMin = min + 20;
+      let slotEndHour = hour;
+      if (slotEndMin >= 60) { slotEndMin -= 60; slotEndHour += 1; }
+      // Stop if slot would end after session end
+      if (slotEndHour * 60 + slotEndMin > endTotalMin) break;
+      const startH = String(hour).padStart(2, '0');
+      const startM = String(min).padStart(2, '0');
+      const endH = String(slotEndHour).padStart(2, '0');
+      const endM = String(slotEndMin).padStart(2, '0');
+      slots.push(`${startH}:${startM}-${endH}:${endM}`);
+      min += 20;
+      if (min >= 60) { min -= 60; hour += 1; }
+    }
   }
   return slots;
 }
@@ -87,15 +86,21 @@ function getUpcomingClinicDates() {
     d.setDate(today.getDate() + i);
     const dow = d.getDay();
     if (dow === 2 || dow === 3) {
+      const config = dow === 2 ? CLINIC_CONFIG.tuesday : CLINIC_CONFIG.wednesday;
       // Only include today if there's still time for appointments
       if (i === 0) {
         const now = new Date();
-        if (now.getHours() >= 16) continue; // clinic over for today
+        const lastSession = config.schedule[config.schedule.length - 1];
+        const [endH] = lastSession.end.split(':').map(Number);
+        if (now.getHours() >= endH) continue; // clinic over for today
       }
       dates.push({
         date: d.toISOString().split('T')[0],
         dayName: dow === 2 ? 'Tuesday' : 'Wednesday',
-        dayOfWeek: dow
+        dayOfWeek: dow,
+        doctors: config.doctors,
+        schedule: config.schedule,
+        scheduleLabel: config.scheduleLabel
       });
     }
   }
@@ -182,7 +187,8 @@ async function getAvailableSlots(params, res) {
     return res.status(400).json({ error: 'Clinic is only available on Tuesdays and Wednesdays' });
   }
 
-  const allSlots = generateTimeSlots();
+  const config = dow === 2 ? CLINIC_CONFIG.tuesday : CLINIC_CONFIG.wednesday;
+  const allSlots = generateTimeSlots(dow);
 
   // Query booked slots for this date
   const result = await query(
@@ -194,7 +200,7 @@ async function getAvailableSlots(params, res) {
   const bookedSlots = result.rows.map(r => r.time_slot);
 
   // Determine doctors for this day
-  const doctors = dow === 2 ? CLINIC_CONFIG.tuesday.doctors : CLINIC_CONFIG.wednesday.doctors;
+  const doctors = config.doctors;
 
   // For each slot, check availability across all doctors
   const slots = allSlots.map(slot => {
@@ -218,6 +224,8 @@ async function getAvailableSlots(params, res) {
     date,
     dayName: dow === 2 ? 'Tuesday' : 'Wednesday',
     doctors,
+    schedule: config.schedule,
+    scheduleLabel: config.scheduleLabel,
     slots
   });
 }
@@ -255,7 +263,7 @@ async function bookAppointment(body, res) {
   }
 
   // Validate time slot format
-  const allSlots = generateTimeSlots();
+  const allSlots = generateTimeSlots(dow);
   if (!allSlots.includes(time_slot)) {
     return res.status(400).json({ error: 'Invalid time slot' });
   }
