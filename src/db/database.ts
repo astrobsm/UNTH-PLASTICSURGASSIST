@@ -221,6 +221,7 @@ export class PlasticSurgeonDB extends Dexie {
   notice_board!: Table<any>; // For notice board posts and announcements
   ps_unit_rosters!: Table<any>; // For PS Unit rotation roster configs
   shopping_lists!: Table<any>; // For saved shopping lists with cloud persistence
+  progress_notes!: Table<any>; // For SOAP progress notes
 
   constructor() {
     super('PlasticSurgeonDB');
@@ -1242,6 +1243,11 @@ export class PlasticSurgeonDB extends Dexie {
       shopping_lists: '++id, patient_id, patient_name, hospital_number, category, created_at, created_by'
     });
 
+    // Version 27: Add progress_notes table for SOAP progress notes
+    this.version(27).stores({
+      progress_notes: '++id, patient_id, patient_name, author, date, synced, created_at'
+    });
+
     // Add hooks to automatically track changes
     this.patients.hook('creating', (primKey, obj, trans) => {
       obj.created_at = obj.created_at || new Date();
@@ -1339,6 +1345,21 @@ export class PlasticSurgeonDB extends Dexie {
 
     this.nutritional_assessments.hook('updating', (modifications, primKey, obj, trans) => {
       (modifications as any).updated_at = new Date();
+    });
+
+    // Progress notes hooks
+    this.progress_notes.hook('creating', (primKey, obj, trans) => {
+      obj.created_at = obj.created_at || new Date();
+      obj.updated_at = obj.updated_at || new Date();
+      if (obj.synced === undefined || obj.synced === null) {
+        obj.synced = false;
+      }
+    });
+
+    this.progress_notes.hook('updating', (modifications, primKey, obj, trans) => {
+      if (!modifications.hasOwnProperty('updated_at')) {
+        (modifications as any).updated_at = new Date();
+      }
     });
   }
 }

@@ -96,6 +96,9 @@ export default async function handler(req, res) {
         if (action === 'who-safety-checklists' || action === 'who_safety_checklists') {
           return await getSyncEntity('who_safety_checklists', res);
         }
+        if (action === 'progress-notes' || action === 'progress_notes') {
+          return await getSyncEntity('progress_notes', res);
+        }
         // Paperwork, CME, Education tables
         if (action === 'paperwork-documents' || action === 'paperwork_documents') {
           return await getSyncEntity('paperwork_documents', res);

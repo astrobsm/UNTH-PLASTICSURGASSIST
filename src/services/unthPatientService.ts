@@ -895,7 +895,27 @@ Please review patient file for complete clinical details or retry AI summary gen
   }
 
   private async saveTransferRecord(transfer: PatientTransfer) {
-    // Save transfer record to database
+    try {
+      // Try to save to server first
+      try {
+        const { apiClient } = await import('./apiClient');
+        await apiClient.request('/patient-transfers', {
+          method: 'POST',
+          body: JSON.stringify(transfer)
+        });
+        console.log('✅ Transfer record synced to server');
+      } catch (apiError) {
+        console.warn('⚠️ Failed to sync transfer to server, saved locally only', apiError);
+      }
+
+      // Save to localStorage as reliable local store
+      const existing = JSON.parse(localStorage.getItem('patient_transfers') || '[]');
+      existing.push({ ...transfer, created_at: new Date().toISOString() });
+      localStorage.setItem('patient_transfers', JSON.stringify(existing));
+      console.log('📱 Transfer record saved locally');
+    } catch (error) {
+      console.error('Error saving transfer record:', error);
+    }
   }
 
   private async generateAdmissionSummary(patientId: string, registrationData: PatientRegistration) {

@@ -44,7 +44,8 @@ export type SyncableEntity =
   | 'pressure_sore_assessments'
   | 'nutritional_assessments'
   | 'procedures'
-  | 'who_safety_checklists';
+  | 'who_safety_checklists'
+  | 'progress_notes';
 
 // Sync status for each entity
 interface EntitySyncStatus {
@@ -106,7 +107,8 @@ class DataSyncService {
     pressure_sore_assessments: '/sync/pressure-sore-assessments',
     nutritional_assessments: '/sync/nutritional-assessments',
     procedures: '/sync/procedures',
-    who_safety_checklists: '/sync/who-safety-checklists'
+    who_safety_checklists: '/sync/who-safety-checklists',
+    progress_notes: '/sync/progress-notes'
   };
 
   // Entity to IndexedDB table mapping
@@ -131,7 +133,8 @@ class DataSyncService {
     pressure_sore_assessments: 'pressure_sore_assessments',
     nutritional_assessments: 'nutritional_assessments',
     procedures: 'procedures',
-    who_safety_checklists: 'who_safety_checklists'
+    who_safety_checklists: 'who_safety_checklists',
+    progress_notes: 'progress_notes'
   };
 
   constructor() {
@@ -156,7 +159,8 @@ class DataSyncService {
       'mdt_patient_teams', 'mdt_meetings', 'mdt_contact_logs',
       'blood_transfusions', 'burn_patients', 'diabetic_foot_assessments',
       'preoperative_assessments', 'dvt_assessments', 'pressure_sore_assessments',
-      'nutritional_assessments', 'procedures', 'who_safety_checklists'
+      'nutritional_assessments', 'procedures', 'who_safety_checklists',
+      'progress_notes'
     ];
 
     entities.forEach(entity => {
@@ -465,6 +469,7 @@ class DataSyncService {
     }
 
     // Define entities to pull in order (dependencies first)
+    // IMPORTANT: ALL syncable entities must be listed here for cross-device sync
     const entitiesToPull: SyncableEntity[] = [
       'patients',       // Must be first - other entities reference patients
       'admissions',
@@ -475,7 +480,19 @@ class DataSyncService {
       'surgeries',
       'ward_rounds',
       'wound_care',
-      'blood_transfusions'
+      'blood_transfusions',
+      'progress_notes',
+      'dvt_assessments',
+      'pressure_sore_assessments',
+      'nutritional_assessments',
+      'burn_patients',
+      'diabetic_foot_assessments',
+      'preoperative_assessments',
+      'procedures',
+      'who_safety_checklists',
+      'mdt_patient_teams',
+      'mdt_meetings',
+      'mdt_contact_logs'
     ];
 
     for (const entity of entitiesToPull) {
