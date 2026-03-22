@@ -17,11 +17,11 @@ async function ensureTable() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(appointment_date, time_slot, doctor_assigned)
-    );
-    CREATE INDEX IF NOT EXISTS idx_clinic_appt_date ON clinic_appointments(appointment_date);
-    CREATE INDEX IF NOT EXISTS idx_clinic_appt_doctor ON clinic_appointments(doctor_assigned);
-    CREATE INDEX IF NOT EXISTS idx_clinic_appt_patient ON clinic_appointments(patient_number);
+    )
   `);
+  await query(`CREATE INDEX IF NOT EXISTS idx_clinic_appt_date ON clinic_appointments(appointment_date)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_clinic_appt_doctor ON clinic_appointments(doctor_assigned)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_clinic_appt_patient ON clinic_appointments(patient_number)`);
   tableEnsured = true;
 }
 
@@ -120,14 +120,16 @@ export default async function handler(req, res) {
   const action = pathParts[0];
 
   try {
+    // clinic-dates is pure JS date math — no DB needed
+    if (method === 'GET' && action === 'clinic-dates') {
+      return await getClinicDates(res);
+    }
+
     await ensureTable();
 
     // PUBLIC endpoints (no auth required for patient booking)
     if (method === 'GET' && action === 'available-slots') {
       return await getAvailableSlots(url.searchParams, res);
-    }
-    if (method === 'GET' && action === 'clinic-dates') {
-      return await getClinicDates(res);
     }
     if (method === 'POST' && action === 'book') {
       return await bookAppointment(req.body, res);
