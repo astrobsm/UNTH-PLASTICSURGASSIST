@@ -62,7 +62,6 @@
       <h1>CLINIC APPOINTMENT BOOKING</h1>
       <div class="subtitle">UNTH Plastic Surgery Unit</div>
     </div>
-    <a href="/" class="btn-login">DOCTORS LOGIN</a>
   </div>
 
   <div class="container" id="app">
@@ -70,7 +69,7 @@
   </div>
 
   <div class="footer">
-    &copy; 2026 UNTH Plastic Surgery Unit &middot; Clinic Appointment System
+    &copy; 2026 UNTH Plastic Surgery Unit &middot; Tuesdays (9 AM &ndash; 4 PM) &middot; Wednesdays (10 AM &ndash; 2 PM)
   </div>
 
   <script>
@@ -221,7 +220,7 @@
       if (state.step === 'select-date') {
         html += `<div class="card">
           <h2>📅 Step 1: Select Clinic Day</h2>
-          <p style="font-size:0.85rem;color:#6b7280;margin-bottom:1rem">Choose a Tuesday or Wednesday clinic date. Clinic hours: 9:00 AM – 1:30 PM &amp; 2:00 PM – 4:00 PM.</p>
+          <p style="font-size:0.85rem;color:#6b7280;margin-bottom:1rem">Choose a Tuesday or Wednesday clinic date.</p>
           <div class="dates-grid">`;
         if (state.dates.length === 0) {
           html += '<p style="color:#6b7280;grid-column:1/-1;text-align:center">No upcoming clinic dates available.</p>';
@@ -245,20 +244,31 @@
         if (state.loading) {
           html += '<div class="loading"><div class="spinner"></div></div>';
         } else {
-          html += '<div class="section-label">Morning Session (9:00 AM – 1:30 PM)</div><div class="slots-grid">';
-          let afternoonStarted = false;
-          for (const s of state.slots) {
-            const startTime = s.time.split('-')[0];
-            if (startTime >= '14:00' && !afternoonStarted) {
-              html += '</div><div class="slots-grid"><div class="break-label">🍽️ Break: 1:30 PM – 2:00 PM (No bookings)</div></div>';
-              html += '<div class="section-label">Afternoon Session (2:00 PM – 4:00 PM)</div><div class="slots-grid">';
-              afternoonStarted = true;
+          const isWednesday = state.selectedDate && state.selectedDate.dayOfWeek === 3;
+          if (isWednesday) {
+            html += '<div class="section-label">Clinic Session (10:00 AM – 2:00 PM)</div><div class="slots-grid">';
+            for (const s of state.slots) {
+              const cls = !s.available ? 'slot-btn booked' : (state.selectedSlot && state.selectedSlot.time === s.time ? 'slot-btn selected' : 'slot-btn');
+              const label = !s.available ? 'BOOKED' : formatTime(s.time);
+              html += `<button class="${cls}" ${!s.available ? 'disabled' : ''} onclick="selectSlot(${esc(JSON.stringify(s).replace(/"/g, '&quot;'))})">${esc(label)}</button>`;
             }
-            const cls = !s.available ? 'slot-btn booked' : (state.selectedSlot && state.selectedSlot.time === s.time ? 'slot-btn selected' : 'slot-btn');
-            const label = !s.available ? 'BOOKED' : formatTime(s.time);
-            html += `<button class="${cls}" ${!s.available ? 'disabled' : ''} onclick="selectSlot(${esc(JSON.stringify(s).replace(/"/g, '&quot;'))})">${esc(label)}</button>`;
+            html += '</div>';
+          } else {
+            html += '<div class="section-label">Morning Session (9:00 AM – 1:30 PM)</div><div class="slots-grid">';
+            let afternoonStarted = false;
+            for (const s of state.slots) {
+              const startTime = s.time.split('-')[0];
+              if (startTime >= '14:00' && !afternoonStarted) {
+                html += '</div><div class="slots-grid"><div class="break-label">🍽️ Break: 1:30 PM – 2:00 PM (No bookings)</div></div>';
+                html += '<div class="section-label">Afternoon Session (2:00 PM – 4:00 PM)</div><div class="slots-grid">';
+                afternoonStarted = true;
+              }
+              const cls = !s.available ? 'slot-btn booked' : (state.selectedSlot && state.selectedSlot.time === s.time ? 'slot-btn selected' : 'slot-btn');
+              const label = !s.available ? 'BOOKED' : formatTime(s.time);
+              html += `<button class="${cls}" ${!s.available ? 'disabled' : ''} onclick="selectSlot(${esc(JSON.stringify(s).replace(/"/g, '&quot;'))})">${esc(label)}</button>`;
+            }
+            html += '</div>';
           }
-          html += '</div>';
         }
         html += '</div>';
       }

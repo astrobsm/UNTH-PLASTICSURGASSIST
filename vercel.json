@@ -40,7 +40,7 @@
       "destination": "/api/:path*"
     },
     {
-      "source": "/((?!api/).*)",
+      "source": "/((?!api/|book-appointment\\.html).*)",
       "destination": "/index.html"
     }
   ],

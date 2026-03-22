@@ -143,12 +143,6 @@ export default function ClinicAppointmentBooking() {
               <p className="text-xs text-gray-500">Plastic Surgery Unit • UNTH</p>
             </div>
           </div>
-          <button
-            onClick={() => navigate('/')}
-            className="px-4 py-2 bg-green-600 text-white text-sm font-semibold rounded-lg hover:bg-green-700 transition-colors shadow-sm"
-          >
-            DOCTORS LOGIN
-          </button>
         </div>
       </header>
 
