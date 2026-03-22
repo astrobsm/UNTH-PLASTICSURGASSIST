@@ -116,12 +116,17 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate the file is actually an image
-    if (!file.type.startsWith('image/')) {
-      setError('Please select an image file (JPEG, PNG, etc.).');
+    const isImage = file.type.startsWith('image/') || /\.(jpe?g|png|gif|bmp|webp|tiff?)$/i.test(file.name);
+    const isPDF = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+
+    if (!isImage && !isPDF) {
+      setError('Please select an image (JPEG, PNG) or PDF file.');
       return;
     }
-    
+
+    // Reset the input so the same file can be re-selected
+    e.target.value = '';
+
     const reader = new FileReader();
     reader.onerror = () => {
       setError('Failed to read the selected file. Please try again.');
@@ -132,16 +137,24 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
         setError('Failed to read the selected file. Please try again.');
         return;
       }
-      // Validate the image can actually be loaded before processing
-      const img = new Image();
-      img.onload = () => {
-        setImagePreview(dataUrl);
-        processImage(dataUrl);
-      };
-      img.onerror = () => {
-        setError('The selected file could not be loaded as an image. Please try a different file.');
-      };
-      img.src = dataUrl;
+
+      if (isPDF) {
+        // PDFs can't be previewed as <img>, pass the File directly to OCR
+        setImagePreview(null);
+        processImage(file);
+      } else {
+        // Validate image can be loaded before processing
+        const img = new Image();
+        img.onload = () => {
+          setImagePreview(dataUrl);
+          processImage(dataUrl);
+        };
+        img.onerror = () => {
+          // Fallback: try passing the file directly if the data URL fails
+          processImage(file);
+        };
+        img.src = dataUrl;
+      }
     };
     reader.readAsDataURL(file);
   };
