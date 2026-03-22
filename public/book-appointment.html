@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Clinic Appointment Booking - UNTH Plastic Surgery</title>
+  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f0fdf4; color: #1a1a2e; min-height: 100vh; }
+    .header { background: linear-gradient(135deg, #065f46 0%, #0e9f6e 100%); color: white; padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; }
+    .header h1 { font-size: 1.25rem; font-weight: 700; letter-spacing: 0.5px; }
+    .header .subtitle { font-size: 0.8rem; opacity: 0.85; }
+    .btn-login { background: white; color: #065f46; padding: 0.5rem 1.25rem; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 0.85rem; transition: all 0.2s; border: none; cursor: pointer; }
+    .btn-login:hover { background: #ecfdf5; transform: translateY(-1px); }
+    .container { max-width: 640px; margin: 1.5rem auto; padding: 0 1rem; }
+    .card { background: white; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 1.5rem; margin-bottom: 1rem; }
+    .card h2 { font-size: 1.1rem; color: #065f46; margin-bottom: 1rem; border-bottom: 2px solid #d1fae5; padding-bottom: 0.5rem; }
+    .form-group { margin-bottom: 1rem; }
+    .form-group label { display: block; font-weight: 600; font-size: 0.85rem; color: #374151; margin-bottom: 0.3rem; }
+    .form-group input, .form-group select { width: 100%; padding: 0.6rem 0.75rem; border: 1.5px solid #d1d5db; border-radius: 8px; font-size: 0.95rem; transition: border-color 0.2s; }
+    .form-group input:focus, .form-group select:focus { outline: none; border-color: #0e9f6e; box-shadow: 0 0 0 3px rgba(14,159,110,0.15); }
+    .slots-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.5rem; margin-top: 0.5rem; }
+    .slot-btn { padding: 0.6rem 0.5rem; border: 2px solid #d1fae5; border-radius: 8px; background: #f0fdf4; cursor: pointer; text-align: center; font-size: 0.8rem; font-weight: 600; color: #065f46; transition: all 0.2s; }
+    .slot-btn:hover:not(.booked):not(.selected) { border-color: #0e9f6e; background: #ecfdf5; }
+    .slot-btn.selected { border-color: #0e9f6e; background: #0e9f6e; color: white; }
+    .slot-btn.booked { background: #fee2e2; border-color: #fca5a5; color: #991b1b; cursor: not-allowed; opacity: 0.6; text-decoration: line-through; }
+    .break-label { grid-column: 1 / -1; text-align: center; padding: 0.4rem; background: #fef3c7; color: #92400e; border-radius: 6px; font-size: 0.8rem; font-weight: 600; }
+    .terms-box { background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
+    .terms-box h3 { font-size: 0.9rem; color: #92400e; margin-bottom: 0.5rem; }
+    .terms-box ul { font-size: 0.8rem; color: #78350f; padding-left: 1.2rem; line-height: 1.6; }
+    .checkbox-row { display: flex; align-items: flex-start; gap: 0.5rem; margin-top: 0.75rem; }
+    .checkbox-row input[type="checkbox"] { margin-top: 3px; width: 18px; height: 18px; accent-color: #0e9f6e; cursor: pointer; }
+    .checkbox-row label { font-size: 0.85rem; color: #374151; cursor: pointer; }
+    .btn-book { width: 100%; padding: 0.75rem; border: none; border-radius: 8px; background: #0e9f6e; color: white; font-size: 1rem; font-weight: 700; cursor: pointer; transition: all 0.2s; }
+    .btn-book:hover:not(:disabled) { background: #065f46; }
+    .btn-book:disabled { opacity: 0.5; cursor: not-allowed; }
+    .success-card { background: #ecfdf5; border: 2px solid #0e9f6e; border-radius: 12px; padding: 1.5rem; text-align: center; }
+    .success-card .check { font-size: 3rem; }
+    .success-card h2 { color: #065f46; margin: 0.5rem 0; }
+    .success-card .detail { display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid #d1fae5; font-size: 0.9rem; }
+    .success-card .detail:last-child { border-bottom: none; }
+    .success-card .detail strong { color: #065f46; }
+    .success-card .instruction { background: #fef3c7; color: #92400e; padding: 0.75rem; border-radius: 8px; margin-top: 1rem; font-size: 0.85rem; font-weight: 600; }
+    .error-msg { background: #fee2e2; color: #dc2626; padding: 0.75rem; border-radius: 8px; font-size: 0.85rem; margin-bottom: 1rem; }
+    .loading { text-align: center; padding: 2rem; color: #6b7280; }
+    .spinner { display: inline-block; width: 24px; height: 24px; border: 3px solid #d1d5db; border-top-color: #0e9f6e; border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .day-btn { padding: 0.75rem 1.5rem; border: 2px solid #d1fae5; border-radius: 8px; background: white; cursor: pointer; font-weight: 600; font-size: 0.85rem; transition: all 0.2s; }
+    .day-btn:hover { border-color: #0e9f6e; }
+    .day-btn.selected { border-color: #0e9f6e; background: #0e9f6e; color: white; }
+    .day-btn .day-name { display: block; font-size: 0.95rem; }
+    .day-btn .day-date { display: block; font-size: 0.75rem; opacity: 0.8; margin-top: 2px; }
+    .dates-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.5rem; }
+    .section-label { font-size: 0.75rem; color: #6b7280; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin: 0.75rem 0 0.25rem; }
+    .footer { text-align: center; padding: 2rem 1rem; color: #9ca3af; font-size: 0.75rem; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <h1>CLINIC APPOINTMENT BOOKING</h1>
+      <div class="subtitle">UNTH Plastic Surgery Unit</div>
+    </div>
+    <a href="/" class="btn-login">DOCTORS LOGIN</a>
+  </div>
+
+  <div class="container" id="app">
+    <div class="loading"><div class="spinner"></div><p style="margin-top:0.5rem">Loading clinic schedule...</p></div>
+  </div>
+
+  <div class="footer">
+    &copy; 2026 UNTH Plastic Surgery Unit &middot; Clinic Appointment System
+  </div>
+
+  <script>
+    const API_BASE = '/api/clinic-appointments';
+    let state = {
+      step: 'select-date',
+      dates: [],
+      selectedDate: null,
+      slots: [],
+      selectedSlot: null,
+      patientNumber: '',
+      agreedTerms: false,
+      loading: true,
+      error: null,
+      booking: null
+    };
+
+    async function fetchJSON(url, opts) {
+      const r = await fetch(url, opts);
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Request failed');
+      return data;
+    }
+
+    async function loadDates() {
+      try {
+        state.loading = true;
+        render();
+        const data = await fetchJSON(`${API_BASE}/clinic-dates`);
+        state.dates = data.dates;
+        state.loading = false;
+        render();
+      } catch (e) {
+        state.error = e.message;
+        state.loading = false;
+        render();
+      }
+    }
+
+    async function selectDate(dateObj) {
+      state.selectedDate = dateObj;
+      state.selectedSlot = null;
+      state.error = null;
+      state.loading = true;
+      state.step = 'select-slot';
+      render();
+      try {
+        const data = await fetchJSON(`${API_BASE}/available-slots?date=${dateObj.date}`);
+        state.slots = data.slots;
+        state.loading = false;
+        render();
+      } catch (e) {
+        state.error = e.message;
+        state.loading = false;
+        render();
+      }
+    }
+
+    function selectSlot(slot) {
+      if (!slot.available) return;
+      state.selectedSlot = slot;
+      state.step = 'enter-details';
+      state.error = null;
+      render();
+    }
+
+    async function submitBooking() {
+      if (!state.patientNumber.trim() || !state.agreedTerms || !state.selectedSlot) return;
+      state.loading = true;
+      state.error = null;
+      render();
+      try {
+        const data = await fetchJSON(`${API_BASE}/book`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            patient_number: state.patientNumber.trim(),
+            date: state.selectedDate.date,
+            time_slot: state.selectedSlot.time,
+            agreed_terms: true
+          })
+        });
+        state.booking = data.appointment;
+        state.step = 'confirmation';
+        state.loading = false;
+        render();
+      } catch (e) {
+        state.error = e.message;
+        state.loading = false;
+        render();
+      }
+    }
+
+    function goBack(toStep) {
+      state.step = toStep;
+      state.error = null;
+      if (toStep === 'select-date') {
+        state.selectedDate = null;
+        state.selectedSlot = null;
+      }
+      if (toStep === 'select-slot') {
+        state.selectedSlot = null;
+      }
+      render();
+    }
+
+    function startOver() {
+      state = { step: 'select-date', dates: state.dates, selectedDate: null, slots: [], selectedSlot: null, patientNumber: '', agreedTerms: false, loading: false, error: null, booking: null };
+      render();
+    }
+
+    function formatTime(slot) {
+      const [start, end] = slot.split('-');
+      const fmt = (t) => {
+        const [h, m] = t.split(':').map(Number);
+        const suffix = h >= 12 ? 'PM' : 'AM';
+        const h12 = h > 12 ? h - 12 : h === 0 ? 12 : h;
+        return `${h12}:${String(m).padStart(2, '0')} ${suffix}`;
+      };
+      return `${fmt(start)} – ${fmt(end)}`;
+    }
+
+    function formatDate(dateStr) {
+      const d = new Date(dateStr + 'T00:00:00');
+      return d.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    }
+
+    function esc(str) {
+      const d = document.createElement('div');
+      d.textContent = str;
+      return d.innerHTML;
+    }
+
+    function render() {
+      const app = document.getElementById('app');
+
+      if (state.loading && state.step !== 'select-slot' && state.step !== 'enter-details') {
+        app.innerHTML = '<div class="loading"><div class="spinner"></div><p style="margin-top:0.5rem">Loading...</p></div>';
+        return;
+      }
+
+      let html = '';
+
+      if (state.error) {
+        html += `<div class="error-msg">${esc(state.error)}</div>`;
+      }
+
+      if (state.step === 'select-date') {
+        html += `<div class="card">
+          <h2>📅 Step 1: Select Clinic Day</h2>
+          <p style="font-size:0.85rem;color:#6b7280;margin-bottom:1rem">Choose a Tuesday or Wednesday clinic date. Clinic hours: 9:00 AM – 1:30 PM &amp; 2:00 PM – 4:00 PM.</p>
+          <div class="dates-grid">`;
+        if (state.dates.length === 0) {
+          html += '<p style="color:#6b7280;grid-column:1/-1;text-align:center">No upcoming clinic dates available.</p>';
+        }
+        for (const d of state.dates) {
+          const dateDisplay = new Date(d.date + 'T00:00:00');
+          const dayStr = dateDisplay.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          html += `<button class="day-btn" onclick="selectDate(${esc(JSON.stringify(d).replace(/"/g, '&quot;'))})">
+            <span class="day-name">${esc(d.dayName)}</span>
+            <span class="day-date">${esc(dayStr)}</span>
+          </button>`;
+        }
+        html += '</div></div>';
+      }
+
+      if (state.step === 'select-slot') {
+        html += `<div class="card">
+          <h2>⏰ Step 2: Select Time Slot</h2>
+          <p style="font-size:0.85rem;color:#6b7280;margin-bottom:0.5rem">${esc(formatDate(state.selectedDate.date))} &middot; Each slot is 20 minutes</p>
+          <button onclick="goBack('select-date')" style="font-size:0.8rem;color:#0e9f6e;background:none;border:none;cursor:pointer;margin-bottom:1rem">&larr; Change date</button>`;
+        if (state.loading) {
+          html += '<div class="loading"><div class="spinner"></div></div>';
+        } else {
+          html += '<div class="section-label">Morning Session (9:00 AM – 1:30 PM)</div><div class="slots-grid">';
+          let afternoonStarted = false;
+          for (const s of state.slots) {
+            const startTime = s.time.split('-')[0];
+            if (startTime >= '14:00' && !afternoonStarted) {
+              html += '</div><div class="slots-grid"><div class="break-label">🍽️ Break: 1:30 PM – 2:00 PM (No bookings)</div></div>';
+              html += '<div class="section-label">Afternoon Session (2:00 PM – 4:00 PM)</div><div class="slots-grid">';
+              afternoonStarted = true;
+            }
+            const cls = !s.available ? 'slot-btn booked' : (state.selectedSlot && state.selectedSlot.time === s.time ? 'slot-btn selected' : 'slot-btn');
+            const label = !s.available ? 'BOOKED' : formatTime(s.time);
+            html += `<button class="${cls}" ${!s.available ? 'disabled' : ''} onclick="selectSlot(${esc(JSON.stringify(s).replace(/"/g, '&quot;'))})">${esc(label)}</button>`;
+          }
+          html += '</div>';
+        }
+        html += '</div>';
+      }
+
+      if (state.step === 'enter-details') {
+        html += `<div class="card">
+          <h2>📋 Step 3: Enter Details &amp; Confirm</h2>
+          <p style="font-size:0.85rem;color:#6b7280;margin-bottom:1rem">
+            ${esc(formatDate(state.selectedDate.date))} &middot; ${esc(formatTime(state.selectedSlot.time))}
+          </p>
+          <button onclick="goBack('select-slot')" style="font-size:0.8rem;color:#0e9f6e;background:none;border:none;cursor:pointer;margin-bottom:1rem">&larr; Change time slot</button>
+          <div class="form-group">
+            <label for="patientNum">Patient Number / Hospital Number *</label>
+            <input type="text" id="patientNum" placeholder="Enter your patient number" value="${esc(state.patientNumber)}" oninput="state.patientNumber=this.value" maxlength="50" />
+          </div>
+        </div>
+        <div class="terms-box">
+          <h3>📜 Terms and Conditions</h3>
+          <ul>
+            <li>Please arrive within <strong>5 minutes before or after</strong> your scheduled appointment time.</li>
+            <li>Missed appointments require <strong>rescheduling</strong> through this system.</li>
+            <li>Late patients will be seen <strong>only after all scheduled patients</strong> have been attended to.</li>
+            <li>Each consultation slot is <strong>20 minutes maximum</strong>.</li>
+            <li>In case of emergency, contact the unit directly.</li>
+          </ul>
+          <div class="checkbox-row">
+            <input type="checkbox" id="agreeTerms" ${state.agreedTerms ? 'checked' : ''} onchange="state.agreedTerms=this.checked;render()" />
+            <label for="agreeTerms">I agree to the Clinic Appointment Terms and Conditions</label>
+          </div>
+        </div>
+        <button class="btn-book" onclick="submitBooking()" ${(!state.patientNumber.trim() || !state.agreedTerms || state.loading) ? 'disabled' : ''}>
+          ${state.loading ? '<span class="spinner" style="width:18px;height:18px;border-width:2px;vertical-align:middle"></span> Booking...' : '✅ Confirm Appointment'}
+        </button>`;
+      }
+
+      if (state.step === 'confirmation' && state.booking) {
+        const b = state.booking;
+        html += `<div class="success-card">
+          <div class="check">✅</div>
+          <h2>Appointment Booked Successfully!</h2>
+          <div style="text-align:left;margin-top:1rem">
+            <div class="detail"><span>Patient Number</span><strong>${esc(b.patient_number)}</strong></div>
+            <div class="detail"><span>Doctor</span><strong>${esc(b.doctor_assigned)}</strong></div>
+            <div class="detail"><span>Date</span><strong>${esc(formatDate(b.appointment_date))}</strong></div>
+            <div class="detail"><span>Time</span><strong>${esc(formatTime(b.time_slot))}</strong></div>
+          </div>
+          <div class="instruction">⏰ Please arrive within 5 minutes before or after your scheduled time.</div>
+          <button onclick="startOver()" style="margin-top:1rem;padding:0.6rem 1.5rem;border:2px solid #0e9f6e;border-radius:8px;background:white;color:#065f46;font-weight:600;cursor:pointer">Book Another Appointment</button>
+        </div>`;
+      }
+
+      app.innerHTML = html;
+    }
+
+    // Initialize
+    loadDates();
+  </script>
+</body>
+</html>

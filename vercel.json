@@ -12,6 +12,10 @@
   },
   "rewrites": [
     {
+      "source": "/api/clinic-appointments/:path*",
+      "destination": "/api/clinic-appointments"
+    },
+    {
       "source": "/api/pre-surgical-conference/:path*",
       "destination": "/api/pre-surgical-conference"
     },

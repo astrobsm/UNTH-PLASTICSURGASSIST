@@ -38,7 +38,8 @@ import {
   Shield,
   PhoneCall,
   Megaphone,
-  Brain
+  Brain,
+  CalendarCheck
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import SyncStatusIndicator from './SyncStatusIndicator';
@@ -56,6 +57,7 @@ const navigation = [
   { name: 'Medical Training', href: '/medical-training', icon: BookOpen },
   { name: 'Call Duty Roster', href: '/call-duty', icon: PhoneCall },
   { name: 'Clinic Duties', href: '/clinic-duties', icon: Shield },
+  { name: 'Clinic Appointments', href: '/clinic-appointments', icon: CalendarCheck },
   { name: 'Notice Board', href: '/notice-board', icon: Megaphone },
   { name: 'Shopping List', href: '/shopping-list', icon: ShoppingCart },
   { name: 'Chat', href: '/chat', icon: MessageSquare },

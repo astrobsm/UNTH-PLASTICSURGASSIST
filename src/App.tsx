@@ -81,6 +81,7 @@ const ClinicDutiesPage = lazyWithRetry(() => import('./pages/ClinicDutiesPage'))
 const NoticeBoardPage = lazyWithRetry(() => import('./pages/NoticeBoardPage'));
 const ScribeDashboard = lazyWithRetry(() => import('./pages/ScribeDashboard'));
 const PatientActionRecords = lazyWithRetry(() => import('./pages/PatientActionRecords'));
+const ClinicAppointmentsPage = lazyWithRetry(() => import('./pages/ClinicAppointmentsPage'));
 
 // Loading fallback component
 const PageLoader = () => (
@@ -220,6 +221,7 @@ function App() {
               <Route path="/departmental-meetings" element={<DepartmentalMeetingsPage />} />
               <Route path="/notice-board" element={<NoticeBoardPage />} />
               <Route path="/ai-scribe" element={<ScribeDashboard />} />
+              <Route path="/clinic-appointments" element={<ClinicAppointmentsPage />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/admin" element={<Admin />} />
             </Routes>
