@@ -1,4 +1,5 @@
 import { db } from '../db/database';
+import { syncService } from '../db/syncService';
 import { apiClient } from './apiClient';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -155,13 +156,18 @@ class ClinicDutyService {
       year: assignedDate.getFullYear(),
       created_at: new Date().toISOString(),
     };
-    return await db.clinic_duty_logs.add(entry as any) as number;
+    const id = await db.clinic_duty_logs.add(entry as any) as number;
+    // Queue for cloud sync
+    syncService.queueAction('create', 'clinic_duty_logs', id, { ...entry, id });
+    return id;
   }
 
   // ── Update a duty log ──────────────────────────────────────────────────
 
   async updateDutyLog(id: number, updates: Partial<ClinicDutyLog>): Promise<void> {
     await db.clinic_duty_logs.update(id, updates as any);
+    const updated = await db.clinic_duty_logs.get(id);
+    if (updated) syncService.queueAction('update', 'clinic_duty_logs', id, updated);
   }
 
   // ── Mark as completed ──────────────────────────────────────────────────
@@ -172,6 +178,8 @@ class ClinicDutyService {
       completed_date: new Date().toISOString(),
       notes: notes || undefined,
     } as any);
+    const updated = await db.clinic_duty_logs.get(id);
+    if (updated) syncService.queueAction('update', 'clinic_duty_logs', id, updated);
   }
 
   // ── Get logs filtered ──────────────────────────────────────────────────

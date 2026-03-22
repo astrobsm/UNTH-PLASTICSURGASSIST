@@ -200,6 +200,12 @@ class SyncService {
       case 'patient_transfers':
         await this.syncPatientTransfer(action, local_id, data);
         break;
+      case 'shopping_lists':
+      case 'call_duty_roster':
+      case 'clinic_duty_logs':
+      case 'cbt_attempts':
+        await this.syncGenericEntity(action, table, local_id, data);
+        break;
       default:
         console.warn(`Unknown table for sync: ${table}`);
         // Don't throw, just skip unknown tables
@@ -623,6 +629,42 @@ class SyncService {
       await db.patient_transfers.update(localId, { id: response.id, synced: true });
       console.log('✅ Patient transfer synced to server:', response.id);
     }
+  }
+
+  // Generic sync for entities that use the /sync/push endpoint
+  private async syncGenericEntity(action: string, table: string, localId: number, data: any): Promise<void> {
+    // For text-id tables (shopping_lists), read from IndexedDB by string key
+    // For serial-id tables, read by number key
+    let record: any = null;
+    try {
+      record = await (db as any).table(table).get(localId);
+    } catch {
+      // If localId is a string, try get by string
+      record = data;
+    }
+    if (!record && data) record = data;
+    if (!record) return;
+
+    const entityId = record.id || localId;
+    const payload = { ...record };
+    delete payload.synced;
+
+    await this.apiCall('POST', '/sync/push', {
+      changes: [{
+        entityType: table,
+        entityId: String(entityId),
+        action: action === 'delete' ? 'delete' : 'upsert',
+        payload
+      }]
+    });
+
+    // Mark as synced locally
+    try {
+      await (db as any).table(table).update(localId, { synced: true });
+    } catch {
+      // Ignore if update fails (e.g. string key table)
+    }
+    console.log(`✅ ${table} synced to server:`, entityId);
   }
 
   private async apiCall(method: string, endpoint: string, data?: any): Promise<any> {

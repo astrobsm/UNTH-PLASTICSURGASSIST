@@ -45,7 +45,11 @@ export type SyncableEntity =
   | 'nutritional_assessments'
   | 'procedures'
   | 'who_safety_checklists'
-  | 'progress_notes';
+  | 'progress_notes'
+  | 'shopping_lists'
+  | 'call_duty_roster'
+  | 'clinic_duty_logs'
+  | 'cbt_attempts';
 
 // Sync status for each entity
 interface EntitySyncStatus {
@@ -108,7 +112,11 @@ class DataSyncService {
     nutritional_assessments: '/sync/nutritional-assessments',
     procedures: '/sync/procedures',
     who_safety_checklists: '/sync/who-safety-checklists',
-    progress_notes: '/sync/progress-notes'
+    progress_notes: '/sync/progress-notes',
+    shopping_lists: '/sync/shopping-lists',
+    call_duty_roster: '/sync/call-duty-roster',
+    clinic_duty_logs: '/sync/clinic-duty-logs',
+    cbt_attempts: '/sync/cbt-attempts'
   };
 
   // Entity to IndexedDB table mapping
@@ -134,7 +142,11 @@ class DataSyncService {
     nutritional_assessments: 'nutritional_assessments',
     procedures: 'procedures',
     who_safety_checklists: 'who_safety_checklists',
-    progress_notes: 'progress_notes'
+    progress_notes: 'progress_notes',
+    shopping_lists: 'shopping_lists',
+    call_duty_roster: 'call_duty_roster',
+    clinic_duty_logs: 'clinic_duty_logs',
+    cbt_attempts: 'cbt_attempts'
   };
 
   constructor() {
@@ -160,7 +172,8 @@ class DataSyncService {
       'blood_transfusions', 'burn_patients', 'diabetic_foot_assessments',
       'preoperative_assessments', 'dvt_assessments', 'pressure_sore_assessments',
       'nutritional_assessments', 'procedures', 'who_safety_checklists',
-      'progress_notes'
+      'progress_notes',
+      'shopping_lists', 'call_duty_roster', 'clinic_duty_logs', 'cbt_attempts'
     ];
 
     entities.forEach(entity => {
@@ -492,7 +505,11 @@ class DataSyncService {
       'who_safety_checklists',
       'mdt_patient_teams',
       'mdt_meetings',
-      'mdt_contact_logs'
+      'mdt_contact_logs',
+      'shopping_lists',
+      'call_duty_roster',
+      'clinic_duty_logs',
+      'cbt_attempts'
     ];
 
     for (const entity of entitiesToPull) {

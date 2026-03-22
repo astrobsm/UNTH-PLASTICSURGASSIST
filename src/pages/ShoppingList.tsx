@@ -12,6 +12,7 @@ import {
 import { patientService } from '../services/patientService';
 import { db } from '../db/database';
 import { apiClient } from '../services/apiClient';
+import { syncService } from '../db/syncService';
 import { useAuthStore } from '../store/authStore';
 import toast from 'react-hot-toast';
 
@@ -107,11 +108,12 @@ export default function ShoppingList() {
       // Save to local DB
       await db.table('shopping_lists').put(record);
 
-      // Push to cloud
+      // Push to cloud with sync queue fallback
       try {
         await apiClient.createShoppingList(record);
       } catch (err) {
-        console.warn('Could not push shopping list to cloud:', err);
+        console.warn('Could not push shopping list to cloud, queuing for sync:', err);
+        await syncService.queueAction('create', 'shopping_lists', record.id as any, record);
       }
 
       toast.success('Shopping list saved');
@@ -968,7 +970,7 @@ export default function ShoppingList() {
                         {list.items && Array.isArray(list.items) && (
                           <div className="mt-2 text-sm text-gray-700">
                             <span className="font-medium">{list.total_items || list.items.length} items</span>
-                            <span className="mx-2">•</span>
+                            <span className="mx-2">ï¿½</span>
                             <span>Total qty: {list.total_quantity || list.items.reduce((s: number, i: any) => s + (i.quantity || 1), 0)}</span>
                             <div className="mt-1 flex flex-wrap gap-1">
                               {list.items.slice(0, 5).map((item: any, idx: number) => (

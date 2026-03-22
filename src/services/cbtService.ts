@@ -4,6 +4,8 @@
  */
 
 import { TrainingLevel, CMEModule, HOUSE_OFFICER_MODULES, JUNIOR_RESIDENT_MODULES, SENIOR_RESIDENT_MODULES } from './medicalTrainingService';
+import { db } from '../db/database';
+import { syncService } from '../db/syncService';
 
 export interface CBTQuestion {
   id: string;
@@ -411,7 +413,7 @@ const fetchFromServer = async (action: string, params: Record<string, string> = 
   }
 };
 
-// Save attempt to localStorage (works offline)
+// Save attempt to localStorage + IndexedDB (works offline, syncs to cloud)
 const saveAttempt = (attempt: CBTAttempt): void => {
   const attempts = getAttempts();
   const existingIndex = attempts.findIndex(a => a.id === attempt.id);
@@ -422,7 +424,30 @@ const saveAttempt = (attempt: CBTAttempt): void => {
     attempts.push(attempt);
   }
   
+  // Keep localStorage as fast synchronous cache
   localStorage.setItem(STORAGE_KEYS.ATTEMPTS, JSON.stringify(attempts));
+
+  // Also persist to IndexedDB + sync queue for cloud persistence
+  (async () => {
+    try {
+      const dbRecord = {
+        ...attempt,
+        answers: JSON.stringify(attempt.answers),
+        flagged_for_review: JSON.stringify(attempt.flaggedForReview),
+        updated_at: new Date().toISOString()
+      };
+      await (db as any).table('cbt_attempts').put(dbRecord);
+      // Queue for cloud sync
+      await syncService.queueAction(
+        existingIndex >= 0 ? 'update' : 'create',
+        'cbt_attempts',
+        attempt.id as any,
+        dbRecord
+      );
+    } catch (e) {
+      console.warn('⚠️ Could not persist CBT attempt to IndexedDB:', e);
+    }
+  })();
 };
 
 // Get all attempts
@@ -566,6 +591,36 @@ const getNextTestNumber = (level: TrainingLevel): number => {
 
 // Export the service
 class CBTService {
+  constructor() {
+    // On startup, load attempts from IndexedDB into localStorage cache
+    this.initFromLocalDB();
+  }
+
+  /** Load persisted attempts from IndexedDB into localStorage cache */
+  private async initFromLocalDB(): Promise<void> {
+    try {
+      const dbAttempts: any[] = await (db as any).table('cbt_attempts').toArray();
+      if (dbAttempts.length > 0) {
+        const localAttempts = getAttempts();
+        const localMap = new Map(localAttempts.map(a => [a.id, a]));
+
+        for (const rec of dbAttempts) {
+          if (!localMap.has(rec.id)) {
+            const attempt: CBTAttempt = {
+              ...rec,
+              answers: typeof rec.answers === 'string' ? JSON.parse(rec.answers) : rec.answers,
+              flaggedForReview: typeof rec.flagged_for_review === 'string' ? JSON.parse(rec.flagged_for_review) : (rec.flaggedForReview || []),
+            };
+            localAttempts.push(attempt);
+          }
+        }
+        localStorage.setItem(STORAGE_KEYS.ATTEMPTS, JSON.stringify(localAttempts));
+      }
+    } catch (e) {
+      console.warn('⚠️ Could not load CBT attempts from IndexedDB:', e);
+    }
+  }
+
   generateTestsForLevel = generateTestsForLevel;
   getTotalTestsForLevel = getTotalTestsForLevel;
   getLevelDisplayName = getLevelDisplayName;

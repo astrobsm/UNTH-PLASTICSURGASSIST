@@ -1405,6 +1405,66 @@ async function createTables() {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
     CREATE INDEX IF NOT EXISTS idx_ps_rosters_active ON ps_unit_rosters(is_active);
+
+    -- Shopping Lists table
+    CREATE TABLE IF NOT EXISTS shopping_lists (
+      id TEXT PRIMARY KEY,
+      patient_id TEXT,
+      patient_name TEXT,
+      hospital_number TEXT,
+      category TEXT,
+      items JSONB DEFAULT '[]',
+      total_items INTEGER DEFAULT 0,
+      total_quantity INTEGER DEFAULT 0,
+      created_by TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_shopping_lists_patient ON shopping_lists(patient_id);
+
+    -- Call Duty Roster table
+    CREATE TABLE IF NOT EXISTS call_duty_roster (
+      id SERIAL PRIMARY KEY,
+      start_date TEXT NOT NULL,
+      end_date TEXT NOT NULL,
+      senior_registrar_id TEXT,
+      senior_registrar_name TEXT,
+      registrar_id TEXT,
+      registrar_name TEXT,
+      house_officer_id TEXT,
+      house_officer_name TEXT,
+      month_key TEXT NOT NULL,
+      shift_number INTEGER NOT NULL,
+      created_by TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_call_duty_month ON call_duty_roster(month_key);
+
+    -- Clinic Duty Logs table
+    CREATE TABLE IF NOT EXISTS clinic_duty_logs (
+      id SERIAL PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      user_name TEXT,
+      user_role TEXT,
+      duty_type TEXT,
+      duty_category TEXT,
+      patient_id TEXT,
+      patient_name TEXT,
+      hospital_number TEXT,
+      description TEXT,
+      notes TEXT,
+      status TEXT DEFAULT 'assigned',
+      assigned_date TEXT,
+      completed_date TEXT,
+      duration_minutes INTEGER,
+      week_number INTEGER,
+      year INTEGER,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_clinic_duty_user ON clinic_duty_logs(user_id);
+    CREATE INDEX IF NOT EXISTS idx_clinic_duty_date ON clinic_duty_logs(assigned_date);
   `;
 
   await query(schema);

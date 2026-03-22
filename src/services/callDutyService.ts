@@ -1,5 +1,6 @@
 import { apiClient } from './apiClient';
 import { db } from '../db/database';
+import { syncService } from '../db/syncService';
 import { userManagementService } from './userManagementService';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -245,6 +246,17 @@ class CallDutyService {
     }
 
     await (db as any).call_duty_roster.bulkAdd(shifts);
+
+    // Queue each shift for cloud sync
+    for (const shift of shifts) {
+      const savedShift = await (db as any).call_duty_roster
+        .where('month_key').equals(mKey)
+        .and((s: any) => s.shift_number === shift.shift_number)
+        .first();
+      if (savedShift?.id) {
+        syncService.queueAction('create', 'call_duty_roster', savedShift.id, savedShift);
+      }
+    }
   }
 
   // ── Fetch saved roster by roster key ────────────────────────────────

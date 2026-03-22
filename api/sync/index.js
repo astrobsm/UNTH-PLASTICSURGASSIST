@@ -136,6 +136,18 @@ export default async function handler(req, res) {
         if (action === 'ps-unit-rosters' || action === 'ps_unit_rosters') {
           return await getSyncEntity('ps_unit_rosters', res);
         }
+        if (action === 'shopping-lists' || action === 'shopping_lists') {
+          return await getSyncEntity('shopping_lists', res);
+        }
+        if (action === 'call-duty-roster' || action === 'call_duty_roster') {
+          return await getSyncEntity('call_duty_roster', res);
+        }
+        if (action === 'clinic-duty-logs' || action === 'clinic_duty_logs') {
+          return await getSyncEntity('clinic_duty_logs', res);
+        }
+        if (action === 'cbt-attempts' || action === 'cbt_attempts') {
+          return await getSyncEntity('cbt_attempts', res);
+        }
         return await getSyncStatus(auth.user, res);
       default:
         res.status(405).json({ error: 'Method not allowed' });
@@ -403,7 +415,8 @@ async function handlePush(data, user, res) {
         'educational_topics', 'weekly_contents', 'topic_schedules', 'education_user_progress',
         'wound_care_records', 'ward_rounds', 'discharge_summaries',
         'admissions', 'surgeries', 'treatment_plans', 'prescriptions', 'lab_orders',
-        'chat_messages', 'chat_rooms', 'audit_logs', 'user_activities'
+        'chat_messages', 'chat_rooms', 'audit_logs', 'user_activities',
+        'shopping_lists', 'call_duty_roster', 'clinic_duty_logs'
       ];
       
       if (clinicalEntities.includes(entityType) && payload) {
@@ -411,7 +424,8 @@ async function handlePush(data, user, res) {
           // Tables with SERIAL (integer) primary keys - local auto-increment ids should NOT be used for lookup
           const serialKeyTables = [
             'wound_care_records', 'ward_rounds', 'discharge_summaries',
-            'admissions', 'surgeries', 'treatment_plans', 'prescriptions', 'lab_orders'
+            'admissions', 'surgeries', 'treatment_plans', 'prescriptions', 'lab_orders',
+            'call_duty_roster', 'clinic_duty_logs'
           ];
           const isSerialKey = serialKeyTables.includes(entityType);
 
@@ -561,7 +575,10 @@ async function handlePull(data, user, res) {
     weekly_contents: { table: 'weekly_contents', userField: null },
     topic_schedules: { table: 'topic_schedules', userField: null },
     education_user_progress: { table: 'education_user_progress', userField: null },
-    ps_unit_rosters: { table: 'ps_unit_rosters', userField: null }
+    ps_unit_rosters: { table: 'ps_unit_rosters', userField: null },
+    shopping_lists: { table: 'shopping_lists', userField: null },
+    call_duty_roster: { table: 'call_duty_roster', userField: null },
+    clinic_duty_logs: { table: 'clinic_duty_logs', userField: 'user_id' }
   };
 
   for (const [entityName, config] of Object.entries(entityConfigs)) {
