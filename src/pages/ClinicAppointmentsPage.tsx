@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Calendar, Clock, User, Filter, RefreshCw, XCircle, CheckCircle, AlertTriangle, Copy, ExternalLink } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Calendar, Clock, User, Filter, RefreshCw, XCircle, CheckCircle, AlertTriangle, Copy, ExternalLink, Volume2, VolumeX, Bell, BellOff } from 'lucide-react';
 import { apiClient } from '../services/apiClient';
 
 interface Appointment {
@@ -47,6 +47,61 @@ function getNextClinicDate(): string {
   return today.toISOString().split('T')[0];
 }
 
+// Parse "HH:MM-HH:MM" into minutes-since-midnight for the start time
+function slotStartMinutes(slot: string): number {
+  const start = slot.split('-')[0];
+  const [h, m] = start.split(':').map(Number);
+  return h * 60 + m;
+}
+
+function currentMinutes(): number {
+  const now = new Date();
+  return now.getHours() * 60 + now.getMinutes();
+}
+
+function minutesToTimeStr(mins: number): string {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  const suffix = h >= 12 ? 'PM' : 'AM';
+  const h12 = h > 12 ? h - 12 : h === 0 ? 12 : h;
+  return `${h12}:${String(m).padStart(2, '0')} ${suffix}`;
+}
+
+function speak(text: string) {
+  if (!('speechSynthesis' in window)) return;
+  // Cancel any ongoing speech
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.rate = 0.95;
+  utterance.pitch = 1.0;
+  utterance.volume = 1.0;
+  // Prefer a clear English voice
+  const voices = window.speechSynthesis.getVoices();
+  const preferred = voices.find(v => v.lang.startsWith('en') && v.name.includes('Female'))
+    || voices.find(v => v.lang.startsWith('en'))
+    || voices[0];
+  if (preferred) utterance.voice = preferred;
+  window.speechSynthesis.speak(utterance);
+}
+
+// Play a short alert tone using Web Audio API
+function playAlertTone(frequency = 880, duration = 300) {
+  try {
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const oscillator = ctx.createOscillator();
+    const gain = ctx.createGain();
+    oscillator.connect(gain);
+    gain.connect(ctx.destination);
+    oscillator.frequency.value = frequency;
+    oscillator.type = 'sine';
+    gain.gain.setValueAtTime(0.5, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration / 1000);
+    oscillator.start(ctx.currentTime);
+    oscillator.stop(ctx.currentTime + duration / 1000);
+    setTimeout(() => ctx.close(), duration + 100);
+  } catch (_) { /* Web Audio not available */ }
+}
+
 const ClinicAppointmentsPage: React.FC = () => {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,6 +110,128 @@ const ClinicAppointmentsPage: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState('');
   const [updating, setUpdating] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
+
+  // Audio reminder state
+  const [remindersEnabled, setRemindersEnabled] = useState(() => {
+    return localStorage.getItem('clinicRemindersEnabled') === 'true';
+  });
+  const [reminderMinutes, setReminderMinutes] = useState(() => {
+    const saved = localStorage.getItem('clinicReminderMinutes');
+    return saved ? parseInt(saved, 10) : 5;
+  });
+  const [currentSlotId, setCurrentSlotId] = useState<number | null>(null);
+  const [nextSlotId, setNextSlotId] = useState<number | null>(null);
+  const [reminderLog, setReminderLog] = useState<string[]>([]);
+  const announcedRef = useRef<Set<string>>(new Set());
+
+  // Persist reminder settings
+  useEffect(() => {
+    localStorage.setItem('clinicRemindersEnabled', String(remindersEnabled));
+  }, [remindersEnabled]);
+  useEffect(() => {
+    localStorage.setItem('clinicReminderMinutes', String(reminderMinutes));
+  }, [reminderMinutes]);
+
+  // Load speech synthesis voices
+  useEffect(() => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.getVoices();
+      window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+    }
+  }, []);
+
+  // Check if the filter date is today
+  const isToday = filterDate === new Date().toISOString().split('T')[0];
+
+  // Audio reminder timer – runs every 30 seconds
+  useEffect(() => {
+    if (!remindersEnabled || !isToday) return;
+
+    const checkReminders = () => {
+      const now = currentMinutes();
+      // Get only active appointments sorted by time
+      const active = appointments
+        .filter(a => ['booked', 'checked-in', 'in-progress'].includes(a.status))
+        .sort((a, b) => slotStartMinutes(a.time_slot) - slotStartMinutes(b.time_slot));
+
+      if (active.length === 0) {
+        setCurrentSlotId(null);
+        setNextSlotId(null);
+        return;
+      }
+
+      // Find current appointment (slot has started, not finished)
+      let currentAppt: Appointment | null = null;
+      let nextAppt: Appointment | null = null;
+
+      for (let i = 0; i < active.length; i++) {
+        const startMin = slotStartMinutes(active[i].time_slot);
+        const endParts = active[i].time_slot.split('-')[1].split(':').map(Number);
+        const endMin = endParts[0] * 60 + endParts[1];
+
+        if (now >= startMin && now < endMin) {
+          currentAppt = active[i];
+          nextAppt = active[i + 1] || null;
+          break;
+        } else if (now < startMin) {
+          nextAppt = active[i];
+          break;
+        }
+      }
+
+      setCurrentSlotId(currentAppt?.id || null);
+      setNextSlotId(nextAppt?.id || null);
+
+      if (!nextAppt) return;
+
+      const nextStart = slotStartMinutes(nextAppt.time_slot);
+      const minsUntilNext = nextStart - now;
+      const nextTimeStr = minutesToTimeStr(nextStart);
+
+      // Reminder at the configured interval before
+      const reminderKey1 = `${nextAppt.id}-${reminderMinutes}min`;
+      if (minsUntilNext <= reminderMinutes && minsUntilNext > 2 && !announcedRef.current.has(reminderKey1)) {
+        announcedRef.current.add(reminderKey1);
+        playAlertTone(660, 200);
+        setTimeout(() => {
+          speak(`Reminder: Next patient, number ${nextAppt!.patient_number}, is in ${minsUntilNext} minutes at ${nextTimeStr}. Please prepare to wrap up.`);
+        }, 300);
+        setReminderLog(prev => [`${new Date().toLocaleTimeString()} — ${minsUntilNext}min reminder: Patient ${nextAppt.patient_number} at ${nextTimeStr}`, ...prev.slice(0, 9)]);
+      }
+
+      // 2-minute warning
+      const reminderKey2 = `${nextAppt.id}-2min`;
+      if (minsUntilNext <= 2 && minsUntilNext > 0 && !announcedRef.current.has(reminderKey2)) {
+        announcedRef.current.add(reminderKey2);
+        playAlertTone(880, 300);
+        setTimeout(() => {
+          speak(`Attention: Next patient, number ${nextAppt!.patient_number}, is in 2 minutes. Time to move on.`);
+        }, 400);
+        setReminderLog(prev => [`${new Date().toLocaleTimeString()} — 2min warning: Patient ${nextAppt.patient_number} at ${nextTimeStr}`, ...prev.slice(0, 9)]);
+      }
+
+      // At appointment time
+      const reminderKey3 = `${nextAppt.id}-now`;
+      if (minsUntilNext <= 0 && minsUntilNext > -1 && !announcedRef.current.has(reminderKey3)) {
+        announcedRef.current.add(reminderKey3);
+        playAlertTone(1100, 400);
+        setTimeout(() => playAlertTone(1100, 400), 500);
+        setTimeout(() => {
+          speak(`It is now time for the next patient. Patient number ${nextAppt!.patient_number} is scheduled now at ${nextTimeStr}. Please proceed.`);
+        }, 1000);
+        setReminderLog(prev => [`${new Date().toLocaleTimeString()} — NOW: Patient ${nextAppt.patient_number} at ${nextTimeStr}`, ...prev.slice(0, 9)]);
+      }
+    };
+
+    checkReminders();
+    const interval = setInterval(checkReminders, 30000); // every 30 seconds
+    return () => clearInterval(interval);
+  }, [remindersEnabled, isToday, appointments, reminderMinutes]);
+
+  // Reset announced set when date changes
+  useEffect(() => {
+    announcedRef.current.clear();
+  }, [filterDate]);
 
   const bookingUrl = typeof window !== 'undefined'
     ? `${window.location.origin}/book-appointment.html`
@@ -150,6 +327,112 @@ const ClinicAppointmentsPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Audio Reminder Controls */}
+      <div className={`border rounded-lg p-4 mb-4 ${remindersEnabled ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'}`}>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+          <div className="flex items-center gap-3">
+            {remindersEnabled ? (
+              <Bell className="w-5 h-5 text-amber-600 animate-pulse" />
+            ) : (
+              <BellOff className="w-5 h-5 text-gray-400" />
+            )}
+            <div>
+              <p className="text-sm font-semibold text-gray-800">
+                Audio Reminders {remindersEnabled ? 'ON' : 'OFF'}
+              </p>
+              <p className="text-xs text-gray-500">
+                {remindersEnabled
+                  ? `Announcing ${reminderMinutes} min & 2 min before each patient${!isToday ? ' (active only for today\'s date)' : ''}`
+                  : 'Enable to get spoken reminders when it\'s time to see the next patient'}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {remindersEnabled && (
+              <div className="flex items-center gap-1.5">
+                <label className="text-xs font-medium text-gray-600">Remind</label>
+                <select
+                  value={reminderMinutes}
+                  onChange={e => setReminderMinutes(Number(e.target.value))}
+                  className="px-2 py-1 border border-amber-300 rounded text-xs bg-white"
+                >
+                  <option value={3}>3 min</option>
+                  <option value={5}>5 min</option>
+                  <option value={7}>7 min</option>
+                  <option value={10}>10 min</option>
+                </select>
+                <label className="text-xs text-gray-500">before</label>
+              </div>
+            )}
+            <button
+              onClick={() => {
+                setRemindersEnabled(!remindersEnabled);
+                if (!remindersEnabled) {
+                  // Test audio on enable
+                  playAlertTone(660, 200);
+                  setTimeout(() => speak('Audio reminders are now enabled.'), 300);
+                } else {
+                  window.speechSynthesis?.cancel();
+                }
+              }}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium ${
+                remindersEnabled
+                  ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                  : 'bg-amber-500 text-white hover:bg-amber-600'
+              }`}
+            >
+              {remindersEnabled ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+              {remindersEnabled ? 'Turn Off' : 'Turn On'}
+            </button>
+          </div>
+        </div>
+
+        {/* Current & Next Patient Alert */}
+        {remindersEnabled && isToday && (currentSlotId || nextSlotId) && (
+          <div className="mt-3 pt-3 border-t border-amber-200 grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {currentSlotId && (() => {
+              const appt = appointments.find(a => a.id === currentSlotId);
+              if (!appt) return null;
+              return (
+                <div className="flex items-center gap-2 bg-green-100 rounded-lg px-3 py-2">
+                  <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                  <div>
+                    <p className="text-xs font-semibold text-green-800">NOW SEEING</p>
+                    <p className="text-sm font-bold text-green-900">Patient {appt.patient_number} &middot; {formatTime(appt.time_slot)}</p>
+                  </div>
+                </div>
+              );
+            })()}
+            {nextSlotId && (() => {
+              const appt = appointments.find(a => a.id === nextSlotId);
+              if (!appt) return null;
+              const minsAway = slotStartMinutes(appt.time_slot) - currentMinutes();
+              return (
+                <div className="flex items-center gap-2 bg-amber-100 rounded-lg px-3 py-2">
+                  <Clock className="w-4 h-4 text-amber-600" />
+                  <div>
+                    <p className="text-xs font-semibold text-amber-800">NEXT UP {minsAway > 0 ? `in ${minsAway} min` : 'NOW'}</p>
+                    <p className="text-sm font-bold text-amber-900">Patient {appt.patient_number} &middot; {formatTime(appt.time_slot)}</p>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
+        {/* Reminder Log */}
+        {remindersEnabled && reminderLog.length > 0 && (
+          <div className="mt-3 pt-3 border-t border-amber-200">
+            <p className="text-xs font-semibold text-gray-600 mb-1">Recent Announcements:</p>
+            <div className="max-h-20 overflow-y-auto text-xs text-gray-500 space-y-0.5">
+              {reminderLog.map((log, i) => (
+                <p key={i}>{log}</p>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
         {[
@@ -229,7 +512,10 @@ const ClinicAppointmentsPage: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {appointments.map(a => (
-                  <tr key={a.id} className={`hover:bg-gray-50 ${a.status === 'cancelled' ? 'opacity-50' : ''}`}>
+                  <tr key={a.id} className={`hover:bg-gray-50 ${a.status === 'cancelled' ? 'opacity-50' : ''} ${
+                    remindersEnabled && isToday && a.id === currentSlotId ? 'bg-green-50 ring-2 ring-green-400 ring-inset' :
+                    remindersEnabled && isToday && a.id === nextSlotId ? 'bg-amber-50 ring-2 ring-amber-300 ring-inset' : ''
+                  }`}>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
                         <Clock className="w-3.5 h-3.5 text-gray-400" />
