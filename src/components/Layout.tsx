@@ -42,6 +42,7 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import SyncStatusIndicator from './SyncStatusIndicator';
+import { HeaderCheckForUpdates } from './SWUpdateBanner';
 
 interface LayoutProps {
   children: ReactNode;
@@ -159,6 +160,9 @@ export default function Layout({ children }: LayoutProps) {
             
             {/* Right side - User actions */}
             <div className="flex items-center space-x-1 sm:space-x-4">
+              {/* Check for Updates */}
+              <HeaderCheckForUpdates />
+              
               {/* Sync Status */}
               <div className="hidden sm:block">
                 <SyncStatusIndicator />

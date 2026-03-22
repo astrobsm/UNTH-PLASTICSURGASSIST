@@ -84,26 +84,50 @@ export const SWUpdateBanner: React.FC = () => {
         </div>
       )}
 
-      {/* Check for Updates button — always visible in bottom-left */}
-      {!updateAvailable && (
-        <div className="fixed bottom-20 left-4 z-[55]">
-          <button
-            onClick={handleCheckForUpdates}
-            disabled={checking}
-            className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 rounded-xl shadow-lg text-xs font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all disabled:opacity-60"
-            title="Check for app updates"
-          >
-            <RotateCcw className={`w-3.5 h-3.5 ${checking ? 'animate-spin' : ''}`} />
-            {checking ? 'Checking...' : 'Check for Updates'}
-          </button>
-          {checkResult && (
-            <div className="mt-2 px-3 py-1.5 bg-gray-800 text-white text-xs rounded-lg shadow-lg animate-in fade-in">
-              {checkResult}
-            </div>
-          )}
+
+    </>
+  );
+};
+
+/** Compact check-for-updates button for use inside the header bar */
+export const HeaderCheckForUpdates: React.FC = () => {
+  const [checking, setChecking] = useState(false);
+  const [checkResult, setCheckResult] = useState<string | null>(null);
+
+  const handleCheck = async () => {
+    setChecking(true);
+    setCheckResult(null);
+    try {
+      const found = await checkForUpdates();
+      if (!found) {
+        setCheckResult('Latest');
+        setTimeout(() => setCheckResult(null), 3000);
+      }
+    } catch {
+      setCheckResult('Failed');
+      setTimeout(() => setCheckResult(null), 3000);
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  return (
+    <div className="relative">
+      <button
+        onClick={handleCheck}
+        disabled={checking}
+        className="flex items-center gap-1 px-2 py-1 text-sky-300 hover:text-white hover:bg-navy-700 rounded-md text-xs transition-colors disabled:opacity-60"
+        title="Check for app updates"
+      >
+        <RotateCcw className={`w-3.5 h-3.5 ${checking ? 'animate-spin' : ''}`} />
+        <span className="hidden sm:inline">{checking ? 'Checking...' : 'Update'}</span>
+      </button>
+      {checkResult && (
+        <div className="absolute top-full right-0 mt-1 px-2 py-1 bg-gray-800 text-white text-xs rounded shadow-lg whitespace-nowrap z-50">
+          {checkResult}
         </div>
       )}
-    </>
+    </div>
   );
 };
 

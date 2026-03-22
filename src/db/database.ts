@@ -1244,9 +1244,12 @@ export class PlasticSurgeonDB extends Dexie {
 
     // Add hooks to automatically track changes
     this.patients.hook('creating', (primKey, obj, trans) => {
-      obj.created_at = new Date();
-      obj.updated_at = new Date();
-      obj.synced = false;
+      obj.created_at = obj.created_at || new Date();
+      obj.updated_at = obj.updated_at || new Date();
+      // Only default synced to false if not explicitly set (e.g. from server pull)
+      if (obj.synced === undefined || obj.synced === null) {
+        obj.synced = false;
+      }
       // Ensure deleted is explicitly false on creation
       if (obj.deleted === undefined) {
         obj.deleted = false;
@@ -1254,10 +1257,11 @@ export class PlasticSurgeonDB extends Dexie {
     });
 
     this.patients.hook('updating', (modifications, primKey, obj, trans) => {
-      (modifications as any).updated_at = new Date();
-      if (!modifications.hasOwnProperty('synced')) {
-        (modifications as any).synced = false;
+      // Only set updated_at if not explicitly provided
+      if (!modifications.hasOwnProperty('updated_at')) {
+        (modifications as any).updated_at = new Date();
       }
+      // Don't auto-reset synced — callers explicitly set synced status
       // Prevent accidental deletion - must be explicit
       if ((modifications as any).deleted === undefined && obj.deleted === undefined) {
         (modifications as any).deleted = false;
@@ -1270,42 +1274,40 @@ export class PlasticSurgeonDB extends Dexie {
     });
 
     this.treatment_plans.hook('creating', (primKey, obj, trans) => {
-      obj.created_at = new Date();
-      obj.updated_at = new Date();
-      obj.synced = false;
-      // Ensure deleted is explicitly false on creation
+      obj.created_at = obj.created_at || new Date();
+      obj.updated_at = obj.updated_at || new Date();
+      if (obj.synced === undefined || obj.synced === null) {
+        obj.synced = false;
+      }
       if (obj.deleted === undefined) {
         obj.deleted = false;
       }
     });
 
     this.treatment_plans.hook('updating', (modifications, primKey, obj, trans) => {
-      (modifications as any).updated_at = new Date();
-      if (!modifications.hasOwnProperty('synced')) {
-        (modifications as any).synced = false;
+      if (!modifications.hasOwnProperty('updated_at')) {
+        (modifications as any).updated_at = new Date();
       }
-      // Prevent accidental deletion
       if ((modifications as any).deleted === undefined && obj.deleted === undefined) {
         (modifications as any).deleted = false;
       }
     });
 
     this.plan_steps.hook('creating', (primKey, obj, trans) => {
-      obj.created_at = new Date();
-      obj.updated_at = new Date();
-      obj.synced = false;
-      // Ensure deleted is explicitly false on creation
+      obj.created_at = obj.created_at || new Date();
+      obj.updated_at = obj.updated_at || new Date();
+      if (obj.synced === undefined || obj.synced === null) {
+        obj.synced = false;
+      }
       if (obj.deleted === undefined) {
         obj.deleted = false;
       }
     });
 
     this.plan_steps.hook('updating', (modifications, primKey, obj, trans) => {
-      (modifications as any).updated_at = new Date();
-      if (!modifications.hasOwnProperty('synced')) {
-        (modifications as any).synced = false;
+      if (!modifications.hasOwnProperty('updated_at')) {
+        (modifications as any).updated_at = new Date();
       }
-      // Prevent accidental deletion
       if ((modifications as any).deleted === undefined && obj.deleted === undefined) {
         (modifications as any).deleted = false;
       }
