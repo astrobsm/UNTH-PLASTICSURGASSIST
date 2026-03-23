@@ -17,7 +17,9 @@ import {
   Activity,
   Target,
   BarChart3,
-  AlertTriangle
+  AlertTriangle,
+  Bell,
+  X
 } from 'lucide-react';
 import { 
   medicalTrainingService, 
@@ -51,6 +53,9 @@ const MedicalTrainingPage: React.FC = () => {
   const [activeRotation, setActiveRotation] = useState<RotationConfig | null>(null);
   const [rotationDays, setRotationDays] = useState<{ daysRemaining: number; daysElapsed: number; totalDays: number; progressPercent: number; commencementDate: string | null; endDate: string | null }>({ daysRemaining: 0, daysElapsed: 0, totalDays: 0, progressPercent: 0, commencementDate: null, endDate: null });
   const [myParticipation, setMyParticipation] = useState<TraineeAnalytics | null>(null);
+  const [warnings, setWarnings] = useState<any[]>([]);
+  const [unreadWarningCount, setUnreadWarningCount] = useState(0);
+  const [showWarnings, setShowWarnings] = useState(false);
 
   // Load CBT status for dashboard display
   useEffect(() => {
@@ -128,6 +133,43 @@ const MedicalTrainingPage: React.FC = () => {
 
     loadRotationData();
   }, [activeTab]);
+
+  // Load training warnings
+  useEffect(() => {
+    const loadWarnings = async () => {
+      try {
+        const token = localStorage.getItem('auth_token');
+        if (!token) return;
+        const response = await fetch('/api/training-warnings', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setWarnings(data.warnings || []);
+          setUnreadWarningCount(data.unreadCount || 0);
+        }
+      } catch (error) {
+        console.warn('Failed to load training warnings:', error);
+      }
+    };
+    loadWarnings();
+  }, []);
+
+  const markWarningRead = async (warningId: number) => {
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) return;
+      await fetch('/api/training-warnings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ warningId })
+      });
+      setWarnings(prev => prev.map(w => w.id === warningId ? { ...w, read: true } : w));
+      setUnreadWarningCount(prev => Math.max(0, prev - 1));
+    } catch (error) {
+      console.warn('Failed to mark warning as read:', error);
+    }
+  };
 
   const modules = useMemo(() => {
     return medicalTrainingService.getModulesByLevel(activeTab);
@@ -290,6 +332,69 @@ const MedicalTrainingPage: React.FC = () => {
               </div>
             </div>
           </div>
+          
+          {/* Training Warnings Banner */}
+          {warnings.length > 0 && (
+            <div className="mt-6">
+              <button
+                onClick={() => setShowWarnings(!showWarnings)}
+                className={`w-full flex items-center justify-between px-5 py-3 rounded-xl border transition-all ${
+                  unreadWarningCount > 0  
+                    ? 'bg-red-500/30 border-red-300/40 hover:bg-red-500/40' 
+                    : 'bg-white/15 border-white/20 hover:bg-white/25'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Bell className="h-5 w-5" />
+                  <span className="font-semibold">Training Warnings</span>
+                  {unreadWarningCount > 0 && (
+                    <span className="px-2 py-0.5 bg-red-500 text-white text-xs font-bold rounded-full animate-pulse">
+                      {unreadWarningCount} new
+                    </span>
+                  )}
+                </div>
+                {showWarnings ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
+              </button>
+              {showWarnings && (
+                <div className="mt-2 space-y-2">
+                  {warnings.map(w => (
+                    <div key={w.id} className={`rounded-lg px-4 py-3 border ${
+                      !w.read 
+                        ? w.severity === 'critical' ? 'bg-red-500/30 border-red-300/40' : 'bg-amber-500/30 border-amber-300/40'
+                        : 'bg-white/10 border-white/15 opacity-75'
+                    }`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            {w.severity === 'critical' ? (
+                              <AlertTriangle className="h-4 w-4 text-red-300 flex-shrink-0" />
+                            ) : w.severity === 'warning' ? (
+                              <AlertTriangle className="h-4 w-4 text-amber-300 flex-shrink-0" />
+                            ) : (
+                              <Bell className="h-4 w-4 text-blue-300 flex-shrink-0" />
+                            )}
+                            <span className="font-semibold text-sm">{w.subject}</span>
+                          </div>
+                          <p className="text-sm text-green-100">{w.message}</p>
+                          <p className="text-xs text-green-200/60 mt-1">
+                            {new Date(w.created_at).toLocaleDateString()} &bull; from {w.sent_by_name || 'Admin'}
+                          </p>
+                        </div>
+                        {!w.read && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); markWarningRead(w.id); }}
+                            className="px-2 py-1 text-xs bg-white/20 hover:bg-white/30 rounded transition-colors flex-shrink-0"
+                          >
+                            Mark Read
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           
           {/* Rotation Period Banner */}
           {activeRotation && (

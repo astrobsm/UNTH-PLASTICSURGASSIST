@@ -162,6 +162,27 @@ const generateQuestionsFromCME = (level: TrainingLevel, testNumber: number): CBT
   return questions;
 };
 
+// Seeded shuffle: Fisher-Yates using a deterministic PRNG so the same
+// test+question always produces the same option order, but the correct
+// answer is NOT always mapped to a fixed letter.
+const seededRandom = (seed: number): (() => number) => {
+  let s = seed | 0;
+  return () => {
+    s = (s * 1103515245 + 12345) & 0x7fffffff;
+    return s / 0x7fffffff;
+  };
+};
+
+const shuffleWithSeed = <T>(arr: T[], seed: number): T[] => {
+  const a = [...arr];
+  const rng = seededRandom(seed);
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+};
+
 const generateQuestionFromContent = (
   questionNumber: number,
   testNumber: number,
@@ -174,82 +195,81 @@ const generateQuestionFromContent = (
   commonMistakes: string[],
   selfAssessment: { question: string; options: string[]; correctAnswer: number; explanation: string }[]
 ): CBTQuestion => {
-  // Use existing self-assessment questions when available, otherwise generate
   const seed = (testNumber * 100) + questionNumber;
-  
+  const LETTERS: ('A' | 'B' | 'C' | 'D' | 'E')[] = ['A', 'B', 'C', 'D', 'E'];
+
   if (selfAssessment.length > 0) {
     const saIndex = seed % selfAssessment.length;
     const sa = selfAssessment[saIndex];
-    
-    // Ensure we have 5 options
-    const options = [...sa.options];
-    while (options.length < 5) {
-      options.push("None of the above");
-    }
-    
+
+    // Pad to 5 options
+    const rawOptions = [...sa.options];
+    while (rawOptions.length < 5) rawOptions.push("None of the above");
+
+    // Build indexed pairs, shuffle, then find where the correct one landed
+    const indexed = rawOptions.map((text, i) => ({ text, origIdx: i }));
+    const shuffled = shuffleWithSeed(indexed, seed + saIndex);
+
+    const correctLetter = LETTERS[shuffled.findIndex(o => o.origIdx === sa.correctAnswer)];
+
     return {
       id: `cbt-${level}-${testNumber}-${questionNumber}`,
       questionNumber,
       clinicalScenario: scenarioPrefix + " the following clinical presentation:",
       question: sa.question,
       options: {
-        A: options[0],
-        B: options[1],
-        C: options[2],
-        D: options[3],
-        E: options[4] || "All of the above"
+        A: shuffled[0].text,
+        B: shuffled[1].text,
+        C: shuffled[2].text,
+        D: shuffled[3].text,
+        E: shuffled[4].text,
       },
-      correctAnswer: ['A', 'B', 'C', 'D', 'E'][sa.correctAnswer] as 'A' | 'B' | 'C' | 'D' | 'E',
+      correctAnswer: correctLetter,
       explanation: sa.explanation,
       topic: topicTitle,
-      marks: 4
+      marks: 4,
     };
   }
-  
+
   // Generate from key points if no self-assessment available
   const allContent = [...keyPoints, ...examTips, ...clinicalPearls];
   const contentIndex = seed % Math.max(allContent.length, 1);
   const correctContent = allContent[contentIndex] || keyPoints[0] || "Standard management applies";
-  
+
   // Create distractors from common mistakes
-  const distractors = commonMistakes.length >= 4 
-    ? commonMistakes.slice(0, 4) 
+  const distractors = commonMistakes.length >= 4
+    ? commonMistakes.slice(0, 4)
     : [
         "Immediate surgical intervention without stabilization",
         "Conservative management only",
         "Delay treatment pending further investigations",
-        "Empirical broad-spectrum antibiotics alone"
+        "Empirical broad-spectrum antibiotics alone",
       ];
-  
-  const correctPosition = seed % 5;
-  const options: string[] = [];
-  let distractorIndex = 0;
-  
-  for (let i = 0; i < 5; i++) {
-    if (i === correctPosition) {
-      options.push(correctContent);
-    } else {
-      options.push(distractors[distractorIndex % distractors.length]);
-      distractorIndex++;
-    }
-  }
-  
+
+  // Build 5 options with the correct one at index 0, then shuffle
+  const rawOptions = [correctContent, ...distractors.slice(0, 4)];
+  while (rawOptions.length < 5) rawOptions.push("No additional intervention required");
+
+  const indexed = rawOptions.map((text, i) => ({ text, origIdx: i }));
+  const shuffled = shuffleWithSeed(indexed, seed);
+  const correctLetter = LETTERS[shuffled.findIndex(o => o.origIdx === 0)];
+
   return {
     id: `cbt-${level}-${testNumber}-${questionNumber}`,
     questionNumber,
     clinicalScenario: scenarioPrefix + " findings consistent with the topic area.",
     question: `Based on this clinical scenario regarding ${topicTitle}, what is the MOST appropriate next step in management?`,
     options: {
-      A: options[0],
-      B: options[1],
-      C: options[2],
-      D: options[3],
-      E: options[4]
+      A: shuffled[0].text,
+      B: shuffled[1].text,
+      C: shuffled[2].text,
+      D: shuffled[3].text,
+      E: shuffled[4].text,
     },
-    correctAnswer: ['A', 'B', 'C', 'D', 'E'][correctPosition] as 'A' | 'B' | 'C' | 'D' | 'E',
+    correctAnswer: correctLetter,
     explanation: `The correct answer relates to: ${correctContent}. This is a key concept from ${topicTitle}.`,
     topic: topicTitle,
-    marks: 4
+    marks: 4,
   };
 };
 
