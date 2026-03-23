@@ -12,6 +12,10 @@
   },
   "rewrites": [
     {
+      "source": "/api/consults/:path*",
+      "destination": "/api/consults"
+    },
+    {
       "source": "/api/clinic-appointments/:path*",
       "destination": "/api/clinic-appointments"
     },

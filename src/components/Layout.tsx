@@ -39,7 +39,8 @@ import {
   PhoneCall,
   Megaphone,
   Brain,
-  CalendarCheck
+  CalendarCheck,
+  Stethoscope
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import SyncStatusIndicator from './SyncStatusIndicator';
@@ -58,6 +59,7 @@ const navigation = [
   { name: 'Call Duty Roster', href: '/call-duty', icon: PhoneCall },
   { name: 'Clinic Duties', href: '/clinic-duties', icon: Shield },
   { name: 'Clinic Appointments', href: '/clinic-appointments', icon: CalendarCheck },
+  { name: 'Consults', href: '/consults', icon: Stethoscope },
   { name: 'Notice Board', href: '/notice-board', icon: Megaphone },
   { name: 'Shopping List', href: '/shopping-list', icon: ShoppingCart },
   { name: 'Chat', href: '/chat', icon: MessageSquare },
