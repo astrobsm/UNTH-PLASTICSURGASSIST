@@ -18,7 +18,8 @@ import {
   BedDouble,
   ExternalLink,
 } from 'lucide-react';
-import { apiClient } from '../services/apiClient';
+// Direct fetch from external PS Consult system (public API with CORS *)
+const CONSULT_API = 'https://ps-consult-unth.vercel.app/api/consults';
 
 // ── Types ───────────────────────────────────────────────────────
 
@@ -118,7 +119,11 @@ export default function ConsultsPage() {
       if (statusFilter) params.set('status', statusFilter);
       if (urgencyFilter) params.set('urgency', urgencyFilter);
 
-      const data = await apiClient.request<ConsultsResponse>(`/consults?${params.toString()}`);
+      const response = await fetch(`${CONSULT_API}/public-list?${params.toString()}`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch consults (${response.status})`);
+      }
+      const data: ConsultsResponse = await response.json();
       setConsults(data.consults);
       setTotal(data.total);
     } catch (err: any) {
