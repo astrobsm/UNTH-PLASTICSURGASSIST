@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { X, Plus, Trash2, AlertTriangle, Info, FileDown, Printer, Search, ChevronDown, Beaker, Activity } from 'lucide-react';
 import MedicalAutocompleteTextarea from './MedicalAutocompleteTextarea';
 import { format } from 'date-fns';
@@ -230,8 +230,24 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
     notes: ''
   });
   
-  // GFR-based dosing
-  const [patientGFR, setPatientGFR] = useState<number | ''>('');
+  // GFR-based dosing - calculator fields
+  const [gfrAge, setGfrAge] = useState<number | ''>('');
+  const [gfrGender, setGfrGender] = useState<'male' | 'female'>('male');
+  const [gfrWeight, setGfrWeight] = useState<number | ''>('');
+  const [gfrCreatinine, setGfrCreatinine] = useState<number | ''>('');
+  const [gfrCreatinineUnit, setGfrCreatinineUnit] = useState<'mg/dL' | 'µmol/L'>('µmol/L');
+
+  // Auto-calculate eGFR using Cockcroft-Gault formula (standard for drug dosing)
+  const patientGFR: number | '' = useMemo(() => {
+    if (!gfrAge || !gfrWeight || !gfrCreatinine || gfrAge <= 0 || gfrWeight <= 0 || gfrCreatinine <= 0) return '';
+    // Convert creatinine to mg/dL if in µmol/L
+    const creatinineMgDl = gfrCreatinineUnit === 'µmol/L' ? gfrCreatinine / 88.4 : gfrCreatinine;
+    if (creatinineMgDl <= 0) return '';
+    // Cockcroft-Gault: CrCl = ((140 - age) × weight) / (72 × Scr)  × 0.85 if female
+    let gfr = ((140 - gfrAge) * gfrWeight) / (72 * creatinineMgDl);
+    if (gfrGender === 'female') gfr *= 0.85;
+    return Math.round(gfr);
+  }, [gfrAge, gfrGender, gfrWeight, gfrCreatinine, gfrCreatinineUnit]);
   const [gfrRecommendation, setGfrRecommendation] = useState<GFRDosingRecommendation | null>(null);
   
   // BNF Medication Search
@@ -700,8 +716,19 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
         criteria_met: [],
         criteria_pending: dischargePlan.discharge_criteria || []
       },
-      // Legacy fields for compatibility - populate lab_works from investigations for local display
-      reviews: [],
+      // Legacy fields for compatibility - populate from form data for display
+      reviews: reviews.map((r, i) => ({
+        id: `review_${Date.now()}_${i}`,
+        plan_id: '',
+        review_date: r.start_date || new Date(),
+        scheduled_date: r.start_date || new Date(),
+        assigned_house_officer: r.assigned_person_name || '',
+        assigned_to: r.assigned_person_name || r.assigned_to || '',
+        status: 'pending',
+        notes: `${r.review_type || ''} review`,
+        created_at: new Date(),
+        updated_at: new Date(),
+      })),
       lab_works: investigations.map((inv, i) => ({
         id: `lab_${Date.now()}_${i}`,
         plan_id: '',
@@ -716,8 +743,35 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
         created_at: new Date(),
         updated_at: new Date(),
       })),
-      procedures: [],
-      medications: [],
+      procedures: procedures.map((p, i) => ({
+        id: `proc_${Date.now()}_${i}`,
+        plan_id: '',
+        patient_id: parseInt(basicInfo.patient_id),
+        procedure_name: p.procedure_name,
+        procedure_type: p.procedure_type || 'minor',
+        planned_date: p.proposed_date || new Date(),
+        proposed_date: p.proposed_date || new Date(),
+        status: p.status || 'planned',
+        surgeon: p.surgeon || '',
+        location: p.location || '',
+        notes: p.notes || '',
+        created_at: new Date(),
+        updated_at: new Date(),
+      })),
+      medications: medications.map((m, i) => ({
+        id: `med_${Date.now()}_${i}`,
+        plan_id: '',
+        patient_id: parseInt(basicInfo.patient_id),
+        medication_name: m.medication_name,
+        dosage: m.dosage || '',
+        route: m.route || 'oral',
+        frequency: m.frequency || '',
+        start_date: m.start_date || new Date(),
+        end_date: m.end_date,
+        status: m.status || 'active',
+        created_at: new Date(),
+        updated_at: new Date(),
+      })),
       created_by: user?.email || 'Unknown'
     };
 
@@ -932,41 +986,100 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
             <div className="space-y-6">
               <h3 className="text-lg font-semibold text-gray-900">Medications</h3>
               
-              {/* GFR Input for Dosing Guidance */}
+              {/* GFR Calculator for Dosing Guidance */}
               <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
                 <div className="flex items-center gap-2 mb-2">
                   <Info className="w-5 h-5 text-blue-600" />
                   <h4 className="font-medium text-blue-900">GFR-Based Dosing Guidance</h4>
                 </div>
                 <p className="text-sm text-blue-700 mb-3">
-                  Enter the patient's eGFR to get automatic dosing adjustments for renal impairment.
+                  Enter patient details to auto-calculate GFR (Cockcroft-Gault) for renal dosing adjustments.
                 </p>
-                <div className="flex items-center gap-3">
-                  <label className="text-sm font-medium text-gray-700">Patient eGFR:</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="150"
-                    value={patientGFR}
-                    onChange={(e) => setPatientGFR(e.target.value ? parseInt(e.target.value) : '')}
-                    className="w-24 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="e.g., 45"
-                  />
-                  <span className="text-sm text-gray-500">mL/min/1.73m²</span>
-                  {patientGFR && typeof patientGFR === 'number' && (
-                    <span className={`text-sm px-2 py-1 rounded ${
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Age (years)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="120"
+                      value={gfrAge}
+                      onChange={(e) => setGfrAge(e.target.value ? parseInt(e.target.value) : '')}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                      placeholder="e.g., 45"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Gender</label>
+                    <select
+                      value={gfrGender}
+                      onChange={(e) => setGfrGender(e.target.value as 'male' | 'female')}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    >
+                      <option value="male">Male</option>
+                      <option value="female">Female</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Weight (kg)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="300"
+                      value={gfrWeight}
+                      onChange={(e) => setGfrWeight(e.target.value ? parseFloat(e.target.value) : '')}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                      placeholder="e.g., 70"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Creatinine
+                      <select
+                        value={gfrCreatinineUnit}
+                        onChange={(e) => setGfrCreatinineUnit(e.target.value as 'mg/dL' | 'µmol/L')}
+                        className="ml-1 text-xs text-blue-600 bg-transparent border-none p-0 focus:outline-none cursor-pointer"
+                      >
+                        <option value="µmol/L">(µmol/L)</option>
+                        <option value="mg/dL">(mg/dL)</option>
+                      </select>
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      value={gfrCreatinine}
+                      onChange={(e) => setGfrCreatinine(e.target.value ? parseFloat(e.target.value) : '')}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                      placeholder={gfrCreatinineUnit === 'µmol/L' ? 'e.g., 120' : 'e.g., 1.4'}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Calculated GFR</label>
+                    <div className={`w-full px-3 py-2 rounded-md text-sm font-semibold text-center ${
+                      patientGFR === '' ? 'bg-gray-100 text-gray-400' :
                       patientGFR >= 90 ? 'bg-green-100 text-green-800' :
                       patientGFR >= 60 ? 'bg-yellow-100 text-yellow-800' :
                       patientGFR >= 30 ? 'bg-orange-100 text-orange-800' :
                       'bg-red-100 text-red-800'
                     }`}>
-                      {patientGFR >= 90 ? 'Normal' :
-                       patientGFR >= 60 ? 'Mild decrease' :
-                       patientGFR >= 30 ? 'Moderate (CKD 3)' :
-                       patientGFR >= 15 ? 'Severe (CKD 4)' : 'Kidney failure (CKD 5)'}
-                    </span>
-                  )}
+                      {patientGFR === '' ? '—' : `${patientGFR} mL/min`}
+                    </div>
+                  </div>
                 </div>
+                {patientGFR !== '' && typeof patientGFR === 'number' && (
+                  <div className={`mt-2 text-sm px-3 py-1.5 rounded-md inline-block ${
+                    patientGFR >= 90 ? 'bg-green-100 text-green-800' :
+                    patientGFR >= 60 ? 'bg-yellow-100 text-yellow-800' :
+                    patientGFR >= 30 ? 'bg-orange-100 text-orange-800' :
+                    'bg-red-100 text-red-800'
+                  }`}>
+                    {patientGFR >= 90 ? 'Normal kidney function' :
+                     patientGFR >= 60 ? 'Mild decrease (CKD 2)' :
+                     patientGFR >= 45 ? 'Mild-moderate decrease (CKD 3a)' :
+                     patientGFR >= 30 ? 'Moderate-severe decrease (CKD 3b)' :
+                     patientGFR >= 15 ? 'Severe decrease (CKD 4)' : 'Kidney failure (CKD 5)'}
+                  </div>
+                )}
               </div>
               
               <div className="bg-gray-50 p-4 rounded-lg space-y-4">
