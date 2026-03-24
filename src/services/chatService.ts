@@ -477,29 +477,14 @@ class ChatService {
     }
 
     try {
-      const response = await fetch('/api/chat/rooms', {
-        headers: {
-          'Authorization': `Bearer ${apiClient.getToken()}`,
-        },
-      });
-
-      // If endpoint doesn't exist (404), mark API as unavailable and don't retry
-      if (response.status === 404) {
-        this.apiAvailable = false;
-        this.apiChecked = true;
-        console.warn('💬 Chat API not available - using offline mode');
-        return [];
-      }
-
+      const rooms = await apiClient.get<ChatRoom[]>('/chat/rooms');
       this.apiChecked = true;
-      if (!response.ok) throw new Error('Failed to fetch rooms');
-      return await response.json();
-    } catch (error) {
+      return rooms;
+    } catch (error: any) {
       // Mark API as unavailable on network errors
       this.apiAvailable = false;
       this.apiChecked = true;
       
-      // Only log once, not repeatedly
       if (!this.apiChecked) {
         console.warn('💬 Chat service offline - using local data only');
       }
@@ -520,26 +505,11 @@ class ChatService {
       const params = new URLSearchParams({ limit: limit.toString() });
       if (before) params.append('before', before);
 
-      const response = await fetch(`/api/chat/rooms/${roomId}/messages?${params}`, {
-        headers: {
-          'Authorization': `Bearer ${apiClient.getToken()}`,
-        },
-      });
-
-      // If endpoint doesn't exist (404), mark API as unavailable and don't retry
-      if (response.status === 404) {
-        this.apiAvailable = false;
-        this.apiChecked = true;
-        return [];
-      }
-
-      if (!response.ok) throw new Error('Failed to fetch messages');
-      return await response.json();
+      const messages = await apiClient.get<ChatMessage[]>(`/chat/rooms/${roomId}/messages?${params}`);
+      return messages;
     } catch (error) {
-      // Mark API as unavailable on errors
       this.apiAvailable = false;
       this.apiChecked = true;
-      // Silent fail - endpoint doesn't exist yet
       return [];
     }
   }
@@ -552,14 +522,7 @@ class ChatService {
       const params = new URLSearchParams({ q: query });
       if (roomId) params.append('roomId', roomId);
 
-      const response = await fetch(`/api/chat/messages/search?${params}`, {
-        headers: {
-          'Authorization': `Bearer ${apiClient.getToken()}`,
-        },
-      });
-
-      if (!response.ok) throw new Error('Failed to search messages');
-      return await response.json();
+      return await apiClient.get<ChatMessage[]>(`/chat/messages/search?${params}`);
     } catch (error) {
       console.error('Error searching messages:', error);
       return [];

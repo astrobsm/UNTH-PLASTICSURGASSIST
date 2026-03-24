@@ -1,34 +1,20 @@
 import { db } from '../db/database';
 import { format } from 'date-fns';
-
-// API Base URL - handles all environments
-const API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL 
-  || ((import.meta as any).env?.PROD 
-    ? '/api'  // Production fallback: use relative path
-    : 'http://localhost:3005/api');  // Development: direct to backend
-
-// Get auth headers from localStorage
-function getAuthHeaders(): HeadersInit {
-  const token = localStorage.getItem('auth_token');
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-  };
-}
+import { apiClient } from './apiClient';
 
 // Helper to sync MDT data to server
 async function syncToServer(endpoint: string, method: string, data?: any): Promise<any> {
   try {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      method,
-      headers: getAuthHeaders(),
-      body: data ? JSON.stringify(data) : undefined
-    });
-    if (!response.ok) {
-      console.warn(`MDT sync failed: ${response.status}`);
-      return null;
+    if (method === 'GET') {
+      return await apiClient.get(endpoint);
+    } else if (method === 'POST') {
+      return await apiClient.post(endpoint, data);
+    } else if (method === 'PUT') {
+      return await apiClient.put(endpoint, data);
+    } else if (method === 'DELETE') {
+      return await apiClient.delete(endpoint);
     }
-    return await response.json();
+    return null;
   } catch (error) {
     console.warn('MDT sync error (will retry later):', error);
     return null;
@@ -504,21 +490,13 @@ class MDTService {
   async syncFromServer(): Promise<void> {
     try {
       // Fetch all MDT data from server using sync/pull endpoint
-      const headers = getAuthHeaders();
-      const body = JSON.stringify({
+      const pullRes = await apiClient.post('/sync/pull', {
         since: '2020-01-01',
         entities: ['mdt_patient_teams', 'mdt_meetings', 'mdt_contact_logs']
       });
-      
-      const pullRes = await fetch(`${API_BASE_URL}/sync/pull`, {
-        method: 'POST',
-        headers: { ...headers, 'Content-Type': 'application/json' },
-        body
-      });
 
-      if (pullRes.ok) {
-        const data = await pullRes.json();
-        const updates = data.updates || {};
+      if (pullRes) {
+        const updates = pullRes.updates || {};
         
         // Process MDT Patient Teams
         const teams = updates.mdt_patient_teams || [];
@@ -641,8 +619,6 @@ class MDTService {
   // Push all local MDT data to server
   async pushToServer(): Promise<void> {
     try {
-      const headers = getAuthHeaders();
-      
       // Get all local MDT data
       const [teams, meetings, contacts] = await Promise.all([
         db.mdt_patient_teams.toArray(),
@@ -689,26 +665,16 @@ class MDTService {
 
       if (changes.length > 0) {
         console.log(`[MDT PUSH] Sending ${changes.length} changes to server...`);
-        const response = await fetch(`${API_BASE_URL}/sync/push`, {
-          method: 'POST',
-          headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ changes })
-        });
-        
-        const responseData = await response.json();
+        const responseData = await apiClient.post('/sync/push', { changes });
         console.log(`[MDT PUSH] Server response:`, responseData);
         
-        if (response.ok) {
-          console.log(`✅ Pushed ${changes.length} MDT records to server`);
-          // Check for any errors in the results
-          if (responseData.results) {
-            const errors = responseData.results.filter((r: any) => r.status === 'error');
-            if (errors.length > 0) {
-              console.warn('[MDT PUSH] Some records failed:', errors);
-            }
+        console.log(`✅ Pushed ${changes.length} MDT records to server`);
+        // Check for any errors in the results
+        if (responseData.results) {
+          const errors = responseData.results.filter((r: any) => r.status === 'error');
+          if (errors.length > 0) {
+            console.warn('[MDT PUSH] Some records failed:', errors);
           }
-        } else {
-          console.warn('[MDT PUSH] Push failed:', responseData);
         }
         
         return responseData;

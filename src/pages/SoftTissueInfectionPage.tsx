@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { patientService } from '../services/patientService';
 import { useAuthStore } from '../store/authStore';
+import { apiClient } from '../services/apiClient';
 import {
   STI_CLASSIFICATIONS, LRINEC_SCORE, LRINEC_INTERPRETATION, QSOFA_CRITERIA,
   LAB_PANELS, TREATMENT_PROTOCOLS, LOCATION_CONSIDERATIONS, NURSING_PROTOCOLS,
@@ -68,15 +69,7 @@ interface Assessment {
   assessment_date?: string;
 }
 
-const API_BASE = '/api/sti-protocol';
-
-const getAuthHeaders = () => {
-  const token = localStorage.getItem('auth_token');
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {})
-  };
-};
+const API_BASE = '/sti-protocol';
 
 // ============================================
 // MAIN COMPONENT
@@ -146,11 +139,8 @@ const SoftTissueInfectionPage: React.FC = () => {
     setIsLoading(true);
     try {
       const params = patientId ? `?patientId=${patientId}` : '';
-      const res = await fetch(`${API_BASE}/assessments${params}`, { headers: getAuthHeaders() });
-      if (res.ok) {
-        const data = await res.json();
-        setAssessments(data.assessments || []);
-      }
+      const data = await apiClient.get(`${API_BASE}/assessments${params}`);
+      setAssessments(data.assessments || []);
     } catch (err) {
       console.error('Error fetching assessments:', err);
     } finally {
@@ -160,14 +150,11 @@ const SoftTissueInfectionPage: React.FC = () => {
 
   const fetchAssessmentDetails = async (id: string) => {
     try {
-      const res = await fetch(`${API_BASE}/assessments/${id}`, { headers: getAuthHeaders() });
-      if (res.ok) {
-        const data = await res.json();
-        setSelectedAssessment(data.assessment);
-        setTreatmentPlans(data.treatmentPlans || []);
-        setDebridements(data.debridements || []);
-        setOrders(data.orders || []);
-      }
+      const data = await apiClient.get(`${API_BASE}/assessments/${id}`);
+      setSelectedAssessment(data.assessment);
+      setTreatmentPlans(data.treatmentPlans || []);
+      setDebridements(data.debridements || []);
+      setOrders(data.orders || []);
     } catch (err) {
       console.error('Error fetching assessment details:', err);
     }
@@ -456,22 +443,12 @@ const SoftTissueInfectionPage: React.FC = () => {
         durationHours: assessmentForm.duration_hours
       };
 
-      const res = await fetch(`${API_BASE}/assessments`, {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify(payload)
-      });
+      const res = await apiClient.post(`${API_BASE}/assessments`, payload);
 
-      if (res.ok) {
-        const data = await res.json();
-        setMessage({ type: 'success', text: 'Assessment saved successfully' });
-        setSelectedAssessment(data.assessment);
-        fetchAssessments(String(selectedPatient.id));
-        setActiveTab('treatment');
-      } else {
-        const err = await res.json();
-        setMessage({ type: 'error', text: err.error || 'Failed to save assessment' });
-      }
+      setMessage({ type: 'success', text: 'Assessment saved successfully' });
+      setSelectedAssessment(res.assessment);
+      fetchAssessments(String(selectedPatient.id));
+      setActiveTab('treatment');
     } catch (err) {
       setMessage({ type: 'error', text: 'Network error saving assessment' });
     } finally {
@@ -513,17 +490,10 @@ const SoftTissueInfectionPage: React.FC = () => {
         escalationCriteria: protocol.escalationCriteria || []
       };
 
-      const res = await fetch(`${API_BASE}/treatment-plans`, {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify(payload)
-      });
+      const res = await apiClient.post(`${API_BASE}/treatment-plans`, payload);
 
-      if (res.ok) {
-        const data = await res.json();
-        setTreatmentPlans(prev => [data.treatmentPlan, ...prev]);
-        setMessage({ type: 'success', text: 'Treatment plan created. Review and approve to auto-generate orders.' });
-      }
+      setTreatmentPlans(prev => [res.treatmentPlan, ...prev]);
+      setMessage({ type: 'success', text: 'Treatment plan created. Review and approve to auto-generate orders.' });
     } catch (err) {
       setMessage({ type: 'error', text: 'Failed to create treatment plan' });
     } finally {
@@ -537,19 +507,12 @@ const SoftTissueInfectionPage: React.FC = () => {
   const approveTreatmentPlan = async (planId: string) => {
     setIsSaving(true);
     try {
-      const res = await fetch(`${API_BASE}/treatment-plans/${planId}`, {
-        method: 'PUT',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ autoOrdersApproved: true })
-      });
+      const data = await apiClient.put(`${API_BASE}/treatment-plans/${planId}`, { autoOrdersApproved: true });
 
-      if (res.ok) {
-        const data = await res.json();
-        setTreatmentPlans(prev => prev.map(p => p.id === planId ? data.treatmentPlan : p));
-        setMessage({ type: 'success', text: 'Treatment plan approved! Orders auto-generated for prescriptions, labs, and procedures.' });
-        // Refresh orders
-        if (selectedAssessment) fetchAssessmentDetails(selectedAssessment.id);
-      }
+      setTreatmentPlans(prev => prev.map(p => p.id === planId ? data.treatmentPlan : p));
+      setMessage({ type: 'success', text: 'Treatment plan approved! Orders auto-generated for prescriptions, labs, and procedures.' });
+      // Refresh orders
+      if (selectedAssessment) fetchAssessmentDetails(selectedAssessment.id);
     } catch (err) {
       setMessage({ type: 'error', text: 'Failed to approve treatment plan' });
     } finally {
@@ -582,17 +545,10 @@ const SoftTissueInfectionPage: React.FC = () => {
         woundDimensions: assessmentForm.vital_signs // placeholder
       };
 
-      const res = await fetch(`${API_BASE}/debridements`, {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify(payload)
-      });
+      const data = await apiClient.post(`${API_BASE}/debridements`, payload);
 
-      if (res.ok) {
-        const data = await res.json();
-        setDebridements(prev => [data.debridement, ...prev]);
-        setMessage({ type: 'success', text: `Debridement #${debridements.length + 1} recorded successfully` });
-      }
+      setDebridements(prev => [data.debridement, ...prev]);
+      setMessage({ type: 'success', text: `Debridement #${debridements.length + 1} recorded successfully` });
     } catch (err) {
       setMessage({ type: 'error', text: 'Failed to save debridement' });
     } finally {
@@ -614,10 +570,7 @@ const SoftTissueInfectionPage: React.FC = () => {
     setCmeSubmitted(true);
 
     try {
-      await fetch(`${API_BASE}/cme`, {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({
+      await apiClient.post(`${API_BASE}/cme`, {
           articleId: STI_CME_ARTICLE.id,
           score,
           totalQuestions: questions.length,
@@ -625,8 +578,7 @@ const SoftTissueInfectionPage: React.FC = () => {
           answers: cmeAnswers,
           passed: score >= 70,
           creditsEarned: score >= 70 ? STI_CME_ARTICLE.cmeCredits : 0
-        })
-      });
+        });
     } catch (err) {
       console.error('Error recording CME:', err);
     }

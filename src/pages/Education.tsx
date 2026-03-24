@@ -18,6 +18,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { cmeService } from '../services/cmeService';
+import { apiClient } from '../services/apiClient';
 import { aiService, CMETopic, TestSession, CMEProgress, CMECertificate } from '../services/aiService';
 import { useAuthStore } from '../store/authStore';
 
@@ -157,23 +158,12 @@ const Education: React.FC = () => {
 
   const saveApiKey = async () => {
     try {
-      const response = await fetch('/api/ai/settings', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-        },
-        body: JSON.stringify({
+      const response = await apiClient.post('/ai/settings', {
           setting_key: 'openai_api_key',
           setting_value: apiKey
-        })
-      });
+        });
 
-      if (response.ok) {
-        alert('API key saved successfully! Clinical features are now enabled.');
-      } else {
-        alert('Failed to save API key. Please check your permissions.');
-      }
+      alert('API key saved successfully! Clinical features are now enabled.');
     } catch (error) {
       alert('Error saving API key. Please try again.');
     }

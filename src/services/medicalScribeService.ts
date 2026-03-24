@@ -8,6 +8,7 @@
 
 import { speechToTextService } from './speechToTextService';
 import { aiTextEnhancementService } from './aiTextEnhancementService';
+import { apiClient } from './apiClient';
 import { db } from '../db/database';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -480,36 +481,26 @@ class MedicalScribeService {
 
     // Try AI-powered enhancement first
     try {
-      const response = await fetch('/api/ai/scribe-process', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
-        },
-        body: JSON.stringify({
-          transcript,
-          context: session.context,
-          round_type: session.round_type,
-          patient_name: session.patient_name,
-          template: this.getTemplateForContext(session.context, session.round_type),
-        })
+      const data = await apiClient.post('/ai/scribe-process', {
+        transcript,
+        context: session.context,
+        round_type: session.round_type,
+        patient_name: session.patient_name,
+        template: this.getTemplateForContext(session.context, session.round_type),
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        if (data.structured_note) {
-          // Merge AI result with local extraction for vitals (more reliable)
-          const localVitals = this.extractVitals(transcript);
-          return {
-            ...data.structured_note,
-            vitals: {
-              ...data.structured_note.vitals,
-              ...localVitals, // Local regex is more reliable for vitals
-            },
-            raw_transcript: transcript,
-            confidence: data.confidence || 0.85,
-          };
-        }
+      if (data.structured_note) {
+        // Merge AI result with local extraction for vitals (more reliable)
+        const localVitals = this.extractVitals(transcript);
+        return {
+          ...data.structured_note,
+          vitals: {
+            ...data.structured_note.vitals,
+            ...localVitals, // Local regex is more reliable for vitals
+          },
+          raw_transcript: transcript,
+          confidence: data.confidence || 0.85,
+        };
       }
     } catch (err) {
       console.warn('AI scribe processing unavailable, falling back to local extraction');

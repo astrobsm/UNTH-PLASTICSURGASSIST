@@ -1,4 +1,5 @@
 import { db } from '../db/database';
+import { apiClient } from './apiClient';
 
 export interface MedicalTeamAssignment {
   id?: number;
@@ -262,21 +263,7 @@ class MedicalTeamService {
    */
   async getPatientMedicalTeamFromAPI(patientId: string | number): Promise<TeamMember[]> {
     try {
-      const token = localStorage.getItem('auth_token');
-      const response = await fetch(`/api/medical-team/patient?patient_id=${patientId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        console.error('Failed to fetch medical team from API:', response.status);
-        // Fall back to local IndexedDB
-        return this.getPatientMedicalTeam(Number(patientId));
-      }
-
-      const data = await response.json();
+      const data = await apiClient.get(`/medical-team/patient?patient_id=${patientId}`);
       return data.team || [];
     } catch (error) {
       console.error('Error fetching medical team from API:', error);
@@ -337,27 +324,9 @@ class MedicalTeamService {
    */
   async getStaffByRole(role: string): Promise<StaffByRole[]> {
     try {
-      const token = localStorage.getItem('auth_token');
-      if (!token) {
-        console.warn('No auth token, using local data');
-        return this.getLocalStaffByRole(role);
-      }
-
-      const response = await fetch(`/api/medical-team/by-role?role=${role}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        console.log(`✅ Fetched ${data.staff?.length || 0} ${role}s from server`);
-        return data.staff || [];
-      } else {
-        console.warn('Server fetch failed, using local data');
-        return this.getLocalStaffByRole(role);
-      }
+      const data = await apiClient.get(`/medical-team/by-role?role=${role}`);
+      console.log(`✅ Fetched ${data.staff?.length || 0} ${role}s from server`);
+      return data.staff || [];
     } catch (error) {
       console.warn('Error fetching staff by role:', error);
       return this.getLocalStaffByRole(role);
@@ -401,27 +370,9 @@ class MedicalTeamService {
    */
   async getSuggestedTeamAssignment(): Promise<SuggestedTeam> {
     try {
-      const token = localStorage.getItem('auth_token');
-      if (!token) {
-        console.warn('No auth token, using local suggestion');
-        return this.getLocalSuggestedTeam();
-      }
-
-      const response = await fetch('/api/medical-team/suggest-assignment', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        console.log('✅ Got team suggestions from server:', data.suggestions);
-        return data.suggestions;
-      } else {
-        console.warn('Server suggestion failed, using local');
-        return this.getLocalSuggestedTeam();
-      }
+      const data = await apiClient.get('/medical-team/suggest-assignment');
+      console.log('✅ Got team suggestions from server:', data.suggestions);
+      return data.suggestions;
     } catch (error) {
       console.warn('Error getting team suggestions:', error);
       return this.getLocalSuggestedTeam();
@@ -450,21 +401,8 @@ class MedicalTeamService {
    */
   async getTeamWorkload(): Promise<TeamWorkload | null> {
     try {
-      const token = localStorage.getItem('auth_token');
-      if (!token) return null;
-
-      const response = await fetch('/api/medical-team/workload', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        return data.workload;
-      }
-      return null;
+      const data = await apiClient.get('/medical-team/workload');
+      return data.workload;
     } catch (error) {
       console.warn('Error fetching team workload:', error);
       return null;
@@ -482,32 +420,15 @@ class MedicalTeamService {
     notes?: string
   ): Promise<boolean> {
     try {
-      const token = localStorage.getItem('auth_token');
-      if (!token) {
-        console.warn('No auth token, skipping activity log');
-        return false;
-      }
-
-      const response = await fetch('/api/medical-team/log-activity', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          patient_id: patientId,
-          activity_type: activityType,
-          description,
-          assigned_staff_id: assignedStaffId,
-          notes
-        })
+      await apiClient.post('/medical-team/log-activity', {
+        patient_id: patientId,
+        activity_type: activityType,
+        description,
+        assigned_staff_id: assignedStaffId,
+        notes
       });
-
-      if (response.ok) {
-        console.log(`✅ Logged ${activityType} activity for patient ${patientId}`);
-        return true;
-      }
-      return false;
+      console.log(`✅ Logged ${activityType} activity for patient ${patientId}`);
+      return true;
     } catch (error) {
       console.warn('Error logging activity:', error);
       return false;
@@ -519,24 +440,11 @@ class MedicalTeamService {
    */
   async getTeamAnalytics(staffId?: number, period: number = 30): Promise<any> {
     try {
-      const token = localStorage.getItem('auth_token');
-      if (!token) return null;
-
-      let url = `/api/medical-team/analytics?period=${period}`;
+      let url = `/medical-team/analytics?period=${period}`;
       if (staffId) url += `&staff_id=${staffId}`;
 
-      const response = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        return data.analytics;
-      }
-      return null;
+      const data = await apiClient.get(url);
+      return data.analytics;
     } catch (error) {
       console.warn('Error fetching team analytics:', error);
       return null;

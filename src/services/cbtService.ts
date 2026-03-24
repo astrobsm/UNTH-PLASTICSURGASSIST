@@ -6,6 +6,7 @@
 import { TrainingLevel, CMEModule, HOUSE_OFFICER_MODULES, JUNIOR_RESIDENT_MODULES, SENIOR_RESIDENT_MODULES } from './medicalTrainingService';
 import { db } from '../db/database';
 import { syncService } from '../db/syncService';
+import { apiClient } from './apiClient';
 
 export interface CBTQuestion {
   id: string;
@@ -387,23 +388,9 @@ const syncToServer = async (action: string, data: any): Promise<any> => {
       return null;
     }
     
-    const response = await fetch(`/api/cbt?action=${action}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify(data)
-    });
-    
-    if (response.ok) {
-      const result = await response.json();
-      console.log(`✅ CBT ${action} synced to server`);
-      return result;
-    } else {
-      console.warn(`⚠️ Failed to sync CBT ${action}:`, response.status);
-      return null;
-    }
+    const result = await apiClient.post(`/cbt?action=${action}`, data);
+    console.log(`✅ CBT ${action} synced to server`);
+    return result;
   } catch (error) {
     console.warn('⚠️ CBT sync failed (offline?):', error);
     return null;
@@ -417,16 +404,7 @@ const fetchFromServer = async (action: string, params: Record<string, string> = 
     if (!token) return null;
     
     const queryString = new URLSearchParams({ action, ...params }).toString();
-    const response = await fetch(`/api/cbt?${queryString}`, {
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
-    });
-    
-    if (response.ok) {
-      return await response.json();
-    }
-    return null;
+    return await apiClient.get(`/cbt?${queryString}`);
   } catch (error) {
     console.warn('⚠️ Failed to fetch CBT data from server:', error);
     return null;

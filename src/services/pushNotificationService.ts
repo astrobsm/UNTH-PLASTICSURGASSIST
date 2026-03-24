@@ -1,6 +1,6 @@
-// Push Notification Service with Voice Announcements
 import { db } from '../db/database';
 import { logger } from '../utils/logger';
+import { apiClient } from './apiClient';
 
 interface PushSubscriptionData {
   id?: number;
@@ -87,27 +87,8 @@ class PushNotificationService {
 
     // Send to server
     try {
-      const token = localStorage.getItem('auth_token');
-      
-      if (!token) {
-        console.warn('⚠️ No auth token available, will retry push subscription sync later');
-        return;
-      }
-
-      const response = await fetch('/api/push-subscriptions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(subscriptionData)
-      });
-
-      if (response.ok) {
-        logger.log('✅ Push subscription saved to server');
-      } else {
-        logger.warn(`⚠️ Failed to save push subscription: ${response.status} ${response.statusText}`);
-      }
+      await apiClient.post('/push-subscriptions', subscriptionData);
+      logger.log('✅ Push subscription saved to server');
     } catch (error) {
       console.warn('⚠️ Failed to save subscription to server:', error);
     }
@@ -171,32 +152,13 @@ class PushNotificationService {
   // Send notification to all users (called from backend)
   async broadcastToAllUsers(title: string, body: string, voiceMessage: string, data?: any): Promise<void> {
     try {
-      const token = localStorage.getItem('auth_token');
-      
-      if (!token) {
-        console.warn('⚠️ No auth token available, skipping broadcast to server');
-        return;
-      }
-
-      const response = await fetch('/api/notifications/broadcast', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          title,
-          body,
-          voiceMessage,
-          data
-        })
+      await apiClient.post('/notifications/broadcast', {
+        title,
+        body,
+        voiceMessage,
+        data
       });
-
-      if (response.ok) {
-        console.log('✅ Broadcast notification sent to all users');
-      } else {
-        console.warn(`⚠️ Failed to broadcast notification: ${response.status} ${response.statusText}`);
-      }
+      console.log('✅ Broadcast notification sent to all users');
     } catch (error) {
       console.error('Error broadcasting notification:', error);
     }

@@ -1,8 +1,43 @@
+import { db } from '../db/database';
+
 // API Base URL - handles all environments
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL 
   || (import.meta.env.PROD 
     ? '/api'  // Production fallback: use relative path (proxied by Nginx)
     : 'http://localhost:3005/api');  // Development: direct to backend
+
+// Entity type mapping for IndexedDB caching (endpoint segment → db table name)
+const ENDPOINT_TO_TABLE: Record<string, string> = {
+  patients: 'patients',
+  'treatment-plans': 'treatment_plans',
+  'plan-steps': 'plan_steps',
+  admissions: 'admissions',
+  'discharge-summaries': 'discharges',
+  discharges: 'discharges',
+  prescriptions: 'prescriptions',
+  'wound-care': 'wound_care',
+  'lab-orders': 'lab_investigations',
+  'lab-results': 'lab_results',
+  'lab-investigations': 'lab_investigations',
+  surgeries: 'surgery_bookings',
+  'ward-rounds': 'ward_rounds',
+  users: 'users',
+  activities: 'user_activities',
+  performance: 'performance_metrics',
+  duties: 'duty_assignments',
+  rotations: 'rotation_records',
+  'cbt-tests': 'cbt_tests',
+  'cbt-attempts': 'cbt_attempts',
+  chat: 'chat_messages',
+  'chat-rooms': 'chat_rooms',
+  'shopping-lists': 'shopping_lists',
+  'progress-notes': 'progress_notes',
+  'notice-board': 'notice_board',
+  'clinic-appointments': 'clinic_sessions',
+  'clinic-sessions': 'clinic_sessions',
+  'surgery-bookings': 'surgery_bookings',
+  'blood-transfusions': 'blood_transfusions',
+};
 
 // Sync state for cross-device sync
 interface SyncState {
@@ -106,6 +141,8 @@ class ApiClient {
   async request<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
     // Ensure token is loaded from localStorage
     const token = this.getToken();
+    const method = (options.method || 'GET').toUpperCase();
+    const isGet = method === 'GET';
     
     // Check if this is a protected endpoint that requires authentication
     const isProtectedEndpoint = !endpoint.includes('/auth') && !endpoint.includes('/health') && !endpoint.includes('/diagnostics');
@@ -128,9 +165,10 @@ class ApiClient {
     const fetchOptions: RequestInit = {
       ...options,
       headers,
-      // Using Bearer token auth - no need for credentials:include
-      // credentials: 'include' would conflict with Access-Control-Allow-Origin: *
     };
+
+    // Parse entity info from endpoint for caching
+    const entityInfo = this.parseEndpoint(endpoint);
 
     try {
       const response = await fetch(`${this.baseURL}${endpoint}`, fetchOptions);
@@ -140,7 +178,6 @@ class ApiClient {
         
         // Handle token expiration
         if (response.status === 401 || response.status === 403) {
-          // Token might be expired, clear it
           const errorMsg = typeof errorData.error === 'string' ? errorData.error : '';
           if (errorMsg.includes('expired') || errorMsg.includes('invalid')) {
             this.setToken(null);
@@ -148,7 +185,6 @@ class ApiClient {
           }
         }
         
-        // Create a proper error message with all available info
         let errorMessage = `HTTP ${response.status}`;
         if (typeof errorData.error === 'string') {
           errorMessage = errorData.error;
@@ -156,7 +192,6 @@ class ApiClient {
           errorMessage = errorData.message;
         }
         
-        // Include debug info if available
         if (errorData.userRole) {
           errorMessage += ` (Your role: ${errorData.userRole})`;
         }
@@ -167,25 +202,149 @@ class ApiClient {
         throw new Error(errorMessage);
       }
 
-      // Update sync timestamp for successful requests
-      if (options.method && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(options.method)) {
+      // Update sync timestamp for successful mutations
+      if (!isGet) {
         this.updateSyncTimestamp();
       }
 
-      return response.json();
+      const data = await response.json();
+
+      // Cache successful GET responses in IndexedDB
+      if (isGet && data) {
+        this.cacheResponse(endpoint, entityInfo, data).catch(err =>
+          console.warn('Cache write failed:', err)
+        );
+      }
+
+      return data;
     } catch (error) {
-      // If offline, queue the request for retry
-      if (!navigator.onLine && options.method && options.method !== 'GET') {
-        const requestId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        this.retryQueue.set(requestId, {
-          request: () => this.request(endpoint, options),
-          retries: 0
-        });
+      // For GET requests: try to serve from IndexedDB cache when offline or on network error
+      if (isGet) {
+        const cached = await this.getCachedResponse<T>(endpoint, entityInfo);
+        if (cached !== null) {
+          console.log(`📦 Serving cached data for ${endpoint}`);
+          return cached;
+        }
+      }
+
+      // For mutations when offline: queue in IndexedDB sync queue
+      if (!navigator.onLine && !isGet) {
+        try {
+          await db.sync_queue.add({
+            action: method === 'DELETE' ? 'delete' : method === 'PUT' || method === 'PATCH' ? 'update' : 'create',
+            table: entityInfo.tableName || entityInfo.entityType,
+            local_id: entityInfo.entityId ? (typeof entityInfo.entityId === 'string' ? parseInt(entityInfo.entityId, 10) || 0 : entityInfo.entityId) : 0,
+            data: {
+              url: `${this.baseURL}${endpoint}`,
+              method,
+              body: options.body ? JSON.parse(options.body as string) : undefined,
+              headers: { Authorization: `Bearer ${token}` },
+              priority: 'normal',
+            },
+            created_at: new Date(),
+            retries: 0,
+          });
+          console.log(`📥 Queued offline ${method} to ${endpoint}`);
+        } catch (queueError) {
+          console.error('Failed to queue request:', queueError);
+        }
         this.syncState.pendingChanges++;
         this.notifySyncListeners();
+        
+        // Return optimistic data for mutations
+        if (options.body) {
+          try {
+            return JSON.parse(options.body as string) as T;
+          } catch { /* fall through */ }
+        }
         throw new Error('Request queued for retry when online');
       }
       throw error;
+    }
+  }
+
+  // Parse endpoint to extract entity type and ID
+  private parseEndpoint(endpoint: string): { entityType: string; entityId?: string | number; tableName?: string } {
+    // Remove query params and leading slash
+    const path = endpoint.split('?')[0].replace(/^\//, '');
+    const segments = path.split('/').filter(Boolean);
+    
+    // Try to match first segment to a known entity table
+    const entityType = segments[0] || '';
+    const tableName = ENDPOINT_TO_TABLE[entityType];
+    const entityId = segments.length > 1 ? segments[1] : undefined;
+    
+    return { entityType, entityId, tableName };
+  }
+
+  // Cache API response in IndexedDB
+  private async cacheResponse(endpoint: string, entityInfo: { entityType: string; entityId?: string | number; tableName?: string }, data: any): Promise<void> {
+    try {
+      // If we have a dedicated table, cache entities there
+      if (entityInfo.tableName) {
+        const table = (db as any)[entityInfo.tableName];
+        if (table) {
+          if (entityInfo.entityId) {
+            // Single entity - put/update
+            await table.put({ ...data, synced: true, updated_at: new Date() });
+          } else if (Array.isArray(data)) {
+            // Array response - replace all
+            await table.clear();
+            if (data.length > 0) {
+              await table.bulkPut(data.map((item: any) => ({ ...item, synced: true, updated_at: new Date() })));
+            }
+          } else if (data && typeof data === 'object') {
+            // Object with nested array (e.g. { patients: [...], total: N })
+            const arrayKey = Object.keys(data).find(k => Array.isArray(data[k]));
+            if (arrayKey && data[arrayKey].length > 0) {
+              await table.clear();
+              await table.bulkPut(data[arrayKey].map((item: any) => ({ ...item, synced: true, updated_at: new Date() })));
+            }
+          }
+          return;
+        }
+      }
+
+      // Fallback: store in generic api_cache table
+      await db.api_cache.put({
+        endpoint,
+        data,
+        updated_at: new Date(),
+      });
+    } catch (err) {
+      // Silently fail - caching is best-effort
+      console.warn('Cache write error:', err);
+    }
+  }
+
+  // Retrieve cached response from IndexedDB
+  private async getCachedResponse<T>(endpoint: string, entityInfo: { entityType: string; entityId?: string | number; tableName?: string }): Promise<T | null> {
+    try {
+      // Try dedicated entity table first
+      if (entityInfo.tableName) {
+        const table = (db as any)[entityInfo.tableName];
+        if (table) {
+          if (entityInfo.entityId) {
+            const id = parseInt(entityInfo.entityId as string, 10);
+            const item = await table.get(isNaN(id) ? entityInfo.entityId : id);
+            return (item || null) as T;
+          } else {
+            const items = await table.toArray();
+            return (items.length > 0 ? items : null) as T;
+          }
+        }
+      }
+
+      // Fallback: check generic api_cache
+      const cached = await db.api_cache.get(endpoint);
+      if (cached && cached.data) {
+        return cached.data as T;
+      }
+
+      return null;
+    } catch (err) {
+      console.warn('Cache read error:', err);
+      return null;
     }
   }
 

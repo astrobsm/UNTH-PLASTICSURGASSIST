@@ -30,6 +30,7 @@ import {
 import { performanceService } from '../services/performanceService';
 import { cbtService, CBTProgress } from '../services/cbtService';
 import { rotationConfigService, RotationConfig, TraineeAnalytics } from '../services/rotationConfigService';
+import { apiClient } from '../services/apiClient';
 import CMEArticleViewer from '../components/training/CMEArticleViewer';
 import { CBTPage } from '../components/cbt';
 import { PerformanceDashboard } from '../components/performance';
@@ -83,19 +84,13 @@ const MedicalTrainingPage: React.FC = () => {
         const token = localStorage.getItem('auth_token');
         if (!token) return;
         
-        const response = await fetch('/api/training-progress', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          if (data.completedTopics && data.completedTopics.length > 0) {
-            setCompletedTopics(prev => {
-              const merged = new Set([...prev, ...data.completedTopics]);
-              localStorage.setItem('completed_training_topics', JSON.stringify([...merged]));
-              return merged;
-            });
-          }
+        const data = await apiClient.get('/training-progress');
+        if (data.completedTopics && data.completedTopics.length > 0) {
+          setCompletedTopics(prev => {
+            const merged = new Set([...prev, ...data.completedTopics]);
+            localStorage.setItem('completed_training_topics', JSON.stringify([...merged]));
+            return merged;
+          });
         }
       } catch (error) {
         console.warn('Failed to load training progress from server:', error);
@@ -140,14 +135,9 @@ const MedicalTrainingPage: React.FC = () => {
       try {
         const token = localStorage.getItem('auth_token');
         if (!token) return;
-        const response = await fetch('/api/training-warnings', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (response.ok) {
-          const data = await response.json();
-          setWarnings(data.warnings || []);
-          setUnreadWarningCount(data.unreadCount || 0);
-        }
+        const data = await apiClient.get('/training-warnings');
+        setWarnings(data.warnings || []);
+        setUnreadWarningCount(data.unreadCount || 0);
       } catch (error) {
         console.warn('Failed to load training warnings:', error);
       }
@@ -159,11 +149,7 @@ const MedicalTrainingPage: React.FC = () => {
     try {
       const token = localStorage.getItem('auth_token');
       if (!token) return;
-      await fetch('/api/training-warnings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ warningId })
-      });
+      await apiClient.put('/training-warnings', { warningId });
       setWarnings(prev => prev.map(w => w.id === warningId ? { ...w, read: true } : w));
       setUnreadWarningCount(prev => Math.max(0, prev - 1));
     } catch (error) {
@@ -214,14 +200,7 @@ const MedicalTrainingPage: React.FC = () => {
     try {
       const token = localStorage.getItem('auth_token');
       if (token) {
-        await fetch('/api/training-progress', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ topicId, level: activeTab, completedAt: new Date().toISOString() })
-        });
+        await apiClient.post('/training-progress', { topicId, level: activeTab, completedAt: new Date().toISOString() });
         console.log('✅ Training progress synced to server');
       }
     } catch (error) {

@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { patientService } from '../services/patientService';
 import { useAuthStore } from '../store/authStore';
+import { apiClient } from '../services/apiClient';
 import {
   PRESSURE_INJURY_STAGES, BRADEN_SCALE, BRADEN_INTERPRETATION,
   TIME_FRAMEWORK, PS_LAB_PANELS, PS_TREATMENT_PROTOCOLS,
@@ -27,15 +28,7 @@ interface Patient {
   last_name?: string;
 }
 
-const API_BASE = '/api/pressure-sore-protocol';
-
-const getAuthHeaders = () => {
-  const token = localStorage.getItem('auth_token');
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {})
-  };
-};
+const API_BASE = '/pressure-sore-protocol';
 
 // ============================================
 // MAIN COMPONENT
@@ -116,11 +109,8 @@ const PressureSorePage: React.FC = () => {
     setIsLoading(true);
     try {
       const params = patientId ? `?patientId=${patientId}` : '';
-      const res = await fetch(`${API_BASE}/wounds${params}`, { headers: getAuthHeaders() });
-      if (res.ok) {
-        const data = await res.json();
-        setWounds(data.wounds || []);
-      }
+      const data = await apiClient.get(`${API_BASE}/wounds${params}`);
+      setWounds(data.wounds || []);
     } catch (err) {
       console.error('Error fetching wounds:', err);
     } finally {
@@ -130,14 +120,11 @@ const PressureSorePage: React.FC = () => {
 
   const fetchWoundDetails = async (id: string) => {
     try {
-      const res = await fetch(`${API_BASE}/wounds/${id}`, { headers: getAuthHeaders() });
-      if (res.ok) {
-        const data = await res.json();
-        setSelectedWound(data.wound);
-        setTreatmentPlans(data.treatmentPlans || []);
-        setProgressNotes(data.progress || []);
-        setOrders(data.orders || []);
-      }
+      const data = await apiClient.get(`${API_BASE}/wounds/${id}`);
+      setSelectedWound(data.wound);
+      setTreatmentPlans(data.treatmentPlans || []);
+      setProgressNotes(data.progress || []);
+      setOrders(data.orders || []);
     } catch (err) {
       console.error('Error fetching wound details:', err);
     }
@@ -187,22 +174,12 @@ const PressureSorePage: React.FC = () => {
         bradenRisk
       };
 
-      const res = await fetch(`${API_BASE}/wounds`, {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify(payload)
-      });
+      const res = await apiClient.post(`${API_BASE}/wounds`, payload);
 
-      if (res.ok) {
-        const data = await res.json();
-        setMessage({ type: 'success', text: 'Wound record saved successfully' });
-        setSelectedWound(data.wound);
-        fetchWounds(String(selectedPatient.id));
-        setActiveTab('treatment');
-      } else {
-        const err = await res.json();
-        setMessage({ type: 'error', text: err.error || 'Failed to save wound record' });
-      }
+      setMessage({ type: 'success', text: 'Wound record saved successfully' });
+      setSelectedWound(res.wound);
+      fetchWounds(String(selectedPatient.id));
+      setActiveTab('treatment');
     } catch (err) {
       setMessage({ type: 'error', text: 'Network error saving wound' });
     } finally {
@@ -251,17 +228,10 @@ const PressureSorePage: React.FC = () => {
         })) || []
       };
 
-      const res = await fetch(`${API_BASE}/treatment-plans`, {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify(payload)
-      });
+      const res = await apiClient.post(`${API_BASE}/treatment-plans`, payload);
 
-      if (res.ok) {
-        const data = await res.json();
-        setTreatmentPlans(prev => [data.treatmentPlan, ...prev]);
-        setMessage({ type: 'success', text: 'Treatment plan created. Approve to auto-generate orders.' });
-      }
+      setTreatmentPlans(prev => [res.treatmentPlan, ...prev]);
+      setMessage({ type: 'success', text: 'Treatment plan created. Approve to auto-generate orders.' });
     } catch (err) {
       setMessage({ type: 'error', text: 'Failed to create treatment plan' });
     } finally {
@@ -275,18 +245,11 @@ const PressureSorePage: React.FC = () => {
   const approveTreatmentPlan = async (planId: string) => {
     setIsSaving(true);
     try {
-      const res = await fetch(`${API_BASE}/treatment-plans/${planId}`, {
-        method: 'PUT',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ autoOrdersApproved: true })
-      });
+      const data = await apiClient.put(`${API_BASE}/treatment-plans/${planId}`, { autoOrdersApproved: true });
 
-      if (res.ok) {
-        const data = await res.json();
-        setTreatmentPlans(prev => prev.map(p => p.id === planId ? data.treatmentPlan : p));
-        setMessage({ type: 'success', text: 'Treatment plan approved! Auto-orders generated for prescriptions, labs, and procedures.' });
-        if (selectedWound) fetchWoundDetails(selectedWound.id);
-      }
+      setTreatmentPlans(prev => prev.map(p => p.id === planId ? data.treatmentPlan : p));
+      setMessage({ type: 'success', text: 'Treatment plan approved! Auto-orders generated for prescriptions, labs, and procedures.' });
+      if (selectedWound) fetchWoundDetails(selectedWound.id);
     } catch (err) {
       setMessage({ type: 'error', text: 'Failed to approve treatment plan' });
     } finally {
@@ -317,17 +280,10 @@ const PressureSorePage: React.FC = () => {
         assessedBy: user?.name || user?.email || 'Unknown'
       };
 
-      const res = await fetch(`${API_BASE}/progress`, {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify(payload)
-      });
+      const data = await apiClient.post(`${API_BASE}/progress`, payload);
 
-      if (res.ok) {
-        const data = await res.json();
-        setProgressNotes(prev => [data.progress, ...prev]);
-        setMessage({ type: 'success', text: `Progress note recorded. Healing rate: ${healingRate}%` });
-      }
+      setProgressNotes(prev => [data.progress, ...prev]);
+      setMessage({ type: 'success', text: `Progress note recorded. Healing rate: ${healingRate}%` });
     } catch (err) {
       setMessage({ type: 'error', text: 'Failed to save progress note' });
     } finally {
@@ -349,10 +305,7 @@ const PressureSorePage: React.FC = () => {
     setCmeSubmitted(true);
 
     try {
-      await fetch(`${API_BASE}/cme`, {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({
+      await apiClient.post(`${API_BASE}/cme`, {
           articleId: PS_CME_ARTICLE.id,
           score,
           totalQuestions: questions.length,
@@ -360,8 +313,7 @@ const PressureSorePage: React.FC = () => {
           answers: cmeAnswers,
           passed: score >= 70,
           creditsEarned: score >= 70 ? PS_CME_ARTICLE.cmeCredits : 0
-        })
-      });
+        });
     } catch (err) {
       console.error('Error recording CME:', err);
     }

@@ -9,6 +9,7 @@
  */
 
 import { TrainingLevel } from './medicalTrainingService';
+import { apiClient } from './apiClient';
 
 // ============== TYPES ==============
 
@@ -127,18 +128,11 @@ const saveRotationConfig = async (config: RotationConfig): Promise<RotationConfi
   
   // Sync to server
   try {
-    const response = await fetch('/api/rotation-config', {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ action: 'save', config })
-    });
-    if (response.ok) {
-      const data = await response.json();
-      if (data.config?.id) {
-        config.id = data.config.id;
-      }
-      console.log('✅ Rotation config synced to server');
+    const data = await apiClient.post('/rotation-config', { action: 'save', config });
+    if (data.config?.id) {
+      config.id = data.config.id;
     }
+    console.log('✅ Rotation config synced to server');
   } catch (error) {
     console.warn('⚠️ Failed to sync rotation config:', error);
   }
@@ -168,11 +162,7 @@ const deactivateRotationConfig = async (configId: string): Promise<void> => {
     localStorage.setItem(STORAGE_KEYS.ROTATION_CONFIGS, JSON.stringify(configs));
     
     try {
-      await fetch('/api/rotation-config', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ action: 'deactivate', configId })
-      });
+      await apiClient.post('/rotation-config', { action: 'deactivate', configId });
     } catch (error) {
       console.warn('⚠️ Failed to sync deactivation:', error);
     }
@@ -204,18 +194,11 @@ const assignResponsibility = async (responsibility: Omit<AssignedResponsibility,
   
   // Sync to server
   try {
-    const response = await fetch('/api/rotation-config', {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ action: 'assign-responsibility', responsibility: newResp })
-    });
-    if (response.ok) {
-      const data = await response.json();
-      if (data.responsibility?.id) {
-        newResp.id = data.responsibility.id;
-      }
-      console.log('✅ Responsibility assignment synced');
+    const data = await apiClient.post('/rotation-config', { action: 'assign-responsibility', responsibility: newResp });
+    if (data.responsibility?.id) {
+      newResp.id = data.responsibility.id;
     }
+    console.log('✅ Responsibility assignment synced');
   } catch (error) {
     console.warn('⚠️ Failed to sync responsibility:', error);
   }
@@ -241,11 +224,7 @@ const updateResponsibilityStatus = async (
   localStorage.setItem(STORAGE_KEYS.RESPONSIBILITIES, JSON.stringify(responsibilities));
   
   try {
-    await fetch('/api/rotation-config', {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ action: 'update-responsibility', respId, status, notes })
-    });
+    await apiClient.post('/rotation-config', { action: 'update-responsibility', respId, status, notes });
   } catch (error) {
     console.warn('⚠️ Failed to sync responsibility update:', error);
   }
@@ -257,13 +236,8 @@ const updateResponsibilityStatus = async (
 
 const getAllTraineeAnalytics = async (): Promise<TraineeAnalytics[]> => {
   try {
-    const response = await fetch('/api/rotation-config?action=all-analytics', {
-      headers: getAuthHeaders()
-    });
-    if (response.ok) {
-      const data = await response.json();
-      return data.analytics || [];
-    }
+    const data = await apiClient.get('/rotation-config?action=all-analytics');
+    return data.analytics || [];
   } catch (error) {
     console.warn('⚠️ Failed to fetch analytics from server:', error);
   }
@@ -274,13 +248,8 @@ const getAllTraineeAnalytics = async (): Promise<TraineeAnalytics[]> => {
 
 const getTraineeAnalytics = async (userId: string): Promise<TraineeAnalytics | null> => {
   try {
-    const response = await fetch(`/api/rotation-config?action=trainee-analytics&userId=${userId}`, {
-      headers: getAuthHeaders()
-    });
-    if (response.ok) {
-      const data = await response.json();
-      return data.analytics || null;
-    }
+    const data = await apiClient.get(`/rotation-config?action=trainee-analytics&userId=${userId}`);
+    return data.analytics || null;
   } catch (error) {
     console.warn('⚠️ Failed to fetch trainee analytics:', error);
   }

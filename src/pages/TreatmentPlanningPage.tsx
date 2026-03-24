@@ -24,6 +24,7 @@ import {
   DischargeTimeline
 } from '../services/treatmentPlanningService';
 import { medicalTeamService } from '../services/medicalTeamService';
+import { apiClient } from '../services/apiClient';
 import { format, isPast } from 'date-fns';
 import { safeFormatDate } from '../utils/dateUtils';
 import { ComprehensiveTreatmentPlanForm } from '../components/ComprehensiveTreatmentPlanForm';
@@ -62,15 +63,8 @@ const TreatmentPlanningPage: React.FC = () => {
       return;
     }
     try {
-      const token = localStorage.getItem('auth_token');
-      if (!token) return;
-      const response = await fetch(`/api/lab-orders?patientId=${patientId}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setServerLabOrders(data.labOrders || []);
-      }
+      const data = await apiClient.get(`/lab-orders?patientId=${patientId}`);
+      setServerLabOrders(data.labOrders || []);
     } catch (error) {
       console.warn('Could not fetch lab orders from server:', error);
     }

@@ -36,6 +36,7 @@ import { dataSyncService } from '../services/dataSyncService';
 import { ScribeRecordingPanel } from '../components/ScribeRecordingPanel';
 import { medicalScribeService, StructuredNote, ScribeSession } from '../services/medicalScribeService';
 import toast from 'react-hot-toast';
+import { apiClient } from '../services/apiClient';
 
 export default function TreatmentPlanningEnhanced() {
   const { user } = useAuthStore();
@@ -221,15 +222,8 @@ export default function TreatmentPlanningEnhanced() {
       return;
     }
     try {
-      const token = localStorage.getItem('auth_token');
-      if (!token) return;
-      const response = await fetch(`/api/lab-orders?patientId=${patientId}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setServerLabOrders(data.labOrders || []);
-      }
+      const data = await apiClient.get(`/lab-orders?patientId=${patientId}`);
+      setServerLabOrders(data.labOrders || []);
     } catch (error) {
       console.warn('Could not fetch lab orders from server:', error);
     }

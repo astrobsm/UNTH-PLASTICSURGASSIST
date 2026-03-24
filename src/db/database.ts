@@ -222,6 +222,7 @@ export class PlasticSurgeonDB extends Dexie {
   ps_unit_rosters!: Table<any>; // For PS Unit rotation roster configs
   shopping_lists!: Table<any>; // For saved shopping lists with cloud persistence
   progress_notes!: Table<any>; // For SOAP progress notes
+  api_cache!: Table<any>; // Generic API response cache for offline-first
 
   constructor() {
     super('PlasticSurgeonDB');
@@ -1246,6 +1247,11 @@ export class PlasticSurgeonDB extends Dexie {
     // Version 27: Add progress_notes table for SOAP progress notes
     this.version(27).stores({
       progress_notes: '++id, patient_id, patient_name, author, date, synced, created_at'
+    });
+
+    // Version 28: Add generic API cache table for offline-first support
+    this.version(28).stores({
+      api_cache: 'endpoint, updated_at'
     });
 
     // Add hooks to automatically track changes

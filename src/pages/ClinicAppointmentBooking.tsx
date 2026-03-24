@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Calendar, Clock, User, CheckCircle, AlertCircle, Stethoscope, ChevronRight, ArrowLeft } from 'lucide-react';
-
-const API_BASE = import.meta.env.VITE_API_URL || '';
+import { apiClient } from '../services/apiClient';
 
 interface ClinicDate {
   date: string;
@@ -58,8 +57,7 @@ export default function ClinicAppointmentBooking() {
 
   // Fetch upcoming clinic dates
   useEffect(() => {
-    fetch(`${API_BASE}/api/appointments?action=dates`)
-      .then(r => r.json())
+    apiClient.get('/appointments?action=dates')
       .then(data => setClinicDates(data.dates || []))
       .catch(() => setError('Unable to load clinic schedule. Please try again.'));
   }, []);
@@ -71,9 +69,7 @@ export default function ClinicAppointmentBooking() {
     setLoading(true);
     setError('');
     try {
-      const r = await fetch(`${API_BASE}/api/appointments?action=slots&date=${date.date}`);
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.error);
+      const data = await apiClient.get(`/appointments?action=slots&date=${date.date}`);
       setSlots(data.slots || []);
       setStep('select-slot');
     } catch (e: any) {
@@ -88,17 +84,11 @@ export default function ClinicAppointmentBooking() {
     setLoading(true);
     setError('');
     try {
-      const r = await fetch(`${API_BASE}/api/appointments`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const data = await apiClient.post('/appointments', {
           patient_number: patientNumber.trim(),
           date: selectedDate.date,
           time_slot: selectedSlot
-        })
-      });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.error);
+        });
       setConfirmedAppointment(data.appointment);
       setStep('confirmed');
     } catch (e: any) {

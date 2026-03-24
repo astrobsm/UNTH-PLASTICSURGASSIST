@@ -25,10 +25,6 @@ export const NOTICE_CATEGORIES = [
   { value: 'general', label: 'General', color: 'bg-gray-100 text-gray-800' },
 ] as const;
 
-const getApiBaseUrl = () => {
-  return import.meta.env.PROD ? '/api' : 'http://localhost:3005/api';
-};
-
 class NoticeBoardService {
   // Pull notices from server, merge with local, return all
   async getAllNotices(): Promise<NoticePost[]> {
@@ -131,20 +127,7 @@ class NoticeBoardService {
 
   // Server sync methods
   private async pullFromServer(): Promise<void> {
-    const token = apiClient.getToken();
-    if (!token) return;
-
-    const baseUrl = getApiBaseUrl();
-    const response = await fetch(`${baseUrl}/notice-board`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/json',
-      },
-    });
-
-    if (!response.ok) return;
-
-    const data = await response.json();
+    const data = await apiClient.get('/notice-board');
     const serverNotices: NoticePost[] = data.notices || [];
 
     // Merge: server notices win by updated_at timestamp
@@ -157,33 +140,11 @@ class NoticeBoardService {
   }
 
   private async pushToServer(notice: NoticePost): Promise<void> {
-    const token = apiClient.getToken();
-    if (!token) return;
-
-    const baseUrl = getApiBaseUrl();
-    await fetch(`${baseUrl}/notice-board`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/json',
-      },
-      body: JSON.stringify(notice),
-    });
+    await apiClient.post('/notice-board', notice);
   }
 
   private async deleteFromServer(id: string): Promise<void> {
-    const token = apiClient.getToken();
-    if (!token) return;
-
-    const baseUrl = getApiBaseUrl();
-    await fetch(`${baseUrl}/notice-board?id=${encodeURIComponent(id)}`, {
-      method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/json',
-      },
-    });
+    await apiClient.delete(`/notice-board?id=${encodeURIComponent(id)}`);
   }
 }
 

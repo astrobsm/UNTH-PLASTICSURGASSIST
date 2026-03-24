@@ -4,23 +4,13 @@ import { apiClient } from './apiClient';
 // Helper to sync blood transfusion to server via sync/push
 async function pushTransfusionToServer(transfusion: any): Promise<void> {
   try {
-    const token = apiClient.getToken();
-    if (!token) return;
-    const baseUrl = (import.meta as any).env?.VITE_API_BASE_URL || '/api';
-    await fetch(`${baseUrl}/sync/push`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({
-        changes: [{
-          entityType: 'blood_transfusions',
-          entityId: transfusion.id || `bt_${Date.now()}`,
-          action: 'upsert',
-          payload: transfusion
-        }]
-      })
+    await apiClient.post('/sync/push', {
+      changes: [{
+        entityType: 'blood_transfusions',
+        entityId: transfusion.id || `bt_${Date.now()}`,
+        action: 'upsert',
+        payload: transfusion
+      }]
     });
   } catch (e) {
     console.warn('Failed to push blood transfusion to server:', e);
@@ -30,16 +20,8 @@ async function pushTransfusionToServer(transfusion: any): Promise<void> {
 // Helper to pull blood transfusions from server
 async function pullTransfusionsFromServer(): Promise<any[]> {
   try {
-    const token = apiClient.getToken();
-    if (!token) return [];
-    const baseUrl = (import.meta as any).env?.VITE_API_BASE_URL || '/api';
-    const res = await fetch(`${baseUrl}/sync/blood-transfusions`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    if (res.ok) {
-      const data = await res.json();
-      return Array.isArray(data) ? data : [];
-    }
+    const data = await apiClient.get('/sync/blood-transfusions');
+    return Array.isArray(data) ? data : [];
   } catch (e) {
     console.warn('Failed to pull blood transfusions from server:', e);
   }
