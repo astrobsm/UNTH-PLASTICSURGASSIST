@@ -82,15 +82,28 @@ const bgSyncPlugin = new BackgroundSyncPlugin('offlineMutationQueue', {
           if (response.status >= 400 && response.status < 500) {
             console.warn(`[SW] Discarding queued request (${response.status}):`, entry.request.url);
             failedCount++;
-            continue; // Drop this entry, move to next
+            continue;
           }
-          throw new Error(`HTTP ${response.status}`);
+          // 5xx errors — discard after too many retries instead of retrying forever
+          const meta = entry.metadata || {};
+          const retryCount = (meta.retryCount || 0) + 1;
+          if (retryCount >= 3) {
+            console.warn(`[SW] Discarding queued request after ${retryCount} retries (${response.status}):`, entry.request.url);
+            failedCount++;
+            continue; // Drop it — server is persistently failing
+          }
+          // Put it back with incremented retry count
+          failedCount++;
+          await queue.unshiftRequest({ ...entry, metadata: { ...meta, retryCount } });
+          console.warn(`[SW] Retry ${retryCount}/3 for queued request (${response.status}):`, entry.request.url);
+          break; // Stop processing — let Workbox retry later
         }
         syncedCount++;
       } catch (error) {
+        // Network error — put back and stop
         failedCount++;
         await queue.unshiftRequest(entry);
-        throw error; // Let Workbox retry later (only 5xx / network errors)
+        break; // Don't throw — prevents unhandled promise rejection
       }
     }
 
@@ -117,7 +130,12 @@ const navigationHandler = new NetworkFirst({
 
 registerRoute(
   new NavigationRoute(navigationHandler, {
-    denylist: [/^\/api/, /^\/sw\.js$/],
+    denylist: [
+      /^\/api/,
+      /^\/sw\.js$/,
+      /\.html$/,           // Static HTML pages (book-appointment.html, etc.)
+      /\.webmanifest$/,     // PWA manifest
+    ],
   })
 );
 
