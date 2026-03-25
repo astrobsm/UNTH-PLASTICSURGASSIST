@@ -228,7 +228,7 @@
         for (const d of state.dates) {
           const dateDisplay = new Date(d.date + 'T00:00:00');
           const dayStr = dateDisplay.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-          html += `<button class="day-btn" onclick="selectDate(${esc(JSON.stringify(d).replace(/"/g, '&quot;'))})">
+          html += `<button class="day-btn" onclick="selectDate(${JSON.stringify(d).replace(/"/g, '&quot;')})">
             <span class="day-name">${esc(d.dayName)}</span>
             <span class="day-date">${esc(dayStr)}</span>
           </button>`;
@@ -250,7 +250,7 @@
             for (const s of state.slots) {
               const cls = !s.available ? 'slot-btn booked' : (state.selectedSlot && state.selectedSlot.time === s.time ? 'slot-btn selected' : 'slot-btn');
               const label = !s.available ? 'BOOKED' : formatTime(s.time);
-              html += `<button class="${cls}" ${!s.available ? 'disabled' : ''} onclick="selectSlot(${esc(JSON.stringify(s).replace(/"/g, '&quot;'))})">${esc(label)}</button>`;
+              html += `<button class="${cls}" ${!s.available ? 'disabled' : ''} onclick="selectSlot(${JSON.stringify(s).replace(/"/g, '&quot;')})">${esc(label)}</button>`;
             }
             html += '</div>';
           } else {
@@ -265,7 +265,7 @@
               }
               const cls = !s.available ? 'slot-btn booked' : (state.selectedSlot && state.selectedSlot.time === s.time ? 'slot-btn selected' : 'slot-btn');
               const label = !s.available ? 'BOOKED' : formatTime(s.time);
-              html += `<button class="${cls}" ${!s.available ? 'disabled' : ''} onclick="selectSlot(${esc(JSON.stringify(s).replace(/"/g, '&quot;'))})">${esc(label)}</button>`;
+              html += `<button class="${cls}" ${!s.available ? 'disabled' : ''} onclick="selectSlot(${JSON.stringify(s).replace(/"/g, '&quot;')})">${esc(label)}</button>`;
             }
             html += '</div>';
           }

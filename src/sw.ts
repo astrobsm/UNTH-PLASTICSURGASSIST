@@ -15,7 +15,7 @@
  */
 
 import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching';
-import { registerRoute, NavigationRoute } from 'workbox-routing';
+import { registerRoute, NavigationRoute, setCatchHandler } from 'workbox-routing';
 import { NetworkFirst, CacheFirst, StaleWhileRevalidate, NetworkOnly } from 'workbox-strategies';
 import { BackgroundSyncPlugin } from 'workbox-background-sync';
 import { ExpirationPlugin } from 'workbox-expiration';
@@ -230,15 +230,27 @@ registerRoute(
 );
 
 // ─── Images → CacheFirst ────────────────────────────────────
+const imageCacheFirst = new CacheFirst({
+  cacheName: IMAGE_CACHE,
+  plugins: [
+    new CacheableResponsePlugin({ statuses: [0, 200] }),
+    new ExpirationPlugin({ maxEntries: 100, maxAgeSeconds: 60 * 24 * 60 * 60 }),
+  ],
+});
+
 registerRoute(
   ({ request }) => request.destination === 'image',
-  new CacheFirst({
-    cacheName: IMAGE_CACHE,
-    plugins: [
-      new CacheableResponsePlugin({ statuses: [0, 200] }),
-      new ExpirationPlugin({ maxEntries: 100, maxAgeSeconds: 60 * 24 * 60 * 60 }),
-    ],
-  })
+  async (args) => {
+    try {
+      return await imageCacheFirst.handle(args);
+    } catch (_err) {
+      // Offline + not cached — return transparent 1×1 pixel
+      return new Response(
+        Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQABNjN9GQAAAAlwSFlzAAAWJQAAFiUBSVIk8AAAAA0lEQVQI12P4z8BQDwAEgAF/QualIQAAAABJRU5ErkJggg=='), c => c.charCodeAt(0)),
+        { headers: { 'Content-Type': 'image/png' } }
+      );
+    }
+  }
 );
 
 // ─── Fonts → CacheFirst ─────────────────────────────────────
@@ -252,6 +264,19 @@ registerRoute(
     ],
   })
 );
+
+// ─── Global catch handler — prevents unhandled rejections ───
+setCatchHandler(async ({ request }) => {
+  // Return appropriate fallback for any route that fails
+  if (request.destination === 'image') {
+    return new Response('', { status: 404, statusText: 'Image not available offline' });
+  }
+  if (request.destination === 'document' || request.destination === 'manifest') {
+    const cache = await caches.match('/offline.html');
+    if (cache) return cache;
+  }
+  return new Response('', { status: 503, statusText: 'Offline' });
+});
 
 // ─── Google Fonts → StaleWhileRevalidate / CacheFirst ───────
 registerRoute(
