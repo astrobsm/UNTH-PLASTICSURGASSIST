@@ -109,7 +109,9 @@
       }
     }
 
-    async function selectDate(dateObj) {
+    async function selectDate(index) {
+      const dateObj = state.dates[index];
+      if (!dateObj) return;
       state.selectedDate = dateObj;
       state.selectedSlot = null;
       state.error = null;
@@ -128,8 +130,9 @@
       }
     }
 
-    function selectSlot(slot) {
-      if (!slot.available) return;
+    function selectSlot(index) {
+      const slot = state.slots[index];
+      if (!slot || !slot.available) return;
       state.selectedSlot = slot;
       state.step = 'enter-details';
       state.error = null;
@@ -225,14 +228,14 @@
         if (state.dates.length === 0) {
           html += '<p style="color:#6b7280;grid-column:1/-1;text-align:center">No upcoming clinic dates available.</p>';
         }
-        for (const d of state.dates) {
+        state.dates.forEach(function(d, i) {
           const dateDisplay = new Date(d.date + 'T00:00:00');
           const dayStr = dateDisplay.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-          html += `<button class="day-btn" onclick="selectDate(${JSON.stringify(d).replace(/"/g, '&quot;')})">
-            <span class="day-name">${esc(d.dayName)}</span>
-            <span class="day-date">${esc(dayStr)}</span>
-          </button>`;
-        }
+          html += '<button class="day-btn" onclick="selectDate(' + i + ')">' +
+            '<span class="day-name">' + esc(d.dayName) + '</span>' +
+            '<span class="day-date">' + esc(dayStr) + '</span>' +
+            '</button>';
+        });
         html += '</div></div>';
       }
 
@@ -247,26 +250,26 @@
           const isWednesday = state.selectedDate && state.selectedDate.dayOfWeek === 3;
           if (isWednesday) {
             html += '<div class="section-label">Clinic Session (10:00 AM – 2:00 PM)</div><div class="slots-grid">';
-            for (const s of state.slots) {
-              const cls = !s.available ? 'slot-btn booked' : (state.selectedSlot && state.selectedSlot.time === s.time ? 'slot-btn selected' : 'slot-btn');
-              const label = !s.available ? 'BOOKED' : formatTime(s.time);
-              html += `<button class="${cls}" ${!s.available ? 'disabled' : ''} onclick="selectSlot(${JSON.stringify(s).replace(/"/g, '&quot;')})">${esc(label)}</button>`;
-            }
+            state.slots.forEach(function(s, i) {
+              var cls = !s.available ? 'slot-btn booked' : (state.selectedSlot && state.selectedSlot.time === s.time ? 'slot-btn selected' : 'slot-btn');
+              var label = !s.available ? 'BOOKED' : formatTime(s.time);
+              html += '<button class="' + cls + '" ' + (!s.available ? 'disabled' : '') + ' onclick="selectSlot(' + i + ')">' + esc(label) + '</button>';
+            });
             html += '</div>';
           } else {
             html += '<div class="section-label">Morning Session (9:00 AM – 1:30 PM)</div><div class="slots-grid">';
-            let afternoonStarted = false;
-            for (const s of state.slots) {
-              const startTime = s.time.split('-')[0];
+            var afternoonStarted = false;
+            state.slots.forEach(function(s, i) {
+              var startTime = s.time.split('-')[0];
               if (startTime >= '14:00' && !afternoonStarted) {
                 html += '</div><div class="slots-grid"><div class="break-label">🍽️ Break: 1:30 PM – 2:00 PM (No bookings)</div></div>';
                 html += '<div class="section-label">Afternoon Session (2:00 PM – 4:00 PM)</div><div class="slots-grid">';
                 afternoonStarted = true;
               }
-              const cls = !s.available ? 'slot-btn booked' : (state.selectedSlot && state.selectedSlot.time === s.time ? 'slot-btn selected' : 'slot-btn');
-              const label = !s.available ? 'BOOKED' : formatTime(s.time);
-              html += `<button class="${cls}" ${!s.available ? 'disabled' : ''} onclick="selectSlot(${JSON.stringify(s).replace(/"/g, '&quot;')})">${esc(label)}</button>`;
-            }
+              var cls = !s.available ? 'slot-btn booked' : (state.selectedSlot && state.selectedSlot.time === s.time ? 'slot-btn selected' : 'slot-btn');
+              var label = !s.available ? 'BOOKED' : formatTime(s.time);
+              html += '<button class="' + cls + '" ' + (!s.available ? 'disabled' : '') + ' onclick="selectSlot(' + i + ')">' + esc(label) + '</button>';
+            });
             html += '</div>';
           }
         }
