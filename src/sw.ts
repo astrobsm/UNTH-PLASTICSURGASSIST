@@ -122,7 +122,7 @@ const bgSyncPlugin = new BackgroundSyncPlugin('offlineMutationQueue', {
 // ─── Navigation → NetworkFirst (app shell) ──────────────────
 const navigationHandler = new NetworkFirst({
   cacheName: `app-shell-${CACHE_VERSION}`,
-  networkTimeoutSeconds: 3,
+  networkTimeoutSeconds: 1.5,   // Fast fallback to cache on poor networks
   plugins: [
     new CacheableResponsePlugin({ statuses: [0, 200] }),
   ],
@@ -144,7 +144,7 @@ registerRoute(
 // instead of letting unhandled promise rejections flood the console.
 const apiGetStrategy = new NetworkFirst({
   cacheName: API_CACHE,
-  networkTimeoutSeconds: 8,
+  networkTimeoutSeconds: 3,   // Fast cache fallback for poor internet
   plugins: [
     new CacheableResponsePlugin({ statuses: [0, 200] }),
     new ExpirationPlugin({

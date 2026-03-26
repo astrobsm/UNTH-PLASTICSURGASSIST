@@ -142,6 +142,11 @@ export default defineConfig({
           // PDF/Canvas (only needed for document generation)
           if (id.includes('html2canvas')) return 'vendor-pdf';
           if (id.includes('jspdf')) return 'vendor-pdf';
+          // Heavy ML/OCR libs — isolated so they never block first load
+          if (id.includes('@tensorflow')) return 'vendor-ml';
+          if (id.includes('tesseract')) return 'vendor-ocr';
+          // AI (only needed for AI features)
+          if (id.includes('openai')) return 'vendor-ai';
           // Sanitization
           if (id.includes('dompurify')) return 'vendor-sanitize';
           // State management
