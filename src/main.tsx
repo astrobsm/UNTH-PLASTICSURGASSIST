@@ -84,12 +84,12 @@ if ('serviceWorker' in navigator) {
       }
 
       // ── Check for update every 5 minutes ──
-      setInterval(() => { registration.update(); }, 5 * 60 * 1000);
+      setInterval(() => { registration.update().catch(() => {}); }, 5 * 60 * 1000);
 
       // ── Also check when tab becomes visible ──
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
-          registration.update();
+          registration.update().catch(() => {});
         }
       });
 

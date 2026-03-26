@@ -376,7 +376,7 @@ export const PatientProfile: React.FC = () => {
                   <p className="text-sm text-gray-500">No assigned medical team</p>
                 ) : (
                   medicalTeam.map((member, index) => {
-                    const initials = member.name
+                    const initials = (member.name || 'U')
                       .split(' ')
                       .map((n: string) => n[0])
                       .join('')

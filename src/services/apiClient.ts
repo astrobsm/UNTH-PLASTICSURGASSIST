@@ -504,7 +504,13 @@ class ApiClient {
       const data = await this.request(`/sync/patients/${id}`);
       return data?.patient || data;
     } catch (error) {
-      console.error('Error fetching patient:', error);
+      // 404 is expected for locally-cached patients not yet on server
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg.includes('404')) {
+        console.warn(`Patient ${id} not found on server (may exist locally)`);
+      } else {
+        console.error('Error fetching patient:', error);
+      }
       throw error;
     }
   }
