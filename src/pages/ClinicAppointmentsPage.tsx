@@ -5,6 +5,7 @@ import { apiClient } from '../services/apiClient';
 interface Appointment {
   id: number;
   patient_number: string;
+  patient_name?: string;
   appointment_date: string;
   time_slot: string;
   doctor_assigned: string;
@@ -194,9 +195,9 @@ const ClinicAppointmentsPage: React.FC = () => {
         announcedRef.current.add(reminderKey1);
         playAlertTone(660, 200);
         setTimeout(() => {
-          speak(`Reminder: Next patient, number ${nextAppt!.patient_number}, is in ${minsUntilNext} minutes at ${nextTimeStr}. Please prepare to wrap up.`);
+          speak(`Reminder: Next patient, ${nextAppt!.patient_name || nextAppt!.patient_number}, is in ${minsUntilNext} minutes at ${nextTimeStr}. Please prepare to wrap up.`);
         }, 300);
-        setReminderLog(prev => [`${new Date().toLocaleTimeString()} — ${minsUntilNext}min reminder: Patient ${nextAppt.patient_number} at ${nextTimeStr}`, ...prev.slice(0, 9)]);
+        setReminderLog(prev => [`${new Date().toLocaleTimeString()} — ${minsUntilNext}min reminder: ${nextAppt.patient_name || nextAppt.patient_number} at ${nextTimeStr}`, ...prev.slice(0, 9)]);
       }
 
       // 2-minute warning
@@ -205,9 +206,9 @@ const ClinicAppointmentsPage: React.FC = () => {
         announcedRef.current.add(reminderKey2);
         playAlertTone(880, 300);
         setTimeout(() => {
-          speak(`Attention: Next patient, number ${nextAppt!.patient_number}, is in 2 minutes. Time to move on.`);
+          speak(`Attention: Next patient, ${nextAppt!.patient_name || nextAppt!.patient_number}, is in 2 minutes. Time to move on.`);
         }, 400);
-        setReminderLog(prev => [`${new Date().toLocaleTimeString()} — 2min warning: Patient ${nextAppt.patient_number} at ${nextTimeStr}`, ...prev.slice(0, 9)]);
+        setReminderLog(prev => [`${new Date().toLocaleTimeString()} — 2min warning: ${nextAppt.patient_name || nextAppt.patient_number} at ${nextTimeStr}`, ...prev.slice(0, 9)]);
       }
 
       // At appointment time
@@ -217,9 +218,9 @@ const ClinicAppointmentsPage: React.FC = () => {
         playAlertTone(1100, 400);
         setTimeout(() => playAlertTone(1100, 400), 500);
         setTimeout(() => {
-          speak(`It is now time for the next patient. Patient number ${nextAppt!.patient_number} is scheduled now at ${nextTimeStr}. Please proceed.`);
+          speak(`It is now time for the next patient. ${nextAppt!.patient_name || nextAppt!.patient_number} is scheduled now at ${nextTimeStr}. Please proceed.`);
         }, 1000);
-        setReminderLog(prev => [`${new Date().toLocaleTimeString()} — NOW: Patient ${nextAppt.patient_number} at ${nextTimeStr}`, ...prev.slice(0, 9)]);
+        setReminderLog(prev => [`${new Date().toLocaleTimeString()} — NOW: ${nextAppt.patient_name || nextAppt.patient_number} at ${nextTimeStr}`, ...prev.slice(0, 9)]);
       }
     };
 
@@ -398,7 +399,7 @@ const ClinicAppointmentsPage: React.FC = () => {
                   <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
                   <div>
                     <p className="text-xs font-semibold text-green-800">NOW SEEING</p>
-                    <p className="text-sm font-bold text-green-900">Patient {appt.patient_number} &middot; {formatTime(appt.time_slot)}</p>
+                    <p className="text-sm font-bold text-green-900">{appt.patient_name || appt.patient_number} &middot; {formatTime(appt.time_slot)}</p>
                   </div>
                 </div>
               );
@@ -412,7 +413,7 @@ const ClinicAppointmentsPage: React.FC = () => {
                   <Clock className="w-4 h-4 text-amber-600" />
                   <div>
                     <p className="text-xs font-semibold text-amber-800">NEXT UP {minsAway > 0 ? `in ${minsAway} min` : 'NOW'}</p>
-                    <p className="text-sm font-bold text-amber-900">Patient {appt.patient_number} &middot; {formatTime(appt.time_slot)}</p>
+                    <p className="text-sm font-bold text-amber-900">{appt.patient_name || appt.patient_number} &middot; {formatTime(appt.time_slot)}</p>
                   </div>
                 </div>
               );
@@ -504,7 +505,7 @@ const ClinicAppointmentsPage: React.FC = () => {
               <thead className="bg-gray-50 border-b">
                 <tr>
                   <th className="text-left px-4 py-3 font-semibold text-gray-700">Time</th>
-                  <th className="text-left px-4 py-3 font-semibold text-gray-700">Patient #</th>
+                  <th className="text-left px-4 py-3 font-semibold text-gray-700">Patient</th>
                   <th className="text-left px-4 py-3 font-semibold text-gray-700">Doctor</th>
                   <th className="text-left px-4 py-3 font-semibold text-gray-700">Status</th>
                   <th className="text-left px-4 py-3 font-semibold text-gray-700">Actions</th>
@@ -525,7 +526,10 @@ const ClinicAppointmentsPage: React.FC = () => {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
                         <User className="w-3.5 h-3.5 text-gray-400" />
-                        <span className="font-mono font-medium">{a.patient_number}</span>
+                        <div>
+                          {a.patient_name && <span className="font-medium block">{a.patient_name}</span>}
+                          <span className="font-mono text-xs text-gray-500">{a.patient_number}</span>
+                        </div>
                       </div>
                     </td>
                     <td className="px-4 py-3 font-medium text-gray-700">{a.doctor_assigned}</td>

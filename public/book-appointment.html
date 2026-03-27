@@ -80,6 +80,7 @@
       selectedDate: null,
       slots: [],
       selectedSlot: null,
+      patientName: '',
       patientNumber: '',
       agreedTerms: false,
       loading: true,
@@ -140,7 +141,7 @@
     }
 
     async function submitBooking() {
-      if (!state.patientNumber.trim() || !state.agreedTerms || !state.selectedSlot) return;
+      if (!state.patientName.trim() || !state.agreedTerms || !state.selectedSlot) return;
       state.loading = true;
       state.error = null;
       render();
@@ -149,7 +150,8 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            patient_number: state.patientNumber.trim(),
+            patient_name: state.patientName.trim(),
+            patient_number: state.patientNumber.trim() || undefined,
             date: state.selectedDate.date,
             time_slot: state.selectedSlot.time,
             agreed_terms: true
@@ -180,7 +182,7 @@
     }
 
     function startOver() {
-      state = { step: 'select-date', dates: state.dates, selectedDate: null, slots: [], selectedSlot: null, patientNumber: '', agreedTerms: false, loading: false, error: null, booking: null };
+      state = { step: 'select-date', dates: state.dates, selectedDate: null, slots: [], selectedSlot: null, patientName: '', patientNumber: '', agreedTerms: false, loading: false, error: null, booking: null };
       render();
     }
 
@@ -284,8 +286,12 @@
           </p>
           <button onclick="goBack('select-slot')" style="font-size:0.8rem;color:#0e9f6e;background:none;border:none;cursor:pointer;margin-bottom:1rem">&larr; Change time slot</button>
           <div class="form-group">
-            <label for="patientNum">Patient Number / Hospital Number *</label>
-            <input type="text" id="patientNum" placeholder="Enter your patient number" value="${esc(state.patientNumber)}" oninput="state.patientNumber=this.value" maxlength="50" />
+            <label for="patientName">Full Name *</label>
+            <input type="text" id="patientName" placeholder="Enter your full name" value="${esc(state.patientName)}" oninput="state.patientName=this.value;render()" maxlength="100" />
+          </div>
+          <div class="form-group">
+            <label for="patientNum">Hospital Number <span style="font-weight:400;color:#9ca3af">(optional — if you have one)</span></label>
+            <input type="text" id="patientNum" placeholder="e.g. UNTH/12345" value="${esc(state.patientNumber)}" oninput="state.patientNumber=this.value" maxlength="50" />
           </div>
         </div>
         <div class="terms-box">
@@ -302,7 +308,7 @@
             <label for="agreeTerms">I agree to the Clinic Appointment Terms and Conditions</label>
           </div>
         </div>
-        <button class="btn-book" onclick="submitBooking()" ${(!state.patientNumber.trim() || !state.agreedTerms || state.loading) ? 'disabled' : ''}>
+        <button class="btn-book" onclick="submitBooking()" ${(!state.patientName.trim() || !state.agreedTerms || state.loading) ? 'disabled' : ''}>
           ${state.loading ? '<span class="spinner" style="width:18px;height:18px;border-width:2px;vertical-align:middle"></span> Booking...' : '✅ Confirm Appointment'}
         </button>`;
       }
@@ -313,7 +319,8 @@
           <div class="check">✅</div>
           <h2>Appointment Booked Successfully!</h2>
           <div style="text-align:left;margin-top:1rem">
-            <div class="detail"><span>Patient Number</span><strong>${esc(b.patient_number)}</strong></div>
+            <div class="detail"><span>Patient Name</span><strong>${esc(b.patient_name || b.patient_number)}</strong></div>
+            ${b.patient_number !== b.patient_name ? '<div class="detail"><span>Hospital Number</span><strong>' + esc(b.patient_number) + '</strong></div>' : ''}
             <div class="detail"><span>Doctor</span><strong>${esc(b.doctor_assigned)}</strong></div>
             <div class="detail"><span>Date</span><strong>${esc(formatDate(b.appointment_date))}</strong></div>
             <div class="detail"><span>Time</span><strong>${esc(formatTime(b.time_slot))}</strong></div>

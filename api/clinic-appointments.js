@@ -10,6 +10,7 @@ async function ensureTable() {
     CREATE TABLE IF NOT EXISTS clinic_appointments (
       id SERIAL PRIMARY KEY,
       patient_number VARCHAR(100) NOT NULL,
+      patient_name VARCHAR(255),
       appointment_date DATE NOT NULL,
       time_slot VARCHAR(20) NOT NULL,
       doctor_assigned VARCHAR(255) NOT NULL,
@@ -22,6 +23,8 @@ async function ensureTable() {
   await query(`CREATE INDEX IF NOT EXISTS idx_clinic_appt_date ON clinic_appointments(appointment_date)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_clinic_appt_doctor ON clinic_appointments(doctor_assigned)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_clinic_appt_patient ON clinic_appointments(patient_number)`);
+  // Add patient_name column if missing (for existing tables)
+  await query(`ALTER TABLE clinic_appointments ADD COLUMN IF NOT EXISTS patient_name VARCHAR(255)`).catch(() => {});
   tableEnsured = true;
 }
 
@@ -232,19 +235,25 @@ async function getAvailableSlots(params, res) {
 
 // PUBLIC: Book an appointment
 async function bookAppointment(body, res) {
-  const { patient_number, date, time_slot, agreed_terms } = body;
+  const { patient_number, patient_name, date, time_slot, agreed_terms } = body;
 
-  if (!patient_number || !date || !time_slot) {
-    return res.status(400).json({ error: 'patient_number, date, and time_slot are required' });
+  if (!patient_name || !date || !time_slot) {
+    return res.status(400).json({ error: 'patient_name, date, and time_slot are required' });
   }
 
   if (!agreed_terms) {
     return res.status(400).json({ error: 'You must agree to the Terms and Conditions' });
   }
 
-  // Validate patient_number format (alphanumeric, 1-50 chars)
-  const sanitizedPatientNumber = String(patient_number).trim();
-  if (!/^[a-zA-Z0-9\-\/]{1,50}$/.test(sanitizedPatientNumber)) {
+  // Validate patient_name (letters, spaces, hyphens, apostrophes, 1-100 chars)
+  const sanitizedName = String(patient_name).trim();
+  if (!/^[a-zA-Z\s\-'.]{1,100}$/.test(sanitizedName)) {
+    return res.status(400).json({ error: 'Invalid patient name. Use letters, spaces, and hyphens only.' });
+  }
+
+  // Validate patient_number if provided (alphanumeric, spaces, hyphens, slashes)
+  const sanitizedPatientNumber = patient_number ? String(patient_number).trim() : sanitizedName;
+  if (patient_number && !/^[a-zA-Z0-9\s\-\/]{1,50}$/.test(sanitizedPatientNumber)) {
     return res.status(400).json({ error: 'Invalid patient number format' });
   }
 
@@ -268,11 +277,11 @@ async function bookAppointment(body, res) {
     return res.status(400).json({ error: 'Invalid time slot' });
   }
 
-  // Check if patient already has a booking on this date
+  // Check if patient already has a booking on this date (by name to prevent duplicates)
   const existingPatient = await query(
     `SELECT id FROM clinic_appointments 
-     WHERE patient_number = $1 AND appointment_date = $2 AND status != 'cancelled'`,
-    [sanitizedPatientNumber, date]
+     WHERE LOWER(patient_name) = LOWER($1) AND appointment_date = $2 AND status != 'cancelled'`,
+    [sanitizedName, date]
   );
   if (existingPatient.rows.length > 0) {
     return res.status(409).json({ error: 'You already have an appointment booked for this date' });
@@ -302,10 +311,10 @@ async function bookAppointment(body, res) {
       }
       // Use the other doctor
       const result = await query(
-        `INSERT INTO clinic_appointments (patient_number, appointment_date, time_slot, doctor_assigned)
-         VALUES ($1, $2, $3, $4)
+        `INSERT INTO clinic_appointments (patient_number, patient_name, appointment_date, time_slot, doctor_assigned)
+         VALUES ($1, $2, $3, $4, $5)
          RETURNING *`,
-        [sanitizedPatientNumber, date, time_slot, otherDoctor]
+        [sanitizedPatientNumber, sanitizedName, date, time_slot, otherDoctor]
       );
       return res.status(201).json({ appointment: result.rows[0] });
     }
@@ -314,10 +323,10 @@ async function bookAppointment(body, res) {
 
   // Insert the booking
   const result = await query(
-    `INSERT INTO clinic_appointments (patient_number, appointment_date, time_slot, doctor_assigned)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO clinic_appointments (patient_number, patient_name, appointment_date, time_slot, doctor_assigned)
+     VALUES ($1, $2, $3, $4, $5)
      RETURNING *`,
-    [sanitizedPatientNumber, date, time_slot, doctor]
+    [sanitizedPatientNumber, sanitizedName, date, time_slot, doctor]
   );
 
   res.status(201).json({ appointment: result.rows[0] });
