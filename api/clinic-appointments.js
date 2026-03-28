@@ -52,28 +52,27 @@ const CLINIC_CONFIG = {
   }
 };
 
-// Generate 20-minute time slots for a given day of week
+// Generate time slots for a given day of week
+// Tuesday: 25-minute slots (two doctors, longer consults)
+// Wednesday: 20-minute slots (single doctor)
 function generateTimeSlots(dayOfWeek) {
   const config = dayOfWeek === 3 ? CLINIC_CONFIG.wednesday : CLINIC_CONFIG.tuesday;
+  const slotDuration = dayOfWeek === 2 ? 25 : 20;
   const slots = [];
   for (const session of config.schedule) {
     const [startHour, startMin] = session.start.split(':').map(Number);
     const [endHour, endMin] = session.end.split(':').map(Number);
     const endTotalMin = endHour * 60 + endMin;
-    let hour = startHour, min = startMin;
+    let currentMin = startHour * 60 + startMin;
     while (true) {
-      let slotEndMin = min + 20;
-      let slotEndHour = hour;
-      if (slotEndMin >= 60) { slotEndMin -= 60; slotEndHour += 1; }
-      // Stop if slot would end after session end
-      if (slotEndHour * 60 + slotEndMin > endTotalMin) break;
-      const startH = String(hour).padStart(2, '0');
-      const startM = String(min).padStart(2, '0');
-      const endH = String(slotEndHour).padStart(2, '0');
-      const endM = String(slotEndMin).padStart(2, '0');
-      slots.push(`${startH}:${startM}-${endH}:${endM}`);
-      min += 20;
-      if (min >= 60) { min -= 60; hour += 1; }
+      const slotEnd = currentMin + slotDuration;
+      if (slotEnd > endTotalMin) break;
+      const sH = String(Math.floor(currentMin / 60)).padStart(2, '0');
+      const sM = String(currentMin % 60).padStart(2, '0');
+      const eH = String(Math.floor(slotEnd / 60)).padStart(2, '0');
+      const eM = String(slotEnd % 60).padStart(2, '0');
+      slots.push(`${sH}:${sM}-${eH}:${eM}`);
+      currentMin = slotEnd;
     }
   }
   return slots;
@@ -114,9 +113,8 @@ function assignDoctor(dayOfWeek) {
   if (dayOfWeek === 3) {
     return 'Dr. Eze';
   }
-  // Tuesday: randomly assign
-  const doctors = CLINIC_CONFIG.tuesday.doctors;
-  return doctors[Math.floor(Math.random() * doctors.length)];
+  // Tuesday: will be assigned evenly in bookAppointment() using DB counts
+  return null;
 }
 
 export default async function handler(req, res) {
@@ -196,7 +194,7 @@ async function getAvailableSlots(params, res) {
   // Query booked slots for this date
   const result = await query(
     `SELECT time_slot, doctor_assigned FROM clinic_appointments 
-     WHERE appointment_date = $1 AND status != 'cancelled'`,
+     WHERE appointment_date::date = $1::date AND status != 'cancelled'`,
     [date]
   );
 
@@ -280,7 +278,7 @@ async function bookAppointment(body, res) {
   // Check if patient already has a booking on this date (by name to prevent duplicates)
   const existingPatient = await query(
     `SELECT id FROM clinic_appointments 
-     WHERE LOWER(patient_name) = LOWER($1) AND appointment_date = $2 AND status != 'cancelled'`,
+     WHERE LOWER(patient_name) = LOWER($1) AND appointment_date::date = $2::date AND status != 'cancelled'`,
     [sanitizedName, date]
   );
   if (existingPatient.rows.length > 0) {
@@ -288,22 +286,59 @@ async function bookAppointment(body, res) {
   }
 
   // Assign doctor
-  const doctor = assignDoctor(dow);
+  let doctor;
+  if (dow === 3) {
+    doctor = 'Dr. Eze';
+  } else {
+    // Tuesday: even assignment with rotation
+    const doctors = CLINIC_CONFIG.tuesday.doctors;
+
+    // Check patient's last visit to ensure they see a different doctor
+    const lastVisit = await query(
+      `SELECT doctor_assigned FROM clinic_appointments
+       WHERE LOWER(patient_name) = LOWER($1) AND status != 'cancelled'
+       ORDER BY appointment_date DESC, created_at DESC LIMIT 1`,
+      [sanitizedName]
+    );
+    const lastDoctor = lastVisit.rows.length > 0 ? lastVisit.rows[0].doctor_assigned : null;
+
+    // Count how many patients each doctor has for this date (for even distribution)
+    const countResult = await query(
+      `SELECT doctor_assigned, COUNT(*) as cnt FROM clinic_appointments
+       WHERE appointment_date::date = $1::date AND status != 'cancelled'
+       GROUP BY doctor_assigned`,
+      [date]
+    );
+    const counts = {};
+    doctors.forEach(d => counts[d] = 0);
+    countResult.rows.forEach(r => { if (counts[r.doctor_assigned] !== undefined) counts[r.doctor_assigned] = parseInt(r.cnt); });
+
+    // Sort doctors by least booked first
+    const sorted = [...doctors].sort((a, b) => counts[a] - counts[b]);
+
+    // Prefer a doctor the patient hasn't seen last, among the least-booked
+    if (lastDoctor && sorted.length > 1) {
+      // Try to pick a different doctor; if the least-booked IS the last doctor, pick the next one
+      doctor = sorted.find(d => d !== lastDoctor) || sorted[0];
+    } else {
+      doctor = sorted[0];
+    }
+  }
 
   // Check if this specific slot+doctor combo is taken (prevent double booking)
   const existingSlot = await query(
     `SELECT id FROM clinic_appointments 
-     WHERE appointment_date = $1 AND time_slot = $2 AND doctor_assigned = $3 AND status != 'cancelled'`,
+     WHERE appointment_date::date = $1::date AND time_slot = $2 AND doctor_assigned = $3 AND status != 'cancelled'`,
     [date, time_slot, doctor]
   );
 
   if (existingSlot.rows.length > 0) {
-    // If random assignment hit a taken slot, try the other doctor (Tuesday only)
+    // If assigned doctor's slot is taken, try the other doctor (Tuesday only)
     if (dow === 2) {
       const otherDoctor = CLINIC_CONFIG.tuesday.doctors.find(d => d !== doctor);
       const otherSlot = await query(
         `SELECT id FROM clinic_appointments 
-         WHERE appointment_date = $1 AND time_slot = $2 AND doctor_assigned = $3 AND status != 'cancelled'`,
+         WHERE appointment_date::date = $1::date AND time_slot = $2 AND doctor_assigned = $3 AND status != 'cancelled'`,
         [date, time_slot, otherDoctor]
       );
       if (otherSlot.rows.length > 0) {
@@ -343,7 +378,7 @@ async function getAllAppointments(params, user, res) {
   let paramCount = 1;
 
   if (date) {
-    queryStr += ` AND appointment_date = $${paramCount}`;
+    queryStr += ` AND appointment_date::date = $${paramCount}::date`;
     queryParams.push(date);
     paramCount++;
   }

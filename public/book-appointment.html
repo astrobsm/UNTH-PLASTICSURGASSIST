@@ -245,7 +245,7 @@
       if (state.step === 'select-slot') {
         html += `<div class="card">
           <h2>⏰ Step 2: Select Time Slot</h2>
-          <p style="font-size:0.85rem;color:#6b7280;margin-bottom:0.5rem">${esc(formatDate(state.selectedDate.date))} &middot; Each slot is 20 minutes</p>
+          <p style="font-size:0.85rem;color:#6b7280;margin-bottom:0.5rem">${esc(formatDate(state.selectedDate.date))} &middot; Each slot is ${state.selectedDate.dayOfWeek === 2 ? '25' : '20'} minutes</p>
           <button onclick="goBack('select-date')" style="font-size:0.8rem;color:#0e9f6e;background:none;border:none;cursor:pointer;margin-bottom:1rem">&larr; Change date</button>`;
         if (state.loading) {
           html += '<div class="loading"><div class="spinner"></div></div>';
@@ -301,7 +301,7 @@
             <li>Please arrive within <strong>5 minutes before or after</strong> your scheduled appointment time.</li>
             <li>Missed appointments require <strong>rescheduling</strong> through this system.</li>
             <li>Late patients will be seen <strong>only after all scheduled patients</strong> have been attended to.</li>
-            <li>Each consultation slot is <strong>20 minutes maximum</strong>.</li>
+            <li>Each consultation slot is <strong>20–25 minutes maximum</strong>.</li>
             <li>In case of emergency, contact the unit directly.</li>
           </ul>
           <div class="checkbox-row">
