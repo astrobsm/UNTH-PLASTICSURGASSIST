@@ -6,6 +6,7 @@ interface Appointment {
   id: number;
   patient_number: string;
   patient_name?: string;
+  phone_number?: string;
   appointment_date: string;
   time_slot: string;
   doctor_assigned: string;
@@ -529,6 +530,9 @@ const ClinicAppointmentsPage: React.FC = () => {
                         <div>
                           {a.patient_name && <span className="font-medium block">{a.patient_name}</span>}
                           <span className="font-mono text-xs text-gray-500">{a.patient_number}</span>
+                          {a.phone_number && (
+                            <a href={`https://wa.me/${a.phone_number.replace(/^0/, '234')}`} target="_blank" rel="noopener noreferrer" className="block text-xs text-green-600 hover:underline">📱 {a.phone_number}</a>
+                          )}
                         </div>
                       </div>
                     </td>

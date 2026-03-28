@@ -82,6 +82,7 @@
       selectedSlot: null,
       patientName: '',
       patientNumber: '',
+      phoneNumber: '',
       agreedTerms: false,
       loading: true,
       error: null,
@@ -141,7 +142,7 @@
     }
 
     async function submitBooking() {
-      if (!state.patientName.trim() || !state.agreedTerms || !state.selectedSlot) return;
+      if (!state.patientName.trim() || !state.phoneNumber.trim() || !state.agreedTerms || !state.selectedSlot) return;
       state.loading = true;
       state.error = null;
       render();
@@ -152,6 +153,7 @@
           body: JSON.stringify({
             patient_name: state.patientName.trim(),
             patient_number: state.patientNumber.trim() || undefined,
+            phone_number: state.phoneNumber.trim(),
             date: state.selectedDate.date,
             time_slot: state.selectedSlot.time,
             agreed_terms: true
@@ -182,7 +184,7 @@
     }
 
     function startOver() {
-      state = { step: 'select-date', dates: state.dates, selectedDate: null, slots: [], selectedSlot: null, patientName: '', patientNumber: '', agreedTerms: false, loading: false, error: null, booking: null };
+      state = { step: 'select-date', dates: state.dates, selectedDate: null, slots: [], selectedSlot: null, patientName: '', patientNumber: '', phoneNumber: '', agreedTerms: false, loading: false, error: null, booking: null };
       render();
     }
 
@@ -201,6 +203,29 @@
       const dateOnly = String(dateStr).split('T')[0];
       const d = new Date(dateOnly + 'T00:00:00');
       return d.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    }
+
+    function getArrivalTime(slot) {
+      const start = slot.split('-')[0];
+      const [h, m] = start.split(':').map(Number);
+      const arrH = h - 1 < 0 ? 0 : h - 1;
+      const suffix = arrH >= 12 ? 'PM' : 'AM';
+      const h12 = arrH > 12 ? arrH - 12 : arrH === 0 ? 12 : arrH;
+      return `${h12}:${String(m).padStart(2, '0')} ${suffix}`;
+    }
+
+    function buildWhatsAppMessage(b, arrivalTime) {
+      return `*UNTH Plastic Surgery Clinic - Appointment Confirmation*\n\n` +
+        `Patient: ${b.patient_name || b.patient_number}\n` +
+        `Doctor: ${b.doctor_assigned}\n` +
+        `Date: ${formatDate(b.appointment_date)}\n` +
+        `Time: ${formatTime(b.time_slot)}\n\n` +
+        `⏰ *Please arrive by ${arrivalTime}* (1 hour before your appointment) to:\n` +
+        `✅ Complete vital signs check\n` +
+        `✅ Pay consultation fees\n` +
+        `✅ Confirm availability of wound care materials (if needed)\n\n` +
+        `Late patients will be seen only after all scheduled patients. ` +
+        `If you cannot make it, please reschedule via the booking system.`;
     }
 
     function esc(str) {
@@ -291,6 +316,10 @@
             <input type="text" id="patientName" placeholder="Enter your full name" value="${esc(state.patientName)}" oninput="state.patientName=this.value;render()" maxlength="100" />
           </div>
           <div class="form-group">
+            <label for="phoneNum">Phone Number (WhatsApp) *</label>
+            <input type="tel" id="phoneNum" placeholder="e.g. 08012345678" value="${esc(state.phoneNumber)}" oninput="state.phoneNumber=this.value;render()" maxlength="15" />
+          </div>
+          <div class="form-group">
             <label for="patientNum">Hospital Number <span style="font-weight:400;color:#9ca3af">(optional — if you have one)</span></label>
             <input type="text" id="patientNum" placeholder="e.g. UNTH/12345" value="${esc(state.patientNumber)}" oninput="state.patientNumber=this.value" maxlength="50" />
           </div>
@@ -298,7 +327,7 @@
         <div class="terms-box">
           <h3>📜 Terms and Conditions</h3>
           <ul>
-            <li>Please arrive within <strong>5 minutes before or after</strong> your scheduled appointment time.</li>
+            <li>Please arrive <strong>at least 1 hour before</strong> your appointment to complete vital signs, pay consultation fees, and confirm availability of wound care materials (if needed).</li>
             <li>Missed appointments require <strong>rescheduling</strong> through this system.</li>
             <li>Late patients will be seen <strong>only after all scheduled patients</strong> have been attended to.</li>
             <li>Each consultation slot is <strong>20–25 minutes maximum</strong>.</li>
@@ -309,25 +338,39 @@
             <label for="agreeTerms">I agree to the Clinic Appointment Terms and Conditions</label>
           </div>
         </div>
-        <button class="btn-book" onclick="submitBooking()" ${(!state.patientName.trim() || !state.agreedTerms || state.loading) ? 'disabled' : ''}>
+        <button class="btn-book" onclick="submitBooking()" ${(!state.patientName.trim() || !state.phoneNumber.trim() || !state.agreedTerms || state.loading) ? 'disabled' : ''}>
           ${state.loading ? '<span class="spinner" style="width:18px;height:18px;border-width:2px;vertical-align:middle"></span> Booking...' : '✅ Confirm Appointment'}
         </button>`;
       }
 
       if (state.step === 'confirmation' && state.booking) {
         const b = state.booking;
+        const arrivalTime = getArrivalTime(b.time_slot);
+        const whatsappMsg = buildWhatsAppMessage(b, arrivalTime);
+        const whatsappPhone = (b.phone_number || '').replace(/^0/, '234');
+        const whatsappUrl = 'https://wa.me/' + whatsappPhone + '?text=' + encodeURIComponent(whatsappMsg);
         html += `<div class="success-card">
           <div class="check">✅</div>
           <h2>Appointment Booked Successfully!</h2>
           <div style="text-align:left;margin-top:1rem">
             <div class="detail"><span>Patient Name</span><strong>${esc(b.patient_name || b.patient_number)}</strong></div>
+            ${b.phone_number ? '<div class="detail"><span>Phone</span><strong>' + esc(b.phone_number) + '</strong></div>' : ''}
             ${b.patient_number !== b.patient_name ? '<div class="detail"><span>Hospital Number</span><strong>' + esc(b.patient_number) + '</strong></div>' : ''}
             <div class="detail"><span>Doctor</span><strong>${esc(b.doctor_assigned)}</strong></div>
             <div class="detail"><span>Date</span><strong>${esc(formatDate(b.appointment_date))}</strong></div>
-            <div class="detail"><span>Time</span><strong>${esc(formatTime(b.time_slot))}</strong></div>
+            <div class="detail"><span>Appointment Time</span><strong>${esc(formatTime(b.time_slot))}</strong></div>
+            <div class="detail"><span>Arrive By</span><strong style="color:#dc2626">${esc(arrivalTime)}</strong></div>
           </div>
-          <div class="instruction">⏰ Please arrive within 5 minutes before or after your scheduled time.</div>
-          <button onclick="startOver()" style="margin-top:1rem;padding:0.6rem 1.5rem;border:2px solid #0e9f6e;border-radius:8px;background:white;color:#065f46;font-weight:600;cursor:pointer">Book Another Appointment</button>
+          <div class="instruction">
+            ⏰ <strong>Please arrive by ${esc(arrivalTime)}</strong> (1 hour before your appointment) to:<br>
+            ✅ Complete vital signs check<br>
+            ✅ Pay consultation fees<br>
+            ✅ Confirm availability of wound care materials (if needed)
+          </div>
+          <a href="${whatsappUrl}" target="_blank" rel="noopener" style="display:block;margin-top:1rem;padding:0.75rem;border:none;border-radius:8px;background:#25D366;color:white;font-size:0.95rem;font-weight:700;text-align:center;text-decoration:none;cursor:pointer">
+            📲 Send Confirmation via WhatsApp
+          </a>
+          <button onclick="startOver()" style="margin-top:0.75rem;padding:0.6rem 1.5rem;border:2px solid #0e9f6e;border-radius:8px;background:white;color:#065f46;font-weight:600;cursor:pointer;width:100%">Book Another Appointment</button>
         </div>`;
       }
 
