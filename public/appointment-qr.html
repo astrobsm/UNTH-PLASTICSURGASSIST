@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Book Your Appointment - UNTH Plastic Surgery Unit</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f0fdf4; color: #1a1a2e; min-height: 100vh; }
+    
+    /* Print styles */
+    @media print {
+      body { background: white; }
+      .no-print { display: none !important; }
+      .page { box-shadow: none; border: none; margin: 0; padding: 1.5cm; max-width: 100%; }
+      .page-break { page-break-after: always; }
+    }
+
+    .header-bar {
+      background: linear-gradient(135deg, #065f46 0%, #0e9f6e 100%);
+      color: white;
+      padding: 1rem 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .header-bar h1 { font-size: 1.1rem; font-weight: 700; }
+    .header-bar .actions { display: flex; gap: 0.5rem; }
+    .header-bar button {
+      background: white; color: #065f46; border: none; padding: 0.5rem 1rem;
+      border-radius: 8px; font-weight: 600; font-size: 0.85rem; cursor: pointer;
+      transition: all 0.2s;
+    }
+    .header-bar button:hover { background: #ecfdf5; transform: translateY(-1px); }
+
+    .page {
+      max-width: 700px;
+      margin: 1.5rem auto;
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      padding: 2rem;
+      border: 3px solid #d1fae5;
+    }
+
+    .logo-section {
+      text-align: center;
+      margin-bottom: 1.5rem;
+      padding-bottom: 1rem;
+      border-bottom: 3px solid #0e9f6e;
+    }
+    .logo-section h2 {
+      font-size: 1.5rem;
+      color: #065f46;
+      margin-bottom: 0.25rem;
+    }
+    .logo-section .dept {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #0e9f6e;
+    }
+    .logo-section .sub {
+      font-size: 0.85rem;
+      color: #6b7280;
+      margin-top: 0.25rem;
+    }
+
+    .qr-section {
+      text-align: center;
+      margin: 1.5rem 0;
+    }
+    .qr-section h3 {
+      font-size: 1.15rem;
+      color: #065f46;
+      margin-bottom: 0.5rem;
+    }
+    .qr-section .qr-instruction {
+      font-size: 0.95rem;
+      color: #374151;
+      margin-bottom: 1rem;
+    }
+    #qr-canvas {
+      border: 4px solid #065f46;
+      border-radius: 12px;
+      padding: 8px;
+      background: white;
+    }
+    .qr-section .url-text {
+      display: block;
+      margin-top: 0.75rem;
+      font-size: 0.8rem;
+      color: #6b7280;
+      word-break: break-all;
+    }
+
+    .steps-section {
+      margin-top: 2rem;
+    }
+    .steps-section h3 {
+      font-size: 1.15rem;
+      color: #065f46;
+      margin-bottom: 1rem;
+      text-align: center;
+      padding-bottom: 0.5rem;
+      border-bottom: 2px solid #d1fae5;
+    }
+
+    .step {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1.25rem;
+      align-items: flex-start;
+    }
+    .step-num {
+      flex-shrink: 0;
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, #065f46, #0e9f6e);
+      color: white;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 1rem;
+    }
+    .step-content h4 {
+      font-size: 0.95rem;
+      color: #065f46;
+      margin-bottom: 0.15rem;
+    }
+    .step-content p {
+      font-size: 0.85rem;
+      color: #4b5563;
+      line-height: 1.5;
+    }
+
+    .important-box {
+      margin-top: 1.5rem;
+      padding: 1rem 1.25rem;
+      background: #fef2f2;
+      border: 2px solid #fecaca;
+      border-radius: 10px;
+    }
+    .important-box h4 {
+      color: #dc2626;
+      font-size: 0.95rem;
+      margin-bottom: 0.5rem;
+    }
+    .important-box ul {
+      list-style: none;
+      padding: 0;
+    }
+    .important-box li {
+      font-size: 0.85rem;
+      color: #991b1b;
+      padding: 0.2rem 0;
+      padding-left: 1.25rem;
+      position: relative;
+    }
+    .important-box li::before {
+      content: "⚠️";
+      position: absolute;
+      left: 0;
+    }
+
+    .clinic-days {
+      margin-top: 1.5rem;
+      padding: 1rem 1.25rem;
+      background: #f0fdf4;
+      border: 2px solid #bbf7d0;
+      border-radius: 10px;
+    }
+    .clinic-days h4 {
+      color: #065f46;
+      font-size: 0.95rem;
+      margin-bottom: 0.5rem;
+    }
+    .clinic-days table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+    .clinic-days th, .clinic-days td {
+      text-align: left;
+      padding: 0.35rem 0.5rem;
+      border-bottom: 1px solid #d1fae5;
+    }
+    .clinic-days th {
+      color: #065f46;
+      font-weight: 700;
+    }
+
+    .footer-note {
+      text-align: center;
+      margin-top: 1.5rem;
+      padding-top: 1rem;
+      border-top: 2px solid #d1fae5;
+      font-size: 0.8rem;
+      color: #6b7280;
+    }
+
+    .share-section {
+      margin-top: 1.5rem;
+      text-align: center;
+    }
+    .share-section button {
+      padding: 0.6rem 1.25rem;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.85rem;
+      cursor: pointer;
+      border: 2px solid;
+      margin: 0.25rem;
+      transition: all 0.2s;
+    }
+    .btn-whatsapp {
+      background: #25D366; color: white; border-color: #25D366;
+    }
+    .btn-download {
+      background: #065f46; color: white; border-color: #065f46;
+    }
+    .btn-whatsapp:hover, .btn-download:hover { opacity: 0.9; transform: translateY(-1px); }
+  </style>
+</head>
+<body>
+
+<div class="header-bar no-print">
+  <h1>📋 Appointment QR Code &amp; Instructions</h1>
+  <div class="actions">
+    <button onclick="window.print()">🖨️ Print</button>
+    <button onclick="downloadQR()">💾 Save QR Image</button>
+    <button onclick="location.href='/book-appointment.html'">📅 Book Now</button>
+  </div>
+</div>
+
+<div class="page" id="printable">
+
+  <div class="logo-section">
+    <h2>🏥 University of Nigeria Teaching Hospital (UNTH)</h2>
+    <div class="dept">Plastic Surgery &amp; Burns Unit</div>
+    <div class="sub">Outpatient Clinic Appointment System</div>
+  </div>
+
+  <div class="qr-section">
+    <h3>📱 Scan to Book Your Appointment</h3>
+    <p class="qr-instruction">Open your phone camera and point it at the QR code below</p>
+    <div id="qr-canvas" style="display:inline-block"></div>
+    <span class="url-text" id="booking-url"></span>
+  </div>
+
+  <div class="steps-section">
+    <h3>📝 How to Book Your Appointment — Step by Step</h3>
+
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-content">
+        <h4>Scan the QR Code</h4>
+        <p>Open your phone's camera app and point it at the QR code above. Tap the link that appears on your screen. Alternatively, you can type the web address shown below the QR code into any browser.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-content">
+        <h4>Select a Clinic Date</h4>
+        <p>Choose from the available clinic dates displayed on the page. Clinic days are <strong>Tuesdays</strong> (two doctors) and <strong>Wednesdays</strong> (one doctor). Only dates with open slots will be shown.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-content">
+        <h4>Pick a Time Slot</h4>
+        <p>Select a convenient time slot from the available options. Green slots are open; grey slots are already booked. Tuesday slots are <strong>25 minutes</strong>, Wednesday slots are <strong>20 minutes</strong>.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-content">
+        <h4>Enter Your Details</h4>
+        <p>Fill in your <strong>Full Name</strong> (required), <strong>Phone Number / WhatsApp</strong> (required), and <strong>Hospital Number</strong> (optional — if you have one from a previous visit). Then read and agree to the terms.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">5</div>
+      <div class="step-content">
+        <h4>Confirm Your Booking</h4>
+        <p>Tap <strong>"Book Appointment"</strong> to submit. You will see a confirmation screen with your <strong>assigned doctor</strong>, <strong>date</strong>, <strong>time</strong>, and <strong>arrival time</strong> (1 hour before appointment).</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">6</div>
+      <div class="step-content">
+        <h4>Share via WhatsApp</h4>
+        <p>After booking, tap the green <strong>"Send Confirmation via WhatsApp"</strong> button to save your appointment details. Share it with family members so they can help you remember.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">7</div>
+      <div class="step-content">
+        <h4>Arrive 1 Hour Early</h4>
+        <p>On your appointment day, arrive <strong>at least 1 hour before</strong> your scheduled time to: <strong>complete vital signs</strong>, <strong>pay consultation fees</strong>, and <strong>confirm availability of wound care materials</strong> (if needed).</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="important-box">
+    <h4>⚠️ Important Reminders</h4>
+    <ul>
+      <li>Arrive at least <strong>1 hour before</strong> your appointment time.</li>
+      <li>Late patients will be seen <strong>only after all scheduled patients</strong>.</li>
+      <li>Missed appointments must be rescheduled through the booking system.</li>
+      <li>Bring your <strong>hospital card</strong> and any <strong>previous medical records</strong>.</li>
+      <li>In case of emergency, contact the unit directly — do not wait for your appointment.</li>
+    </ul>
+  </div>
+
+  <div class="clinic-days">
+    <h4>🗓️ Clinic Schedule</h4>
+    <table>
+      <thead>
+        <tr><th>Day</th><th>Time</th><th>Doctors</th><th>Slot Duration</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Tuesday</strong></td>
+          <td>9:00 AM – 1:00 PM</td>
+          <td>2 doctors (Dr. Obaedo &amp; Dr. Okoye)</td>
+          <td>25 minutes</td>
+        </tr>
+        <tr>
+          <td><strong>Wednesday</strong></td>
+          <td>9:00 AM – 1:00 PM</td>
+          <td>1 doctor (Dr. Okoye)</td>
+          <td>20 minutes</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="share-section no-print">
+    <button class="btn-whatsapp" onclick="shareWhatsApp()">📲 Share via WhatsApp</button>
+    <button class="btn-download" onclick="downloadQR()">💾 Download QR Code</button>
+  </div>
+
+  <div class="footer-note">
+    <p>UNTH Plastic Surgery &amp; Burns Unit — Outpatient Clinic</p>
+    <p>For assistance, contact the clinic during working hours.</p>
+  </div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+// Application logic
+var BOOKING_URL = window.location.origin + '/book-appointment.html';
+
+document.addEventListener('DOMContentLoaded', function() {
+  var container = document.getElementById('qr-canvas');
+  var urlEl = document.getElementById('booking-url');
+  urlEl.textContent = BOOKING_URL;
+
+  // Try QRCode.js library first
+  if (typeof QRCode !== 'undefined') {
+    try {
+      new QRCode(container, {
+        text: BOOKING_URL,
+        width: 280,
+        height: 280,
+        colorDark: '#000000',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M
+      });
+      return;
+    } catch (e) { /* fall through */ }
+  }
+
+  // Fallback: show the URL prominently with instruction to use any QR generator
+  container.innerHTML =
+    '<div style="width:280px;height:280px;border:3px dashed #065f46;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:1rem;text-align:center">' +
+    '<p style="font-size:1.1rem;font-weight:700;color:#065f46;margin-bottom:0.5rem">Visit this link:</p>' +
+    '<p style="font-size:0.85rem;color:#374151;word-break:break-all">' + BOOKING_URL + '</p>' +
+    '</div>';
+});
+
+function downloadQR() {
+  var container = document.getElementById('qr-canvas');
+  var img = container.querySelector('img');
+  var canvas = container.querySelector('canvas');
+  var src = img ? img.src : canvas ? canvas.toDataURL('image/png') : null;
+  if (!src) { alert('Right-click the QR code and save the image.'); return; }
+  var link = document.createElement('a');
+  link.download = 'UNTH-PlasticSurgery-Booking-QR.png';
+  link.href = src;
+  link.click();
+}
+
+function shareWhatsApp() {
+  var msg = '*UNTH Plastic Surgery Clinic \u2014 Book Your Appointment Online*\n\n' +
+    '\ud83d\udcf1 Scan the QR code or visit:\n' + BOOKING_URL + '\n\n' +
+    '*How to Book:*\n' +
+    '1\ufe0f\u20e3 Open the link above\n' +
+    '2\ufe0f\u20e3 Select a clinic date (Tuesday or Wednesday)\n' +
+    '3\ufe0f\u20e3 Choose an available time slot\n' +
+    '4\ufe0f\u20e3 Enter your name, phone number, and hospital number\n' +
+    '5\ufe0f\u20e3 Confirm your booking\n\n' +
+    '\u23f0 *Remember:* Arrive at least 1 hour before your appointment to complete vital signs, pay consultation fees, and confirm wound care materials.\n\n' +
+    '\ud83c\udfe5 Clinic Days: Tuesdays & Wednesdays, 9 AM \u2013 1 PM';
+  window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+}
+</script>
+
+</body>
+</html>

@@ -310,22 +310,30 @@ const ClinicAppointmentsPage: React.FC = () => {
             className="flex items-center gap-1.5 px-3 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">
             <ExternalLink className="w-4 h-4" /> Open Booking Page
           </a>
+          <a href="/appointment-qr.html" target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-1.5 px-3 py-2 bg-white border border-green-600 text-green-700 rounded-lg text-sm hover:bg-green-50">
+            📱 QR Code &amp; Instructions
+          </a>
         </div>
       </div>
 
       {/* Shareable Link */}
       <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
         <p className="text-sm font-semibold text-green-800 mb-2">📎 Patient Booking Link (share with patients)</p>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <input
             readOnly
             value={bookingUrl}
-            className="flex-1 px-3 py-2 border border-green-300 rounded-md text-sm bg-white text-gray-800"
+            className="flex-1 min-w-0 px-3 py-2 border border-green-300 rounded-md text-sm bg-white text-gray-800"
           />
           <button onClick={copyLink}
             className="flex items-center gap-1.5 px-3 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">
             <Copy className="w-4 h-4" /> {copied ? 'Copied!' : 'Copy'}
           </button>
+          <a href="/appointment-qr.html" target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-1.5 px-3 py-2 bg-white border border-green-600 text-green-700 rounded-lg text-sm hover:bg-green-50 no-underline">
+            📱 Print QR Flyer
+          </a>
         </div>
       </div>
 
