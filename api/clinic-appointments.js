@@ -35,7 +35,7 @@ const CLINIC_CONFIG = {
   // 0=Sun,1=Mon,2=Tue,3=Wed,4=Thu,5=Fri,6=Sat
   tuesday: {
     dayOfWeek: 2,
-    doctors: ['Dr. Nnadi', 'Dr. Onyia'],
+    doctors: ['Dr. Nnadi', 'Dr. Onyia', 'Dr. Okwesili'],
     assignMode: 'random',
     schedule: [
       { label: 'Morning Session', start: '09:00', end: '13:30' },
@@ -45,18 +45,18 @@ const CLINIC_CONFIG = {
   },
   wednesday: {
     dayOfWeek: 3,
-    doctors: ['Dr. Eze'],
-    assignMode: 'fixed',
+    doctors: ['Dr. Okwesili', 'Dr. Eze'],
+    assignMode: 'random',
     schedule: [
-      { label: 'Clinic Session', start: '10:00', end: '14:00' }
+      { label: 'Clinic Session', start: '10:00', end: '16:00' }
     ],
-    scheduleLabel: '10:00 AM – 2:00 PM'
+    scheduleLabel: '10:00 AM – 4:00 PM'
   }
 };
 
 // Generate time slots for a given day of week
-// Tuesday: 25-minute slots (two doctors, longer consults)
-// Wednesday: 20-minute slots (single doctor)
+// Tuesday: 25-minute slots (three doctors)
+// Wednesday: 20-minute slots (two doctors)
 function generateTimeSlots(dayOfWeek) {
   const config = dayOfWeek === 3 ? CLINIC_CONFIG.wednesday : CLINIC_CONFIG.tuesday;
   const slotDuration = dayOfWeek === 2 ? 25 : 20;

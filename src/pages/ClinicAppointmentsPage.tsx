@@ -23,7 +23,7 @@ const STATUS_COLORS: Record<string, string> = {
   'no-show': 'bg-gray-100 text-gray-800',
 };
 
-const DOCTORS = ['Dr. Nnadi', 'Dr. Onyia', 'Dr. Eze'];
+const DOCTORS = ['Dr. Nnadi', 'Dr. Onyia', 'Dr. Okwesili', 'Dr. Eze'];
 
 function formatTime(slot: string) {
   const [start, end] = slot.split('-');

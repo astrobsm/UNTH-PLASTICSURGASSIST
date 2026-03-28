@@ -303,7 +303,7 @@
         } else {
           const isWednesday = state.selectedDate && state.selectedDate.dayOfWeek === 3;
           if (isWednesday) {
-            html += '<div class="section-label">Clinic Session (10:00 AM – 2:00 PM)</div><div class="slots-grid">';
+            html += '<div class="section-label">Clinic Session (10:00 AM – 4:00 PM)</div><div class="slots-grid">';
             state.slots.forEach(function(s, i) {
               var cls = !s.available ? 'slot-btn booked' : (state.selectedSlot && state.selectedSlot.time === s.time ? 'slot-btn selected' : 'slot-btn');
               var label = !s.available ? 'BOOKED' : formatTime(s.time);

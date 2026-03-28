@@ -217,7 +217,7 @@ export default function ClinicAppointmentBooking() {
                 </div>
                 <div>
                   <p className="font-medium">Wednesday</p>
-                  <p>10:00 AM – 2:00 PM</p>
+                  <p>10:00 AM – 4:00 PM</p>
                 </div>
               </div>
               <p className="text-xs text-green-600 mt-2">Tuesday has a break: 1:30 PM – 2:00 PM</p>
@@ -244,7 +244,7 @@ export default function ClinicAppointmentBooking() {
                 {/* Morning / Main session */}
                 <div className="mb-6">
                   <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                    <Clock className="w-4 h-4" /> {isTuesday ? 'Morning Session (9:00 AM – 1:30 PM)' : 'Clinic Session (10:00 AM – 2:00 PM)'}
+                    <Clock className="w-4 h-4" /> {isTuesday ? 'Morning Session (9:00 AM – 1:30 PM)' : 'Clinic Session (10:00 AM – 4:00 PM)'}
                   </h3>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                     {morningSlots.map(slot => (

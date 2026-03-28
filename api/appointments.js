@@ -28,8 +28,8 @@ async function ensureTable() {
 }
 
 // Clinic schedule configuration
-const TUESDAY_DOCTORS = ['Dr. Nnadi', 'Dr. Onyia'];
-const WEDNESDAY_DOCTORS = ['Dr. Eze'];
+const TUESDAY_DOCTORS = ['Dr. Nnadi', 'Dr. Onyia', 'Dr. Okwesili'];
+const WEDNESDAY_DOCTORS = ['Dr. Okwesili', 'Dr. Eze'];
 
 function generateTimeSlots() {
   const slots = [];
@@ -97,7 +97,7 @@ function getNextClinicDates(weeksAhead = 4) {
 }
 
 function assignDoctor(dayOfWeek) {
-  if (dayOfWeek === 3) return 'Dr. Eze'; // Wednesday
+  if (dayOfWeek === 3) return WEDNESDAY_DOCTORS[Math.floor(Math.random() * WEDNESDAY_DOCTORS.length)];
   // Tuesday: random assignment
   return TUESDAY_DOCTORS[Math.floor(Math.random() * TUESDAY_DOCTORS.length)];
 }
