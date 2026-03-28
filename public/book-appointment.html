@@ -143,7 +143,7 @@
     }
 
     async function submitBooking() {
-      if (!state.patientName.trim() || !state.phoneNumber.trim() || !state.agreedTerms || !state.selectedSlot) return;
+      if (!state.patientName.trim() || !isValidPhone() || !state.agreedTerms || !state.selectedSlot) return;
       state.loading = true;
       state.error = null;
       render();
@@ -154,7 +154,7 @@
           body: JSON.stringify({
             patient_name: state.patientName.trim(),
             patient_number: state.patientNumber.trim() || undefined,
-            phone_number: state.phoneNumber.trim(),
+            phone_number: getFullPhone(),
             date: state.selectedDate.date,
             time_slot: state.selectedSlot.time,
             agreed_terms: true
@@ -204,6 +204,31 @@
       const dateOnly = String(dateStr).split('T')[0];
       const d = new Date(dateOnly + 'T00:00:00');
       return d.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    }
+
+    function handlePhoneInput(el) {
+      // Strip leading 0, +234, spaces, dashes — keep only digits
+      var raw = el.value.replace(/[^0-9]/g, '');
+      if (raw.startsWith('234') && raw.length > 3) raw = raw.substring(3);
+      if (raw.startsWith('0')) raw = raw.substring(1);
+      state.phoneNumber = raw;
+      el.value = raw;
+      render();
+    }
+
+    function getFullPhone() {
+      // Always return +234 + 10-digit local number (without leading 0)
+      var num = state.phoneNumber.replace(/[^0-9]/g, '');
+      if (num.startsWith('234') && num.length > 3) num = num.substring(3);
+      if (num.startsWith('0')) num = num.substring(1);
+      return '+234' + num;
+    }
+
+    function isValidPhone() {
+      var num = state.phoneNumber.replace(/[^0-9]/g, '');
+      if (num.startsWith('234') && num.length > 3) num = num.substring(3);
+      if (num.startsWith('0')) num = num.substring(1);
+      return /^[789][01]\d{8}$/.test(num);
     }
 
     function getArrivalTime(slot) {
@@ -318,7 +343,11 @@
           </div>
           <div class="form-group">
             <label for="phoneNum">Phone Number (WhatsApp) *</label>
-            <input type="tel" id="phoneNum" placeholder="e.g. 08012345678" value="${esc(state.phoneNumber)}" oninput="state.phoneNumber=this.value;render()" maxlength="15" />
+            <div style="display:flex;align-items:center;gap:0">
+              <span style="padding:0.6rem 0.75rem;background:#065f46;color:white;border:1.5px solid #065f46;border-right:none;border-radius:8px 0 0 8px;font-weight:700;font-size:0.95rem;white-space:nowrap">+234</span>
+              <input type="tel" id="phoneNum" placeholder="e.g. 8012345678" value="${esc(state.phoneNumber)}" oninput="handlePhoneInput(this)" maxlength="11" style="border-radius:0 8px 8px 0;flex:1" />
+            </div>
+            <span style="font-size:0.7rem;color:#6b7280;margin-top:0.2rem;display:block">Enter number without leading zero — it will be added automatically</span>
           </div>
           <div class="form-group">
             <label for="patientNum">Hospital Number <span style="font-weight:400;color:#9ca3af">(optional — if you have one)</span></label>
@@ -339,7 +368,7 @@
             <label for="agreeTerms">I agree to the Clinic Appointment Terms and Conditions</label>
           </div>
         </div>
-        <button class="btn-book" onclick="submitBooking()" ${(!state.patientName.trim() || !state.phoneNumber.trim() || !state.agreedTerms || state.loading) ? 'disabled' : ''}>
+        <button class="btn-book" onclick="submitBooking()" ${(!state.patientName.trim() || !isValidPhone() || !state.agreedTerms || state.loading) ? 'disabled' : ''}>
           ${state.loading ? '<span class="spinner" style="width:18px;height:18px;border-width:2px;vertical-align:middle"></span> Booking...' : '✅ Confirm Appointment'}
         </button>`;
       }
@@ -348,7 +377,7 @@
         const b = state.booking;
         const arrivalTime = getArrivalTime(b.time_slot);
         const whatsappMsg = buildWhatsAppMessage(b, arrivalTime);
-        const whatsappPhone = (b.phone_number || '').replace(/^0/, '234');
+        const whatsappPhone = (b.phone_number || '').replace(/^\+/, '').replace(/^0/, '234');
         const whatsappUrl = 'https://wa.me/' + whatsappPhone + '?text=' + encodeURIComponent(whatsappMsg);
         html += `<div class="success-card">
           <div class="check">✅</div>

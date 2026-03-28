@@ -539,7 +539,7 @@ const ClinicAppointmentsPage: React.FC = () => {
                           {a.patient_name && <span className="font-medium block">{a.patient_name}</span>}
                           <span className="font-mono text-xs text-gray-500">{a.patient_number}</span>
                           {a.phone_number && (
-                            <a href={`https://wa.me/${a.phone_number.replace(/^0/, '234')}`} target="_blank" rel="noopener noreferrer" className="block text-xs text-green-600 hover:underline">📱 {a.phone_number}</a>
+                            <a href={`https://wa.me/${a.phone_number.replace(/^\+/, '').replace(/^0/, '234')}`} target="_blank" rel="noopener noreferrer" className="block text-xs text-green-600 hover:underline">📱 {a.phone_number}</a>
                           )}
                         </div>
                       </div>

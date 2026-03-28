@@ -251,11 +251,16 @@ async function bookAppointment(body, res) {
     return res.status(400).json({ error: 'Invalid patient name. Use letters, spaces, and hyphens only.' });
   }
 
-  // Validate phone number (Nigerian format: 070/080/081/090/091 + 8 digits, or +234...)
-  const sanitizedPhone = String(phone_number).trim().replace(/\s/g, '');
-  if (!/^(\+234|0)[789][01]\d{8}$/.test(sanitizedPhone)) {
-    return res.status(400).json({ error: 'Invalid phone number. Use Nigerian format e.g. 08012345678' });
+  // Validate and normalize phone number to +234 format
+  let sanitizedPhone = String(phone_number).trim().replace(/[\s\-]/g, '');
+  // Normalize: strip +234 or leading 0 to get 10-digit local number
+  if (sanitizedPhone.startsWith('+234')) sanitizedPhone = sanitizedPhone.substring(4);
+  else if (sanitizedPhone.startsWith('234') && sanitizedPhone.length > 10) sanitizedPhone = sanitizedPhone.substring(3);
+  if (sanitizedPhone.startsWith('0')) sanitizedPhone = sanitizedPhone.substring(1);
+  if (!/^[789][01]\d{8}$/.test(sanitizedPhone)) {
+    return res.status(400).json({ error: 'Invalid phone number. Use Nigerian format e.g. 08012345678 or 8012345678' });
   }
+  sanitizedPhone = '+234' + sanitizedPhone;
 
   // Validate patient_number if provided (alphanumeric, spaces, hyphens, slashes)
   const sanitizedPatientNumber = patient_number ? String(patient_number).trim() : sanitizedName;
