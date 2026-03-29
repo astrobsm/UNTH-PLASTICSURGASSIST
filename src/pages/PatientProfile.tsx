@@ -1,25 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { db } from '../db/database';
 import { Patient } from '../db/database';
 import { patientService } from '../services/patientService';
 import { unthPatientService } from '../services/unthPatientService';
 import { PatientSummaryView, QuickSummaryCard } from '../components/PatientSummary';
-import { PatientTransferForm, TransferHistory } from '../components/PatientTransfer';
 import { DischargePlanning } from '../components/DischargePlanning';
-import { RiskAssessmentSummary } from '../components/riskAssessments/RiskAssessmentSummary';
-import { DVTRiskAssessmentForm } from '../components/riskAssessments/DVTRiskAssessment';
-import { PressureSoreRiskAssessmentForm } from '../components/riskAssessments/PressureSoreRiskAssessment';
-import { NutritionalRiskAssessmentForm } from '../components/riskAssessments/NutritionalRiskAssessment';
-import { ProgressNoteModal } from '../components/ProgressNoteModal';
 import { PrescriptionModal } from '../components/PrescriptionModal';
-import { PatientActivityTimeline } from '../components/PatientActivityTimeline';
-import { PatientChronologicalTimeline } from '../components/PatientChronologicalTimeline';
 import { medicalTeamService, TeamMember } from '../services/medicalTeamService';
 import { logPatientAccess } from '../services/auditLoggingService';
-import { riskAssessmentService } from '../services/riskAssessmentService';
+import { apiClient } from '../services/apiClient';
 import { useAuthStore } from '../store/authStore';
 import { ErrorBoundary } from '../components/ErrorBoundary';
+import {
+  Activity, Camera, Calendar, Clock, FileText, Plus, TrendingUp,
+  Scissors, ClipboardCheck, Pill, Heart, Image, AlertCircle,
+  ChevronRight, X, Save, Loader2, Thermometer, Droplet,
+  Eye, Trash2, Upload
+} from 'lucide-react';
 
 export const PatientProfile: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -29,16 +27,15 @@ export const PatientProfile: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editFormData, setEditFormData] = useState<Partial<Patient>>({});
-  const [activeTab, setActiveTab] = useState('timeline');
-  const [upcomingPlans, setUpcomingPlans] = useState<any[]>([]);
-  const [activeRiskAssessment, setActiveRiskAssessment] = useState<'summary' | 'dvt' | 'pressure' | 'nutrition'>('summary');
-  const [showProgressNoteModal, setShowProgressNoteModal] = useState(false);
+  const [activeTab, setActiveTab] = useState('encounters');
+  const [admissionStatus, setAdmissionStatus] = useState<{ isAdmitted: boolean; ward?: string; bed?: string; admissionDate?: string } | null>(null);
   const [showPrescriptionModal, setShowPrescriptionModal] = useState(false);
   const [medicalTeam, setMedicalTeam] = useState<TeamMember[]>([]);
 
   useEffect(() => {
     if (id) {
       loadPatientData();
+      loadAdmissionStatus();
     }
   }, [id]);
 
@@ -65,22 +62,35 @@ export const PatientProfile: React.FC = () => {
 
   const loadPatientData = async () => {
     if (!id) return;
-    
     try {
       setLoading(true);
-      
-      // Load patient basic info from API
       const patientData = await patientService.getPatient(id);
       setPatient(patientData || null);
-
-      // Load upcoming plans
-      const plans = await unthPatientService.getUpcomingPlans(id);
-      setUpcomingPlans(plans);
-      
     } catch (error) {
       console.error('Error loading patient data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadAdmissionStatus = async () => {
+    if (!id) return;
+    try {
+      const data = await apiClient.get(`/admissions?patientId=${id}&status=active`);
+      const admissions = data?.admissions || [];
+      if (admissions.length > 0) {
+        const latest = admissions[0];
+        setAdmissionStatus({
+          isAdmitted: true,
+          ward: latest.ward_location || latest.ward,
+          bed: latest.bed_number,
+          admissionDate: latest.admission_date,
+        });
+      } else {
+        setAdmissionStatus({ isAdmitted: false });
+      }
+    } catch {
+      setAdmissionStatus({ isAdmitted: false });
     }
   };
 
@@ -193,82 +203,45 @@ export const PatientProfile: React.FC = () => {
     );
   }
 
+  const patientName = `${patient.first_name} ${patient.last_name}`;
+  const hospitalNumber = patient.hospital_number || id!;
+
   const tabs = [
-    { id: 'timeline', name: 'Timeline' },
-    { id: 'summary', name: 'Summary' },
-    { id: 'risk-assessment', name: 'Risk Assessment' },
-    { id: 'transfer', name: 'Transfer' },
-    { id: 'progress', name: 'Progress' },
-    { id: 'plans', name: 'Upcoming Plans' },
-    { id: 'activity', name: 'Activity Log' },
-    { id: 'discharge', name: 'Discharge' }
+    { id: 'encounters', name: 'Encounters', icon: '📋' },
+    { id: 'summary', name: 'Summary', icon: '📄' },
+    { id: 'vital-signs', name: 'Vital Signs', icon: '💓' },
+    { id: 'investigations', name: 'Investigations', icon: '🔬' },
+    { id: 'treatment-plans', name: 'Treatment Planning', icon: '📅' },
+    { id: 'clinical-photos', name: 'Clinical Photos', icon: '📷' },
+    { id: 'wound-assessment', name: 'Wound Assessment', icon: '🩹' },
+    { id: 'discharge', name: 'Discharge', icon: '🏠' }
   ];
 
   const renderTabContent = () => {
     switch (activeTab) {
-      case 'timeline':
-        return (
-          <PatientChronologicalTimeline
-            patientId={id!}
-            hospitalNumber={patient?.hospital_number || id!}
-          />
-        );
-      
+      case 'encounters':
+        return <EncountersTab patientId={id!} hospitalNumber={hospitalNumber} patientName={patientName} userName={user?.name || 'Unknown'} />;
       case 'summary':
         return <PatientSummaryView patientId={id!} />;
-      
-      case 'risk-assessment':
-        return <RiskAssessmentView patientId={id!} hospitalNumber={patient?.hospital_number || id!} patientDob={patient?.dob || patient?.date_of_birth} />;
-      
-      case 'transfer':
-        return (
-          <div className="space-y-6">
-            <PatientTransferForm 
-              patientId={id!}
-              currentWard="sw1" // This would come from patient data
-              onSuccess={(transfer) => {
-                console.log('Transfer completed:', transfer);
-                // Refresh patient data
-                loadPatientData();
-              }}
-            />
-            <TransferHistory patientId={id!} />
-          </div>
-        );
-      
-      case 'progress':
-        return (
-          <div className="space-y-6">
-            <TreatmentProgressView patientId={id!} />
-          </div>
-        );
-      
-      case 'plans':
-        return (
-          <div className="space-y-6">
-            <UpcomingPlansView plans={upcomingPlans} />
-          </div>
-        );
-      
-      case 'activity':
-        return (
-          <PatientActivityTimeline 
-            patientId={Number(id!)}
-            hospitalNumber={patient?.hospital_number || id!}
-          />
-        );
-      
+      case 'vital-signs':
+        return <VitalSignsTab patientId={id!} hospitalNumber={hospitalNumber} userName={user?.name || 'Unknown'} />;
+      case 'investigations':
+        return <InvestigationsTab patientId={id!} hospitalNumber={hospitalNumber} patientName={patientName} userName={user?.name || 'Unknown'} />;
+      case 'treatment-plans':
+        return <TreatmentPlansTab patientId={id!} patientName={patientName} navigate={navigate} />;
+      case 'clinical-photos':
+        return <ClinicalPhotosTab patientId={id!} hospitalNumber={hospitalNumber} patientName={patientName} userName={user?.name || 'Unknown'} />;
+      case 'wound-assessment':
+        return <WoundAssessmentTab patientId={id!} patientName={patientName} hospitalNumber={hospitalNumber} navigate={navigate} />;
       case 'discharge':
         return (
-          <DischargePlanning 
+          <DischargePlanning
             patientId={id!}
             onDischargeComplete={(dischargeId) => {
-              console.log('Discharge completed:', dischargeId);
               alert('Discharge plan completed successfully!');
             }}
           />
         );
-      
       default:
         return <div>Tab content not found</div>;
     }
@@ -300,6 +273,18 @@ export const PatientProfile: React.FC = () => {
               </div>
               
               <div className="flex items-center gap-2 sm:gap-3">
+                {admissionStatus && (
+                  admissionStatus.isAdmitted ? (
+                    <span className="px-2 sm:px-3 py-1 bg-red-100 text-red-800 rounded-full text-xs sm:text-sm font-medium flex items-center gap-1">
+                      <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                      Admitted {admissionStatus.ward ? `• ${admissionStatus.ward}` : ''} {admissionStatus.bed ? `Bed ${admissionStatus.bed}` : ''}
+                    </span>
+                  ) : (
+                    <span className="px-2 sm:px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs sm:text-sm font-medium">
+                      Outpatient
+                    </span>
+                  )
+                )}
                 <span className="px-2 sm:px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs sm:text-sm font-medium">
                   Active
                 </span>
@@ -411,34 +396,28 @@ export const PatientProfile: React.FC = () => {
               </div>
               <div className="p-4 space-y-2">
                 <button 
-                  onClick={() => setActiveTab('risk-assessment')}
-                  className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded transition-colors"
+                  onClick={() => setActiveTab('vital-signs')}
+                  className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded transition-colors flex items-center gap-2"
                 >
-                  Risk Assessment
+                  <Heart className="w-4 h-4" /> Vital Signs
                 </button>
                 <button 
-                  onClick={() => setActiveTab('transfer')}
-                  className="w-full text-left px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                  onClick={() => navigate(`/booking-register?patientId=${id}&patientName=${encodeURIComponent(patientName)}`)}
+                  className="w-full text-left px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded transition-colors flex items-center gap-2"
                 >
-                  Transfer Patient
+                  <Scissors className="w-4 h-4" /> Preop Planning & Surgery Booking
                 </button>
                 <button 
                   onClick={() => setActiveTab('discharge')}
-                  className="w-full text-left px-3 py-2 text-sm text-green-600 hover:bg-green-50 rounded transition-colors"
+                  className="w-full text-left px-3 py-2 text-sm text-green-600 hover:bg-green-50 rounded transition-colors flex items-center gap-2"
                 >
-                  Plan Discharge
-                </button>
-                <button 
-                  onClick={() => setShowProgressNoteModal(true)}
-                  className="w-full text-left px-3 py-2 text-sm text-purple-600 hover:bg-purple-50 rounded transition-colors"
-                >
-                  Add Progress Note
+                  <ClipboardCheck className="w-4 h-4" /> Plan Discharge
                 </button>
                 <button 
                   onClick={() => setShowPrescriptionModal(true)}
-                  className="w-full text-left px-3 py-2 text-sm text-orange-600 hover:bg-orange-50 rounded transition-colors"
+                  className="w-full text-left px-3 py-2 text-sm text-orange-600 hover:bg-orange-50 rounded transition-colors flex items-center gap-2"
                 >
-                  Prescribe Medication
+                  <Pill className="w-4 h-4" /> Prescribe Medication
                 </button>
               </div>
             </div>
@@ -479,25 +458,12 @@ export const PatientProfile: React.FC = () => {
       </div>
 
       {/* Modals */}
-      <ProgressNoteModal
-        isOpen={showProgressNoteModal}
-        onClose={() => setShowProgressNoteModal(false)}
-        patientId={id!}
-        patientName={`${patient.first_name} ${patient.last_name}`}
-        patientSex={patient.sex || patient.gender}
-        onSuccess={() => {
-          console.log('Progress note saved');
-          loadPatientData();
-        }}
-      />
-
       <PrescriptionModal
         isOpen={showPrescriptionModal}
         onClose={() => setShowPrescriptionModal(false)}
         patientId={id!}
-        patientName={`${patient.first_name} ${patient.last_name}`}
+        patientName={patientName}
         onSuccess={() => {
-          console.log('Prescription saved');
           loadPatientData();
         }}
       />
@@ -604,183 +570,899 @@ export const PatientProfile: React.FC = () => {
   );
 };
 
-// Helper Components
-const RiskAssessmentView: React.FC<{ patientId: string; hospitalNumber: string; patientDob?: string }> = ({ patientId, hospitalNumber, patientDob }) => {
-  const [activeAssessment, setActiveAssessment] = useState<'summary' | 'dvt' | 'pressure' | 'nutrition'>('summary');
+// ─── ENCOUNTERS TAB ──────────────────────────────────────────────────────────
+const EncountersTab: React.FC<{ patientId: string; hospitalNumber: string; patientName: string; userName: string }> = ({ patientId, hospitalNumber, patientName, userName }) => {
+  const [encounters, setEncounters] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showNewEncounter, setShowNewEncounter] = useState(false);
+  const [newNote, setNewNote] = useState('');
+  const [encounterType, setEncounterType] = useState('progress_note');
+  const [saving, setSaving] = useState(false);
 
-  const assessmentTabs = [
-    { id: 'summary', name: 'Overview', color: 'gray' },
-    { id: 'dvt', name: 'DVT Risk', color: 'red' },
-    { id: 'pressure', name: 'Pressure Sore', color: 'orange' },
-    { id: 'nutrition', name: 'Nutrition', color: 'green' }
-  ];
+  useEffect(() => { loadEncounters(); }, [patientId]);
 
-  const renderAssessmentContent = () => {
-    switch (activeAssessment) {
-      case 'summary':
-        return (
-          <RiskAssessmentSummary 
-            patientId={patientId} 
-            onCreateAssessment={(type) => {
-              if (type === 'dvt') setActiveAssessment('dvt');
-              else if (type === 'pressure_sore') setActiveAssessment('pressure');
-              else if (type === 'nutritional') setActiveAssessment('nutrition');
-            }}
-          />
-        );
-      case 'dvt':
-        return (
-          <DVTRiskAssessmentForm 
-            patientId={patientId}
-            hospitalNumber={hospitalNumber}
-            patientDob={patientDob}
-            onSave={async (assessment) => {
-              try {
-                await riskAssessmentService.saveDVTAssessment(assessment);
-                console.log('DVT assessment saved:', assessment);
-              } catch (e) {
-                console.error('Error persisting DVT assessment:', e);
-              }
-              setActiveAssessment('summary');
-            }}
-          />
-        );
-      case 'pressure':
-        return (
-          <PressureSoreRiskAssessmentForm 
-            patientId={patientId}
-            onSave={async (assessment) => {
-              try {
-                await riskAssessmentService.savePressureSoreAssessment(assessment);
-                console.log('Pressure sore assessment saved:', assessment);
-              } catch (e) {
-                console.error('Error persisting pressure sore assessment:', e);
-              }
-              setActiveAssessment('summary');
-            }}
-          />
-        );
-      case 'nutrition':
-        return (
-          <NutritionalRiskAssessmentForm 
-            patientId={patientId}
-            onSave={async (assessment) => {
-              try {
-                await riskAssessmentService.saveNutritionalAssessment(assessment);
-                console.log('Nutritional assessment saved:', assessment);
-              } catch (e) {
-                console.error('Error persisting nutritional assessment:', e);
-              }
-              setActiveAssessment('summary');
-            }}
-          />
-        );
-      default:
-        return (
-          <RiskAssessmentSummary 
-            patientId={patientId} 
-            onCreateAssessment={(type) => {
-              if (type === 'dvt') setActiveAssessment('dvt');
-              else if (type === 'pressure_sore') setActiveAssessment('pressure');
-              else if (type === 'nutritional') setActiveAssessment('nutrition');
-            }}
-          />
-        );
+  const loadEncounters = async () => {
+    setLoading(true);
+    try {
+      const data = await apiClient.get(`/progress-notes?patientId=${patientId}`);
+      const notes = data?.notes || data?.progressNotes || [];
+      // Also fetch admissions for encounter context
+      const admData = await apiClient.get(`/admissions?patientId=${patientId}`);
+      const admissions = (admData?.admissions || []).map((a: any) => ({
+        ...a,
+        _type: 'admission',
+        created_at: a.admission_date || a.created_at,
+      }));
+      // Merge and sort chronologically
+      const all = [
+        ...notes.map((n: any) => ({ ...n, _type: n.type || 'progress_note' })),
+        ...admissions,
+      ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      setEncounters(all);
+    } catch {
+      setEncounters([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveEncounter = async () => {
+    if (!newNote.trim()) return;
+    setSaving(true);
+    try {
+      await apiClient.post('/progress-notes', {
+        patient_id: patientId,
+        hospital_number: hospitalNumber,
+        patient_name: patientName,
+        type: encounterType,
+        content: newNote,
+        created_by: userName,
+      });
+      setNewNote('');
+      setShowNewEncounter(false);
+      await loadEncounters();
+    } catch (err) {
+      alert('Failed to save encounter');
+    } finally {
+      setSaving(false);
     }
   };
 
   return (
-    <div className="space-y-6">
-      {/* Assessment Navigation */}
+    <div className="space-y-4">
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="px-3 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">Risk Assessment Module</h3>
-          <p className="text-sm text-gray-600 mt-1">
-            Evidence-based clinical assessments for patient safety and care planning
-          </p>
+        <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-900">Patient Encounters</h3>
+          <button onClick={() => setShowNewEncounter(true)} className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700">
+            <Plus className="w-4 h-4" /> New Encounter
+          </button>
         </div>
-        
-        <div className="px-6 py-4">
-          <nav className="flex space-x-1">
-            {assessmentTabs.map(tab => {
-              const isActive = activeAssessment === tab.id;
-              const getActiveStyles = () => {
-                switch (tab.color) {
-                  case 'red':
-                    return 'bg-red-100 text-red-700 border border-red-200';
-                  case 'orange':
-                    return 'bg-orange-100 text-orange-700 border border-orange-200';
-                  case 'green':
-                    return 'bg-green-100 text-green-700 border border-green-200';
-                  default:
-                    return 'bg-gray-100 text-gray-700 border border-gray-200';
-                }
-              };
-              
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveAssessment(tab.id as any)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    isActive
-                      ? getActiveStyles()
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                  }`}
-                >
-                  {tab.name}
-                </button>
-              );
-            })}
-          </nav>
-        </div>
-      </div>
 
-      {/* Assessment Content */}
-      <div className="min-h-96">
-        {renderAssessmentContent()}
+        {showNewEncounter && (
+          <div className="p-4 border-b border-gray-200 bg-green-50">
+            <div className="mb-3">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Encounter Type</label>
+              <select value={encounterType} onChange={e => setEncounterType(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                <option value="progress_note">Progress Note</option>
+                <option value="ward_round">Ward Round Note</option>
+                <option value="consultation">Consultation</option>
+                <option value="procedure_note">Procedure Note</option>
+                <option value="clinic_visit">Clinic Visit</option>
+                <option value="emergency">Emergency Review</option>
+              </select>
+            </div>
+            <textarea value={newNote} onChange={e => setNewNote(e.target.value)} rows={5} placeholder="Document the encounter..." className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm mb-3" />
+            <div className="flex gap-2">
+              <button onClick={saveEncounter} disabled={saving || !newNote.trim()} className="flex items-center gap-1 px-4 py-2 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 disabled:opacity-50">
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save
+              </button>
+              <button onClick={() => setShowNewEncounter(false)} className="px-4 py-2 text-gray-600 text-sm rounded-md hover:bg-gray-100">Cancel</button>
+            </div>
+          </div>
+        )}
+
+        <div className="p-4">
+          {loading ? (
+            <div className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin mx-auto text-green-600" /><p className="text-sm text-gray-500 mt-2">Loading encounters...</p></div>
+          ) : encounters.length === 0 ? (
+            <div className="text-center py-8"><FileText className="w-10 h-10 text-gray-300 mx-auto mb-2" /><p className="text-gray-500">No encounters documented yet</p></div>
+          ) : (
+            <div className="space-y-3">
+              {encounters.map((enc, i) => (
+                <div key={enc.id || i} className="border border-gray-200 rounded-lg p-4 hover:border-green-300 transition-colors">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                        enc._type === 'admission' ? 'bg-red-100 text-red-700' :
+                        enc._type === 'ward_round' ? 'bg-blue-100 text-blue-700' :
+                        enc._type === 'consultation' ? 'bg-purple-100 text-purple-700' :
+                        enc._type === 'procedure_note' ? 'bg-orange-100 text-orange-700' :
+                        'bg-green-100 text-green-700'
+                      }`}>
+                        {enc._type === 'admission' ? 'Admission' :
+                         enc._type === 'ward_round' ? 'Ward Round' :
+                         enc._type === 'consultation' ? 'Consultation' :
+                         enc._type === 'procedure_note' ? 'Procedure' :
+                         enc._type === 'clinic_visit' ? 'Clinic Visit' :
+                         enc._type === 'emergency' ? 'Emergency' :
+                         'Progress Note'}
+                      </span>
+                    </div>
+                    <div className="text-xs text-gray-400">
+                      {enc.created_at ? new Date(enc.created_at).toLocaleString() : ''}
+                    </div>
+                  </div>
+                  <p className="text-sm text-gray-800 whitespace-pre-wrap">{enc.content || enc.presenting_complaint || enc.reasons_for_admission || enc.notes || 'No content'}</p>
+                  <div className="mt-2 text-xs text-gray-400 flex items-center gap-1">
+                    <span>By: {enc.created_by || enc.admitting_doctor || 'Unknown'}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
 };
 
-const TreatmentProgressView: React.FC<{ patientId: string }> = ({ patientId }) => {
-  return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-      <h3 className="text-lg font-semibold text-gray-900 mb-4">Treatment Progress</h3>
-      <p className="text-gray-500">Treatment progress tracking will be implemented here.</p>
-      {/* Implementation for treatment progress tracking */}
-    </div>
-  );
-};
+// ─── VITAL SIGNS TAB ─────────────────────────────────────────────────────────
+interface VitalReading {
+  id?: string;
+  date: string;
+  temperature?: number;
+  pulse?: number;
+  bp_systolic?: number;
+  bp_diastolic?: number;
+  respiratory_rate?: number;
+  spo2?: number;
+  weight?: number;
+  recorded_by?: string;
+}
 
-const UpcomingPlansView: React.FC<{ plans: any[] }> = ({ plans }) => {
+const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; userName: string }> = ({ patientId, hospitalNumber, userName }) => {
+  const [vitals, setVitals] = useState<VitalReading[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState<Partial<VitalReading>>({});
+  const [saving, setSaving] = useState(false);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => { loadVitals(); }, [patientId]);
+  useEffect(() => { if (vitals.length > 1) drawChart(); }, [vitals]);
+
+  const loadVitals = async () => {
+    setLoading(true);
+    try {
+      // Try API first, fall back to localStorage
+      let data: VitalReading[] = [];
+      try {
+        const res = await apiClient.get(`/vital-signs?patientId=${patientId}`);
+        data = res?.vitals || res?.vitalSigns || [];
+      } catch {
+        // fallback localStorage
+        const stored = localStorage.getItem(`vitals_${patientId}`);
+        data = stored ? JSON.parse(stored) : [];
+      }
+      setVitals(data.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()));
+    } catch {
+      setVitals([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveVital = async () => {
+    if (!form.temperature && !form.pulse && !form.bp_systolic) return;
+    setSaving(true);
+    const reading: VitalReading = {
+      id: `vs_${Date.now()}`,
+      date: new Date().toISOString(),
+      ...form,
+      recorded_by: userName,
+    };
+    try {
+      try {
+        await apiClient.post('/vital-signs', { ...reading, patient_id: patientId, hospital_number: hospitalNumber });
+      } catch {
+        // Save locally as fallback
+        const stored = localStorage.getItem(`vitals_${patientId}`);
+        const arr = stored ? JSON.parse(stored) : [];
+        arr.push(reading);
+        localStorage.setItem(`vitals_${patientId}`, JSON.stringify(arr));
+      }
+      setForm({});
+      setShowForm(false);
+      await loadVitals();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const drawChart = () => {
+    const canvas = canvasRef.current;
+    if (!canvas || vitals.length < 2) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const W = canvas.width = canvas.offsetWidth * 2;
+    const H = canvas.height = 300;
+    ctx.clearRect(0, 0, W, H);
+    ctx.scale(1, 1);
+
+    const padding = { top: 30, right: 30, bottom: 40, left: 50 };
+    const chartW = W - padding.left - padding.right;
+    const chartH = H - padding.top - padding.bottom;
+
+    const datasets = [
+      { key: 'pulse', label: 'Pulse', color: '#DC2626', min: 40, max: 160 },
+      { key: 'bp_systolic', label: 'Systolic', color: '#2563EB', min: 60, max: 220 },
+      { key: 'bp_diastolic', label: 'Diastolic', color: '#7C3AED', min: 30, max: 140 },
+      { key: 'temperature', label: 'Temp', color: '#EA580C', min: 34, max: 42 },
+      { key: 'spo2', label: 'SpO2', color: '#059669', min: 80, max: 100 },
+    ];
+
+    // Draw axes
+    ctx.strokeStyle = '#E5E7EB';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(padding.left, padding.top);
+    ctx.lineTo(padding.left, H - padding.bottom);
+    ctx.lineTo(W - padding.right, H - padding.bottom);
+    ctx.stroke();
+
+    // Date labels
+    ctx.fillStyle = '#6B7280';
+    ctx.font = '18px sans-serif';
+    ctx.textAlign = 'center';
+    const maxLabels = Math.min(vitals.length, 8);
+    const step = Math.max(1, Math.floor(vitals.length / maxLabels));
+    for (let i = 0; i < vitals.length; i += step) {
+      const x = padding.left + (i / (vitals.length - 1)) * chartW;
+      const d = new Date(vitals[i].date);
+      ctx.fillText(`${d.getDate()}/${d.getMonth() + 1}`, x, H - padding.bottom + 25);
+    }
+
+    // Draw each dataset
+    datasets.forEach(ds => {
+      const points = vitals.map((v, i) => ({
+        x: padding.left + (i / (vitals.length - 1)) * chartW,
+        y: padding.top + chartH - ((((v as any)[ds.key] || 0) - ds.min) / (ds.max - ds.min)) * chartH,
+        val: (v as any)[ds.key],
+      })).filter(p => p.val);
+
+      if (points.length < 2) return;
+
+      ctx.strokeStyle = ds.color;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      points.forEach((p, i) => {
+        if (i === 0) ctx.moveTo(p.x, p.y);
+        else ctx.lineTo(p.x, p.y);
+      });
+      ctx.stroke();
+
+      // Dots
+      points.forEach(p => {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+        ctx.fillStyle = ds.color;
+        ctx.fill();
+      });
+    });
+
+    // Legend
+    ctx.font = '16px sans-serif';
+    let legendX = padding.left;
+    datasets.forEach(ds => {
+      ctx.fillStyle = ds.color;
+      ctx.fillRect(legendX, 8, 14, 14);
+      ctx.fillStyle = '#374151';
+      ctx.textAlign = 'left';
+      ctx.fillText(ds.label, legendX + 18, 20);
+      legendX += ctx.measureText(ds.label).width + 40;
+    });
+  };
+
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="px-3 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">Upcoming Treatment Plans</h3>
+        <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-900">Vital Signs Records</h3>
+          <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700">
+            <Plus className="w-4 h-4" /> Record Vitals
+          </button>
         </div>
-        
-        <div className="p-6">
-          {plans.length === 0 ? (
-            <div className="text-center py-8">
-              <h4 className="text-lg font-medium text-gray-900 mb-2">No Upcoming Plans</h4>
-              <p className="text-gray-500">No scheduled treatment plans for this patient.</p>
+
+        {showForm && (
+          <div className="p-4 border-b border-gray-200 bg-green-50">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+              <div><label className="block text-xs font-medium text-gray-700 mb-1">Temp (°C)</label>
+                <input type="number" step="0.1" value={form.temperature || ''} onChange={e => setForm({ ...form, temperature: parseFloat(e.target.value) || undefined })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" placeholder="36.5" /></div>
+              <div><label className="block text-xs font-medium text-gray-700 mb-1">Pulse (bpm)</label>
+                <input type="number" value={form.pulse || ''} onChange={e => setForm({ ...form, pulse: parseInt(e.target.value) || undefined })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" placeholder="72" /></div>
+              <div><label className="block text-xs font-medium text-gray-700 mb-1">BP Systolic</label>
+                <input type="number" value={form.bp_systolic || ''} onChange={e => setForm({ ...form, bp_systolic: parseInt(e.target.value) || undefined })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" placeholder="120" /></div>
+              <div><label className="block text-xs font-medium text-gray-700 mb-1">BP Diastolic</label>
+                <input type="number" value={form.bp_diastolic || ''} onChange={e => setForm({ ...form, bp_diastolic: parseInt(e.target.value) || undefined })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" placeholder="80" /></div>
+              <div><label className="block text-xs font-medium text-gray-700 mb-1">Resp Rate</label>
+                <input type="number" value={form.respiratory_rate || ''} onChange={e => setForm({ ...form, respiratory_rate: parseInt(e.target.value) || undefined })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" placeholder="18" /></div>
+              <div><label className="block text-xs font-medium text-gray-700 mb-1">SpO2 (%)</label>
+                <input type="number" value={form.spo2 || ''} onChange={e => setForm({ ...form, spo2: parseInt(e.target.value) || undefined })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" placeholder="98" /></div>
+              <div><label className="block text-xs font-medium text-gray-700 mb-1">Weight (kg)</label>
+                <input type="number" step="0.1" value={form.weight || ''} onChange={e => setForm({ ...form, weight: parseFloat(e.target.value) || undefined })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" placeholder="70" /></div>
             </div>
+            <div className="flex gap-2">
+              <button onClick={saveVital} disabled={saving} className="flex items-center gap-1 px-4 py-2 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 disabled:opacity-50">
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save
+              </button>
+              <button onClick={() => setShowForm(false)} className="px-4 py-2 text-gray-600 text-sm hover:bg-gray-100 rounded-md">Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {/* Trend Chart */}
+        {vitals.length > 1 && (
+          <div className="p-4 border-b border-gray-200">
+            <h4 className="text-sm font-semibold text-gray-700 mb-2">Trends</h4>
+            <canvas ref={canvasRef} className="w-full" style={{ height: '150px' }} />
+          </div>
+        )}
+
+        {/* Records Table */}
+        <div className="p-4 overflow-x-auto">
+          {loading ? (
+            <div className="text-center py-6"><Loader2 className="w-5 h-5 animate-spin mx-auto text-green-600" /></div>
+          ) : vitals.length === 0 ? (
+            <p className="text-center text-gray-500 py-6">No vital signs recorded yet</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead><tr className="border-b border-gray-200 text-gray-500 text-xs">
+                <th className="py-2 text-left">Date/Time</th><th>Temp</th><th>Pulse</th><th>BP</th><th>RR</th><th>SpO2</th><th>Wt</th><th>By</th>
+              </tr></thead>
+              <tbody>
+                {[...vitals].reverse().map((v, i) => (
+                  <tr key={v.id || i} className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="py-2 text-xs text-gray-600">{new Date(v.date).toLocaleString()}</td>
+                    <td className="text-center">{v.temperature || '-'}</td>
+                    <td className="text-center">{v.pulse || '-'}</td>
+                    <td className="text-center">{v.bp_systolic && v.bp_diastolic ? `${v.bp_systolic}/${v.bp_diastolic}` : '-'}</td>
+                    <td className="text-center">{v.respiratory_rate || '-'}</td>
+                    <td className="text-center">{v.spo2 ? `${v.spo2}%` : '-'}</td>
+                    <td className="text-center">{v.weight || '-'}</td>
+                    <td className="text-xs text-gray-400">{v.recorded_by || '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── INVESTIGATIONS TAB ──────────────────────────────────────────────────────
+const InvestigationsTab: React.FC<{ patientId: string; hospitalNumber: string; patientName: string; userName: string }> = ({ patientId, hospitalNumber, patientName, userName }) => {
+  const [requested, setRequested] = useState<any[]>([]);
+  const [results, setResults] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeSection, setActiveSection] = useState<'requested' | 'results'>('requested');
+
+  useEffect(() => { loadInvestigations(); }, [patientId]);
+
+  const loadInvestigations = async () => {
+    setLoading(true);
+    try {
+      const data = await apiClient.get(`/lab-orders?patientId=${patientId}`);
+      const allOrders = data?.labOrders || [];
+      setRequested(allOrders.filter((o: any) => o.status === 'pending' || o.status === 'ordered' || o.status === 'in_progress'));
+      setResults(allOrders.filter((o: any) => o.status === 'completed' || o.status === 'resulted' || o.results));
+    } catch {
+      // Fallback localStorage
+      const stored = localStorage.getItem(`investigations_${patientId}`);
+      const arr = stored ? JSON.parse(stored) : [];
+      setRequested(arr.filter((o: any) => !o.results));
+      setResults(arr.filter((o: any) => o.results));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+        <div className="px-4 py-3 border-b border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900">Investigation Results</h3>
+        </div>
+
+        {/* Section Toggle */}
+        <div className="flex border-b border-gray-200">
+          <button onClick={() => setActiveSection('requested')} className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${activeSection === 'requested' ? 'border-b-2 border-green-500 text-green-600' : 'text-gray-500 hover:text-gray-700'}`}>
+            Requested Investigations ({requested.length})
+          </button>
+          <button onClick={() => setActiveSection('results')} className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${activeSection === 'results' ? 'border-b-2 border-green-500 text-green-600' : 'text-gray-500 hover:text-gray-700'}`}>
+            Available Results ({results.length})
+          </button>
+        </div>
+
+        <div className="p-4">
+          {loading ? (
+            <div className="text-center py-8"><Loader2 className="w-5 h-5 animate-spin mx-auto text-green-600" /></div>
+          ) : activeSection === 'requested' ? (
+            requested.length === 0 ? (
+              <p className="text-center text-gray-500 py-8">No pending investigations</p>
+            ) : (
+              <div className="space-y-3">
+                {requested.map((inv, i) => (
+                  <div key={inv.id || i} className="border border-yellow-200 bg-yellow-50 rounded-lg p-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-gray-900 text-sm">{inv.test_name || inv.investigation_type || 'Lab Test'}</p>
+                        <p className="text-xs text-gray-500 mt-0.5">Ordered: {inv.created_at ? new Date(inv.created_at).toLocaleString() : 'N/A'}</p>
+                      </div>
+                      <span className="px-2 py-0.5 bg-yellow-200 text-yellow-800 text-xs rounded-full font-medium">{inv.status || 'Pending'}</span>
+                    </div>
+                    {inv.ordered_by && <p className="text-xs text-gray-400 mt-1">By: {inv.ordered_by}</p>}
+                  </div>
+                ))}
+              </div>
+            )
+          ) : (
+            results.length === 0 ? (
+              <p className="text-center text-gray-500 py-8">No available results</p>
+            ) : (
+              <div className="space-y-3">
+                {results.map((inv, i) => (
+                  <div key={inv.id || i} className="border border-green-200 bg-green-50 rounded-lg p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="font-medium text-gray-900 text-sm">{inv.test_name || inv.investigation_type || 'Lab Test'}</p>
+                      <span className="px-2 py-0.5 bg-green-200 text-green-800 text-xs rounded-full font-medium">Completed</span>
+                    </div>
+                    {inv.results && typeof inv.results === 'object' ? (
+                      <div className="grid grid-cols-2 gap-2">
+                        {Object.entries(inv.results).map(([key, val]) => (
+                          <div key={key} className="text-xs">
+                            <span className="text-gray-500">{key}:</span> <span className="font-medium text-gray-900">{String(val)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : inv.results ? (
+                      <p className="text-sm text-gray-800">{String(inv.results)}</p>
+                    ) : null}
+                    <p className="text-xs text-gray-400 mt-2">Resulted: {inv.result_date ? new Date(inv.result_date).toLocaleString() : inv.updated_at ? new Date(inv.updated_at).toLocaleString() : ''}</p>
+                  </div>
+                ))}
+              </div>
+            )
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── TREATMENT PLANS TAB ─────────────────────────────────────────────────────
+const TreatmentPlansTab: React.FC<{ patientId: string; patientName: string; navigate: any }> = ({ patientId, patientName, navigate }) => {
+  const [plans, setPlans] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => { loadPlans(); }, [patientId]);
+
+  const loadPlans = async () => {
+    setLoading(true);
+    try {
+      const data = await apiClient.get(`/treatment-plans?patientId=${patientId}`);
+      const allPlans = data?.plans || data?.treatmentPlans || [];
+      setPlans(allPlans.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
+    } catch {
+      setPlans([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+        <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-900">Treatment Planning</h3>
+          <button onClick={() => navigate(`/treatment-planning?patientId=${patientId}&patientName=${encodeURIComponent(patientName)}`)} className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700">
+            <Plus className="w-4 h-4" /> New Plan
+          </button>
+        </div>
+        <div className="p-4">
+          {loading ? (
+            <div className="text-center py-8"><Loader2 className="w-5 h-5 animate-spin mx-auto text-green-600" /></div>
+          ) : plans.length === 0 ? (
+            <div className="text-center py-8"><Calendar className="w-10 h-10 text-gray-300 mx-auto mb-2" /><p className="text-gray-500">No treatment plans yet</p></div>
+          ) : (
+            <div className="space-y-3">
+              {plans.map((plan, i) => {
+                const steps = plan.steps || plan.plan_steps || [];
+                const completedSteps = steps.filter((s: any) => s.status === 'completed').length;
+                const totalSteps = steps.length;
+                const progress = totalSteps > 0 ? Math.round((completedSteps / totalSteps) * 100) : 0;
+                const isPastDue = plan.target_date && new Date(plan.target_date) < new Date() && plan.status !== 'completed';
+
+                return (
+                  <div key={plan.id || i} className={`border rounded-lg p-4 cursor-pointer hover:border-green-400 transition-colors ${isPastDue ? 'border-red-300 bg-red-50' : 'border-gray-200'}`}
+                    onClick={() => navigate(`/patients/${patientId}/plans/${plan.id}`)}>
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="font-medium text-gray-900">{plan.title || 'Untitled Plan'}</h4>
+                      <div className="flex items-center gap-2">
+                        {isPastDue && <span className="px-2 py-0.5 bg-red-200 text-red-800 text-xs rounded-full animate-pulse">Overdue</span>}
+                        <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${
+                          plan.status === 'completed' ? 'bg-green-100 text-green-700' :
+                          plan.status === 'active' ? 'bg-blue-100 text-blue-700' :
+                          'bg-gray-100 text-gray-600'
+                        }`}>{plan.status || 'Active'}</span>
+                      </div>
+                    </div>
+                    {totalSteps > 0 && (
+                      <div className="mb-2">
+                        <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                          <span>{completedSteps}/{totalSteps} steps</span>
+                          <span>{progress}%</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div className="bg-green-500 h-2 rounded-full transition-all" style={{ width: `${progress}%` }} />
+                        </div>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between text-xs text-gray-400">
+                      <span>Created: {plan.created_at ? new Date(plan.created_at).toLocaleDateString() : 'N/A'}</span>
+                      {plan.target_date && <span>Target: {new Date(plan.target_date).toLocaleDateString()}</span>}
+                      <span>By: {plan.created_by || 'Unknown'}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── CLINICAL PHOTOGRAPHS TAB ────────────────────────────────────────────────
+const ClinicalPhotosTab: React.FC<{ patientId: string; hospitalNumber: string; patientName: string; userName: string }> = ({ patientId, hospitalNumber, patientName, userName }) => {
+  const [photos, setPhotos] = useState<Array<{ id: string; dataUrl: string; caption: string; date: string; taken_by: string }>>([]);
+  const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { loadPhotos(); }, [patientId]);
+
+  const loadPhotos = () => {
+    const stored = localStorage.getItem(`clinical_photos_${patientId}`);
+    setPhotos(stored ? JSON.parse(stored) : []);
+  };
+
+  const savePhotos = (newPhotos: typeof photos) => {
+    localStorage.setItem(`clinical_photos_${patientId}`, JSON.stringify(newPhotos));
+    setPhotos(newPhotos);
+  };
+
+  const compressImage = (file: File): Promise<string> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new window.Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_SIZE = 800;
+          let w = img.width, h = img.height;
+          if (w > h) { if (w > MAX_SIZE) { h *= MAX_SIZE / w; w = MAX_SIZE; } }
+          else { if (h > MAX_SIZE) { w *= MAX_SIZE / h; h = MAX_SIZE; } }
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', 0.6));
+        };
+        img.src = e.target?.result as string;
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleFiles = async (files: FileList | null) => {
+    if (!files) return;
+    const newPhotos = [...photos];
+    for (const file of Array.from(files)) {
+      const dataUrl = await compressImage(file);
+      const caption = prompt('Enter a caption/description for this photo:') || '';
+      newPhotos.push({
+        id: `photo_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        dataUrl,
+        caption,
+        date: new Date().toISOString(),
+        taken_by: userName,
+      });
+    }
+    savePhotos(newPhotos);
+  };
+
+  const deletePhoto = (photoId: string) => {
+    if (!confirm('Delete this photo?')) return;
+    savePhotos(photos.filter(p => p.id !== photoId));
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+        <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-900">Clinical Photographs</h3>
+          <div className="flex gap-2">
+            <button onClick={() => cameraInputRef.current?.click()} className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700">
+              <Camera className="w-4 h-4" /> Take Photo
+            </button>
+            <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">
+              <Upload className="w-4 h-4" /> Upload
+            </button>
+          </div>
+          <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={e => handleFiles(e.target.files)} />
+          <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={e => handleFiles(e.target.files)} />
+        </div>
+
+        <div className="p-4">
+          {photos.length === 0 ? (
+            <div className="text-center py-8"><Image className="w-10 h-10 text-gray-300 mx-auto mb-2" /><p className="text-gray-500">No clinical photographs yet</p></div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+              {photos.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(photo => (
+                <div key={photo.id} className="relative group border border-gray-200 rounded-lg overflow-hidden">
+                  <img src={photo.dataUrl} alt={photo.caption} className="w-full h-32 object-cover cursor-pointer" onClick={() => setSelectedPhoto(photo.id)} />
+                  <div className="p-2">
+                    <p className="text-xs text-gray-800 font-medium truncate">{photo.caption || 'No caption'}</p>
+                    <p className="text-xs text-gray-400">{new Date(photo.date).toLocaleDateString()}</p>
+                    <p className="text-xs text-gray-400">By: {photo.taken_by}</p>
+                  </div>
+                  <button onClick={() => deletePhoto(photo.id)} className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Lightbox */}
+      {selectedPhoto && (
+        <div className="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center p-4" onClick={() => setSelectedPhoto(null)}>
+          <div className="relative max-w-3xl w-full" onClick={e => e.stopPropagation()}>
+            <button onClick={() => setSelectedPhoto(null)} className="absolute -top-10 right-0 text-white"><X className="w-6 h-6" /></button>
+            {(() => {
+              const photo = photos.find(p => p.id === selectedPhoto);
+              return photo ? (
+                <div>
+                  <img src={photo.dataUrl} alt={photo.caption} className="w-full rounded-lg" />
+                  <div className="mt-2 text-white text-sm">
+                    <p className="font-medium">{photo.caption}</p>
+                    <p className="text-gray-300">{new Date(photo.date).toLocaleString()} • By: {photo.taken_by}</p>
+                  </div>
+                </div>
+              ) : null;
+            })()}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── WOUND ASSESSMENT TAB ────────────────────────────────────────────────────
+const WOUND_TYPES = ['Surgical', 'Traumatic', 'Burn', 'Pressure ulcer', 'Diabetic ulcer', 'Venous ulcer', 'Arterial ulcer', 'Other'];
+const EXUDATE_AMOUNTS = ['None', 'Light', 'Moderate', 'Heavy'] as const;
+const TISSUE_TYPES = ['Epithelializing', 'Granulation', 'Slough', 'Necrotic', 'Eschar', 'Hypergranulation'];
+const HEALING_PHASES = ['Inflammatory', 'Proliferative', 'Remodeling'] as const;
+
+interface WoundRecord {
+  id: string;
+  wound_type: string;
+  location: string;
+  length: number;
+  width: number;
+  depth: number;
+  tissue_types: string[];
+  exudate_amount: string;
+  pain_level: number;
+  healing_phase: string;
+  notes: string;
+  recommendations: string[];
+  protocol: string[];
+  assessed_by: string;
+  assessed_at: string;
+}
+
+const WoundAssessmentTab: React.FC<{ patientId: string; patientName: string; hospitalNumber: string; navigate: any }> = ({ patientId, patientName, hospitalNumber, navigate }) => {
+  const [assessments, setAssessments] = useState<WoundRecord[]>([]);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState<Partial<WoundRecord>>({ tissue_types: [], pain_level: 0 });
+  const { user } = useAuthStore();
+
+  useEffect(() => { loadAssessments(); }, [patientId]);
+
+  const loadAssessments = () => {
+    const stored = localStorage.getItem(`wound_assessments_${patientId}`);
+    setAssessments(stored ? JSON.parse(stored) : []);
+  };
+
+  const generateRecommendations = (data: Partial<WoundRecord>): string[] => {
+    const recs: string[] = [];
+    if (data.exudate_amount === 'Heavy') recs.push('Use highly absorbent dressing (e.g., alginate or foam)');
+    if (data.exudate_amount === 'None' || data.exudate_amount === 'Light') recs.push('Maintain moist wound environment with hydrogel/film');
+    if (data.tissue_types?.includes('Necrotic') || data.tissue_types?.includes('Eschar')) recs.push('Consider debridement of necrotic/eschar tissue');
+    if (data.tissue_types?.includes('Slough')) recs.push('Autolytic debridement with hydrogel recommended');
+    if (data.tissue_types?.includes('Granulation')) recs.push('Protect granulation tissue — use non-adherent dressing');
+    if ((data.pain_level || 0) >= 7) recs.push('Adequate pain management before dressing changes');
+    if (data.depth && data.depth > 2) recs.push('Consider wound VAC for deep wounds');
+    if (data.healing_phase === 'Inflammatory') recs.push('Monitor for infection signs — consider culture if not improving');
+    recs.push('Reassess wound in 48-72 hours');
+    recs.push('Document wound measurements and photograph at each dressing change');
+    return recs;
+  };
+
+  const generateProtocol = (data: Partial<WoundRecord>): string[] => {
+    const steps: string[] = [];
+    steps.push('1. Wash hands and don sterile gloves');
+    steps.push('2. Remove old dressing gently — soak if adherent');
+    steps.push('3. Cleanse wound with normal saline (0.9% NaCl)');
+    if (data.tissue_types?.includes('Necrotic') || data.tissue_types?.includes('Slough')) {
+      steps.push('4. Perform gentle mechanical debridement as needed');
+    }
+    steps.push(`${steps.length + 1}. Pat dry periwound skin`);
+    if (data.exudate_amount === 'Heavy') {
+      steps.push(`${steps.length + 1}. Apply alginate/hydrofiber primary dressing`);
+      steps.push(`${steps.length + 1}. Cover with absorbent foam secondary dressing`);
+    } else if (data.tissue_types?.includes('Granulation')) {
+      steps.push(`${steps.length + 1}. Apply non-adherent dressing (e.g., Jelonet/Mepitel)`);
+      steps.push(`${steps.length + 1}. Cover with gauze pad and secure`);
+    } else {
+      steps.push(`${steps.length + 1}. Apply appropriate primary dressing`);
+      steps.push(`${steps.length + 1}. Secure with tape or bandage`);
+    }
+    steps.push(`${steps.length + 1}. Label dressing with date, time, and initials`);
+    steps.push(`${steps.length + 1}. Document assessment and plan in patient record`);
+    return steps;
+  };
+
+  const saveAssessment = () => {
+    if (!form.wound_type || !form.location) { alert('Wound type and location are required'); return; }
+    const recs = generateRecommendations(form);
+    const protocol = generateProtocol(form);
+    const record: WoundRecord = {
+      id: `wa_${Date.now()}`,
+      wound_type: form.wound_type || '',
+      location: form.location || '',
+      length: form.length || 0,
+      width: form.width || 0,
+      depth: form.depth || 0,
+      tissue_types: form.tissue_types || [],
+      exudate_amount: form.exudate_amount || 'None',
+      pain_level: form.pain_level || 0,
+      healing_phase: form.healing_phase || 'Inflammatory',
+      notes: form.notes || '',
+      recommendations: recs,
+      protocol,
+      assessed_by: user?.name || 'Unknown',
+      assessed_at: new Date().toISOString(),
+    };
+    const updated = [record, ...assessments];
+    localStorage.setItem(`wound_assessments_${patientId}`, JSON.stringify(updated));
+    setAssessments(updated);
+    setForm({ tissue_types: [], pain_level: 0 });
+    setShowForm(false);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+        <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-900">Wound Assessment</h3>
+          <div className="flex gap-2">
+            <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700">
+              <Plus className="w-4 h-4" /> New Assessment
+            </button>
+            <button onClick={() => navigate(`/wound-care?patientId=${patientId}&patientName=${encodeURIComponent(patientName)}`)} className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">
+              <Eye className="w-4 h-4" /> Full Wound Care
+            </button>
+          </div>
+        </div>
+
+        {showForm && (
+          <div className="p-4 border-b border-gray-200 bg-green-50 space-y-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <div><label className="block text-xs font-medium text-gray-700 mb-1">Wound Type*</label>
+                <select value={form.wound_type || ''} onChange={e => setForm({ ...form, wound_type: e.target.value })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm">
+                  <option value="">Select...</option>
+                  {WOUND_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                </select></div>
+              <div><label className="block text-xs font-medium text-gray-700 mb-1">Location*</label>
+                <input value={form.location || ''} onChange={e => setForm({ ...form, location: e.target.value })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" placeholder="e.g., Left anterior leg" /></div>
+              <div><label className="block text-xs font-medium text-gray-700 mb-1">Healing Phase</label>
+                <select value={form.healing_phase || ''} onChange={e => setForm({ ...form, healing_phase: e.target.value })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm">
+                  {HEALING_PHASES.map(p => <option key={p} value={p}>{p}</option>)}
+                </select></div>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div><label className="block text-xs font-medium text-gray-700 mb-1">Length (cm)</label>
+                <input type="number" step="0.1" value={form.length || ''} onChange={e => setForm({ ...form, length: parseFloat(e.target.value) || 0 })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" /></div>
+              <div><label className="block text-xs font-medium text-gray-700 mb-1">Width (cm)</label>
+                <input type="number" step="0.1" value={form.width || ''} onChange={e => setForm({ ...form, width: parseFloat(e.target.value) || 0 })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" /></div>
+              <div><label className="block text-xs font-medium text-gray-700 mb-1">Depth (cm)</label>
+                <input type="number" step="0.1" value={form.depth || ''} onChange={e => setForm({ ...form, depth: parseFloat(e.target.value) || 0 })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" /></div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="block text-xs font-medium text-gray-700 mb-1">Exudate Amount</label>
+                <select value={form.exudate_amount || 'None'} onChange={e => setForm({ ...form, exudate_amount: e.target.value })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm">
+                  {EXUDATE_AMOUNTS.map(a => <option key={a} value={a}>{a}</option>)}
+                </select></div>
+              <div><label className="block text-xs font-medium text-gray-700 mb-1">Pain Level (0-10): {form.pain_level || 0}</label>
+                <input type="range" min="0" max="10" value={form.pain_level || 0} onChange={e => setForm({ ...form, pain_level: parseInt(e.target.value) })} className="w-full" /></div>
+            </div>
+            <div><label className="block text-xs font-medium text-gray-700 mb-1">Tissue Types Present</label>
+              <div className="flex flex-wrap gap-2">
+                {TISSUE_TYPES.map(t => (
+                  <label key={t} className="flex items-center gap-1 text-xs">
+                    <input type="checkbox" checked={form.tissue_types?.includes(t) || false} onChange={e => {
+                      const types = form.tissue_types || [];
+                      setForm({ ...form, tissue_types: e.target.checked ? [...types, t] : types.filter(x => x !== t) });
+                    }} className="rounded border-gray-300" /> {t}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div><label className="block text-xs font-medium text-gray-700 mb-1">Notes</label>
+              <textarea value={form.notes || ''} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" /></div>
+            <div className="flex gap-2">
+              <button onClick={saveAssessment} className="flex items-center gap-1 px-4 py-2 bg-green-600 text-white text-sm rounded-md hover:bg-green-700"><Save className="w-4 h-4" /> Save & Generate Protocol</button>
+              <button onClick={() => setShowForm(false)} className="px-4 py-2 text-gray-600 text-sm hover:bg-gray-100 rounded-md">Cancel</button>
+            </div>
+          </div>
+        )}
+
+        <div className="p-4">
+          {assessments.length === 0 ? (
+            <div className="text-center py-8"><AlertCircle className="w-10 h-10 text-gray-300 mx-auto mb-2" /><p className="text-gray-500">No wound assessments recorded</p></div>
           ) : (
             <div className="space-y-4">
-              {plans.map((planItem, index) => (
-                <div key={index} className="border border-gray-200 rounded-lg p-4">
-                  <h4 className="font-medium text-gray-900 mb-2">{planItem.plan.title}</h4>
-                  <div className="space-y-2">
-                    {planItem.upcomingSteps.map((step: any, stepIndex: number) => (
-                      <div key={stepIndex} className="flex items-center justify-between text-sm">
-                        <span className="text-gray-700">{step.title}</span>
-                        <span className="text-gray-500">
-                          Due: {new Date(step.due_date).toLocaleDateString()}
-                        </span>
-                      </div>
-                    ))}
+              {assessments.map((wa) => (
+                <div key={wa.id} className="border border-gray-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <h4 className="font-medium text-gray-900">{wa.wound_type} — {wa.location}</h4>
+                      <p className="text-xs text-gray-500">{new Date(wa.assessed_at).toLocaleString()} • By: {wa.assessed_by}</p>
+                    </div>
+                    <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">{wa.healing_phase}</span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm mb-3">
+                    <div><span className="text-gray-500">Size:</span> {wa.length}×{wa.width}×{wa.depth} cm</div>
+                    <div><span className="text-gray-500">Area:</span> {(wa.length * wa.width).toFixed(1)} cm²</div>
+                    <div><span className="text-gray-500">Exudate:</span> {wa.exudate_amount}</div>
+                    <div><span className="text-gray-500">Pain:</span> {wa.pain_level}/10</div>
+                  </div>
+                  {wa.tissue_types.length > 0 && (
+                    <div className="mb-3"><span className="text-xs text-gray-500">Tissue: </span>{wa.tissue_types.map(t => (
+                      <span key={t} className="inline-block bg-gray-100 text-gray-700 text-xs px-2 py-0.5 rounded-full mr-1">{t}</span>
+                    ))}</div>
+                  )}
+                  {/* Auto-generated Recommendations */}
+                  <div className="mt-3 p-3 bg-blue-50 rounded-lg">
+                    <h5 className="text-sm font-semibold text-blue-800 mb-1">Auto-Generated Recommendations</h5>
+                    <ul className="text-xs text-blue-700 space-y-1">
+                      {wa.recommendations.map((r, i) => <li key={i}>• {r}</li>)}
+                    </ul>
+                  </div>
+                  {/* Wound Care Protocol */}
+                  <div className="mt-2 p-3 bg-green-50 rounded-lg">
+                    <h5 className="text-sm font-semibold text-green-800 mb-1">Wound Care Protocol</h5>
+                    <ol className="text-xs text-green-700 space-y-1">
+                      {wa.protocol.map((s, i) => <li key={i}>{s}</li>)}
+                    </ol>
                   </div>
                 </div>
               ))}
