@@ -84,6 +84,7 @@ const PatientActionRecords = lazyWithRetry(() => import('./pages/PatientActionRe
 const ClinicAppointmentsPage = lazyWithRetry(() => import('./pages/ClinicAppointmentsPage'));
 const ConsultsPage = lazyWithRetry(() => import('./pages/ConsultsPage'));
 const AdminTrainingPage = lazyWithRetry(() => import('./pages/AdminTrainingPage'));
+const SJSManagementPage = lazyWithRetry(() => import('./pages/SJSManagementPage'));
 
 // Loading fallback component
 const PageLoader = () => (
@@ -209,6 +210,7 @@ function App() {
               <Route path="/shopping-list" element={<ShoppingList />} />
               <Route path="/limb-salvage" element={<LimbSalvagePage />} />
               <Route path="/burn-care" element={<BurnCarePage />} />
+              <Route path="/sjs-management" element={<SJSManagementPage />} />
               <Route path="/wound-care" element={<WoundCarePage />} />
               <Route path="/keloid-care" element={<KeloidCarePage />} />
               <Route path="/soft-tissue-infection" element={<SoftTissueInfectionPage />} />

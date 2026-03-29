@@ -54,7 +54,7 @@ export interface BurnPatient {
   updatedAt: Date;
 }
 
-export type BurnMechanism = 'flame' | 'scald' | 'chemical' | 'electrical' | 'contact' | 'radiation' | 'friction';
+export type BurnMechanism = 'flame' | 'scald' | 'chemical' | 'electrical' | 'contact' | 'radiation' | 'friction' | 'sjs_ten';
 
 export type BurnDepth = 'superficial' | 'superficial_partial' | 'deep_partial' | 'full_thickness';
 
@@ -407,6 +407,95 @@ class BurnCareService {
    */
   calculateRevisedBauxScore(age: number, tbsa: number, inhalationInjury: boolean): number {
     return age + tbsa + (inhalationInjury ? 17 : 0);
+  }
+
+  /**
+   * SCORTEN — Severity-of-Illness Score for Toxic Epidermal Necrolysis (SJS/TEN)
+   * Bastuji-Garin et al. J Invest Dermatol 2000;115:149-53
+   *
+   * 7 independent risk factors, each scores 1 point if present:
+   *  1. Age ≥ 40 years
+   *  2. Heart rate ≥ 120 bpm
+   *  3. Cancer / haematological malignancy
+   *  4. BSA (body surface area) detached ≥ 10 % on day 1
+   *  5. Serum urea > 10 mmol/L  (or BUN > 28 mg/dL)
+   *  6. Serum bicarbonate < 20 mmol/L
+   *  7. Serum glucose > 14 mmol/L  (or > 252 mg/dL)
+   */
+  calculateSCORTEN(params: {
+    age: number;
+    heartRate: number;
+    hasMalignancy: boolean;
+    bsaDetached: number;  // percentage
+    serumUrea: number;    // mmol/L
+    serumBicarbonate: number; // mmol/L
+    serumGlucose: number; // mmol/L
+  }): { score: number; predictedMortality: string; breakdown: { criterion: string; value: string; met: boolean }[] } {
+    const breakdown: { criterion: string; value: string; met: boolean }[] = [];
+    let score = 0;
+
+    const ageMet = params.age >= 40;
+    breakdown.push({ criterion: 'Age ≥ 40 years', value: `${params.age} years`, met: ageMet });
+    if (ageMet) score++;
+
+    const hrMet = params.heartRate >= 120;
+    breakdown.push({ criterion: 'Heart rate ≥ 120 bpm', value: `${params.heartRate} bpm`, met: hrMet });
+    if (hrMet) score++;
+
+    breakdown.push({ criterion: 'Malignancy', value: params.hasMalignancy ? 'Yes' : 'No', met: params.hasMalignancy });
+    if (params.hasMalignancy) score++;
+
+    const bsaMet = params.bsaDetached >= 10;
+    breakdown.push({ criterion: 'BSA detached ≥ 10%', value: `${params.bsaDetached}%`, met: bsaMet });
+    if (bsaMet) score++;
+
+    const ureaMet = params.serumUrea > 10;
+    breakdown.push({ criterion: 'Serum urea > 10 mmol/L', value: `${params.serumUrea} mmol/L`, met: ureaMet });
+    if (ureaMet) score++;
+
+    const bicarb = params.serumBicarbonate < 20;
+    breakdown.push({ criterion: 'Serum bicarbonate < 20 mmol/L', value: `${params.serumBicarbonate} mmol/L`, met: bicarb });
+    if (bicarb) score++;
+
+    const glucMet = params.serumGlucose > 14;
+    breakdown.push({ criterion: 'Serum glucose > 14 mmol/L', value: `${params.serumGlucose} mmol/L`, met: glucMet });
+    if (glucMet) score++;
+
+    // Predicted mortality per Bastuji-Garin:
+    // 0–1 → 3.2%, 2 → 12.1%, 3 → 35.3%, 4 → 58.3%, ≥5 → 90%
+    const mortalityMap: Record<number, string> = {
+      0: '3.2%', 1: '3.2%', 2: '12.1%', 3: '35.3%', 4: '58.3%', 5: '90%', 6: '90%', 7: '90%',
+    };
+    return { score, predictedMortality: mortalityMap[score] || '>90%', breakdown };
+  }
+
+  /**
+   * Get SJS/TEN management protocol based on SCORTEN
+   */
+  getSJSTENProtocol(scortenScore: number): string[] {
+    const protocols: string[] = [
+      'Immediately stop all suspected causative drugs',
+      'Transfer to burn unit / ICU for wound care',
+      'Aggressive fluid resuscitation (less than thermal burns — use 2 mL/kg/%BSA)',
+      'Maintain thermoregulation — warm environment (30–32°C)',
+      'Non-adhesive wound dressings (e.g. Mepitel, silver-based)',
+      'Ophthalmology consult within 24h for ocular involvement',
+      'Nutritional support — high calorie, high protein',
+      'VTE prophylaxis',
+      'Pain management — avoid NSAIDs (may be causative)',
+      'Daily wound assessment and photography',
+    ];
+    if (scortenScore >= 3) {
+      protocols.push('Consider IVIG 0.2–0.75 g/kg/day × 3–4 days (controversial)');
+      protocols.push('Consider cyclosporine 3–5 mg/kg/day (if no contraindication)');
+      protocols.push('Discussion of prognosis with patient/family');
+    }
+    if (scortenScore >= 4) {
+      protocols.push('ICU-level monitoring mandatory');
+      protocols.push('Central venous access for resuscitation');
+      protocols.push('Multidisciplinary team: Dermatology, Burns, Ophthalmology, ICU');
+    }
+    return protocols;
   }
 
   /**

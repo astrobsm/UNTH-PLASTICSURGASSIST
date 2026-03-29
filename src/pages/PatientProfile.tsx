@@ -12,11 +12,13 @@ import { logPatientAccess } from '../services/auditLoggingService';
 import { apiClient } from '../services/apiClient';
 import { useAuthStore } from '../store/authStore';
 import { ErrorBoundary } from '../components/ErrorBoundary';
+import { speechToTextService } from '../services/speechToTextService';
+import { DocumentScannerModal } from '../components/DocumentScannerModal';
 import {
   Activity, Camera, Calendar, Clock, FileText, Plus, TrendingUp,
   Scissors, ClipboardCheck, Pill, Heart, Image, AlertCircle,
   ChevronRight, X, Save, Loader2, Thermometer, Droplet,
-  Eye, Trash2, Upload
+  Eye, Trash2, Upload, Mic, MicOff, ScanLine
 } from 'lucide-react';
 
 export const PatientProfile: React.FC = () => {
@@ -578,8 +580,58 @@ const EncountersTab: React.FC<{ patientId: string; hospitalNumber: string; patie
   const [newNote, setNewNote] = useState('');
   const [encounterType, setEncounterType] = useState('progress_note');
   const [saving, setSaving] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [showOCRScanner, setShowOCRScanner] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => { loadEncounters(); }, [patientId]);
+
+  // Cleanup speech on unmount
+  useEffect(() => {
+    return () => {
+      if (isRecording) {
+        speechToTextService.stopListening();
+      }
+    };
+  }, [isRecording]);
+
+  const toggleSpeechToText = () => {
+    if (isRecording) {
+      speechToTextService.stopListening();
+      setIsRecording(false);
+    } else {
+      if (!speechToTextService.isSupported()) {
+        alert('Speech recognition is not supported in this browser. Use Chrome or Edge.');
+        return;
+      }
+      const started = speechToTextService.startListening({
+        language: 'en-US',
+        continuous: true,
+        interimResults: true,
+        onResult: (result) => {
+          if (result.isFinal) {
+            setNewNote(prev => {
+              const separator = prev.trim() ? ' ' : '';
+              return prev.trim() + separator + result.transcript;
+            });
+          }
+        },
+        onError: (error) => {
+          console.error('Speech recognition error:', error);
+          setIsRecording(false);
+        },
+        onEnd: () => setIsRecording(false),
+      });
+      if (started) setIsRecording(true);
+    }
+  };
+
+  const handleOCRExtracted = (fields: Record<string, any>) => {
+    const extractedText = fields.rawText || fields.content || fields.text || 
+      Object.entries(fields).map(([k, v]) => `${k}: ${v}`).join('\n');
+    setNewNote(prev => prev ? prev + '\n\n--- OCR Extracted ---\n' + extractedText : extractedText);
+    setShowOCRScanner(false);
+  };
 
   const loadEncounters = async () => {
     setLoading(true);
@@ -651,12 +703,50 @@ const EncountersTab: React.FC<{ patientId: string; hospitalNumber: string; patie
                 <option value="emergency">Emergency Review</option>
               </select>
             </div>
-            <textarea value={newNote} onChange={e => setNewNote(e.target.value)} rows={5} placeholder="Document the encounter..." className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm mb-3" />
+            {/* Speech & OCR Toolbar */}
+            <div className="flex items-center gap-2 mb-2 p-2 bg-white rounded-lg border border-gray-200">
+              <button
+                onClick={toggleSpeechToText}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${
+                  isRecording
+                    ? 'bg-red-100 text-red-700 border border-red-300 animate-pulse'
+                    : 'bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100'
+                }`}
+                title={isRecording ? 'Stop dictation' : 'Start voice dictation'}
+              >
+                {isRecording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                {isRecording ? 'Stop Dictation' : 'Dictate'}
+              </button>
+              <button
+                onClick={() => setShowOCRScanner(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 transition-all"
+                title="Scan document with OCR"
+              >
+                <ScanLine className="w-4 h-4" /> Scan Document
+              </button>
+              {isRecording && (
+                <span className="flex items-center gap-1 text-xs text-red-600 ml-auto">
+                  <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                  Listening — speak clearly...
+                </span>
+              )}
+            </div>
+
+            <textarea
+              ref={textareaRef}
+              value={newNote}
+              onChange={e => setNewNote(e.target.value)}
+              rows={6}
+              placeholder={isRecording ? 'Speak now — your dictation will appear here...' : 'Document the encounter, or use Dictate / Scan Document above...'}
+              className={`w-full px-3 py-2 border rounded-md text-sm mb-3 transition-colors ${
+                isRecording ? 'border-red-300 bg-red-50 focus:ring-red-500' : 'border-gray-300 focus:ring-green-500'
+              }`}
+            />
             <div className="flex gap-2">
               <button onClick={saveEncounter} disabled={saving || !newNote.trim()} className="flex items-center gap-1 px-4 py-2 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 disabled:opacity-50">
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save
               </button>
-              <button onClick={() => setShowNewEncounter(false)} className="px-4 py-2 text-gray-600 text-sm rounded-md hover:bg-gray-100">Cancel</button>
+              <button onClick={() => { setShowNewEncounter(false); if (isRecording) { speechToTextService.stopListening(); setIsRecording(false); } }} className="px-4 py-2 text-gray-600 text-sm rounded-md hover:bg-gray-100">Cancel</button>
             </div>
           </div>
         )}
@@ -702,6 +792,18 @@ const EncountersTab: React.FC<{ patientId: string; hospitalNumber: string; patie
           )}
         </div>
       </div>
+
+      {/* OCR Document Scanner Modal */}
+      {showOCRScanner && (
+        <DocumentScannerModal
+          isOpen={showOCRScanner}
+          onClose={() => setShowOCRScanner(false)}
+          onFieldsExtracted={handleOCRExtracted}
+          documentType="clinical_note"
+          patientContext={{ name: patientName, hospitalNumber }}
+          targetForm="progress_note"
+        />
+      )}
     </div>
   );
 };
@@ -948,6 +1050,15 @@ const InvestigationsTab: React.FC<{ patientId: string; hospitalNumber: string; p
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState<'requested' | 'results'>('requested');
+  const [showScanForm, setShowScanForm] = useState(false);
+  const [showScanResult, setShowScanResult] = useState(false);
+  const [showOCRModal, setShowOCRModal] = useState<'form' | 'result' | null>(null);
+  const [uploadingForm, setUploadingForm] = useState(false);
+  const [uploadingResult, setUploadingResult] = useState(false);
+  const formFileRef = useRef<HTMLInputElement>(null);
+  const resultFileRef = useRef<HTMLInputElement>(null);
+  const [scannedFormData, setScannedFormData] = useState<any>(null);
+  const [scannedResultData, setScannedResultData] = useState<any>(null);
 
   useEffect(() => { loadInvestigations(); }, [patientId]);
 
@@ -969,11 +1080,118 @@ const InvestigationsTab: React.FC<{ patientId: string; hospitalNumber: string; p
     }
   };
 
+  const handleFileUpload = async (file: File, uploadType: 'form' | 'result') => {
+    const setter = uploadType === 'form' ? setUploadingForm : setUploadingResult;
+    setter(true);
+    try {
+      const reader = new FileReader();
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const record = {
+        id: `inv-upload-${Date.now()}`,
+        patient_id: patientId,
+        hospital_number: hospitalNumber,
+        type: uploadType,
+        file_name: file.name,
+        file_data: dataUrl,
+        uploaded_by: userName,
+        uploaded_at: new Date().toISOString(),
+        test_name: uploadType === 'form' ? 'Scanned Investigation Form' : 'Scanned Result',
+        status: uploadType === 'form' ? 'pending' : 'completed',
+      };
+
+      const stored = localStorage.getItem(`investigation_uploads_${patientId}`);
+      const existing = stored ? JSON.parse(stored) : [];
+      existing.unshift(record);
+      localStorage.setItem(`investigation_uploads_${patientId}`, JSON.stringify(existing));
+
+      if (uploadType === 'form') {
+        setRequested(prev => [{ ...record, _type: 'upload' }, ...prev]);
+      } else {
+        setResults(prev => [{ ...record, results: 'See scanned document', _type: 'upload' }, ...prev]);
+      }
+    } catch (err) {
+      alert('Failed to process uploaded file');
+    } finally {
+      setter(false);
+    }
+  };
+
+  const handleOCRExtractedInv = (fields: Record<string, any>, scanType: 'form' | 'result') => {
+    const testName = fields.test_name || fields.testName || fields.investigation || 'Scanned Investigation';
+    const record = {
+      id: `inv-ocr-${Date.now()}`,
+      patient_id: patientId,
+      hospital_number: hospitalNumber,
+      test_name: testName,
+      status: scanType === 'form' ? 'pending' : 'completed',
+      results: scanType === 'result' ? fields : undefined,
+      ocr_extracted: true,
+      created_by: userName,
+      created_at: new Date().toISOString(),
+    };
+
+    const stored = localStorage.getItem(`investigations_${patientId}`);
+    const existing = stored ? JSON.parse(stored) : [];
+    existing.unshift(record);
+    localStorage.setItem(`investigations_${patientId}`, JSON.stringify(existing));
+
+    if (scanType === 'form') {
+      setRequested(prev => [record, ...prev]);
+    } else {
+      setResults(prev => [record, ...prev]);
+    }
+    setShowOCRModal(null);
+  };
+
   return (
     <div className="space-y-4">
+      {/* Hidden file inputs */}
+      <input type="file" ref={formFileRef} className="hidden" accept="image/*,.pdf" capture="environment"
+        onChange={e => { const f = e.target.files?.[0]; if (f) handleFileUpload(f, 'form'); e.target.value = ''; }} />
+      <input type="file" ref={resultFileRef} className="hidden" accept="image/*,.pdf" capture="environment"
+        onChange={e => { const f = e.target.files?.[0]; if (f) handleFileUpload(f, 'result'); e.target.value = ''; }} />
+
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="px-4 py-3 border-b border-gray-200">
+        <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
           <h3 className="text-lg font-semibold text-gray-900">Investigation Results</h3>
+          <div className="flex gap-2">
+            <button onClick={() => setShowOCRModal('form')} className="flex items-center gap-1 px-3 py-1.5 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700">
+              <ScanLine className="w-3.5 h-3.5" /> OCR Scan
+            </button>
+          </div>
+        </div>
+
+        {/* Upload Buttons */}
+        <div className="p-3 border-b border-gray-100 bg-gray-50">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button
+              onClick={() => formFileRef.current?.click()}
+              disabled={uploadingForm}
+              className="flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-blue-300 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors disabled:opacity-50"
+            >
+              {uploadingForm ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+              <div className="text-left">
+                <div className="text-sm font-medium">Upload Investigation Form</div>
+                <div className="text-xs text-blue-500">Scan or photograph physical request form</div>
+              </div>
+            </button>
+            <button
+              onClick={() => resultFileRef.current?.click()}
+              disabled={uploadingResult}
+              className="flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-green-300 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 transition-colors disabled:opacity-50"
+            >
+              {uploadingResult ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
+              <div className="text-left">
+                <div className="text-sm font-medium">Upload Investigation Result</div>
+                <div className="text-xs text-green-500">Scan or photograph result when available</div>
+              </div>
+            </button>
+          </div>
         </div>
 
         {/* Section Toggle */}
@@ -1038,6 +1256,18 @@ const InvestigationsTab: React.FC<{ patientId: string; hospitalNumber: string; p
           )}
         </div>
       </div>
+
+      {/* OCR Scanner Modal for Investigations */}
+      {showOCRModal && (
+        <DocumentScannerModal
+          isOpen={!!showOCRModal}
+          onClose={() => setShowOCRModal(null)}
+          onFieldsExtracted={(fields) => handleOCRExtractedInv(fields, showOCRModal)}
+          documentType={showOCRModal === 'result' ? 'lab_report' : 'clinical_note'}
+          patientContext={{ name: patientName, hospitalNumber }}
+          targetForm="lab_entry"
+        />
+      )}
     </div>
   );
 };

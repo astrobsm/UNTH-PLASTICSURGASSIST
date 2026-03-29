@@ -55,6 +55,18 @@ const BurnMonitoringDashboard: React.FC<BurnMonitoringDashboardProps> = ({ patie
   const [showFollowUpModal, setShowFollowUpModal] = useState(false);
   const [followUpAssessments, setFollowUpAssessments] = useState<FollowUpAssessment[]>([]);
 
+  // SCORTEN state (for SJS/TEN patients)
+  const isSJSTEN = patient.mechanism === 'sjs_ten';
+  const [showSCORTEN, setShowSCORTEN] = useState(false);
+  const [scortenParams, setScortenParams] = useState({
+    heartRate: 0,
+    hasMalignancy: false,
+    serumUrea: 0,
+    serumBicarbonate: 22,
+    serumGlucose: 5,
+  });
+  const [scortenResult, setScortenResult] = useState<{ score: number; predictedMortality: string; breakdown: { criterion: string; value: string; met: boolean }[] } | null>(null);
+
   // Calculate hours since burn
   const hoursSinceBurn = Math.floor(
     (Date.now() - new Date(patient.timeOfBurn).getTime()) / (1000 * 60 * 60)
@@ -508,6 +520,160 @@ const BurnMonitoringDashboard: React.FC<BurnMonitoringDashboardProps> = ({ patie
                 </div>
               </div>
             </div>
+
+            {/* SCORTEN Scoring for SJS/TEN */}
+            {isSJSTEN && (
+              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mt-4">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Brain className="h-5 w-5 text-purple-600" />
+                    <h3 className="text-lg font-bold text-purple-900">SCORTEN Assessment — SJS/TEN</h3>
+                  </div>
+                  <button
+                    onClick={() => setShowSCORTEN(!showSCORTEN)}
+                    className="px-3 py-1.5 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+                  >
+                    {showSCORTEN ? 'Hide Calculator' : 'Calculate SCORTEN'}
+                  </button>
+                </div>
+
+                {showSCORTEN && (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      <div className="bg-white rounded-lg p-3 border border-purple-100">
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Age ≥ 40 years</label>
+                        <p className="text-sm font-medium text-gray-900">
+                          {patient.age >= 40 ? '✅ Yes (criterion met)' : '❌ No'} — Age: {patient.age}
+                        </p>
+                      </div>
+                      <div className="bg-white rounded-lg p-3 border border-purple-100">
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Heart Rate ≥ 120 bpm</label>
+                        <input
+                          type="number"
+                          value={scortenParams.heartRate || ''}
+                          onChange={e => setScortenParams(p => ({ ...p, heartRate: Number(e.target.value) }))}
+                          placeholder="Enter HR (bpm)"
+                          className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                        />
+                      </div>
+                      <div className="bg-white rounded-lg p-3 border border-purple-100">
+                        <label className="block text-xs font-medium text-gray-600 mb-1">BSA Detached ≥ 10%</label>
+                        <p className="text-sm font-medium text-gray-900">
+                          {patient.tbsa >= 10 ? '✅ Yes' : '❌ No'} — BSA: {patient.tbsa}%
+                        </p>
+                      </div>
+                      <div className="bg-white rounded-lg p-3 border border-purple-100">
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Active Malignancy</label>
+                        <select
+                          value={scortenParams.hasMalignancy ? 'yes' : 'no'}
+                          onChange={e => setScortenParams(p => ({ ...p, hasMalignancy: e.target.value === 'yes' }))}
+                          className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                        >
+                          <option value="no">No</option>
+                          <option value="yes">Yes</option>
+                        </select>
+                      </div>
+                      <div className="bg-white rounded-lg p-3 border border-purple-100">
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Serum Urea &gt; 10 mmol/L</label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={scortenParams.serumUrea || ''}
+                          onChange={e => setScortenParams(p => ({ ...p, serumUrea: Number(e.target.value) }))}
+                          placeholder="mmol/L"
+                          className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                        />
+                      </div>
+                      <div className="bg-white rounded-lg p-3 border border-purple-100">
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Serum Bicarbonate &lt; 20 mmol/L</label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={scortenParams.serumBicarbonate || ''}
+                          onChange={e => setScortenParams(p => ({ ...p, serumBicarbonate: Number(e.target.value) }))}
+                          placeholder="mmol/L"
+                          className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                        />
+                      </div>
+                      <div className="bg-white rounded-lg p-3 border border-purple-100">
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Serum Glucose &gt; 14 mmol/L</label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={scortenParams.serumGlucose || ''}
+                          onChange={e => setScortenParams(p => ({ ...p, serumGlucose: Number(e.target.value) }))}
+                          placeholder="mmol/L"
+                          className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        const result = burnCareService.calculateSCORTEN({
+                          age: patient.age,
+                          heartRate: scortenParams.heartRate,
+                          hasMalignancy: scortenParams.hasMalignancy,
+                          bsaDetached: patient.tbsa,
+                          serumUrea: scortenParams.serumUrea,
+                          serumBicarbonate: scortenParams.serumBicarbonate,
+                          serumGlucose: scortenParams.serumGlucose,
+                        });
+                        setScortenResult(result);
+                      }}
+                      className="w-full py-2.5 bg-purple-700 text-white font-semibold rounded-lg hover:bg-purple-800 transition-colors"
+                    >
+                      Calculate SCORTEN Score
+                    </button>
+
+                    {scortenResult && (
+                      <div className="space-y-4 mt-4">
+                        <div className={`text-center p-4 rounded-lg ${
+                          scortenResult.score <= 1 ? 'bg-green-100 border-2 border-green-400' :
+                          scortenResult.score <= 2 ? 'bg-yellow-100 border-2 border-yellow-400' :
+                          scortenResult.score <= 3 ? 'bg-orange-100 border-2 border-orange-400' :
+                          'bg-red-100 border-2 border-red-500'
+                        }`}>
+                          <div className="text-3xl font-bold">{scortenResult.score} / 7</div>
+                          <div className={`text-lg font-semibold mt-1 ${
+                            scortenResult.score <= 1 ? 'text-green-700' :
+                            scortenResult.score <= 2 ? 'text-yellow-700' :
+                            scortenResult.score <= 3 ? 'text-orange-700' :
+                            'text-red-700'
+                          }`}>
+                            Predicted Mortality: {scortenResult.predictedMortality}
+                          </div>
+                        </div>
+
+                        <div className="bg-white rounded-lg p-3 border border-gray-200">
+                          <h4 className="text-sm font-semibold text-gray-700 mb-2">Criteria Breakdown</h4>
+                          <div className="space-y-1">
+                            {scortenResult.breakdown.map((item, idx) => (
+                              <div key={idx} className={`flex items-center justify-between text-sm px-2 py-1 rounded ${item.met ? 'bg-red-50 text-red-800' : 'bg-gray-50 text-gray-600'}`}>
+                                <span>{item.criterion}</span>
+                                <span className="font-medium">{item.value} {item.met ? '⚠️' : '✓'}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="bg-white rounded-lg p-3 border border-purple-200">
+                          <h4 className="text-sm font-semibold text-purple-800 mb-2">📋 Management Protocol (SCORTEN-based)</h4>
+                          <ul className="space-y-1">
+                            {burnCareService.getSJSTENProtocol(scortenResult.score).map((step, idx) => (
+                              <li key={idx} className="flex items-start gap-2 text-sm text-gray-800">
+                                <CheckCircle className="h-4 w-4 text-purple-500 mt-0.5 shrink-0" />
+                                <span>{step}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 

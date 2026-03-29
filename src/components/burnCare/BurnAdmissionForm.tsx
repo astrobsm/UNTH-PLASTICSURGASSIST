@@ -67,6 +67,7 @@ const BURN_MECHANISMS: { value: BurnMechanism; label: string; description: strin
   { value: 'chemical', label: 'Chemical', description: 'Acids, alkalis, etc.' },
   { value: 'radiation', label: 'Radiation', description: 'UV, ionizing radiation' },
   { value: 'friction', label: 'Friction', description: 'Abrasion burns' },
+  { value: 'sjs_ten', label: 'SJS / TEN', description: 'Stevens-Johnson / Toxic Epidermal Necrolysis' },
 ];
 
 const BURN_DEPTHS: { value: BurnDepth; label: string; color: string }[] = [
@@ -517,17 +518,19 @@ const BurnAdmissionForm: React.FC<BurnAdmissionFormProps> = ({ onComplete, onCan
               </div>
             </div>
 
-            {(mechanism === 'electrical' || mechanism === 'chemical') && (
-              <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            {(mechanism === 'electrical' || mechanism === 'chemical' || mechanism === 'sjs_ten') && (
+              <div className={`p-4 ${mechanism === 'sjs_ten' ? 'bg-purple-50 border border-purple-200' : 'bg-yellow-50 border border-yellow-200'} rounded-lg`}>
                 <div className="flex items-start gap-2">
-                  <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5" />
+                  <AlertTriangle className={`h-5 w-5 ${mechanism === 'sjs_ten' ? 'text-purple-600' : 'text-yellow-600'} mt-0.5`} />
                   <div>
-                    <p className="font-medium text-yellow-800">
-                      {mechanism === 'electrical' ? 'Electrical Burn Alert' : 'Chemical Burn Alert'}
+                    <p className={`font-medium ${mechanism === 'sjs_ten' ? 'text-purple-800' : 'text-yellow-800'}`}>
+                      {mechanism === 'electrical' ? 'Electrical Burn Alert' : mechanism === 'sjs_ten' ? 'SJS/TEN Alert — SCORTEN Required' : 'Chemical Burn Alert'}
                     </p>
-                    <p className="text-sm text-yellow-700 mt-1">
+                    <p className={`text-sm ${mechanism === 'sjs_ten' ? 'text-purple-700' : 'text-yellow-700'} mt-1`}>
                       {mechanism === 'electrical' 
                         ? 'Consider: ECG monitoring, CK levels, hidden deep tissue injury, entry/exit wounds, cardiac monitoring for 24hrs'
+                        : mechanism === 'sjs_ten'
+                        ? 'Stevens-Johnson Syndrome / Toxic Epidermal Necrolysis — Stop ALL suspected causative drugs immediately. SCORTEN scoring available in Monitoring Dashboard. Ophthalmology consult within 24h. Transfer to burn unit/ICU for wound care.'
                         : 'Consider: Copious irrigation (30+ min for alkali), identify agent, contact Poison Control, pH monitoring'}
                     </p>
                   </div>

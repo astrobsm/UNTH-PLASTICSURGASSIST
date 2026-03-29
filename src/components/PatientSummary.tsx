@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { unthPatientService, PatientSummary } from '../services/unthPatientService';
 import { patientService } from '../services/patientService';
+import { apiClient } from '../services/apiClient';
 import { db } from '../db/database';
 
 interface PatientSummaryViewProps {
@@ -68,7 +69,7 @@ export const PatientSummaryView: React.FC<PatientSummaryViewProps> = ({
   };
 
   const generateSummaryFromPatientData = async (patient: any, type: PatientSummary['summary_type']): Promise<PatientSummary> => {
-    // Get related data for the patient (handle both number and string patient_id)
+    // Get related data from local DB
     const allAdmissions = await db.admissions?.toArray() || [];
     const admissions = allAdmissions.filter(a => String(a.patient_id) === String(patient.id));
     const allTreatmentPlans = await db.treatment_plans?.toArray() || [];
@@ -76,6 +77,31 @@ export const PatientSummaryView: React.FC<PatientSummaryViewProps> = ({
     const latestAdmission = admissions.sort((a, b) => 
       new Date(b.admission_date || b.created_at).getTime() - new Date(a.admission_date || a.created_at).getTime()
     )[0];
+
+    // Fetch encounters (progress notes) from server
+    let encounters: any[] = [];
+    try {
+      const encData = await apiClient.get(`/progress-notes?patientId=${patient.id}`);
+      encounters = encData?.notes || encData?.progressNotes || [];
+    } catch { /* offline — skip */ }
+
+    // Fetch vital signs from server
+    let vitals: any[] = [];
+    try {
+      const vitData = await apiClient.get(`/vital-signs?patientId=${patient.id}`);
+      vitals = (vitData?.vitalSigns || vitData?.vitals || [])
+        .sort((a: any, b: any) => new Date(b.date || b.created_at).getTime() - new Date(a.date || a.created_at).getTime());
+    } catch { /* offline — skip */ }
+
+    // Fetch pending investigations
+    let pendingInvestigations: string[] = [];
+    try {
+      const labData = await apiClient.get(`/lab-orders?patientId=${patient.id}`);
+      const allOrders = labData?.labOrders || [];
+      pendingInvestigations = allOrders
+        .filter((o: any) => o.status === 'pending' || o.status === 'ordered' || o.status === 'in_progress')
+        .map((o: any) => o.test_name || o.investigation_type || 'Lab Test');
+    } catch { /* offline — skip */ }
     
     // Build content from actual patient data
     const patientName = `${patient.first_name} ${patient.last_name}`;
@@ -99,6 +125,45 @@ export const PatientSummaryView: React.FC<PatientSummaryViewProps> = ({
     if (patient.medical_history) {
       content += ` Medical history: ${patient.medical_history}.`;
     }
+
+    // Add recent encounters to summary
+    if (encounters.length > 0) {
+      const recentEncounters = encounters.slice(0, 5);
+      content += `\n\nRecent Encounters (${encounters.length} total):`;
+      recentEncounters.forEach((enc: any) => {
+        const dateStr = enc.created_at ? new Date(enc.created_at).toLocaleDateString() : 'Unknown date';
+        const typeLabel = enc.type === 'ward_round' ? 'Ward Round' : enc.type === 'consultation' ? 'Consultation' : enc.type === 'procedure_note' ? 'Procedure' : 'Progress Note';
+        const snippet = (enc.content || '').substring(0, 150);
+        content += `\n• [${dateStr}] ${typeLabel}: ${snippet}${snippet.length >= 150 ? '...' : ''}`;
+      });
+    }
+
+    // Add vital signs trend to summary
+    if (vitals.length > 0) {
+      const latest = vitals[0];
+      content += `\n\nLatest Vital Signs (${new Date(latest.date || latest.created_at).toLocaleDateString()}):`;
+      if (latest.temperature) content += ` Temp: ${latest.temperature}°C,`;
+      if (latest.pulse) content += ` HR: ${latest.pulse} bpm,`;
+      if (latest.bp_systolic && latest.bp_diastolic) content += ` BP: ${latest.bp_systolic}/${latest.bp_diastolic} mmHg,`;
+      if (latest.respiratory_rate) content += ` RR: ${latest.respiratory_rate},`;
+      if (latest.spo2) content += ` SpO2: ${latest.spo2}%,`;
+      content = content.replace(/,$/, '.');
+
+      // Vital signs trend analysis
+      if (vitals.length >= 2) {
+        const prev = vitals[1];
+        const trends: string[] = [];
+        if (latest.temperature && prev.temperature) {
+          const diff = latest.temperature - prev.temperature;
+          if (Math.abs(diff) > 0.3) trends.push(`Temperature ${diff > 0 ? 'rising' : 'falling'} (${diff > 0 ? '+' : ''}${diff.toFixed(1)}°C)`);
+        }
+        if (latest.pulse && prev.pulse) {
+          const diff = latest.pulse - prev.pulse;
+          if (Math.abs(diff) > 10) trends.push(`Heart rate ${diff > 0 ? 'rising' : 'falling'} (${diff > 0 ? '+' : ''}${diff})`);
+        }
+        if (trends.length > 0) content += ` Trends: ${trends.join('; ')}.`;
+      }
+    }
     
     // Build key points from actual data
     const keyPoints: string[] = [];
@@ -106,6 +171,14 @@ export const PatientSummaryView: React.FC<PatientSummaryViewProps> = ({
     if (ward !== 'Not assigned') keyPoints.push(`Location: ${ward}`);
     if (patient.blood_group) keyPoints.push(`Blood Group: ${patient.blood_group}`);
     if (allergies.length > 0) keyPoints.push(`Allergies: ${allergies.join(', ')}`);
+    if (encounters.length > 0) keyPoints.push(`Total encounters: ${encounters.length}`);
+    if (vitals.length > 0) {
+      const latest = vitals[0];
+      if (latest.temperature && latest.temperature >= 38) keyPoints.push(`⚠️ Febrile: ${latest.temperature}°C`);
+      if (latest.spo2 && latest.spo2 < 94) keyPoints.push(`⚠️ Low SpO2: ${latest.spo2}%`);
+      if (latest.bp_systolic && latest.bp_systolic < 90) keyPoints.push(`⚠️ Hypotension: ${latest.bp_systolic}/${latest.bp_diastolic}`);
+      if (latest.pulse && latest.pulse > 120) keyPoints.push(`⚠️ Tachycardia: ${latest.pulse} bpm`);
+    }
     
     // Current problems from treatment plans
     const currentProblems: string[] = [];
@@ -149,6 +222,9 @@ export const PatientSummaryView: React.FC<PatientSummaryViewProps> = ({
         });
       }
     });
+    if (pendingInvestigations.length > 0) {
+      plan.push(`Await results: ${pendingInvestigations.join(', ')}`);
+    }
     if (plan.length === 0) {
       plan.push('Continue monitoring', 'Review treatment response');
     }
@@ -162,7 +238,7 @@ export const PatientSummaryView: React.FC<PatientSummaryViewProps> = ({
       key_points: keyPoints.length > 0 ? keyPoints : ['Patient data loaded from database'],
       current_problems: currentProblems.length > 0 ? currentProblems : ['No active problems documented'],
       medications: medications.length > 0 ? medications : ['No active medications'],
-      investigations_pending: [],
+      investigations_pending: pendingInvestigations,
       plan: plan,
       generated_at: new Date(),
       generated_by_user: 'system',
