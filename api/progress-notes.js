@@ -64,6 +64,7 @@ async function ensureTable() {
       soap JSONB DEFAULT '{}',
       clinical_images JSONB DEFAULT '[]',
       status VARCHAR(50) DEFAULT 'active',
+      geolocation JSONB DEFAULT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
@@ -71,9 +72,12 @@ async function ensureTable() {
     CREATE INDEX IF NOT EXISTS idx_progress_notes_date ON progress_notes(date DESC);
     CREATE INDEX IF NOT EXISTS idx_progress_notes_author ON progress_notes(author);
   `);
-  // Add clinical_images column if table already existed without it
+  // Add columns if table already existed without them
   try {
     await query(`ALTER TABLE progress_notes ADD COLUMN IF NOT EXISTS clinical_images JSONB DEFAULT '[]'`);
+  } catch(e) { /* column may already exist */ }
+  try {
+    await query(`ALTER TABLE progress_notes ADD COLUMN IF NOT EXISTS geolocation JSONB DEFAULT NULL`);
   } catch(e) { /* column may already exist */ }
   tableEnsured = true;
 }
@@ -113,32 +117,42 @@ async function getProgressNote(id, res) {
 async function createProgressNote(body, user, res) {
   const {
     patient_id, patient_name, author, author_role,
-    date, vital_signs, lmp, soap, clinical_images
+    date, vital_signs, lmp, soap, clinical_images, geolocation,
+    created_by, content, type
   } = body;
 
   if (!patient_id) {
     return res.status(400).json({ error: 'patient_id is required' });
   }
 
+  // Support both field naming conventions
+  const authorName = author || created_by || (user && user.full_name) || 'Unknown';
+  // If content/type provided but soap not, build soap from them
+  let soapData = soap || {};
+  if (content && !soap) {
+    soapData = { note: content, type: type || 'progress_note' };
+  }
+
   const result = await query(
     `INSERT INTO progress_notes 
-     (patient_id, patient_name, author, author_role, date, vital_signs, lmp, soap, clinical_images)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+     (patient_id, patient_name, author, author_role, date, vital_signs, lmp, soap, clinical_images, geolocation)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
      RETURNING *`,
     [
       parseInt(patient_id, 10),
       patient_name || null,
-      author || user.full_name || 'Unknown',
-      author_role || user.role || 'Unknown',
+      authorName,
+      author_role || (user && user.role) || 'Unknown',
       date ? new Date(date) : new Date(),
       JSON.stringify(vital_signs || {}),
       lmp || null,
-      JSON.stringify(soap || {}),
-      JSON.stringify(clinical_images || [])
+      JSON.stringify(soapData),
+      JSON.stringify(clinical_images || []),
+      geolocation ? JSON.stringify(geolocation) : null
     ]
   );
 
-  console.log(`✅ Progress note created for patient ${patient_id} by ${author || user.full_name}`);
+  console.log(`Progress note created for patient ${patient_id} by ${authorName}`);
   res.status(201).json({ note: result.rows[0] });
 }
 

@@ -33,11 +33,13 @@ export const PatientProfile: React.FC = () => {
   const [admissionStatus, setAdmissionStatus] = useState<{ isAdmitted: boolean; ward?: string; bed?: string; admissionDate?: string; daysAdmitted?: number; lastSurgery?: { procedure_name: string; date: string; daysPostOp: number }; surgeryCount?: number } | null>(null);
   const [showPrescriptionModal, setShowPrescriptionModal] = useState(false);
   const [medicalTeam, setMedicalTeam] = useState<TeamMember[]>([]);
+  const [mdtInfo, setMdtInfo] = useState<{ patient_type: string; consulting_unit?: string; referring_hospital?: string; mdt_team?: any } | null>(null);
 
   useEffect(() => {
     if (id) {
       loadPatientData();
       loadAdmissionStatus();
+      loadMDTInfo();
     }
   }, [id]);
 
@@ -211,6 +213,17 @@ export const PatientProfile: React.FC = () => {
     }
   };
 
+  const loadMDTInfo = async () => {
+    if (!id) return;
+    try {
+      const data = await apiClient.get(`/mdt/patient-info/${id}`);
+      setMdtInfo(data);
+    } catch {
+      // MDT info not available yet
+      setMdtInfo({ patient_type: 'primary' });
+    }
+  };
+
   if (loading) {
     return (
       <div className="p-8">
@@ -245,6 +258,7 @@ export const PatientProfile: React.FC = () => {
     { id: 'vital-signs', name: 'Vital Signs', icon: '💓' },
     { id: 'investigations', name: 'Investigations', icon: '🔬' },
     { id: 'treatment-plans', name: 'Treatment Planning', icon: '📅' },
+    { id: 'mdt-care', name: 'MDT Care', icon: '🤝' },
     { id: 'clinical-photos', name: 'Clinical Photos', icon: '📷' },
     { id: 'wound-assessment', name: 'Wound Assessment', icon: '🩹' },
     { id: 'discharge', name: 'Discharge', icon: '🏠' }
@@ -262,6 +276,8 @@ export const PatientProfile: React.FC = () => {
         return <InvestigationsTab patientId={id!} hospitalNumber={hospitalNumber} patientName={patientName} userName={user?.name || 'Unknown'} />;
       case 'treatment-plans':
         return <TreatmentPlansTab patientId={id!} patientName={patientName} navigate={navigate} />;
+      case 'mdt-care':
+        return <MDTCareTab patientId={id!} patientName={patientName} hospitalNumber={hospitalNumber} userName={user?.name || 'Unknown'} mdtInfo={mdtInfo} onMdtInfoChange={loadMDTInfo} />;
       case 'clinical-photos':
         return <ClinicalPhotosTab patientId={id!} hospitalNumber={hospitalNumber} patientName={patientName} userName={user?.name || 'Unknown'} />;
       case 'wound-assessment':
@@ -329,6 +345,17 @@ export const PatientProfile: React.FC = () => {
                       Outpatient
                     </span>
                   )
+                )}
+                {/* MDT/Primary Patient Badge */}
+                {mdtInfo && mdtInfo.patient_type === 'consult' ? (
+                  <span className="px-2 sm:px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-xs sm:text-sm font-medium flex items-center gap-1 cursor-pointer" onClick={() => setActiveTab('mdt-care')}>
+                    <Activity className="w-3 h-3" /> Consult/MDT
+                    {mdtInfo.consulting_unit && <span className="hidden sm:inline"> • {mdtInfo.consulting_unit}</span>}
+                  </span>
+                ) : (
+                  <span className="px-2 sm:px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs sm:text-sm font-medium">
+                    Primary
+                  </span>
                 )}
                 <span className="px-2 sm:px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs sm:text-sm font-medium">
                   Active
@@ -711,13 +738,30 @@ const EncountersTab: React.FC<{ patientId: string; hospitalNumber: string; patie
     if (!newNote.trim()) return;
     setSaving(true);
     try {
+      // Get geolocation for anti-fraud documentation verification
+      let geoLocation: { latitude: number; longitude: number; accuracy: number; address?: string } | null = null;
+      try {
+        const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 });
+        });
+        geoLocation = { latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy };
+        // Reverse geocode for human-readable address
+        try {
+          const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${pos.coords.latitude}&lon=${pos.coords.longitude}&zoom=18&addressdetails=1`, { headers: { 'User-Agent': 'UNTH-PlasticSurg-Assistant/1.0' } });
+          if (geoRes.ok) {
+            const geoData = await geoRes.json();
+            geoLocation.address = geoData.display_name || '';
+          }
+        } catch { /* geocode failed, coordinates still valid */ }
+      } catch { /* geolocation unavailable */ }
+
       await apiClient.post('/progress-notes', {
         patient_id: patientId,
-        hospital_number: hospitalNumber,
         patient_name: patientName,
+        author: userName,
         type: encounterType,
-        content: newNote,
-        created_by: userName,
+        soap: { note: newNote, type: encounterType },
+        geolocation: geoLocation,
       });
       setNewNote('');
       setShowNewEncounter(false);
@@ -831,9 +875,15 @@ const EncountersTab: React.FC<{ patientId: string; hospitalNumber: string; patie
                       {enc.created_at ? new Date(enc.created_at).toLocaleString() : ''}
                     </div>
                   </div>
-                  <p className="text-sm text-gray-800 whitespace-pre-wrap">{enc.content || enc.presenting_complaint || enc.reasons_for_admission || enc.notes || 'No content'}</p>
-                  <div className="mt-2 text-xs text-gray-400 flex items-center gap-1">
-                    <span>By: {enc.created_by || enc.admitting_doctor || 'Unknown'}</span>
+                  <p className="text-sm text-gray-800 whitespace-pre-wrap">{(() => { const s = enc.soap; const txt = (typeof s === 'string' ? s : s?.note || s?.subjective || s?.assessment || ''); return txt || enc.content || enc.presenting_complaint || enc.reasons_for_admission || enc.notes || 'No content'; })()}</p>
+                  <div className="mt-2 text-xs text-gray-400 flex flex-wrap items-center gap-1">
+                    <span>By: {enc.author || enc.created_by || enc.admitting_doctor || 'Unknown'}</span>
+                    {enc.geolocation && (() => { const g = typeof enc.geolocation === 'string' ? JSON.parse(enc.geolocation) : enc.geolocation; return g?.latitude ? (
+                      <span className="ml-2 px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded text-[10px] flex items-center gap-0.5" title={g.address || `${g.latitude.toFixed(5)}, ${g.longitude.toFixed(5)}`}>
+                        📍 {g.address ? g.address.split(',').slice(0, 2).join(',') : `${g.latitude.toFixed(4)}, ${g.longitude.toFixed(4)}`}
+                        {g.accuracy && <span className="text-blue-400">(±{Math.round(g.accuracy)}m)</span>}
+                      </span>
+                    ) : null; })()}
                   </div>
                 </div>
               ))}
@@ -2133,6 +2183,383 @@ const WoundAssessmentTab: React.FC<{ patientId: string; patientName: string; hos
           )}
         </div>
       </div>
+    </div>
+  );
+};
+
+// ─── MDT CARE TAB ────────────────────────────────────────────────────────────
+const MDTCareTab: React.FC<{
+  patientId: string; patientName: string; hospitalNumber: string; userName: string;
+  mdtInfo: { patient_type: string; consulting_unit?: string; referring_hospital?: string; mdt_team?: any } | null;
+  onMdtInfoChange: () => void;
+}> = ({ patientId, patientName, hospitalNumber, userName, mdtInfo, onMdtInfoChange }) => {
+  const [patientType, setPatientType] = useState(mdtInfo?.patient_type || 'primary');
+  const [consultingUnit, setConsultingUnit] = useState(mdtInfo?.consulting_unit || '');
+  const [referringHospital, setReferringHospital] = useState(mdtInfo?.referring_hospital || '');
+  const [specialties, setSpecialties] = useState<string[]>([]);
+  const [newSpecialty, setNewSpecialty] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  // Documentation state
+  const [docs, setDocs] = useState<any[]>([]);
+  const [docsLoading, setDocsLoading] = useState(true);
+  const [showNewDoc, setShowNewDoc] = useState(false);
+  const [docTeam, setDocTeam] = useState('');
+  const [docContent, setDocContent] = useState('');
+  const [docType, setDocType] = useState('clinical_note');
+  const [docSaving, setDocSaving] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [showOCRScanner, setShowOCRScanner] = useState(false);
+
+  const CONSULTING_UNITS = [
+    'Cardiology', 'Endocrinology', 'Respiratory', 'Nephrology',
+    'Dermatology and Rheumatology', 'Haematology', 'Neurology', 'Psychiatry',
+    'Pediatrics', 'Ophthalmology', 'ENT', 'Maxillofacial', 'General Surgery',
+    'Urology', 'Cardiothoracic', 'Gastroenterology', 'Radio-Oncology',
+    'Obstetrics and Gynaecology', 'ICU', 'Orthopaedic',
+    'Pain and Palliative Unit', 'Burns, Plastic and Reconstructive Surgery',
+    'Anaesthesia', 'Neurosurgery', 'Emergency Medicine', 'Infectious Disease',
+    'Internal Medicine', 'Oncology', 'Physiotherapy', 'Dietetics',
+  ];
+
+  useEffect(() => {
+    if (mdtInfo) {
+      setPatientType(mdtInfo.patient_type || 'primary');
+      setConsultingUnit(mdtInfo.consulting_unit || '');
+      setReferringHospital(mdtInfo.referring_hospital || '');
+      if (mdtInfo.mdt_team?.specialties) {
+        try {
+          const sp = typeof mdtInfo.mdt_team.specialties === 'string'
+            ? JSON.parse(mdtInfo.mdt_team.specialties)
+            : mdtInfo.mdt_team.specialties;
+          setSpecialties(Array.isArray(sp) ? sp : []);
+        } catch { setSpecialties([]); }
+      }
+    }
+  }, [mdtInfo]);
+
+  useEffect(() => { loadDocumentation(); }, [patientId]);
+
+  // Cleanup speech on unmount
+  useEffect(() => {
+    return () => { if (isRecording) speechToTextService.stopListening(); };
+  }, [isRecording]);
+
+  const loadDocumentation = async () => {
+    setDocsLoading(true);
+    try {
+      const data = await apiClient.get(`/mdt-documentation?patientId=${patientId}`);
+      setDocs(data?.documentation || []);
+    } catch { setDocs([]); }
+    finally { setDocsLoading(false); }
+  };
+
+  const savePatientType = async () => {
+    setSaving(true);
+    try {
+      await apiClient.post('/mdt/set-patient-type', {
+        patient_id: patientId,
+        patient_type: patientType,
+        consulting_unit: consultingUnit,
+        referring_hospital: referringHospital,
+        specialties,
+        patient_name: patientName,
+        hospital_number: hospitalNumber,
+      });
+      onMdtInfoChange();
+    } catch (err) {
+      alert('Failed to save patient type');
+    } finally { setSaving(false); }
+  };
+
+  const addSpecialty = () => {
+    if (newSpecialty && !specialties.includes(newSpecialty)) {
+      setSpecialties([...specialties, newSpecialty]);
+      setNewSpecialty('');
+    }
+  };
+
+  const removeSpecialty = (s: string) => setSpecialties(specialties.filter(x => x !== s));
+
+  const toggleSpeechToText = () => {
+    if (isRecording) {
+      speechToTextService.stopListening();
+      setIsRecording(false);
+    } else {
+      if (!speechToTextService.isSupported()) {
+        alert('Speech recognition is not supported in this browser. Use Chrome or Edge.');
+        return;
+      }
+      const started = speechToTextService.startListening({
+        language: 'en-US',
+        continuous: true,
+        interimResults: true,
+        onResult: (result) => {
+          if (result.isFinal) {
+            setDocContent(prev => {
+              const separator = prev.trim() ? ' ' : '';
+              return prev.trim() + separator + result.transcript;
+            });
+          }
+        },
+        onError: () => setIsRecording(false),
+        onEnd: () => setIsRecording(false),
+      });
+      if (started) setIsRecording(true);
+    }
+  };
+
+  const handleOCRExtracted = (fields: Record<string, any>) => {
+    const extractedText = fields.rawText || fields.content || fields.text ||
+      Object.entries(fields).map(([k, v]) => `${k}: ${v}`).join('\n');
+    setDocContent(prev => prev ? prev + '\n\n--- OCR Extracted ---\n' + extractedText : extractedText);
+    setShowOCRScanner(false);
+  };
+
+  const saveDocumentation = async () => {
+    if (!docContent.trim() || !docTeam) return;
+    setDocSaving(true);
+    try {
+      // Get geolocation
+      let geoLocation: any = null;
+      try {
+        const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 });
+        });
+        geoLocation = { latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy };
+        try {
+          const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${pos.coords.latitude}&lon=${pos.coords.longitude}&zoom=18&addressdetails=1`, { headers: { 'User-Agent': 'UNTH-PlasticSurg-Assistant/1.0' } });
+          if (geoRes.ok) { const geoData = await geoRes.json(); geoLocation.address = geoData.display_name || ''; }
+        } catch { /* geocode optional */ }
+      } catch { /* geolocation optional */ }
+
+      await apiClient.post('/mdt-documentation', {
+        patient_id: patientId,
+        hospital_number: hospitalNumber,
+        patient_name: patientName,
+        team_name: docTeam,
+        documenter_name: userName,
+        documentation_type: docType,
+        content: docContent + (geoLocation ? `\n\n[Location: ${geoLocation.address || `${geoLocation.latitude.toFixed(5)}, ${geoLocation.longitude.toFixed(5)}`} (±${Math.round(geoLocation.accuracy || 0)}m)]` : ''),
+        input_method: isRecording ? 'speech' : 'typed',
+        created_by: userName,
+      });
+      setDocContent('');
+      setShowNewDoc(false);
+      if (isRecording) { speechToTextService.stopListening(); setIsRecording(false); }
+      await loadDocumentation();
+    } catch { alert('Failed to save documentation'); }
+    finally { setDocSaving(false); }
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Patient Type Configuration */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+        <div className="px-4 py-3 border-b border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900">Patient Classification & MDT Setup</h3>
+        </div>
+        <div className="p-4 space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Patient Type</label>
+              <select value={patientType} onChange={e => setPatientType(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-green-500 focus:border-green-500">
+                <option value="primary">Primary (Our Unit&apos;s Patient)</option>
+                <option value="consult">Consult/MDT (Invited via Consult)</option>
+              </select>
+            </div>
+            {patientType === 'consult' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Primary Managing Unit</label>
+                <select value={consultingUnit} onChange={e => setConsultingUnit(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-green-500 focus:border-green-500">
+                  <option value="">Select Unit...</option>
+                  {CONSULTING_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                </select>
+              </div>
+            )}
+          </div>
+
+          {patientType === 'consult' && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Referring Hospital / Source</label>
+                <input value={referringHospital} onChange={e => setReferringHospital(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" placeholder="e.g. UNTH Ward X, External hospital..." />
+              </div>
+
+              {/* Co-managing Specialties */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Co-managing Units/Teams</label>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {specialties.map(s => (
+                    <span key={s} className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded-full">
+                      {s} <button onClick={() => removeSpecialty(s)} className="text-purple-500 hover:text-purple-700"><X className="w-3 h-3" /></button>
+                    </span>
+                  ))}
+                  {specialties.length === 0 && <span className="text-xs text-gray-400">No co-managing teams added yet</span>}
+                </div>
+                <div className="flex gap-2">
+                  <select value={newSpecialty} onChange={e => setNewSpecialty(e.target.value)}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm">
+                    <option value="">Add a co-managing unit...</option>
+                    {CONSULTING_UNITS.filter(u => !specialties.includes(u)).map(u => <option key={u} value={u}>{u}</option>)}
+                  </select>
+                  <button onClick={addSpecialty} disabled={!newSpecialty}
+                    className="px-3 py-2 bg-purple-600 text-white text-sm rounded-md hover:bg-purple-700 disabled:opacity-50">
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+
+          <button onClick={savePatientType} disabled={saving}
+            className="flex items-center gap-1 px-4 py-2 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 disabled:opacity-50">
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save Classification
+          </button>
+        </div>
+      </div>
+
+      {/* MDT Status Banner */}
+      {patientType === 'consult' && (
+        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Activity className="w-5 h-5 text-purple-600" />
+            <h4 className="font-semibold text-purple-900">MDT Patient — Active Consult</h4>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
+            <div><span className="text-purple-600 font-medium">Primary Unit:</span> <span className="text-purple-900">{consultingUnit || 'Not set'}</span></div>
+            <div><span className="text-purple-600 font-medium">Referring From:</span> <span className="text-purple-900">{referringHospital || 'Not set'}</span></div>
+            <div><span className="text-purple-600 font-medium">Co-managing:</span> <span className="text-purple-900">{specialties.length > 0 ? specialties.join(', ') : 'None'}</span></div>
+          </div>
+        </div>
+      )}
+
+      {/* MDT Documentation */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+        <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-900">Co-managing Team Documentation</h3>
+          <button onClick={() => setShowNewDoc(true)} className="flex items-center gap-1 px-3 py-1.5 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700">
+            <Plus className="w-4 h-4" /> New Entry
+          </button>
+        </div>
+
+        {showNewDoc && (
+          <div className="p-4 border-b border-gray-200 bg-purple-50">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Team/Unit</label>
+                <select value={docTeam} onChange={e => setDocTeam(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                  <option value="">Select team...</option>
+                  {[...specialties, consultingUnit, 'Burns, Plastic and Reconstructive Surgery'].filter(Boolean).map((s, i) =>
+                    <option key={i} value={s}>{s}</option>
+                  )}
+                  {CONSULTING_UNITS.filter(u => ![...specialties, consultingUnit].includes(u)).map(u =>
+                    <option key={u} value={u}>{u}</option>
+                  )}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Documentation Type</label>
+                <select value={docType} onChange={e => setDocType(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                  <option value="clinical_note">Clinical Note</option>
+                  <option value="consult_review">Consult Review</option>
+                  <option value="recommendation">Recommendation</option>
+                  <option value="procedure_note">Procedure Note</option>
+                  <option value="discharge_plan">Discharge Plan</option>
+                  <option value="harmonization">Care Harmonization Note</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Speech & OCR Toolbar */}
+            <div className="flex items-center gap-2 mb-2 p-2 bg-white rounded-lg border border-gray-200">
+              <button onClick={toggleSpeechToText}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${
+                  isRecording ? 'bg-red-100 text-red-700 border border-red-300 animate-pulse' : 'bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100'
+                }`} title={isRecording ? 'Stop dictation' : 'Start voice dictation'}>
+                {isRecording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                {isRecording ? 'Stop Dictation' : 'Dictate'}
+              </button>
+              <button onClick={() => setShowOCRScanner(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 transition-all"
+                title="Scan document with OCR">
+                <ScanLine className="w-4 h-4" /> Scan Document
+              </button>
+              {isRecording && (
+                <span className="flex items-center gap-1 text-xs text-red-600 ml-auto">
+                  <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" /> Listening — speak clearly...
+                </span>
+              )}
+            </div>
+
+            <textarea value={docContent} onChange={e => setDocContent(e.target.value)} rows={5}
+              placeholder={isRecording ? 'Speak now — your dictation will appear here...' : 'Enter co-managing team notes, recommendations, or care plan...'}
+              className={`w-full px-3 py-2 border rounded-md text-sm mb-3 transition-colors ${
+                isRecording ? 'border-red-300 bg-red-50 focus:ring-red-500' : 'border-gray-300 focus:ring-purple-500'
+              }`} />
+            <div className="flex gap-2">
+              <button onClick={saveDocumentation} disabled={docSaving || !docContent.trim() || !docTeam}
+                className="flex items-center gap-1 px-4 py-2 bg-purple-600 text-white text-sm rounded-md hover:bg-purple-700 disabled:opacity-50">
+                {docSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save
+              </button>
+              <button onClick={() => { setShowNewDoc(false); if (isRecording) { speechToTextService.stopListening(); setIsRecording(false); } }}
+                className="px-4 py-2 text-gray-600 text-sm rounded-md hover:bg-gray-100">Cancel</button>
+            </div>
+          </div>
+        )}
+
+        <div className="p-4">
+          {docsLoading ? (
+            <div className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin mx-auto text-purple-600" /><p className="text-sm text-gray-500 mt-2">Loading documentation...</p></div>
+          ) : docs.length === 0 ? (
+            <div className="text-center py-8"><FileText className="w-10 h-10 text-gray-300 mx-auto mb-2" /><p className="text-gray-500">No MDT documentation yet</p><p className="text-xs text-gray-400 mt-1">Add documentation from co-managing teams using the button above</p></div>
+          ) : (
+            <div className="space-y-3">
+              {docs.map((doc, i) => (
+                <div key={doc.id || i} className="border border-gray-200 rounded-lg p-4 hover:border-purple-300 transition-colors">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-purple-100 text-purple-700">{doc.team_name}</span>
+                      <span className="px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-600">
+                        {doc.documentation_type === 'clinical_note' ? 'Clinical Note' :
+                         doc.documentation_type === 'consult_review' ? 'Consult Review' :
+                         doc.documentation_type === 'recommendation' ? 'Recommendation' :
+                         doc.documentation_type === 'procedure_note' ? 'Procedure Note' :
+                         doc.documentation_type === 'discharge_plan' ? 'Discharge Plan' :
+                         doc.documentation_type === 'harmonization' ? 'Harmonization' :
+                         doc.documentation_type || 'Note'}
+                      </span>
+                      {doc.input_method && doc.input_method !== 'typed' && (
+                        <span className="text-[10px] text-gray-400">{doc.input_method === 'speech' ? '🎤 Dictated' : '📷 Scanned'}</span>
+                      )}
+                    </div>
+                    <span className="text-xs text-gray-400">{doc.created_at ? new Date(doc.created_at).toLocaleString() : ''}</span>
+                  </div>
+                  <p className="text-sm text-gray-800 whitespace-pre-wrap">{doc.content}</p>
+                  <div className="mt-2 text-xs text-gray-400">
+                    By: {doc.documenter_name || doc.created_by || 'Unknown'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* OCR Scanner Modal */}
+      {showOCRScanner && (
+        <DocumentScannerModal
+          isOpen={showOCRScanner}
+          onClose={() => setShowOCRScanner(false)}
+          onExtracted={handleOCRExtracted}
+          documentType="consultation"
+        />
+      )}
     </div>
   );
 };

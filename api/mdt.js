@@ -27,6 +27,12 @@ export default async function handler(req, res) {
     if (resource === 'contact-logs') {
       return await handleContactLogs(method, id, req.body, res);
     }
+    if (resource === 'set-patient-type') {
+      return await handleSetPatientType(method, req.body, res);
+    }
+    if (resource === 'patient-info') {
+      return await handleGetPatientMDTInfo(method, id, res);
+    }
 
     res.status(404).json({ error: 'Resource not found' });
   } catch (error) {
@@ -227,4 +233,106 @@ async function handleContactLogs(method, id, body, res) {
     default:
       return res.status(405).json({ error: 'Method not allowed' });
   }
+}
+
+// Set patient type (primary vs consult) and auto-register MDT
+async function handleSetPatientType(method, body, res) {
+  if (method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+  const { patient_id, patient_type, consulting_unit, referring_hospital, specialties, patient_name, hospital_number } = body;
+  if (!patient_id || !patient_type) {
+    return res.status(400).json({ error: 'patient_id and patient_type are required' });
+  }
+
+  // Update patient record
+  try {
+    await query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'patients' AND column_name = 'patient_type') THEN
+          ALTER TABLE patients ADD COLUMN patient_type VARCHAR(50) DEFAULT 'primary';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'patients' AND column_name = 'consulting_unit') THEN
+          ALTER TABLE patients ADD COLUMN consulting_unit VARCHAR(255);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'patients' AND column_name = 'referring_hospital') THEN
+          ALTER TABLE patients ADD COLUMN referring_hospital VARCHAR(255);
+        END IF;
+      END $$;
+    `);
+  } catch (e) { /* columns may already exist */ }
+
+  await query(
+    `UPDATE patients SET patient_type = $1, consulting_unit = $2, referring_hospital = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4`,
+    [patient_type, consulting_unit || null, referring_hospital || null, parseInt(patient_id, 10)]
+  );
+
+  // If consult, auto-register/update MDT team
+  if (patient_type === 'consult') {
+    const existing = await query('SELECT id FROM mdt_patient_teams WHERE patient_id = $1', [parseInt(patient_id, 10)]);
+    if (existing.rows.length > 0) {
+      await query(
+        `UPDATE mdt_patient_teams SET specialties = $1, is_active = true, updated_at = CURRENT_TIMESTAMP WHERE patient_id = $2`,
+        [JSON.stringify(specialties || [consulting_unit].filter(Boolean)), parseInt(patient_id, 10)]
+      );
+    } else {
+      await query(
+        `INSERT INTO mdt_patient_teams (patient_id, patient_name, hospital_number, primary_specialty, specialties, is_active)
+         VALUES ($1, $2, $3, $4, $5, true)`,
+        [
+          parseInt(patient_id, 10),
+          patient_name || '',
+          hospital_number || '',
+          consulting_unit || 'Plastic Surgery',
+          JSON.stringify(specialties || [consulting_unit].filter(Boolean))
+        ]
+      );
+    }
+  } else {
+    // If setting back to primary, deactivate MDT team
+    await query(
+      `UPDATE mdt_patient_teams SET is_active = false, updated_at = CURRENT_TIMESTAMP WHERE patient_id = $1`,
+      [parseInt(patient_id, 10)]
+    );
+  }
+
+  return res.status(200).json({ success: true, patient_type });
+}
+
+// Get patient MDT info (type, team, specialties)
+async function handleGetPatientMDTInfo(method, patientId, res) {
+  if (method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+  if (!patientId) return res.status(400).json({ error: 'Patient ID required' });
+
+  // Get patient type info
+  let patientInfo = { patient_type: 'primary', consulting_unit: null, referring_hospital: null };
+  try {
+    const pResult = await query(
+      'SELECT patient_type, consulting_unit, referring_hospital FROM patients WHERE id = $1',
+      [parseInt(patientId, 10)]
+    );
+    if (pResult.rows.length > 0) {
+      patientInfo = pResult.rows[0];
+    }
+  } catch {
+    // columns may not exist yet
+  }
+
+  // Get MDT team
+  let mdtTeam = null;
+  try {
+    const tResult = await query(
+      'SELECT * FROM mdt_patient_teams WHERE patient_id = $1 AND is_active = true',
+      [parseInt(patientId, 10)]
+    );
+    if (tResult.rows.length > 0) {
+      mdtTeam = tResult.rows[0];
+    }
+  } catch { /* table may not exist */ }
+
+  return res.status(200).json({
+    patient_type: patientInfo.patient_type || 'primary',
+    consulting_unit: patientInfo.consulting_unit,
+    referring_hospital: patientInfo.referring_hospital,
+    mdt_team: mdtTeam,
+  });
 }

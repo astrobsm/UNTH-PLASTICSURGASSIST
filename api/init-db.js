@@ -102,6 +102,15 @@ async function createTables() {
       IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'patients' AND column_name = 'secondary_diagnoses') THEN
         ALTER TABLE patients ADD COLUMN secondary_diagnoses JSONB DEFAULT '[]';
       END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'patients' AND column_name = 'patient_type') THEN
+        ALTER TABLE patients ADD COLUMN patient_type VARCHAR(50) DEFAULT 'primary';
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'patients' AND column_name = 'consulting_unit') THEN
+        ALTER TABLE patients ADD COLUMN consulting_unit VARCHAR(255);
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'patients' AND column_name = 'referring_hospital') THEN
+        ALTER TABLE patients ADD COLUMN referring_hospital VARCHAR(255);
+      END IF;
     END $$;
 
     -- Treatment Plans table
@@ -644,6 +653,27 @@ async function createTables() {
     CREATE INDEX IF NOT EXISTS idx_mdt_meetings_status ON mdt_meetings(status);
     CREATE INDEX IF NOT EXISTS idx_mdt_contacts_patient ON mdt_contact_logs(patient_id);
     CREATE INDEX IF NOT EXISTS idx_mdt_contacts_date ON mdt_contact_logs(contact_date);
+
+    -- MDT Documentation table (co-managing team notes)
+    CREATE TABLE IF NOT EXISTS mdt_documentation (
+      id SERIAL PRIMARY KEY,
+      patient_id INTEGER REFERENCES patients(id) ON DELETE CASCADE,
+      hospital_number VARCHAR(100),
+      patient_name VARCHAR(255),
+      team_name VARCHAR(255) NOT NULL,
+      documenter_name VARCHAR(255),
+      documenter_role VARCHAR(100),
+      documentation_type VARCHAR(50) DEFAULT 'text',
+      content TEXT NOT NULL,
+      input_method VARCHAR(50) DEFAULT 'typed',
+      created_by VARCHAR(255),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_mdt_docs_patient ON mdt_documentation(patient_id);
+    CREATE INDEX IF NOT EXISTS idx_mdt_docs_team ON mdt_documentation(team_name);
+    CREATE INDEX IF NOT EXISTS idx_mdt_docs_created ON mdt_documentation(created_at);
 
     -- Blood Transfusion Records table
     CREATE TABLE IF NOT EXISTS blood_transfusions (
