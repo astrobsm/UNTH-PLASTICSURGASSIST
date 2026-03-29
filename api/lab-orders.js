@@ -49,9 +49,11 @@ async function getAllLabOrders(searchParams, res) {
   const status = searchParams.get('status');
 
   let queryStr = `
-    SELECT lo.*, p.first_name, p.last_name, p.hospital_number
+    SELECT lo.*, p.first_name, p.last_name, p.hospital_number,
+           u.full_name AS ordered_by_name, u.username AS ordered_by_username
     FROM lab_orders lo
     LEFT JOIN patients p ON lo.patient_id = p.id
+    LEFT JOIN users u ON lo.ordered_by = u.id
     WHERE 1=1
   `;
   const params = [];
@@ -78,9 +80,11 @@ async function getAllLabOrders(searchParams, res) {
 
 async function getLabOrder(id, res) {
   const result = await query(
-    `SELECT lo.*, p.first_name, p.last_name, p.hospital_number
+    `SELECT lo.*, p.first_name, p.last_name, p.hospital_number,
+            u.full_name AS ordered_by_name, u.username AS ordered_by_username
      FROM lab_orders lo
      LEFT JOIN patients p ON lo.patient_id = p.id
+     LEFT JOIN users u ON lo.ordered_by = u.id
      WHERE lo.id = $1`,
     [id]
   );
@@ -96,7 +100,8 @@ async function createLabOrder(data, user, res) {
   // Accept both camelCase and snake_case field names
   const patientId = data.patientId || data.patient_id;
   const testType = data.testType || data.test_type || (data.tests && data.tests[0]?.category) || 'general';
-  const testName = data.testName || data.test_name || data.clinical_indication || (data.tests && data.tests.map(t => t.test_name).join(', '));
+  const testsJoined = data.tests && Array.isArray(data.tests) && data.tests.length > 0 ? data.tests.map(t => t.test_name).join(', ') : null;
+  const testName = data.testName || data.test_name || testsJoined || data.clinical_indication;
   const priority = data.priority || data.urgency || 'routine';
   const clinicalNotes = data.clinicalNotes || data.clinical_notes || data.clinical_indication || '';
   const status = data.status || 'pending';

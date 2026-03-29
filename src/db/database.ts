@@ -223,6 +223,8 @@ export class PlasticSurgeonDB extends Dexie {
   shopping_lists!: Table<any>; // For saved shopping lists with cloud persistence
   progress_notes!: Table<any>; // For SOAP progress notes
   api_cache!: Table<any>; // Generic API response cache for offline-first
+  sjs_assessments!: Table<any>; // For SJS/TEN clinical assessments
+  investigation_uploads!: Table<any>; // For investigation form/result uploads
 
   constructor() {
     super('PlasticSurgeonDB');
@@ -1252,6 +1254,12 @@ export class PlasticSurgeonDB extends Dexie {
     // Version 28: Add generic API cache table for offline-first support
     this.version(28).stores({
       api_cache: 'endpoint, updated_at'
+    });
+
+    // Version 29: Add SJS/TEN assessments and investigation uploads tables
+    this.version(29).stores({
+      sjs_assessments: '++id, patient_id, hospital_number, date_of_assessment, classification, status, created_at',
+      investigation_uploads: '++id, patient_id, hospital_number, upload_type, status, created_at'
     });
 
     // Add hooks to automatically track changes

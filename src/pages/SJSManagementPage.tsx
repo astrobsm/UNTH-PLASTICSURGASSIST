@@ -1,10 +1,12 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Download, AlertTriangle, CheckCircle, Eye, Heart,
-  Thermometer, Activity, Users, FileText, Pill, Shield, BookOpen
+  Thermometer, Activity, Users, FileText, Pill, Shield, BookOpen, Save
 } from 'lucide-react';
 import { burnCareService } from '../services/burnCareService';
+import { apiClient } from '../services/apiClient';
+import { db } from '../db/database';
 import {
   createPDF, addPDFHeader, addSectionHeader, addBodyText, addBulletList,
   addSeparator, addFooter, addWarningBox, addInfoBox, addTwoColumnText,
@@ -238,6 +240,129 @@ export default function SJSManagementPage() {
   const [activeTab, setActiveTab] = useState<'assessment' | 'management' | 'counselling'>('assessment');
   const [scortenResult, setScortenResult] = useState<ReturnType<typeof burnCareService.calculateSCORTEN> | null>(null);
   const [generatingPDF, setGeneratingPDF] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [savedId, setSavedId] = useState<number | null>(null);
+  const [savedAssessments, setSavedAssessments] = useState<any[]>([]);
+
+  // ── Load saved assessments on mount ───────────────────────────────────
+  useEffect(() => {
+    loadSavedAssessments();
+  }, []);
+
+  const loadSavedAssessments = async () => {
+    try {
+      const response = await apiClient.get<{ assessments: any[] }>('/api/sjs-assessments?status=active');
+      setSavedAssessments(response.assessments || []);
+    } catch {
+      // Fallback to IndexedDB
+      try {
+        const local = await db.sjs_assessments.orderBy('created_at').reverse().limit(50).toArray();
+        setSavedAssessments(local);
+      } catch { /* offline with no local data */ }
+    }
+  };
+
+  const saveAssessment = async () => {
+    setSaving(true);
+    try {
+      const score = scortenResult?.score ?? 0;
+      const mortality = scortenResult?.predictedMortality ?? 'N/A';
+      const payload = {
+        patient_name: data.patientName,
+        hospital_number: data.hospitalNumber,
+        age: data.age,
+        sex: data.sex,
+        weight: data.weight,
+        date_of_onset: data.dateOfOnset,
+        date_of_assessment: data.dateOfAssessment,
+        causative_drug: data.causativeDrug === 'Unknown / Other' ? data.otherDrug : data.causativeDrug,
+        other_drug: data.otherDrug,
+        days_since_drug_start: data.daysSinceDrugStart,
+        classification: data.classification,
+        bsa_detached: data.bsaDetached,
+        organ_involvement: data.organInvolvement,
+        organ_notes: data.organNotes,
+        heart_rate: data.heartRate,
+        has_malignancy: data.hasMalignancy,
+        serum_urea: data.serumUrea,
+        serum_bicarbonate: data.serumBicarbonate,
+        serum_glucose: data.serumGlucose,
+        nikolsky_sign: data.nikolskySign,
+        fever_on_admission: data.feverOnAdmission,
+        temperature: data.temperature,
+        pain_score: data.painScore,
+        scorten_score: score,
+        scorten_mortality: mortality,
+        patient_aware: data.patientAware,
+        family_counselled: data.familyCounselled,
+        counselling_notes: data.counsellingNotes,
+      };
+
+      // Save to IndexedDB first for offline support
+      const localRecord = { ...payload, created_at: new Date().toISOString(), status: 'active' };
+      const localId = await db.sjs_assessments.add(localRecord);
+
+      // Try to save to server
+      try {
+        const response = savedId
+          ? await apiClient.put<{ assessment: any }>(`/api/sjs-assessments/${savedId}`, payload)
+          : await apiClient.post<{ assessment: any }>('/api/sjs-assessments', payload);
+        const serverAssessment = response.assessment;
+        setSavedId(serverAssessment.id);
+        // Update local record with server ID
+        await db.sjs_assessments.update(localId, { serverId: serverAssessment.id, synced: true });
+      } catch {
+        // Offline — data saved locally
+      }
+
+      await loadSavedAssessments();
+      alert('Assessment saved successfully');
+    } catch (err) {
+      console.error('Save failed:', err);
+      alert('Failed to save assessment');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const loadAssessment = (assessment: any) => {
+    setData({
+      patientName: assessment.patient_name || '',
+      hospitalNumber: assessment.hospital_number || '',
+      age: assessment.age || 0,
+      sex: assessment.sex || 'Male',
+      weight: assessment.weight || 0,
+      dateOfOnset: assessment.date_of_onset?.split('T')[0] || defaultAssessment.dateOfOnset,
+      dateOfAssessment: assessment.date_of_assessment?.split('T')[0] || defaultAssessment.dateOfAssessment,
+      causativeDrug: assessment.causative_drug || '',
+      otherDrug: assessment.other_drug || '',
+      daysSinceDrugStart: assessment.days_since_drug_start || 0,
+      classification: assessment.classification || 'SJS',
+      bsaDetached: parseFloat(assessment.bsa_detached) || 0,
+      organInvolvement: assessment.organ_involvement || defaultAssessment.organInvolvement,
+      organNotes: assessment.organ_notes || defaultAssessment.organNotes,
+      heartRate: assessment.heart_rate || 80,
+      hasMalignancy: assessment.has_malignancy || false,
+      serumUrea: parseFloat(assessment.serum_urea) || 5,
+      serumBicarbonate: parseFloat(assessment.serum_bicarbonate) || 24,
+      serumGlucose: parseFloat(assessment.serum_glucose) || 5,
+      nikolskySign: assessment.nikolsky_sign || false,
+      feverOnAdmission: assessment.fever_on_admission || false,
+      temperature: parseFloat(assessment.temperature) || 37,
+      painScore: assessment.pain_score || 5,
+      patientAware: assessment.patient_aware || false,
+      familyCounselled: assessment.family_counselled || false,
+      counsellingNotes: assessment.counselling_notes || '',
+    });
+    setSavedId(assessment.id || assessment.serverId || null);
+    if (assessment.scorten_score) {
+      setScortenResult({
+        score: assessment.scorten_score,
+        predictedMortality: assessment.scorten_mortality || 'N/A',
+        parameters: [],
+      });
+    }
+  };
 
   // ── Field updater ─────────────────────────────────────────────────────
   const update = useCallback(<K extends keyof AssessmentData>(field: K, value: AssessmentData[K]) => {
@@ -568,15 +693,43 @@ export default function SJSManagementPage() {
             <p className="text-sm text-gray-500">Comprehensive assessment, treatment planning &amp; patient counselling</p>
           </div>
         </div>
-        <button
-          onClick={generatePDF}
-          disabled={generatingPDF || !data.patientName}
-          className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50"
-        >
-          <Download size={18} />
-          {generatingPDF ? 'Generating...' : 'Download PDF'}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={saveAssessment}
+            disabled={saving || !data.patientName}
+            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          >
+            <Save size={18} />
+            {saving ? 'Saving...' : savedId ? 'Update' : 'Save'}
+          </button>
+          <button
+            onClick={generatePDF}
+            disabled={generatingPDF || !data.patientName}
+            className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50"
+          >
+            <Download size={18} />
+            {generatingPDF ? 'Generating...' : 'Download PDF'}
+          </button>
+        </div>
       </div>
+
+      {/* Saved Assessments Quick Load */}
+      {savedAssessments.length > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+          <p className="text-sm font-medium text-blue-700 mb-2">Saved Assessments ({savedAssessments.length})</p>
+          <div className="flex flex-wrap gap-2">
+            {savedAssessments.slice(0, 5).map((a: any) => (
+              <button
+                key={a.id}
+                onClick={() => loadAssessment(a)}
+                className="text-xs bg-white border border-blue-300 text-blue-700 px-2 py-1 rounded hover:bg-blue-100"
+              >
+                {a.patient_name || 'Unknown'} — {a.date_of_assessment?.split('T')[0] || 'N/A'}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Severity banner */}
       {data.bsaDetached > 0 && (

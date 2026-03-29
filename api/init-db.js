@@ -1465,6 +1465,65 @@ async function createTables() {
     );
     CREATE INDEX IF NOT EXISTS idx_clinic_duty_user ON clinic_duty_logs(user_id);
     CREATE INDEX IF NOT EXISTS idx_clinic_duty_date ON clinic_duty_logs(assigned_date);
+
+    -- SJS/TEN Assessments table
+    CREATE TABLE IF NOT EXISTS sjs_assessments (
+      id SERIAL PRIMARY KEY,
+      patient_id INTEGER REFERENCES patients(id) ON DELETE CASCADE,
+      hospital_number VARCHAR(100),
+      patient_name VARCHAR(255),
+      age INTEGER,
+      sex VARCHAR(10),
+      weight DECIMAL(5,2),
+      date_of_onset DATE,
+      date_of_assessment DATE,
+      causative_drug VARCHAR(255),
+      other_drug VARCHAR(255),
+      days_since_drug_start INTEGER,
+      classification VARCHAR(50),
+      bsa_detached DECIMAL(5,2),
+      organ_involvement JSONB DEFAULT '{}',
+      organ_notes JSONB DEFAULT '{}',
+      heart_rate INTEGER,
+      has_malignancy BOOLEAN DEFAULT FALSE,
+      serum_urea DECIMAL(8,2),
+      serum_bicarbonate DECIMAL(8,2),
+      serum_glucose DECIMAL(8,2),
+      nikolsky_sign BOOLEAN DEFAULT FALSE,
+      fever_on_admission BOOLEAN DEFAULT FALSE,
+      temperature DECIMAL(4,1),
+      pain_score INTEGER,
+      scorten_score INTEGER,
+      scorten_mortality VARCHAR(50),
+      patient_aware BOOLEAN DEFAULT FALSE,
+      family_counselled BOOLEAN DEFAULT FALSE,
+      counselling_notes TEXT,
+      assessed_by VARCHAR(255),
+      status VARCHAR(50) DEFAULT 'active',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_sjs_assessments_patient ON sjs_assessments(patient_id);
+    CREATE INDEX IF NOT EXISTS idx_sjs_assessments_date ON sjs_assessments(date_of_assessment);
+
+    -- Investigation Uploads table
+    CREATE TABLE IF NOT EXISTS investigation_uploads (
+      id SERIAL PRIMARY KEY,
+      patient_id INTEGER,
+      hospital_number VARCHAR(100),
+      upload_type VARCHAR(20) NOT NULL,
+      file_name VARCHAR(500),
+      file_data TEXT,
+      ocr_text TEXT,
+      test_name VARCHAR(255),
+      results JSONB,
+      ocr_extracted BOOLEAN DEFAULT FALSE,
+      status VARCHAR(50) DEFAULT 'pending',
+      uploaded_by VARCHAR(255),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_investigation_uploads_patient ON investigation_uploads(patient_id);
   `;
 
   await query(schema);

@@ -30,7 +30,7 @@ export const PatientProfile: React.FC = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editFormData, setEditFormData] = useState<Partial<Patient>>({});
   const [activeTab, setActiveTab] = useState('encounters');
-  const [admissionStatus, setAdmissionStatus] = useState<{ isAdmitted: boolean; ward?: string; bed?: string; admissionDate?: string } | null>(null);
+  const [admissionStatus, setAdmissionStatus] = useState<{ isAdmitted: boolean; ward?: string; bed?: string; admissionDate?: string; daysAdmitted?: number; lastSurgery?: { procedure_name: string; date: string; daysPostOp: number }; surgeryCount?: number } | null>(null);
   const [showPrescriptionModal, setShowPrescriptionModal] = useState(false);
   const [medicalTeam, setMedicalTeam] = useState<TeamMember[]>([]);
 
@@ -82,11 +82,42 @@ export const PatientProfile: React.FC = () => {
       const admissions = data?.admissions || [];
       if (admissions.length > 0) {
         const latest = admissions[0];
+        const admDate = new Date(latest.admission_date);
+        const now = new Date();
+        const daysAdmitted = Math.max(1, Math.ceil((now.getTime() - admDate.getTime()) / (1000 * 60 * 60 * 24)));
+
+        // Fetch surgeries for this patient that happened during admission
+        let lastSurgery: { procedure_name: string; date: string; daysPostOp: number } | undefined;
+        let surgeryCount = 0;
+        try {
+          const surgData: any = await apiClient.get(`/sync/surgeries`);
+          const allSurgeries = Array.isArray(surgData) ? surgData : (surgData?.surgeries || []);
+          const patientSurgeries = allSurgeries
+            .filter((s: any) => {
+              const sId = String(s.patient_id);
+              const matchesPatient = sId === String(id) || sId === String(latest.patient_id);
+              if (!matchesPatient) return false;
+              const surgDate = new Date(s.actual_end_time || s.scheduled_date);
+              return surgDate >= admDate && (s.status === 'completed' || s.status === 'done');
+            })
+            .sort((a: any, b: any) => new Date(b.actual_end_time || b.scheduled_date).getTime() - new Date(a.actual_end_time || a.scheduled_date).getTime());
+          surgeryCount = patientSurgeries.length;
+          if (patientSurgeries.length > 0) {
+            const most = patientSurgeries[0];
+            const surgDate = new Date(most.actual_end_time || most.scheduled_date);
+            const daysPostOp = Math.max(0, Math.ceil((now.getTime() - surgDate.getTime()) / (1000 * 60 * 60 * 24)));
+            lastSurgery = { procedure_name: most.procedure_name, date: surgDate.toISOString(), daysPostOp };
+          }
+        } catch { /* surgeries fetch failed, not critical */ }
+
         setAdmissionStatus({
           isAdmitted: true,
           ward: latest.ward_location || latest.ward,
           bed: latest.bed_number,
           admissionDate: latest.admission_date,
+          daysAdmitted,
+          lastSurgery,
+          surgeryCount,
         });
       } else {
         setAdmissionStatus({ isAdmitted: false });
@@ -277,10 +308,22 @@ export const PatientProfile: React.FC = () => {
               <div className="flex items-center gap-2 sm:gap-3">
                 {admissionStatus && (
                   admissionStatus.isAdmitted ? (
-                    <span className="px-2 sm:px-3 py-1 bg-red-100 text-red-800 rounded-full text-xs sm:text-sm font-medium flex items-center gap-1">
-                      <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                      Admitted {admissionStatus.ward ? `• ${admissionStatus.ward}` : ''} {admissionStatus.bed ? `Bed ${admissionStatus.bed}` : ''}
-                    </span>
+                    <div className="flex flex-col gap-1">
+                      <span className="px-2 sm:px-3 py-1 bg-red-100 text-red-800 rounded-full text-xs sm:text-sm font-medium flex items-center gap-1">
+                        <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                        Admitted {admissionStatus.ward ? `• ${admissionStatus.ward}` : ''} {admissionStatus.bed ? `Bed ${admissionStatus.bed}` : ''}
+                        <span className="font-bold ml-1">• Day {admissionStatus.daysAdmitted}</span>
+                      </span>
+                      {admissionStatus.lastSurgery && (
+                        <span className="px-2 sm:px-3 py-0.5 bg-purple-100 text-purple-800 rounded-full text-[10px] sm:text-xs font-medium flex items-center gap-1">
+                          <Scissors className="w-3 h-3" />
+                          POD {admissionStatus.lastSurgery.daysPostOp} – {admissionStatus.lastSurgery.procedure_name}
+                          {(admissionStatus.surgeryCount || 0) > 1 && (
+                            <span className="ml-1 text-purple-600">({admissionStatus.surgeryCount} surgeries)</span>
+                          )}
+                        </span>
+                      )}
+                    </div>
                   ) : (
                     <span className="px-2 sm:px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs sm:text-sm font-medium">
                       Outpatient
@@ -397,6 +440,12 @@ export const PatientProfile: React.FC = () => {
                 <h3 className="text-lg font-semibold text-gray-900">Quick Actions</h3>
               </div>
               <div className="p-4 space-y-2">
+                <button 
+                  onClick={() => navigate(`/admission-discharge?patientId=${id}&patientName=${encodeURIComponent(patientName)}`)}
+                  className="w-full text-left px-3 py-2 text-sm text-purple-600 hover:bg-purple-50 rounded transition-colors flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4" /> Admit Patient
+                </button>
                 <button 
                   onClick={() => setActiveTab('vital-signs')}
                   className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded transition-colors flex items-center gap-2"
@@ -1067,8 +1116,24 @@ const InvestigationsTab: React.FC<{ patientId: string; hospitalNumber: string; p
     try {
       const data = await apiClient.get(`/lab-orders?patientId=${patientId}`);
       const allOrders = data?.labOrders || [];
-      setRequested(allOrders.filter((o: any) => o.status === 'pending' || o.status === 'ordered' || o.status === 'in_progress'));
-      setResults(allOrders.filter((o: any) => o.status === 'completed' || o.status === 'resulted' || o.results));
+
+      // Also load investigation uploads from server
+      let uploads: any[] = [];
+      try {
+        const uploadData = await apiClient.get<{ uploads: any[] }>(`/api/investigation-uploads?patientId=${patientId}`);
+        uploads = (uploadData.uploads || []).map((u: any) => ({ ...u, _type: 'upload' }));
+      } catch { /* fallback below */ }
+
+      const allRequested = [
+        ...uploads.filter((u: any) => u.upload_type === 'form' || u.status === 'pending'),
+        ...allOrders.filter((o: any) => o.status === 'pending' || o.status === 'ordered' || o.status === 'in_progress'),
+      ];
+      const allResults = [
+        ...uploads.filter((u: any) => u.upload_type === 'result' || u.status === 'completed').map((u: any) => ({ ...u, results: u.results || 'See scanned document' })),
+        ...allOrders.filter((o: any) => o.status === 'completed' || o.status === 'resulted' || o.results),
+      ];
+      setRequested(allRequested);
+      setResults(allResults);
     } catch {
       // Fallback localStorage
       const stored = localStorage.getItem(`investigations_${patientId}`);
@@ -1091,22 +1156,33 @@ const InvestigationsTab: React.FC<{ patientId: string; hospitalNumber: string; p
         reader.readAsDataURL(file);
       });
 
-      const record = {
-        id: `inv-upload-${Date.now()}`,
+      const record: any = {
         patient_id: patientId,
         hospital_number: hospitalNumber,
-        type: uploadType,
+        upload_type: uploadType,
         file_name: file.name,
         file_data: dataUrl,
         uploaded_by: userName,
-        uploaded_at: new Date().toISOString(),
         test_name: uploadType === 'form' ? 'Scanned Investigation Form' : 'Scanned Result',
         status: uploadType === 'form' ? 'pending' : 'completed',
       };
 
+      // Save to IndexedDB
+      try {
+        const localId = await db.investigation_uploads.add({ ...record, created_at: new Date().toISOString() });
+        record.id = localId;
+      } catch { /* IndexedDB unavailable */ }
+
+      // Try server save (without file_data in listing response)
+      try {
+        const resp = await apiClient.post<{ upload: any }>('/api/investigation-uploads', record);
+        if (resp.upload) record.id = resp.upload.id;
+      } catch { /* offline — saved locally */ }
+
+      // Also keep localStorage as backup
       const stored = localStorage.getItem(`investigation_uploads_${patientId}`);
       const existing = stored ? JSON.parse(stored) : [];
-      existing.unshift(record);
+      existing.unshift({ ...record, uploaded_at: new Date().toISOString() });
       localStorage.setItem(`investigation_uploads_${patientId}`, JSON.stringify(existing));
 
       if (uploadType === 'form') {
@@ -1123,18 +1199,28 @@ const InvestigationsTab: React.FC<{ patientId: string; hospitalNumber: string; p
 
   const handleOCRExtractedInv = (fields: Record<string, any>, scanType: 'form' | 'result') => {
     const testName = fields.test_name || fields.testName || fields.investigation || 'Scanned Investigation';
-    const record = {
-      id: `inv-ocr-${Date.now()}`,
+    const record: any = {
       patient_id: patientId,
       hospital_number: hospitalNumber,
+      upload_type: scanType,
       test_name: testName,
       status: scanType === 'form' ? 'pending' : 'completed',
       results: scanType === 'result' ? fields : undefined,
       ocr_extracted: true,
-      created_by: userName,
+      ocr_text: JSON.stringify(fields),
+      uploaded_by: userName,
       created_at: new Date().toISOString(),
     };
 
+    // Save to IndexedDB
+    try {
+      db.investigation_uploads.add({ ...record }).then(id => { record.id = id; });
+    } catch { /* IndexedDB unavailable */ }
+
+    // Try server save
+    apiClient.post('/api/investigation-uploads', record).catch(() => { /* offline */ });
+
+    // Keep localStorage backup
     const stored = localStorage.getItem(`investigations_${patientId}`);
     const existing = stored ? JSON.parse(stored) : [];
     existing.unshift(record);
@@ -1215,13 +1301,36 @@ const InvestigationsTab: React.FC<{ patientId: string; hospitalNumber: string; p
                 {requested.map((inv, i) => (
                   <div key={inv.id || i} className="border border-yellow-200 bg-yellow-50 rounded-lg p-3">
                     <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium text-gray-900 text-sm">{inv.test_name || inv.investigation_type || 'Lab Test'}</p>
-                        <p className="text-xs text-gray-500 mt-0.5">Ordered: {inv.created_at ? new Date(inv.created_at).toLocaleString() : 'N/A'}</p>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-gray-900 text-sm">
+                          {inv.clinical_notes || inv.clinical_indication || inv.test_name || 'Lab Investigation'}
+                        </p>
+                        {inv.test_name && inv.test_name !== (inv.clinical_notes || inv.clinical_indication) && (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {inv.test_name.split(',').map((t: string, idx: number) => (
+                              <span key={idx} className="inline-flex px-1.5 py-0.5 bg-yellow-100 text-yellow-900 text-[10px] sm:text-xs rounded font-medium border border-yellow-300">
+                                {t.trim()}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1">
+                          <p className="text-xs text-gray-500">
+                            Ordered: {inv.ordered_at ? new Date(inv.ordered_at).toLocaleString() : inv.created_at ? new Date(inv.created_at).toLocaleString() : 'N/A'}
+                          </p>
+                          {(inv.priority || inv.urgency) && (inv.priority || inv.urgency) !== 'routine' && (
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold uppercase ${
+                              (inv.priority || inv.urgency) === 'stat' ? 'bg-red-200 text-red-800' : 'bg-orange-200 text-orange-800'
+                            }`}>{inv.priority || inv.urgency}</span>
+                          )}
+                        </div>
                       </div>
-                      <span className="px-2 py-0.5 bg-yellow-200 text-yellow-800 text-xs rounded-full font-medium">{inv.status || 'Pending'}</span>
+                      <span className="px-2 py-0.5 bg-yellow-200 text-yellow-800 text-xs rounded-full font-medium ml-2 flex-shrink-0">{inv.status || 'pending'}</span>
                     </div>
-                    {inv.ordered_by && <p className="text-xs text-gray-400 mt-1">By: {inv.ordered_by}</p>}
+                    {(inv.ordered_by_name || inv.ordered_by_username || inv.ordered_by) && (
+                      <p className="text-xs text-gray-400 mt-1">By: {inv.ordered_by_name || inv.ordered_by_username || `User #${inv.ordered_by}`}</p>
+                    )}
+                    {inv.test_type && <p className="text-[10px] text-gray-400 mt-0.5">Category: {inv.test_type}</p>}
                   </div>
                 ))}
               </div>
@@ -1234,8 +1343,21 @@ const InvestigationsTab: React.FC<{ patientId: string; hospitalNumber: string; p
                 {results.map((inv, i) => (
                   <div key={inv.id || i} className="border border-green-200 bg-green-50 rounded-lg p-3">
                     <div className="flex items-center justify-between mb-2">
-                      <p className="font-medium text-gray-900 text-sm">{inv.test_name || inv.investigation_type || 'Lab Test'}</p>
-                      <span className="px-2 py-0.5 bg-green-200 text-green-800 text-xs rounded-full font-medium">Completed</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-gray-900 text-sm">
+                          {inv.clinical_notes || inv.clinical_indication || inv.test_name || 'Lab Test'}
+                        </p>
+                        {inv.test_name && inv.test_name !== (inv.clinical_notes || inv.clinical_indication) && (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {inv.test_name.split(',').map((t: string, idx: number) => (
+                              <span key={idx} className="inline-flex px-1.5 py-0.5 bg-green-100 text-green-900 text-[10px] sm:text-xs rounded font-medium border border-green-300">
+                                {t.trim()}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <span className="px-2 py-0.5 bg-green-200 text-green-800 text-xs rounded-full font-medium ml-2 flex-shrink-0">Completed</span>
                     </div>
                     {inv.results && typeof inv.results === 'object' ? (
                       <div className="grid grid-cols-2 gap-2">
@@ -1248,7 +1370,12 @@ const InvestigationsTab: React.FC<{ patientId: string; hospitalNumber: string; p
                     ) : inv.results ? (
                       <p className="text-sm text-gray-800">{String(inv.results)}</p>
                     ) : null}
-                    <p className="text-xs text-gray-400 mt-2">Resulted: {inv.result_date ? new Date(inv.result_date).toLocaleString() : inv.updated_at ? new Date(inv.updated_at).toLocaleString() : ''}</p>
+                    <div className="flex flex-wrap items-center gap-x-3 mt-2">
+                      <p className="text-xs text-gray-400">Resulted: {inv.completed_at ? new Date(inv.completed_at).toLocaleString() : inv.result_date ? new Date(inv.result_date).toLocaleString() : inv.updated_at ? new Date(inv.updated_at).toLocaleString() : ''}</p>
+                      {(inv.ordered_by_name || inv.ordered_by_username) && (
+                        <p className="text-xs text-gray-400">By: {inv.ordered_by_name || inv.ordered_by_username}</p>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1485,18 +1612,27 @@ const ClinicalPhotosTab: React.FC<{ patientId: string; hospitalNumber: string; p
 };
 
 // ─── WOUND ASSESSMENT TAB ────────────────────────────────────────────────────
-const WOUND_TYPES = ['Surgical', 'Traumatic', 'Burn', 'Pressure ulcer', 'Diabetic ulcer', 'Venous ulcer', 'Arterial ulcer', 'Other'];
+const WOUND_TYPES = ['Surgical', 'Traumatic', 'Burn', 'Pressure ulcer', 'Diabetic ulcer', 'Venous ulcer', 'Arterial ulcer', 'Skin Graft Donor Site', 'Skin Graft Recipient Site', 'Dehisced Wound', 'Other'];
 const EXUDATE_AMOUNTS = ['None', 'Light', 'Moderate', 'Heavy'] as const;
 const TISSUE_TYPES = ['Epithelializing', 'Granulation', 'Slough', 'Necrotic', 'Eschar', 'Hypergranulation'];
-const HEALING_PHASES = ['Inflammatory', 'Proliferative', 'Remodeling'] as const;
+const WOUND_NATURES = ['Acute', 'Chronic'] as const;
+const ACUTE_PHASES = ['Inflammatory', 'Proliferative', 'Remodeling'] as const;
+const CHRONIC_PHASES = ['Extension', 'Transition', 'Repair'] as const;
+const CHRONIC_PHASE_INFO: Record<string, { description: string; granulation: string; frequency: string; color: string }> = {
+  Extension: { description: 'Necrotic and edematous with no evidence of granulation or healthy tissue', granulation: '0%', frequency: 'Daily', color: 'bg-red-100 text-red-800' },
+  Transition: { description: 'Granulation up to 40% of wound surface, edema reduced, discharges minimal', granulation: '1-40%', frequency: 'Alternate Day', color: 'bg-yellow-100 text-yellow-800' },
+  Repair: { description: 'Active granulation and epithelialization, minimal to no exudate', granulation: '>40%', frequency: 'Alternate Day', color: 'bg-green-100 text-green-800' },
+};
 
 interface WoundRecord {
   id: string;
+  wound_nature: 'Acute' | 'Chronic';
   wound_type: string;
   location: string;
   length: number;
   width: number;
   depth: number;
+  granulation_percentage: number;
   tissue_types: string[];
   exudate_amount: string;
   pain_level: number;
@@ -1511,8 +1647,10 @@ interface WoundRecord {
 const WoundAssessmentTab: React.FC<{ patientId: string; patientName: string; hospitalNumber: string; navigate: any }> = ({ patientId, patientName, hospitalNumber, navigate }) => {
   const [assessments, setAssessments] = useState<WoundRecord[]>([]);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState<Partial<WoundRecord>>({ tissue_types: [], pain_level: 0 });
+  const [form, setForm] = useState<Partial<WoundRecord>>({ wound_nature: 'Acute', tissue_types: [], pain_level: 0, granulation_percentage: 0 });
   const { user } = useAuthStore();
+
+  const healingPhases = form.wound_nature === 'Chronic' ? CHRONIC_PHASES : ACUTE_PHASES;
 
   useEffect(() => { loadAssessments(); }, [patientId]);
 
@@ -1523,40 +1661,126 @@ const WoundAssessmentTab: React.FC<{ patientId: string; patientName: string; hos
 
   const generateRecommendations = (data: Partial<WoundRecord>): string[] => {
     const recs: string[] = [];
-    if (data.exudate_amount === 'Heavy') recs.push('Use highly absorbent dressing (e.g., alginate or foam)');
-    if (data.exudate_amount === 'None' || data.exudate_amount === 'Light') recs.push('Maintain moist wound environment with hydrogel/film');
+    const nature = data.wound_nature || 'Acute';
+    const phase = data.healing_phase || '';
+
+    if (nature === 'Chronic') {
+      // Chronic wound recommendations based on Extension/Transition/Repair phases
+      const phaseInfo = CHRONIC_PHASE_INFO[phase];
+      if (phaseInfo) {
+        recs.push(`Phase: ${phase} — ${phaseInfo.description}`);
+        recs.push(`Expected granulation: ${phaseInfo.granulation}`);
+        recs.push(`Dressing frequency: ${phaseInfo.frequency}`);
+      }
+      if (phase === 'Extension') {
+        recs.push('Focus on debridement and infection control');
+        recs.push('Monitor for infection signs — consider wound culture if not improving');
+        recs.push('Optimize nutrition (protein, vitamin C, zinc)');
+        recs.push('Address underlying aetiology (offload pressure, compression for venous, vascular assessment for arterial)');
+      } else if (phase === 'Transition') {
+        recs.push('Continue wound bed preparation');
+        recs.push('Protect emerging granulation tissue');
+        recs.push('Maintain moist wound environment');
+        recs.push('Reassess for surgical closure options (graft/flap) if granulation > 40%');
+      } else if (phase === 'Repair') {
+        recs.push('Protect granulation and epithelialization');
+        recs.push('Minimize wound disturbance during dressing changes');
+        recs.push('Consider surgical closure (skin graft/flap) when wound bed is ready');
+        recs.push('Monitor for hypergranulation');
+      }
+    } else {
+      // Acute wound recommendations based on Inflammatory/Proliferative/Remodeling phases
+      if (phase === 'Inflammatory') {
+        recs.push('Monitor for infection signs (increased redness, warmth, swelling, discharge)');
+        recs.push('Keep wound clean and covered');
+        recs.push('Adequate pain management');
+      } else if (phase === 'Proliferative') {
+        recs.push('Maintain moist wound environment');
+        recs.push('Protect granulation tissue — use non-adherent dressing');
+        recs.push('Ensure adequate nutrition for tissue repair');
+      } else if (phase === 'Remodeling') {
+        recs.push('Protect scar from sun exposure');
+        recs.push('Consider silicone gel/sheet for scar management');
+        recs.push('Minimize tension on wound — advise on activity restriction');
+      }
+    }
+    // General recommendations
+    if (data.exudate_amount === 'Heavy') recs.push('Use highly absorbent dressing (alginate or foam)');
     if (data.tissue_types?.includes('Necrotic') || data.tissue_types?.includes('Eschar')) recs.push('Consider debridement of necrotic/eschar tissue');
     if (data.tissue_types?.includes('Slough')) recs.push('Autolytic debridement with hydrogel recommended');
-    if (data.tissue_types?.includes('Granulation')) recs.push('Protect granulation tissue — use non-adherent dressing');
     if ((data.pain_level || 0) >= 7) recs.push('Adequate pain management before dressing changes');
     if (data.depth && data.depth > 2) recs.push('Consider wound VAC for deep wounds');
-    if (data.healing_phase === 'Inflammatory') recs.push('Monitor for infection signs — consider culture if not improving');
-    recs.push('Reassess wound in 48-72 hours');
     recs.push('Document wound measurements and photograph at each dressing change');
     return recs;
   };
 
   const generateProtocol = (data: Partial<WoundRecord>): string[] => {
+    const nature = data.wound_nature || 'Acute';
     const steps: string[] = [];
-    steps.push('1. Wash hands and don sterile gloves');
-    steps.push('2. Remove old dressing gently — soak if adherent');
-    steps.push('3. Cleanse wound with normal saline (0.9% NaCl)');
-    if (data.tissue_types?.includes('Necrotic') || data.tissue_types?.includes('Slough')) {
-      steps.push('4. Perform gentle mechanical debridement as needed');
+
+    // Special graft protocols
+    if (data.wound_type === 'Skin Graft Recipient Site') {
+      return [
+        '1. Irrigate using Wound Clex Spray solution',
+        '2. Apply Sofratulle gauze embedded with Hera Gel',
+        '3. Overlay with 3 layers of sterile dry gauze',
+        '4. Secure with crepe bandage or plaster as appropriate for the site',
+        '⚠ Handle graft site with extreme care — do not apply excessive pressure',
+        '⚠ Monitor for graft failure signs (discoloration, separation)'
+      ];
     }
-    steps.push(`${steps.length + 1}. Pat dry periwound skin`);
-    if (data.exudate_amount === 'Heavy') {
-      steps.push(`${steps.length + 1}. Apply alginate/hydrofiber primary dressing`);
-      steps.push(`${steps.length + 1}. Cover with absorbent foam secondary dressing`);
-    } else if (data.tissue_types?.includes('Granulation')) {
-      steps.push(`${steps.length + 1}. Apply non-adherent dressing (e.g., Jelonet/Mepitel)`);
-      steps.push(`${steps.length + 1}. Cover with gauze pad and secure`);
+    if (data.wound_type === 'Skin Graft Donor Site') {
+      return [
+        '1. After surgeon removes last Sofratulle layer of intraoperative dressing:',
+        '2. Irrigate gently with Wound Clex Solution',
+        '3. Apply Hera Gel embedded in Sofratulle gauze',
+        '4. Overlay with 4 layers of sterile dry gauze',
+        '5. Secure with crepe bandage or plaster as appropriate'
+      ];
+    }
+
+    if (nature === 'Chronic') {
+      // Full chronic wound dressing protocol (Extension/Transition/Repair)
+      steps.push('1. Wash hands and don sterile gloves');
+      steps.push('2. Remove old dressing gently — soak if adherent');
+      steps.push('3. Clean with Wound Clex Solution');
+      if (data.tissue_types?.includes('Necrotic') || data.tissue_types?.includes('Eschar') || data.tissue_types?.includes('Slough')) {
+        steps.push('4. Pack with first layer: Hera Gel (for debridement)');
+      } else if ((data.granulation_percentage || 0) > 40) {
+        steps.push('4. Pack with first layer: Woundcare-Honey Gauze');
+      } else {
+        steps.push('4. Pack with first layer: Hera Gel');
+      }
+      steps.push('5. Second layer: Woundcare-Honey Gauze');
+      steps.push('6. Capillary layer: Sterile Gauze');
+      steps.push('7. Absorbent layer: Cotton Wool');
+      steps.push('8. Secure with Crepe Bandage or Plaster');
+      const phase = data.healing_phase || 'Extension';
+      const info = CHRONIC_PHASE_INFO[phase];
+      if (info) steps.push(`Next dressing: ${info.frequency}`);
     } else {
-      steps.push(`${steps.length + 1}. Apply appropriate primary dressing`);
-      steps.push(`${steps.length + 1}. Secure with tape or bandage`);
+      // Acute wound protocol
+      steps.push('1. Wash hands and don sterile gloves');
+      steps.push('2. Remove old dressing gently — soak if adherent');
+      steps.push('3. Cleanse wound with normal saline (0.9% NaCl) or Wound Clex Solution');
+      if (data.tissue_types?.includes('Necrotic') || data.tissue_types?.includes('Slough')) {
+        steps.push('4. Perform gentle mechanical debridement as needed');
+      }
+      const next = steps.length + 1;
+      steps.push(`${next}. Pat dry periwound skin`);
+      if (data.exudate_amount === 'Heavy') {
+        steps.push(`${next + 1}. Apply alginate/hydrofiber primary dressing`);
+        steps.push(`${next + 2}. Cover with absorbent foam secondary dressing`);
+      } else if (data.tissue_types?.includes('Granulation')) {
+        steps.push(`${next + 1}. Apply non-adherent dressing (e.g., Jelonet/Mepitel)`);
+        steps.push(`${next + 2}. Cover with gauze pad and secure`);
+      } else {
+        steps.push(`${next + 1}. Apply appropriate primary dressing`);
+        steps.push(`${next + 2}. Secure with tape or bandage`);
+      }
+      steps.push(`${steps.length + 1}. Label dressing with date, time, and initials`);
+      steps.push(`${steps.length + 1}. Document assessment and plan in patient record`);
     }
-    steps.push(`${steps.length + 1}. Label dressing with date, time, and initials`);
-    steps.push(`${steps.length + 1}. Document assessment and plan in patient record`);
     return steps;
   };
 
@@ -1566,15 +1790,17 @@ const WoundAssessmentTab: React.FC<{ patientId: string; patientName: string; hos
     const protocol = generateProtocol(form);
     const record: WoundRecord = {
       id: `wa_${Date.now()}`,
+      wound_nature: form.wound_nature || 'Acute',
       wound_type: form.wound_type || '',
       location: form.location || '',
       length: form.length || 0,
       width: form.width || 0,
       depth: form.depth || 0,
+      granulation_percentage: form.granulation_percentage || 0,
       tissue_types: form.tissue_types || [],
       exudate_amount: form.exudate_amount || 'None',
       pain_level: form.pain_level || 0,
-      healing_phase: form.healing_phase || 'Inflammatory',
+      healing_phase: form.healing_phase || (form.wound_nature === 'Chronic' ? 'Extension' : 'Inflammatory'),
       notes: form.notes || '',
       recommendations: recs,
       protocol,
@@ -1584,7 +1810,7 @@ const WoundAssessmentTab: React.FC<{ patientId: string; patientName: string; hos
     const updated = [record, ...assessments];
     localStorage.setItem(`wound_assessments_${patientId}`, JSON.stringify(updated));
     setAssessments(updated);
-    setForm({ tissue_types: [], pain_level: 0 });
+    setForm({ wound_nature: 'Acute', tissue_types: [], pain_level: 0, granulation_percentage: 0 });
     setShowForm(false);
   };
 
@@ -1605,6 +1831,19 @@ const WoundAssessmentTab: React.FC<{ patientId: string; patientName: string; hos
 
         {showForm && (
           <div className="p-4 border-b border-gray-200 bg-green-50 space-y-3">
+            {/* Wound Nature Toggle */}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Wound Nature*</label>
+              <div className="flex gap-2">
+                {WOUND_NATURES.map(n => (
+                  <button key={n} onClick={() => setForm({ ...form, wound_nature: n as 'Acute' | 'Chronic', healing_phase: n === 'Chronic' ? 'Extension' : 'Inflammatory', granulation_percentage: 0 })}
+                    className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg border-2 transition-colors ${form.wound_nature === n ? (n === 'Acute' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-orange-500 bg-orange-50 text-orange-700') : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'}`}>
+                    {n}
+                    <span className="block text-[10px] font-normal mt-0.5">{n === 'Acute' ? 'Inflammatory → Proliferative → Remodeling' : 'Extension → Transition → Repair'}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <div><label className="block text-xs font-medium text-gray-700 mb-1">Wound Type*</label>
                 <select value={form.wound_type || ''} onChange={e => setForm({ ...form, wound_type: e.target.value })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm">
@@ -1614,10 +1853,30 @@ const WoundAssessmentTab: React.FC<{ patientId: string; patientName: string; hos
               <div><label className="block text-xs font-medium text-gray-700 mb-1">Location*</label>
                 <input value={form.location || ''} onChange={e => setForm({ ...form, location: e.target.value })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" placeholder="e.g., Left anterior leg" /></div>
               <div><label className="block text-xs font-medium text-gray-700 mb-1">Healing Phase</label>
-                <select value={form.healing_phase || ''} onChange={e => setForm({ ...form, healing_phase: e.target.value })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm">
-                  {HEALING_PHASES.map(p => <option key={p} value={p}>{p}</option>)}
-                </select></div>
+                <select value={form.healing_phase || healingPhases[0]} onChange={e => setForm({ ...form, healing_phase: e.target.value })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm">
+                  {healingPhases.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+                {form.wound_nature === 'Chronic' && form.healing_phase && CHRONIC_PHASE_INFO[form.healing_phase] && (
+                  <p className="text-[10px] text-gray-500 mt-0.5">{CHRONIC_PHASE_INFO[form.healing_phase].description}</p>
+                )}
+              </div>
             </div>
+            {/* Granulation % for chronic wounds */}
+            {form.wound_nature === 'Chronic' && (
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Granulation Percentage: {form.granulation_percentage || 0}%</label>
+                <input type="range" min="0" max="100" value={form.granulation_percentage || 0}
+                  onChange={e => {
+                    const pct = parseInt(e.target.value);
+                    const autoPhase = pct === 0 ? 'Extension' : pct <= 40 ? 'Transition' : 'Repair';
+                    setForm({ ...form, granulation_percentage: pct, healing_phase: autoPhase });
+                  }}
+                  className="w-full" />
+                <div className="flex justify-between text-[10px] text-gray-400">
+                  <span>0% (Extension)</span><span>40% (Transition→Repair)</span><span>100%</span>
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-3 gap-3">
               <div><label className="block text-xs font-medium text-gray-700 mb-1">Length (cm)</label>
                 <input type="number" step="0.1" value={form.length || ''} onChange={e => setForm({ ...form, length: parseFloat(e.target.value) || 0 })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" /></div>
@@ -1667,8 +1926,18 @@ const WoundAssessmentTab: React.FC<{ patientId: string; patientName: string; hos
                       <h4 className="font-medium text-gray-900">{wa.wound_type} — {wa.location}</h4>
                       <p className="text-xs text-gray-500">{new Date(wa.assessed_at).toLocaleString()} • By: {wa.assessed_by}</p>
                     </div>
-                    <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">{wa.healing_phase}</span>
+                    <div className="flex gap-1.5 items-center">
+                      <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${wa.wound_nature === 'Chronic' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}`}>{wa.wound_nature || 'Acute'}</span>
+                      <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${wa.wound_nature === 'Chronic' && CHRONIC_PHASE_INFO[wa.healing_phase] ? CHRONIC_PHASE_INFO[wa.healing_phase].color : 'bg-blue-100 text-blue-700'}`}>{wa.healing_phase}</span>
+                    </div>
                   </div>
+                  {/* Phase details for chronic wounds */}
+                  {wa.wound_nature === 'Chronic' && CHRONIC_PHASE_INFO[wa.healing_phase] && (
+                    <div className={`mb-3 p-2 rounded text-xs ${CHRONIC_PHASE_INFO[wa.healing_phase].color}`}>
+                      <span className="font-medium">{wa.healing_phase} Phase:</span> {CHRONIC_PHASE_INFO[wa.healing_phase].description}
+                      {' • '}Granulation: {wa.granulation_percentage ?? 0}% • Dressing: {CHRONIC_PHASE_INFO[wa.healing_phase].frequency}
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm mb-3">
                     <div><span className="text-gray-500">Size:</span> {wa.length}×{wa.width}×{wa.depth} cm</div>
                     <div><span className="text-gray-500">Area:</span> {(wa.length * wa.width).toFixed(1)} cm²</div>
@@ -1681,9 +1950,11 @@ const WoundAssessmentTab: React.FC<{ patientId: string; patientName: string; hos
                     ))}</div>
                   )}
                   {/* Auto-generated Recommendations */}
-                  <div className="mt-3 p-3 bg-blue-50 rounded-lg">
-                    <h5 className="text-sm font-semibold text-blue-800 mb-1">Auto-Generated Recommendations</h5>
-                    <ul className="text-xs text-blue-700 space-y-1">
+                  <div className={`mt-3 p-3 rounded-lg ${wa.wound_nature === 'Chronic' ? 'bg-orange-50' : 'bg-blue-50'}`}>
+                    <h5 className={`text-sm font-semibold mb-1 ${wa.wound_nature === 'Chronic' ? 'text-orange-800' : 'text-blue-800'}`}>
+                      {wa.wound_nature === 'Chronic' ? `${wa.healing_phase} Phase Recommendations` : 'Auto-Generated Recommendations'}
+                    </h5>
+                    <ul className={`text-xs space-y-1 ${wa.wound_nature === 'Chronic' ? 'text-orange-700' : 'text-blue-700'}`}>
                       {wa.recommendations.map((r, i) => <li key={i}>• {r}</li>)}
                     </ul>
                   </div>
