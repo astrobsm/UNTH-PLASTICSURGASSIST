@@ -18,7 +18,7 @@ import {
   Activity, Camera, Calendar, Clock, FileText, Plus, TrendingUp,
   Scissors, ClipboardCheck, Pill, Heart, Image, AlertCircle,
   ChevronRight, X, Save, Loader2, Thermometer, Droplet,
-  Eye, Trash2, Upload, Mic, MicOff, ScanLine
+  Eye, Trash2, Upload, Mic, MicOff, ScanLine, Printer
 } from 'lucide-react';
 
 export const PatientProfile: React.FC = () => {
@@ -1120,7 +1120,7 @@ const InvestigationsTab: React.FC<{ patientId: string; hospitalNumber: string; p
       // Also load investigation uploads from server
       let uploads: any[] = [];
       try {
-        const uploadData = await apiClient.get<{ uploads: any[] }>(`/api/investigation-uploads?patientId=${patientId}`);
+        const uploadData = await apiClient.get<{ uploads: any[] }>(`/investigation-uploads?patientId=${patientId}`);
         uploads = (uploadData.uploads || []).map((u: any) => ({ ...u, _type: 'upload' }));
       } catch { /* fallback below */ }
 
@@ -1175,7 +1175,7 @@ const InvestigationsTab: React.FC<{ patientId: string; hospitalNumber: string; p
 
       // Try server save (without file_data in listing response)
       try {
-        const resp = await apiClient.post<{ upload: any }>('/api/investigation-uploads', record);
+        const resp = await apiClient.post<{ upload: any }>('/investigation-uploads', record);
         if (resp.upload) record.id = resp.upload.id;
       } catch { /* offline — saved locally */ }
 
@@ -1218,7 +1218,7 @@ const InvestigationsTab: React.FC<{ patientId: string; hospitalNumber: string; p
     } catch { /* IndexedDB unavailable */ }
 
     // Try server save
-    apiClient.post('/api/investigation-uploads', record).catch(() => { /* offline */ });
+    apiClient.post('/investigation-uploads', record).catch(() => { /* offline */ });
 
     // Keep localStorage backup
     const stored = localStorage.getItem(`investigations_${patientId}`);
@@ -1403,6 +1403,7 @@ const InvestigationsTab: React.FC<{ patientId: string; hospitalNumber: string; p
 const TreatmentPlansTab: React.FC<{ patientId: string; patientName: string; navigate: any }> = ({ patientId, patientName, navigate }) => {
   const [plans, setPlans] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [expandedPlan, setExpandedPlan] = useState<number | null>(null);
 
   useEffect(() => { loadPlans(); }, [patientId]);
 
@@ -1417,6 +1418,13 @@ const TreatmentPlansTab: React.FC<{ patientId: string; patientName: string; navi
     } finally {
       setLoading(false);
     }
+  };
+
+  const parseJSON = (val: any) => {
+    if (!val) return [];
+    if (Array.isArray(val)) return val;
+    if (typeof val === 'string') { try { return JSON.parse(val); } catch { return []; } }
+    return [];
   };
 
   return (
@@ -1436,42 +1444,123 @@ const TreatmentPlansTab: React.FC<{ patientId: string; patientName: string; navi
           ) : (
             <div className="space-y-3">
               {plans.map((plan, i) => {
-                const steps = plan.steps || plan.plan_steps || [];
-                const completedSteps = steps.filter((s: any) => s.status === 'completed').length;
-                const totalSteps = steps.length;
-                const progress = totalSteps > 0 ? Math.round((completedSteps / totalSteps) * 100) : 0;
+                const isExpanded = expandedPlan === plan.id;
+                const procedures = parseJSON(plan.procedures);
+                const medications = parseJSON(plan.medications);
+                const investigations = parseJSON(plan.investigations);
+                const objectives = parseJSON(plan.objectives);
+                const followUp = parseJSON(plan.follow_up_schedule);
+                const medicalTeam = plan.medical_team ? (typeof plan.medical_team === 'string' ? (() => { try { return JSON.parse(plan.medical_team); } catch { return null; } })() : plan.medical_team) : null;
                 const isPastDue = plan.target_date && new Date(plan.target_date) < new Date() && plan.status !== 'completed';
 
                 return (
-                  <div key={plan.id || i} className={`border rounded-lg p-4 cursor-pointer hover:border-green-400 transition-colors ${isPastDue ? 'border-red-300 bg-red-50' : 'border-gray-200'}`}
-                    onClick={() => navigate(`/patients/${patientId}/plans/${plan.id}`)}>
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-medium text-gray-900">{plan.title || 'Untitled Plan'}</h4>
-                      <div className="flex items-center gap-2">
-                        {isPastDue && <span className="px-2 py-0.5 bg-red-200 text-red-800 text-xs rounded-full animate-pulse">Overdue</span>}
-                        <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${
-                          plan.status === 'completed' ? 'bg-green-100 text-green-700' :
-                          plan.status === 'active' ? 'bg-blue-100 text-blue-700' :
-                          'bg-gray-100 text-gray-600'
-                        }`}>{plan.status || 'Active'}</span>
+                  <div key={plan.id || i} className={`border rounded-lg overflow-hidden ${isPastDue ? 'border-red-300' : 'border-gray-200'}`}>
+                    <div className={`p-4 cursor-pointer hover:bg-gray-50 transition-colors ${isPastDue ? 'bg-red-50' : ''}`}
+                      onClick={() => setExpandedPlan(isExpanded ? null : plan.id)}>
+                      <div className="flex items-center justify-between mb-1">
+                        <h4 className="font-medium text-gray-900">{plan.diagnosis || plan.title || 'Untitled Plan'}</h4>
+                        <div className="flex items-center gap-2">
+                          {isPastDue && <span className="px-2 py-0.5 bg-red-200 text-red-800 text-xs rounded-full animate-pulse">Overdue</span>}
+                          <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${
+                            plan.status === 'completed' ? 'bg-green-100 text-green-700' :
+                            plan.status === 'active' ? 'bg-blue-100 text-blue-700' :
+                            'bg-gray-100 text-gray-600'
+                          }`}>{plan.status || 'Active'}</span>
+                          <ChevronRight className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 text-xs text-gray-400">
+                        <span>Created: {plan.created_at ? new Date(plan.created_at).toLocaleDateString() : 'N/A'}</span>
+                        {plan.treatment_type && <span>Type: {plan.treatment_type}</span>}
+                        <span>By: {plan.created_by || 'Unknown'}</span>
                       </div>
                     </div>
-                    {totalSteps > 0 && (
-                      <div className="mb-2">
-                        <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
-                          <span>{completedSteps}/{totalSteps} steps</span>
-                          <span>{progress}%</span>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2">
-                          <div className="bg-green-500 h-2 rounded-full transition-all" style={{ width: `${progress}%` }} />
+                    {/* Expanded Plan Details */}
+                    {isExpanded && (
+                      <div className="px-4 pb-4 border-t border-gray-100 bg-gray-50 space-y-3">
+                        {plan.description && (
+                          <div className="mt-3">
+                            <h5 className="text-xs font-semibold text-gray-600 uppercase mb-1">Description</h5>
+                            <p className="text-sm text-gray-800">{plan.description}</p>
+                          </div>
+                        )}
+                        {medicalTeam && (
+                          <div>
+                            <h5 className="text-xs font-semibold text-gray-600 uppercase mb-1">Medical Team</h5>
+                            <div className="flex flex-wrap gap-2">
+                              {medicalTeam.seniorRegistrar && <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">SR: {medicalTeam.seniorRegistrar}</span>}
+                              {medicalTeam.registrar && medicalTeam.registrar !== 'None available' && <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">Reg: {medicalTeam.registrar}</span>}
+                              {medicalTeam.houseOfficer && <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">HO: {medicalTeam.houseOfficer}</span>}
+                            </div>
+                          </div>
+                        )}
+                        {objectives.length > 0 && (
+                          <div>
+                            <h5 className="text-xs font-semibold text-gray-600 uppercase mb-1">Objectives</h5>
+                            <ul className="text-sm text-gray-700 space-y-1">
+                              {objectives.map((obj: any, j: number) => <li key={j} className="flex items-start gap-1"><span className="text-green-500 mt-0.5">•</span> {typeof obj === 'string' ? obj : obj.description || obj.objective || JSON.stringify(obj)}</li>)}
+                            </ul>
+                          </div>
+                        )}
+                        {procedures.length > 0 && (
+                          <div>
+                            <h5 className="text-xs font-semibold text-gray-600 uppercase mb-1">Procedures ({procedures.length})</h5>
+                            <div className="space-y-1">
+                              {procedures.map((proc: any, j: number) => (
+                                <div key={j} className="text-sm bg-white p-2 rounded border border-gray-200">
+                                  <span className="font-medium text-gray-900">{proc.name || proc.procedure_name || proc.description || JSON.stringify(proc)}</span>
+                                  {proc.notes && <p className="text-xs text-gray-500 mt-0.5">{proc.notes}</p>}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {medications.length > 0 && (
+                          <div>
+                            <h5 className="text-xs font-semibold text-gray-600 uppercase mb-1">Medications ({medications.length})</h5>
+                            <div className="space-y-1">
+                              {medications.map((med: any, j: number) => (
+                                <div key={j} className="text-sm bg-white p-2 rounded border border-gray-200">
+                                  <span className="font-medium text-gray-900">{med.name || med.medication_name || med.drug || JSON.stringify(med)}</span>
+                                  {(med.dose || med.dosage) && <span className="text-xs text-gray-500 ml-2">{med.dose || med.dosage} {med.route && `(${med.route})`} {med.frequency && `- ${med.frequency}`}</span>}
+                                  {med.duration && <span className="text-xs text-gray-400 ml-2">for {med.duration}</span>}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {investigations.length > 0 && (
+                          <div>
+                            <h5 className="text-xs font-semibold text-gray-600 uppercase mb-1">Investigations ({investigations.length})</h5>
+                            <div className="flex flex-wrap gap-1">
+                              {investigations.map((inv: any, j: number) => (
+                                <span key={j} className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full">{inv.investigation_name || inv.name || inv.test || JSON.stringify(inv)}</span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {followUp.length > 0 && (
+                          <div>
+                            <h5 className="text-xs font-semibold text-gray-600 uppercase mb-1">Follow-up Schedule</h5>
+                            <ul className="text-sm text-gray-700 space-y-1">
+                              {followUp.map((f: any, j: number) => <li key={j}>• {typeof f === 'string' ? f : f.description || f.schedule || JSON.stringify(f)}</li>)}
+                            </ul>
+                          </div>
+                        )}
+                        {plan.notes && (
+                          <div>
+                            <h5 className="text-xs font-semibold text-gray-600 uppercase mb-1">Notes</h5>
+                            <p className="text-sm text-gray-700">{plan.notes}</p>
+                          </div>
+                        )}
+                        <div className="flex gap-2 pt-2">
+                          <button onClick={(e) => { e.stopPropagation(); navigate(`/treatment-planning?patientId=${patientId}&patientName=${encodeURIComponent(patientName)}&planId=${plan.id}`); }}
+                            className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white text-xs rounded-md hover:bg-blue-700">
+                            <FileText className="w-3.5 h-3.5" /> Edit Plan
+                          </button>
                         </div>
                       </div>
                     )}
-                    <div className="flex items-center justify-between text-xs text-gray-400">
-                      <span>Created: {plan.created_at ? new Date(plan.created_at).toLocaleDateString() : 'N/A'}</span>
-                      {plan.target_date && <span>Target: {new Date(plan.target_date).toLocaleDateString()}</span>}
-                      <span>By: {plan.created_by || 'Unknown'}</span>
-                    </div>
                   </div>
                 );
               })}
@@ -1784,6 +1873,73 @@ const WoundAssessmentTab: React.FC<{ patientId: string; patientName: string; hos
     return steps;
   };
 
+  const printWoundAssessment = async (wa: WoundRecord) => {
+    const { jsPDF } = await import('jspdf');
+    const thermalWidth = 80;
+    const estimatedHeight = 220 + (wa.recommendations.length * 5) + (wa.protocol.length * 5);
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [thermalWidth, estimatedHeight] });
+    const m = 3;
+    let y = m;
+    const clean = (t: string) => t.replace(/[^\x20-\x7E]/g, '');
+    doc.setFont('times', 'bold');
+    doc.setFontSize(12);
+    doc.text('UNTH PLASTIC SURGERY', thermalWidth / 2, y, { align: 'center' }); y += 5;
+    doc.setFontSize(10);
+    doc.setFont('times', 'normal');
+    doc.text('WOUND ASSESSMENT REPORT', thermalWidth / 2, y, { align: 'center' }); y += 5;
+    doc.setLineWidth(0.3);
+    doc.line(m, y, thermalWidth - m, y); y += 4;
+    doc.setFont('times', 'bold'); doc.setFontSize(12);
+    doc.text('PATIENT', m, y); y += 4;
+    doc.setFont('times', 'normal');
+    doc.text(`Name: ${clean(patientName)}`, m, y); y += 4;
+    doc.text(`Hosp #: ${clean(hospitalNumber)}`, m, y); y += 4;
+    doc.text(`Date: ${new Date(wa.assessed_at).toLocaleString()}`, m, y); y += 4;
+    doc.text(`Assessed by: ${clean(wa.assessed_by)}`, m, y); y += 5;
+    doc.line(m, y, thermalWidth - m, y); y += 4;
+    doc.setFont('times', 'bold');
+    doc.text('WOUND DETAILS', m, y); y += 4;
+    doc.setFont('times', 'normal');
+    doc.text(`Type: ${wa.wound_type} (${wa.wound_nature || 'Acute'})`, m, y); y += 4;
+    doc.text(`Location: ${clean(wa.location)}`, m, y); y += 4;
+    doc.text(`Phase: ${wa.healing_phase}`, m, y); y += 4;
+    if (wa.wound_nature === 'Chronic') {
+      doc.text(`Granulation: ${wa.granulation_percentage ?? 0}%`, m, y); y += 4;
+    }
+    doc.text(`Size: ${wa.length} x ${wa.width} x ${wa.depth} cm`, m, y); y += 4;
+    doc.text(`Area: ${(wa.length * wa.width).toFixed(1)} cm2`, m, y); y += 4;
+    doc.text(`Exudate: ${wa.exudate_amount}`, m, y); y += 4;
+    doc.text(`Pain: ${wa.pain_level}/10`, m, y); y += 4;
+    if (wa.tissue_types.length > 0) {
+      doc.text(`Tissue: ${wa.tissue_types.join(', ')}`, m, y); y += 4;
+    }
+    y += 2; doc.line(m, y, thermalWidth - m, y); y += 4;
+    doc.setFont('times', 'bold');
+    doc.text('RECOMMENDATIONS', m, y); y += 4;
+    doc.setFont('times', 'normal'); doc.setFontSize(10);
+    wa.recommendations.forEach(r => {
+      const lines = doc.splitTextToSize(`- ${clean(r)}`, thermalWidth - 2 * m);
+      doc.text(lines, m, y); y += lines.length * 4;
+    });
+    y += 2; doc.line(m, y, thermalWidth - m, y); y += 4;
+    doc.setFont('times', 'bold'); doc.setFontSize(12);
+    doc.text('DRESSING PROTOCOL', m, y); y += 4;
+    doc.setFont('times', 'normal'); doc.setFontSize(10);
+    wa.protocol.forEach(s => {
+      const lines = doc.splitTextToSize(clean(s), thermalWidth - 2 * m);
+      doc.text(lines, m, y); y += lines.length * 4;
+    });
+    if (wa.notes) {
+      y += 2; doc.line(m, y, thermalWidth - m, y); y += 4;
+      doc.setFont('times', 'bold'); doc.setFontSize(12);
+      doc.text('NOTES', m, y); y += 4;
+      doc.setFont('times', 'normal'); doc.setFontSize(10);
+      const noteLines = doc.splitTextToSize(clean(wa.notes), thermalWidth - 2 * m);
+      doc.text(noteLines, m, y);
+    }
+    doc.save(`wound_assessment_${wa.id}.pdf`);
+  };
+
   const saveAssessment = () => {
     if (!form.wound_type || !form.location) { alert('Wound type and location are required'); return; }
     const recs = generateRecommendations(form);
@@ -1964,6 +2120,12 @@ const WoundAssessmentTab: React.FC<{ patientId: string; patientName: string; hos
                     <ol className="text-xs text-green-700 space-y-1">
                       {wa.protocol.map((s, i) => <li key={i}>{s}</li>)}
                     </ol>
+                  </div>
+                  {/* Print Button */}
+                  <div className="mt-3 flex gap-2">
+                    <button onClick={() => printWoundAssessment(wa)} className="flex items-center gap-1 px-3 py-1.5 bg-gray-700 text-white text-xs rounded-md hover:bg-gray-800">
+                      <Printer className="w-3.5 h-3.5" /> Print (Thermal 80mm)
+                    </button>
                   </div>
                 </div>
               ))}

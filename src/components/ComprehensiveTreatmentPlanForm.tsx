@@ -657,10 +657,20 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
       urgency: 'routine' as const
     }));
 
+    const pdfData = {
+      patientName: patientData.patient_name,
+      hospitalNumber: patientData.hospital_number,
+      ward: patientData.ward,
+      diagnosis: basicInfo.diagnosis || '',
+      investigations: investigationsForPdf,
+      requestedBy: user?.name || patientData.consultant || 'N/A',
+      requestDate: new Date(),
+    };
+
     if (thermal) {
-      investigationPdfService.generateThermalInvestigationRequestPDF(patientData, investigationsForPdf);
+      investigationPdfService.generateThermalInvestigationRequestPDF(pdfData);
     } else {
-      investigationPdfService.generateInvestigationRequestPDF(patientData, investigationsForPdf);
+      investigationPdfService.generateInvestigationRequestPDF(pdfData);
     }
   };
 
