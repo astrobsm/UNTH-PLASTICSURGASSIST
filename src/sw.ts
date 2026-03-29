@@ -37,11 +37,10 @@ const STATIC_CACHE = `static-cache-${CACHE_VERSION}`;
 precacheAndRoute(self.__WB_MANIFEST);
 cleanupOutdatedCaches();
 
-// ─── Install: do NOT auto-skipWaiting — wait for user prompt ─
+// ─── Install: auto-skipWaiting to ensure latest code is served ─
 self.addEventListener('install', () => {
-  // New SW installs in background; stays in 'waiting' state
-  // until the user clicks "Update Now" and we receive SKIP_WAITING message.
-  console.log('[SW] New service worker installed, waiting for activation...');
+  console.log('[SW] New service worker installed, activating immediately...');
+  self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
