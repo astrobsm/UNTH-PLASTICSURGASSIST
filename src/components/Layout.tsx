@@ -1,5 +1,5 @@
 import { ReactNode, useState, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Users, 
   Calendar, 
@@ -30,6 +30,7 @@ import {
   ChevronRight,
   Menu,
   X,
+  ArrowLeft,
   Syringe,
   Bug,
   Armchair,
@@ -95,7 +96,9 @@ export const patientActions = [
 
 export default function Layout({ children }: LayoutProps) {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, logout } = useAuthStore();
+  const isHomePage = location.pathname === '/';
   
   // Mobile menu state
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -146,6 +149,18 @@ export default function Layout({ children }: LayoutProps) {
               >
                 <Menu className="h-6 w-6" />
               </button>
+
+              {/* Back button — visible on all pages except Dashboard */}
+              {!isHomePage && (
+                <button
+                  onClick={() => navigate(-1)}
+                  className="p-2 mr-1 sm:mr-2 rounded-md text-sky-200 hover:text-white hover:bg-navy-700 focus:outline-none focus:ring-2 focus:ring-sky-400 transition-colors"
+                  aria-label="Go back"
+                  title="Go back"
+                >
+                  <ArrowLeft className="h-5 w-5" />
+                </button>
+              )}
               
               <div className="flex items-center space-x-2 sm:space-x-3">
                 <img 
