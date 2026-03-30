@@ -273,93 +273,316 @@ class OCRService {
     });
   }
 
-  // Preprocess image for better OCR results
+  // ──────────────────────────────────────────────────────────
+  // Advanced Image Preprocessing Pipeline for Tesseract.js
+  // Steps: Load → Upscale → Grayscale → Denoise → Normalize
+  //        → Sharpen → Adaptive Binarize → Border Cleanup
+  // ──────────────────────────────────────────────────────────
+
   private async preprocessImage(
     imageSource: File | Blob | string | HTMLImageElement | HTMLCanvasElement,
     documentType: DocumentType
   ): Promise<HTMLCanvasElement> {
-    return new Promise(async (resolve, reject) => {
-      try {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        
-        if (!ctx) {
-          reject(new Error('Could not get canvas context'));
-          return;
-        }
+    // Step 1: Load image onto a canvas at optimal resolution
+    const srcCanvas = await this.loadImageToCanvas(imageSource);
+    const { width, height } = srcCanvas;
+    const ctx = srcCanvas.getContext('2d')!;
 
-        let img: HTMLImageElement;
+    // Step 2: Upscale small images to ~300 DPI equivalent
+    const TARGET_MIN_DIM = 2400;
+    const maxDim = Math.max(width, height);
+    let workCanvas = srcCanvas;
+    if (maxDim < TARGET_MIN_DIM) {
+      const scale = TARGET_MIN_DIM / maxDim;
+      workCanvas = this.scaleCanvas(srcCanvas, scale);
+    } else if (maxDim > 4000) {
+      // Downscale very large images to save memory
+      workCanvas = this.scaleCanvas(srcCanvas, 4000 / maxDim);
+    }
 
-        if (imageSource instanceof HTMLImageElement) {
-          img = imageSource;
-        } else if (imageSource instanceof HTMLCanvasElement) {
-          resolve(imageSource);
-          return;
-        } else {
-          img = new Image();
-          
-          if (imageSource instanceof File || imageSource instanceof Blob) {
-            img.src = URL.createObjectURL(imageSource);
-          } else {
-            img.src = imageSource;
-          }
+    const wCtx = workCanvas.getContext('2d')!;
+    let imgData = wCtx.getImageData(0, 0, workCanvas.width, workCanvas.height);
 
-          await new Promise<void>((res, rej) => {
-            img.onload = () => res();
-            img.onerror = () => rej(new Error('Failed to load image'));
-          });
-        }
+    // Step 3: Convert to grayscale (luminosity)
+    imgData = this.toGrayscale(imgData);
 
-        // Scale image for better OCR (optimal is around 300 DPI)
-        const scaleFactor = Math.min(2, 2000 / Math.max(img.width, img.height));
-        canvas.width = img.width * scaleFactor;
-        canvas.height = img.height * scaleFactor;
+    // Step 4: Denoise (3×3 median filter — removes salt-and-pepper noise)
+    imgData = this.medianFilter(imgData, workCanvas.width, workCanvas.height);
 
-        // Draw image
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    // Step 5: Contrast normalization (histogram stretch to use full 0–255 range)
+    imgData = this.histogramStretch(imgData);
 
-        // Apply preprocessing filters
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const data = imageData.data;
+    // Step 6: Sharpen (unsharp mask to recover edges after denoising)
+    imgData = this.unsharpMask(imgData, workCanvas.width, workCanvas.height, 1.5);
 
-        // Convert to grayscale and apply thresholding for handwritten notes
-        if (documentType === 'handwritten_note') {
-          // Compute mean gray for adaptive Otsu-style threshold
-          let sum = 0;
-          const grayValues = new Uint8Array(data.length / 4);
-          for (let i = 0; i < data.length; i += 4) {
-            const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
-            grayValues[i / 4] = gray;
-            sum += gray;
-          }
-          const mean = sum / grayValues.length;
-          // Otsu-inspired: use weighted mean between global mean and a fixed ceiling
-          const otsuThreshold = Math.min(Math.max(mean * 0.85, 100), 200);
-          for (let i = 0; i < data.length; i += 4) {
-            const val = grayValues[i / 4] > otsuThreshold ? 255 : 0;
-            data[i] = data[i + 1] = data[i + 2] = val;
-          }
-        } else {
-          // For printed documents, enhance contrast
-          for (let i = 0; i < data.length; i += 4) {
-            const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
-            const enhanced = Math.min(255, Math.max(0, (gray - 128) * 1.5 + 128));
-            data[i] = data[i + 1] = data[i + 2] = enhanced;
-          }
-        }
+    // Step 7: Adaptive binarization or contrast enhancement
+    if (documentType === 'handwritten_note') {
+      // Sauvola adaptive thresholding — handles uneven lighting on paper
+      imgData = this.sauvolaThreshold(imgData, workCanvas.width, workCanvas.height, 15, 0.2);
+    } else if (documentType === 'lab_report' || documentType === 'prescription') {
+      // Aggressive Otsu binarization for clean printed text
+      imgData = this.otsuThreshold(imgData);
+    } else {
+      // Gentle contrast boost + Otsu for general documents
+      imgData = this.enhanceContrast(imgData, 1.8);
+      imgData = this.otsuThreshold(imgData);
+    }
 
-        ctx.putImageData(imageData, 0, 0);
+    // Step 8: Border cleanup — remove dark edges (from scanning)
+    imgData = this.cleanBorders(imgData, workCanvas.width, workCanvas.height, 5);
 
-        // Clean up blob URL if created
-        if ((imageSource instanceof File || imageSource instanceof Blob) && img.src.startsWith('blob:')) {
-          URL.revokeObjectURL(img.src);
-        }
+    // Write final result
+    wCtx.putImageData(imgData, 0, 0);
+    return workCanvas;
+  }
 
-        resolve(canvas);
-      } catch (error) {
-        reject(error);
+  /** Load any image source into a canvas at its native resolution */
+  private async loadImageToCanvas(
+    imageSource: File | Blob | string | HTMLImageElement | HTMLCanvasElement
+  ): Promise<HTMLCanvasElement> {
+    if (imageSource instanceof HTMLCanvasElement) {
+      return imageSource;
+    }
+
+    let img: HTMLImageElement;
+    let blobUrl: string | null = null;
+
+    if (imageSource instanceof HTMLImageElement) {
+      img = imageSource;
+    } else {
+      img = new Image();
+      if (imageSource instanceof File || imageSource instanceof Blob) {
+        blobUrl = URL.createObjectURL(imageSource);
+        img.src = blobUrl;
+      } else {
+        img.src = imageSource;
       }
-    });
+      await new Promise<void>((res, rej) => {
+        img.onload = () => res();
+        img.onerror = () => rej(new Error('Failed to load image for OCR preprocessing'));
+      });
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth || img.width;
+    canvas.height = img.naturalHeight || img.height;
+    const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    if (blobUrl) URL.revokeObjectURL(blobUrl);
+    return canvas;
+  }
+
+  /** Scale a canvas by a given factor */
+  private scaleCanvas(src: HTMLCanvasElement, scale: number): HTMLCanvasElement {
+    const dst = document.createElement('canvas');
+    dst.width = Math.round(src.width * scale);
+    dst.height = Math.round(src.height * scale);
+    const ctx = dst.getContext('2d')!;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(src, 0, 0, dst.width, dst.height);
+    return dst;
+  }
+
+  /** Convert RGBA ImageData to grayscale (in-place, keeps RGBA format) */
+  private toGrayscale(imgData: ImageData): ImageData {
+    const d = imgData.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const gray = d[i] * 0.2126 + d[i + 1] * 0.7152 + d[i + 2] * 0.0722;
+      d[i] = d[i + 1] = d[i + 2] = gray;
+    }
+    return imgData;
+  }
+
+  /** 3×3 median filter for noise removal */
+  private medianFilter(imgData: ImageData, w: number, h: number): ImageData {
+    const src = new Uint8ClampedArray(imgData.data);
+    const dst = imgData.data;
+    const neighbors = new Uint8Array(9);
+
+    for (let y = 1; y < h - 1; y++) {
+      for (let x = 1; x < w - 1; x++) {
+        let n = 0;
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            neighbors[n++] = src[((y + dy) * w + (x + dx)) * 4];
+          }
+        }
+        // Partial sort to find median (index 4) — insertion sort on 9 elements
+        for (let i = 1; i < 9; i++) {
+          const key = neighbors[i];
+          let j = i - 1;
+          while (j >= 0 && neighbors[j] > key) {
+            neighbors[j + 1] = neighbors[j];
+            j--;
+          }
+          neighbors[j + 1] = key;
+        }
+        const med = neighbors[4];
+        const idx = (y * w + x) * 4;
+        dst[idx] = dst[idx + 1] = dst[idx + 2] = med;
+      }
+    }
+    return imgData;
+  }
+
+  /** Stretch histogram so darkest pixel → 0, brightest → 255 */
+  private histogramStretch(imgData: ImageData): ImageData {
+    const d = imgData.data;
+    let min = 255, max = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i] < min) min = d[i];
+      if (d[i] > max) max = d[i];
+    }
+    if (max - min < 10) return imgData; // already flat, skip
+    const range = max - min;
+    for (let i = 0; i < d.length; i += 4) {
+      const v = Math.round(((d[i] - min) / range) * 255);
+      d[i] = d[i + 1] = d[i + 2] = v;
+    }
+    return imgData;
+  }
+
+  /** Unsharp mask sharpening: sharpened = original + amount * (original - blurred) */
+  private unsharpMask(imgData: ImageData, w: number, h: number, amount: number): ImageData {
+    const d = imgData.data;
+    // Create Gaussian-blurred copy (3×3 box blur as approximation)
+    const blurred = new Uint8ClampedArray(d);
+    for (let y = 1; y < h - 1; y++) {
+      for (let x = 1; x < w - 1; x++) {
+        let sum = 0;
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            sum += d[((y + dy) * w + (x + dx)) * 4];
+          }
+        }
+        blurred[(y * w + x) * 4] = sum / 9;
+      }
+    }
+    for (let i = 0; i < d.length; i += 4) {
+      const v = Math.round(d[i] + amount * (d[i] - blurred[i]));
+      d[i] = d[i + 1] = d[i + 2] = Math.min(255, Math.max(0, v));
+    }
+    return imgData;
+  }
+
+  /** Otsu's method — compute optimal global threshold, then binarize */
+  private otsuThreshold(imgData: ImageData): ImageData {
+    const d = imgData.data;
+    const hist = new Int32Array(256);
+    const totalPixels = d.length / 4;
+
+    // Build histogram
+    for (let i = 0; i < d.length; i += 4) hist[d[i]]++;
+
+    // Otsu's algorithm
+    let sumAll = 0;
+    for (let t = 0; t < 256; t++) sumAll += t * hist[t];
+
+    let sumBg = 0, wBg = 0, maxVariance = 0, threshold = 128;
+    for (let t = 0; t < 256; t++) {
+      wBg += hist[t];
+      if (wBg === 0) continue;
+      const wFg = totalPixels - wBg;
+      if (wFg === 0) break;
+
+      sumBg += t * hist[t];
+      const meanBg = sumBg / wBg;
+      const meanFg = (sumAll - sumBg) / wFg;
+      const variance = wBg * wFg * (meanBg - meanFg) * (meanBg - meanFg);
+      if (variance > maxVariance) {
+        maxVariance = variance;
+        threshold = t;
+      }
+    }
+
+    // Binarize
+    for (let i = 0; i < d.length; i += 4) {
+      const v = d[i] > threshold ? 255 : 0;
+      d[i] = d[i + 1] = d[i + 2] = v;
+    }
+    return imgData;
+  }
+
+  /** Sauvola adaptive thresholding — excellent for uneven illumination */
+  private sauvolaThreshold(
+    imgData: ImageData, w: number, h: number, windowRadius: number, k: number
+  ): ImageData {
+    const d = imgData.data;
+    const gray = new Float32Array(w * h);
+    for (let i = 0; i < gray.length; i++) gray[i] = d[i * 4];
+
+    // Build integral image and integral of squares for fast local stats
+    const integral = new Float64Array((w + 1) * (h + 1));
+    const integralSq = new Float64Array((w + 1) * (h + 1));
+    const iw = w + 1;
+
+    for (let y = 0; y < h; y++) {
+      let rowSum = 0, rowSumSq = 0;
+      for (let x = 0; x < w; x++) {
+        const v = gray[y * w + x];
+        rowSum += v;
+        rowSumSq += v * v;
+        integral[(y + 1) * iw + (x + 1)] = integral[y * iw + (x + 1)] + rowSum;
+        integralSq[(y + 1) * iw + (x + 1)] = integralSq[y * iw + (x + 1)] + rowSumSq;
+      }
+    }
+
+    // Compute local threshold for each pixel
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const x1 = Math.max(0, x - windowRadius);
+        const y1 = Math.max(0, y - windowRadius);
+        const x2 = Math.min(w - 1, x + windowRadius);
+        const y2 = Math.min(h - 1, y + windowRadius);
+        const area = (x2 - x1 + 1) * (y2 - y1 + 1);
+
+        const sum = integral[(y2 + 1) * iw + (x2 + 1)]
+                  - integral[y1 * iw + (x2 + 1)]
+                  - integral[(y2 + 1) * iw + x1]
+                  + integral[y1 * iw + x1];
+        const sumSq = integralSq[(y2 + 1) * iw + (x2 + 1)]
+                    - integralSq[y1 * iw + (x2 + 1)]
+                    - integralSq[(y2 + 1) * iw + x1]
+                    + integralSq[y1 * iw + x1];
+
+        const mean = sum / area;
+        const variance = (sumSq / area) - mean * mean;
+        const stddev = Math.sqrt(Math.max(0, variance));
+        const R = 128; // dynamic range of standard deviation
+        const threshold = mean * (1 + k * (stddev / R - 1));
+
+        const idx = (y * w + x) * 4;
+        const v = gray[y * w + x] > threshold ? 255 : 0;
+        d[idx] = d[idx + 1] = d[idx + 2] = v;
+      }
+    }
+    return imgData;
+  }
+
+  /** Simple linear contrast enhancement: out = (in - 128) * factor + 128 */
+  private enhanceContrast(imgData: ImageData, factor: number): ImageData {
+    const d = imgData.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const v = Math.round((d[i] - 128) * factor + 128);
+      d[i] = d[i + 1] = d[i + 2] = Math.min(255, Math.max(0, v));
+    }
+    return imgData;
+  }
+
+  /** Remove dark border pixels (common from scanning / camera shots) */
+  private cleanBorders(imgData: ImageData, w: number, h: number, borderPx: number): ImageData {
+    const d = imgData.data;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (x < borderPx || x >= w - borderPx || y < borderPx || y >= h - borderPx) {
+          const idx = (y * w + x) * 4;
+          d[idx] = d[idx + 1] = d[idx + 2] = 255;
+        }
+      }
+    }
+    return imgData;
   }
 
   // Post-process extracted text based on document type
