@@ -15,7 +15,7 @@ import { ScribeNoteEditor } from './ScribeNoteEditor';
 import { medicalScribeService, StructuredNote, ScribeSession } from '../services/medicalScribeService';
 import { DocumentScannerModal } from './DocumentScannerModal';
 import { searchDrugs, BNFDrug } from '../data/bnfDrugDatabase';
-import Tesseract from 'tesseract.js';
+import { ocrService } from '../services/ocrService';
 
 interface WardRoundFormProps {
   patientId?: string;
@@ -541,28 +541,13 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
     setOcrProgress(0);
 
     try {
-      let result;
-      try {
-        result = await Tesseract.recognize(
-          image.data,
-          'eng',
-          {
-            logger: (m: any) => {
-              if (m.status === 'recognizing text') {
-                setOcrProgress(Math.round(m.progress * 100));
-              }
-            }
-          }
-        );
-      } catch (ocrLoadError: any) {
-        console.error('Tesseract worker load error:', ocrLoadError);
-        setIsProcessingOCR(false);
-        setOcrProgress(0);
-        alert('OCR is temporarily unavailable. The text recognition engine could not be loaded. Please check your internet connection and try again.');
-        return;
-      }
+      const ocrResult = await ocrService.extractText(
+        image.data,
+        'general',
+        (p) => setOcrProgress(Math.round(p.progress * 100))
+      );
 
-      const extractedText = result.data.text;
+      const extractedText = ocrResult.text;
       
       if (!extractedText || extractedText.trim().length === 0) {
         alert('No text could be extracted from this image. Try a clearer image.');

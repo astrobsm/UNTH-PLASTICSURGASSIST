@@ -1,10 +1,14 @@
 /**
  * OCR Service for Medical Document Scanning
- * Uses Tesseract.js for text extraction from images
+ * 
+ * Primary: Google Cloud Vision API via backend /api/ocr/scan
+ * Fallback: Tesseract.js (local, offline-capable)
+ * 
  * Optimized for laboratory reports, imaging reports, and medical documents
  */
 
 import { createWorker, Worker, PSM, OEM } from 'tesseract.js';
+import { apiClient } from './apiClient';
 
 export interface OCRResult {
   text: string;
@@ -157,7 +161,7 @@ class OCRService {
     }
   }
 
-  // Process image and extract text
+  // Process image and extract text — tries Cloud Vision first, falls back to Tesseract
   async extractText(
     imageSource: File | Blob | string | HTMLImageElement | HTMLCanvasElement,
     documentType: DocumentType = 'general',
@@ -165,7 +169,42 @@ class OCRService {
   ): Promise<OCRResult> {
     const startTime = Date.now();
 
-    // Initialize if needed
+    // Try Google Cloud Vision via backend first
+    try {
+      onProgress?.({ status: 'Sending to Cloud Vision...', progress: 0.1 });
+      const base64 = await this.imageToBase64(imageSource);
+      onProgress?.({ status: 'Processing with Cloud Vision...', progress: 0.3 });
+
+      const response = await apiClient.post('/ocr/scan', {
+        image: base64,
+        documentType,
+        aiPostProcess: false, // Raw OCR only — AI is handled separately in processDocumentWithAI
+      });
+
+      if (response?.success && response.raw_text) {
+        onProgress?.({ status: 'Cloud Vision complete', progress: 1.0 });
+        const processedText = this.postProcessText(response.raw_text, documentType);
+        const words: OCRWord[] = (response.structured_blocks || []).map((b: any) => ({
+          text: b.text || '',
+          confidence: b.confidence || 0,
+          bbox: b.boundingBox ? { x0: b.boundingBox[0]?.x || 0, y0: b.boundingBox[0]?.y || 0, x1: b.boundingBox[2]?.x || 0, y1: b.boundingBox[2]?.y || 0 } : { x0: 0, y0: 0, x1: 0, y1: 0 },
+        }));
+
+        const result: OCRResult = {
+          text: processedText,
+          confidence: response.confidence ?? 0.9,
+          words,
+          processingTime: Date.now() - startTime,
+        };
+        console.log(`✅ Cloud Vision OCR completed in ${result.processingTime}ms with ${Math.round(result.confidence * 100)}% confidence`);
+        return result;
+      }
+    } catch (cloudErr: any) {
+      console.warn('Cloud Vision OCR unavailable, falling back to Tesseract:', cloudErr.message || cloudErr);
+    }
+
+    // Fallback: local Tesseract.js
+    onProgress?.({ status: 'Initializing local OCR...', progress: 0.05 });
     await this.initialize(onProgress);
 
     if (!this.worker) {
@@ -205,6 +244,33 @@ class OCRService {
       console.error('OCR extraction failed:', error);
       throw error;
     }
+  }
+
+  // Convert any image source to a base64 data URI for backend upload
+  private async imageToBase64(
+    imageSource: File | Blob | string | HTMLImageElement | HTMLCanvasElement
+  ): Promise<string> {
+    if (typeof imageSource === 'string') {
+      return imageSource; // Already a data URI or base64
+    }
+    if (imageSource instanceof HTMLCanvasElement) {
+      return imageSource.toDataURL('image/jpeg', 0.92);
+    }
+    if (imageSource instanceof HTMLImageElement) {
+      const canvas = document.createElement('canvas');
+      canvas.width = imageSource.naturalWidth || imageSource.width;
+      canvas.height = imageSource.naturalHeight || imageSource.height;
+      const ctx = canvas.getContext('2d');
+      if (ctx) { ctx.drawImage(imageSource, 0, 0); }
+      return canvas.toDataURL('image/jpeg', 0.92);
+    }
+    // File or Blob
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error('Failed to read image file'));
+      reader.readAsDataURL(imageSource);
+    });
   }
 
   // Preprocess image for better OCR results
@@ -445,14 +511,16 @@ class OCRService {
   }
 
   // ──────────────────────────────────────────────────────────
-  // AI-Enhanced OCR Processing (ABBYY FineReader-style AI layering)
+  // AI-Enhanced OCR Processing (Cloud Vision + AI pipeline)
   // ──────────────────────────────────────────────────────────
 
   /**
-   * Process a document image with Tesseract OCR + AI post-processing.
-   * The AI layer corrects OCR errors, extracts structured clinical data,
-   * and maps values to the appropriate form fields — similar to ABBYY
-   * FineReader/FlexiCapture intelligent document processing.
+   * Process a document image with OCR + AI post-processing.
+   * 
+   * Pipeline:
+   * 1. Try backend /api/ocr/scan (Cloud Vision + AI in one call)
+   * 2. If backend unavailable, fall back to local Tesseract + separate AI endpoint
+   * 3. If AI unavailable, fall back to rule-based extraction
    */
   async processDocumentWithAI(
     imageSource: File | Blob | string | HTMLImageElement | HTMLCanvasElement,
@@ -467,27 +535,77 @@ class OCRService {
   ): Promise<AIEnhancedOCRResult> {
     const startTime = Date.now();
 
-    // Step 1: Run Tesseract OCR
-    onProgress?.({ status: 'recognizing', progress: 0.1 });
+    // ── Attempt 1: Unified backend (Cloud Vision + AI in one call) ──
+    try {
+      onProgress?.({ status: 'Sending to Cloud Vision AI...', progress: 0.1 });
+      const base64 = await this.imageToBase64(imageSource);
+
+      onProgress?.({ status: 'Cloud Vision processing...', progress: 0.3 });
+      const backendResult = await apiClient.post('/ocr/scan', {
+        image: base64,
+        documentType,
+        aiPostProcess: true,
+        patientContext,
+      });
+
+      if (backendResult?.success && backendResult.raw_text) {
+        onProgress?.({ status: 'AI structuring complete', progress: 1.0 });
+
+        const processedText = this.postProcessText(backendResult.raw_text, documentType);
+        const detectedType = backendResult.documentType || documentType;
+        const words: OCRWord[] = (backendResult.structured_blocks || []).map((b: any) => ({
+          text: b.text || '',
+          confidence: b.confidence || 0,
+          bbox: b.boundingBox ? { x0: b.boundingBox[0]?.x || 0, y0: b.boundingBox[0]?.y || 0, x1: b.boundingBox[2]?.x || 0, y1: b.boundingBox[2]?.y || 0 } : { x0: 0, y0: 0, x1: 0, y1: 0 },
+        }));
+
+        let structuredData = backendResult.structured;
+        let aiConfidence = structuredData?.confidence || 0.8;
+        const aiProcessed = !!structuredData;
+
+        // If no AI structured data, use rule-based fallback
+        if (!structuredData) {
+          structuredData = this.ruleBasedExtraction(processedText, detectedType as DocumentType);
+          aiConfidence = 0.5;
+        }
+
+        const result: AIEnhancedOCRResult = {
+          text: processedText,
+          confidence: backendResult.confidence ?? 0.9,
+          words,
+          processingTime: Date.now() - startTime,
+          documentType: detectedType as DocumentType,
+          structuredData,
+          aiConfidence,
+          aiProcessed,
+        };
+        console.log(`✅ Cloud Vision + AI completed in ${result.processingTime}ms`);
+        return result;
+      }
+    } catch (backendErr: any) {
+      console.warn('Backend OCR unavailable, falling back to Tesseract:', backendErr.message || backendErr);
+    }
+
+    // ── Attempt 2: Local Tesseract OCR + separate AI endpoint ──
+    onProgress?.({ status: 'Using local OCR engine...', progress: 0.1 });
     const ocrResult = await this.extractText(imageSource, documentType, (p) => {
       onProgress?.({ ...p, progress: p.progress * 0.5 }); // First 50% is OCR
     });
 
     onProgress?.({ status: 'recognizing', progress: 0.55 });
 
-    // Step 2: Auto-detect document type if not specified
+    // Auto-detect document type if not specified
     const detectedType = documentType === 'general'
       ? this.detectDocumentType(ocrResult.text)
       : documentType;
 
-    // Step 3: AI post-processing — send to serverless endpoint
-    onProgress?.({ status: 'recognizing', progress: 0.6 });
+    // AI post-processing via separate endpoint
+    onProgress?.({ status: 'AI analyzing content...', progress: 0.6 });
     let structuredData: any = null;
     let aiConfidence = 0;
 
     try {
       const token = localStorage.getItem('auth_token');
-      // Retry up to 2 times for transient 503 errors (Vercel cold starts)
       let response: Response | null = null;
       for (let attempt = 0; attempt < 3; attempt++) {
         response = await fetch('/api/ai/ocr-process', {
@@ -503,20 +621,18 @@ class OCRService {
           }),
         });
         if (response.status !== 503 || attempt === 2) break;
-        // Wait before retry: 1s, then 2s
         await new Promise(r => setTimeout(r, (attempt + 1) * 1000));
       }
 
-      if (response.ok) {
-        const result = await response.json();
+      if (response!.ok) {
+        const result = await response!.json();
         if (result.success && result.structured) {
           structuredData = result.structured;
           aiConfidence = result.structured.confidence || 0.8;
         }
       } else {
-        const errData = await response.json().catch(() => ({}));
-        console.warn(`AI OCR returned ${response.status}:`, errData);
-        // If AI not configured (501), silently fall through to rule-based
+        const errData = await response!.json().catch(() => ({}));
+        console.warn(`AI OCR returned ${response!.status}:`, errData);
         if (errData.fallback) {
           console.log('AI not configured, using rule-based extraction');
         }
