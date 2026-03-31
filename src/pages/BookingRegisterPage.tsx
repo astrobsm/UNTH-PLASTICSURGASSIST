@@ -21,6 +21,7 @@ import {
   createThermalPDF, addThermalHeader, addThermalText, finalizeThermalPDF,
 } from '../utils/pdfUtils';
 import jsPDF from 'jspdf';
+import { useAuthStore } from '../store/authStore';
 
 //  interfaces 
 interface Patient {
@@ -319,6 +320,7 @@ const getPriorityLabel = (bk: SurgeryBooking): { label: string; cls: string; ico
 //  BOOKING REGISTER PAGE
 // 
 const BookingRegisterPage: React.FC = () => {
+  const { user } = useAuthStore();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const patientIdFromUrl = searchParams.get('patientId');
@@ -591,7 +593,7 @@ const BookingRegisterPage: React.FC = () => {
           'Fasting: NPO status - ' + (data.clinicalAssessment?.npo_status || 'NPO since midnight') +
           '. Medications: ' + ((data.clinicalAssessment?.currentMedications || []).length > 0 ? data.clinicalAssessment.currentMedications.join(', ') : 'None') +
           '. Investigations ordered: ' + ((data.generatedInvestigations || []).map((i: any) => i.name).join(', ') || 'As per protocol') + '.',
-        assessed_by: data.assessedBy || localStorage.getItem('userName') || 'Unknown',
+        assessed_by: data.assessedBy || user?.name || 'Unknown',
         assessed_at: new Date(),
         updated_at: new Date(),
       };
@@ -720,7 +722,7 @@ const BookingRegisterPage: React.FC = () => {
 
   const saveInvestigationResults = (patientId: string) => {
     const filled = investigationEntries.filter(e => e.value.trim() !== '');
-    const updated = { ...investigationResults, [patientId]: filled.map(e => ({ ...e, enteredBy: localStorage.getItem('userName') || 'Unknown', enteredAt: new Date().toISOString() })) };
+    const updated = { ...investigationResults, [patientId]: filled.map(e => ({ ...e, enteredBy: user?.name || 'Unknown', enteredAt: new Date().toISOString() })) };
     setInvestigationResults(updated);
     saveJSON(INVESTIGATION_RESULTS_KEY, updated);
     setShowInvestigationModal(null);

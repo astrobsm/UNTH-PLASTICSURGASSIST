@@ -16,6 +16,11 @@ interface SyncResult {
   errors: string[];
 }
 
+// Maximum retries before an item is permanently removed from the queue
+const MAX_RETRIES = 3;
+// Maximum age (in ms) for a sync queue item before it's considered stale (7 days)
+const MAX_ITEM_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
 class SyncService {
   private isOnline = navigator.onLine;
   private syncInProgress = false;
@@ -104,6 +109,9 @@ class SyncService {
     const result: SyncResult = { success: true, synced: 0, failed: 0, errors: [] };
 
     try {
+      // First, purge stale items that are too old or have too many retries
+      await this.purgeStaleItems();
+
       // Get all pending sync items, ordered by creation time
       const pendingItems = await db.sync_queue
         .orderBy('created_at')
@@ -119,16 +127,18 @@ class SyncService {
           result.failed++;
           result.errors.push(`${item.table} ${item.action}: ${error}`);
           
-          // Update retry count
-          await db.sync_queue.update(item.id!, {
-            retries: item.retries + 1,
-            last_error: String(error)
-          });
-
-          // Remove items that have failed too many times
-          if (item.retries >= 3) {
+          // Increment retry count (use NEW value for checking)
+          const newRetries = (item.retries || 0) + 1;
+          
+          if (newRetries >= MAX_RETRIES) {
+            // Permanently remove items that have exceeded max retries
             await db.sync_queue.delete(item.id!);
-            toast.error(`Failed to sync ${item.table} after 3 attempts`);
+            console.warn(`🗑️ Removed sync item ${item.table}/${item.local_id} after ${MAX_RETRIES} failed attempts: ${error}`);
+          } else {
+            await db.sync_queue.update(item.id!, {
+              retries: newRetries,
+              last_error: String(error)
+            });
           }
         }
       }
@@ -143,16 +153,58 @@ class SyncService {
       toast.error('Sync failed - will retry later');
     } finally {
       this.syncInProgress = false;
+      this.notifyListeners();
     }
 
     return result;
+  }
+
+  // Purge items that are too old or have exceeded max retries
+  private async purgeStaleItems(): Promise<number> {
+    let purgedCount = 0;
+    try {
+      const allItems = await db.sync_queue.toArray();
+      const now = Date.now();
+      
+      for (const item of allItems) {
+        const itemAge = now - new Date(item.created_at).getTime();
+        const isTooOld = itemAge > MAX_ITEM_AGE_MS;
+        const isTooManyRetries = (item.retries || 0) >= MAX_RETRIES;
+        const hasInvalidUrl = item.data?.url && (
+          item.data.url.includes('localhost') && import.meta.env.PROD
+        );
+        
+        if (isTooOld || isTooManyRetries || hasInvalidUrl) {
+          await db.sync_queue.delete(item.id!);
+          purgedCount++;
+        }
+      }
+      
+      if (purgedCount > 0) {
+        console.log(`🧹 Purged ${purgedCount} stale/invalid sync queue items`);
+      }
+    } catch (e) {
+      console.warn('Failed to purge stale items:', e);
+    }
+    return purgedCount;
   }
 
   // Sync a single item
   private async syncItem(item: SyncQueue): Promise<void> {
     const { action, table, local_id, data } = item;
 
+    // Handle raw request replay format (queued by apiClient when offline)
+    if (data && data.url && data.method) {
+      // Fix URLs: rewrite localhost URLs to production base URL when in production
+      if (import.meta.env.PROD && data.url.includes('localhost')) {
+        const urlPath = new URL(data.url).pathname;
+        data.url = urlPath; // Convert to relative path
+      }
+      return this.replayRawRequest(data);
+    }
+
     switch (table) {
+      // ── Core Clinical Entities with specific sync methods ──
       case 'patients':
         await this.syncPatient(action, local_id, data);
         break;
@@ -181,17 +233,20 @@ class SyncService {
         await this.syncLabResult(action, local_id, data);
         break;
       case 'risk_assessments':
+      case 'dvt_assessments':
+      case 'pressure_sore_assessments':
+      case 'nutritional_assessments':
         await this.syncRiskAssessment(action, local_id, data);
         break;
       case 'preoperative_assessments':
         await this.syncPreoperativeAssessment(action, local_id, data);
         break;
       case 'surgeries':
-      case 'surgery_bookings': // Handle both table names
+      case 'surgery_bookings':
         await this.syncSurgery(action, local_id, data);
         break;
       case 'wound_care':
-      case 'wound_care_records': // Handle both table names
+      case 'wound_care_records':
         await this.syncWoundCare(action, local_id, data);
         break;
       case 'ward_rounds':
@@ -200,15 +255,42 @@ class SyncService {
       case 'patient_transfers':
         await this.syncPatientTransfer(action, local_id, data);
         break;
+
+      // ── Entities synced via the generic /sync/push endpoint ──
       case 'shopping_lists':
       case 'call_duty_roster':
       case 'clinic_duty_logs':
       case 'cbt_attempts':
+      case 'blood_transfusions':
+      case 'burn_patients':
+      case 'diabetic_foot_assessments':
+      case 'procedures':
+      case 'who_safety_checklists':
+      case 'ward_rounds_clinical':
+      case 'mdt_patient_teams':
+      case 'mdt_meetings':
+      case 'mdt_contact_logs':
+      case 'sjs_assessments':
+      case 'investigation_uploads':
+      case 'notice_board':
+      case 'audit_logs':
         await this.syncGenericEntity(action, table, local_id, data);
         break;
+
       default:
-        console.warn(`Unknown table for sync: ${table}`);
-        // Don't throw, just skip unknown tables
+        // For any table that exists in the database, attempt generic sync
+        try {
+          const tableRef = (db as any).table(table);
+          if (tableRef) {
+            console.log(`⚡ Attempting generic sync for unregistered table: ${table}`);
+            await this.syncGenericEntity(action, table, local_id, data);
+          } else {
+            console.warn(`⚠️ Unknown table "${table}" — removing item from queue`);
+          }
+        } catch {
+          console.warn(`⚠️ Table "${table}" not found in database — removing item from queue`);
+        }
+        // Item will be deleted by the caller since we don't throw
     }
   }
 
@@ -540,13 +622,44 @@ class SyncService {
   }
 
   private async syncRiskAssessment(action: string, localId: number, data: any): Promise<void> {
-    const assessment = await db.risk_assessments?.get(localId);
+    // Try each assessment table type based on qi data or the queued item
+    const assessmentType = data?.assessment_type || data?.type;
+    let assessment: any = null;
+    let tableName = 'dvt_assessments';
+    let apiEndpoint = '/risk-assessments';
+
+    // Try to find the record in the appropriate table
+    if (assessmentType === 'pressure_sore' || assessmentType === 'braden') {
+      assessment = await db.pressure_sore_assessments?.get(localId);
+      tableName = 'pressure_sore_assessments';
+    } else if (assessmentType === 'nutritional' || assessmentType === 'must') {
+      assessment = await db.nutritional_assessments?.get(localId);
+      tableName = 'nutritional_assessments';
+    } else {
+      assessment = await db.dvt_assessments?.get(localId);
+      tableName = 'dvt_assessments';
+    }
+
+    // Fallback: try all assessment tables if not found
+    if (!assessment) {
+      assessment = await db.dvt_assessments?.get(localId);
+      if (assessment) { tableName = 'dvt_assessments'; }
+      else {
+        assessment = await db.pressure_sore_assessments?.get(localId);
+        if (assessment) { tableName = 'pressure_sore_assessments'; }
+        else {
+          assessment = await db.nutritional_assessments?.get(localId);
+          if (assessment) { tableName = 'nutritional_assessments'; }
+        }
+      }
+    }
+
     if (!assessment) return;
 
     if (action === 'create') {
-      const response = await this.apiCall('POST', '/risk-assessments', assessment);
-      await db.risk_assessments.update(localId, { id: response.id, synced: true });
-      console.log('✅ Risk assessment synced to server:', response.id);
+      const response = await this.apiCall('POST', apiEndpoint, assessment);
+      await (db as any)[tableName].update(localId, { id: response.id, synced: true });
+      console.log(`✅ Risk assessment (${tableName}) synced to server:`, response.id);
     }
   }
 
@@ -667,6 +780,44 @@ class SyncService {
     console.log(`✅ ${table} synced to server:`, entityId);
   }
 
+  // Replay a raw queued request from apiClient
+  private async replayRawRequest(data: { url: string; method: string; body?: any; headers?: Record<string, string> }): Promise<void> {
+    const token = apiClient.getToken();
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    };
+    // Always use fresh token (don't use stale token from the stored headers)
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    // Fix URL: ensure we use the correct base URL for the current environment
+    let url = data.url;
+    try {
+      const parsedUrl = new URL(url, window.location.origin);
+      // If the stored URL is absolute and points to localhost while we're in production,
+      // extract just the pathname and use relative URL
+      if (import.meta.env.PROD && parsedUrl.hostname === 'localhost') {
+        url = parsedUrl.pathname + parsedUrl.search;
+      }
+    } catch {
+      // If URL is already relative, leave it as-is
+    }
+
+    const response = await fetch(url, {
+      method: data.method,
+      headers,
+      body: data.body ? JSON.stringify(data.body) : undefined,
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Request failed' }));
+      throw new Error(errorData.error || errorData.message || `HTTP ${response.status}`);
+    }
+    console.log(`✅ Replayed queued ${data.method} ${url}`);
+  }
+
   private async apiCall(method: string, endpoint: string, data?: any): Promise<any> {
     const token = apiClient.getToken();
     const baseUrl = getApiBaseUrl();
@@ -726,8 +877,75 @@ class SyncService {
     };
   }
 
+  // Get detailed breakdown of what's in the sync queue
+  async getQueueBreakdown(): Promise<{
+    total: number;
+    byTable: Record<string, number>;
+    byAction: Record<string, number>;
+    staleCount: number;
+    failedCount: number;
+    rawRequestCount: number;
+  }> {
+    const allItems = await db.sync_queue.toArray();
+    const now = Date.now();
+    const byTable: Record<string, number> = {};
+    const byAction: Record<string, number> = {};
+    let staleCount = 0;
+    let failedCount = 0;
+    let rawRequestCount = 0;
+
+    for (const item of allItems) {
+      // Count by table
+      byTable[item.table] = (byTable[item.table] || 0) + 1;
+      // Count by action
+      byAction[item.action] = (byAction[item.action] || 0) + 1;
+      // Count stale items (> 7 days old)
+      if (now - new Date(item.created_at).getTime() > MAX_ITEM_AGE_MS) {
+        staleCount++;
+      }
+      // Count items that have failed at least once
+      if ((item.retries || 0) > 0) {
+        failedCount++;
+      }
+      // Count raw request items (from apiClient offline queue)
+      if (item.data?.url && item.data?.method) {
+        rawRequestCount++;
+      }
+    }
+
+    return {
+      total: allItems.length,
+      byTable,
+      byAction,
+      staleCount,
+      failedCount,
+      rawRequestCount
+    };
+  }
+
+  // Clear all items from the sync queue (nuclear option)
+  async clearAllQueue(): Promise<number> {
+    const count = await db.sync_queue.count();
+    await db.sync_queue.clear();
+    console.log(`🗑️ Cleared ${count} items from sync queue`);
+    this.notifyListeners();
+    return count;
+  }
+
+  // Clear items for a specific table from the sync queue
+  async clearQueueForTable(tableName: string): Promise<number> {
+    const items = await db.sync_queue.where('table').equals(tableName).toArray();
+    const ids = items.map(i => i.id!);
+    await db.sync_queue.bulkDelete(ids);
+    console.log(`🗑️ Cleared ${ids.length} items for table "${tableName}" from sync queue`);
+    this.notifyListeners();
+    return ids.length;
+  }
+
   // Force sync (for manual trigger)
-  async forcSync(): Promise<SyncResult> {
+  async forceSync(): Promise<SyncResult> {
+    // Reset the syncInProgress flag in case it got stuck
+    this.syncInProgress = false;
     return this.syncAll();
   }
 }

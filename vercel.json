@@ -40,6 +40,10 @@
       "destination": "/api/keloid-care"
     },
     {
+      "source": "/api/attendance/:path*",
+      "destination": "/api/attendance"
+    },
+    {
       "source": "/api/:path*",
       "destination": "/api/:path*"
     },

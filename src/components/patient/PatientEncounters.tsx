@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { db } from '../../db/database';
 import { apiClient } from '../../services/apiClient';
 import { useAuthStore } from '../../store/authStore';
+import { RefreshCw } from 'lucide-react';
 
 interface Encounter {
   id: number | string;
@@ -23,105 +24,280 @@ export const PatientEncounters: React.FC<PatientEncountersProps> = ({ patientId,
   const { user } = useAuthStore();
   const [encounters, setEncounters] = useState<Encounter[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [showNewEncounter, setShowNewEncounter] = useState(false);
   const [newEncounter, setNewEncounter] = useState({ type: 'progress_note', title: '', content: '' });
   const [saving, setSaving] = useState(false);
+  const mountedRef = useRef(true);
 
-  useEffect(() => { loadEncounters(); }, [patientId]);
+  /** Extract displayable content from a progress note (handles SOAP & plain formats) */
+  const extractNoteContent = (n: any): string => {
+    if (n.content) return n.content;
+    if (n.note) return n.note;
+    // SOAP note format from ProgressNoteModal
+    if (n.soap && typeof n.soap === 'object') {
+      const soap = typeof n.soap === 'string' ? JSON.parse(n.soap) : n.soap;
+      const parts: string[] = [];
+      if (soap.subjective) parts.push(`S: ${soap.subjective}`);
+      if (soap.objective) parts.push(`O: ${soap.objective}`);
+      if (soap.assessment) parts.push(`A: ${soap.assessment}`);
+      if (soap.plan) parts.push(`P: ${soap.plan}`);
+      if (soap.note) parts.push(soap.note);
+      if (parts.length > 0) return parts.join(' | ');
+    }
+    if (n.subjective) return `S: ${n.subjective}`;
+    return '';
+  };
 
-  const loadEncounters = async () => {
-    setLoading(true);
+  /** Deduplicate encounters by server id or unique composite key */
+  const dedup = (items: Encounter[]): Encounter[] => {
+    const seen = new Set<string>();
+    return items.filter((e) => {
+      const key = String(e.id);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+
+  const loadEncounters = useCallback(async (showSpinner = true) => {
+    if (showSpinner) setLoading(true);
+    else setRefreshing(true);
+
     try {
       const allEncounters: Encounter[] = [];
       const pid = Number(patientId) || patientId;
 
-      // 1. Progress Notes from IndexedDB
+      // ─── Fetch from SERVER first (if online) ──────────────────────
+      if (navigator.onLine) {
+        try {
+          // Progress Notes from server
+          const notesResp = await apiClient.request(`/progress-notes?patientId=${pid}`);
+          const serverNotes: any[] = notesResp?.notes || (Array.isArray(notesResp) ? notesResp : []);
+          for (const n of serverNotes) {
+            allEncounters.push({
+              id: `note-${n.id}`, type: 'Progress Note',
+              title: n.title || 'Progress Note',
+              content: extractNoteContent(n),
+              date: n.created_at || n.date || '',
+              created_by_name: n.author || n.created_by_name || '',
+              created_by_role: n.author_role || n.created_by_role || ''
+            });
+            // Also upsert into IndexedDB for offline use
+            try { if (db.progress_notes) await db.progress_notes.put({ ...n, synced: true }); } catch { /* ok */ }
+          }
+        } catch { /* offline or error – will fall back to IndexedDB below */ }
+
+        try {
+          // Admissions from server
+          const admResp = await apiClient.request(`/admissions?patientId=${pid}`);
+          const serverAdm: any[] = admResp?.admissions || (Array.isArray(admResp) ? admResp : []);
+          for (const a of serverAdm) {
+            allEncounters.push({
+              id: `adm-${a.id}`, type: 'Admission',
+              title: `Admission - ${a.admitting_diagnosis || a.primary_diagnosis || 'General'}`,
+              content: a.notes || a.presenting_complaint || `Ward: ${a.ward || 'N/A'}, Bed: ${a.bed_number || 'N/A'}`,
+              date: a.admission_date || a.created_at || '',
+              created_by_name: a.admitting_doctor || a.created_by_name || '',
+              created_by_role: 'Doctor'
+            });
+          }
+        } catch { /* ok */ }
+
+        try {
+          // Prescriptions from server
+          const rxResp = await apiClient.request(`/prescriptions?patientId=${pid}`);
+          const serverRx: any[] = rxResp?.prescriptions || (Array.isArray(rxResp) ? rxResp : []);
+          for (const p of serverRx) {
+            allEncounters.push({
+              id: `rx-${p.id}`, type: 'Prescription',
+              title: `Rx: ${p.medication_name || p.drug_name || 'Medication'}`,
+              content: `${p.dosage || ''} ${p.frequency || ''} ${p.duration || ''} ${p.route || ''}`.trim(),
+              date: p.prescribed_at || p.created_at || '',
+              created_by_name: p.prescribed_by_name || p.prescribed_by || '',
+              created_by_role: 'Doctor'
+            });
+          }
+        } catch { /* ok */ }
+
+        try {
+          // Ward Rounds from server
+          const wrResp = await apiClient.request(`/ward-rounds?patientId=${pid}`);
+          const serverWR: any[] = wrResp?.rounds || wrResp?.wardRounds || (Array.isArray(wrResp) ? wrResp : []);
+          for (const r of serverWR) {
+            allEncounters.push({
+              id: `round-${r.id}`, type: 'Ward Round',
+              title: `Ward Round - ${r.round_type || 'General'}`,
+              content: r.notes || r.assessment || r.plan || '',
+              date: r.round_date || r.created_at || '',
+              created_by_name: r.led_by || r.created_by_name || '',
+              created_by_role: r.created_by_role || 'Doctor'
+            });
+          }
+        } catch { /* ok */ }
+
+        try {
+          // Surgeries from server
+          const surgResp = await apiClient.request(`/surgeries?patientId=${pid}`);
+          const serverSurg: any[] = surgResp?.surgeries || (Array.isArray(surgResp) ? surgResp : []);
+          for (const s of serverSurg) {
+            allEncounters.push({
+              id: `surg-${s.id}`, type: 'Surgery',
+              title: `Surgery: ${s.procedure_name || s.procedure || 'Procedure'}`,
+              content: s.notes || s.findings || '',
+              date: s.surgery_date || s.scheduled_date || s.created_at || '',
+              created_by_name: s.surgeon || s.lead_surgeon || '',
+              created_by_role: 'Surgeon'
+            });
+          }
+        } catch { /* ok */ }
+
+        try {
+          // Discharge summaries from server
+          const disResp = await apiClient.request(`/discharge-summaries?patientId=${pid}`);
+          const serverDis: any[] = disResp?.discharges || (Array.isArray(disResp) ? disResp : []);
+          for (const d of serverDis) {
+            allEncounters.push({
+              id: `dis-${d.id}`, type: 'Discharge', title: 'Discharge Summary',
+              content: d.summary || d.discharge_diagnosis || '',
+              date: d.discharge_date || d.created_at || '',
+              created_by_name: d.prepared_by || '',
+              created_by_role: 'Doctor'
+            });
+          }
+        } catch { /* ok */ }
+      }
+
+      // ─── Fallback / supplement from IndexedDB ──────────────────────
+      // Always merge local data (it may contain unsynced local entries)
+
+      // Progress Notes from IndexedDB
       try {
         const notes = await db.progress_notes?.where('patient_id').equals(pid).toArray() || [];
-        notes.forEach((n: any) => allEncounters.push({
-          id: `note-${n.id}`, type: 'Progress Note', title: n.title || 'Progress Note',
-          content: n.content || n.note || n.subjective || '',
-          date: n.created_at || n.date || '', created_by_name: n.author || n.created_by_name || '',
-          created_by_role: n.author_role || n.created_by_role || ''
-        }));
+        for (const n of notes) {
+          allEncounters.push({
+            id: `note-${n.id}`, type: 'Progress Note',
+            title: (n as any).title || 'Progress Note',
+            content: extractNoteContent(n),
+            date: (n as any).created_at || (n as any).date || '',
+            created_by_name: (n as any).author || (n as any).created_by_name || '',
+            created_by_role: (n as any).author_role || (n as any).created_by_role || ''
+          });
+        }
       } catch { /* empty */ }
 
-      // 2. Ward Rounds
+      // Ward Rounds
       try {
         const rounds = await db.ward_rounds?.toArray() || [];
         const patientRounds = rounds.filter((r: any) =>
           String(r.patient_id) === String(patientId) || String(r.hospital_number) === hospitalNumber
         );
-        patientRounds.forEach((r: any) => allEncounters.push({
-          id: `round-${r.id}`, type: 'Ward Round', title: `Ward Round - ${r.round_type || 'General'}`,
-          content: r.notes || r.assessment || r.plan || '',
-          date: r.round_date || r.created_at || '', created_by_name: r.led_by || r.created_by_name || '',
-          created_by_role: r.created_by_role || 'Doctor'
-        }));
+        for (const r of patientRounds as any[]) {
+          allEncounters.push({
+            id: `round-${r.id}`, type: 'Ward Round', title: `Ward Round - ${r.round_type || 'General'}`,
+            content: r.notes || r.assessment || r.plan || '',
+            date: r.round_date || r.created_at || '', created_by_name: r.led_by || r.created_by_name || '',
+            created_by_role: r.created_by_role || 'Doctor'
+          });
+        }
       } catch { /* empty */ }
 
-      // 3. Admissions
+      // Admissions
       try {
         const admissions = await db.admissions?.toArray() || [];
         const patientAdm = admissions.filter((a: any) =>
           String(a.patient_id) === String(patientId) || String(a.hospital_number) === hospitalNumber
         );
-        patientAdm.forEach((a: any) => allEncounters.push({
-          id: `adm-${a.id}`, type: 'Admission', title: `Admission - ${a.admitting_diagnosis || 'General'}`,
-          content: a.notes || `Ward: ${a.ward || 'N/A'}, Bed: ${a.bed_number || 'N/A'}`,
-          date: a.admission_date || a.created_at || '', created_by_name: a.admitting_doctor || a.created_by_name || '',
-          created_by_role: 'Doctor'
-        }));
+        for (const a of patientAdm as any[]) {
+          allEncounters.push({
+            id: `adm-${a.id}`, type: 'Admission', title: `Admission - ${a.admitting_diagnosis || 'General'}`,
+            content: a.notes || `Ward: ${a.ward || 'N/A'}, Bed: ${a.bed_number || 'N/A'}`,
+            date: a.admission_date || a.created_at || '', created_by_name: a.admitting_doctor || a.created_by_name || '',
+            created_by_role: 'Doctor'
+          });
+        }
       } catch { /* empty */ }
 
-      // 4. Discharge Summaries
+      // Discharge Summaries
       try {
         const discharges = await db.discharge_summaries?.toArray() || [];
         const patientDis = discharges.filter((d: any) =>
           String(d.patient_id) === String(patientId) || String(d.hospital_number) === hospitalNumber
         );
-        patientDis.forEach((d: any) => allEncounters.push({
-          id: `dis-${d.id}`, type: 'Discharge', title: 'Discharge Summary',
-          content: d.summary || d.discharge_diagnosis || '',
-          date: d.discharge_date || d.created_at || '', created_by_name: d.prepared_by || '',
-          created_by_role: 'Doctor'
-        }));
+        for (const d of patientDis as any[]) {
+          allEncounters.push({
+            id: `dis-${d.id}`, type: 'Discharge', title: 'Discharge Summary',
+            content: d.summary || d.discharge_diagnosis || '',
+            date: d.discharge_date || d.created_at || '', created_by_name: d.prepared_by || '',
+            created_by_role: 'Doctor'
+          });
+        }
       } catch { /* empty */ }
 
-      // 5. Prescriptions
+      // Prescriptions
       try {
         const prescriptions = await db.prescriptions?.where('patient_id').equals(pid).toArray() || [];
-        prescriptions.forEach((p: any) => allEncounters.push({
-          id: `rx-${p.id}`, type: 'Prescription', title: `Rx: ${p.medication_name || p.drug_name || 'Medication'}`,
-          content: `${p.dosage || ''} ${p.frequency || ''} ${p.duration || ''} ${p.route || ''}`.trim(),
-          date: p.prescribed_at || p.created_at || '', created_by_name: p.prescribed_by_name || p.prescribed_by || '',
-          created_by_role: 'Doctor'
-        }));
+        for (const p of prescriptions as any[]) {
+          allEncounters.push({
+            id: `rx-${p.id}`, type: 'Prescription', title: `Rx: ${p.medication_name || p.drug_name || 'Medication'}`,
+            content: `${p.dosage || ''} ${p.frequency || ''} ${p.duration || ''} ${p.route || ''}`.trim(),
+            date: p.prescribed_at || p.created_at || '', created_by_name: p.prescribed_by_name || p.prescribed_by || '',
+            created_by_role: 'Doctor'
+          });
+        }
       } catch { /* empty */ }
 
-      // 6. Surgeries
+      // Surgeries
       try {
         const surgeries = await db.surgery_bookings?.toArray() || [];
         const patientSurg = surgeries.filter((s: any) =>
           String(s.patient_id) === String(patientId) || String(s.hospital_number) === hospitalNumber
         );
-        patientSurg.forEach((s: any) => allEncounters.push({
-          id: `surg-${s.id}`, type: 'Surgery', title: `Surgery: ${s.procedure_name || s.procedure || 'Procedure'}`,
-          content: s.notes || s.findings || '',
-          date: s.surgery_date || s.scheduled_date || s.created_at || '',
-          created_by_name: s.surgeon || s.lead_surgeon || '', created_by_role: 'Surgeon'
-        }));
+        for (const s of patientSurg as any[]) {
+          allEncounters.push({
+            id: `surg-${s.id}`, type: 'Surgery', title: `Surgery: ${s.procedure_name || s.procedure || 'Procedure'}`,
+            content: s.notes || s.findings || '',
+            date: s.surgery_date || s.scheduled_date || s.created_at || '',
+            created_by_name: s.surgeon || s.lead_surgeon || '', created_by_role: 'Surgeon'
+          });
+        }
       } catch { /* empty */ }
 
-      // Sort chronologically (newest first)
-      allEncounters.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      setEncounters(allEncounters);
+      // Deduplicate (server + local may overlap), then sort newest first
+      const unique = dedup(allEncounters);
+      unique.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      if (mountedRef.current) setEncounters(unique);
     } catch (err) {
       console.error('Error loading encounters:', err);
     } finally {
-      setLoading(false);
+      if (mountedRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
-  };
+  }, [patientId, hospitalNumber]);
+
+  // Load on mount + refresh on visibility change (user returns to tab / opens app)
+  useEffect(() => {
+    mountedRef.current = true;
+    loadEncounters();
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && mountedRef.current) {
+        loadEncounters(false); // silent refresh
+      }
+    };
+    const handleOnline = () => { if (mountedRef.current) loadEncounters(false); };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('online', handleOnline);
+
+    return () => {
+      mountedRef.current = false;
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [patientId, loadEncounters]);
 
   const handleSaveEncounter = async () => {
     if (!newEncounter.content.trim()) return;
@@ -205,12 +381,22 @@ export const PatientEncounters: React.FC<PatientEncountersProps> = ({ patientId,
               All clinical documentation for {patientName} ({encounters.length} records)
             </p>
           </div>
-          <button
-            onClick={() => setShowNewEncounter(true)}
-            className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors"
-          >
-            + New Encounter
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => loadEncounters(false)}
+              disabled={refreshing}
+              className="p-2 text-gray-500 hover:text-green-600 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
+              title="Refresh encounters"
+            >
+              <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
+            </button>
+            <button
+              onClick={() => setShowNewEncounter(true)}
+              className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors"
+            >
+              + New Encounter
+            </button>
+          </div>
         </div>
       </div>
 

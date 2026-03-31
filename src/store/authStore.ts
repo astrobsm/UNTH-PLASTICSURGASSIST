@@ -49,7 +49,16 @@ export const useAuthStore = create<AuthState>()(
           set({ useBackend: backendAvailable });
 
           if (!backendAvailable) {
-            throw new Error('Unable to connect to server. Please check your connection.');
+            // ─── Offline login: allow access if user was previously authenticated ───
+            const state = get();
+            if (state.token && state.user && state.user.email === email) {
+              // User was previously logged in with this email — allow offline access
+              console.log('📴 Offline login: restoring previous session for', email);
+              await initializeEncryption(password);
+              set({ loading: false });
+              return;
+            }
+            throw new Error('Unable to connect to server. Please check your connection and try again.');
           }
 
           // Use backend API
@@ -98,15 +107,27 @@ export const useAuthStore = create<AuthState>()(
           // Check if we have stored auth data
           const state = get();
           if (state.token && state.user) {
+            // If offline, trust the cached token/user — don't attempt validation
+            if (!navigator.onLine) {
+              console.log('📴 Offline: trusting cached auth session');
+              set({ loading: false });
+              return;
+            }
             // Validate token with backend
             try {
               await apiClient.getCurrentUser();
               set({ loading: false });
             } catch (error) {
-              // Token invalid or expired, clear it
-              console.warn('Token validation failed, logging out');
-              set({ user: null, token: null, loading: false });
-              apiClient.logout();
+              // Only clear auth if we're online and token is truly invalid
+              if (navigator.onLine) {
+                console.warn('Token validation failed, logging out');
+                set({ user: null, token: null, loading: false });
+                apiClient.logout();
+              } else {
+                // Network error while checking — trust cached session
+                console.log('📴 Network error during auth check: trusting cached session');
+                set({ loading: false });
+              }
             }
           } else {
             set({ loading: false });

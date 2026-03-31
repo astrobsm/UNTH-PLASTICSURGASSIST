@@ -10,14 +10,20 @@ import {
   Search,
   ChevronRight,
   UserCheck,
-  Building2
+  Building2,
+  Download,
+  CheckCircle2,
+  Loader2,
+  WifiOff
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { db, Patient } from '../db/database';
 import { patientService } from '../services/patientService';
 import { admissionDischargeService, Admission } from '../services/admissionDischargeService';
+import { warmCache, CacheWarmProgress } from '../services/cacheWarmer';
+import { syncService } from '../db/syncService';
 import UnitRosterWidget from '../components/UnitRosterWidget';
 
 interface DashboardPatient {
@@ -52,8 +58,70 @@ export default function Dashboard() {
   const [patientSearch, setPatientSearch] = useState('');
   const [wardFilter, setWardFilter] = useState('all');
   const [availableWards, setAvailableWards] = useState<string[]>([]);
+  const [cacheProgress, setCacheProgress] = useState<CacheWarmProgress | null>(null);
+  const [syncBreakdown, setSyncBreakdown] = useState<{
+    total: number;
+    byTable: Record<string, number>;
+    byAction: Record<string, number>;
+    staleCount: number;
+    failedCount: number;
+    rawRequestCount: number;
+  } | null>(null);
+  const [syncDiagOpen, setSyncDiagOpen] = useState(false);
+  const [syncClearing, setSyncClearing] = useState(false);
 
   const isAdmin = user?.role === 'admin';
+
+  const handleWarmCache = useCallback(async () => {
+    if (cacheProgress?.status === 'warming') return; // prevent double-click
+    setCacheProgress({ current: 0, total: 1, currentModule: 'Starting...', status: 'warming', errors: [], cached: 0, skipped: 0 });
+    try {
+      await warmCache((p) => setCacheProgress({ ...p }));
+    } catch {
+      setCacheProgress(prev => prev ? { ...prev, status: 'error' } : null);
+    }
+  }, [cacheProgress?.status]);
+
+  const handleSyncDiagnostics = useCallback(async () => {
+    try {
+      const breakdown = await syncService.getQueueBreakdown();
+      setSyncBreakdown(breakdown);
+      setSyncDiagOpen(true);
+    } catch (e) {
+      console.error('Failed to get sync breakdown:', e);
+    }
+  }, []);
+
+  const handleClearSyncQueue = useCallback(async () => {
+    if (!confirm('This will clear ALL pending sync items. Data that hasn\'t been synced to the server will be lost. Continue?')) return;
+    setSyncClearing(true);
+    try {
+      const cleared = await syncService.clearAllQueue();
+      setSyncBreakdown(null);
+      setSyncDiagOpen(false);
+      toast.success(`Cleared ${cleared} pending sync items`);
+    } catch (e) {
+      toast.error('Failed to clear sync queue');
+    } finally {
+      setSyncClearing(false);
+    }
+  }, []);
+
+  const handleForceSync = useCallback(async () => {
+    try {
+      toast.loading('Force syncing...', { id: 'force-sync' });
+      const result = await syncService.forceSync();
+      toast.dismiss('force-sync');
+      if (result.synced > 0 || result.failed > 0) {
+        toast.success(`Sync: ${result.synced} succeeded, ${result.failed} failed`);
+      }
+      // Refresh diagnostics
+      handleSyncDiagnostics();
+    } catch (e) {
+      toast.dismiss('force-sync');
+      toast.error('Force sync failed');
+    }
+  }, [handleSyncDiagnostics]);
 
   useEffect(() => {
     loadDashboardData();
@@ -483,6 +551,136 @@ export default function Dashboard() {
               <Megaphone className="h-4 w-4 mr-2 flex-shrink-0" />
               <span className="truncate">Notice Board</span>
             </Link>
+          </div>
+
+          {/* Offline Cache Warmer */}
+          <div className="mt-4 pt-4 border-t border-gray-200">
+            <button
+              onClick={handleWarmCache}
+              disabled={cacheProgress?.status === 'warming' || !navigator.onLine}
+              className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
+                cacheProgress?.status === 'done'
+                  ? 'bg-green-50 text-green-700 border border-green-200'
+                  : cacheProgress?.status === 'warming'
+                    ? 'bg-amber-50 text-amber-700 border border-amber-200 cursor-wait'
+                    : !navigator.onLine
+                      ? 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed'
+                      : 'bg-primary-50 text-primary-700 border border-primary-200 hover:bg-primary-100 active:bg-primary-200'
+              }`}
+            >
+              {cacheProgress?.status === 'warming' ? (
+                <Loader2 className="h-4 w-4 animate-spin flex-shrink-0" />
+              ) : cacheProgress?.status === 'done' ? (
+                <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
+              ) : !navigator.onLine ? (
+                <WifiOff className="h-4 w-4 flex-shrink-0" />
+              ) : (
+                <Download className="h-4 w-4 flex-shrink-0" />
+              )}
+              <span>
+                {cacheProgress?.status === 'warming'
+                  ? `Caching: ${cacheProgress.currentModule} (${cacheProgress.current}/${cacheProgress.total})`
+                  : cacheProgress?.status === 'done'
+                    ? `Offline ready! ${cacheProgress.cached} modules cached`
+                    : !navigator.onLine
+                      ? 'Go online to cache data'
+                      : 'Download for Offline Use'}
+              </span>
+            </button>
+
+            {/* Progress bar */}
+            {cacheProgress?.status === 'warming' && (
+              <div className="mt-2">
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div
+                    className="bg-primary-500 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${Math.round((cacheProgress.current / cacheProgress.total) * 100)}%` }}
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1 text-center">
+                  {Math.round((cacheProgress.current / cacheProgress.total) * 100)}% complete
+                </p>
+              </div>
+            )}
+
+            {/* Done summary */}
+            {cacheProgress?.status === 'done' && cacheProgress.skipped > 0 && (
+              <p className="text-xs text-gray-500 mt-1 text-center">
+                {cacheProgress.skipped} endpoint{cacheProgress.skipped !== 1 ? 's' : ''} skipped (not available)
+              </p>
+            )}
+            {cacheProgress?.status === 'error' && (
+              <p className="text-xs text-red-500 mt-1 text-center">
+                Some modules failed. Try again or check your connection.
+              </p>
+            )}
+          </div>
+
+          {/* Sync Queue Diagnostics */}
+          <div className="mt-4 pt-4 border-t border-gray-200">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-sm font-medium text-gray-700">Sync Queue</h4>
+              <button
+                onClick={handleSyncDiagnostics}
+                className="text-xs text-primary-600 hover:text-primary-800 underline"
+              >
+                {syncDiagOpen ? 'Refresh' : 'Diagnose'}
+              </button>
+            </div>
+
+            {syncDiagOpen && syncBreakdown && (
+              <div className="space-y-2 text-xs">
+                <div className="flex justify-between text-gray-600">
+                  <span>Total pending:</span>
+                  <span className={`font-semibold ${syncBreakdown.total > 0 ? 'text-amber-600' : 'text-green-600'}`}>
+                    {syncBreakdown.total}
+                  </span>
+                </div>
+                {syncBreakdown.staleCount > 0 && (
+                  <div className="flex justify-between text-red-600">
+                    <span>Stale (will be purged):</span>
+                    <span className="font-semibold">{syncBreakdown.staleCount}</span>
+                  </div>
+                )}
+                {syncBreakdown.failedCount > 0 && (
+                  <div className="flex justify-between text-red-600">
+                    <span>Failed (max retries):</span>
+                    <span className="font-semibold">{syncBreakdown.failedCount}</span>
+                  </div>
+                )}
+
+                {Object.keys(syncBreakdown.byTable).length > 0 && (
+                  <div className="mt-1 p-2 bg-gray-50 rounded text-xs max-h-32 overflow-y-auto">
+                    <p className="font-medium text-gray-500 mb-1">By table:</p>
+                    {Object.entries(syncBreakdown.byTable)
+                      .sort(([, a], [, b]) => (b as number) - (a as number))
+                      .map(([table, count]) => (
+                        <div key={table} className="flex justify-between py-0.5">
+                          <span className="text-gray-600 truncate mr-2">{table}</span>
+                          <span className="font-mono text-gray-800">{count as number}</span>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex gap-2 mt-2">
+              <button
+                onClick={handleForceSync}
+                disabled={!navigator.onLine}
+                className="flex-1 px-3 py-2 text-xs font-medium rounded-lg bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Force Sync
+              </button>
+              <button
+                onClick={handleClearSyncQueue}
+                disabled={syncClearing}
+                className="flex-1 px-3 py-2 text-xs font-medium rounded-lg bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 disabled:opacity-50"
+              >
+                {syncClearing ? 'Clearing...' : 'Clear Queue'}
+              </button>
+            </div>
           </div>
         </div>
       </div>

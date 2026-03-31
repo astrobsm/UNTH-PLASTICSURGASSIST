@@ -21,13 +21,16 @@ const ENDPOINT_TO_TABLE: Record<string, string> = {
   'lab-investigations': 'lab_investigations',
   surgeries: 'surgery_bookings',
   'ward-rounds': 'ward_rounds',
+  'ward-rounds-clinical': 'ward_rounds_clinical',
   users: 'users',
   activities: 'user_activities',
+  'activity-logs': 'activity_logs',
   performance: 'performance_metrics',
   duties: 'duty_assignments',
   rotations: 'rotation_records',
   'cbt-tests': 'cbt_tests',
   'cbt-attempts': 'cbt_attempts',
+  'cbt-progress': 'cbt_progress',
   chat: 'chat_messages',
   'chat-rooms': 'chat_rooms',
   'shopping-lists': 'shopping_lists',
@@ -37,6 +40,24 @@ const ENDPOINT_TO_TABLE: Record<string, string> = {
   'clinic-sessions': 'clinic_sessions',
   'surgery-bookings': 'surgery_bookings',
   'blood-transfusions': 'blood_transfusions',
+  'preoperative-assessments': 'preoperative_assessments',
+  'risk-assessments': 'dvt_assessments',
+  'dvt-assessments': 'dvt_assessments',
+  'pressure-sore-assessments': 'pressure_sore_assessments',
+  'nutritional-assessments': 'nutritional_assessments',
+  'diabetic-foot': 'diabetic_foot_assessments',
+  'burn-patients': 'burn_patients',
+  'who-safety-checklists': 'who_safety_checklists',
+  procedures: 'procedures',
+  'patient-assignments': 'patient_assignments',
+  'audit-logs': 'audit_logs',
+  'call-duty-roster': 'call_duty_roster',
+  'clinic-duty-logs': 'clinic_duty_logs',
+  'sjs-assessments': 'sjs_assessments',
+  'investigation-uploads': 'investigation_uploads',
+  'mdt-meetings': 'mdt_meetings',
+  'mdt-contact-logs': 'mdt_contact_logs',
+  'mdt-patient-teams': 'mdt_patient_teams',
 };
 
 // Sync state for cross-device sync
@@ -170,6 +191,22 @@ class ApiClient {
     // Parse entity info from endpoint for caching
     const entityInfo = this.parseEndpoint(endpoint);
 
+    // ─── Offline-first: if clearly offline, skip network for GETs ───
+    if (!navigator.onLine && isGet) {
+      const cached = await this.getCachedResponse<T>(endpoint, entityInfo);
+      if (cached !== null) {
+        console.log(`📦 Offline: serving cached data for ${endpoint}`);
+        return cached;
+      }
+      // No cache — let SERVICE WORKER handle (it may have Cache API data)
+      // Fall through to fetch which the SW will intercept
+    }
+
+    // ─── Offline: queue mutations immediately ───
+    if (!navigator.onLine && !isGet) {
+      return this.queueOfflineMutation<T>(endpoint, method, options, token, entityInfo);
+    }
+
     try {
       const response = await fetch(`${this.baseURL}${endpoint}`, fetchOptions);
 
@@ -182,6 +219,17 @@ class ApiClient {
           if (errorMsg.includes('expired') || errorMsg.includes('invalid')) {
             this.setToken(null);
             window.dispatchEvent(new CustomEvent('auth:expired'));
+          }
+        }
+
+        // Handle 503 from service worker (offline/queued)
+        if (response.status === 503) {
+          if (isGet) {
+            const cached = await this.getCachedResponse<T>(endpoint, entityInfo);
+            if (cached !== null) {
+              console.log(`📦 SW 503: serving cached data for ${endpoint}`);
+              return cached;
+            }
           }
         }
         
@@ -218,49 +266,66 @@ class ApiClient {
 
       return data;
     } catch (error) {
-      // For GET requests: try to serve from IndexedDB cache when offline or on network error
+      // Network error — try to serve from cache for GETs
       if (isGet) {
         const cached = await this.getCachedResponse<T>(endpoint, entityInfo);
         if (cached !== null) {
-          console.log(`📦 Serving cached data for ${endpoint}`);
+          console.log(`📦 Network error: serving cached data for ${endpoint}`);
           return cached;
         }
       }
 
-      // For mutations when offline: queue in IndexedDB sync queue
-      if (!navigator.onLine && !isGet) {
-        try {
-          await db.sync_queue.add({
-            action: method === 'DELETE' ? 'delete' : method === 'PUT' || method === 'PATCH' ? 'update' : 'create',
-            table: entityInfo.tableName || entityInfo.entityType,
-            local_id: entityInfo.entityId ? (typeof entityInfo.entityId === 'string' ? parseInt(entityInfo.entityId, 10) || 0 : entityInfo.entityId) : 0,
-            data: {
-              url: `${this.baseURL}${endpoint}`,
-              method,
-              body: options.body ? JSON.parse(options.body as string) : undefined,
-              headers: { Authorization: `Bearer ${token}` },
-              priority: 'normal',
-            },
-            created_at: new Date(),
-            retries: 0,
-          });
-          console.log(`📥 Queued offline ${method} to ${endpoint}`);
-        } catch (queueError) {
-          console.error('Failed to queue request:', queueError);
-        }
-        this.syncState.pendingChanges++;
-        this.notifySyncListeners();
-        
-        // Return optimistic data for mutations
-        if (options.body) {
-          try {
-            return JSON.parse(options.body as string) as T;
-          } catch { /* fall through */ }
-        }
-        throw new Error('Request queued for retry when online');
+      // Network error on mutation — queue for sync
+      if (!isGet && error instanceof TypeError) {
+        return this.queueOfflineMutation<T>(endpoint, method, options, token, entityInfo);
       }
       throw error;
     }
+  }
+
+  // Queue a mutation for offline sync and return optimistic data
+  private async queueOfflineMutation<T>(
+    endpoint: string,
+    method: string,
+    options: RequestInit,
+    token: string | null,
+    entityInfo: { entityType: string; entityId?: string | number; tableName?: string }
+  ): Promise<T> {
+    let bodyData: any;
+    try {
+      bodyData = typeof options.body === 'string' ? JSON.parse(options.body) : options.body;
+    } catch {
+      bodyData = options.body;
+    }
+
+    try {
+      await db.sync_queue.add({
+        action: method === 'DELETE' ? 'delete' : method === 'PUT' || method === 'PATCH' ? 'update' : 'create',
+        table: entityInfo.tableName || entityInfo.entityType,
+        local_id: entityInfo.entityId ? (typeof entityInfo.entityId === 'string' ? parseInt(entityInfo.entityId, 10) || 0 : entityInfo.entityId) : 0,
+        data: {
+          url: `${this.baseURL}${endpoint}`,
+          method,
+          body: bodyData,
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          priority: 'normal',
+        },
+        created_at: new Date(),
+        retries: 0,
+      });
+      console.log(`📥 Queued offline ${method} to ${endpoint}`);
+    } catch (queueError) {
+      console.error('Failed to queue request:', queueError);
+    }
+    this.syncState.pendingChanges++;
+    this.notifySyncListeners();
+    
+    // Return optimistic data for mutations
+    if (bodyData && typeof bodyData === 'object') {
+      return { ...bodyData, _offline: true, _queued: true } as T;
+    }
+    // Return a minimal success indicator
+    return { success: true, _offline: true, _queued: true } as T;
   }
 
   // Parse endpoint to extract entity type and ID
@@ -301,11 +366,11 @@ class ApiClient {
               await table.bulkPut(data[arrayKey].map((item: any) => ({ ...item, synced: true, updated_at: new Date() })));
             }
           }
-          return;
+          // Don't return — also write to api_cache for full response structure
         }
       }
 
-      // Fallback: store in generic api_cache table
+      // Always store in generic api_cache table (preserves full response including metadata)
       await db.api_cache.put({
         endpoint,
         data,
@@ -327,17 +392,25 @@ class ApiClient {
           if (entityInfo.entityId) {
             const id = parseInt(entityInfo.entityId as string, 10);
             const item = await table.get(isNaN(id) ? entityInfo.entityId : id);
-            return (item || null) as T;
+            if (item) return item as T;
           } else {
             const items = await table.toArray();
-            return (items.length > 0 ? items : null) as T;
+            if (items.length > 0) return items as T;
           }
         }
       }
 
-      // Fallback: check generic api_cache
+      // Always check generic api_cache as fallback (covers endpoints not mapped to entity tables)
       const cached = await db.api_cache.get(endpoint);
       if (cached && cached.data) {
+        // Check freshness — skip data older than 30 days
+        if (cached.updated_at) {
+          const age = Date.now() - new Date(cached.updated_at).getTime();
+          if (age > 30 * 24 * 60 * 60 * 1000) {
+            await db.api_cache.delete(endpoint);
+            return null;
+          }
+        }
         return cached.data as T;
       }
 

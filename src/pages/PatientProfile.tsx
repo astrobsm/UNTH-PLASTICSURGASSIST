@@ -18,7 +18,7 @@ import {
   Activity, Camera, Calendar, Clock, FileText, Plus, TrendingUp,
   Scissors, ClipboardCheck, Pill, Heart, Image, AlertCircle,
   ChevronRight, X, Save, Loader2, Thermometer, Droplet,
-  Eye, Trash2, Upload, Mic, MicOff, ScanLine, Printer
+  Eye, Trash2, Upload, Mic, MicOff, ScanLine, Printer, RefreshCw
 } from 'lucide-react';
 
 export const PatientProfile: React.FC = () => {
@@ -652,6 +652,7 @@ export const PatientProfile: React.FC = () => {
 const EncountersTab: React.FC<{ patientId: string; hospitalNumber: string; patientName: string; userName: string }> = ({ patientId, hospitalNumber, patientName, userName }) => {
   const [encounters, setEncounters] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [showNewEncounter, setShowNewEncounter] = useState(false);
   const [newNote, setNewNote] = useState('');
   const [encounterType, setEncounterType] = useState('progress_note');
@@ -659,8 +660,18 @@ const EncountersTab: React.FC<{ patientId: string; hospitalNumber: string; patie
   const [isRecording, setIsRecording] = useState(false);
   const [showOCRScanner, setShowOCRScanner] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const mountedRef = useRef(true);
 
-  useEffect(() => { loadEncounters(); }, [patientId]);
+  useEffect(() => {
+    mountedRef.current = true;
+    loadEncounters();
+    // Re-fetch when user returns to tab or comes back online
+    const onVisible = () => { if (document.visibilityState === 'visible' && mountedRef.current) loadEncounters(true); };
+    const onOnline = () => { if (mountedRef.current) loadEncounters(true); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('online', onOnline);
+    return () => { mountedRef.current = false; document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('online', onOnline); };
+  }, [patientId]);
 
   // Cleanup speech on unmount
   useEffect(() => {
@@ -709,9 +720,10 @@ const EncountersTab: React.FC<{ patientId: string; hospitalNumber: string; patie
     setShowOCRScanner(false);
   };
 
-  const loadEncounters = async () => {
-    setLoading(true);
+  const loadEncounters = async (silent = false) => {
+    if (silent) setRefreshing(true); else setLoading(true);
     try {
+      const pid = Number(patientId) || patientId;
       const data = await apiClient.get(`/progress-notes?patientId=${patientId}`);
       const notes = data?.notes || data?.progressNotes || [];
       // Also fetch admissions for encounter context
@@ -721,16 +733,32 @@ const EncountersTab: React.FC<{ patientId: string; hospitalNumber: string; patie
         _type: 'admission',
         created_at: a.admission_date || a.created_at,
       }));
+      // Also upsert progress notes into IndexedDB for offline use
+      for (const n of notes) {
+        try { if (db.progress_notes) await db.progress_notes.put({ ...n, patient_id: typeof n.patient_id === 'string' ? parseInt(n.patient_id, 10) : n.patient_id, synced: true }); } catch { /* ok */ }
+      }
       // Merge and sort chronologically
       const all = [
         ...notes.map((n: any) => ({ ...n, _type: n.type || 'progress_note' })),
         ...admissions,
       ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-      setEncounters(all);
+      if (mountedRef.current) setEncounters(all);
     } catch {
-      setEncounters([]);
+      // Fallback to IndexedDB when offline / API error
+      try {
+        const pid = Number(patientId) || patientId;
+        const localNotes = await db.progress_notes?.where('patient_id').equals(pid).toArray() || [];
+        const localAdm = (await db.admissions?.toArray() || []).filter((a: any) =>
+          String(a.patient_id) === String(patientId) || String(a.hospital_number) === String(patientId)
+        );
+        const all = [
+          ...localNotes.map((n: any) => ({ ...n, _type: n.type || 'progress_note', created_at: n.created_at || n.date })),
+          ...localAdm.map((a: any) => ({ ...a, _type: 'admission', created_at: a.admission_date || a.created_at })),
+        ].sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        if (mountedRef.current) setEncounters(all);
+      } catch { if (mountedRef.current) setEncounters([]); }
     } finally {
-      setLoading(false);
+      if (mountedRef.current) { setLoading(false); setRefreshing(false); }
     }
   };
 
@@ -778,9 +806,14 @@ const EncountersTab: React.FC<{ patientId: string; hospitalNumber: string; patie
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
         <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
           <h3 className="text-lg font-semibold text-gray-900">Patient Encounters</h3>
-          <button onClick={() => setShowNewEncounter(true)} className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700">
-            <Plus className="w-4 h-4" /> New Encounter
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => loadEncounters(true)} disabled={refreshing} className="p-1.5 text-gray-500 hover:text-green-600 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50" title="Refresh encounters">
+              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+            </button>
+            <button onClick={() => setShowNewEncounter(true)} className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700">
+              <Plus className="w-4 h-4" /> New Encounter
+            </button>
+          </div>
         </div>
 
         {showNewEncounter && (

@@ -279,4 +279,19 @@ setTimeout(async () => {
   } catch (error) {
     console.error('Error initializing WACS/MCQ services:', error);
   }
+
+  // ── Cross-device sync: Start background pull/push every 2 min ──
+  try {
+    const { dataSyncService } = await import('./services/dataSyncService');
+    // dataSyncService constructor already starts periodic sync,
+    // but force an immediate full sync when the app boots
+    if (navigator.onLine) {
+      dataSyncService.performFullSync().then((r) => {
+        console.log(`🔄 Initial cross-device sync: ↑${r.pushed} ↓${r.pulled}`);
+      }).catch(() => { /* will retry on next interval */ });
+    }
+    console.log('Cross-device DataSyncService started');
+  } catch (error) {
+    console.error('Error starting DataSyncService:', error);
+  }
 }, 2000);

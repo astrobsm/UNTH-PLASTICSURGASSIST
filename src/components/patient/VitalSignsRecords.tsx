@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { db } from '../../db/database';
 import { useAuthStore } from '../../store/authStore';
+import { DocumentScannerModal } from '../DocumentScannerModal';
 
 interface VitalSign {
   id?: number;

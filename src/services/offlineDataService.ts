@@ -300,7 +300,7 @@ class OfflineDataService {
 
   // Force sync
   async forceSync() {
-    return syncService.forcSync();
+    return syncService.forceSync();
   }
 }
 

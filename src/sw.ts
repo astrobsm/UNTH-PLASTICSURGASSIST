@@ -24,10 +24,10 @@ import { CacheableResponsePlugin } from 'workbox-cacheable-response';
 declare const self: ServiceWorkerGlobalScope;
 
 // ─── Cache names ────────────────────────────────────────────
-// Use a build timestamp to ensure caches bust on every deployment.
-// This value is replaced at build time by Vite's define or stays as Date.now()
-// fallback. Either way, each new SW file has a unique hash from Workbox.
-const CACHE_VERSION = `v7-${Date.now()}`;
+// Cache names use a FIXED version string so caches persist across SW restarts.
+// When deploying a new version, increment the version number below.
+// Workbox precache handles content-hash-based cache busting automatically.
+const CACHE_VERSION = 'v8';
 const API_CACHE = `api-cache-${CACHE_VERSION}`;
 const IMAGE_CACHE = `images-cache-${CACHE_VERSION}`;
 const FONT_CACHE = `fonts-cache-${CACHE_VERSION}`;
@@ -46,21 +46,31 @@ self.addEventListener('install', () => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
-      // Clean old version caches
+      // Clean old version caches (those with a different CACHE_VERSION)
       const cacheNames = await caches.keys();
-      const validPrefixes = ['api-cache-', 'images-cache-', 'fonts-cache-', 'static-cache-', 'workbox-precache'];
+      const currentCacheSuffixes = [
+        API_CACHE, IMAGE_CACHE, FONT_CACHE, STATIC_CACHE,
+        `app-shell-${CACHE_VERSION}`,
+      ];
       await Promise.all(
         cacheNames
           .filter(name => {
-            // Keep current version caches and workbox precache
-            if (name.includes(CACHE_VERSION)) return false;
+            // Keep workbox precache
             if (name.startsWith('workbox-precache')) return false;
-            // Delete old versioned caches
-            return validPrefixes.some(prefix => name.startsWith(prefix));
+            // Keep google fonts (no version suffix)
+            if (name.startsWith('google-fonts')) return false;
+            // Keep current version caches
+            if (currentCacheSuffixes.includes(name)) return false;
+            // Delete everything else (old versioned caches)
+            return true;
           })
-          .map(name => caches.delete(name))
+          .map(name => {
+            console.log('[SW] Deleting old cache:', name);
+            return caches.delete(name);
+          })
       );
       await self.clients.claim();
+      console.log('[SW] Activated and claimed clients');
     })()
   );
 });
@@ -121,7 +131,7 @@ const bgSyncPlugin = new BackgroundSyncPlugin('offlineMutationQueue', {
 // ─── Navigation → NetworkFirst (app shell) ──────────────────
 const navigationHandler = new NetworkFirst({
   cacheName: `app-shell-${CACHE_VERSION}`,
-  networkTimeoutSeconds: 1.5,   // Fast fallback to cache on poor networks
+  networkTimeoutSeconds: 3,   // 3s timeout — balances fast fallback vs slow networks
   plugins: [
     new CacheableResponsePlugin({ statuses: [0, 200] }),
   ],
@@ -143,12 +153,12 @@ registerRoute(
 // instead of letting unhandled promise rejections flood the console.
 const apiGetStrategy = new NetworkFirst({
   cacheName: API_CACHE,
-  networkTimeoutSeconds: 3,   // Fast cache fallback for poor internet
+  networkTimeoutSeconds: 4,   // 4s — then serve cached data for offline/slow nets
   plugins: [
     new CacheableResponsePlugin({ statuses: [0, 200] }),
     new ExpirationPlugin({
-      maxEntries: 300,
-      maxAgeSeconds: 7 * 24 * 60 * 60, // 7 days
+      maxEntries: 500,
+      maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days — clinical data must survive long offline
       purgeOnQuotaError: true,
     }),
   ],

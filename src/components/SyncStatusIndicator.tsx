@@ -77,7 +77,7 @@ export const SyncStatusIndicator = () => {
 
     setStatus((prev) => ({ ...prev, isSyncing: true }));
     try {
-      await syncService.forcSync();
+      await syncService.forceSync();
       setStatus((prev) => ({
         ...prev,
         isSyncing: false,
