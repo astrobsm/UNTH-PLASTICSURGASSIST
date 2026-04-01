@@ -2158,12 +2158,12 @@ const BookingRegisterPage: React.FC = () => {
         <div>
           {/* Calendar header */}
           <div className="flex items-center justify-between mb-4">
-            <button onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1))}
+            <button title="Previous month" onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1))}
               className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"><ChevronLeft className="w-5 h-5" /></button>
             <h2 className="text-lg font-semibold text-gray-800">
               {calendarMonth.toLocaleString('default', { month: 'long', year: 'numeric' })}
             </h2>
-            <button onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1))}
+            <button title="Next month" onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1))}
               className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"><ChevronRight className="w-5 h-5" /></button>
           </div>
 
@@ -2266,7 +2266,7 @@ const BookingRegisterPage: React.FC = () => {
                       {avail.emergencyCount > 0 && <span className="text-red-600 font-medium">{avail.emergencyCount} Emergency</span>}
                     </div>
                   </div>
-                  <button onClick={() => setSelectedCalendarDay(null)} className="text-gray-400 hover:text-gray-600">
+                  <button title="Close" onClick={() => setSelectedCalendarDay(null)} className="text-gray-400 hover:text-gray-600">
                     <X className="w-5 h-5" />
                   </button>
                 </div>

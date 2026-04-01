@@ -25,6 +25,7 @@ import { admissionDischargeService, Admission } from '../services/admissionDisch
 import { warmCache, CacheWarmProgress } from '../services/cacheWarmer';
 import { syncService } from '../db/syncService';
 import UnitRosterWidget from '../components/UnitRosterWidget';
+import { userManagementService, ApprovedUser } from '../services/userManagementService';
 
 interface DashboardPatient {
   id: number | string;
@@ -69,6 +70,12 @@ export default function Dashboard() {
   } | null>(null);
   const [syncDiagOpen, setSyncDiagOpen] = useState(false);
   const [syncClearing, setSyncClearing] = useState(false);
+
+  // Staff Patient Lookup
+  const [staffList, setStaffList] = useState<ApprovedUser[]>([]);
+  const [selectedStaffId, setSelectedStaffId] = useState('');
+  const [staffPatients, setStaffPatients] = useState<DashboardPatient[]>([]);
+  const [staffLookupLoading, setStaffLookupLoading] = useState(false);
 
   const isAdmin = user?.role === 'admin';
 
@@ -125,6 +132,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadDashboardData();
+    loadStaffList();
   }, []);
 
   const loadDashboardData = async () => {
@@ -259,6 +267,68 @@ export default function Dashboard() {
     } catch (error) {
       console.error('Error loading dashboard data:', error);
     }
+  };
+
+  const loadStaffList = async () => {
+    try {
+      const all = await userManagementService.getAllApprovedUsers();
+      setStaffList(all.filter(u => u.is_active));
+    } catch { /* staff list not available */ }
+  };
+
+  const handleStaffLookup = async (staffId: string) => {
+    setSelectedStaffId(staffId);
+    if (!staffId) { setStaffPatients([]); return; }
+    setStaffLookupLoading(true);
+    try {
+      const staffUser = staffList.find(u => String(u.id) === staffId);
+      if (!staffUser) { setStaffPatients([]); return; }
+      const staffName = staffUser.full_name.toLowerCase();
+
+      // Filter from existing dashboard patients OR all patients for admin
+      const allPatients = await patientService.getAllPatients();
+      const activePatientsList = allPatients.filter((p: any) => !p.deleted);
+      let activeAdmissions: Admission[] = [];
+      try { activeAdmissions = await admissionDischargeService.getActiveAdmissions(); } catch {}
+      const admissionByPid = new Map<string, Admission>();
+      const admissionByHn = new Map<string, Admission>();
+      for (const adm of activeAdmissions) {
+        admissionByPid.set(String(adm.patient_id), adm);
+        if (adm.hospital_number) admissionByHn.set(adm.hospital_number.trim().toLowerCase(), adm);
+      }
+
+      const matched: DashboardPatient[] = [];
+      for (const p of activePatientsList) {
+        const pid = String(p.id || p.serverId || '');
+        const hn = (p.hospital_number || '').trim().toLowerCase();
+        const adm = admissionByPid.get(pid) || (hn ? admissionByHn.get(hn) : undefined);
+        const consultant = (adm?.admitting_consultant || p.consultant_in_charge || '').toLowerCase();
+        const resident = (adm?.admitting_doctor || p.resident_in_charge || '').toLowerCase();
+
+        const isAssigned = consultant.includes(staffName) || resident.includes(staffName) ||
+          (p.consultant_in_charge || '').toLowerCase().includes(staffName) ||
+          (p.resident_in_charge || '').toLowerCase().includes(staffName) ||
+          adm?.admitting_doctor?.toLowerCase().includes(staffName) ||
+          adm?.admitting_consultant?.toLowerCase().includes(staffName) ||
+          adm?.created_by === staffId;
+
+        if (isAssigned) {
+          matched.push({
+            id: p.id || p.serverId || '',
+            name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.full_name || 'Unknown',
+            hospital_number: p.hospital_number || '',
+            ward: adm?.ward_location || p.ward_id || '',
+            bed: adm?.bed_number || p.bed_number || '',
+            consultant: adm?.admitting_consultant || p.consultant_in_charge || '',
+            resident: adm?.admitting_doctor || p.resident_in_charge || '',
+            admission_status: adm ? 'active' as const : 'outpatient' as const,
+            admission_date: adm ? new Date(adm.admission_date).toLocaleDateString() : undefined
+          });
+        }
+      }
+      setStaffPatients(matched);
+    } catch { setStaffPatients([]); }
+    finally { setStaffLookupLoading(false); }
   };
 
   const formatTimeAgo = (date: Date): string => {
@@ -495,6 +565,92 @@ export default function Dashboard() {
                   : 'No patients assigned to you yet.'}
             </p>
           </div>
+        )}
+      </div>
+
+      {/* Staff Patient Lookup */}
+      <div className="card p-4 sm:p-6">
+        <h3 className="text-base sm:text-lg font-semibold text-clinical-dark flex items-center gap-2 mb-4">
+          <Users className="h-5 w-5 text-blue-600" />
+          Staff Patient Lookup
+        </h3>
+        <div className="flex flex-col sm:flex-row gap-3 mb-4">
+          <select
+            value={selectedStaffId}
+            onChange={(e) => handleStaffLookup(e.target.value)}
+            className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+          >
+            <option value="">-- Select a staff member --</option>
+            {staffList.map(s => (
+              <option key={s.id} value={s.id}>
+                {s.full_name} ({s.role?.replace('_', ' ')})
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {staffLookupLoading && (
+          <div className="text-center py-4"><Loader2 className="h-5 w-5 animate-spin mx-auto text-primary-600" /></div>
+        )}
+
+        {!staffLookupLoading && selectedStaffId && staffPatients.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-sm text-gray-500 mb-2">{staffPatients.length} patient(s) assigned</p>
+            {/* Desktop Table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-blue-50 text-left">
+                    <th className="px-3 py-2 font-medium text-gray-600">Patient</th>
+                    <th className="px-3 py-2 font-medium text-gray-600">Hospital #</th>
+                    <th className="px-3 py-2 font-medium text-gray-600">Ward</th>
+                    <th className="px-3 py-2 font-medium text-gray-600">Status</th>
+                    <th className="px-3 py-2"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {staffPatients.map((p) => (
+                    <tr key={p.id} className="hover:bg-blue-50/50 cursor-pointer" onClick={() => navigate(`/patients/${p.id}`)}>
+                      <td className="px-3 py-2 font-medium text-clinical-dark">{p.name}</td>
+                      <td className="px-3 py-2 text-gray-600">{p.hospital_number}</td>
+                      <td className="px-3 py-2 text-gray-600">{p.ward || '—'}{p.bed ? `, Bed ${p.bed}` : ''}</td>
+                      <td className="px-3 py-2">
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${p.admission_status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
+                          {p.admission_status === 'active' ? 'Admitted' : 'Outpatient'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2"><ChevronRight className="h-4 w-4 text-gray-400" /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {/* Mobile Cards */}
+            <div className="md:hidden space-y-2">
+              {staffPatients.map((p) => (
+                <div key={p.id} className="border border-gray-200 rounded-lg p-3 hover:bg-blue-50/50 cursor-pointer" onClick={() => navigate(`/patients/${p.id}`)}>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="font-medium text-clinical-dark">{p.name}</p>
+                      <p className="text-xs text-gray-500">{p.hospital_number}</p>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${p.admission_status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
+                      {p.admission_status === 'active' ? 'Admitted' : 'Outpatient'}
+                    </span>
+                  </div>
+                  {p.ward && <p className="text-xs text-gray-600 mt-1">{p.ward}{p.bed ? `, Bed ${p.bed}` : ''}</p>}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {!staffLookupLoading && selectedStaffId && staffPatients.length === 0 && (
+          <p className="text-sm text-gray-500 text-center py-4">No patients assigned to this staff member.</p>
+        )}
+
+        {!selectedStaffId && (
+          <p className="text-sm text-gray-400 text-center py-4">Select a staff member above to view their assigned patients.</p>
         )}
       </div>
 

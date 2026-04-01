@@ -40,6 +40,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [selectedFields, setSelectedFields] = useState<Set<string>>(new Set());
   const [showRawText, setShowRawText] = useState(false);
+  const [handwritingMode, setHandwritingMode] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -58,6 +59,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
     setError(null);
     setSelectedFields(new Set());
     setShowRawText(false);
+    setHandwritingMode(false);
     stopCamera();
   }, []);
 
@@ -162,7 +164,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
   const processImage = async (imageSource: File | Blob | string) => {
     setStep('processing');
     setProgress(0);
-    setProgressText('Initializing OCR engine...');
+    setProgressText(handwritingMode ? 'Sending to AI Vision for handwriting recognition...' : 'Initializing OCR engine...');
     setError(null);
 
     try {
@@ -172,12 +174,20 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
         patientContext,
         (p) => {
           setProgress(Math.round(p.progress * 100));
-          if (p.progress < 0.3) setProgressText('Initializing OCR engine...');
-          else if (p.progress < 0.5) setProgressText('Scanning document with Tesseract...');
-          else if (p.progress < 0.6) setProgressText('OCR text extracted, sending to AI...');
-          else if (p.progress < 0.85) setProgressText('AI analyzing clinical content...');
-          else setProgressText('Structuring form fields...');
-        }
+          if (handwritingMode) {
+            if (p.progress < 0.3) setProgressText('Sending to AI Vision for handwriting recognition...');
+            else if (p.progress < 0.7) setProgressText('AI reading handwritten text...');
+            else if (p.progress < 0.9) setProgressText('Structuring clinical data...');
+            else setProgressText('Almost done...');
+          } else {
+            if (p.progress < 0.3) setProgressText('Initializing OCR engine...');
+            else if (p.progress < 0.5) setProgressText('Scanning document...');
+            else if (p.progress < 0.6) setProgressText('OCR text extracted, sending to AI...');
+            else if (p.progress < 0.85) setProgressText('AI analyzing clinical content...');
+            else setProgressText('Structuring form fields...');
+          }
+        },
+        { handwritingMode }
       );
 
       setResult(aiResult);
@@ -594,7 +604,10 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                         <button
                           type="button"
                           key={dt.value}
-                          onClick={() => setSelectedDocType(dt.value as DocumentType)}
+                          onClick={() => {
+                            setSelectedDocType(dt.value as DocumentType);
+                            if (dt.value === 'handwritten_note') setHandwritingMode(true);
+                          }}
                           className={`px-3 py-1.5 rounded-lg text-sm border transition ${
                             selectedDocType === dt.value
                               ? 'bg-green-600 text-white border-green-600'
@@ -605,6 +618,30 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                         </button>
                       ))}
                     </div>
+                  </div>
+
+                  {/* Handwriting Mode Toggle */}
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                    <label className="flex items-center justify-between cursor-pointer">
+                      <div className="flex items-center space-x-3">
+                        <span className="text-xl">✍️</span>
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-900">Advanced Handwriting Recognition</h4>
+                          <p className="text-xs text-gray-500">Uses GPT-4o Vision AI to read handwritten medical notes directly from the image</p>
+                        </div>
+                      </div>
+                      <div className="relative">
+                        <input
+                          type="checkbox"
+                          checked={handwritingMode}
+                          onChange={e => setHandwritingMode(e.target.checked)}
+                          className="sr-only"
+                        />
+                        <div className={`w-11 h-6 rounded-full transition-colors ${handwritingMode ? 'bg-green-600' : 'bg-gray-300'}`}>
+                          <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${handwritingMode ? 'translate-x-5' : 'translate-x-0'}`} />
+                        </div>
+                      </div>
+                    </label>
                   </div>
                 </>
               )}

@@ -17,6 +17,9 @@ import {
   Activity
 } from 'lucide-react';
 import { schedulingService, SurgeryBooking } from '../services/schedulingService';
+import { labService } from '../services/labService';
+import { PREOP_PANELS } from '../data/investigationDatabase';
+import { COMMON_LAB_TESTS } from '../services/labService';
 import PreoperativeAssessmentForm from './PreoperativeAssessmentForm';
 
 interface PreOpEvaluation {
@@ -370,6 +373,38 @@ export default function SurgeryBookingEnhanced({ selectedDate, onRefresh }: Surg
       };
 
       await schedulingService.createSurgeryBooking(bookingPayload);
+      
+      // Auto-request mandatory pre-operative investigations
+      try {
+        const panelName = 'Standard Pre-op (Major Surgery)';
+        const panelTests = PREOP_PANELS[panelName] || [];
+        const allTests = Object.values(COMMON_LAB_TESTS).flat();
+        const matchedTests = panelTests.map(name => {
+          const found = allTests.find(t => t.test_name === name);
+          return found || { id: name.toLowerCase().replace(/\s+/g, '_'), test_code: '', test_name: name, category: 'other' as const, sample_type: 'blood' as const, fasting_required: false, status: 'pending' as const, priority: 99 };
+        });
+        const teamNames = [
+          ...formData.consultants,
+          ...formData.senior_registrars,
+          ...formData.house_officers,
+        ].filter(Boolean).join(', ');
+
+        await labService.createLabInvestigation({
+          patient_id: formData.patient_id,
+          patient_name: formData.patient_name,
+          request_date: new Date(),
+          requested_by: teamNames || formData.primary_surgeon || 'Surgical Team',
+          urgency: 'routine',
+          clinical_indication: `Pre-operative workup for: ${formData.procedure_name}`,
+          tests: matchedTests,
+          status: 'pending',
+          special_instructions: `Auto-requested for surgery on ${formData.date}. Panel: ${panelName}`,
+        });
+        console.log('✅ Pre-op investigations auto-requested for surgery booking');
+      } catch (labErr) {
+        console.warn('⚠️ Failed to auto-request pre-op investigations:', labErr);
+      }
+
       setShowBookingForm(false);
       loadSurgeries();
       onRefresh();

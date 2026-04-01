@@ -41,7 +41,8 @@ import {
   Megaphone,
   Brain,
   CalendarCheck,
-  Stethoscope
+  Stethoscope,
+  Wine
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import SyncStatusIndicator from './SyncStatusIndicator';
@@ -89,6 +90,7 @@ export const patientActions = [
   { name: 'Keloid Care', href: '/keloid-care', icon: Syringe },
   { name: 'Soft Tissue Infection', href: '/soft-tissue-infection', icon: Bug },
   { name: 'Pressure Sore', href: '/pressure-sore', icon: Armchair },
+  { name: 'Substance Detox', href: '/substance-detox', icon: Wine },
   { name: 'Labs', href: '/labs', icon: FlaskConical },
   { name: 'Prescriptions', href: '/prescriptions', icon: Pill },
   { name: 'Patient Education', href: '/patient-education', icon: BookOpenCheck },

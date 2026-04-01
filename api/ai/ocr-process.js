@@ -206,7 +206,7 @@ export default async function handler(req, res) {
 
     userMessage += '\n\nPlease extract and structure ALL medical data from this OCR text into the appropriate JSON schema for this document type. Correct obvious OCR errors in medical terminology.';
 
-    // Call OpenAI GPT-4o-mini
+    // Call OpenAI GPT-4o for maximum accuracy
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -214,7 +214,7 @@ export default async function handler(req, res) {
         'Authorization': `Bearer ${openaiApiKey}`,
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: 'gpt-4o',
         messages: [
           { role: 'system', content: OCR_SYSTEM_PROMPT },
           { role: 'user', content: userMessage },
@@ -251,7 +251,7 @@ export default async function handler(req, res) {
       structured,
       rawText: ocrText,
       processedAt: new Date().toISOString(),
-      model: 'gpt-4o-mini',
+      model: 'gpt-4o',
     });
   } catch (err) {
     console.error('OCR processing error:', err);

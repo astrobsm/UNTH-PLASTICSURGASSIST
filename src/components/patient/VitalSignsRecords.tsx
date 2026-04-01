@@ -35,6 +35,7 @@ export const VitalSignsRecords: React.FC<VitalSignsRecordsProps> = ({ patientId,
   const [saving, setSaving] = useState(false);
   const [selectedParam, setSelectedParam] = useState<string>('systolic_bp');
   const [formData, setFormData] = useState<Partial<VitalSign>>({});
+  const [showScanner, setShowScanner] = useState(false);
 
   const loadVitals = useCallback(async () => {
     setLoading(true);
@@ -115,6 +116,32 @@ export const VitalSignsRecords: React.FC<VitalSignsRecordsProps> = ({ patientId,
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleScanExtracted = (fields: Record<string, any>) => {
+    const vitals = fields.vital_signs || fields.vitals || fields;
+    const mapped: Partial<VitalSign> = { ...formData };
+    if (vitals.temperature) mapped.temperature = Number(vitals.temperature);
+    if (vitals.pulse) mapped.pulse = Number(vitals.pulse);
+    if (vitals.bp_systolic || vitals.systolic_bp) mapped.systolic_bp = Number(vitals.bp_systolic || vitals.systolic_bp);
+    if (vitals.bp_diastolic || vitals.diastolic_bp) mapped.diastolic_bp = Number(vitals.bp_diastolic || vitals.diastolic_bp);
+    if (vitals.bloodPressure && typeof vitals.bloodPressure === 'string') {
+      const bpParts = vitals.bloodPressure.split('/');
+      if (bpParts.length === 2) {
+        mapped.systolic_bp = Number(bpParts[0]);
+        mapped.diastolic_bp = Number(bpParts[1]);
+      }
+    }
+    if (vitals.respiratoryRate || vitals.respiratory_rate) mapped.respiratory_rate = Number(vitals.respiratoryRate || vitals.respiratory_rate);
+    if (vitals.oxygenSaturation || vitals.spo2) mapped.spo2 = Number(vitals.oxygenSaturation || vitals.spo2);
+    if (vitals.weight) mapped.weight = Number(vitals.weight);
+    if (vitals.height) mapped.height = Number(vitals.height);
+    if (vitals.blood_sugar || vitals.bloodSugar) mapped.blood_sugar = Number(vitals.blood_sugar || vitals.bloodSugar);
+    if (vitals.painScore || vitals.pain_score) mapped.pain_score = Number(vitals.painScore || vitals.pain_score);
+    if (vitals.urine_output || vitals.urineOutput) mapped.urine_output = Number(vitals.urine_output || vitals.urineOutput);
+    setFormData(mapped);
+    setShowForm(true);
+    setShowScanner(false);
   };
 
   const VITAL_PARAMS = [
@@ -234,6 +261,9 @@ export const VitalSignsRecords: React.FC<VitalSignsRecordsProps> = ({ patientId,
           <button onClick={() => setShowForm(true)} className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700">
             + Record Vitals
           </button>
+          <button onClick={() => setShowScanner(true)} className="px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700">
+            📷 Scan Vitals
+          </button>
         </div>
       </div>
 
@@ -338,6 +368,18 @@ export const VitalSignsRecords: React.FC<VitalSignsRecordsProps> = ({ patientId,
             </tbody>
           </table>
         </div>
+      )}
+
+      {/* OCR Scanner Modal for Vital Signs */}
+      {showScanner && (
+        <DocumentScannerModal
+          isOpen={showScanner}
+          onClose={() => setShowScanner(false)}
+          onFieldsExtracted={handleScanExtracted}
+          documentType="clinical_note"
+          patientContext={{ name: patientName }}
+          targetForm="ward_round"
+        />
       )}
     </div>
   );

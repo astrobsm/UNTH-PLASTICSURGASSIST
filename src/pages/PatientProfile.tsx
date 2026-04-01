@@ -1181,7 +1181,7 @@ const InvestigationsTab: React.FC<{ patientId: string; hospitalNumber: string; p
   const [requested, setRequested] = useState<any[]>([]);
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeSection, setActiveSection] = useState<'requested' | 'results'>('requested');
+  const [activeSection, setActiveSection] = useState<'requested' | 'results' | 'trends'>('requested');
   const [showScanForm, setShowScanForm] = useState(false);
   const [showScanResult, setShowScanResult] = useState(false);
   const [showOCRModal, setShowOCRModal] = useState<'form' | 'result' | null>(null);
@@ -1329,6 +1329,9 @@ const InvestigationsTab: React.FC<{ patientId: string; hospitalNumber: string; p
         <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
           <h3 className="text-lg font-semibold text-gray-900">Investigation Results</h3>
           <div className="flex gap-2">
+            <button onClick={() => setShowOCRModal('result')} className="flex items-center gap-1 px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700">
+              <Camera className="w-3.5 h-3.5" /> Scan Results
+            </button>
             <button onClick={() => setShowOCRModal('form')} className="flex items-center gap-1 px-3 py-1.5 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700">
               <ScanLine className="w-3.5 h-3.5" /> OCR Scan
             </button>
@@ -1370,6 +1373,9 @@ const InvestigationsTab: React.FC<{ patientId: string; hospitalNumber: string; p
           </button>
           <button onClick={() => setActiveSection('results')} className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${activeSection === 'results' ? 'border-b-2 border-green-500 text-green-600' : 'text-gray-500 hover:text-gray-700'}`}>
             Available Results ({results.length})
+          </button>
+          <button onClick={() => setActiveSection('trends')} className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${activeSection === 'trends' ? 'border-b-2 border-green-500 text-green-600' : 'text-gray-500 hover:text-gray-700'}`}>
+            📈 Trends
           </button>
         </div>
 
@@ -1418,7 +1424,7 @@ const InvestigationsTab: React.FC<{ patientId: string; hospitalNumber: string; p
                 ))}
               </div>
             )
-          ) : (
+          ) : activeSection === 'results' ? (
             results.length === 0 ? (
               <p className="text-center text-gray-500 py-8">No available results</p>
             ) : (
@@ -1463,7 +1469,73 @@ const InvestigationsTab: React.FC<{ patientId: string; hospitalNumber: string; p
                 ))}
               </div>
             )
-          )}
+          ) : activeSection === 'trends' ? (
+            /* Investigation Trends with SVG Charts */
+            (() => {
+              const trendData: Record<string, { date: string; value: number }[]> = {};
+              results.forEach((inv: any) => {
+                const dateStr = inv.completed_at || inv.result_date || inv.updated_at || inv.created_at;
+                if (!dateStr) return;
+                if (inv.results && typeof inv.results === 'object') {
+                  Object.entries(inv.results).forEach(([key, val]) => {
+                    const num = parseFloat(String(val));
+                    if (!isNaN(num) && key !== 'id' && key !== 'patient_id') {
+                      if (!trendData[key]) trendData[key] = [];
+                      trendData[key].push({ date: dateStr, value: num });
+                    }
+                  });
+                }
+                if (inv.test_name && inv.result_value) {
+                  const num = parseFloat(String(inv.result_value));
+                  if (!isNaN(num)) {
+                    if (!trendData[inv.test_name]) trendData[inv.test_name] = [];
+                    trendData[inv.test_name].push({ date: dateStr, value: num });
+                  }
+                }
+              });
+              const paramNames = Object.keys(trendData).filter(k => trendData[k].length >= 1);
+              if (paramNames.length === 0) return <p className="text-center text-gray-500 py-8">No numeric results for trend analysis. Scan or upload results to see trends.</p>;
+              const COLORS = ['#0E9F6E','#DC2626','#2563EB','#7C3AED','#D97706','#059669','#BE185D','#6366F1','#0891B2','#EA580C'];
+              return (
+                <div className="space-y-6">
+                  {paramNames.map((name, pi) => {
+                    const pts = trendData[name].sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+                    const vals = pts.map(p => p.value);
+                    const mn = Math.min(...vals)*0.9, mx = Math.max(...vals)*1.1||1, rng = mx-mn||1;
+                    const color = COLORS[pi%COLORS.length];
+                    const W=600, H=180, P=50, cW=W-P*2, cH=H-P*2;
+                    const sp = pts.map((d,i) => ({
+                      x: P+(pts.length===1?cW/2:(i/(pts.length-1))*cW),
+                      y: P+cH-((d.value-mn)/rng)*cH,
+                      value: d.value, date: d.date
+                    }));
+                    const lp = sp.map((p,i) => `${i===0?'M':'L'} ${p.x} ${p.y}`).join(' ');
+                    return (
+                      <div key={name} className="bg-gray-50 rounded-lg p-4">
+                        <h4 className="text-sm font-semibold mb-2" style={{color}}>{name}</h4>
+                        <div className="overflow-x-auto">
+                          <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-2xl mx-auto" style={{minWidth:350}}>
+                            {[0,0.25,0.5,0.75,1].map(f => {
+                              const y=P+cH-f*cH, v=(mn+f*rng).toFixed(1);
+                              return <g key={f}><line x1={P} y1={y} x2={W-P} y2={y} stroke="#E5E7EB" strokeWidth="1"/><text x={P-5} y={y+4} textAnchor="end" fill="#9CA3AF" fontSize="10">{v}</text></g>;
+                            })}
+                            <path d={lp} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                            {sp.map((p,i) => <g key={i}><circle cx={p.x} cy={p.y} r="4" fill={color} stroke="white" strokeWidth="2"/><text x={p.x} y={p.y-10} textAnchor="middle" fill={color} fontSize="10" fontWeight="bold">{p.value}</text></g>)}
+                            {sp.map((p,i) => { const d=new Date(p.date); const lb=isNaN(d.getTime())?'':`${d.getDate()}/${d.getMonth()+1}`; return <text key={`xl${i}`} x={p.x} y={H-5} textAnchor="middle" fill="#9CA3AF" fontSize="9">{lb}</text>; })}
+                          </svg>
+                        </div>
+                        <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                          <span>{pts.length} data point{pts.length!==1?'s':''}</span>
+                          <span>Range: {Math.min(...vals).toFixed(1)} – {Math.max(...vals).toFixed(1)}</span>
+                          {pts.length>=2 && <span className={vals[vals.length-1]>vals[0]?'text-red-500':vals[vals.length-1]<vals[0]?'text-green-500':'text-gray-500'}>{vals[vals.length-1]>vals[0]?'↑ Rising':vals[vals.length-1]<vals[0]?'↓ Falling':'→ Stable'}</span>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()
+          ) : null}
         </div>
       </div>
 

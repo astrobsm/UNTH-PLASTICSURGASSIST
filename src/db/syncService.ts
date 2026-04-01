@@ -271,6 +271,10 @@ class SyncService {
       case 'mdt_meetings':
       case 'mdt_contact_logs':
       case 'sjs_assessments':
+      case 'substance_use_assessments':
+      case 'detox_monitoring_records':
+      case 'detox_follow_ups':
+      case 'substance_use_clinical_summaries':
       case 'investigation_uploads':
       case 'notice_board':
       case 'audit_logs':

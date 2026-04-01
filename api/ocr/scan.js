@@ -64,6 +64,32 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: `Unsupported file type: ${mimeType}. Allowed: ${allowed.join(', ')}` });
     }
 
+    const { image, mimeType: providedMime, documentType, aiPostProcess = true, patientContext, useVisionOCR = false } = body;
+
+    // ─── GPT-4o Vision Direct OCR (for handwriting) ──────────────
+    const openaiApiKey = process.env.OPENAI_API_KEY;
+    if (useVisionOCR && openaiApiKey) {
+      try {
+        const visionResult = await runGPT4oVisionOCR(image, mimeType, documentType || 'handwritten_note', patientContext, openaiApiKey);
+        return res.status(200).json({
+          success: true,
+          raw_text: visionResult.raw_text,
+          structured_blocks: [],
+          confidence: visionResult.confidence,
+          pages: 1,
+          language: 'en',
+          structured: visionResult.structured,
+          documentType: visionResult.documentType || documentType || 'handwritten_note',
+          processedAt: new Date().toISOString(),
+          aiModel: visionResult.model,
+          visionOCR: true,
+        });
+      } catch (visionErr) {
+        console.warn('GPT-4o Vision OCR failed, falling back to Cloud Vision:', visionErr.message);
+        // Fall through to standard Cloud Vision pipeline
+      }
+    }
+
     // ─── Run Google Cloud Vision OCR ──────────────────────────────
     const ocrResult = await performOCR(image, mimeType);
 
@@ -89,7 +115,6 @@ export default async function handler(req, res) {
 
     if (aiPostProcess) {
       try {
-        const openaiApiKey = process.env.OPENAI_API_KEY;
         if (openaiApiKey) {
           const aiResult = await runAIPostProcessing(
             ocrResult.raw_text,
@@ -145,6 +170,93 @@ export default async function handler(req, res) {
   }
 }
 
+// ─── GPT-4o Vision Direct OCR (superior handwriting recognition) ───
+const VISION_OCR_SYSTEM_PROMPT = `You are an expert medical document OCR and handwriting recognition system for a plastic surgery / clinical department. You are looking at a photograph of a medical document that may contain handwritten notes, printed text, or a mix of both.
+
+Your task:
+1. Read and transcribe ALL text in the image as accurately as possible, including handwritten portions
+2. Correct likely medical abbreviations and terms (e.g. "Hb" → Hemoglobin context, "BP" → Blood Pressure)
+3. Structure the extracted data into the appropriate medical schema
+4. For handwritten text that is ambiguous, provide your best interpretation with [?] marker for uncertain words
+
+Respond with ONLY valid JSON in this format:
+{
+  "raw_text": "Complete transcription of all text in the image, preserving layout with newlines",
+  "document_type": "ward_round|lab_report|prescription|imaging_report|handwritten_note|general",
+  "confidence": 0.0 to 1.0,
+  "handwriting_detected": true/false,
+  "structured": {
+    For clinical notes: { "clinical_status", "subjective", "objective", "assessment", "plan", "vitals": { "temperature", "pulse", "bp_systolic", "bp_diastolic", "respiratory_rate", "spo2", "pain_score" }, "medications": [{"name","dose","route","frequency"}], "investigations": [{"type","name","result","abnormal"}], "wounds": [{"location","description","size","dressing"}], "diagnoses": [], "allergies": [], "diet", "activity", "notes", "confidence" },
+    For lab_report: { "results": [{"test_name","result_value","unit","reference_range","abnormal","flag"}], "specimen_type", "confidence" },
+    For prescription: { "medications": [{"name","dose","route","frequency","duration","instructions"}], "confidence" },
+    For imaging_report: { "modality","body_part","findings","impression","confidence" }
+  }
+}
+
+IMPORTANT:
+- Read handwriting character by character when needed — you are excellent at this
+- Use medical context to disambiguate unclear characters (e.g. "1" vs "l", "0" vs "O")
+- Extract ALL data including dates, signatures, patient identifiers visible in the document
+- For vitals written in shorthand like "T37.2 P80 BP120/80 RR18 SpO2 98%", parse each value
+- Recognize common medical handwriting patterns: medication names, dosages, SOAP notes format`;
+
+async function runGPT4oVisionOCR(base64Image, mimeType, documentType, patientContext, apiKey) {
+  // Strip data URI prefix if present, then re-add for the API
+  const cleanBase64 = base64Image.replace(/^data:[^;]+;base64,/, '');
+  const dataUri = `data:${mimeType || 'image/jpeg'};base64,${cleanBase64}`;
+
+  let userMessage = `Please read and transcribe all text from this medical document image. Document type hint: ${documentType || 'general'}.`;
+
+  if (patientContext) {
+    userMessage += `\n\nPatient context: ${patientContext.name || 'Unknown'}, Hospital# ${patientContext.hospitalNumber || 'Unknown'}, Ward: ${patientContext.ward || 'Unknown'}, Diagnosis: ${patientContext.diagnosis || 'Unknown'}`;
+  }
+
+  userMessage += '\n\nExtract ALL text including handwritten portions and structure into the JSON schema. Pay special attention to handwriting accuracy.';
+
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o',
+      messages: [
+        { role: 'system', content: VISION_OCR_SYSTEM_PROMPT },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: userMessage },
+            { type: 'image_url', image_url: { url: dataUri, detail: 'high' } },
+          ],
+        },
+      ],
+      temperature: 0.1,
+      max_tokens: 8192,
+      response_format: { type: 'json_object' },
+    }),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`GPT-4o Vision API error (${response.status}): ${errText}`);
+  }
+
+  const data = await response.json();
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error('Empty GPT-4o Vision response');
+
+  const parsed = JSON.parse(content);
+  return {
+    raw_text: parsed.raw_text || '',
+    structured: parsed.structured || null,
+    confidence: parsed.confidence || 0.85,
+    documentType: parsed.document_type || documentType,
+    handwritingDetected: parsed.handwriting_detected || false,
+    model: 'gpt-4o-vision',
+  };
+}
+
 // ─── AI Post-Processing (reuses same prompt from api/ai/ocr-process.js) ───
 async function runAIPostProcessing(rawText, documentType, patientContext, apiKey) {
   const trimmedText = rawText.length > 15000
@@ -166,7 +278,7 @@ async function runAIPostProcessing(rawText, documentType, patientContext, apiKey
       'Authorization': `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: 'gpt-4o-mini',
+      model: 'gpt-4o',
       messages: [
         { role: 'system', content: AI_SYSTEM_PROMPT },
         { role: 'user', content: userMessage },
@@ -187,7 +299,7 @@ async function runAIPostProcessing(rawText, documentType, patientContext, apiKey
 
   return {
     structured: JSON.parse(content),
-    model: 'gpt-4o-mini',
+    model: 'gpt-4o',
   };
 }
 

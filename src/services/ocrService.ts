@@ -741,9 +741,10 @@ class OCRService {
    * Process a document image with OCR + AI post-processing.
    * 
    * Pipeline:
-   * 1. Try backend /api/ocr/scan (Cloud Vision + AI in one call)
-   * 2. If backend unavailable, fall back to local Tesseract + separate AI endpoint
-   * 3. If AI unavailable, fall back to rule-based extraction
+   * 1. If handwritingMode, try GPT-4o Vision direct OCR (best for handwriting)
+   * 2. Try backend /api/ocr/scan (Cloud Vision + AI in one call)
+   * 3. If backend unavailable, fall back to local Tesseract + separate AI endpoint
+   * 4. If AI unavailable, fall back to rule-based extraction
    */
   async processDocumentWithAI(
     imageSource: File | Blob | string | HTMLImageElement | HTMLCanvasElement,
@@ -754,21 +755,25 @@ class OCRService {
       ward?: string;
       diagnosis?: string;
     },
-    onProgress?: (progress: OCRProgress) => void
+    onProgress?: (progress: OCRProgress) => void,
+    options?: { handwritingMode?: boolean }
   ): Promise<AIEnhancedOCRResult> {
     const startTime = Date.now();
 
     // ── Attempt 1: Unified backend (Cloud Vision + AI in one call) ──
+    // If handwritingMode, use GPT-4o Vision for direct image-to-text+structured
+    const useVisionOCR = options?.handwritingMode ?? (documentType === 'handwritten_note');
     try {
-      onProgress?.({ status: 'Sending to Cloud Vision AI...', progress: 0.1 });
+      onProgress?.({ status: useVisionOCR ? 'Sending to AI Vision (handwriting)...' : 'Sending to Cloud Vision AI...', progress: 0.1 });
       const base64 = await this.imageToBase64(imageSource);
 
-      onProgress?.({ status: 'Cloud Vision processing...', progress: 0.3 });
+      onProgress?.({ status: useVisionOCR ? 'AI reading handwriting...' : 'Cloud Vision processing...', progress: 0.3 });
       const backendResult = await apiClient.post('/ocr/scan', {
         image: base64,
-        documentType,
+        documentType: useVisionOCR ? 'handwritten_note' : documentType,
         aiPostProcess: true,
         patientContext,
+        useVisionOCR,
       });
 
       if (backendResult?.success && backendResult.raw_text) {

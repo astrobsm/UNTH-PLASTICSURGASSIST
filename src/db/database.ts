@@ -225,6 +225,10 @@ export class PlasticSurgeonDB extends Dexie {
   api_cache!: Table<any>; // Generic API response cache for offline-first
   sjs_assessments!: Table<any>; // For SJS/TEN clinical assessments
   investigation_uploads!: Table<any>; // For investigation form/result uploads
+  substance_use_assessments!: Table<any>; // For substance use disorder assessments
+  detox_monitoring_records!: Table<any>; // For detox vital signs / withdrawal monitoring
+  detox_follow_ups!: Table<any>; // For detox follow-up visits
+  substance_use_clinical_summaries!: Table<any>; // For generated clinical summaries
 
   constructor() {
     super('PlasticSurgeonDB');
@@ -1260,6 +1264,14 @@ export class PlasticSurgeonDB extends Dexie {
     this.version(29).stores({
       sjs_assessments: '++id, patient_id, hospital_number, date_of_assessment, classification, status, created_at',
       investigation_uploads: '++id, patient_id, hospital_number, upload_type, status, created_at'
+    });
+
+    // Version 30: Add Substance Use Disorder Assessment & Detoxification tables
+    this.version(30).stores({
+      substance_use_assessments: 'id, patientId, hospitalId, hospitalNumber, primarySubstance, status, assessedBy, synced, createdAt',
+      detox_monitoring_records: 'id, assessmentId, patientId, recordedAt, synced',
+      detox_follow_ups: 'id, assessmentId, patientId, scheduledDate, status, synced, createdAt',
+      substance_use_clinical_summaries: 'id, assessmentId, patientId, generatedAt'
     });
 
     // Add hooks to automatically track changes

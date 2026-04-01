@@ -951,7 +951,12 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
     }
 
     if (!selectedHouseOfficer) {
-      alert('Please assign at least a House Officer to the patient');
+      alert('House Officer assignment is mandatory. Please assign a House Officer.');
+      return;
+    }
+
+    if (!selectedSeniorRegistrar) {
+      alert('Senior Registrar assignment is mandatory. Please assign a Senior Registrar.');
       return;
     }
 
@@ -1148,7 +1153,7 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
           {/* Senior Registrar (Optional) */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Senior Registrar <span className="text-gray-400 text-xs">(optional)</span>
+              Senior Registrar <span className="text-red-500">*</span>
             </label>
             <select
               value={selectedSeniorRegistrar || ''}
