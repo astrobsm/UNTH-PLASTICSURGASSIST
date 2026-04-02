@@ -64,6 +64,7 @@ const navigation = [
   { name: 'Consults', href: '/consults', icon: Stethoscope },
   { name: 'Notice Board', href: '/notice-board', icon: Megaphone },
   { name: 'Shopping List', href: '/shopping-list', icon: ShoppingCart },
+  { name: 'Substance Detox', href: '/substance-detox', icon: Wine },
   { name: 'Chat', href: '/chat', icon: MessageSquare },
   { name: 'Video Conference', href: '/conference', icon: Video },
   { name: 'Notifications', href: '/notifications', icon: Bell },

@@ -26,6 +26,7 @@ import { warmCache, CacheWarmProgress } from '../services/cacheWarmer';
 import { syncService } from '../db/syncService';
 import UnitRosterWidget from '../components/UnitRosterWidget';
 import { userManagementService, ApprovedUser } from '../services/userManagementService';
+import { medicalTeamService } from '../services/medicalTeamService';
 
 interface DashboardPatient {
   id: number | string;
@@ -35,6 +36,7 @@ interface DashboardPatient {
   bed: string;
   consultant: string;
   resident: string;
+  house_officer: string;
   admission_status: 'active' | 'discharged' | 'outpatient';
   admission_date?: string;
 }
@@ -76,6 +78,8 @@ export default function Dashboard() {
   const [selectedStaffId, setSelectedStaffId] = useState('');
   const [staffPatients, setStaffPatients] = useState<DashboardPatient[]>([]);
   const [staffLookupLoading, setStaffLookupLoading] = useState(false);
+  const [autoAssigning, setAutoAssigning] = useState(false);
+  const [autoAssignResult, setAutoAssignResult] = useState<string | null>(null);
 
   const isAdmin = user?.role === 'admin';
 
@@ -158,6 +162,19 @@ export default function Dashboard() {
         }
       }
 
+      // Load patient_assignments for accurate team data
+      let allAssignments: any[] = [];
+      try { allAssignments = await db.patient_assignments.toArray(); } catch { /* table may not exist */ }
+      const assignmentByPid = new Map<number, any>();
+      for (const a of allAssignments) {
+        if (a.is_active) assignmentByPid.set(a.patient_id, a);
+      }
+      // Build user lookup for resolving IDs to names
+      let allUsers: any[] = [];
+      try { allUsers = await db.users.toArray(); } catch { /* */ }
+      const userById = new Map<number, any>();
+      for (const u of allUsers) userById.set(u.id, u);
+
       // Build dashboard patient list
       const userName = user?.name || '';
       const userId = user?.id || '';
@@ -165,24 +182,35 @@ export default function Dashboard() {
 
       for (const p of activePatientsList) {
         const pid = String(p.id || p.serverId || '');
+        const numPid = Number(pid);
         const hn = (p.hospital_number || '').trim().toLowerCase();
         const adm = admissionByPid.get(pid) || (hn ? admissionByHn.get(hn) : undefined);
-        
+        const assignment = assignmentByPid.get(numPid);
+
         const ward = adm?.ward_location || p.ward_id || '';
         const bed = adm?.bed_number || p.bed_number || '';
         const consultant = adm?.admitting_consultant || p.consultant_in_charge || '';
         const resident = adm?.admitting_doctor || p.resident_in_charge || '';
+        const hoUser = assignment?.house_officer_id ? userById.get(assignment.house_officer_id) : null;
+        const houseOfficer = hoUser ? (hoUser.full_name || hoUser.name || '') : '';
         const admStatus = adm ? 'active' as const : 'outpatient' as const;
 
-        // For non-admin: check if patient is assigned to this user
-        const isAssigned = isAdmin || 
+        // For non-admin: check if patient is assigned to this user via name OR via patient_assignments
+        const myUserId = Number(userId);
+        const isAssigned = isAdmin ||
           consultant.toLowerCase().includes(userName.toLowerCase()) ||
           resident.toLowerCase().includes(userName.toLowerCase()) ||
           (p.consultant_in_charge || '').toLowerCase().includes(userName.toLowerCase()) ||
           (p.resident_in_charge || '').toLowerCase().includes(userName.toLowerCase()) ||
           adm?.admitting_doctor?.toLowerCase().includes(userName.toLowerCase()) ||
           adm?.admitting_consultant?.toLowerCase().includes(userName.toLowerCase()) ||
-          adm?.created_by === userId;
+          adm?.created_by === userId ||
+          (assignment && (
+            assignment.consultant_id === myUserId ||
+            assignment.senior_registrar_id === myUserId ||
+            assignment.registrar_id === myUserId ||
+            assignment.house_officer_id === myUserId
+          ));
 
         if (isAdmin || isAssigned) {
           dPatients.push({
@@ -193,6 +221,7 @@ export default function Dashboard() {
             bed,
             consultant,
             resident,
+            house_officer: houseOfficer,
             admission_status: admStatus,
             admission_date: adm ? new Date(adm.admission_date).toLocaleDateString() : undefined
           });
@@ -284,8 +313,20 @@ export default function Dashboard() {
       const staffUser = staffList.find(u => String(u.id) === staffId);
       if (!staffUser) { setStaffPatients([]); return; }
       const staffName = staffUser.full_name.toLowerCase();
+      const staffNumId = Number(staffId);
 
-      // Filter from existing dashboard patients OR all patients for admin
+      // Load patient_assignments for ID-based matching
+      let allAssignments: any[] = [];
+      try { allAssignments = await db.patient_assignments.toArray(); } catch { /* */ }
+      const assignedPatientIds = new Set<number>();
+      for (const a of allAssignments) {
+        if (!a.is_active) continue;
+        if (a.consultant_id === staffNumId || a.senior_registrar_id === staffNumId ||
+            a.registrar_id === staffNumId || a.house_officer_id === staffNumId) {
+          assignedPatientIds.add(a.patient_id);
+        }
+      }
+
       const allPatients = await patientService.getAllPatients();
       const activePatientsList = allPatients.filter((p: any) => !p.deleted);
       let activeAdmissions: Admission[] = [];
@@ -297,15 +338,26 @@ export default function Dashboard() {
         if (adm.hospital_number) admissionByHn.set(adm.hospital_number.trim().toLowerCase(), adm);
       }
 
+      // Resolve HO names
+      let allUsers: any[] = [];
+      try { allUsers = await db.users.toArray(); } catch { /* */ }
+      const userById = new Map<number, any>();
+      for (const u of allUsers) userById.set(u.id, u);
+      const assignmentByPid = new Map<number, any>();
+      for (const a of allAssignments) { if (a.is_active) assignmentByPid.set(a.patient_id, a); }
+
       const matched: DashboardPatient[] = [];
       for (const p of activePatientsList) {
         const pid = String(p.id || p.serverId || '');
+        const numPid = Number(pid);
         const hn = (p.hospital_number || '').trim().toLowerCase();
         const adm = admissionByPid.get(pid) || (hn ? admissionByHn.get(hn) : undefined);
+        const assignment = assignmentByPid.get(numPid);
         const consultant = (adm?.admitting_consultant || p.consultant_in_charge || '').toLowerCase();
         const resident = (adm?.admitting_doctor || p.resident_in_charge || '').toLowerCase();
 
-        const isAssigned = consultant.includes(staffName) || resident.includes(staffName) ||
+        const isAssigned = assignedPatientIds.has(numPid) ||
+          consultant.includes(staffName) || resident.includes(staffName) ||
           (p.consultant_in_charge || '').toLowerCase().includes(staffName) ||
           (p.resident_in_charge || '').toLowerCase().includes(staffName) ||
           adm?.admitting_doctor?.toLowerCase().includes(staffName) ||
@@ -313,6 +365,7 @@ export default function Dashboard() {
           adm?.created_by === staffId;
 
         if (isAssigned) {
+          const hoUser = assignment?.house_officer_id ? userById.get(assignment.house_officer_id) : null;
           matched.push({
             id: p.id || p.serverId || '',
             name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.full_name || 'Unknown',
@@ -321,6 +374,7 @@ export default function Dashboard() {
             bed: adm?.bed_number || p.bed_number || '',
             consultant: adm?.admitting_consultant || p.consultant_in_charge || '',
             resident: adm?.admitting_doctor || p.resident_in_charge || '',
+            house_officer: hoUser ? (hoUser.full_name || hoUser.name || '') : '',
             admission_status: adm ? 'active' as const : 'outpatient' as const,
             admission_date: adm ? new Date(adm.admission_date).toLocaleDateString() : undefined
           });
@@ -329,6 +383,31 @@ export default function Dashboard() {
       setStaffPatients(matched);
     } catch { setStaffPatients([]); }
     finally { setStaffLookupLoading(false); }
+  };
+
+  const handleAutoAssignHO = async () => {
+    setAutoAssigning(true);
+    setAutoAssignResult(null);
+    try {
+      const result = await medicalTeamService.autoAssignAdmittedPatientsToHouseOfficers();
+      setAutoAssignResult(`Assigned ${result.assigned} of ${result.total} admitted patients to house officers.`);
+      // Reload dashboard data
+      await loadDashboardData();
+    } catch (err: any) {
+      setAutoAssignResult(`Error: ${err.message || 'Failed to auto-assign'}`);
+    } finally { setAutoAssigning(false); }
+  };
+
+  const handleReassignHO = async () => {
+    setAutoAssigning(true);
+    setAutoAssignResult(null);
+    try {
+      const result = await medicalTeamService.reassignAllHouseOfficers();
+      setAutoAssignResult(`Reassigned ${result.reassigned} admitted patients evenly across house officers.`);
+      await loadDashboardData();
+    } catch (err: any) {
+      setAutoAssignResult(`Error: ${err.message || 'Failed to reassign'}`);
+    } finally { setAutoAssigning(false); }
   };
 
   const formatTimeAgo = (date: Date): string => {
@@ -424,6 +503,24 @@ export default function Dashboard() {
             <span className="text-sm font-normal text-gray-500">({filteredPatients.length})</span>
           </h3>
           <div className="flex flex-col sm:flex-row gap-2">
+            {isAdmin && (
+              <>
+                <button
+                  onClick={handleAutoAssignHO}
+                  disabled={autoAssigning}
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50"
+                >
+                  {autoAssigning ? 'Assigning...' : 'Auto-Assign HOs'}
+                </button>
+                <button
+                  onClick={handleReassignHO}
+                  disabled={autoAssigning}
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
+                >
+                  {autoAssigning ? 'Reassigning...' : 'Reassign All HOs'}
+                </button>
+              </>
+            )}
             {/* Search */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -451,6 +548,12 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {autoAssignResult && (
+          <div className="mb-3 px-3 py-2 rounded-lg bg-blue-50 text-blue-800 text-sm">
+            {autoAssignResult}
+          </div>
+        )}
+
         {filteredPatients.length > 0 ? (
           <>
             {/* Desktop Table */}
@@ -467,6 +570,7 @@ export default function Dashboard() {
                       <>
                         <th className="px-3 py-2 font-medium text-gray-600">Consultant</th>
                         <th className="px-3 py-2 font-medium text-gray-600">Resident</th>
+                        <th className="px-3 py-2 font-medium text-gray-600">House Officer</th>
                       </>
                     )}
                     <th className="px-3 py-2 font-medium text-gray-600">Status</th>
@@ -496,6 +600,7 @@ export default function Dashboard() {
                         <>
                           <td className="px-3 py-3 text-gray-600">{p.consultant || <span className="text-gray-400 text-xs">Unassigned</span>}</td>
                           <td className="px-3 py-3 text-gray-600">{p.resident || <span className="text-gray-400 text-xs">Unassigned</span>}</td>
+                          <td className="px-3 py-3 text-gray-600">{p.house_officer || <span className="text-gray-400 text-xs">Unassigned</span>}</td>
                         </>
                       )}
                       <td className="px-3 py-3">
@@ -543,11 +648,13 @@ export default function Dashboard() {
                       {p.ward}{p.bed ? `, Bed ${p.bed}` : ''}
                     </p>
                   )}
-                  {isAdmin && (p.consultant || p.resident) && (
+                  {isAdmin && (p.consultant || p.resident || p.house_officer) && (
                     <div className="mt-1 text-xs text-gray-500">
                       {p.consultant && <span>Consultant: {p.consultant}</span>}
                       {p.consultant && p.resident && <span> · </span>}
                       {p.resident && <span>Resident: {p.resident}</span>}
+                      {(p.consultant || p.resident) && p.house_officer && <span> · </span>}
+                      {p.house_officer && <span>HO: {p.house_officer}</span>}
                     </div>
                   )}
                 </div>

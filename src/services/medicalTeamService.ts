@@ -486,6 +486,160 @@ class MedicalTeamService {
       `SR: ${team.senior_registrar_id}, Reg: ${team.registrar_id}, HO: ${team.house_officer_id}`
     );
   }
+
+  /**
+   * Auto-assign all admitted patients evenly to active house officers.
+   * Creates assignments for patients that don't have one yet, and
+   * fills in house_officer_id for existing assignments missing one.
+   */
+  async autoAssignAdmittedPatientsToHouseOfficers(): Promise<{ assigned: number; total: number }> {
+    try {
+      // Get active admissions from local DB
+      let admissions: any[] = [];
+      try {
+        admissions = await db.admissions.filter(a => a.status === 'active').toArray();
+      } catch { /* table may not exist */ }
+
+      // Also get patients table for hospital_number
+      const patients = await db.patients.toArray();
+      const patientMap = new Map<number, any>();
+      for (const p of patients) { if (p.id) patientMap.set(p.id, p); }
+
+      // Get active house officers sorted by least loaded
+      const houseOfficers = await this.getLocalStaffByRole('house_officer');
+      if (houseOfficers.length === 0) {
+        console.warn('No active house officers available for auto-assignment');
+        return { assigned: 0, total: admissions.length };
+      }
+
+      // Get existing assignments
+      const existingAssignments = await db.patient_assignments.toArray();
+      const assignmentByPid = new Map<number, any>();
+      for (const a of existingAssignments) {
+        if (a.is_active) assignmentByPid.set(a.patient_id, a);
+      }
+
+      // Build current load counts per HO
+      const hoLoad = new Map<number, number>();
+      for (const ho of houseOfficers) hoLoad.set(ho.id, 0);
+      for (const a of existingAssignments) {
+        if (a.is_active && a.house_officer_id && hoLoad.has(a.house_officer_id)) {
+          hoLoad.set(a.house_officer_id, (hoLoad.get(a.house_officer_id) || 0) + 1);
+        }
+      }
+
+      let assignedCount = 0;
+      const admittedPatientIds = new Set(admissions.map(a => Number(a.patient_id)));
+
+      for (const adm of admissions) {
+        const pid = Number(adm.patient_id);
+        const existing = assignmentByPid.get(pid);
+
+        if (existing && existing.house_officer_id) {
+          // Already has HO assigned — skip
+          continue;
+        }
+
+        // Pick least-loaded HO
+        const leastLoaded = [...hoLoad.entries()].sort((a, b) => a[1] - b[1])[0];
+        const hoId = leastLoaded[0];
+
+        if (existing) {
+          // Update existing assignment with HO
+          await db.patient_assignments.update(existing.id, { house_officer_id: hoId });
+        } else {
+          // Create new assignment
+          const patient = patientMap.get(pid);
+          const hn = patient?.hospital_number || adm.hospital_number || '';
+          await db.patient_assignments.add({
+            patient_id: pid,
+            hospital_number: hn,
+            house_officer_id: hoId,
+            assigned_at: new Date(),
+            is_active: true
+          });
+        }
+
+        hoLoad.set(hoId, (hoLoad.get(hoId) || 0) + 1);
+        assignedCount++;
+      }
+
+      console.log(`✅ Auto-assigned ${assignedCount} admitted patients to house officers`);
+      return { assigned: assignedCount, total: admissions.length };
+    } catch (error) {
+      console.error('Error auto-assigning house officers:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Reassign ALL admitted patients' house officers evenly.
+   * Called when a new HO is added or an HO is deactivated.
+   * Clears all HO assignments and redistributes evenly.
+   */
+  async reassignAllHouseOfficers(): Promise<{ reassigned: number }> {
+    try {
+      // Get active admissions
+      let admissions: any[] = [];
+      try {
+        admissions = await db.admissions.filter(a => a.status === 'active').toArray();
+      } catch { /* */ }
+
+      const admittedPids = new Set(admissions.map(a => Number(a.patient_id)));
+
+      // Get active house officers
+      const houseOfficers = await this.getLocalStaffByRole('house_officer');
+      if (houseOfficers.length === 0) {
+        console.warn('No active house officers for reassignment');
+        return { reassigned: 0 };
+      }
+
+      // Get all active assignments for admitted patients
+      const allAssignments = await db.patient_assignments.toArray();
+      const admittedAssignments = allAssignments.filter(
+        a => a.is_active && admittedPids.has(a.patient_id)
+      );
+
+      // Also handle admitted patients with no assignment at all
+      const patients = await db.patients.toArray();
+      const patientMap = new Map<number, any>();
+      for (const p of patients) { if (p.id) patientMap.set(p.id, p); }
+      const assignedPids = new Set(admittedAssignments.map(a => a.patient_id));
+      const unassignedAdmittedPids = [...admittedPids].filter(pid => !assignedPids.has(pid));
+
+      // Total patients to distribute
+      const totalPatients = admittedAssignments.length + unassignedAdmittedPids.length;
+      let hoIndex = 0;
+
+      // Redistribute existing assignments
+      for (const a of admittedAssignments) {
+        const hoId = houseOfficers[hoIndex % houseOfficers.length].id;
+        await db.patient_assignments.update(a.id!, { house_officer_id: hoId });
+        hoIndex++;
+      }
+
+      // Create assignments for unassigned admitted patients
+      for (const pid of unassignedAdmittedPids) {
+        const hoId = houseOfficers[hoIndex % houseOfficers.length].id;
+        const patient = patientMap.get(pid);
+        const adm = admissions.find(a => Number(a.patient_id) === pid);
+        await db.patient_assignments.add({
+          patient_id: pid,
+          hospital_number: patient?.hospital_number || adm?.hospital_number || '',
+          house_officer_id: hoId,
+          assigned_at: new Date(),
+          is_active: true
+        });
+        hoIndex++;
+      }
+
+      console.log(`✅ Reassigned ${totalPatients} admitted patients evenly across ${houseOfficers.length} house officers`);
+      return { reassigned: totalPatients };
+    } catch (error) {
+      console.error('Error reassigning house officers:', error);
+      throw error;
+    }
+  }
 }
 
 export const medicalTeamService = new MedicalTeamService();
