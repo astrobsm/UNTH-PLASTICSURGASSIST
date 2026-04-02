@@ -278,6 +278,9 @@ class SyncService {
       case 'investigation_uploads':
       case 'notice_board':
       case 'audit_logs':
+      case 'ho_tracking_assignments':
+      case 'ho_task_logs':
+      case 'patient_transfers':
         await this.syncGenericEntity(action, table, local_id, data);
         break;
 

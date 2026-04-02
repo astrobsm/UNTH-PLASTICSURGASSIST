@@ -148,6 +148,19 @@ export default async function handler(req, res) {
         if (action === 'cbt-attempts' || action === 'cbt_attempts') {
           return await getSyncEntity('cbt_attempts', res);
         }
+        // Substance detox tables
+        if (action === 'substance-use-assessments' || action === 'substance_use_assessments') {
+          return await getSyncEntity('substance_use_assessments', res);
+        }
+        if (action === 'detox-monitoring-records' || action === 'detox_monitoring_records') {
+          return await getSyncEntity('detox_monitoring_records', res);
+        }
+        if (action === 'detox-follow-ups' || action === 'detox_follow_ups') {
+          return await getSyncEntity('detox_follow_ups', res);
+        }
+        if (action === 'substance-use-clinical-summaries' || action === 'substance_use_clinical_summaries') {
+          return await getSyncEntity('substance_use_clinical_summaries', res);
+        }
         return await getSyncStatus(auth.user, res);
       default:
         res.status(405).json({ error: 'Method not allowed' });
@@ -405,6 +418,15 @@ async function handlePush(data, user, res) {
         }
       }
 
+      // Map client-side IndexedDB table names to server PostgreSQL table names
+      const tableNameMap = {
+        'wound_care': 'wound_care_records',
+        'surgery_bookings': 'surgeries',
+        'lab_investigations': 'lab_orders',
+        'discharges': 'discharge_summaries',
+      };
+      const resolvedEntityType = tableNameMap[entityType] || entityType;
+
       // Handle clinical assessment entities with upsert
       const clinicalEntities = [
         'blood_transfusions', 'burn_patients', 'diabetic_foot_assessments',
@@ -418,10 +440,13 @@ async function handlePush(data, user, res) {
         'chat_messages', 'chat_rooms', 'audit_logs', 'user_activities',
         'shopping_lists', 'call_duty_roster', 'clinic_duty_logs',
         'substance_use_assessments', 'detox_monitoring_records', 'detox_follow_ups',
-        'substance_use_clinical_summaries'
+        'substance_use_clinical_summaries',
+        'progress_notes', 'sjs_assessments', 'ward_rounds_clinical',
+        'investigation_uploads', 'notice_board', 'patient_transfers',
+        'ho_tracking_assignments', 'ho_task_logs'
       ];
       
-      if (clinicalEntities.includes(entityType) && payload) {
+      if (clinicalEntities.includes(resolvedEntityType) && payload) {
         try {
           // Tables with SERIAL (integer) primary keys - local auto-increment ids should NOT be used for lookup
           const serialKeyTables = [
@@ -429,7 +454,7 @@ async function handlePush(data, user, res) {
             'admissions', 'surgeries', 'treatment_plans', 'prescriptions', 'lab_orders',
             'call_duty_roster', 'clinic_duty_logs'
           ];
-          const isSerialKey = serialKeyTables.includes(entityType);
+          const isSerialKey = serialKeyTables.includes(resolvedEntityType);
 
           // Build dynamic upsert query - filter out internal fields and local-only id for SERIAL tables
           const skipKeys = ['serverId', 'synced', 'deleted'];
@@ -448,7 +473,7 @@ async function handlePush(data, user, res) {
             // VARCHAR id tables: look up by id directly
             const existingId = payload.serverId || payload.id;
             if (existingId) {
-              existing = await query(`SELECT id FROM ${entityType} WHERE id = $1`, [existingId]);
+              existing = await query(`SELECT id FROM ${resolvedEntityType} WHERE id = $1`, [existingId]);
             }
           }
           
@@ -472,10 +497,10 @@ async function handlePush(data, user, res) {
               'lab_orders': 'ordered_at',
               'discharge_summaries': 'discharge_date'
             };
-            const dateField = dateFieldMap[entityType];
+            const dateField = dateFieldMap[resolvedEntityType];
             if (dateField && payload[dateField]) {
               existing = await query(
-                `SELECT id FROM ${entityType} WHERE patient_id = $1 AND ${dateField} = $2`,
+                `SELECT id FROM ${resolvedEntityType} WHERE patient_id = $1 AND ${dateField} = $2`,
                 [payload.patient_id, payload[dateField]]
               );
             }
@@ -485,13 +510,13 @@ async function handlePush(data, user, res) {
             // Update
             const setClause = columns.map((col, i) => `${col} = $${i + 1}`).join(', ');
             await query(
-              `UPDATE ${entityType} SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = $${columns.length + 1}`,
+              `UPDATE ${resolvedEntityType} SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = $${columns.length + 1}`,
               [...values, existing.rows[0].id]
             );
           } else {
             // Insert (for SERIAL tables, PostgreSQL auto-generates the id)
             await query(
-              `INSERT INTO ${entityType} (${columns.join(', ')}) VALUES (${placeholders})`,
+              `INSERT INTO ${resolvedEntityType} (${columns.join(', ')}) VALUES (${placeholders})`,
               values
             );
           }
@@ -580,7 +605,19 @@ async function handlePull(data, user, res) {
     ps_unit_rosters: { table: 'ps_unit_rosters', userField: null },
     shopping_lists: { table: 'shopping_lists', userField: null },
     call_duty_roster: { table: 'call_duty_roster', userField: null },
-    clinic_duty_logs: { table: 'clinic_duty_logs', userField: 'user_id' }
+    clinic_duty_logs: { table: 'clinic_duty_logs', userField: 'user_id' },
+    // Substance detox tables
+    substance_use_assessments: { table: 'substance_use_assessments', userField: null },
+    detox_monitoring_records: { table: 'detox_monitoring_records', userField: null },
+    detox_follow_ups: { table: 'detox_follow_ups', userField: null },
+    substance_use_clinical_summaries: { table: 'substance_use_clinical_summaries', userField: null },
+    // Additional clinical tables
+    progress_notes: { table: 'progress_notes', userField: null },
+    sjs_assessments: { table: 'sjs_assessments', userField: null },
+    notice_board: { table: 'notice_board', userField: null },
+    patient_transfers: { table: 'patient_transfers', userField: null },
+    ho_tracking_assignments: { table: 'ho_tracking_assignments', userField: null },
+    ho_task_logs: { table: 'ho_task_logs', userField: null }
   };
 
   for (const [entityName, config] of Object.entries(entityConfigs)) {
