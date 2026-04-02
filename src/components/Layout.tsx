@@ -69,6 +69,7 @@ const navigation = [
   { name: 'Video Conference', href: '/conference', icon: Video },
   { name: 'Notifications', href: '/notifications', icon: Bell },
   { name: 'Settings', href: '/settings', icon: SettingsIcon },
+  { name: 'HO Tracking', href: '/ho-tracking', icon: ClipboardCheck },
   { name: 'Training Admin', href: '/admin-training', icon: GraduationCap },
   { name: 'Admin', href: '/admin', icon: SettingsIcon },
 ];

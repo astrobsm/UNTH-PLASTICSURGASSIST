@@ -86,6 +86,7 @@ const ConsultsPage = lazyWithRetry(() => import('./pages/ConsultsPage'));
 const AdminTrainingPage = lazyWithRetry(() => import('./pages/AdminTrainingPage'));
 const SJSManagementPage = lazyWithRetry(() => import('./pages/SJSManagementPage'));
 const SubstanceDetoxPage = lazyWithRetry(() => import('./pages/SubstanceDetoxPage'));
+const HOTrackingPage = lazyWithRetry(() => import('./pages/HOTrackingPage'));
 
 // Loading fallback component
 const PageLoader = () => (
@@ -231,6 +232,7 @@ function App() {
               <Route path="/consults" element={<ConsultsPage />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/admin-training" element={<AdminTrainingPage />} />
+              <Route path="/ho-tracking" element={<HOTrackingPage />} />
               <Route path="/admin" element={<Admin />} />
             </Routes>
             
