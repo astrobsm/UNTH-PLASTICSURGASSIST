@@ -681,11 +681,12 @@ export default function Dashboard() {
           <Users className="h-5 w-5 text-blue-600" />
           Staff Patient Lookup
         </h3>
-        <div className="flex flex-col sm:flex-row gap-3 mb-4">
+        <div className="mb-4">
           <select
             value={selectedStaffId}
             onChange={(e) => handleStaffLookup(e.target.value)}
-            className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+            className="w-full px-3 py-3 text-base sm:text-sm border border-gray-300 rounded-lg bg-white focus:ring-primary-500 focus:border-primary-500 appearance-none"
+            style={{ fontSize: '16px' }}
           >
             <option value="">-- Select a staff member --</option>
             {staffList.map(s => (
