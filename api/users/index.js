@@ -206,8 +206,8 @@ export default async function handler(req, res) {
 }
 
 async function getAllUsers(currentUser, res) {
-  if (!['admin', 'super_admin', 'consultant'].includes(currentUser.role)) {
-    return res.status(403).json({ error: 'Access denied' });
+  // All authenticated users can view the staff directory (read-only)
+  // Write operations (create, update, delete) have their own admin checks
   }
 
   const result = await query(

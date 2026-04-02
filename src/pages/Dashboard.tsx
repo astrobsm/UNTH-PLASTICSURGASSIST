@@ -302,7 +302,25 @@ export default function Dashboard() {
     try {
       const all = await userManagementService.getAllApprovedUsers();
       setStaffList(all.filter(u => u.is_active));
-    } catch { /* staff list not available */ }
+    } catch {
+      // Fallback: load from local IndexedDB
+      try {
+        const localUsers = await db.users?.toArray() || [];
+        const mapped: ApprovedUser[] = localUsers
+          .filter((u: any) => u.is_approved && u.is_active !== false)
+          .map((u: any) => ({
+            id: u.id,
+            full_name: u.full_name || u.name || u.username || 'Unknown',
+            email: u.email || '',
+            role: u.role || 'house_officer',
+            is_approved: true,
+            is_active: true,
+            username: u.username || u.email || '',
+            created_at: u.created_at || '',
+          }));
+        if (mapped.length > 0) setStaffList(mapped);
+      } catch { /* no local fallback available */ }
+    }
   };
 
   const handleStaffLookup = async (staffId: string) => {
