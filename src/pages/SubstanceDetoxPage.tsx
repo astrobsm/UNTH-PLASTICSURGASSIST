@@ -119,10 +119,37 @@ export default function SubstanceDetoxPage() {
   const [selectedAssessment, setSelectedAssessment] = useState<SubstanceUseAssessment | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Load assessments
+  // Load assessments from server + local DB
   const loadAssessments = useCallback(async () => {
     setLoading(true);
     try {
+      // Try fetching from server first
+      let serverItems: SubstanceUseAssessment[] = [];
+      try {
+        const token = localStorage.getItem('auth_token');
+        const res = await fetch('/api/substance-assessments', {
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          serverItems = (data.assessments || []).map((a: any) => ({
+            ...a,
+            createdAt: a.created_at || a.createdAt,
+            updatedAt: a.updated_at || a.updatedAt,
+          }));
+          // Merge server items into local DB
+          for (const item of serverItems) {
+            try {
+              const exists = await db.substance_use_assessments.get(item.id);
+              if (!exists) {
+                await db.substance_use_assessments.put({ ...item, synced: true } as any);
+              }
+            } catch { /* skip duplicates */ }
+          }
+        }
+      } catch { /* server unavailable, fall back to local */ }
+
+      // Always read from local DB (now enriched with server data)
       const items = await db.substance_use_assessments.toArray();
       items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setAssessments(items);
@@ -434,7 +461,20 @@ function NewAssessmentWizard({ user, onComplete }: { user: any; onComplete: () =
 
       await db.substance_use_assessments.add(assessment as any);
 
-      // Queue for sync
+      // Push to server directly
+      try {
+        const token = localStorage.getItem('auth_token');
+        const resp = await fetch('/api/substance-assessments', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(assessment),
+        });
+        if (resp.ok) {
+          await db.substance_use_assessments.update(assessment.id as any, { synced: true } as any);
+        }
+      } catch { /* will sync later via queue */ }
+
+      // Also queue for sync as backup
       try {
         await (db as any).sync_queue.add({ table: 'substance_use_assessments', action: 'create', data: assessment, local_id: assessment.id, created_at: now });
       } catch { /* offline-safe */ }

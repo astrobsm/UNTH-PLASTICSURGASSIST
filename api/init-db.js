@@ -1554,6 +1554,72 @@ async function createTables() {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
     CREATE INDEX IF NOT EXISTS idx_investigation_uploads_patient ON investigation_uploads(patient_id);
+
+    -- Substance Use Assessments table
+    CREATE TABLE IF NOT EXISTS substance_use_assessments (
+      id VARCHAR(255) PRIMARY KEY,
+      patient_id VARCHAR(255),
+      patient_name VARCHAR(255),
+      hospital_number VARCHAR(100),
+      hospital_id VARCHAR(100),
+      primary_substance VARCHAR(100),
+      substances JSONB DEFAULT '[]',
+      poly_substance_use BOOLEAN DEFAULT FALSE,
+      addiction_severity_score JSONB DEFAULT '{}',
+      withdrawal_risk_prediction JSONB DEFAULT '{}',
+      care_setting_decision JSONB DEFAULT '{}',
+      pain_management_support JSONB,
+      comorbidities JSONB DEFAULT '[]',
+      comorbidity_modifications JSONB DEFAULT '[]',
+      social_factors JSONB DEFAULT '{}',
+      previous_detox_attempts INTEGER DEFAULT 0,
+      previous_treatment_history TEXT,
+      consent_obtained BOOLEAN DEFAULT FALSE,
+      consent_document JSONB,
+      status VARCHAR(50) DEFAULT 'initial_assessment',
+      assessed_by VARCHAR(255),
+      assessment_date TIMESTAMP,
+      audit_log JSONB DEFAULT '[]',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_substance_assessments_patient ON substance_use_assessments(patient_id);
+    CREATE INDEX IF NOT EXISTS idx_substance_assessments_status ON substance_use_assessments(status);
+
+    -- Detox Monitoring Records
+    CREATE TABLE IF NOT EXISTS detox_monitoring_records (
+      id VARCHAR(255) PRIMARY KEY,
+      assessment_id VARCHAR(255) REFERENCES substance_use_assessments(id),
+      patient_id VARCHAR(255),
+      monitoring_date TIMESTAMP,
+      vital_signs JSONB DEFAULT '{}',
+      withdrawal_score JSONB DEFAULT '{}',
+      symptoms JSONB DEFAULT '[]',
+      medications_administered JSONB DEFAULT '[]',
+      clinical_notes TEXT,
+      recorded_by VARCHAR(255),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_detox_monitoring_assessment ON detox_monitoring_records(assessment_id);
+
+    -- Detox Follow-Ups
+    CREATE TABLE IF NOT EXISTS detox_follow_ups (
+      id VARCHAR(255) PRIMARY KEY,
+      assessment_id VARCHAR(255) REFERENCES substance_use_assessments(id),
+      patient_id VARCHAR(255),
+      follow_up_date TIMESTAMP,
+      follow_up_type VARCHAR(50),
+      relapse_status VARCHAR(50),
+      current_medications JSONB DEFAULT '[]',
+      psychosocial_support JSONB DEFAULT '{}',
+      clinical_notes TEXT,
+      next_follow_up_date TIMESTAMP,
+      recorded_by VARCHAR(255),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_detox_followups_assessment ON detox_follow_ups(assessment_id);
   `;
 
   await query(schema);

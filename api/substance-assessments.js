@@ -86,27 +86,33 @@ async function getAssessment(id, res) {
 
 async function createAssessment(data, user, res) {
   const {
-    patientId, patientName, hospitalNumber, hospitalId, primarySubstance,
+    id: clientId, patientId, patientName, hospitalNumber, hospitalId, primarySubstance,
     substances, polySubstanceUse, addictionSeverityScore, withdrawalRiskPrediction,
     careSettingDecision, painManagementSupport, comorbidities, comorbidityModifications,
     socialFactors, previousDetoxAttempts, previousTreatmentHistory,
-    consentObtained, consentDocument, status = 'initial_assessment'
+    consentObtained, consentDocument, status = 'initial_assessment',
+    assessedBy, auditLog
   } = data;
 
   if (!patientId || !primarySubstance) {
     return res.status(400).json({ error: 'Patient ID and primary substance are required' });
   }
 
+  const assessor = assessedBy || user.username || user.id;
+  const logEntry = auditLog || [{ action: 'assessment_created', performedBy: assessor, performedAt: new Date().toISOString() }];
+
   const result = await query(
     `INSERT INTO substance_use_assessments (
-      patient_id, patient_name, hospital_number, hospital_id, primary_substance,
+      id, patient_id, patient_name, hospital_number, hospital_id, primary_substance,
       substances, poly_substance_use, addiction_severity_score, withdrawal_risk_prediction,
       care_setting_decision, pain_management_support, comorbidities, comorbidity_modifications,
       social_factors, previous_detox_attempts, previous_treatment_history,
       consent_obtained, consent_document, status, assessed_by, assessment_date, audit_log
     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,NOW(),$21)
+    ON CONFLICT (id) DO NOTHING
     RETURNING *`,
     [
+      clientId || `sua-${Date.now()}`,
       patientId, patientName, hospitalNumber, hospitalId, primarySubstance,
       JSON.stringify(substances || []), polySubstanceUse || false,
       JSON.stringify(addictionSeverityScore || {}), JSON.stringify(withdrawalRiskPrediction || {}),
@@ -115,12 +121,12 @@ async function createAssessment(data, user, res) {
       JSON.stringify(socialFactors || {}), previousDetoxAttempts || 0,
       previousTreatmentHistory || '',
       consentObtained || false, JSON.stringify(consentDocument || null),
-      status, user.username || user.id,
-      JSON.stringify([{ action: 'assessment_created', performedBy: user.username || user.id, performedAt: new Date().toISOString() }])
+      status, assessor,
+      JSON.stringify(logEntry)
     ]
   );
 
-  res.status(201).json({ assessment: result.rows[0] });
+  res.status(201).json({ assessment: result.rows[0] || { id: clientId } });
 }
 
 async function updateAssessment(id, data, user, res) {

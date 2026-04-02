@@ -416,7 +416,9 @@ async function handlePush(data, user, res) {
         'wound_care_records', 'ward_rounds', 'discharge_summaries',
         'admissions', 'surgeries', 'treatment_plans', 'prescriptions', 'lab_orders',
         'chat_messages', 'chat_rooms', 'audit_logs', 'user_activities',
-        'shopping_lists', 'call_duty_roster', 'clinic_duty_logs'
+        'shopping_lists', 'call_duty_roster', 'clinic_duty_logs',
+        'substance_use_assessments', 'detox_monitoring_records', 'detox_follow_ups',
+        'substance_use_clinical_summaries'
       ];
       
       if (clinicalEntities.includes(entityType) && payload) {
