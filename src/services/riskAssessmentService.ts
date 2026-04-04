@@ -17,6 +17,7 @@ export interface BaseRiskAssessment {
   status: 'active' | 'completed' | 'superseded';
   created_at: Date;
   updated_at: Date;
+  synced?: boolean;
 }
 
 export interface ActionPlanItem {

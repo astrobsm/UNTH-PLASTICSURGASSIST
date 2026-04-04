@@ -259,23 +259,31 @@ class ClinicDutyService {
   // ── Get staff from API ─────────────────────────────────────────────────
 
   async getStaffByRole(role: string): Promise<{ id: string; full_name: string; role: string; email?: string }[]> {
+    // Handle 'registrar' / 'junior_registrar' equivalence
+    const matchRole = (userRole: string) => {
+      if (role === 'junior_registrar' || role === 'registrar') {
+        return userRole === 'junior_registrar' || userRole === 'registrar';
+      }
+      return userRole === role;
+    };
+
     try {
       const all = await apiClient.getUsers();
       if (!Array.isArray(all)) return [];
       return all
-        .filter((u: any) => u.role === role && u.is_approved !== false && u.is_active !== false)
+        .filter((u: any) => matchRole(u.role) && u.is_approved !== false && u.is_active !== false)
         .map((u: any) => ({
           id: String(u.id),
           full_name: u.full_name || u.name || u.username || 'Unknown',
-          role: u.role,
+          role: role === 'junior_registrar' || role === 'registrar' ? 'junior_registrar' : u.role,
           email: u.email,
         }));
     } catch {
-      const local = await db.approved_users.filter((u: any) => u.role === role && u.is_active !== false).toArray();
+      const local = await db.approved_users.filter((u: any) => matchRole(u.role) && u.is_active !== false).toArray();
       return local.map((u: any) => ({
         id: String(u.id),
         full_name: u.full_name || u.name || 'Unknown',
-        role: u.role,
+        role: role === 'junior_registrar' || role === 'registrar' ? 'junior_registrar' : u.role,
         email: u.email,
       }));
     }

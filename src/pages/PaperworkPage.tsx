@@ -794,7 +794,7 @@ const PaperworkPage: React.FC = () => {
 
           // If no restrictions from ward rounds, check treatment plan for activity restrictions
           if (!restrictionsText && activePlan && activePlan.activity_restrictions) {
-            restrictionsText = activePlan.activity_restrictions;
+            restrictionsText = Array.isArray(activePlan.activity_restrictions) ? activePlan.activity_restrictions.join(', ') : activePlan.activity_restrictions;
           }
 
           setFormData({

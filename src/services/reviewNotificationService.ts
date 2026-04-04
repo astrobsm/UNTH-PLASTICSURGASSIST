@@ -255,7 +255,7 @@ class ReviewNotificationService {
         title: `📋 ${review.review_type.charAt(0).toUpperCase() + review.review_type.slice(1)} Review Reminder`,
         message: `Review for ${patientName} scheduled. Assigned to: ${reviewerName}`,
         type: 'reminder',
-        patientId,
+        patientId: Number(patientId),
         planId,
         scheduledFor: reminderDate,
         url: `/treatment-planning?patientId=${patientId}`

@@ -108,7 +108,7 @@ async function createAssessment(data, user, res) {
       care_setting_decision, pain_management_support, comorbidities, comorbidity_modifications,
       social_factors, previous_detox_attempts, previous_treatment_history,
       consent_obtained, consent_document, status, assessed_by, assessment_date, audit_log
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,NOW(),$21)
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,NOW(),$22)
     ON CONFLICT (id) DO NOTHING
     RETURNING *`,
     [

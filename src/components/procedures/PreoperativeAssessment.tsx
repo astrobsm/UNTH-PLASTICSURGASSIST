@@ -12,7 +12,7 @@ export const PreoperativeAssessmentForm: React.FC<PreoperativeAssessmentFormProp
   procedureId,
   onComplete
 }) => {
-  const [assessment, setAssessment] = useState<Partial<PreoperativeAssessment>>({
+  const [assessment, setAssessment] = useState<any>({
     patient_id: patientId,
     procedure_id: procedureId,
     assessment_date: new Date().toISOString().split('T')[0],

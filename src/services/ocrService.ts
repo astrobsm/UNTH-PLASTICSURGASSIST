@@ -33,7 +33,7 @@ export interface OCRProgress {
   progress: number;
 }
 
-export type DocumentType = 'lab_report' | 'imaging_report' | 'prescription' | 'handwritten_note' | 'general';
+export type DocumentType = 'lab_report' | 'imaging_report' | 'prescription' | 'handwritten_note' | 'general' | 'clinical_note' | 'consultation';
 
 // Medical lab value patterns for extraction
 const LAB_VALUE_PATTERNS: Record<string, RegExp> = {

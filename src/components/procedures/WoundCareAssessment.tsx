@@ -22,7 +22,7 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
   procedureId,
   onComplete
 }) => {
-  const [assessment, setAssessment] = useState<Partial<WoundCareAssessment>>({
+  const [assessment, setAssessment] = useState<any>({
     patient_id: patientId,
     procedure_id: procedureId,
     wound_location: '',
@@ -493,14 +493,14 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
     
     // Draw cutting guides (light gray dashed lines between rows)
     doc.setDrawColor(180, 180, 180);
-    doc.setLineDash([2, 2]);
+    (doc as any).setLineDash([2, 2]);
     doc.setLineWidth(0.3);
     
     for (let row = 1; row < numberOfRows; row++) {
       const y = startY + (row * rowSpacing) - (gapBetweenLines / 2);
       doc.line(0, y, pageWidth, y);
     }
-    doc.setLineDash([]); // Reset to solid lines
+    (doc as any).setLineDash([]); // Reset to solid lines
 
     // Draw 15cm lines in a grid pattern
     let lineNumber = 1;

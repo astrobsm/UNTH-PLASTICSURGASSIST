@@ -44,10 +44,10 @@ class OfflineDataService {
       });
 
       // Queue for sync
-      await syncService.queueAction('create', 'patients', patientId, data);
+      await syncService.queueAction('create', 'patients', patientId as number, data);
       
       toast.success(`Patient ${data.first_name} ${data.last_name} created ${navigator.onLine ? '' : '(offline)'}`);
-      return patientId;
+      return patientId as number;
     } catch (error) {
       toast.error('Failed to create patient');
       throw error;
@@ -57,7 +57,7 @@ class OfflineDataService {
   async getPatients(): Promise<Patient[]> {
     return db.patients
       .where('deleted')
-      .notEqual(true)
+      .notEqual(true as any)
       .toArray();
   }
 
@@ -93,10 +93,10 @@ class OfflineDataService {
         synced: false
       });
 
-      await syncService.queueAction('create', 'treatment_plans', planId, data);
+      await syncService.queueAction('create', 'treatment_plans', planId as number, data);
       
       toast.success(`Treatment plan "${data.title}" created ${navigator.onLine ? '' : '(offline)'}`);
-      return planId;
+      return planId as number;
     } catch (error) {
       toast.error('Failed to create treatment plan');
       throw error;
@@ -104,7 +104,7 @@ class OfflineDataService {
   }
 
   async getTreatmentPlans(patientId?: number): Promise<TreatmentPlan[]> {
-    let query = db.treatment_plans.where('deleted').notEqual(true);
+    let query = db.treatment_plans.where('deleted').notEqual(true as any);
     
     if (patientId) {
       query = query.and(plan => plan.patient_id === patientId);
@@ -154,10 +154,10 @@ class OfflineDataService {
         synced: false
       });
 
-      await syncService.queueAction('create', 'plan_steps', stepId, data);
+      await syncService.queueAction('create', 'plan_steps', stepId as number, data);
       
       toast.success(`Step "${data.title}" added ${navigator.onLine ? '' : '(offline)'}`);
-      return stepId;
+      return stepId as number;
     } catch (error) {
       toast.error('Failed to create plan step');
       throw error;

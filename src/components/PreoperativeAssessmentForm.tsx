@@ -245,7 +245,7 @@ export default function PreoperativeAssessmentForm({
     try {
       setGenerating(true);
       
-      const instructions = await preoperativeService.generatePreoperativeInstructions({
+      const instructions = await preoperativeService.generatePreOpInstructions({
         patient,
         surgery: surgery || {},
         anaesthesia_type: surgery?.anaesthesia_type || 'general',
@@ -254,7 +254,7 @@ export default function PreoperativeAssessmentForm({
         bleeding_risk: bleedingRisk as BleedingRiskAssessment,
         dvt_risk: dvtRisk as CapriniDVTRisk,
         cardiovascular_risk: cardiacRisk as CardiovascularRiskAssessment
-      });
+      } as any);
 
       setPreopInstructions(instructions);
       setShowInstructionsView(true);

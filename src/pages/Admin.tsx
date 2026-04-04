@@ -42,7 +42,10 @@ import {
   Wifi,
   WifiOff,
   Copy,
-  Check
+  Check,
+  GraduationCap,
+  Loader2,
+  Star
 } from 'lucide-react';
 import Layout from '../components/Layout';
 import { UserApprovalManager } from '../components/UserApprovalManager';
@@ -58,7 +61,7 @@ import toast from 'react-hot-toast';
 import RotationManagement from '../components/admin/RotationManagement';
 import { UnitRosterConfig } from '../config/psUnits';
 
-type AdminTab = 'dashboard' | 'user-approvals' | 'users' | 'bulk-import' | 'team-analytics' | 'rotations' | 'system' | 'database' | 'security' | 'analytics' | 'settings';
+type AdminTab = 'dashboard' | 'user-approvals' | 'users' | 'bulk-import' | 'team-analytics' | 'rotations' | 'students' | 'system' | 'database' | 'security' | 'analytics' | 'settings';
 
 interface User {
   id: string;
@@ -101,7 +104,12 @@ interface AuditLog {
 }
 
 export default function Admin() {
-  const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
+  const [activeTab, setActiveTab] = useState<AdminTab>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab');
+    return (tab && ['dashboard','user-approvals','users','bulk-import','team-analytics','rotations','students','system','database','security','analytics','settings'].includes(tab))
+      ? tab as AdminTab : 'dashboard';
+  });
   const [users, setUsers] = useState<User[]>([]);
   const [metrics, setMetrics] = useState<SystemMetrics | null>(null);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
@@ -456,6 +464,7 @@ export default function Admin() {
         <TabButton tab="bulk-import" label="Bulk Import" icon={UserPlus} />
         <TabButton tab="team-analytics" label="Team Analytics" icon={Activity} />
         <TabButton tab="rotations" label="Rotations" icon={Calendar} />
+        <TabButton tab="students" label="Students" icon={GraduationCap} />
         <TabButton tab="system" label="System" icon={Activity} />
         <TabButton tab="database" label="Database" icon={Database} />
         <TabButton tab="security" label="Security" icon={Shield} />
@@ -1120,6 +1129,9 @@ export default function Admin() {
         <RotationManagement />
       )}
 
+      {/* Students Tab */}
+      {activeTab === 'students' && <StudentManagementTab />}
+
       {/* Settings Tab */}
       {activeTab === 'settings' && (
         <div className="space-y-6">
@@ -1643,3 +1655,321 @@ const BackupModal = ({
     </div>
   );
 };
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// STUDENT MANAGEMENT TAB  
+// ═══════════════════════════════════════════════════════════════════════════════
+function StudentManagementTab() {
+  const [students, setStudents] = useState<any[]>([]);
+  const [overview, setOverview] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [selectedStudent, setSelectedStudent] = useState<any>(null);
+  const [detail, setDetail] = useState<any>(null);
+  const [evalModal, setEvalModal] = useState<{ type: 'clerking' | 'plan'; id: number } | null>(null);
+  const [evalScore, setEvalScore] = useState('');
+  const [evalFeedback, setEvalFeedback] = useState('');
+  const [evalSaving, setEvalSaving] = useState(false);
+
+  const shareLink = `${window.location.origin}/student-register`;
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [studentList, overviewData] = await Promise.all([
+        apiClient.get('/students'),
+        apiClient.get('/students/overview'),
+      ]);
+      setStudents(studentList);
+      setOverview(overviewData.stats);
+    } catch (err) {
+      console.error('Failed to load students:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadStudentDetail = async (id: number) => {
+    try {
+      const data = await apiClient.get(`/students/${id}`);
+      setDetail(data);
+      setSelectedStudent(data.student);
+    } catch (err) {
+      console.error('Failed to load student detail:', err);
+    }
+  };
+
+  const approveStudent = async (id: number, approved: boolean) => {
+    try {
+      await apiClient.put('/students/approve', { studentId: id, approved });
+      await loadData();
+      if (detail?.student?.id === id) await loadStudentDetail(id);
+    } catch (err: any) {
+      alert(err.message || 'Failed');
+    }
+  };
+
+  const deactivateStudent = async (id: number, active: boolean) => {
+    try {
+      await apiClient.put('/students/deactivate', { studentId: id, active });
+      await loadData();
+      if (detail?.student?.id === id) await loadStudentDetail(id);
+    } catch (err: any) {
+      alert(err.message || 'Failed');
+    }
+  };
+
+  const submitEvaluation = async () => {
+    if (!evalModal || !evalScore) return;
+    setEvalSaving(true);
+    try {
+      const body: any = { score: parseInt(evalScore), feedback: evalFeedback };
+      if (evalModal.type === 'clerking') body.clerkingId = evalModal.id;
+      else body.treatmentPlanId = evalModal.id;
+      await apiClient.put('/students/evaluate', body);
+      setEvalModal(null);
+      setEvalScore('');
+      setEvalFeedback('');
+      if (selectedStudent) await loadStudentDetail(selectedStudent.id);
+    } catch (err: any) {
+      alert(err.message || 'Evaluation failed');
+    } finally {
+      setEvalSaving(false);
+    }
+  };
+
+  useEffect(() => { loadData(); }, []);
+
+  if (loading) return <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-green-600" /></div>;
+
+  return (
+    <div className="space-y-6">
+      {/* Header + Share Link */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-semibold text-gray-900">Student Management</h2>
+          <p className="text-sm text-gray-500">Manage clinical posting students</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <input readOnly value={shareLink} className="text-xs border border-gray-300 rounded-lg px-3 py-2 w-64 bg-gray-50" onClick={e => (e.target as HTMLInputElement).select()} title="Student registration link" />
+          <button onClick={() => { navigator.clipboard.writeText(shareLink); alert('Link copied!'); }}
+            className="px-3 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 flex items-center gap-1">
+            <Copy className="w-4 h-4" /> Copy Link
+          </button>
+        </div>
+      </div>
+
+      {/* Overview Stats */}
+      {overview && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[
+            { label: 'Total Students', value: overview.total_students, color: 'blue' },
+            { label: 'Active', value: overview.active_students, color: 'green' },
+            { label: 'Pending Approval', value: overview.pending_approval, color: 'yellow' },
+            { label: 'Expired Postings', value: overview.expired_postings, color: 'red' },
+          ].map((s, i) => (
+            <div key={i} className="bg-white border border-gray-200 rounded-lg p-4">
+              <p className="text-xs text-gray-500">{s.label}</p>
+              <p className={`text-2xl font-bold text-${s.color}-600`}>{s.value}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Back button when viewing detail */}
+      {selectedStudent && (
+        <button onClick={() => { setSelectedStudent(null); setDetail(null); }}
+          className="text-sm text-blue-600 hover:underline">&larr; Back to student list</button>
+      )}
+
+      {/* Student Detail View */}
+      {selectedStudent && detail ? (
+        <div className="space-y-4">
+          <div className="bg-white border border-gray-200 rounded-lg p-5">
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">{selectedStudent.full_name}</h3>
+                <p className="text-sm text-gray-500">{selectedStudent.email} · {selectedStudent.university || 'N/A'} · {selectedStudent.matric_number || 'N/A'}</p>
+                <p className="text-sm text-gray-500">Posting: {new Date(selectedStudent.posting_start).toLocaleDateString()} – {new Date(selectedStudent.posting_end).toLocaleDateString()}</p>
+              </div>
+              <div className="flex gap-2">
+                {!selectedStudent.is_approved ? (
+                  <button onClick={() => approveStudent(selectedStudent.id, true)}
+                    className="px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700">Approve</button>
+                ) : (
+                  <span className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded-full">Approved</span>
+                )}
+                <button onClick={() => deactivateStudent(selectedStudent.id, !selectedStudent.is_active)}
+                  className={`px-3 py-1.5 text-sm rounded-lg ${selectedStudent.is_active ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-gray-600 text-white hover:bg-gray-700'}`}>
+                  {selectedStudent.is_active ? 'Deactivate' : 'Reactivate'}
+                </button>
+              </div>
+            </div>
+
+            {/* Assigned Patients */}
+            <h4 className="font-semibold text-gray-800 mb-2 mt-4">Assigned Patients ({detail.patients?.length || 0}/5)</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-4">
+              {(detail.patients || []).map((p: any) => (
+                <div key={p.patient_id} className="bg-gray-50 rounded-lg p-3 text-sm">
+                  <p className="font-medium">{p.first_name} {p.last_name}</p>
+                  <p className="text-xs text-gray-500">Ward: {p.ward_id || 'N/A'} · Bed: {p.bed_number || 'N/A'}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Clerkings */}
+            <h4 className="font-semibold text-gray-800 mb-2">Clerkings ({detail.clerkings?.length || 0})</h4>
+            <div className="space-y-2 mb-4">
+              {(detail.clerkings || []).map((c: any) => (
+                <div key={c.id} className="bg-white border border-gray-200 rounded-lg p-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">{c.provisional_diagnosis || 'Draft'}</p>
+                      <p className="text-xs text-gray-500">{c.first_name} {c.last_name} · {new Date(c.created_at).toLocaleDateString()}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {c.evaluation_score != null ? (
+                        <span className={`text-sm font-bold ${c.evaluation_score >= 70 ? 'text-green-600' : c.evaluation_score >= 50 ? 'text-yellow-600' : 'text-red-600'}`}>{c.evaluation_score}/100</span>
+                      ) : (
+                        <button onClick={() => { setEvalModal({ type: 'clerking', id: c.id }); setEvalScore(''); setEvalFeedback(''); }}
+                          className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center gap-1">
+                          <Star className="w-3 h-3" /> Evaluate
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  {c.chief_complaint && <p className="text-xs text-gray-600 mt-1 truncate">CC: {c.chief_complaint}</p>}
+                </div>
+              ))}
+              {(!detail.clerkings || detail.clerkings.length === 0) && <p className="text-sm text-gray-400">No clerkings yet</p>}
+            </div>
+
+            {/* Treatment Plans */}
+            <h4 className="font-semibold text-gray-800 mb-2">Treatment Plans ({detail.treatmentPlans?.length || 0})</h4>
+            <div className="space-y-2">
+              {(detail.treatmentPlans || []).map((p: any) => (
+                <div key={p.id} className="bg-white border border-gray-200 rounded-lg p-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">{p.diagnosis || 'Draft'}</p>
+                      <p className="text-xs text-gray-500">{p.first_name} {p.last_name} · {new Date(p.created_at).toLocaleDateString()}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {p.evaluation_score != null ? (
+                        <span className={`text-sm font-bold ${p.evaluation_score >= 70 ? 'text-green-600' : p.evaluation_score >= 50 ? 'text-yellow-600' : 'text-red-600'}`}>{p.evaluation_score}/100</span>
+                      ) : (
+                        <button onClick={() => { setEvalModal({ type: 'plan', id: p.id }); setEvalScore(''); setEvalFeedback(''); }}
+                          className="px-2 py-1 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 flex items-center gap-1">
+                          <Star className="w-3 h-3" /> Evaluate
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {(!detail.treatmentPlans || detail.treatmentPlans.length === 0) && <p className="text-sm text-gray-400">No treatment plans yet</p>}
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* Student List */
+        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Name</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600 hidden md:table-cell">University</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600 hidden md:table-cell">Posting</th>
+                <th className="text-center px-4 py-3 font-medium text-gray-600">Patients</th>
+                <th className="text-center px-4 py-3 font-medium text-gray-600">Clerkings</th>
+                <th className="text-center px-4 py-3 font-medium text-gray-600 hidden md:table-cell">Avg Score</th>
+                <th className="text-center px-4 py-3 font-medium text-gray-600">Status</th>
+                <th className="text-right px-4 py-3 font-medium text-gray-600">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {students.map(s => {
+                const expired = new Date(s.posting_end) < new Date();
+                const avgScore = s.avg_clerking_score ? Math.round(Number(s.avg_clerking_score)) : null;
+                return (
+                  <tr key={s.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3">
+                      <p className="font-medium text-gray-900">{s.full_name}</p>
+                      <p className="text-xs text-gray-400">{s.email}</p>
+                    </td>
+                    <td className="px-4 py-3 text-gray-600 hidden md:table-cell">{s.university || '—'}</td>
+                    <td className="px-4 py-3 text-xs text-gray-500 hidden md:table-cell">
+                      {new Date(s.posting_start).toLocaleDateString()} – {new Date(s.posting_end).toLocaleDateString()}
+                      {expired && <span className="ml-1 text-red-500 font-medium">(Expired)</span>}
+                    </td>
+                    <td className="px-4 py-3 text-center">{s.assigned_patients || 0}/5</td>
+                    <td className="px-4 py-3 text-center">{s.total_clerkings || 0}</td>
+                    <td className="px-4 py-3 text-center hidden md:table-cell">
+                      {avgScore != null ? <span className={`font-medium ${avgScore >= 70 ? 'text-green-600' : avgScore >= 50 ? 'text-yellow-600' : 'text-red-600'}`}>{avgScore}%</span> : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      {!s.is_approved ? (
+                        <span className="px-2 py-0.5 text-xs bg-yellow-100 text-yellow-700 rounded-full">Pending</span>
+                      ) : !s.is_active ? (
+                        <span className="px-2 py-0.5 text-xs bg-red-100 text-red-700 rounded-full">Inactive</span>
+                      ) : (
+                        <span className="px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded-full">Active</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button onClick={() => loadStudentDetail(s.id)} className="p-1.5 hover:bg-gray-100 rounded" title="View detail">
+                          <Eye className="w-4 h-4 text-gray-500" />
+                        </button>
+                        {!s.is_approved && (
+                          <button onClick={() => approveStudent(s.id, true)} className="p-1.5 hover:bg-green-100 rounded" title="Approve">
+                            <CheckCircle className="w-4 h-4 text-green-600" />
+                          </button>
+                        )}
+                        <button onClick={() => deactivateStudent(s.id, !s.is_active)}
+                          className="p-1.5 hover:bg-red-100 rounded" title={s.is_active ? 'Deactivate' : 'Reactivate'}>
+                          {s.is_active ? <XCircle className="w-4 h-4 text-red-500" /> : <CheckCircle className="w-4 h-4 text-gray-500" />}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+              {students.length === 0 && (
+                <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">No students registered yet. Share the registration link above.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Evaluation Modal */}
+      {evalModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-gray-900">Evaluate {evalModal.type === 'clerking' ? 'Clerking' : 'Treatment Plan'}</h3>
+              <button onClick={() => setEvalModal(null)} aria-label="Close"><X className="w-5 h-5 text-gray-400" /></button>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Score (0–100) *</label>
+              <input type="number" min="0" max="100" value={evalScore} onChange={e => setEvalScore(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="e.g. 75" title="Evaluation score" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Feedback</label>
+              <textarea rows={3} value={evalFeedback} onChange={e => setEvalFeedback(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="Comments on strengths, areas for improvement..." />
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setEvalModal(null)} className="flex-1 py-2 border border-gray-300 rounded-lg text-sm">Cancel</button>
+              <button onClick={submitEvaluation} disabled={!evalScore || evalSaving}
+                className="flex-1 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-1">
+                {evalSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Star className="w-4 h-4" />} Submit Score
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

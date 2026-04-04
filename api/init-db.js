@@ -67,6 +67,14 @@ async function createTables() {
       END IF;
     END $$;
 
+    -- Add phone column for WhatsApp contact
+    DO $$ 
+    BEGIN 
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'phone') THEN
+        ALTER TABLE users ADD COLUMN phone VARCHAR(50);
+      END IF;
+    END $$;
+
     -- Patients table
     CREATE TABLE IF NOT EXISTS patients (
       id SERIAL PRIMARY KEY,

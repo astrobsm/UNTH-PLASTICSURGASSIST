@@ -291,7 +291,7 @@ export const ProgressNoteModal: React.FC<ProgressNoteModalProps> = ({
         // Fallback: save locally and queue for sync
         if (db.progress_notes) {
           const localId = await db.progress_notes.add({ ...progressNote, synced: false });
-          await syncService.queueAction('create', 'progress_notes', localId, progressNote);
+          await syncService.queueAction('create', 'progress_notes', localId as number, progressNote);
           console.log('📱 Progress note saved locally, will sync when online:', localId);
         } else {
           // Ultimate fallback to localStorage if db table doesn't exist

@@ -67,7 +67,7 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
   const [selectedBnfDrug, setSelectedBnfDrug] = useState<BNFDrug | null>(null);
   const [showBnfDropdown, setShowBnfDropdown] = useState(false);
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<any>({
     patient_id: initialPatientId || '',
     reviewer_id: '',
     reviewing_doctor: authUser?.name || '',
@@ -1684,7 +1684,7 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
                               setNewMedication({
                                 name: drug.genericName,
                                 dose: drug.dosage.adult?.standard || defaultFormulation?.strength || '',
-                                frequency: drug.dosage.adult?.frequency || 'od',
+                                frequency: String(drug.dosage.adult?.frequency || 'od'),
                                 route: defaultRoute.toLowerCase()
                               });
                             }}

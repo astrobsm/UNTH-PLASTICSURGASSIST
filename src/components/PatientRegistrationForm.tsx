@@ -286,7 +286,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
   };
 
   const calculateBradenScore = (subscores: any): { score: number; riskLevel: 'low' | 'moderate' | 'high' | 'very_high' } => {
-    const score = Object.values(subscores).reduce((sum: number, val: any) => sum + val, 0);
+    const score = Object.values(subscores).reduce((sum: number, val: any) => sum + (Number(val) || 0), 0) as number;
     let riskLevel: 'low' | 'moderate' | 'high' | 'very_high' = 'low';
     if (score <= 9) riskLevel = 'very_high';
     else if (score <= 12) riskLevel = 'high';
@@ -2244,8 +2244,9 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     y += 4;
 
     // DVT Risk
-    const dvtScore = riskAssessmentService.calculateDVTScore(riskAssessmentData.dvt);
-    const dvtRisk = riskAssessmentService.getDVTRiskLevel(dvtScore);
+    const dvtResult = await riskAssessmentService.calculateDVTRisk(riskAssessmentData.dvt as any);
+    const dvtScore = dvtResult.score;
+    const dvtRisk = dvtResult;
     doc.setFont('times', 'bold');
     doc.setFontSize(14);
     doc.text('DVT RISK', m, y); y += 5;
@@ -2254,8 +2255,9 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     doc.text('Score: ' + dvtScore + ' - ' + dvtRisk.riskLevel, m, y); y += 5;
 
     // Pressure Sore Risk
-    const psScore = riskAssessmentService.calculatePressureSoreScore(riskAssessmentData.pressureSore);
-    const psRisk = riskAssessmentService.getPressureSoreRiskLevel(psScore);
+    const psResult = await riskAssessmentService.calculatePressureSoreRisk(riskAssessmentData.pressureSore as any);
+    const psScore = psResult.score;
+    const psRisk = psResult;
     doc.setFont('times', 'bold');
     doc.setFontSize(14);
     doc.text('PRESSURE SORE RISK', m, y); y += 5;

@@ -3,7 +3,7 @@ import {
   Users, Search, AlertTriangle, CheckCircle, Clock, XCircle,
   ChevronDown, ChevronUp, Send, Eye, BarChart3, Shield,
   User, Activity, BookOpen, ClipboardCheck, Calendar, TrendingUp,
-  Bell, ArrowLeft, Filter, RefreshCw, Award, Target,
+  Bell, ArrowLeft, Filter, RefreshCw, Award, Target, MessageCircle, Phone,
 } from 'lucide-react';
 import { apiClient } from '../services/apiClient';
 
@@ -53,6 +53,7 @@ interface Trainee {
   email: string;
   registered_at: string;
   level: string;
+  phone: string | null;
   metrics: TraineeMetrics;
   rotation: Rotation | null;
   requirements: Requirements;
@@ -103,6 +104,11 @@ const AdminTrainingPage: React.FC = () => {
   const [sendingWarning, setSendingWarning] = useState(false);
   const [expandedTrainee, setExpandedTrainee] = useState<number | null>(null);
   const [detailData, setDetailData] = useState<any>(null);
+  const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
+  const [whatsAppTarget, setWhatsAppTarget] = useState<Trainee | null>(null);
+  const [whatsAppPhone, setWhatsAppPhone] = useState('');
+  const [whatsAppMessage, setWhatsAppMessage] = useState('');
+  const [savingPhone, setSavingPhone] = useState(false);
 
   const fetchTrainees = useCallback(async () => {
     setLoading(true);
@@ -605,6 +611,21 @@ const AdminTrainingPage: React.FC = () => {
                             >
                               <Bell className="w-4 h-4" />
                             </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setWhatsAppTarget(t);
+                                setWhatsAppPhone(t.phone || '');
+                                const statusMsg = t.metrics.overallScore === 0
+                                  ? `Hi ${t.full_name}, this is a reminder from the Plastic Surgery Training Program. You have NO recorded activity yet. Please log in to the app and begin your clinical tasks, CBT tests, and duty assignments immediately.`
+                                  : `Hi ${t.full_name}, this is an update from the Plastic Surgery Training Program.\n\nYour current performance:\n- Overall Score: ${t.metrics.overallScore}%\n- CBT Tests: ${t.metrics.cbtTestsCompleted}/${t.requirements.cbtTests}\n- Patient Entries: ${t.metrics.patientEntries}/${t.requirements.patientEntries}\n- Duties: ${t.metrics.dutiesCompleted}/${t.requirements.duties}\n\n${t.metrics.overallScore < 50 ? 'Your performance is below expectations. Please improve your engagement urgently.' : 'Keep up the good work! Continue to meet your targets.'}`;
+                                setWhatsAppMessage(statusMsg);
+                                setShowWhatsAppModal(true);
+                              }}
+                              className="p-1.5 hover:bg-green-100 rounded text-green-600" title="WhatsApp Status"
+                            >
+                              <MessageCircle className="w-4 h-4" />
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -743,6 +764,127 @@ const AdminTrainingPage: React.FC = () => {
               >
                 <Send className="w-4 h-4" />
                 {sendingWarning ? 'Sending...' : 'Send Warning'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* WhatsApp Status Modal */}
+      {showWhatsAppModal && whatsAppTarget && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b">
+              <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                <MessageCircle className="w-5 h-5 text-green-500" /> WhatsApp Status to {whatsAppTarget.full_name}
+              </h2>
+              <p className="text-sm text-gray-500 mt-1">Send a WhatsApp message about their training status</p>
+            </div>
+            <div className="p-6 space-y-4">
+              {/* Phone Number */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <Phone className="w-3.5 h-3.5 inline mr-1" />
+                  Phone Number (with country code)
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="tel"
+                    value={whatsAppPhone}
+                    onChange={(e) => setWhatsAppPhone(e.target.value)}
+                    placeholder="e.g. 2348012345678"
+                    className="flex-1 border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500"
+                  />
+                  <button
+                    onClick={async () => {
+                      if (!whatsAppPhone.trim()) return;
+                      setSavingPhone(true);
+                      try {
+                        await apiClient.request('/admin-training?action=update-phone', {
+                          method: 'POST',
+                          body: JSON.stringify({ userId: whatsAppTarget.id, phone: whatsAppPhone.trim() }),
+                        });
+                        setTrainees(prev => prev.map(t =>
+                          t.id === whatsAppTarget.id ? { ...t, phone: whatsAppPhone.trim() } : t
+                        ));
+                      } catch (err: any) {
+                        console.error('Failed to save phone:', err);
+                      } finally {
+                        setSavingPhone(false);
+                      }
+                    }}
+                    disabled={savingPhone || !whatsAppPhone.trim()}
+                    className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg text-xs font-medium hover:bg-gray-200 disabled:opacity-50"
+                    title="Save phone number"
+                  >
+                    {savingPhone ? '...' : 'Save'}
+                  </button>
+                </div>
+                {!whatsAppPhone && (
+                  <p className="text-xs text-amber-600 mt-1">No phone number on file. Enter the number to send a WhatsApp message.</p>
+                )}
+              </div>
+
+              {/* Message */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
+                <textarea
+                  value={whatsAppMessage}
+                  onChange={(e) => setWhatsAppMessage(e.target.value)}
+                  rows={6}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 resize-none"
+                />
+              </div>
+
+              {/* Quick templates */}
+              <div>
+                <p className="text-xs text-gray-400 mb-2">Quick templates:</p>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { label: 'No Activity', msg: `Hi ${whatsAppTarget.full_name}, you have NO recorded activity on the Plastic Surgery Training App. Please log in immediately and begin your tasks. This is important for your rotation sign-out.` },
+                    { label: 'Low Score', msg: `Hi ${whatsAppTarget.full_name}, your overall training score is ${whatsAppTarget.metrics.overallScore}%, which is below expectations. Please focus on: CBT tests (${whatsAppTarget.metrics.cbtTestsCompleted}/${whatsAppTarget.requirements.cbtTests}), Patient entries (${whatsAppTarget.metrics.patientEntries}/${whatsAppTarget.requirements.patientEntries}), and Duties (${whatsAppTarget.metrics.dutiesCompleted}/${whatsAppTarget.requirements.duties}).` },
+                    { label: 'Encouragement', msg: `Hi ${whatsAppTarget.full_name}, great work on your training progress! Your current score is ${whatsAppTarget.metrics.overallScore}%. Keep it up and continue meeting your targets for a smooth sign-out.` },
+                    { label: 'Deadline Reminder', msg: `Hi ${whatsAppTarget.full_name}, this is a reminder that your rotation requirements must be completed before your sign-out date. Current progress: Overall ${whatsAppTarget.metrics.overallScore}%. Please prioritize any outstanding tasks.` },
+                  ].map(tmpl => (
+                    <button
+                      key={tmpl.label}
+                      onClick={() => setWhatsAppMessage(tmpl.msg)}
+                      className="px-2 py-1 bg-green-50 hover:bg-green-100 border border-green-200 rounded text-xs text-green-700"
+                    >
+                      {tmpl.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Preview */}
+              <div className="bg-gray-50 rounded-lg p-3 border">
+                <p className="text-xs font-medium text-gray-500 mb-1">Preview:</p>
+                <p className="text-sm text-gray-700 whitespace-pre-line">{whatsAppMessage}</p>
+              </div>
+            </div>
+            <div className="p-6 border-t flex justify-end gap-3">
+              <button
+                onClick={() => { setShowWhatsAppModal(false); setWhatsAppTarget(null); setWhatsAppMessage(''); }}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  const phone = whatsAppPhone.replace(/[^0-9]/g, '');
+                  if (!phone) {
+                    alert('Please enter a phone number first.');
+                    return;
+                  }
+                  const url = `https://wa.me/${phone}?text=${encodeURIComponent(whatsAppMessage)}`;
+                  window.open(url, '_blank');
+                }}
+                disabled={!whatsAppPhone.trim() || !whatsAppMessage.trim()}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                <MessageCircle className="w-4 h-4" />
+                Open WhatsApp
               </button>
             </div>
           </div>

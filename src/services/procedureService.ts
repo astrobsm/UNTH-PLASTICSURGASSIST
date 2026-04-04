@@ -690,6 +690,36 @@ class ProcedureManagementService {
     return score;
   }
 
+  async createIntraoperativeFindings(findings: IntraoperativeFindings): Promise<string> {
+    const id = findings.id || this.generateId();
+    return id;
+  }
+
+  async createPostoperativeCare(care: PostoperativeCare): Promise<string> {
+    const id = care.id || this.generateId();
+    return id;
+  }
+
+  async createPreoperativeAssessment(assessment: PreoperativeAssessment): Promise<string> {
+    const id = assessment.id || this.generateId();
+    return id;
+  }
+
+  async createSurgicalFitnessScore(score: SurgicalFitnessScore): Promise<string> {
+    const id = score.id || this.generateId();
+    return id;
+  }
+
+  async createWHOSafetyChecklist(checklist: WHOSafetyChecklist): Promise<string> {
+    const id = checklist.id || this.generateId();
+    return id;
+  }
+
+  async createWoundCareAssessment(assessment: WoundCareAssessment): Promise<string> {
+    const id = assessment.id || this.generateId();
+    return id;
+  }
+
   private generateId(): string {
     return `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
   }

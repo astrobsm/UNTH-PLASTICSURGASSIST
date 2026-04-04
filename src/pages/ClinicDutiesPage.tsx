@@ -152,7 +152,9 @@ export default function ClinicDutiesPage() {
         clinicDutyService.getStaffByRole('house_officer'),
       ]);
       setStaffList([...sr, ...reg, ...ho]);
-    } catch { /* ignore */ }
+    } catch (err) {
+      console.error('Failed to load staff:', err);
+    }
   }, []);
 
   useEffect(() => {

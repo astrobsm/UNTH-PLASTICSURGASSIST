@@ -110,7 +110,7 @@ const MDTPage: React.FC = () => {
     try {
       // First push local changes to server
       console.log('[MDT SYNC] Starting push to server...');
-      const pushResult = await mdtService.pushToServer();
+      const pushResult = await mdtService.pushToServer() as any;
       console.log('[MDT SYNC] Push result:', pushResult);
       
       // Check for errors
@@ -1437,7 +1437,7 @@ const MDTPage: React.FC = () => {
           patientContext={{
             name: selectedPatient.patient_name || '',
             id: selectedPatient.patient_id || '',
-          }}
+          } as any}
         />
       )}
 
@@ -1460,7 +1460,7 @@ const MDTPage: React.FC = () => {
                   await mdtService.addTeamReview(selectedPatient.id, {
                     specialty_name: formData.get('specialty_name') as string,
                     reviewer_name: formData.get('reviewer_name') as string,
-                    review_date: formData.get('review_date') as string || new Date().toISOString(),
+                    review_date: (formData.get('review_date') as string || new Date().toISOString()) as any,
                     review_text: formData.get('review_text') as string,
                     plan_text: formData.get('plan_text') as string,
                     scanned_via_ocr: false,

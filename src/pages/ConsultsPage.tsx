@@ -17,6 +17,10 @@ import {
   Activity,
   BedDouble,
   ExternalLink,
+  UserCheck,
+  Bell,
+  Merge,
+  Eye,
 } from 'lucide-react';
 import { apiClient } from '../services/apiClient';
 
@@ -70,6 +74,29 @@ interface ConsultsResponse {
   consults: Consult[];
 }
 
+interface ProcessingRecord {
+  consult_id: string;
+  hospital_number: string;
+  patient_id: number;
+  admission_id: number;
+  assigned_ho_id: string;
+  assigned_ho_name: string;
+  status: string;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+  notification_count: number;
+  merged_consult_ids: string[];
+  consult_data: any;
+}
+
+interface ProcessResult {
+  processed: number;
+  merged: number;
+  skipped: number;
+  totalConsults: number;
+  houseOfficers: string[];
+}
+
 // ── Constants ───────────────────────────────────────────────────
 
 const URGENCY_CONFIG: Record<string, { label: string; color: string; icon: typeof AlertCircle }> = {
@@ -98,6 +125,12 @@ export default function ConsultsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Processing state
+  const [processingRecords, setProcessingRecords] = useState<Record<string, ProcessingRecord>>({});
+  const [processing, setProcessing] = useState(false);
+  const [processResult, setProcessResult] = useState<ProcessResult | null>(null);
+  const [reviewingId, setReviewingId] = useState<string | null>(null);
+
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -106,6 +139,52 @@ export default function ConsultsPage() {
 
   // Expanded consult detail
   const [expandedId, setExpandedId] = useState<number | null>(null);
+
+  // ── Auto-process incoming consults ────────────────────────────
+  const processConsults = useCallback(async () => {
+    setProcessing(true);
+    try {
+      const result = await apiClient.request<ProcessResult>('/consults/process-incoming', {
+        method: 'POST',
+      });
+      setProcessResult(result);
+    } catch (err: any) {
+      console.error('Error processing consults:', err);
+    } finally {
+      setProcessing(false);
+    }
+  }, []);
+
+  // ── Get processing records (assignments, review status) ──────
+  const fetchProcessingRecords = useCallback(async () => {
+    try {
+      const data = await apiClient.request<{ records: ProcessingRecord[] }>('/consults/process-incoming');
+      const map: Record<string, ProcessingRecord> = {};
+      for (const rec of data.records) {
+        map[rec.consult_id] = rec;
+      }
+      setProcessingRecords(map);
+    } catch (err: any) {
+      console.error('Error fetching processing records:', err);
+    }
+  }, []);
+
+  // ── Mark consult as reviewed ─────────────────────────────────
+  const markAsReviewed = useCallback(async (consultId: string) => {
+    setReviewingId(consultId);
+    try {
+      await apiClient.request('/consults/process-incoming', {
+        method: 'PATCH',
+        body: JSON.stringify({ consult_id: consultId }),
+      });
+      // Refresh processing records
+      await fetchProcessingRecords();
+    } catch (err: any) {
+      console.error('Error marking consult as reviewed:', err);
+    } finally {
+      setReviewingId(null);
+    }
+  }, [fetchProcessingRecords]);
 
   const fetchConsults = useCallback(async () => {
     setLoading(true);
@@ -131,6 +210,19 @@ export default function ConsultsPage() {
   useEffect(() => {
     fetchConsults();
   }, [fetchConsults]);
+
+  // Auto-process incoming consults on mount (register/admit/assign)
+  useEffect(() => {
+    processConsults().then(() => fetchProcessingRecords());
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Refresh processing records when consults change
+  useEffect(() => {
+    if (consults.length > 0) {
+      fetchProcessingRecords();
+    }
+  }, [consults, fetchProcessingRecords]);
 
   // Debounced search
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -177,6 +269,16 @@ export default function ConsultsPage() {
 
   const hasActiveFilters = searchQuery || statusFilter || urgencyFilter;
 
+  // Helper: get processing info for a consult
+  const getProcessingInfo = (consult: Consult): ProcessingRecord | null => {
+    const consultId = consult.consult_id || `ext-${consult.id}`;
+    return processingRecords[consultId] || null;
+  };
+
+  const pendingReviewCount = Object.values(processingRecords).filter(
+    r => r.status === 'pending_review'
+  ).length;
+
   return (
     <div className="max-w-6xl mx-auto px-4 py-6">
       {/* Header */}
@@ -210,6 +312,43 @@ export default function ConsultsPage() {
           </button>
         </div>
       </div>
+
+      {/* Auto-Processing Status Banner */}
+      {processing && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-4 flex items-center gap-3">
+          <RefreshCw className="w-5 h-5 text-blue-600 animate-spin" />
+          <span className="text-sm text-blue-700 font-medium">
+            Processing incoming consults — auto-admitting patients and assigning to House Officers...
+          </span>
+        </div>
+      )}
+
+      {processResult && !processing && (processResult.processed > 0 || processResult.merged > 0) && (
+        <div className="bg-green-50 border border-green-200 rounded-xl p-3 mb-4">
+          <div className="flex items-center gap-2">
+            <CheckCircle className="w-5 h-5 text-green-600" />
+            <span className="text-sm text-green-700 font-medium">
+              {processResult.processed > 0 && `${processResult.processed} new consult${processResult.processed > 1 ? 's' : ''} auto-admitted & assigned. `}
+              {processResult.merged > 0 && `${processResult.merged} consult${processResult.merged > 1 ? 's' : ''} merged with existing patients. `}
+            </span>
+          </div>
+          {processResult.houseOfficers.length > 0 && (
+            <p className="text-xs text-green-600 mt-1 ml-7">
+              Active HOs: {processResult.houseOfficers.join(', ')}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Pending Review Alert */}
+      {pendingReviewCount > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4 flex items-center gap-3">
+          <Bell className="w-5 h-5 text-amber-600" />
+          <span className="text-sm text-amber-700 font-medium">
+            {pendingReviewCount} consult{pendingReviewCount > 1 ? 's' : ''} awaiting House Officer review — notifications active until reviewed
+          </span>
+        </div>
+      )}
 
       {/* Search & Filters */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-4">
@@ -346,12 +485,19 @@ export default function ConsultsPage() {
             const statusCfg = STATUS_CONFIG[consult.status] || STATUS_CONFIG.pending;
             const UrgIcon = urgCfg.icon;
             const isExpanded = expandedId === consult.id;
+            const procInfo = getProcessingInfo(consult);
+            const isPendingReview = procInfo?.status === 'pending_review';
+            const isReviewed = procInfo?.status === 'reviewed';
+            const isMerged = procInfo?.status === 'merged';
+            const hasMergedConsults = (procInfo?.merged_consult_ids?.length || 0) > 0;
 
             return (
               <div
                 key={consult.id}
                 className={`bg-white rounded-xl border transition-all ${
-                  consult.urgency === 'emergency'
+                  isPendingReview
+                    ? 'border-amber-300 shadow-md ring-1 ring-amber-200'
+                    : consult.urgency === 'emergency'
                     ? 'border-red-300 shadow-md'
                     : consult.urgency === 'urgent'
                     ? 'border-orange-200 shadow-sm'
@@ -374,6 +520,31 @@ export default function ConsultsPage() {
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusCfg.color}`}>
                           {statusCfg.label}
                         </span>
+                        {/* Auto-admission / HO assignment badges */}
+                        {procInfo && isPendingReview && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 border border-amber-300">
+                            <Bell className="w-3 h-3" />
+                            Awaiting Review
+                          </span>
+                        )}
+                        {procInfo && isReviewed && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-300">
+                            <Eye className="w-3 h-3" />
+                            Reviewed
+                          </span>
+                        )}
+                        {hasMergedConsults && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 border border-purple-300">
+                            <Merge className="w-3 h-3" />
+                            +{procInfo!.merged_consult_ids.length} merged
+                          </span>
+                        )}
+                        {isMerged && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 border border-gray-300">
+                            <Merge className="w-3 h-3" />
+                            Merged
+                          </span>
+                        )}
                       </div>
                       <h3 className="text-base font-semibold text-gray-900 truncate">
                         {consult.patient_name}
@@ -402,6 +573,20 @@ export default function ConsultsPage() {
                   <p className="text-sm text-gray-600 mt-2 line-clamp-1">
                     <span className="font-medium">Dx:</span> {consult.primary_diagnosis}
                   </p>
+                  {/* HO Assignment row */}
+                  {procInfo && procInfo.assigned_ho_name && (
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <UserCheck className="w-3.5 h-3.5 text-green-600" />
+                      <span className="text-xs text-green-700 font-medium">
+                        Assigned to: {procInfo.assigned_ho_name}
+                      </span>
+                      {procInfo.admission_id && (
+                        <span className="text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
+                          Auto-admitted
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </button>
 
                 {/* Expanded Detail */}
@@ -543,6 +728,73 @@ export default function ConsultsPage() {
                         </dl>
                       </div>
                     </div>
+
+                    {/* Auto-Admission & HO Assignment Details */}
+                    {procInfo && procInfo.status !== 'merged' && (
+                      <div className="mt-4 pt-3 border-t border-gray-100">
+                        <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-1 mb-2">
+                          <UserCheck className="w-4 h-4" /> Auto-Admission Details
+                        </h4>
+                        <dl className="text-sm space-y-1">
+                          {procInfo.assigned_ho_name && (
+                            <div className="flex justify-between">
+                              <dt className="text-gray-500">Assigned House Officer</dt>
+                              <dd className="font-medium text-green-700">{procInfo.assigned_ho_name}</dd>
+                            </div>
+                          )}
+                          {procInfo.admission_id && (
+                            <div className="flex justify-between">
+                              <dt className="text-gray-500">Admission ID</dt>
+                              <dd className="font-medium text-gray-900">#{procInfo.admission_id}</dd>
+                            </div>
+                          )}
+                          {procInfo.patient_id && (
+                            <div className="flex justify-between">
+                              <dt className="text-gray-500">Patient Record ID</dt>
+                              <dd className="font-medium text-gray-900">#{procInfo.patient_id}</dd>
+                            </div>
+                          )}
+                          <div className="flex justify-between">
+                            <dt className="text-gray-500">Review Status</dt>
+                            <dd className={`font-medium ${procInfo.status === 'reviewed' ? 'text-green-700' : 'text-amber-700'}`}>
+                              {procInfo.status === 'reviewed'
+                                ? `Reviewed by ${procInfo.reviewed_by} at ${formatDateTime(procInfo.reviewed_at!)}`
+                                : 'Pending HO Review'}
+                            </dd>
+                          </div>
+                          {procInfo.notification_count > 0 && (
+                            <div className="flex justify-between">
+                              <dt className="text-gray-500">Reminder Notifications Sent</dt>
+                              <dd className="font-medium text-gray-900">{procInfo.notification_count}</dd>
+                            </div>
+                          )}
+                          {hasMergedConsults && (
+                            <div className="flex justify-between">
+                              <dt className="text-gray-500">Merged Consults</dt>
+                              <dd className="font-medium text-purple-700">{procInfo!.merged_consult_ids.join(', ')}</dd>
+                            </div>
+                          )}
+                        </dl>
+                        {/* Mark as Reviewed button */}
+                        {procInfo.status === 'pending_review' && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              markAsReviewed(consult.consult_id || `ext-${consult.id}`);
+                            }}
+                            disabled={reviewingId === (consult.consult_id || `ext-${consult.id}`)}
+                            className="mt-3 w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700 disabled:opacity-50 transition-colors"
+                          >
+                            {reviewingId === (consult.consult_id || `ext-${consult.id}`) ? (
+                              <RefreshCw className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Eye className="w-4 h-4" />
+                            )}
+                            Mark as Reviewed
+                          </button>
+                        )}
+                      </div>
+                    )}
 
                     {/* Status Progress Bar */}
                     <div className="mt-4 pt-3 border-t border-gray-100">

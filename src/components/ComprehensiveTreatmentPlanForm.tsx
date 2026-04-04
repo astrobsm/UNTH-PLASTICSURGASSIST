@@ -668,9 +668,9 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
     };
 
     if (thermal) {
-      investigationPdfService.generateThermalInvestigationRequestPDF(pdfData);
+      investigationPdfService.generateThermalInvestigationRequestPDF(pdfData as any);
     } else {
-      investigationPdfService.generateInvestigationRequestPDF(pdfData);
+      investigationPdfService.generateInvestigationRequestPDF(pdfData as any);
     }
   };
 

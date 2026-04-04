@@ -191,7 +191,7 @@ class AIService {
           role: "user",
           content: prompt
         }
-      ], 2000);
+      ], 'gpt-4', 2000);
 
       if (!response) {
         throw new Error('No response from AI service');

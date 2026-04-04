@@ -10,31 +10,37 @@ import {
   sharePDFViaWhatsApp
 } from '../utils/pdfUtils';
 
+export interface DischargeMedication {
+  medication: string;
+  dosage: string;
+  frequency: string;
+  duration: string;
+  instructions?: string;
+}
+
 export interface Discharge {
   id?: number;
   admission_id: number;
   patient_id: number;
   patient_name: string;
   hospital_number: string;
-  admission_date: Date;
-  discharge_date: Date;
+  age?: number;
+  gender?: string;
+  admission_date: Date | string;
+  discharge_date: Date | string;
   discharge_time: string;
   admitting_diagnosis: string;
   final_diagnosis: string;
   length_of_stay_days: number;
-  discharge_status: 'improved' | 'recovered' | 'transferred' | 'against_medical_advice' | 'deceased';
-  discharge_destination: 'home' | 'another_facility' | 'mortuary' | 'other';
-  discharge_plans: string;
-  follow_up_date?: Date;
+  discharge_status: 'improved' | 'recovered' | 'transferred' | 'against_medical_advice' | 'deceased' | string;
+  discharge_destination: 'home' | 'another_facility' | 'mortuary' | 'other' | string;
+  discharge_plans?: string;
+  follow_up_date?: Date | string;
   follow_up_clinic?: string;
   follow_up_instructions?: string;
-  medications_on_discharge?: Array<{
-    medication: string;
-    dosage: string;
-    frequency: string;
-    duration: string;
-    instructions?: string;
-  }>;
+  medications_on_discharge?: DischargeMedication[];
+  medications?: DischargeMedication[];
+  discharge_instructions?: string;
   dietary_recommendations?: string;
   lifestyle_modifications?: string;
   activity_restrictions?: string;
@@ -54,11 +60,17 @@ export interface DischargeInstructionsData {
   age?: number;
   gender?: string;
   hospital_number: string;
-  admission_date: Date;
-  discharge_date: Date;
+  admission_date: Date | string;
+  discharge_date: Date | string;
   admitting_diagnosis: string;
   final_diagnosis: string;
-  procedures_performed?: string[];
+  procedures_performed?: string[] | string;
+  medications_on_discharge?: Array<{
+    medication: string;
+    dosage: string;
+    frequency: string;
+    duration: string;
+  }>;
   medications?: Array<{
     medication: string;
     dosage: string;
@@ -87,7 +99,7 @@ class DischargeService {
       // Update admission status
       if (dischargeData.admission_id) {
         try {
-          await apiClient.updateAdmission(dischargeData.admission_id, {
+          await apiClient.updateAdmission(String(dischargeData.admission_id), {
             status: 'discharged',
             discharge_date: dischargeData.discharge_date
           });
@@ -110,7 +122,7 @@ class DischargeService {
           updated_at: now
         });
       }
-      return id;
+      return id as number;
     }
   }
 
@@ -207,9 +219,10 @@ class DischargeService {
       patient_name, 
       final_diagnosis, 
       medications = [],
-      procedures_performed = [],
+      procedures_performed: rawProcedures = [],
       treatment_summary = ''
     } = data;
+    const procedures_performed = Array.isArray(rawProcedures) ? rawProcedures : [rawProcedures];
 
     let instructions = `DISCHARGE INSTRUCTIONS FOR ${patient_name.toUpperCase()}\n\n`;
     
@@ -403,9 +416,9 @@ class DischargeService {
     yPos += 7;
 
     pdf.setFont('times', 'normal');
-    pdf.text('Admission Date: ' + format(discharge.admission_date, 'dd/MM/yyyy'), PDF_MARGINS.left, yPos);
+    pdf.text('Admission Date: ' + format(new Date(discharge.admission_date), 'dd/MM/yyyy'), PDF_MARGINS.left, yPos);
     yPos += 6;
-    pdf.text('Discharge Date: ' + format(discharge.discharge_date, 'dd/MM/yyyy') + ' at ' + clean(discharge.discharge_time), PDF_MARGINS.left, yPos);
+    pdf.text('Discharge Date: ' + format(new Date(discharge.discharge_date), 'dd/MM/yyyy') + ' at ' + clean(discharge.discharge_time), PDF_MARGINS.left, yPos);
     yPos += 6;
     pdf.text('Length of Stay: ' + discharge.length_of_stay_days + ' days', PDF_MARGINS.left, yPos);
     yPos += 10;
@@ -493,7 +506,7 @@ class DischargeService {
       yPos += 7;
 
       pdf.setFont('times', 'normal');
-      pdf.text('Date: ' + format(discharge.follow_up_date, 'dd/MM/yyyy'), PDF_MARGINS.left, yPos);
+      pdf.text('Date: ' + format(new Date(discharge.follow_up_date as any), 'dd/MM/yyyy'), PDF_MARGINS.left, yPos);
       yPos += 6;
       if (discharge.follow_up_clinic) {
         pdf.text('Clinic: ' + clean(discharge.follow_up_clinic), PDF_MARGINS.left, yPos);
@@ -571,10 +584,10 @@ class DischargeService {
     addFooter(pdf);
 
     // Save with patient name
-    const fileName = 'Discharge_Summary_' + (discharge.patient_name || 'Unknown_Patient').replace(/\s+/g, '_') + '_' + format(discharge.discharge_date, 'yyyyMMdd') + '.pdf';
+    const fileName = 'Discharge_Summary_' + (discharge.patient_name || 'Unknown_Patient').replace(/\s+/g, '_') + '_' + format(new Date(discharge.discharge_date), 'yyyyMMdd') + '.pdf';
     
     if (shareViaWhatsApp) {
-      const message = `Discharge Summary for ${discharge.patient_name} (${discharge.hospital_number}) - ${format(discharge.discharge_date, 'dd/MM/yyyy')}`;
+      const message = `Discharge Summary for ${discharge.patient_name} (${discharge.hospital_number}) - ${format(new Date(discharge.discharge_date), 'dd/MM/yyyy')}`;
       await sharePDFViaWhatsApp(pdf, fileName, message);
     } else {
       pdf.save(fileName);

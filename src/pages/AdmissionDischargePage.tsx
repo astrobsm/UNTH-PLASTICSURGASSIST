@@ -270,7 +270,7 @@ function ActivePatientsTab({ admissions, searchTerm, setSearchTerm, onDischarge,
     if (preopData[id] === undefined) {
       setLoadingPreop(id);
       try {
-        const assessment = await preoperativeService.getAssessmentByPatient(admission.patient_id);
+        const assessment = await preoperativeService.getAssessmentByPatient(String(admission.patient_id));
         setPreopData(prev => ({ ...prev, [id]: assessment }));
       } catch (error) {
         console.error('Error loading preoperative assessment:', error);
@@ -392,7 +392,7 @@ function ActivePatientsTab({ admissions, searchTerm, setSearchTerm, onDischarge,
       ], y);
       y = addSeparator(doc, y);
 
-      y = addWarningBox(doc, 'SEEK IMMEDIATE MEDICAL ATTENTION if you experience: severe/increasing pain not relieved by medication, heavy bleeding from the wound, fever above 38.5�C, difficulty breathing, severe nausea/vomiting, or any sudden change in your condition.', y);
+      y = addWarningBox(doc, 'WARNING', ['SEEK IMMEDIATE MEDICAL ATTENTION if you experience: severe/increasing pain not relieved by medication, heavy bleeding from the wound, fever above 38.5\u00B0C, difficulty breathing, severe nausea/vomiting, or any sudden change in your condition.'], y);
 
       y = addSectionHeader(doc, 'Follow-Up', y);
       y = addBodyText(doc, 'Please attend your follow-up appointment as scheduled. If you need to reschedule, contact the Plastic Surgery Unit during office hours.', y);
@@ -732,7 +732,7 @@ function ActivePatientsTab({ admissions, searchTerm, setSearchTerm, onDischarge,
                                   {assessment.current_medications && assessment.current_medications.length > 0 && (
                                     <div className="text-sm">
                                       <span className="font-medium text-gray-700">Current Medications: </span>
-                                      {assessment.current_medications.map(m => 
+                                      {assessment.current_medications.map((m: any) => 
                                         typeof m === 'string' ? m : `${m.name} ${m.dose || ''}`
                                       ).join(', ')}
                                     </div>

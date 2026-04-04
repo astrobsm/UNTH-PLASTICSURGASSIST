@@ -1067,7 +1067,7 @@ const SetDischargeModal: React.FC<{ planId: string; onClose: () => void; onSucce
         discharge_criteria: criteria,
         status: 'planning',
         delays: []
-      });
+      } as any);
       onSuccess();
     } catch (error) {
       console.error('Error setting discharge:', error);

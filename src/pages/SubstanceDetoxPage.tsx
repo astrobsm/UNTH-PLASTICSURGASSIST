@@ -123,10 +123,11 @@ export default function SubstanceDetoxPage() {
   const loadAssessments = useCallback(async () => {
     setLoading(true);
     try {
+      const token = localStorage.getItem('auth_token');
+
       // Try fetching from server first
       let serverItems: SubstanceUseAssessment[] = [];
       try {
-        const token = localStorage.getItem('auth_token');
         const res = await fetch('/api/substance-assessments', {
           headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
         });
@@ -134,6 +135,27 @@ export default function SubstanceDetoxPage() {
           const data = await res.json();
           serverItems = (data.assessments || []).map((a: any) => ({
             ...a,
+            id: a.id,
+            patientId: a.patient_id || a.patientId,
+            patientName: a.patient_name || a.patientName,
+            hospitalNumber: a.hospital_number || a.hospitalNumber,
+            hospitalId: a.hospital_id || a.hospitalId,
+            primarySubstance: a.primary_substance || a.primarySubstance,
+            substances: typeof a.substances === 'string' ? JSON.parse(a.substances) : (a.substances || []),
+            polySubstanceUse: a.poly_substance_use ?? a.polySubstanceUse ?? false,
+            addictionSeverityScore: typeof a.addiction_severity_score === 'string' ? JSON.parse(a.addiction_severity_score) : (a.addiction_severity_score || a.addictionSeverityScore || {}),
+            withdrawalRiskPrediction: typeof a.withdrawal_risk_prediction === 'string' ? JSON.parse(a.withdrawal_risk_prediction) : (a.withdrawal_risk_prediction || a.withdrawalRiskPrediction || {}),
+            careSettingDecision: typeof a.care_setting_decision === 'string' ? JSON.parse(a.care_setting_decision) : (a.care_setting_decision || a.careSettingDecision || {}),
+            painManagementSupport: typeof a.pain_management_support === 'string' ? JSON.parse(a.pain_management_support) : (a.pain_management_support || a.painManagementSupport),
+            comorbidities: typeof a.comorbidities === 'string' ? JSON.parse(a.comorbidities) : (a.comorbidities || []),
+            comorbidityModifications: typeof a.comorbidity_modifications === 'string' ? JSON.parse(a.comorbidity_modifications) : (a.comorbidity_modifications || a.comorbidityModifications || []),
+            socialFactors: typeof a.social_factors === 'string' ? JSON.parse(a.social_factors) : (a.social_factors || a.socialFactors || {}),
+            previousDetoxAttempts: a.previous_detox_attempts ?? a.previousDetoxAttempts ?? 0,
+            previousTreatmentHistory: a.previous_treatment_history || a.previousTreatmentHistory || '',
+            consentObtained: a.consent_obtained ?? a.consentObtained ?? false,
+            status: a.status || 'initial_assessment',
+            assessedBy: a.assessed_by || a.assessedBy,
+            auditLog: typeof a.audit_log === 'string' ? JSON.parse(a.audit_log) : (a.audit_log || a.auditLog || []),
             createdAt: a.created_at || a.createdAt,
             updatedAt: a.updated_at || a.updatedAt,
           }));
@@ -153,6 +175,23 @@ export default function SubstanceDetoxPage() {
       const items = await db.substance_use_assessments.toArray();
       items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setAssessments(items);
+
+      // Push any unsynced local items to server
+      const unsynced = items.filter((a: any) => !a.synced);
+      if (unsynced.length > 0 && token) {
+        for (const item of unsynced) {
+          try {
+            const resp = await fetch('/api/substance-assessments', {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify(item),
+            });
+            if (resp.ok) {
+              await db.substance_use_assessments.update(item.id as any, { synced: true } as any);
+            }
+          } catch { /* will retry next load */ }
+        }
+      }
     } catch (err) {
       console.error('Error loading assessments:', err);
     } finally {

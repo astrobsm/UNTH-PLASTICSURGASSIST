@@ -359,8 +359,8 @@ export default function SJSManagementPage() {
       setScortenResult({
         score: assessment.scorten_score,
         predictedMortality: assessment.scorten_mortality || 'N/A',
-        parameters: [],
-      });
+        breakdown: [],
+      } as any);
     }
   };
 

@@ -448,6 +448,13 @@ async function handlePush(data, user, res) {
       
       if (clinicalEntities.includes(resolvedEntityType) && payload) {
         try {
+          // Convert camelCase keys to snake_case for PostgreSQL column names
+          const toSnakeCase = (str) => str.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+          const snakePayload = {};
+          for (const [key, val] of Object.entries(payload)) {
+            snakePayload[toSnakeCase(key)] = val;
+          }
+
           // Tables with SERIAL (integer) primary keys - local auto-increment ids should NOT be used for lookup
           const serialKeyTables = [
             'wound_care_records', 'ward_rounds', 'discharge_summaries',
@@ -457,11 +464,11 @@ async function handlePush(data, user, res) {
           const isSerialKey = serialKeyTables.includes(resolvedEntityType);
 
           // Build dynamic upsert query - filter out internal fields and local-only id for SERIAL tables
-          const skipKeys = ['serverId', 'synced', 'deleted'];
+          const skipKeys = ['server_id', 'synced', 'deleted', 'local_id'];
           if (isSerialKey) skipKeys.push('id'); // don't use local auto-increment id
-          const columns = Object.keys(payload).filter(k => !skipKeys.includes(k));
+          const columns = Object.keys(snakePayload).filter(k => !skipKeys.includes(k));
           const values = columns.map(k => {
-            const v = payload[k];
+            const v = snakePayload[k];
             return (v !== null && typeof v === 'object') ? JSON.stringify(v) : v;
           });
           const placeholders = columns.map((_, i) => `$${i + 1}`).join(', ');
@@ -471,14 +478,14 @@ async function handlePush(data, user, res) {
           
           if (!isSerialKey) {
             // VARCHAR id tables: look up by id directly
-            const existingId = payload.serverId || payload.id;
+            const existingId = snakePayload.server_id || snakePayload.id;
             if (existingId) {
               existing = await query(`SELECT id FROM ${resolvedEntityType} WHERE id = $1`, [existingId]);
             }
           }
           
           // For all entities with patient_id, try lookup by patient_id + date
-          if ((!existing || existing.rows.length === 0) && payload.patient_id) {
+          if ((!existing || existing.rows.length === 0) && snakePayload.patient_id) {
             const dateFieldMap = {
               'dvt_assessments': 'assessment_date',
               'pressure_sore_assessments': 'assessment_date',
@@ -498,10 +505,10 @@ async function handlePush(data, user, res) {
               'discharge_summaries': 'discharge_date'
             };
             const dateField = dateFieldMap[resolvedEntityType];
-            if (dateField && payload[dateField]) {
+            if (dateField && snakePayload[dateField]) {
               existing = await query(
                 `SELECT id FROM ${resolvedEntityType} WHERE patient_id = $1 AND ${dateField} = $2`,
-                [payload.patient_id, payload[dateField]]
+                [snakePayload.patient_id, snakePayload[dateField]]
               );
             }
           }

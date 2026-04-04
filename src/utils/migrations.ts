@@ -1,4 +1,4 @@
-import { db } from '../db';
+import { db } from '../db/database';
 import Dexie from 'dexie';
 import { logger } from './logger';
 

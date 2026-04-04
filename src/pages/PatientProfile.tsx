@@ -961,6 +961,10 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; userN
   const [form, setForm] = useState<Partial<VitalReading>>({});
   const [saving, setSaving] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [showVitalsOCR, setShowVitalsOCR] = useState(false);
+  const [ocrVitalsEntries, setOcrVitalsEntries] = useState<VitalReading[]>([]);
+  const [showOCRReview, setShowOCRReview] = useState(false);
+  const [savingOCR, setSavingOCR] = useState(false);
 
   useEffect(() => { loadVitals(); }, [patientId]);
   useEffect(() => { if (vitals.length > 1) drawChart(); }, [vitals]);
@@ -1098,14 +1102,102 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; userN
     });
   };
 
+  const handleVitalsOCRExtracted = (fields: Record<string, any>) => {
+    const entries: VitalReading[] = [];
+    // Handle single set of vitals from OCR
+    if (fields.vital_signs || fields.vitals) {
+      const v = fields.vital_signs || fields.vitals;
+      const reading: VitalReading = {
+        id: `vs_ocr_${Date.now()}`,
+        date: new Date().toISOString(),
+        temperature: v.temperature || v.temp || undefined,
+        pulse: v.pulse || v.heart_rate || undefined,
+        bp_systolic: v.bp_systolic || (v.bloodPressure ? parseInt(v.bloodPressure.split('/')[0]) : undefined),
+        bp_diastolic: v.bp_diastolic || (v.bloodPressure ? parseInt(v.bloodPressure.split('/')[1]) : undefined),
+        respiratory_rate: v.respiratory_rate || v.respiratoryRate || v.resp_rate || undefined,
+        spo2: v.spo2 || v.oxygenSaturation || v.oxygen_saturation || undefined,
+        weight: v.weight || undefined,
+        recorded_by: `${userName} (OCR)`,
+      };
+      if (reading.temperature || reading.pulse || reading.bp_systolic || reading.spo2) {
+        entries.push(reading);
+      }
+    }
+    // Handle array of vitals (series from chart)
+    if (fields.vital_signs_series && Array.isArray(fields.vital_signs_series)) {
+      fields.vital_signs_series.forEach((v: any, i: number) => {
+        entries.push({
+          id: `vs_ocr_${Date.now()}_${i}`,
+          date: v.date || v.datetime || new Date(Date.now() - (fields.vital_signs_series.length - 1 - i) * 3600000).toISOString(),
+          temperature: v.temperature || v.temp || undefined,
+          pulse: v.pulse || v.heart_rate || undefined,
+          bp_systolic: v.bp_systolic || undefined,
+          bp_diastolic: v.bp_diastolic || undefined,
+          respiratory_rate: v.respiratory_rate || v.resp_rate || undefined,
+          spo2: v.spo2 || v.oxygen_saturation || undefined,
+          weight: v.weight || undefined,
+          recorded_by: `${userName} (OCR)`,
+        });
+      });
+    }
+    // Fallback: parse from raw fields if flat
+    if (entries.length === 0 && (fields.temperature || fields.pulse || fields.bp_systolic)) {
+      entries.push({
+        id: `vs_ocr_${Date.now()}`,
+        date: new Date().toISOString(),
+        temperature: fields.temperature,
+        pulse: fields.pulse,
+        bp_systolic: fields.bp_systolic,
+        bp_diastolic: fields.bp_diastolic,
+        respiratory_rate: fields.respiratory_rate,
+        spo2: fields.spo2,
+        weight: fields.weight,
+        recorded_by: `${userName} (OCR)`,
+      });
+    }
+    if (entries.length > 0) {
+      setOcrVitalsEntries(entries);
+      setShowOCRReview(true);
+    } else {
+      alert('Could not extract vital signs from the scanned document. Please enter vitals manually.');
+    }
+    setShowVitalsOCR(false);
+  };
+
+  const saveOCRVitals = async () => {
+    setSavingOCR(true);
+    try {
+      for (const reading of ocrVitalsEntries) {
+        try {
+          await apiClient.post('/vital-signs', { ...reading, patient_id: patientId, hospital_number: hospitalNumber });
+        } catch {
+          const stored = localStorage.getItem(`vitals_${patientId}`);
+          const arr = stored ? JSON.parse(stored) : [];
+          arr.push(reading);
+          localStorage.setItem(`vitals_${patientId}`, JSON.stringify(arr));
+        }
+      }
+      setOcrVitalsEntries([]);
+      setShowOCRReview(false);
+      await loadVitals();
+    } finally {
+      setSavingOCR(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
         <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
           <h3 className="text-lg font-semibold text-gray-900">Vital Signs Records</h3>
-          <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700">
+          <div className="flex gap-2">
+            <button onClick={() => setShowVitalsOCR(true)} className="flex items-center gap-1 px-3 py-1.5 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700">
+              <ScanLine className="w-4 h-4" /> Scan Vitals
+            </button>
+            <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700">
             <Plus className="w-4 h-4" /> Record Vitals
           </button>
+          </div>
         </div>
 
         {showForm && (
@@ -1172,6 +1264,54 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; userN
           )}
         </div>
       </div>
+
+      {/* Vitals OCR Scanner Modal */}
+      {showVitalsOCR && (
+        <DocumentScannerModal
+          isOpen={showVitalsOCR}
+          onClose={() => setShowVitalsOCR(false)}
+          onFieldsExtracted={handleVitalsOCRExtracted}
+          documentType="general"
+          patientContext={{ name: '', hospitalNumber }}
+          targetForm="ward_round"
+        />
+      )}
+
+      {/* OCR Vitals Review Modal */}
+      {showOCRReview && ocrVitalsEntries.length > 0 && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4" onClick={() => setShowOCRReview(false)}>
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[80vh] overflow-auto" onClick={e => e.stopPropagation()}>
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
+              <h3 className="font-semibold text-gray-900">Review Scanned Vital Signs ({ocrVitalsEntries.length} reading{ocrVitalsEntries.length !== 1 ? 's' : ''})</h3>
+              <button onClick={() => setShowOCRReview(false)} className="p-1 hover:bg-gray-100 rounded-full"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="p-4 space-y-3">
+              {ocrVitalsEntries.map((entry, idx) => (
+                <div key={idx} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-gray-700">Reading #{idx + 1}</span>
+                    <span className="text-xs text-gray-500">{new Date(entry.date).toLocaleString()}</span>
+                  </div>
+                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                    {entry.temperature && <div className="text-center p-1 bg-white rounded border"><div className="text-[10px] text-gray-500">Temp</div><div className="text-sm font-bold text-orange-600">{entry.temperature}°C</div></div>}
+                    {entry.pulse && <div className="text-center p-1 bg-white rounded border"><div className="text-[10px] text-gray-500">Pulse</div><div className="text-sm font-bold text-red-600">{entry.pulse}</div></div>}
+                    {entry.bp_systolic && <div className="text-center p-1 bg-white rounded border"><div className="text-[10px] text-gray-500">BP</div><div className="text-sm font-bold text-blue-600">{entry.bp_systolic}/{entry.bp_diastolic}</div></div>}
+                    {entry.respiratory_rate && <div className="text-center p-1 bg-white rounded border"><div className="text-[10px] text-gray-500">RR</div><div className="text-sm font-bold text-purple-600">{entry.respiratory_rate}</div></div>}
+                    {entry.spo2 && <div className="text-center p-1 bg-white rounded border"><div className="text-[10px] text-gray-500">SpO2</div><div className="text-sm font-bold text-green-600">{entry.spo2}%</div></div>}
+                    {entry.weight && <div className="text-center p-1 bg-white rounded border"><div className="text-[10px] text-gray-500">Wt</div><div className="text-sm font-bold text-gray-700">{entry.weight}kg</div></div>}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="sticky bottom-0 bg-white border-t border-gray-200 px-4 py-3 flex gap-2 justify-end">
+              <button onClick={() => setShowOCRReview(false)} className="px-4 py-2 text-gray-600 text-sm hover:bg-gray-100 rounded-md">Cancel</button>
+              <button onClick={saveOCRVitals} disabled={savingOCR} className="flex items-center gap-1 px-4 py-2 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 disabled:opacity-50">
+                {savingOCR ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save All Vitals
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -1191,6 +1331,8 @@ const InvestigationsTab: React.FC<{ patientId: string; hospitalNumber: string; p
   const resultFileRef = useRef<HTMLInputElement>(null);
   const [scannedFormData, setScannedFormData] = useState<any>(null);
   const [scannedResultData, setScannedResultData] = useState<any>(null);
+  const [viewingUpload, setViewingUpload] = useState<any>(null);
+  const [loadingUpload, setLoadingUpload] = useState(false);
 
   useEffect(() => { loadInvestigations(); }, [patientId]);
 
@@ -1317,6 +1459,56 @@ const InvestigationsTab: React.FC<{ patientId: string; hospitalNumber: string; p
     setShowOCRModal(null);
   };
 
+  const viewUploadDetail = async (inv: any) => {
+    // If file_data is already present (freshly uploaded or from localStorage), show directly
+    if (inv.file_data) {
+      setViewingUpload(inv);
+      return;
+    }
+    // If it has an ID and is an upload type, fetch the full record including file_data
+    if (inv.id && inv._type === 'upload') {
+      setLoadingUpload(true);
+      try {
+        const data = await apiClient.get(`/investigation-uploads/${inv.id}`);
+        if (data?.upload) {
+          setViewingUpload({ ...inv, ...data.upload });
+        } else {
+          // Also check localStorage fallback
+          const stored = localStorage.getItem(`investigation_uploads_${patientId}`);
+          const arr = stored ? JSON.parse(stored) : [];
+          const local = arr.find((u: any) => u.id === inv.id || u.file_name === inv.file_name);
+          if (local?.file_data) {
+            setViewingUpload({ ...inv, ...local });
+          } else {
+            alert('Unable to load document. The image data may not be available.');
+          }
+        }
+      } catch {
+        // Try localStorage fallback
+        const stored = localStorage.getItem(`investigation_uploads_${patientId}`);
+        const arr = stored ? JSON.parse(stored) : [];
+        const local = arr.find((u: any) => u.id === inv.id || u.file_name === inv.file_name);
+        if (local?.file_data) {
+          setViewingUpload({ ...inv, ...local });
+        } else {
+          alert('Unable to load document. You may be offline.');
+        }
+      } finally {
+        setLoadingUpload(false);
+      }
+      return;
+    }
+    // For OCR-extracted items, show the OCR text
+    if (inv.ocr_text || inv.ocr_extracted) {
+      setViewingUpload(inv);
+      return;
+    }
+    // For lab orders (non-upload), show results in detail
+    if (inv.results) {
+      setViewingUpload(inv);
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* Hidden file inputs */}
@@ -1414,7 +1606,14 @@ const InvestigationsTab: React.FC<{ patientId: string; hospitalNumber: string; p
                           )}
                         </div>
                       </div>
-                      <span className="px-2 py-0.5 bg-yellow-200 text-yellow-800 text-xs rounded-full font-medium ml-2 flex-shrink-0">{inv.status || 'pending'}</span>
+                      <div className="flex items-center gap-2 ml-2 flex-shrink-0">
+                        {(inv._type === 'upload' || inv.file_data || inv.ocr_text) && (
+                          <button onClick={() => viewUploadDetail(inv)} className="flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full hover:bg-blue-200">
+                            <Eye className="w-3 h-3" /> View
+                          </button>
+                        )}
+                        <span className="px-2 py-0.5 bg-yellow-200 text-yellow-800 text-xs rounded-full font-medium">{inv.status || 'pending'}</span>
+                      </div>
                     </div>
                     {(inv.ordered_by_name || inv.ordered_by_username || inv.ordered_by) && (
                       <p className="text-xs text-gray-400 mt-1">By: {inv.ordered_by_name || inv.ordered_by_username || `User #${inv.ordered_by}`}</p>
@@ -1430,7 +1629,7 @@ const InvestigationsTab: React.FC<{ patientId: string; hospitalNumber: string; p
             ) : (
               <div className="space-y-3">
                 {results.map((inv, i) => (
-                  <div key={inv.id || i} className="border border-green-200 bg-green-50 rounded-lg p-3">
+                  <div key={inv.id || i} className="border border-green-200 bg-green-50 rounded-lg p-3 cursor-pointer hover:border-green-300 transition-colors" onClick={() => viewUploadDetail(inv)}>
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-gray-900 text-sm">
@@ -1446,7 +1645,14 @@ const InvestigationsTab: React.FC<{ patientId: string; hospitalNumber: string; p
                           </div>
                         )}
                       </div>
-                      <span className="px-2 py-0.5 bg-green-200 text-green-800 text-xs rounded-full font-medium ml-2 flex-shrink-0">Completed</span>
+                      <div className="flex items-center gap-2 ml-2 flex-shrink-0">
+                        {(inv._type === 'upload' || inv.file_data || inv.ocr_text) && (
+                          <button onClick={(e) => { e.stopPropagation(); viewUploadDetail(inv); }} className="flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full hover:bg-blue-200">
+                            <Eye className="w-3 h-3" /> View
+                          </button>
+                        )}
+                        <span className="px-2 py-0.5 bg-green-200 text-green-800 text-xs rounded-full font-medium">Completed</span>
+                      </div>
                     </div>
                     {inv.results && typeof inv.results === 'object' ? (
                       <div className="grid grid-cols-2 gap-2">
@@ -1550,6 +1756,102 @@ const InvestigationsTab: React.FC<{ patientId: string; hospitalNumber: string; p
           targetForm="lab_entry"
         />
       )}
+
+      {/* Investigation Upload Viewer / Lightbox */}
+      {viewingUpload && (
+        <div className="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center p-4" onClick={() => setViewingUpload(null)}>
+          <div className="relative max-w-4xl w-full max-h-[90vh] overflow-auto bg-white rounded-lg" onClick={e => e.stopPropagation()}>
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between z-10">
+              <div>
+                <h3 className="font-semibold text-gray-900">{viewingUpload.test_name || viewingUpload.clinical_notes || 'Investigation Document'}</h3>
+                <p className="text-xs text-gray-500">
+                  {viewingUpload.upload_type === 'form' ? 'Investigation Form' : viewingUpload.upload_type === 'result' ? 'Investigation Result' : 'Investigation'}
+                  {' • '}{viewingUpload.created_at ? new Date(viewingUpload.created_at).toLocaleString() : viewingUpload.ordered_at ? new Date(viewingUpload.ordered_at).toLocaleString() : ''}
+                  {viewingUpload.uploaded_by && ` • By: ${viewingUpload.uploaded_by}`}
+                </p>
+              </div>
+              <button onClick={() => setViewingUpload(null)} className="p-1 hover:bg-gray-100 rounded-full">
+                <X className="w-5 h-5 text-gray-600" />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              {/* Scanned Image */}
+              {viewingUpload.file_data && (
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-700 mb-2">Scanned Document</h4>
+                  <img
+                    src={viewingUpload.file_data}
+                    alt={viewingUpload.test_name || 'Scanned investigation'}
+                    className="w-full rounded-lg border border-gray-200"
+                    style={{ maxHeight: '60vh', objectFit: 'contain' }}
+                  />
+                </div>
+              )}
+              {/* OCR Extracted Text */}
+              {viewingUpload.ocr_text && (
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-700 mb-2">OCR Extracted Text</h4>
+                  <pre className="text-sm text-gray-800 bg-gray-50 p-3 rounded-lg border border-gray-200 whitespace-pre-wrap font-mono max-h-60 overflow-y-auto">
+                    {typeof viewingUpload.ocr_text === 'string' ? (
+                      (() => { try { return JSON.stringify(JSON.parse(viewingUpload.ocr_text), null, 2); } catch { return viewingUpload.ocr_text; } })()
+                    ) : JSON.stringify(viewingUpload.ocr_text, null, 2)}
+                  </pre>
+                </div>
+              )}
+              {/* Results Data */}
+              {viewingUpload.results && typeof viewingUpload.results === 'object' && viewingUpload.results !== 'See scanned document' && (
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-700 mb-2">Results</h4>
+                  {Array.isArray(viewingUpload.results) ? (
+                    <div className="space-y-2">
+                      {viewingUpload.results.map((r: any, idx: number) => (
+                        <div key={idx} className="flex items-center justify-between bg-gray-50 p-2 rounded border border-gray-200">
+                          <span className="text-sm font-medium text-gray-900">{r.test_name || r.name || `Test ${idx+1}`}</span>
+                          <div className="text-right">
+                            <span className={`text-sm font-bold ${r.abnormal ? 'text-red-600' : 'text-green-700'}`}>{r.result_value || r.value || '-'}</span>
+                            {r.unit && <span className="text-xs text-gray-500 ml-1">{r.unit}</span>}
+                            {r.reference_range && <p className="text-[10px] text-gray-400">Ref: {r.reference_range}</p>}
+                            {r.flag && r.flag !== 'normal' && <span className={`text-[10px] px-1 py-0.5 rounded ${r.flag.includes('critical') ? 'bg-red-200 text-red-800' : r.flag === 'high' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}`}>{r.flag}</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : typeof viewingUpload.results === 'object' ? (
+                    <div className="grid grid-cols-2 gap-2">
+                      {Object.entries(viewingUpload.results).map(([key, val]) => (
+                        <div key={key} className="bg-gray-50 p-2 rounded border border-gray-200">
+                          <span className="text-xs text-gray-500">{key}</span>
+                          <p className="text-sm font-medium text-gray-900">{String(val)}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-800">{String(viewingUpload.results)}</p>
+                  )}
+                </div>
+              )}
+              {/* No image/data available message */}
+              {!viewingUpload.file_data && !viewingUpload.ocr_text && (!viewingUpload.results || viewingUpload.results === 'See scanned document') && (
+                <div className="text-center py-8">
+                  <FileText className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                  <p className="text-gray-500">No scanned document available for this investigation.</p>
+                  <p className="text-xs text-gray-400 mt-1">The document may not have been uploaded with an image.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Loading overlay for upload fetch */}
+      {loadingUpload && (
+        <div className="fixed inset-0 bg-black bg-opacity-30 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-lg p-6 flex flex-col items-center gap-2">
+            <Loader2 className="w-6 h-6 animate-spin text-green-600" />
+            <p className="text-sm text-gray-600">Loading document...</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -1559,6 +1861,8 @@ const TreatmentPlansTab: React.FC<{ patientId: string; patientName: string; navi
   const [plans, setPlans] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedPlan, setExpandedPlan] = useState<number | null>(null);
+  const [showPlanOCR, setShowPlanOCR] = useState(false);
+  const [savingOCRPlan, setSavingOCRPlan] = useState(false);
 
   useEffect(() => { loadPlans(); }, [patientId]);
 
@@ -1582,14 +1886,59 @@ const TreatmentPlansTab: React.FC<{ patientId: string; patientName: string; navi
     return [];
   };
 
+  const handlePlanOCRExtracted = async (fields: Record<string, any>) => {
+    setSavingOCRPlan(true);
+    try {
+      const planData: any = {
+        patientId,
+        diagnosis: fields.assessment || fields.diagnoses?.[0] || fields.content_summary || fields.key_findings?.[0] || 'OCR Scanned Plan',
+        treatmentType: fields.document_type || 'medical',
+        description: fields.plan || fields.content_summary || fields.objective || '',
+        objectives: fields.recommendations || fields.key_findings || [],
+        procedures: fields.procedures_planned?.map((p: string) => ({ name: p })) || [],
+        medications: fields.medications || [],
+        investigations: fields.investigations || [],
+        notes: [
+          fields.subjective ? `Subjective: ${fields.subjective}` : '',
+          fields.objective ? `Objective: ${fields.objective}` : '',
+          fields.assessment ? `Assessment: ${fields.assessment}` : '',
+          fields.notes || '',
+          '(Created from OCR scan)',
+        ].filter(Boolean).join('\n'),
+        status: 'draft',
+      };
+
+      try {
+        await apiClient.post('/treatment-plans', planData);
+      } catch {
+        // Save locally as fallback
+        const stored = localStorage.getItem(`treatment_plans_${patientId}`);
+        const arr = stored ? JSON.parse(stored) : [];
+        arr.unshift({ ...planData, id: `tp_ocr_${Date.now()}`, created_at: new Date().toISOString(), created_by: 'OCR Scan' });
+        localStorage.setItem(`treatment_plans_${patientId}`, JSON.stringify(arr));
+      }
+      await loadPlans();
+    } catch {
+      alert('Failed to save OCR treatment plan.');
+    } finally {
+      setSavingOCRPlan(false);
+      setShowPlanOCR(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
         <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
           <h3 className="text-lg font-semibold text-gray-900">Treatment Planning</h3>
-          <button onClick={() => navigate(`/treatment-planning?patientId=${patientId}&patientName=${encodeURIComponent(patientName)}`)} className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700">
-            <Plus className="w-4 h-4" /> New Plan
-          </button>
+          <div className="flex gap-2">
+            <button onClick={() => setShowPlanOCR(true)} disabled={savingOCRPlan} className="flex items-center gap-1 px-3 py-1.5 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 disabled:opacity-50">
+              {savingOCRPlan ? <Loader2 className="w-4 h-4 animate-spin" /> : <ScanLine className="w-4 h-4" />} Scan Plan
+            </button>
+            <button onClick={() => navigate(`/treatment-planning?patientId=${patientId}&patientName=${encodeURIComponent(patientName)}`)} className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700">
+              <Plus className="w-4 h-4" /> New Plan
+            </button>
+          </div>
         </div>
         <div className="p-4">
           {loading ? (
@@ -1723,6 +2072,18 @@ const TreatmentPlansTab: React.FC<{ patientId: string; patientName: string; navi
           )}
         </div>
       </div>
+
+      {/* Treatment Plan OCR Scanner Modal */}
+      {showPlanOCR && (
+        <DocumentScannerModal
+          isOpen={showPlanOCR}
+          onClose={() => setShowPlanOCR(false)}
+          onFieldsExtracted={handlePlanOCRExtracted}
+          documentType="general"
+          patientContext={{ name: patientName }}
+          targetForm="ward_round"
+        />
+      )}
     </div>
   );
 };
@@ -2663,6 +3024,7 @@ const MDTCareTab: React.FC<{
           onClose={() => setShowOCRScanner(false)}
           onExtracted={handleOCRExtracted}
           documentType="consultation"
+          {...{} as any}
         />
       )}
     </div>

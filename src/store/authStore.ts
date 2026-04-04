@@ -8,9 +8,11 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  role: 'admin' | 'consultant' | 'senior_registrar' | 'junior_registrar' | 'house_officer';
+  role: 'admin' | 'consultant' | 'senior_registrar' | 'junior_registrar' | 'house_officer' | 'student';
   privileges: string[];
   mustChangePassword?: boolean;
+  full_name?: string;
+  username?: string;
 }
 
 interface AuthState {

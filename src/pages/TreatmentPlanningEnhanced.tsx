@@ -432,7 +432,7 @@ export default function TreatmentPlanningEnhanced() {
       planned_date: new Date(dischargeTimeline.planned_date),
       criteria_met: dischargeTimeline.criteria_met,
       pending_requirements: dischargeTimeline.pending_requirements
-    });
+    } as any);
 
     setShowDischargeModal(false);
     await reloadSelectedPlan();

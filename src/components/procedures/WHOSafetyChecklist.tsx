@@ -11,7 +11,7 @@ export const WHOSafetyChecklistForm: React.FC<WHOSafetyChecklistFormProps> = ({
   procedureId,
   onComplete
 }) => {
-  const [checklist, setChecklist] = useState<Partial<WHOSafetyChecklist>>({
+  const [checklist, setChecklist] = useState<any>({
     procedure_id: procedureId,
     sign_in: {
       patient_identity_confirmed: false,

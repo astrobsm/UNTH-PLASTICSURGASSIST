@@ -74,7 +74,7 @@ class NotificationBackgroundService {
   /**
    * Send push notification
    */
-  async sendNotification(title: string, options?: NotificationOptions): Promise<void> {
+  async sendNotification(title: string, options?: any): Promise<void> {
     if (!('Notification' in window)) {
       console.log('Notifications not supported');
       return;
@@ -92,9 +92,8 @@ class NotificationBackgroundService {
       const notification = new Notification(title, {
         icon: '/icon-192.png',
         badge: '/icon-192.png',
-        vibrate: [200, 100, 200],
         ...options
-      });
+      } as any);
 
       notification.onclick = () => {
         window.focus();

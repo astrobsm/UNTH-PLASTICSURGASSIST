@@ -317,7 +317,7 @@ class MedicationDosingService {
       for (const plan of plans) {
         if (plan.status !== 'active') continue;
         
-        const medications = plan.planned_medications || plan.medications || [];
+        const medications = (plan as any).planned_medications || plan.medications || [];
         
         for (const med of medications) {
           if (med.status !== 'active') continue;
@@ -349,8 +349,8 @@ class MedicationDosingService {
           
           alerts.push({
             medication_name: med.medication_name,
-            patient_id: plan.patient_id,
-            patient_name: plan.patient_name || 'Unknown Patient',
+            patient_id: String(plan.patient_id),
+            patient_name: (plan as any).patient_name || 'Unknown Patient',
             end_date: endDate,
             days_remaining: daysRemaining,
             alert_level: alertLevel
@@ -366,7 +366,7 @@ class MedicationDosingService {
               title: alertLevel === 'expired' ? '⚠️ Medication Ended' : '⏰ Medication Ending Soon',
               message,
               type: alertLevel === 'expired' ? 'urgent' : 'reminder',
-              patientId: parseInt(plan.patient_id),
+              patientId: parseInt(String(plan.patient_id)),
               url: `/treatment-planning`
             });
           }

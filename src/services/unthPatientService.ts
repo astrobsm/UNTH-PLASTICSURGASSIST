@@ -123,7 +123,7 @@ export interface PatientSummary {
   id: string;
   patient_id: string;
   summary_type: 'admission' | 'progress' | 'discharge' | 'consultation';
-  generated_by: 'ai' | 'manual';
+  generated_by: 'ai' | 'manual' | 'system';
   content: string;
   key_points: string[];
   current_problems: string[];

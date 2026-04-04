@@ -123,7 +123,7 @@ export default function DischargesPage() {
         admitting_diagnosis: selectedAdmission.provisional_diagnosis || '',
         final_diagnosis: finalDiagnosis,
         procedures_performed: selectedAdmission.initial_management_plan || '',
-        medications_on_discharge: medications,
+        medications_on_discharge: medications as any,
         complications: '',
         treatment_summary: dischargePlans
       };
@@ -202,7 +202,8 @@ export default function DischargesPage() {
         emergency_contact_info: 'Emergency: Call hospital at +234-XXX-XXX-XXXX',
         ai_generated_instructions: aiGeneratedInstructions || undefined,
         discharging_doctor: getCurrentUserName(), // TODO: Get from auth context
-        discharging_consultant: dischargingConsultant
+        discharging_consultant: dischargingConsultant,
+        created_by: getCurrentUserName()
       };
 
       await dischargeService.createDischarge(dischargeData);
@@ -270,7 +271,8 @@ export default function DischargesPage() {
           emergency_contact_info: 'Emergency: Call hospital at +234-XXX-XXX-XXXX',
           ai_generated_instructions: aiGeneratedInstructions || undefined,
           discharging_doctor: getCurrentUserName(),
-          discharging_consultant: dischargingConsultant
+          discharging_consultant: dischargingConsultant,
+          created_by: getCurrentUserName()
         };
 
         await dischargeService.generateDischargePDF(dischargeData as Discharge, undefined, shareViaWhatsApp);

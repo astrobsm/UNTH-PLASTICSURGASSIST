@@ -32,7 +32,7 @@ export const NutritionalRiskAssessmentForm: React.FC<NutritionalRiskAssessmentPr
     height: 0,
     weight: 0,
     weight_loss_percentage: 0,
-    weight_loss_timeframe: '3-6_months',
+    weight_loss_timeframe: '3-6_months' as any,
     acute_disease_effect: false,
     dietary_intake: {
       appetite_change: 'no_change',

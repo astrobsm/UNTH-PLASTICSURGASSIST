@@ -67,7 +67,7 @@ export const RiskAssessmentSummary: React.FC<RiskAssessmentSummaryProps> = ({
           assessmentDate: new Date(a.assessment_date),
           assessedBy: a.assessed_by,
           nextDue: new Date(a.next_assessment_due),
-          status: a.status,
+          status: a.status as 'active' | 'archived',
           urgent: a.risk_level === 'high' || isOverdue(new Date(a.next_assessment_due))
         })),
         ...pressureSoreAssessments.map(a => ({
@@ -78,7 +78,7 @@ export const RiskAssessmentSummary: React.FC<RiskAssessmentSummaryProps> = ({
           assessmentDate: new Date(a.assessment_date),
           assessedBy: a.assessed_by,
           nextDue: new Date(a.next_assessment_due),
-          status: a.status,
+          status: a.status as 'active' | 'archived',
           urgent: a.risk_level === 'high' || a.risk_level === 'very_high' || isOverdue(new Date(a.next_assessment_due))
         })),
         ...nutritionalAssessments.map(a => ({
@@ -89,7 +89,7 @@ export const RiskAssessmentSummary: React.FC<RiskAssessmentSummaryProps> = ({
           assessmentDate: new Date(a.assessment_date),
           assessedBy: a.assessed_by,
           nextDue: new Date(a.next_assessment_due),
-          status: a.status,
+          status: a.status as 'active' | 'archived',
           urgent: a.risk_level === 'high' || isOverdue(new Date(a.next_assessment_due))
         }))
       ];

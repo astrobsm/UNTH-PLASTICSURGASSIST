@@ -25,12 +25,16 @@ export interface Admission {
   provisional_diagnosis: string;
   admitting_doctor: string;
   admitting_consultant?: string;
+  ps_unit?: string;
+  assigned_senior_registrar?: string;
+  assigned_house_officer?: string;
+  final_diagnosis?: string;
   vital_signs?: {
-    temperature?: string;
+    temperature?: string | number;
     blood_pressure?: string;
-    pulse?: string;
-    respiratory_rate?: string;
-    oxygen_saturation?: string;
+    pulse?: string | number;
+    respiratory_rate?: string | number;
+    oxygen_saturation?: string | number;
   };
   allergies?: string;
   current_medications?: string;
@@ -91,9 +95,9 @@ class AdmissionService {
     const localId = await db.admissions.add({ ...admission, synced: false } as any);
     
     // Queue for sync
-    await syncService.queueAction('create', 'admissions', localId, admission);
+    await syncService.queueAction('create', 'admissions', localId as number, admission);
     
-    return localId;
+    return localId as number;
   }
 
   // Get admission by ID

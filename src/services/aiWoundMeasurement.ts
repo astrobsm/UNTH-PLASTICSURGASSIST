@@ -274,7 +274,7 @@ export class AIWoundMeasurementService {
     // Apply morphological operations to clean up the mask
     const cleanedMask = this.morphologicalOperations(maskData, width, height);
 
-    return new ImageData(cleanedMask, width, height);
+    return new ImageData(new Uint8ClampedArray(cleanedMask), width, height);
   }
 
   /**

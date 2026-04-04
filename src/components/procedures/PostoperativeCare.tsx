@@ -12,7 +12,7 @@ export const PostoperativeCareForm: React.FC<PostoperativeCareFormProps> = ({
   procedureId,
   onComplete
 }) => {
-  const [care, setCare] = useState<Partial<PostoperativeCare>>({
+  const [care, setCare] = useState<any>({
     patient_id: patientId,
     procedure_id: procedureId,
     care_date: new Date().toISOString().split('T')[0],

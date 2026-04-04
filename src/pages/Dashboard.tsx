@@ -24,6 +24,7 @@ import { patientService } from '../services/patientService';
 import { admissionDischargeService, Admission } from '../services/admissionDischargeService';
 import { warmCache, CacheWarmProgress } from '../services/cacheWarmer';
 import { syncService } from '../db/syncService';
+import toast from 'react-hot-toast';
 import UnitRosterWidget from '../components/UnitRosterWidget';
 import { userManagementService, ApprovedUser } from '../services/userManagementService';
 import { medicalTeamService } from '../services/medicalTeamService';
@@ -247,7 +248,7 @@ export default function Dashboard() {
 
       // Lab results
       const allLabInvestigations = await db.lab_investigations?.toArray() || [];
-      const labResults = allLabInvestigations.filter(li => 
+      const labResults = allLabInvestigations.filter((li: any) => 
         li.status === 'pending' || li.status === 'in_progress'
       ).length;
 

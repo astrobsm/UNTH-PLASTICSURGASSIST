@@ -12,6 +12,8 @@ export interface PendingUser {
   created_at: string;
   is_approved: boolean;
   is_active: boolean;
+  status?: string;
+  requested_at?: string;
 }
 
 export interface ApprovedUser {
@@ -27,6 +29,7 @@ export interface ApprovedUser {
   updated_at?: string;
   is_approved: boolean;
   is_active: boolean;
+  last_login?: string;
 }
 
 export interface BulkImportUser {

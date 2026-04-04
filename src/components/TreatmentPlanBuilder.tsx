@@ -481,7 +481,7 @@ export default function TreatmentPlanBuilder({ planId }: TreatmentPlanBuilderPro
                     </span>
                     
                     {!step.synced && (
-                      <Clock className="h-4 w-4 text-yellow-500" title="Not synced" />
+                      <Clock className="h-4 w-4 text-yellow-500" {...{title: 'Not synced'} as any} />
                     )}
                     
                     {step.status !== 'completed' && (

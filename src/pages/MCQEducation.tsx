@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import DOMPurify from 'dompurify';
 import { 
   BookOpen, 
   Brain, 
@@ -189,7 +190,7 @@ const MCQEducation: React.FC = () => {
     try {
       const session = await mcqGenerationService.startMCQTest(
         user?.id || 'anonymous',
-        userLevel,
+        userLevel as 'house_officer' | 'junior_resident' | 'senior_resident',
         schedule.id
       );
       

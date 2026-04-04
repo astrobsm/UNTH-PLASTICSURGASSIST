@@ -20,7 +20,7 @@ export const IntraoperativeFindingsForm: React.FC<IntraoperativeFindingsFormProp
   procedureId,
   onComplete
 }) => {
-  const [findings, setFindings] = useState<Partial<IntraoperativeFindings>>({
+  const [findings, setFindings] = useState<any>({
     patient_id: patientId,
     procedure_id: procedureId,
     procedure_date: new Date().toISOString().split('T')[0],

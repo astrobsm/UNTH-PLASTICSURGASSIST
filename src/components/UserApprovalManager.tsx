@@ -560,17 +560,17 @@ export function UserApprovalManager() {
                     <p className="text-clinical-dark">{selectedUser.department}</p>
                   </div>
                 )}
-                {'registration_number' in selectedUser && selectedUser.registration_number && (
+                {'registration_number' in selectedUser && (selectedUser as any).registration_number && (
                   <div>
                     <label className="text-sm font-medium text-gray-500">Registration Number</label>
-                    <p className="text-clinical-dark">{selectedUser.registration_number}</p>
+                    <p className="text-clinical-dark">{(selectedUser as any).registration_number}</p>
                   </div>
                 )}
                 {'privileges' in selectedUser && (
                   <div className="col-span-2">
                     <label className="text-sm font-medium text-gray-500">Privileges</label>
                     <div className="flex flex-wrap gap-2 mt-2">
-                      {selectedUser.privileges.map((priv, idx) => (
+                      {((selectedUser as any).privileges || []).map((priv: string, idx: number) => (
                         <span key={idx} className="px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded">
                           {priv.replace('_', ' ')}
                         </span>

@@ -717,6 +717,9 @@ export default function BloodTransfusionForm({
       const spo2 = fields[`${key}_spo2`] || fields[`spo2_${key}`];
       if (temp || pulse || bpSys) {
         const vitals: TransfusionVitals = {
+          transfusion_id: '',
+          patient_id: '0',
+          measurement_type: vitalsTypes[idx],
           type: vitalsTypes[idx],
           temperature: parseFloat(temp) || 36.5,
           pulse: parseInt(pulse) || 80,

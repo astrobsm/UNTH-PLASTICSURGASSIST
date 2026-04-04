@@ -109,7 +109,7 @@ async function handleGet(req, res, adminUser) {
     case 'all-trainees': {
       // Comprehensive trainee list with live metrics
       const trainees = await query(`
-        SELECT u.id, u.username, u.full_name, u.role, u.email,
+        SELECT u.id, u.username, u.full_name, u.role, u.email, u.phone,
                u.created_at as registered_at
         FROM users u
         WHERE u.role IN ('intern', 'registrar', 'senior_registrar', 'house_officer', 'junior_resident', 'senior_resident')
@@ -333,6 +333,20 @@ async function handlePost(req, res, adminUser) {
       }
 
       return res.status(200).json({ success: true, approved });
+    }
+
+    case 'update-phone': {
+      const { userId: targetUserId, phone } = body;
+      if (!targetUserId || !phone) {
+        return res.status(400).json({ error: 'userId and phone are required' });
+      }
+      // Ensure phone column exists
+      await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(50)`).catch(() => {});
+      await query(
+        'UPDATE users SET phone = $1, updated_at = NOW() WHERE id = $2',
+        [phone.trim(), targetUserId]
+      );
+      return res.status(200).json({ message: 'Phone number updated' });
     }
 
     default:

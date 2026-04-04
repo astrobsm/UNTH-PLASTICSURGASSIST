@@ -261,7 +261,7 @@ class WardRoundsService {
 
     // Always save to IndexedDB first (offline-first)
     try {
-      await db.ward_rounds.add(localRound);
+      await db.ward_rounds.add(localRound as any);
     } catch (e) {
       console.warn('Could not save ward round to IndexedDB:', e);
     }
@@ -330,7 +330,7 @@ class WardRoundsService {
     }
 
     // Fallback to local
-    return await db.ward_rounds.get(id);
+    return await db.ward_rounds.get(id) as unknown as WardRound;
   }
 
   /**
@@ -351,9 +351,9 @@ class WardRoundsService {
     // Fallback to IndexedDB (use filter instead of .where on non-indexed field)
     try {
       return await db.ward_rounds
-        .filter(r => r.patient_id === patientId)
+        .filter(r => (r as any).patient_id === patientId)
         .reverse()
-        .sortBy('round_date');
+        .sortBy('round_date') as unknown as WardRound[];
     } catch {
       return [];
     }
@@ -375,7 +375,7 @@ class WardRoundsService {
               .filter(r => !r.synced)
               .toArray();
             if (localRounds.length > 0) {
-              return [...localRounds as WardRound[], ...mapped];
+              return [...localRounds as unknown as WardRound[], ...mapped];
             }
           } catch { /* ignore */ }
 
@@ -389,7 +389,7 @@ class WardRoundsService {
     // Fallback to IndexedDB
     try {
       const local = await db.ward_rounds.toArray();
-      return (local as WardRound[]).sort(
+      return (local as unknown as WardRound[]).sort(
         (a, b) => new Date(b.round_date).getTime() - new Date(a.round_date).getTime()
       );
     } catch {
@@ -454,7 +454,7 @@ class WardRoundsService {
 
     try {
       const local = await db.ward_rounds.toArray();
-      return (local as WardRound[]).filter(r => {
+      return (local as unknown as WardRound[]).filter(r => {
         const rd = new Date(r.round_date);
         return rd >= startOfDay && rd <= endOfDay;
       });
@@ -493,7 +493,7 @@ class WardRoundsService {
 
       const patientsWithLastRound = await Promise.all(
         patients.map(async (patient) => {
-          const rounds = await this.getPatientWardRounds(patient.id!);
+          const rounds = await this.getPatientWardRounds(String(patient.id!));
           const lastRound = rounds[0];
           return {
             ...patient,

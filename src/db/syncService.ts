@@ -741,12 +741,12 @@ class SyncService {
   }
 
   private async syncPatientTransfer(action: string, localId: number, data: any): Promise<void> {
-    const transfer = await db.patient_transfers?.get(localId);
+    const transfer = await (db as any).patient_transfers?.get(localId);
     if (!transfer) return;
 
     if (action === 'create') {
       const response = await this.apiCall('POST', '/patient-transfers', transfer);
-      await db.patient_transfers.update(localId, { id: response.id, synced: true });
+      await (db as any).patient_transfers.update(localId, { id: response.id, synced: true });
       console.log('✅ Patient transfer synced to server:', response.id);
     }
   }

@@ -220,7 +220,7 @@ export const PatientEncounters: React.FC<PatientEncountersProps> = ({ patientId,
 
       // Discharge Summaries
       try {
-        const discharges = await db.discharge_summaries?.toArray() || [];
+        const discharges = await (db as any).discharge_summaries?.toArray() || [];
         const patientDis = discharges.filter((d: any) =>
           String(d.patient_id) === String(patientId) || String(d.hospital_number) === hospitalNumber
         );

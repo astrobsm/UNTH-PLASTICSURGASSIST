@@ -21,6 +21,7 @@ export interface BurnPatient {
   
   // TBSA Assessment
   tbsaAssessment: TBSAAssessment;
+  tbsa?: number;
   
   // Scores
   bauxScore: number;

@@ -87,6 +87,9 @@ const AdminTrainingPage = lazyWithRetry(() => import('./pages/AdminTrainingPage'
 const SJSManagementPage = lazyWithRetry(() => import('./pages/SJSManagementPage'));
 const SubstanceDetoxPage = lazyWithRetry(() => import('./pages/SubstanceDetoxPage'));
 const HOTrackingPage = lazyWithRetry(() => import('./pages/HOTrackingPage'));
+const StudentRegister = lazyWithRetry(() => import('./pages/StudentRegister'));
+const StudentLogin = lazyWithRetry(() => import('./pages/StudentLogin'));
+const StudentDashboard = lazyWithRetry(() => import('./pages/StudentDashboard'));
 
 // Loading fallback component
 const PageLoader = () => (
@@ -154,7 +157,24 @@ function App() {
   if (!user) {
     return (
       <Suspense fallback={<PageLoader />}>
-        <Login />
+        <Routes>
+          <Route path="/student-register" element={<StudentRegister />} />
+          <Route path="/student-login" element={<StudentLogin />} />
+          <Route path="*" element={<Login />} />
+        </Routes>
+      </Suspense>
+    );
+  }
+
+  // Student users go directly to their dashboard
+  if ((user.role as string) === 'student') {
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <Routes>
+          <Route path="/student-dashboard" element={<StudentDashboard />} />
+          <Route path="/student-login" element={<StudentLogin />} />
+          <Route path="*" element={<StudentDashboard />} />
+        </Routes>
       </Suspense>
     );
   }

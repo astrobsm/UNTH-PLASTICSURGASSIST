@@ -10,7 +10,7 @@ export const SurgicalFitnessScoreForm: React.FC<SurgicalFitnessScoreFormProps> =
   patientId,
   onComplete
 }) => {
-  const [score, setScore] = useState<Partial<SurgicalFitnessScore>>({
+  const [score, setScore] = useState<any>({
     patient_id: patientId,
     assessment_date: new Date().toISOString().split('T')[0],
     cardiovascular_score: 0,

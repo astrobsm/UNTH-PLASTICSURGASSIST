@@ -24,9 +24,26 @@ export interface WardRound {
   intern?: string;
   patients: WardRoundPatient[];
   notes: string;
-  status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
+  status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled' | 'critical' | 'stable' | 'deteriorating' | 'improved';
   created_at: Date;
   updated_at: Date;
+  synced?: boolean;
+  // Clinical round fields (used by wardRoundsService consumers)
+  patient_id?: string;
+  round_date?: Date;
+  round_type?: string;
+  progress_status?: string;
+  clinical_notes?: string;
+  discharge_planning?: string;
+  follow_up_plan?: string;
+  new_orders?: string;
+  assessment?: string;
+  additional_notes?: string;
+  lab_notes?: string;
+  temperature?: string | number;
+  vitals?: any;
+  plan?: string;
+  medications?: any[];
 }
 
 export interface WardRoundPatient {
@@ -163,6 +180,7 @@ export interface SurgeryBooking {
   patient_age_at_booking?: number;
   created_at: Date;
   updated_at: Date;
+  synced?: boolean;
 }
 
 export interface OperationList {
@@ -355,7 +373,7 @@ class SchedulingService {
     } catch (error) {
       console.warn('âš ï¸ Failed to sync surgery booking to server, saving locally', error);
       await db.surgery_bookings.add({ ...newBooking, synced: false });
-      await syncService.queueAction('create', 'surgeries', id, newBooking);
+      await syncService.queueAction('create', 'surgeries', id as any, newBooking);
       console.log('ðŸ“± Surgery booking saved locally, will sync when online:', id);
       return id;
     }

@@ -1243,6 +1243,7 @@ const UploadSection = ({ investigations, onRefresh }: any) => {
 
 // Trends Section Component
 const TrendsSection = ({ selectedPatient }: any) => {
+  const { user } = useAuthStore();
   const [trendData, setTrendData] = useState<LabTrend[]>([]);
   const [selectedTest, setSelectedTest] = useState('');
   const [timeRange, setTimeRange] = useState(6);

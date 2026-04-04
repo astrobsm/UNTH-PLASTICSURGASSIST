@@ -125,7 +125,7 @@ export const PrescriptionModal: React.FC<PrescriptionModalProps> = ({
         if (db.prescriptions) {
           const localId = await db.prescriptions.add({ ...prescriptionData, synced: false });
           prescriptionId = localId.toString();
-          await syncService.queueAction('create', 'prescriptions', localId, prescriptionData);
+          await syncService.queueAction('create', 'prescriptions', localId as number, prescriptionData);
           console.log('📱 Prescription saved locally, will sync when online:', localId);
         } else {
           // Ultimate fallback to localStorage if db table doesn't exist

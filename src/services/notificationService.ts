@@ -5,8 +5,8 @@ export interface NotificationPayload {
   title: string;
   message: string;
   type: 'reminder' | 'alert' | 'urgent' | 'info';
-  patientId?: number;
-  planId?: number;
+  patientId?: number | string;
+  planId?: number | string;
   stepId?: number;
   scheduledFor?: Date;
   url?: string; // Deep link to relevant page
@@ -68,7 +68,7 @@ class NotificationService {
     try {
       const subscription = await this.registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: this.urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+        applicationServerKey: this.urlBase64ToUint8Array(VAPID_PUBLIC_KEY) as BufferSource
       });
 
       this.subscription = subscription;
@@ -102,7 +102,7 @@ class NotificationService {
       throw new Error('Notification permission not granted');
     }
 
-    const options: NotificationOptions = {
+    const options: any = {
       body: payload.message,
       icon: '/logo.png',
       badge: '/logo.png',

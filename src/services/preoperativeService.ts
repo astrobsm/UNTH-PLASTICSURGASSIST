@@ -49,6 +49,7 @@ export interface BleedingRiskAssessment {
   aptt?: number;
   risk_level: 'low' | 'moderate' | 'high';
   risk_score: number;
+  total_score?: number;
   recommendations: string[];
 }
 
@@ -97,6 +98,7 @@ export interface CapriniDVTRisk {
   acute_spinal_cord_injury: boolean;
   
   total_score: number;
+  risk_level?: string;
   risk_category: 'low' | 'moderate' | 'high' | 'very-high';
   prophylaxis_recommendation: string;
 }
@@ -125,6 +127,7 @@ export interface CardiovascularRiskAssessment {
   hba1c?: number;
   
   rcri_score: number;
+  total_score?: number;
   risk_level: 'low' | 'intermediate' | 'high';
   cardiac_event_risk_percent: number;
   recommendations: string[];
@@ -142,6 +145,8 @@ export interface PressureSoreRiskAssessment {
   braden_total: number; // 6-23, lower = higher risk
   risk_category: 'severe' | 'high' | 'moderate' | 'low' | 'no-risk';
   preventive_measures: string[];
+  total_score?: number;
+  risk_level?: string;
 }
 
 export interface ComorbidityMedication {

@@ -199,6 +199,10 @@ export interface Discharge {
   created_by: string;
   created_at: Date;
   updated_at: Date;
+
+  // Alternate field names used in some components
+  discharge_instructions?: string;
+  medications?: DischargeMedication[];
 }
 
 export interface FollowUpAppointment {

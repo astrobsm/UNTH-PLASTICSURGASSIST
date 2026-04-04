@@ -39,10 +39,12 @@ export interface BloodBagDetails {
   source_details?: string;
   screening_done: boolean;
   crossmatch_compatible: boolean;
+  transfused?: boolean;
 }
 
 export interface TransfusionVitals {
   id?: string;
+  type?: string;
   transfusion_id: string;
   patient_id: string;
   measurement_type: 'pre' | 'during' | 'post';
@@ -144,6 +146,8 @@ export interface BloodTransfusion {
   created_at: Date;
   updated_at: Date;
   notes?: string;
+  vitals_monitoring?: TransfusionVitals[];
+  post_hb?: number;
 }
 
 class BloodTransfusionService {

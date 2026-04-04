@@ -129,7 +129,8 @@ export interface DischargePlanning {
   discharge_criteria: string[];
   criteria_met: string[];
   criteria_pending: string[];
-  status: 'on_track' | 'extended' | 'ready' | 'discharged';
+  status: 'on_track' | 'extended' | 'ready' | 'discharged' | 'planned' | 'planning';
+  planned_date?: Date;
 }
 
 export interface TreatmentPlanReview {
@@ -181,10 +182,11 @@ export interface PlannedProcedure {
   procedure_name: string;
   procedure_type: 'minor' | 'major' | 'diagnostic';
   proposed_date: Date;
+  planned_date?: Date;
   proposed_time?: string;
   actual_date?: Date;
   actual_time?: string;
-  status: 'planned' | 'scheduled' | 'completed' | 'cancelled' | 'postponed';
+  status: 'planned' | 'scheduled' | 'completed' | 'cancelled' | 'postponed' | 'overdue';
   surgeon?: string;
   location?: string;
   delay_reason?: string;
@@ -204,6 +206,9 @@ export interface MedicationAdministration {
   frequency: string;
   timeline_start: Date;
   timeline_end?: Date;
+  start_date?: Date;
+  end_date?: Date;
+  prescribing_doctor?: string;
   scheduled_times: Array<{
     date: Date;
     time: string;
@@ -218,7 +223,7 @@ export interface MedicationAdministration {
     delay_reason?: string;
     notes?: string;
   }>;
-  status: 'active' | 'completed' | 'discontinued';
+  status: 'active' | 'completed' | 'discontinued' | 'overdue';
   created_at: Date;
   updated_at: Date;
 }
@@ -239,7 +244,10 @@ export interface DischargeTimeline {
     documented_by: string;
     documented_at: Date;
   }>;
-  status: 'planned' | 'ready' | 'discharged' | 'extended';
+  planned_date?: Date;
+  criteria_met?: string[];
+  pending_requirements?: string[];
+  status: 'planned' | 'ready' | 'discharged' | 'extended' | 'overdue';
   discharge_summary_completed: boolean;
   created_at: Date;
   updated_at: Date;
@@ -274,6 +282,8 @@ export interface EnhancedTreatmentPlan {
   discharge_timeline?: DischargeTimeline;
   
   notes?: string;
+  investigations?: any[];
+  activity_restrictions?: string[];
   created_by: string;
   created_at: Date;
   updated_at: Date;

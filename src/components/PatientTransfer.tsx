@@ -56,7 +56,7 @@ export const PatientTransferForm: React.FC<PatientTransferFormProps> = ({
     setIsSubmitting(true);
 
     try {
-      const transfer = await unthPatientService.transferPatient(transferData);
+      const transfer = await unthPatientService.transferPatient(transferData as any);
       onSuccess?.(transfer);
     } catch (error) {
       console.error('Transfer failed:', error);

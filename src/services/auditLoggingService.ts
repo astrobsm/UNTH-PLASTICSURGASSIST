@@ -12,7 +12,7 @@ export interface AuditLog {
   user_name: string;
   user_role: string;
   action: 'VIEW' | 'CREATE' | 'UPDATE' | 'DELETE' | 'EXPORT' | 'PRINT';
-  resource_type: 'PATIENT' | 'ADMISSION' | 'PRESCRIPTION' | 'PROCEDURE' | 'LAB_ORDER' | 'TREATMENT_PLAN' | 'DISCHARGE';
+  resource_type: 'PATIENT' | 'ADMISSION' | 'PRESCRIPTION' | 'PROCEDURE' | 'LAB_ORDER' | 'LAB' | 'TREATMENT_PLAN' | 'DISCHARGE';
   resource_id: string;
   resource_identifier?: string; // Hospital number, patient name, etc.
   details?: string;

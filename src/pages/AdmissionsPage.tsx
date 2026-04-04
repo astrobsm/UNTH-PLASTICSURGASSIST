@@ -6,7 +6,6 @@ import { patientAssignmentService } from '../services/patientAssignmentService';
 import { calculateAge, calculateAndFormatAge } from '../utils/dateUtils';
 import { PS_UNITS, getCurrentAssignments, getUnitTeam, UnitRosterConfig } from '../config/psUnits';
 import { getCurrentUserName } from '../utils/getCurrentUser';
-import { db } from '../db/database';
 
 interface Ward {
   name: string;
@@ -218,7 +217,7 @@ export default function AdmissionsPage() {
         patient_id: selectedPatient.id,
         patient_name: `${selectedPatient.first_name} ${selectedPatient.last_name}`,
         hospital_number: selectedPatient.hospital_number,
-        admission_date: new Date().toISOString().split('T')[0],
+        admission_date: new Date(),
         admission_time: new Date().toTimeString().split(' ')[0],
         ward_location: wardLocation,
         bed_number: bedNumber,
@@ -235,11 +234,11 @@ export default function AdmissionsPage() {
         assigned_senior_registrar: unitTeamInfo?.seniorRegistrar || undefined,
         assigned_house_officer: unitTeamInfo?.houseOfficer || undefined,
         vital_signs: {
-          temperature: temperature ? parseFloat(temperature) : undefined,
+          temperature: temperature || undefined,
           blood_pressure: bloodPressure,
-          pulse: pulse ? parseInt(pulse) : undefined,
-          respiratory_rate: respiratoryRate ? parseInt(respiratoryRate) : undefined,
-          oxygen_saturation: oxygenSaturation ? parseInt(oxygenSaturation) : undefined
+          pulse: pulse || undefined,
+          respiratory_rate: respiratoryRate || undefined,
+          oxygen_saturation: oxygenSaturation || undefined
         },
         allergies,
         current_medications: currentMedications,
@@ -249,7 +248,8 @@ export default function AdmissionsPage() {
         family_history: familyHistory,
         examination_findings: examinationFindings,
         initial_management_plan: initialManagementPlan,
-        status: 'active'
+        status: 'active',
+        created_by: getCurrentUserName()
       };
 
       await admissionService.createAdmission(admissionData);
