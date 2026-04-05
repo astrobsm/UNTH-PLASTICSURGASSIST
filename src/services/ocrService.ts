@@ -150,7 +150,7 @@ class OCRService {
       await this.worker.setParameters({
         tessedit_pageseg_mode: PSM.AUTO,
         preserve_interword_spaces: '1',
-        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,;:/-+()%<>=[] \n'
+        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,;:/-+()%<>=[]\'"#@!?&_°~ \n'
       });
 
       this.isInitialized = true;
@@ -589,12 +589,8 @@ class OCRService {
   private postProcessText(text: string, documentType: DocumentType): string {
     let processed = text;
 
-    // Clean up common OCR errors
+    // Light cleanup only — avoid aggressive replacements that corrupt handwritten OCR
     processed = processed
-      .replace(/\|/g, 'l')  // Pipe to lowercase L
-      .replace(/0(?=[a-zA-Z])/g, 'O')  // Zero before letters to O
-      .replace(/(?<=[a-zA-Z])0/g, 'o')  // Zero after letters to o
-      .replace(/1(?=[a-zA-Z])/g, 'l')  // One before letters to l
       .replace(/\s+/g, ' ')  // Multiple spaces to single
       .replace(/\n\s*\n\s*\n/g, '\n\n');  // Multiple newlines to double
 

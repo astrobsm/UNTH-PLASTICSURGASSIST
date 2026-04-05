@@ -41,7 +41,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'JSON body required with "image" field' });
     }
 
-    const { image, mimeType: providedMime, documentType, aiPostProcess = true, patientContext } = body;
+    const { image, mimeType: providedMime, documentType, aiPostProcess = true, patientContext, useVisionOCR = false } = body;
 
     if (!image || typeof image !== 'string') {
       return res.status(400).json({ error: '"image" field is required (base64 string)' });
@@ -63,8 +63,6 @@ export default async function handler(req, res) {
     if (!allowed.includes(mimeType)) {
       return res.status(400).json({ error: `Unsupported file type: ${mimeType}. Allowed: ${allowed.join(', ')}` });
     }
-
-    const { image, mimeType: providedMime, documentType, aiPostProcess = true, patientContext, useVisionOCR = false } = body;
 
     // ─── GPT-4o Vision Direct OCR (for handwriting) ──────────────
     const openaiApiKey = process.env.OPENAI_API_KEY;
