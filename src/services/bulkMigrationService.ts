@@ -26,7 +26,7 @@ export interface MigrationResult {
 type ProgressCallback = (progress: MigrationProgress[]) => void;
 
 class BulkMigrationService {
-  private BATCH_SIZE = 10; // Push 10 records at a time to avoid timeouts
+  private BATCH_SIZE = 5; // Push 5 records at a time to avoid pool exhaustion
 
   /**
    * Push ALL local data to the server.
@@ -129,27 +129,55 @@ class BulkMigrationService {
 
           if (changes.length === 0) continue;
 
-          try {
-            const response = await apiClient.post('/sync/push', { changes });
-            if (response?.results) {
-              for (const r of response.results) {
-                if (r.status === 'synced') {
-                  progress.synced++;
-                } else {
-                  progress.errors++;
-                  const errMsg = r.message || r.status;
-                  console.warn(`Sync error for ${migration.name} [${r.entityId}]:`, errMsg);
-                  // Store last error message for display
+          // Retry with backoff for pool exhaustion errors
+          let retries = 0;
+          const maxRetries = 3;
+          let success = false;
+          while (!success && retries <= maxRetries) {
+            try {
+              if (retries > 0) {
+                // Wait longer between retries: 2s, 5s, 10s
+                const delay = retries * 2000 + 1000;
+                console.log(`Retry ${retries}/${maxRetries} for ${migration.name} batch after ${delay}ms...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+              }
+              const response = await apiClient.post('/sync/push', { changes });
+              if (response?.results) {
+                for (const r of response.results) {
+                  if (r.status === 'synced') {
+                    progress.synced++;
+                  } else {
+                    progress.errors++;
+                    const errMsg = r.message || r.status;
+                    console.warn(`Sync error for ${migration.name} [${r.entityId}]:`, errMsg);
+                    // Store last error message for display
+                    (progress as any).lastError = errMsg;
+                  }
+                }
+              } else {
+                progress.synced += changes.length;
+              }
+              success = true;
+            } catch (pushErr: any) {
+              const errMsg = pushErr?.message || String(pushErr);
+              if (errMsg.includes('MaxClients') || errMsg.includes('max clients') || errMsg.includes('pool')) {
+                retries++;
+                if (retries > maxRetries) {
+                  console.error(`Failed to push batch for ${migration.name} after ${maxRetries} retries:`, pushErr);
+                  progress.errors += changes.length;
                   (progress as any).lastError = errMsg;
                 }
+              } else {
+                console.error(`Failed to push batch for ${migration.name}:`, pushErr);
+                progress.errors += changes.length;
+                (progress as any).lastError = errMsg;
+                break;
               }
-            } else {
-              progress.synced += changes.length;
             }
-          } catch (pushErr) {
-            console.error(`Failed to push batch for ${migration.name}:`, pushErr);
-            progress.errors += changes.length;
           }
+
+          // Small delay between batches to let DB connections close
+          await new Promise(resolve => setTimeout(resolve, 300));
 
           onProgress?.(progressList);
         }
@@ -181,10 +209,20 @@ class BulkMigrationService {
   // Each mapper transforms a local IndexedDB record into server-column-compatible payload.
 
   private mapPatient(record: any): any {
+    // Resolve first/last names from all possible local field variants
+    let firstName = record.first_name || record.firstName;
+    let lastName = record.last_name || record.lastName;
+    if (!firstName && !lastName) {
+      const combined = record.full_name || record.fullName || record.name || record.patient_name || record.patientName || '';
+      const parts = combined.trim().split(/\s+/);
+      firstName = parts[0] || null;
+      lastName = parts.slice(1).join(' ') || null;
+    }
     return {
-      hospital_number: record.hospital_number,
-      first_name: record.first_name,
-      last_name: record.last_name,
+      hospital_number: record.hospital_number || record.hospitalNumber,
+      first_name: firstName || 'Unknown',
+      last_name: lastName || 'Patient',
+      full_name: record.full_name || record.fullName || record.name || record.patient_name,
       date_of_birth: record.date_of_birth || record.dob || null,
       gender: record.gender || record.sex || null,
       phone: record.phone || null,

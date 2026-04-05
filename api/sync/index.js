@@ -402,11 +402,26 @@ async function handlePush(data, user, res) {
         try {
           const { hospital_number, first_name, last_name, date_of_birth, gender, phone, email,
                   address, blood_group, allergies, medical_history, primary_diagnosis, 
-                  secondary_diagnoses, ward, bed_number, emergency_contact_name, emergency_contact_phone } = payload;
+                  secondary_diagnoses, ward, bed_number, emergency_contact_name, emergency_contact_phone,
+                  full_name, name, patient_name } = payload;
+          
+          // Resolve first/last names from all possible fields
+          let resolvedFirst = first_name;
+          let resolvedLast = last_name;
+          if (!resolvedFirst && !resolvedLast) {
+            // Try full_name, name, or patient_name and split
+            const combinedName = full_name || name || patient_name || '';
+            const parts = combinedName.trim().split(/\s+/);
+            resolvedFirst = parts[0] || null;
+            resolvedLast = parts.slice(1).join(' ') || null;
+          }
+          // Ensure NOT NULL constraints are satisfied
+          resolvedFirst = resolvedFirst || 'Unknown';
+          resolvedLast = resolvedLast || 'Patient';
           
           // Generate a fallback hospital_number for records that don't have one
           const effectiveHospitalNumber = hospital_number || 
-            `AUTO-${(first_name || 'U').substring(0,3).toUpperCase()}${(last_name || 'N').substring(0,3).toUpperCase()}-${Date.now().toString(36)}`;
+            `AUTO-${resolvedFirst.substring(0,3).toUpperCase()}${resolvedLast.substring(0,3).toUpperCase()}-${Date.now().toString(36)}`;
           
           const existing = await query('SELECT id FROM patients WHERE hospital_number = $1', [effectiveHospitalNumber]);
           if (existing.rows.length > 0) {
@@ -417,7 +432,7 @@ async function handlePush(data, user, res) {
                blood_group = COALESCE($8, blood_group), allergies = COALESCE($9, allergies), 
                medical_history = COALESCE($10, medical_history), primary_diagnosis = COALESCE($11, primary_diagnosis),
                updated_at = CURRENT_TIMESTAMP WHERE hospital_number = $12`,
-              [first_name, last_name, date_of_birth, gender, phone, email, address,
+              [resolvedFirst, resolvedLast, date_of_birth, gender, phone, email, address,
                blood_group, allergies, medical_history, primary_diagnosis, effectiveHospitalNumber]
             );
           } else {
@@ -425,7 +440,7 @@ async function handlePush(data, user, res) {
               `INSERT INTO patients (hospital_number, first_name, last_name, date_of_birth, gender, phone, email, 
                address, blood_group, allergies, medical_history, primary_diagnosis)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-              [effectiveHospitalNumber, first_name, last_name, date_of_birth, gender, phone, email, 
+              [effectiveHospitalNumber, resolvedFirst, resolvedLast, date_of_birth, gender, phone, email, 
                address, blood_group, allergies, medical_history, primary_diagnosis]
             );
           }
