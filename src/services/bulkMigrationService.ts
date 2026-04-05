@@ -216,7 +216,7 @@ class BulkMigrationService {
   private mapAdmission(record: any): any {
     return {
       patient_id: record.patient_id,
-      admission_date: record.admission_date,
+      admission_date: record.admission_date || record.created_at || new Date().toISOString(),
       discharge_date: record.discharge_date || null,
       ward: record.ward || record.ward_location || null,
       bed_number: record.bed_number || null,
@@ -297,7 +297,7 @@ class BulkMigrationService {
 
     return {
       patient_id: record.patient_id,
-      round_date: record.round_date || record.date || null,
+      round_date: record.round_date || record.date || record.created_at || new Date().toISOString().split('T')[0],
       round_type: record.round_type || 'routine',
       findings: JSON.stringify(findings),
       plan: record.follow_up_plan || record.chief_complaint || null,

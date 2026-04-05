@@ -11,7 +11,10 @@ async function getTableColumns(tableName) {
         "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1",
         [tableName]
       );
-      tableColumnsCache[tableName] = new Set(result.rows.map(r => r.column_name));
+      const cols = new Set(result.rows.map(r => r.column_name));
+      // If table doesn't exist (0 columns), return null to skip validation (fail open)
+      // rather than an empty set which would filter out ALL columns
+      tableColumnsCache[tableName] = cols.size > 0 ? cols : null;
     } catch {
       return null; // Fail open — skip validation if schema query fails
     }
@@ -401,32 +404,32 @@ async function handlePush(data, user, res) {
                   address, blood_group, allergies, medical_history, primary_diagnosis, 
                   secondary_diagnoses, ward, bed_number, emergency_contact_name, emergency_contact_phone } = payload;
           
-          if (hospital_number) {
-            const existing = await query('SELECT id FROM patients WHERE hospital_number = $1', [hospital_number]);
-            if (existing.rows.length > 0) {
-              await query(
-                `UPDATE patients SET first_name = COALESCE($1, first_name), last_name = COALESCE($2, last_name), 
-                 date_of_birth = COALESCE($3, date_of_birth), gender = COALESCE($4, gender), 
-                 phone = COALESCE($5, phone), email = COALESCE($6, email), address = COALESCE($7, address),
-                 blood_group = COALESCE($8, blood_group), allergies = COALESCE($9, allergies), 
-                 medical_history = COALESCE($10, medical_history), primary_diagnosis = COALESCE($11, primary_diagnosis),
-                 updated_at = CURRENT_TIMESTAMP WHERE hospital_number = $12`,
-                [first_name, last_name, date_of_birth, gender, phone, email, address,
-                 blood_group, allergies, medical_history, primary_diagnosis, hospital_number]
-              );
-            } else {
-              await query(
-                `INSERT INTO patients (hospital_number, first_name, last_name, date_of_birth, gender, phone, email, 
-                 address, blood_group, allergies, medical_history, primary_diagnosis)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-                [hospital_number, first_name, last_name, date_of_birth, gender, phone, email, 
-                 address, blood_group, allergies, medical_history, primary_diagnosis]
-              );
-            }
-            results.push({ entityId, status: 'synced' });
+          // Generate a fallback hospital_number for records that don't have one
+          const effectiveHospitalNumber = hospital_number || 
+            `AUTO-${(first_name || 'U').substring(0,3).toUpperCase()}${(last_name || 'N').substring(0,3).toUpperCase()}-${Date.now().toString(36)}`;
+          
+          const existing = await query('SELECT id FROM patients WHERE hospital_number = $1', [effectiveHospitalNumber]);
+          if (existing.rows.length > 0) {
+            await query(
+              `UPDATE patients SET first_name = COALESCE($1, first_name), last_name = COALESCE($2, last_name), 
+               date_of_birth = COALESCE($3, date_of_birth), gender = COALESCE($4, gender), 
+               phone = COALESCE($5, phone), email = COALESCE($6, email), address = COALESCE($7, address),
+               blood_group = COALESCE($8, blood_group), allergies = COALESCE($9, allergies), 
+               medical_history = COALESCE($10, medical_history), primary_diagnosis = COALESCE($11, primary_diagnosis),
+               updated_at = CURRENT_TIMESTAMP WHERE hospital_number = $12`,
+              [first_name, last_name, date_of_birth, gender, phone, email, address,
+               blood_group, allergies, medical_history, primary_diagnosis, effectiveHospitalNumber]
+            );
           } else {
-            results.push({ entityId, status: 'skipped', message: 'No hospital_number' });
+            await query(
+              `INSERT INTO patients (hospital_number, first_name, last_name, date_of_birth, gender, phone, email, 
+               address, blood_group, allergies, medical_history, primary_diagnosis)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+              [effectiveHospitalNumber, first_name, last_name, date_of_birth, gender, phone, email, 
+               address, blood_group, allergies, medical_history, primary_diagnosis]
+            );
           }
+          results.push({ entityId, status: 'synced' });
           continue;
         } catch (err) {
           console.error('Error syncing patient:', err);
@@ -517,6 +520,18 @@ async function handlePush(data, user, res) {
             if (!snakePayload.resource_id) snakePayload.resource_id = 'unknown';
           }
 
+          // Ensure NOT NULL date fields have default values
+          if (resolvedEntityType === 'admissions') {
+            if (!snakePayload.admission_date) {
+              snakePayload.admission_date = snakePayload.created_at || new Date().toISOString();
+            }
+          }
+          if (resolvedEntityType === 'ward_rounds') {
+            if (!snakePayload.round_date) {
+              snakePayload.round_date = snakePayload.created_at || new Date().toISOString().split('T')[0];
+            }
+          }
+
           // Coerce patient_id to integer for tables with INTEGER REFERENCES patients(id)
           const integerPatientIdTables = [
             'dvt_assessments', 'pressure_sore_assessments', 'nutritional_assessments',
@@ -554,16 +569,104 @@ async function handlePush(data, user, res) {
           // Dynamically validate columns against the actual database schema
           // This prevents INSERT failures from unknown columns for ALL tables
           let columns = Object.keys(snakePayload).filter(k => !skipKeys.includes(k));
-          const validColumns = await getTableColumns(resolvedEntityType);
+          let validColumns = await getTableColumns(resolvedEntityType);
           if (validColumns) {
             columns = columns.filter(k => validColumns.has(k));
           }
+          
+          // Ensure the table exists — auto-create if needed
+          if (validColumns === null) {
+            // Table might not exist — try creating critical missing tables
+            const createTableSQL = {
+              'substance_use_assessments': `CREATE TABLE IF NOT EXISTS substance_use_assessments (
+                id VARCHAR(255) PRIMARY KEY,
+                patient_id VARCHAR(255),
+                patient_name VARCHAR(255),
+                hospital_number VARCHAR(100),
+                hospital_id VARCHAR(100),
+                primary_substance VARCHAR(100),
+                substances JSONB DEFAULT '[]',
+                poly_substance_use BOOLEAN DEFAULT FALSE,
+                addiction_severity_score JSONB DEFAULT '{}',
+                withdrawal_risk_prediction JSONB DEFAULT '{}',
+                care_setting_decision JSONB DEFAULT '{}',
+                pain_management_support JSONB,
+                comorbidities JSONB DEFAULT '[]',
+                comorbidity_modifications JSONB DEFAULT '[]',
+                social_factors JSONB DEFAULT '{}',
+                previous_detox_attempts INTEGER DEFAULT 0,
+                previous_treatment_history TEXT,
+                consent_obtained BOOLEAN DEFAULT FALSE,
+                consent_document JSONB,
+                status VARCHAR(50) DEFAULT 'initial_assessment',
+                assessed_by VARCHAR(255),
+                assessment_date TIMESTAMP,
+                audit_log JSONB DEFAULT '[]',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+              )`,
+              'detox_monitoring_records': `CREATE TABLE IF NOT EXISTS detox_monitoring_records (
+                id VARCHAR(255) PRIMARY KEY,
+                assessment_id VARCHAR(255),
+                patient_id VARCHAR(255),
+                monitoring_date TIMESTAMP,
+                vital_signs JSONB DEFAULT '{}',
+                withdrawal_score JSONB DEFAULT '{}',
+                symptoms JSONB DEFAULT '[]',
+                medications_administered JSONB DEFAULT '[]',
+                clinical_notes TEXT,
+                recorded_by VARCHAR(255),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+              )`,
+              'detox_follow_ups': `CREATE TABLE IF NOT EXISTS detox_follow_ups (
+                id VARCHAR(255) PRIMARY KEY,
+                assessment_id VARCHAR(255),
+                patient_id VARCHAR(255),
+                follow_up_date TIMESTAMP,
+                status VARCHAR(50),
+                notes TEXT,
+                next_appointment TIMESTAMP,
+                created_by VARCHAR(255),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+              )`,
+              'substance_use_clinical_summaries': `CREATE TABLE IF NOT EXISTS substance_use_clinical_summaries (
+                id VARCHAR(255) PRIMARY KEY,
+                assessment_id VARCHAR(255),
+                patient_id VARCHAR(255),
+                summary_type VARCHAR(100),
+                content TEXT,
+                created_by VARCHAR(255),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+              )`
+            };
+            if (createTableSQL[resolvedEntityType]) {
+              try {
+                await query(createTableSQL[resolvedEntityType]);
+                // Clear cache so we re-query columns
+                delete tableColumnsCache[resolvedEntityType];
+                // Re-fetch columns after table creation
+                const newCols = await getTableColumns(resolvedEntityType);
+                if (newCols) {
+                  validColumns = newCols;
+                  columns = Object.keys(snakePayload).filter(k => !skipKeys.includes(k));
+                  columns = columns.filter(k => newCols.has(k));
+                }
+              } catch (createErr) {
+                console.error(`Failed to auto-create table ${resolvedEntityType}:`, createErr.message);
+              }
+            }
+          }
+
+          // Compute values and placeholders AFTER table creation and column validation
           const values = columns.map(k => {
             const v = snakePayload[k];
             return (v !== null && typeof v === 'object') ? JSON.stringify(v) : v;
           });
           const placeholders = columns.map((_, i) => `$${i + 1}`).join(', ');
-          
+
           // Check if record exists
           let existing = null;
           
@@ -571,7 +674,13 @@ async function handlePush(data, user, res) {
             // VARCHAR id tables: look up by id directly
             const existingId = snakePayload.server_id || snakePayload.id;
             if (existingId) {
-              existing = await query(`SELECT id FROM ${resolvedEntityType} WHERE id = $1`, [existingId]);
+              try {
+                existing = await query(`SELECT id FROM ${resolvedEntityType} WHERE id = $1`, [existingId]);
+              } catch (lookupErr) {
+                // Table might not exist — will fail at INSERT with clearer message
+                console.error(`Lookup failed for ${resolvedEntityType}:`, lookupErr.message);
+                existing = null;
+              }
             }
           }
           
@@ -606,9 +715,13 @@ async function handlePush(data, user, res) {
           
           if (existing && existing.rows.length > 0) {
             // Update — quote column names to handle reserved words like "timestamp"
+            // Only append updated_at = CURRENT_TIMESTAMP if the table has that column AND it's not already in the payload
+            const hasUpdatedAtColumn = validColumns ? validColumns.has('updated_at') : true;
+            const payloadHasUpdatedAt = columns.includes('updated_at');
+            const updatedAtSuffix = (hasUpdatedAtColumn && !payloadHasUpdatedAt) ? ', updated_at = CURRENT_TIMESTAMP' : '';
             const setClause = columns.map((col, i) => `"${col}" = $${i + 1}`).join(', ');
             await query(
-              `UPDATE ${resolvedEntityType} SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = $${columns.length + 1}`,
+              `UPDATE ${resolvedEntityType} SET ${setClause}${updatedAtSuffix} WHERE id = $${columns.length + 1}`,
               [...values, existing.rows[0].id]
             );
           } else {
