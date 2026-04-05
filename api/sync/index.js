@@ -461,9 +461,35 @@ async function handlePush(data, user, res) {
               snakePayload.assessment_date = snakePayload.assessed_at;
               delete snakePayload.assessed_at;
             }
+            if (!snakePayload.assessment_date) {
+              snakePayload.assessment_date = snakePayload.created_at || snakePayload.updated_at || new Date().toISOString();
+            }
             if (snakePayload.surgery_booking_id && !snakePayload.surgery_id) {
               snakePayload.surgery_id = snakePayload.surgery_booking_id;
               delete snakePayload.surgery_booking_id;
+            }
+            // Map local risk assessment objects to PostgreSQL JSONB columns
+            if (snakePayload.cardiovascular_risk) {
+              snakePayload.cardiovascular = snakePayload.cardiovascular_risk;
+              delete snakePayload.cardiovascular_risk;
+            }
+            if (snakePayload.bleeding_risk) {
+              snakePayload.hematologic = snakePayload.bleeding_risk;
+              delete snakePayload.bleeding_risk;
+            }
+            // Pack extra local fields into notes JSONB so data is not lost
+            const extraFields = ['dvt_risk', 'pressure_sore_risk', 'comorbidities_medications',
+              'consent_document', 'payment_evidence', 'insurance_covered',
+              'comprehensive_summary', 'preop_instructions'];
+            const extras = {};
+            for (const f of extraFields) {
+              if (snakePayload[f] !== undefined) {
+                extras[f] = snakePayload[f];
+                delete snakePayload[f];
+              }
+            }
+            if (Object.keys(extras).length > 0) {
+              snakePayload.notes = JSON.stringify(extras);
             }
           }
 
@@ -507,7 +533,29 @@ async function handlePush(data, user, res) {
           // Build dynamic upsert query - filter out internal fields and local-only id for SERIAL tables
           const skipKeys = ['server_id', 'synced', 'deleted', 'local_id'];
           if (isSerialKey) skipKeys.push('id'); // don't use local auto-increment id
-          const columns = Object.keys(snakePayload).filter(k => !skipKeys.includes(k));
+
+          // Define allowed columns per table to prevent INSERT failures from unknown columns
+          const tableColumnAllowlist = {
+            'preoperative_assessments': [
+              'patient_id', 'surgery_id', 'hospital_number', 'patient_name',
+              'assessment_date', 'asa_class', 'mallampati_score', 'airway_assessment',
+              'cardiovascular', 'respiratory', 'renal', 'hepatic', 'endocrine',
+              'hematologic', 'current_medications', 'allergies', 'fasting_status',
+              'consent_obtained', 'blood_available', 'icu_bed_reserved',
+              'fitness_for_surgery', 'anesthesia_plan', 'assessed_by', 'notes',
+              'created_at', 'updated_at'
+            ],
+            'audit_logs': [
+              'user_id', 'user_name', 'user_role', 'action', 'resource_type',
+              'resource_id', 'resource_identifier', 'details', 'ip_address', 'timestamp'
+            ]
+          };
+          const allowlist = tableColumnAllowlist[resolvedEntityType];
+
+          let columns = Object.keys(snakePayload).filter(k => !skipKeys.includes(k));
+          if (allowlist) {
+            columns = columns.filter(k => allowlist.includes(k));
+          }
           const values = columns.map(k => {
             const v = snakePayload[k];
             return (v !== null && typeof v === 'object') ? JSON.stringify(v) : v;
@@ -555,16 +603,17 @@ async function handlePush(data, user, res) {
           }
           
           if (existing && existing.rows.length > 0) {
-            // Update
-            const setClause = columns.map((col, i) => `${col} = $${i + 1}`).join(', ');
+            // Update — quote column names to handle reserved words like "timestamp"
+            const setClause = columns.map((col, i) => `"${col}" = $${i + 1}`).join(', ');
             await query(
               `UPDATE ${resolvedEntityType} SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = $${columns.length + 1}`,
               [...values, existing.rows[0].id]
             );
           } else {
             // Insert (for SERIAL tables, PostgreSQL auto-generates the id)
+            const quotedColumns = columns.map(c => `"${c}"`).join(', ');
             await query(
-              `INSERT INTO ${resolvedEntityType} (${columns.join(', ')}) VALUES (${placeholders})`,
+              `INSERT INTO ${resolvedEntityType} (${quotedColumns}) VALUES (${placeholders})`,
               values
             );
           }
