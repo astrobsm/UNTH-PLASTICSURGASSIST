@@ -52,7 +52,8 @@ export type SyncableEntity =
   | 'cbt_attempts'
   | 'substance_use_assessments'
   | 'detox_monitoring_records'
-  | 'detox_follow_ups';
+  | 'detox_follow_ups'
+  | 'substance_use_clinical_summaries';
 
 // Sync status for each entity
 interface EntitySyncStatus {
@@ -122,7 +123,8 @@ class DataSyncService {
     cbt_attempts: '/sync/cbt-attempts',
     substance_use_assessments: '/sync/substance-use-assessments',
     detox_monitoring_records: '/sync/detox-monitoring-records',
-    detox_follow_ups: '/sync/detox-follow-ups'
+    detox_follow_ups: '/sync/detox-follow-ups',
+    substance_use_clinical_summaries: '/sync/substance-use-clinical-summaries'
   };
 
   // Entity to IndexedDB table mapping
@@ -155,7 +157,8 @@ class DataSyncService {
     cbt_attempts: 'cbt_attempts',
     substance_use_assessments: 'substance_use_assessments',
     detox_monitoring_records: 'detox_monitoring_records',
-    detox_follow_ups: 'detox_follow_ups'
+    detox_follow_ups: 'detox_follow_ups',
+    substance_use_clinical_summaries: 'substance_use_clinical_summaries'
   };
 
   constructor() {
@@ -183,7 +186,8 @@ class DataSyncService {
       'nutritional_assessments', 'procedures', 'who_safety_checklists',
       'progress_notes',
       'shopping_lists', 'call_duty_roster', 'clinic_duty_logs', 'cbt_attempts',
-      'substance_use_assessments', 'detox_monitoring_records', 'detox_follow_ups'
+      'substance_use_assessments', 'detox_monitoring_records', 'detox_follow_ups',
+      'substance_use_clinical_summaries'
     ];
 
     entities.forEach(entity => {
@@ -522,7 +526,8 @@ class DataSyncService {
       'cbt_attempts',
       'substance_use_assessments',
       'detox_monitoring_records',
-      'detox_follow_ups'
+      'detox_follow_ups',
+      'substance_use_clinical_summaries'
     ];
 
     for (const entity of entitiesToPull) {

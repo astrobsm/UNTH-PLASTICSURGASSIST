@@ -67,6 +67,10 @@ class BulkMigrationService {
       { name: 'education_user_progress', table: () => db.user_progress, mapper: this.mapUserProgress, entityType: 'education_user_progress' },
       { name: 'audit_logs', table: () => db.audit_logs, mapper: this.mapDirect },
       { name: 'user_activities', table: () => db.user_activities, mapper: this.mapDirect },
+      { name: 'substance_use_assessments', table: () => db.substance_use_assessments, mapper: this.mapDirect },
+      { name: 'detox_monitoring_records', table: () => db.detox_monitoring_records, mapper: this.mapDirect },
+      { name: 'detox_follow_ups', table: () => db.detox_follow_ups, mapper: this.mapDirect },
+      { name: 'substance_use_clinical_summaries', table: () => db.substance_use_clinical_summaries, mapper: this.mapDirect },
     ];
 
     const progressList: MigrationProgress[] = tableMigrations.map(t => ({
