@@ -455,11 +455,52 @@ async function handlePush(data, user, res) {
             snakePayload[toSnakeCase(key)] = val;
           }
 
+          // Fix column name mismatches between local IndexedDB and PostgreSQL
+          if (resolvedEntityType === 'preoperative_assessments') {
+            if (snakePayload.assessed_at && !snakePayload.assessment_date) {
+              snakePayload.assessment_date = snakePayload.assessed_at;
+              delete snakePayload.assessed_at;
+            }
+            if (snakePayload.surgery_booking_id && !snakePayload.surgery_id) {
+              snakePayload.surgery_id = snakePayload.surgery_booking_id;
+              delete snakePayload.surgery_booking_id;
+            }
+          }
+
+          // Ensure audit_logs NOT NULL fields have default values
+          if (resolvedEntityType === 'audit_logs') {
+            if (!snakePayload.action) snakePayload.action = 'unknown';
+            if (!snakePayload.resource_type) snakePayload.resource_type = 'unknown';
+            if (!snakePayload.resource_id) snakePayload.resource_id = 'unknown';
+          }
+
+          // Coerce patient_id to integer for tables with INTEGER REFERENCES patients(id)
+          const integerPatientIdTables = [
+            'dvt_assessments', 'pressure_sore_assessments', 'nutritional_assessments',
+            'diabetic_foot_assessments', 'preoperative_assessments', 'blood_transfusions',
+            'burn_patients', 'procedures', 'who_safety_checklists',
+            'wound_care_records', 'ward_rounds', 'admissions', 'surgeries',
+            'treatment_plans', 'prescriptions', 'lab_orders', 'discharge_summaries',
+            'progress_notes', 'sjs_assessments'
+          ];
+          if (integerPatientIdTables.includes(resolvedEntityType) && snakePayload.patient_id) {
+            const parsed = parseInt(snakePayload.patient_id, 10);
+            if (!isNaN(parsed)) {
+              snakePayload.patient_id = parsed;
+            }
+          }
+
           // Tables with SERIAL (integer) primary keys - local auto-increment ids should NOT be used for lookup
           const serialKeyTables = [
             'wound_care_records', 'ward_rounds', 'discharge_summaries',
             'admissions', 'surgeries', 'treatment_plans', 'prescriptions', 'lab_orders',
-            'call_duty_roster', 'clinic_duty_logs'
+            'call_duty_roster', 'clinic_duty_logs',
+            'dvt_assessments', 'pressure_sore_assessments', 'nutritional_assessments',
+            'diabetic_foot_assessments', 'preoperative_assessments', 'audit_logs',
+            'blood_transfusions', 'burn_patients', 'procedures',
+            'who_safety_checklists', 'progress_notes', 'sjs_assessments',
+            'investigation_uploads', 'notice_board', 'patient_transfers',
+            'ho_tracking_assignments', 'ho_task_logs'
           ];
           const isSerialKey = serialKeyTables.includes(resolvedEntityType);
 
@@ -491,7 +532,7 @@ async function handlePush(data, user, res) {
               'pressure_sore_assessments': 'assessment_date',
               'nutritional_assessments': 'assessment_date',
               'diabetic_foot_assessments': 'assessment_date',
-              'preoperative_assessments': 'assessed_at',
+              'preoperative_assessments': 'assessment_date',
               'blood_transfusions': 'transfusion_date',
               'burn_patients': 'admission_date',
               'procedures': 'scheduled_date',
