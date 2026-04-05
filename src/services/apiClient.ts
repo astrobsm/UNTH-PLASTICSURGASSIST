@@ -458,6 +458,13 @@ class ApiClient {
       body: JSON.stringify({ username: email, password })
     });
     this.setToken(data.token);
+
+    // Log login activity for training tracking (non-blocking)
+    this.request('/activities?action=login', {
+      method: 'POST',
+      body: JSON.stringify({})
+    }).catch(() => {});
+
     return data;
   }
 
