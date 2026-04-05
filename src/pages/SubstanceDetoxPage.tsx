@@ -159,13 +159,10 @@ export default function SubstanceDetoxPage() {
             createdAt: a.created_at || a.createdAt,
             updatedAt: a.updated_at || a.updatedAt,
           }));
-          // Merge server items into local DB
+          // Merge server items into local DB — always upsert to ensure camelCase fields overwrite any snake_case data
           for (const item of serverItems) {
             try {
-              const exists = await db.substance_use_assessments.get(item.id);
-              if (!exists) {
-                await db.substance_use_assessments.put({ ...item, synced: true } as any);
-              }
+              await db.substance_use_assessments.put({ ...item, synced: true } as any);
             } catch { /* skip duplicates */ }
           }
         }

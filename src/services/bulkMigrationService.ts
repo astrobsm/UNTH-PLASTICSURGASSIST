@@ -137,7 +137,10 @@ class BulkMigrationService {
                   progress.synced++;
                 } else {
                   progress.errors++;
-                  console.warn(`Sync error for ${migration.name}:`, r.message || r.status);
+                  const errMsg = r.message || r.status;
+                  console.warn(`Sync error for ${migration.name} [${r.entityId}]:`, errMsg);
+                  // Store last error message for display
+                  (progress as any).lastError = errMsg;
                 }
               }
             } else {

@@ -555,16 +555,21 @@ export default function Settings() {
               <div className="mt-3 bg-gray-50 rounded-lg p-3 max-h-48 overflow-y-auto">
                 <p className="text-xs font-medium text-gray-600 mb-2">Migration Progress:</p>
                 {migrationProgress.filter(p => p.total > 0).map(p => (
-                  <div key={p.table} className="flex items-center justify-between text-xs py-1">
-                    <span className="text-gray-700">{p.table}</span>
-                    <span className={`font-medium ${
-                      p.status === 'done' ? 'text-green-600' :
-                      p.status === 'error' ? 'text-red-600' :
-                      p.status === 'in-progress' ? 'text-blue-600' : 'text-gray-400'
-                    }`}>
-                      {p.synced}/{p.total}{p.errors > 0 ? ` (${p.errors} err)` : ''}
-                      {p.status === 'in-progress' ? ' ⏳' : p.status === 'done' ? ' ✅' : p.status === 'error' ? ' ❌' : ''}
-                    </span>
+                  <div key={p.table} className="flex flex-col text-xs py-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-700">{p.table}</span>
+                      <span className={`font-medium ${
+                        p.status === 'done' ? 'text-green-600' :
+                        p.status === 'error' ? 'text-red-600' :
+                        p.status === 'in-progress' ? 'text-blue-600' : 'text-gray-400'
+                      }`}>
+                        {p.synced}/{p.total}{p.errors > 0 ? ` (${p.errors} err)` : ''}
+                        {p.status === 'in-progress' ? ' ⏳' : p.status === 'done' ? ' ✅' : p.status === 'error' ? ' ❌' : ''}
+                      </span>
+                    </div>
+                    {p.errors > 0 && (p as any).lastError && (
+                      <span className="text-red-500 text-[10px] truncate mt-0.5">{(p as any).lastError}</span>
+                    )}
                   </div>
                 ))}
               </div>

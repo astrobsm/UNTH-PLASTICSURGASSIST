@@ -2,6 +2,23 @@
 import { query } from '../_lib/db.js';
 import { cors, authenticateRequest } from '../_lib/auth.js';
 
+// Cache table columns to avoid repeated information_schema queries
+const tableColumnsCache = {};
+async function getTableColumns(tableName) {
+  if (!tableColumnsCache[tableName]) {
+    try {
+      const result = await query(
+        "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1",
+        [tableName]
+      );
+      tableColumnsCache[tableName] = new Set(result.rows.map(r => r.column_name));
+    } catch {
+      return null; // Fail open — skip validation if schema query fails
+    }
+  }
+  return tableColumnsCache[tableName];
+}
+
 export default async function handler(req, res) {
   if (cors(req, res)) return;
 
@@ -534,27 +551,12 @@ async function handlePush(data, user, res) {
           const skipKeys = ['server_id', 'synced', 'deleted', 'local_id'];
           if (isSerialKey) skipKeys.push('id'); // don't use local auto-increment id
 
-          // Define allowed columns per table to prevent INSERT failures from unknown columns
-          const tableColumnAllowlist = {
-            'preoperative_assessments': [
-              'patient_id', 'surgery_id', 'hospital_number', 'patient_name',
-              'assessment_date', 'asa_class', 'mallampati_score', 'airway_assessment',
-              'cardiovascular', 'respiratory', 'renal', 'hepatic', 'endocrine',
-              'hematologic', 'current_medications', 'allergies', 'fasting_status',
-              'consent_obtained', 'blood_available', 'icu_bed_reserved',
-              'fitness_for_surgery', 'anesthesia_plan', 'assessed_by', 'notes',
-              'created_at', 'updated_at'
-            ],
-            'audit_logs': [
-              'user_id', 'user_name', 'user_role', 'action', 'resource_type',
-              'resource_id', 'resource_identifier', 'details', 'ip_address', 'timestamp'
-            ]
-          };
-          const allowlist = tableColumnAllowlist[resolvedEntityType];
-
+          // Dynamically validate columns against the actual database schema
+          // This prevents INSERT failures from unknown columns for ALL tables
           let columns = Object.keys(snakePayload).filter(k => !skipKeys.includes(k));
-          if (allowlist) {
-            columns = columns.filter(k => allowlist.includes(k));
+          const validColumns = await getTableColumns(resolvedEntityType);
+          if (validColumns) {
+            columns = columns.filter(k => validColumns.has(k));
           }
           const values = columns.map(k => {
             const v = snakePayload[k];
@@ -620,8 +622,8 @@ async function handlePush(data, user, res) {
           results.push({ entityId, status: 'synced' });
           continue;
         } catch (err) {
-          console.error(`Error syncing ${entityType}:`, err);
-          results.push({ entityId, status: 'error', message: err.message });
+          console.error(`Error syncing ${entityType} (id: ${entityId}):`, err.message, err.detail || '', err.where || '');
+          results.push({ entityId, status: 'error', message: `${err.message}${err.detail ? ' | ' + err.detail : ''}` });
           continue;
         }
       }
