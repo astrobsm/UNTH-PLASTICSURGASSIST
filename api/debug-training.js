@@ -9,7 +9,7 @@ export default async function handler(req, res) {
   const mode = req.query?.mode || 'raw';
 
   try {
-    const debug = {};
+    const debug = { version: 'v5-metrics', mode };
 
     // Get trainees
     const trainees = await query(`
