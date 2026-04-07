@@ -16,6 +16,8 @@ export default async function handler(req, res) {
   const userRole = authResult.user.role;
 
   try {
+    // Ensure required columns exist
+    await ensureWardRoundColumns();
     switch (method) {
       case 'GET':
         return await handleGet(req, res, userId, userRole);
@@ -399,4 +401,20 @@ async function logActivity(userId, activityType, description, metadata = {}) {
      VALUES ($1, $2, $3, $4, $5)`,
     [userId, activityType, description, points[activityType] || 0, JSON.stringify(metadata)]
   );
+}
+
+let columnsEnsured = false;
+async function ensureWardRoundColumns() {
+  if (columnsEnsured) return;
+  try {
+    await query(`ALTER TABLE ward_rounds ADD COLUMN IF NOT EXISTS round_date DATE DEFAULT CURRENT_DATE`).catch(() => {});
+    await query(`ALTER TABLE ward_rounds ADD COLUMN IF NOT EXISTS round_type VARCHAR(50) DEFAULT 'routine'`).catch(() => {});
+    await query(`ALTER TABLE ward_rounds ADD COLUMN IF NOT EXISTS consultant_reviewed BOOLEAN DEFAULT false`).catch(() => {});
+    await query(`ALTER TABLE ward_rounds ADD COLUMN IF NOT EXISTS user_id INTEGER`).catch(() => {});
+    await query(`ALTER TABLE ward_rounds ADD COLUMN IF NOT EXISTS admission_id INTEGER`).catch(() => {});
+    await query(`ALTER TABLE ward_rounds ADD COLUMN IF NOT EXISTS created_by INTEGER`).catch(() => {});
+    columnsEnsured = true;
+  } catch (e) {
+    console.error('ensureWardRoundColumns error:', e.message);
+  }
 }

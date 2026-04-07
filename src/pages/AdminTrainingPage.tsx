@@ -370,7 +370,7 @@ const AdminTrainingPage: React.FC = () => {
                       <tr key={a.id} className="border-b last:border-0">
                         <td className="py-2 pr-4 font-medium">Test {a.test_number || a.testNumber}</td>
                         <td className="py-2 pr-4">{a.score}/{a.total_marks || a.totalMarks}</td>
-                        <td className={`py-2 pr-4 font-semibold ${(a.percentage || 0) >= 75 ? 'text-green-600' : 'text-red-600'}`}>{(a.percentage || 0).toFixed(0)}%</td>
+                        <td className={`py-2 pr-4 font-semibold ${Number(a.percentage || 0) >= 75 ? 'text-green-600' : 'text-red-600'}`}>{Number(a.percentage || 0).toFixed(0)}%</td>
                         <td className="py-2 pr-4">{a.passed ? <CheckCircle className="w-4 h-4 text-green-500" /> : <XCircle className="w-4 h-4 text-red-500" />}</td>
                         <td className="py-2 text-gray-500">{a.created_at ? new Date(a.created_at).toLocaleDateString() : '-'}</td>
                       </tr>
@@ -588,7 +588,7 @@ const AdminTrainingPage: React.FC = () => {
                         </td>
                         <td className="px-4 py-3 text-center hidden lg:table-cell">
                           <div className="text-sm">{t.metrics.cbtTestsCompleted}/{t.requirements.cbtTests}</div>
-                          <div className="text-xs text-gray-400">{t.metrics.cbtAvgScore.toFixed(0)}% avg</div>
+                          <div className="text-xs text-gray-400">{Number(t.metrics.cbtAvgScore).toFixed(0)}% avg</div>
                         </td>
                         <td className="px-4 py-3 text-center hidden lg:table-cell">
                           <div className="text-sm">{t.metrics.patientEntries}/{t.requirements.patientEntries}</div>
@@ -634,10 +634,10 @@ const AdminTrainingPage: React.FC = () => {
                         <tr>
                           <td colSpan={8} className="px-4 py-4 bg-gray-50">
                             <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                              <MiniMetric label="CBT Score" value={`${t.metrics.cbtAvgScore.toFixed(0)}%`} sub={`${t.metrics.cbtTestsCompleted}/${t.requirements.cbtTests} tests`} />
-                              <MiniMetric label="Patient Care" value={`${t.metrics.patientScore.toFixed(0)}%`} sub={`${t.metrics.patientEntries}/${t.requirements.patientEntries} entries`} />
-                              <MiniMetric label="Duties" value={`${t.metrics.dutyScore.toFixed(0)}%`} sub={`${t.metrics.dutiesCompleted}/${t.requirements.duties} done`} />
-                              <MiniMetric label="Attendance" value={`${t.metrics.attendanceScore.toFixed(0)}%`} sub={`${t.metrics.loginDays}/${t.requirements.loginDays} days`} />
+                              <MiniMetric label="CBT Score" value={`${Number(t.metrics.cbtAvgScore).toFixed(0)}%`} sub={`${t.metrics.cbtTestsCompleted}/${t.requirements.cbtTests} tests`} />
+                              <MiniMetric label="Patient Care" value={`${Number(t.metrics.patientScore).toFixed(0)}%`} sub={`${t.metrics.patientEntries}/${t.requirements.patientEntries} entries`} />
+                              <MiniMetric label="Duties" value={`${Number(t.metrics.dutyScore).toFixed(0)}%`} sub={`${t.metrics.dutiesCompleted}/${t.requirements.duties} done`} />
+                              <MiniMetric label="Attendance" value={`${Number(t.metrics.attendanceScore).toFixed(0)}%`} sub={`${t.metrics.loginDays}/${t.requirements.loginDays} days`} />
                               <MiniMetric label="CME Topics" value={`${t.metrics.cmeTopicsCompleted}`} sub={`of ${t.requirements.cmeTopics} topics`} />
                             </div>
                             <div className="mt-3 flex flex-wrap gap-2">
@@ -906,7 +906,7 @@ const MetricCard: React.FC<{ icon: React.ReactNode; label: string; value: string
     <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
       <div className={`h-full rounded-full bg-${color}-500 transition-all duration-500`} style={{ width: `${Math.min(100, score)}%` }} />
     </div>
-    <div className="text-xs text-gray-400 mt-1">{score.toFixed(0)}%</div>
+    <div className="text-xs text-gray-400 mt-1">{Number(score).toFixed(0)}%</div>
   </div>
 );
 
