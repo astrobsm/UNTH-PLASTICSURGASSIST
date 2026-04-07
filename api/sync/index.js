@@ -431,17 +431,18 @@ async function handlePush(data, user, res) {
                phone = COALESCE($5, phone), email = COALESCE($6, email), address = COALESCE($7, address),
                blood_group = COALESCE($8, blood_group), allergies = COALESCE($9, allergies), 
                medical_history = COALESCE($10, medical_history), primary_diagnosis = COALESCE($11, primary_diagnosis),
+               created_by = COALESCE(created_by, $13),
                updated_at = CURRENT_TIMESTAMP WHERE hospital_number = $12`,
               [resolvedFirst, resolvedLast, date_of_birth, gender, phone, email, address,
-               blood_group, allergies, medical_history, primary_diagnosis, effectiveHospitalNumber]
+               blood_group, allergies, medical_history, primary_diagnosis, effectiveHospitalNumber, user.id]
             );
           } else {
             await query(
               `INSERT INTO patients (hospital_number, first_name, last_name, date_of_birth, gender, phone, email, 
-               address, blood_group, allergies, medical_history, primary_diagnosis)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+               address, blood_group, allergies, medical_history, primary_diagnosis, created_by)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
               [effectiveHospitalNumber, resolvedFirst, resolvedLast, date_of_birth, gender, phone, email, 
-               address, blood_group, allergies, medical_history, primary_diagnosis]
+               address, blood_group, allergies, medical_history, primary_diagnosis, user.id]
             );
           }
           results.push({ entityId, status: 'synced' });
@@ -488,6 +489,17 @@ async function handlePush(data, user, res) {
           const snakePayload = {};
           for (const [key, val] of Object.entries(payload)) {
             snakePayload[toSnakeCase(key)] = val;
+          }
+
+          // Inject created_by from authenticated user if not present in payload
+          // This ensures clinical records are attributed to the user who synced them
+          const tablesWithCreatedBy = [
+            'treatment_plans', 'admissions', 'prescriptions', 'ward_rounds', 'lab_orders',
+            'surgeries', 'wound_care_records', 'discharge_summaries', 'procedures',
+            'progress_notes', 'who_safety_checklists'
+          ];
+          if (tablesWithCreatedBy.includes(resolvedEntityType) && !snakePayload.created_by && user.id) {
+            snakePayload.created_by = user.id;
           }
 
           // Fix column name mismatches between local IndexedDB and PostgreSQL

@@ -120,7 +120,7 @@ async function handleGet(req, res, adminUser) {
       const enriched = [];
       for (const t of trainees.rows) {
         const traineeLevel = roleToLevel(t.role);
-        const metrics = await getTraineeMetrics(t.id, traineeLevel);
+        const metrics = await getTraineeMetrics(t.id, traineeLevel, t.full_name, t.username);
         const rotation = await getActiveRotation(t.id);
         const reqs = getRequirements(traineeLevel);
         const eligibility = computeEligibility(metrics, reqs);
@@ -149,7 +149,7 @@ async function handleGet(req, res, adminUser) {
 
       const t = user.rows[0];
       const traineeLevel = level || roleToLevel(t.role);
-      const metrics = await getTraineeMetrics(t.id, traineeLevel);
+      const metrics = await getTraineeMetrics(t.id, traineeLevel, t.full_name, t.username);
       const rotation = await getActiveRotation(t.id);
       const reqs = getRequirements(traineeLevel);
       const eligibility = computeEligibility(metrics, reqs);
@@ -222,7 +222,7 @@ async function handleGet(req, res, adminUser) {
     }
 
     case 'debug-metrics': {
-      // Temporary debug endpoint to diagnose 0% issue
+      // Debug endpoint to diagnose training metrics issues
       const trainees = await query(`
         SELECT id, username, full_name, role FROM users
         WHERE role IN ('intern', 'registrar', 'senior_registrar', 'house_officer', 'junior_resident', 'senior_resident')
@@ -234,35 +234,46 @@ async function handleGet(req, res, adminUser) {
         const uid = String(t.id);
         const checks = {};
         
+        // Clinical tables with created_by (INTEGER)
         try { const r = await query(`SELECT COUNT(*) as cnt FROM patients WHERE created_by = $1`, [t.id]); checks.patients_created_by = parseInt(r.rows[0].cnt); } catch(e) { checks.patients_created_by = `ERR: ${e.message}`; }
         try { const r = await query(`SELECT COUNT(*) as cnt FROM treatment_plans WHERE created_by = $1`, [t.id]); checks.treatment_plans_created_by = parseInt(r.rows[0].cnt); } catch(e) { checks.treatment_plans_created_by = `ERR: ${e.message}`; }
         try { const r = await query(`SELECT COUNT(*) as cnt FROM admissions WHERE created_by = $1`, [t.id]); checks.admissions_created_by = parseInt(r.rows[0].cnt); } catch(e) { checks.admissions_created_by = `ERR: ${e.message}`; }
-        try { const r = await query(`SELECT COUNT(*) as cnt FROM prescriptions WHERE created_by = $1`, [t.id]); checks.prescriptions_created_by = parseInt(r.rows[0].cnt); } catch(e) { checks.prescriptions_created_by = `ERR: ${e.message}`; }
-        try { const r = await query(`SELECT COUNT(*) as cnt FROM ward_rounds WHERE created_by = $1`, [t.id]); checks.ward_rounds_created_by = parseInt(r.rows[0].cnt); } catch(e) { checks.ward_rounds_created_by = `ERR: ${e.message}`; }
-        try { const r = await query(`SELECT COUNT(*) as cnt FROM lab_orders WHERE created_by = $1`, [t.id]); checks.lab_orders_created_by = parseInt(r.rows[0].cnt); } catch(e) { checks.lab_orders_created_by = `ERR: ${e.message}`; }
-        try { const r = await query(`SELECT COUNT(*) as cnt FROM activity_logs WHERE user_id = $1`, [t.id]); checks.activity_logs_int = parseInt(r.rows[0].cnt); } catch(e) { checks.activity_logs_int = `ERR: ${e.message}`; }
-        try { const r = await query(`SELECT COUNT(*) as cnt FROM audit_logs WHERE user_id = $1`, [uid]); checks.audit_logs_str = parseInt(r.rows[0].cnt); } catch(e) { checks.audit_logs_str = `ERR: ${e.message}`; }
-        try { const r = await query(`SELECT COUNT(*) as cnt FROM cbt_attempts WHERE user_id = $1`, [t.id]); checks.cbt_attempts = parseInt(r.rows[0].cnt); } catch(e) { checks.cbt_attempts = `ERR: ${e.message}`; }
-        try { const r = await query(`SELECT COUNT(*) as cnt FROM training_progress WHERE user_id = $1`, [t.id]); checks.training_progress = parseInt(r.rows[0].cnt); } catch(e) { checks.training_progress = `ERR: ${e.message}`; }
+
+        // Audit logs with user_id VARCHAR - try both ID and name matching
+        try { const r = await query(`SELECT COUNT(*) as cnt FROM audit_logs WHERE user_id = $1`, [uid]); checks.audit_logs_by_id = parseInt(r.rows[0].cnt); } catch(e) { checks.audit_logs_by_id = `ERR: ${e.message}`; }
+        try { const r = await query(`SELECT COUNT(*) as cnt FROM audit_logs WHERE LOWER(user_name) = LOWER($1)`, [t.full_name]); checks.audit_logs_by_name = parseInt(r.rows[0].cnt); } catch(e) { checks.audit_logs_by_name = `ERR: ${e.message}`; }
+        try { const r = await query(`SELECT COUNT(*) as cnt FROM audit_logs WHERE user_id = $1 OR LOWER(user_name) = LOWER($2)`, [uid, t.full_name]); checks.audit_logs_combined = parseInt(r.rows[0].cnt); } catch(e) { checks.audit_logs_combined = `ERR: ${e.message}`; }
+
+        // Activity logs (user_id INTEGER)
+        try { const r = await query(`SELECT COUNT(*) as cnt FROM activity_logs WHERE user_id = $1`, [t.id]); checks.activity_logs = parseInt(r.rows[0].cnt); } catch(e) { checks.activity_logs = `ERR: ${e.message}`; }
+
+        // CBT, training, CME
+        try { const r = await query(`SELECT COUNT(*) as cnt FROM cbt_attempts WHERE user_id = $1`, [t.id]); checks.cbt_attempts_int = parseInt(r.rows[0].cnt); } catch(e) { checks.cbt_attempts_int = `ERR: ${e.message}`; }
+        try { const r = await query(`SELECT COUNT(*) as cnt FROM cbt_attempts WHERE user_id::text = $1`, [uid]); checks.cbt_attempts_str = parseInt(r.rows[0].cnt); } catch(e) { checks.cbt_attempts_str = `ERR: ${e.message}`; }
+        try { const r = await query(`SELECT COUNT(*) as cnt FROM training_progress WHERE user_id = $1`, [t.id]); checks.training_progress_int = parseInt(r.rows[0].cnt); } catch(e) { checks.training_progress_int = `ERR: ${e.message}`; }
+        try { const r = await query(`SELECT COUNT(*) as cnt FROM training_progress WHERE user_id::text = $1`, [uid]); checks.training_progress_str = parseInt(r.rows[0].cnt); } catch(e) { checks.training_progress_str = `ERR: ${e.message}`; }
         try { const r = await query(`SELECT COUNT(*) as cnt FROM cme_progress WHERE user_id = $1`, [uid]); checks.cme_progress = parseInt(r.rows[0].cnt); } catch(e) { checks.cme_progress = `ERR: ${e.message}`; }
-        try { const r = await query(`SELECT COUNT(*) as cnt FROM duty_assignments WHERE user_id = $1`, [t.id]); checks.duty_assignments = parseInt(r.rows[0].cnt); } catch(e) { checks.duty_assignments = `ERR: ${e.message}`; }
-        
-        // Check what created_by values exist in patients
+        try { const r = await query(`SELECT COUNT(*) as cnt FROM cme_reading_progress WHERE user_id = $1`, [uid]); checks.cme_reading_progress = parseInt(r.rows[0].cnt); } catch(e) { checks.cme_reading_progress = `ERR: ${e.message}`; }
+
+        // Distinct values in key tables
         try { 
-          const r = await query(`SELECT DISTINCT created_by FROM patients LIMIT 10`); 
+          const r = await query(`SELECT DISTINCT created_by FROM patients WHERE created_by IS NOT NULL LIMIT 10`); 
           checks.patients_created_by_values = r.rows.map(r => r.created_by);
         } catch(e) { checks.patients_created_by_values = `ERR: ${e.message}`; }
-        
-        // Check what user_id values exist in audit_logs  
         try { 
-          const r = await query(`SELECT DISTINCT user_id FROM audit_logs LIMIT 10`); 
-          checks.audit_logs_user_ids = r.rows.map(r => r.user_id);
-        } catch(e) { checks.audit_logs_user_ids = `ERR: ${e.message}`; }
+          const r = await query(`SELECT DISTINCT user_id, user_name FROM audit_logs LIMIT 10`); 
+          checks.audit_logs_users = r.rows.map(r => `id=${r.user_id},name=${r.user_name}`);
+        } catch(e) { checks.audit_logs_users = `ERR: ${e.message}`; }
 
-        // Check total rows in key tables
+        // Global totals
         try { const r = await query(`SELECT COUNT(*) as cnt FROM patients`); checks.total_patients = parseInt(r.rows[0].cnt); } catch(e) {}
-        try { const r = await query(`SELECT COUNT(*) as cnt FROM treatment_plans`); checks.total_treatment_plans = parseInt(r.rows[0].cnt); } catch(e) {}
         try { const r = await query(`SELECT COUNT(*) as cnt FROM audit_logs`); checks.total_audit_logs = parseInt(r.rows[0].cnt); } catch(e) {}
+        try { const r = await query(`SELECT COUNT(*) as cnt FROM cbt_attempts`); checks.total_cbt_attempts = parseInt(r.rows[0].cnt); } catch(e) {}
+        
+        // Computed metrics
+        const traineeLevel = roleToLevel(t.role);
+        const metrics = await getTraineeMetrics(t.id, traineeLevel, t.full_name, t.username);
+        checks.computed_metrics = metrics;
         
         debug[`${t.full_name} (id=${t.id}, role=${t.role})`] = checks;
       }
@@ -426,151 +437,140 @@ function getRequirements(level) {
   return reqs[level] || reqs.house_officer;
 }
 
-async function getTraineeMetrics(userId, level) {
+async function getTraineeMetrics(userId, level, fullName, username) {
   const lvl = level || 'house_officer';
-  const uid = String(userId);
+  const uid = String(userId);       // For VARCHAR user_id columns (audit_logs, cme_progress, cme_reading_progress)
+  const uidInt = parseInt(userId);   // For INTEGER user_id columns (cbt_attempts, training_progress, activity_logs)
 
-  // CBT — check cbt_attempts table (also accept completed IS NULL as completed for legacy data)
-  const cbt = await query(
-    `SELECT COUNT(*) as completed, COALESCE(AVG(
-      CASE WHEN percentage IS NOT NULL AND percentage > 0 THEN percentage
-           WHEN score IS NOT NULL AND total_marks > 0 THEN (score::numeric / total_marks) * 100
-           ELSE 0 END
-    ), 0) as avg_score
-     FROM cbt_attempts WHERE user_id = $1 AND (completed = true OR passed = true)`, [userId]
+  // Helper: safely count from a query, returns 0 on any error
+  async function safeCount(sql, params) {
+    try {
+      const r = await query(sql, params);
+      return parseInt(r.rows[0].cnt) || 0;
+    } catch (e) { return 0; }
+  }
+
+  // ── CBT Tests ──
+  // cbt_attempts.user_id is INTEGER
+  let cbtCompleted = 0, cbtAvgScore = 0;
+  try {
+    const cbt = await query(
+      `SELECT COUNT(*) as completed, COALESCE(AVG(
+        CASE WHEN percentage IS NOT NULL AND percentage > 0 THEN percentage
+             WHEN score IS NOT NULL AND total_marks > 0 THEN (score::numeric / total_marks) * 100
+             ELSE 0 END
+      ), 0) as avg_score
+       FROM cbt_attempts WHERE user_id = $1 AND (completed = true OR passed = true)`, [uidInt]
+    );
+    cbtCompleted = parseInt(cbt.rows[0].completed) || 0;
+    cbtAvgScore = parseFloat(cbt.rows[0].avg_score) || 0;
+  } catch (e) {}
+  // Also try string match in case user_id was stored as string
+  if (cbtCompleted === 0) {
+    try {
+      const cbt2 = await query(
+        `SELECT COUNT(*) as completed, COALESCE(AVG(
+          CASE WHEN percentage IS NOT NULL AND percentage > 0 THEN percentage
+               WHEN score IS NOT NULL AND total_marks > 0 THEN (score::numeric / total_marks) * 100
+               ELSE 0 END
+        ), 0) as avg_score
+         FROM cbt_attempts WHERE user_id::text = $1 AND (completed = true OR passed = true)`, [uid]
+      );
+      cbtCompleted = parseInt(cbt2.rows[0].completed) || 0;
+      cbtAvgScore = parseFloat(cbt2.rows[0].avg_score) || 0;
+    } catch (e) {}
+  }
+
+  // ── Patient Care Entries ──
+  // Count from created_by (INTEGER) in clinical tables
+  let patientCount = 0;
+  const clinicalTables = ['patients', 'treatment_plans', 'admissions', 'prescriptions', 'ward_rounds', 'lab_orders', 'surgeries'];
+  for (const tbl of clinicalTables) {
+    patientCount += await safeCount(`SELECT COUNT(*) as cnt FROM ${tbl} WHERE created_by = $1`, [uidInt]);
+  }
+
+  // Count from audit_logs (user_id VARCHAR, resource_type is UPPERCASE)
+  // Match by user_id OR user_name (case-insensitive) for robust matching
+  const auditUserClause = fullName
+    ? `(user_id = $1 OR LOWER(user_name) = LOWER($2))`
+    : `user_id = $1`;
+  const auditUserParams = fullName ? [uid, fullName] : [uid];
+
+  patientCount += await safeCount(
+    `SELECT COUNT(*) as cnt FROM audit_logs
+     WHERE ${auditUserClause} AND UPPER(action) IN ('CREATE', 'UPDATE')
+     AND UPPER(resource_type) IN ('PATIENT', 'TREATMENT_PLAN', 'ADMISSION', 'PRESCRIPTION', 'WARD_ROUND', 'LAB_ORDER', 'PROCEDURE', 'DISCHARGE', 'LAB')`,
+    auditUserParams
   );
 
-  // Patient care — count from multiple real data sources:
-  // 1. Patients created by this user
-  // 2. Treatment plans created by this user
-  // 3. Admissions, prescriptions, ward rounds, lab orders with created_by
-  // 4. Activity logs with patient-related types
-  // 5. Audit logs with patient-related actions
-  let patientCount = 0;
-  try {
-    const patientsCreated = await query(
-      `SELECT COUNT(*) as cnt FROM patients WHERE created_by = $1`, [userId]);
-    patientCount += parseInt(patientsCreated.rows[0].cnt) || 0;
-  } catch (e) { /* table may not have created_by */ }
+  // Count from activity_logs (user_id INTEGER)
+  patientCount += await safeCount(
+    `SELECT COUNT(*) as cnt FROM activity_logs
+     WHERE user_id = $1 AND activity_type IN (
+       'patient_entry', 'patient_update', 'treatment_plan', 'prescription',
+       'ward_round', 'surgery_booking', 'surgery_completed', 'wound_care',
+       'discharge_summary', 'risk_assessment', 'admission', 'lab_order'
+     )`, [uidInt]
+  );
 
-  try {
-    const treatmentPlans = await query(
-      `SELECT COUNT(*) as cnt FROM treatment_plans WHERE created_by = $1`, [userId]);
-    patientCount += parseInt(treatmentPlans.rows[0].cnt) || 0;
-  } catch (e) {}
-
-  try {
-    const admissions = await query(
-      `SELECT COUNT(*) as cnt FROM admissions WHERE created_by = $1`, [userId]);
-    patientCount += parseInt(admissions.rows[0].cnt) || 0;
-  } catch (e) {}
-
-  try {
-    const prescriptions = await query(
-      `SELECT COUNT(*) as cnt FROM prescriptions WHERE created_by = $1`, [userId]);
-    patientCount += parseInt(prescriptions.rows[0].cnt) || 0;
-  } catch (e) {}
-
-  try {
-    const wardRounds = await query(
-      `SELECT COUNT(*) as cnt FROM ward_rounds WHERE created_by = $1`, [userId]);
-    patientCount += parseInt(wardRounds.rows[0].cnt) || 0;
-  } catch (e) {}
-
-  try {
-    const labOrders = await query(
-      `SELECT COUNT(*) as cnt FROM lab_orders WHERE created_by = $1`, [userId]);
-    patientCount += parseInt(labOrders.rows[0].cnt) || 0;
-  } catch (e) {}
-
-  // Also count from activity_logs (any patient-related activity type)
-  try {
-    const activityPatients = await query(
-      `SELECT COUNT(*) as cnt FROM activity_logs
-       WHERE user_id = $1 AND activity_type IN (
-         'patient_entry', 'patient_update', 'treatment_plan', 'prescription',
-         'ward_round', 'surgery_booking', 'surgery_completed', 'wound_care',
-         'discharge_summary', 'risk_assessment', 'admission', 'lab_order'
-       )`, [userId]);
-    patientCount += parseInt(activityPatients.rows[0].cnt) || 0;
-  } catch (e) {}
-
-  // Also count from audit_logs (user_id is VARCHAR there)
-  try {
-    const auditPatients = await query(
-      `SELECT COUNT(*) as cnt FROM audit_logs
-       WHERE user_id = $1 AND action IN ('CREATE', 'UPDATE')
-       AND resource_type IN ('patient', 'treatment_plan', 'admission', 'prescription', 'ward_round', 'lab_order')`,
-      [uid]);
-    patientCount += parseInt(auditPatients.rows[0].cnt) || 0;
-  } catch (e) {}
-
-  // Duties — count completed duties AND clinical tasks from audit logs
+  // ── Duties / Clinical Tasks ──
   let dutiesCount = 0;
-  try {
-    const formalDuties = await query(
-      `SELECT COUNT(*) as cnt FROM duty_assignments
-       WHERE user_id = $1 AND status = 'completed'`, [userId]);
-    dutiesCount += parseInt(formalDuties.rows[0].cnt) || 0;
-  } catch (e) {}
 
-  // Count distinct audit actions as duty completions (each clinical documentation is a duty fulfilled)
-  try {
-    const auditDuties = await query(
-      `SELECT COUNT(*) as cnt FROM audit_logs
-       WHERE user_id = $1 AND action IN ('CREATE', 'UPDATE', 'COMPLETE')`,
-      [uid]);
-    dutiesCount += parseInt(auditDuties.rows[0].cnt) || 0;
-  } catch (e) {}
+  // Formal duty assignments
+  dutiesCount += await safeCount(
+    `SELECT COUNT(*) as cnt FROM duty_assignments WHERE user_id = $1 AND status = 'completed'`, [uidInt]
+  );
 
-  // Login days — check activity_logs + audit_logs for login events
+  // Each audit_log entry counts as a clinical task/duty fulfilled
+  dutiesCount += await safeCount(
+    `SELECT COUNT(*) as cnt FROM audit_logs WHERE ${auditUserClause} AND UPPER(action) IN ('CREATE', 'UPDATE', 'COMPLETE', 'VIEW', 'EXPORT')`,
+    auditUserParams
+  );
+
+  // ── Login / Attendance Days ──
   let loginDays = 0;
-  try {
-    const activityLogins = await query(
-      `SELECT COUNT(DISTINCT DATE(created_at)) as days
-       FROM activity_logs WHERE user_id = $1 AND activity_type = 'login'`, [userId]);
-    loginDays = parseInt(activityLogins.rows[0].days) || 0;
-  } catch (e) {}
 
-  // Also count distinct days from audit_logs as attendance evidence
-  try {
-    const auditDays = await query(
-      `SELECT COUNT(DISTINCT DATE(timestamp)) as days
-       FROM audit_logs WHERE user_id = $1`, [uid]);
-    const auditLoginDays = parseInt(auditDays.rows[0].days) || 0;
-    loginDays = Math.max(loginDays, auditLoginDays);
-  } catch (e) {}
+  // From activity_logs (user_id INTEGER)
+  loginDays = Math.max(loginDays, await safeCount(
+    `SELECT COUNT(DISTINCT DATE(created_at)) as cnt FROM activity_logs WHERE user_id = $1 AND activity_type = 'login'`, [uidInt]
+  ));
 
-  // CME topics — check training_progress + cme_article_reads + cme_progress
+  // From audit_logs — distinct days with any activity counts as attendance
+  loginDays = Math.max(loginDays, await safeCount(
+    `SELECT COUNT(DISTINCT DATE(timestamp)) as cnt FROM audit_logs WHERE ${auditUserClause}`,
+    auditUserParams
+  ));
+
+  // ── CME / Education Topics ──
   let cmeCount = 0;
-  try {
-    const tp = await query(
-      `SELECT COUNT(*) as cnt FROM training_progress WHERE user_id = $1`, [userId]);
-    cmeCount += parseInt(tp.rows[0].cnt) || 0;
-  } catch (e) {}
 
-  try {
-    const cmeReads = await query(
-      `SELECT COUNT(DISTINCT article_id) as cnt FROM cme_article_reads WHERE user_id = $1`, [userId]);
-    cmeCount += parseInt(cmeReads.rows[0].cnt) || 0;
-  } catch (e) {}
+  // training_progress (user_id INTEGER)
+  cmeCount += await safeCount(`SELECT COUNT(*) as cnt FROM training_progress WHERE user_id = $1`, [uidInt]);
+  // Also try string match
+  if (cmeCount === 0) {
+    cmeCount += await safeCount(`SELECT COUNT(*) as cnt FROM training_progress WHERE user_id::text = $1`, [uid]);
+  }
 
-  try {
-    const cmeProgress = await query(
-      `SELECT COUNT(*) as cnt FROM cme_progress WHERE user_id = $1 AND completed = true`, [uid]);
-    cmeCount += parseInt(cmeProgress.rows[0].cnt) || 0;
-  } catch (e) {}
+  // cme_reading_progress (user_id VARCHAR) — correct table name
+  cmeCount += await safeCount(
+    `SELECT COUNT(DISTINCT article_id) as cnt FROM cme_reading_progress WHERE user_id = $1`, [uid]
+  );
 
+  // cme_progress (user_id VARCHAR)
+  cmeCount += await safeCount(
+    `SELECT COUNT(*) as cnt FROM cme_progress WHERE user_id = $1 AND completed = true`, [uid]
+  );
+
+  // ── Calculate Scores ──
   const reqs = getRequirements(lvl);
-  const cbtScore = parseFloat(cbt.rows[0].avg_score) || 0;
   const patientScore = Math.min(100, (patientCount / reqs.patientEntries) * 100);
   const dutyScore = Math.min(100, (dutiesCount / reqs.duties) * 100);
   const attendanceScore = Math.min(100, (loginDays / reqs.loginDays) * 100);
-  const overallScore = (cbtScore * 0.30) + (patientScore * 0.35) + (dutyScore * 0.25) + (attendanceScore * 0.10);
+  const overallScore = (cbtAvgScore * 0.30) + (patientScore * 0.35) + (dutyScore * 0.25) + (attendanceScore * 0.10);
 
   return {
-    cbtTestsCompleted: parseInt(cbt.rows[0].completed),
-    cbtAvgScore: Math.round(cbtScore * 10) / 10,
+    cbtTestsCompleted: cbtCompleted,
+    cbtAvgScore: Math.round(cbtAvgScore * 10) / 10,
     patientEntries: patientCount,
     patientScore: Math.round(patientScore * 10) / 10,
     dutiesCompleted: dutiesCount,
