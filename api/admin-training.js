@@ -221,8 +221,57 @@ async function handleGet(req, res, adminUser) {
       return res.status(200).json({ warnings: warningsQuery.rows });
     }
 
+    case 'debug-metrics': {
+      // Temporary debug endpoint to diagnose 0% issue
+      const trainees = await query(`
+        SELECT id, username, full_name, role FROM users
+        WHERE role IN ('intern', 'registrar', 'senior_registrar', 'house_officer', 'junior_resident', 'senior_resident')
+          AND is_active = true
+      `);
+      
+      const debug = {};
+      for (const t of trainees.rows) {
+        const uid = String(t.id);
+        const checks = {};
+        
+        try { const r = await query(`SELECT COUNT(*) as cnt FROM patients WHERE created_by = $1`, [t.id]); checks.patients_created_by = parseInt(r.rows[0].cnt); } catch(e) { checks.patients_created_by = `ERR: ${e.message}`; }
+        try { const r = await query(`SELECT COUNT(*) as cnt FROM treatment_plans WHERE created_by = $1`, [t.id]); checks.treatment_plans_created_by = parseInt(r.rows[0].cnt); } catch(e) { checks.treatment_plans_created_by = `ERR: ${e.message}`; }
+        try { const r = await query(`SELECT COUNT(*) as cnt FROM admissions WHERE created_by = $1`, [t.id]); checks.admissions_created_by = parseInt(r.rows[0].cnt); } catch(e) { checks.admissions_created_by = `ERR: ${e.message}`; }
+        try { const r = await query(`SELECT COUNT(*) as cnt FROM prescriptions WHERE created_by = $1`, [t.id]); checks.prescriptions_created_by = parseInt(r.rows[0].cnt); } catch(e) { checks.prescriptions_created_by = `ERR: ${e.message}`; }
+        try { const r = await query(`SELECT COUNT(*) as cnt FROM ward_rounds WHERE created_by = $1`, [t.id]); checks.ward_rounds_created_by = parseInt(r.rows[0].cnt); } catch(e) { checks.ward_rounds_created_by = `ERR: ${e.message}`; }
+        try { const r = await query(`SELECT COUNT(*) as cnt FROM lab_orders WHERE created_by = $1`, [t.id]); checks.lab_orders_created_by = parseInt(r.rows[0].cnt); } catch(e) { checks.lab_orders_created_by = `ERR: ${e.message}`; }
+        try { const r = await query(`SELECT COUNT(*) as cnt FROM activity_logs WHERE user_id = $1`, [t.id]); checks.activity_logs_int = parseInt(r.rows[0].cnt); } catch(e) { checks.activity_logs_int = `ERR: ${e.message}`; }
+        try { const r = await query(`SELECT COUNT(*) as cnt FROM audit_logs WHERE user_id = $1`, [uid]); checks.audit_logs_str = parseInt(r.rows[0].cnt); } catch(e) { checks.audit_logs_str = `ERR: ${e.message}`; }
+        try { const r = await query(`SELECT COUNT(*) as cnt FROM cbt_attempts WHERE user_id = $1`, [t.id]); checks.cbt_attempts = parseInt(r.rows[0].cnt); } catch(e) { checks.cbt_attempts = `ERR: ${e.message}`; }
+        try { const r = await query(`SELECT COUNT(*) as cnt FROM training_progress WHERE user_id = $1`, [t.id]); checks.training_progress = parseInt(r.rows[0].cnt); } catch(e) { checks.training_progress = `ERR: ${e.message}`; }
+        try { const r = await query(`SELECT COUNT(*) as cnt FROM cme_progress WHERE user_id = $1`, [uid]); checks.cme_progress = parseInt(r.rows[0].cnt); } catch(e) { checks.cme_progress = `ERR: ${e.message}`; }
+        try { const r = await query(`SELECT COUNT(*) as cnt FROM duty_assignments WHERE user_id = $1`, [t.id]); checks.duty_assignments = parseInt(r.rows[0].cnt); } catch(e) { checks.duty_assignments = `ERR: ${e.message}`; }
+        
+        // Check what created_by values exist in patients
+        try { 
+          const r = await query(`SELECT DISTINCT created_by FROM patients LIMIT 10`); 
+          checks.patients_created_by_values = r.rows.map(r => r.created_by);
+        } catch(e) { checks.patients_created_by_values = `ERR: ${e.message}`; }
+        
+        // Check what user_id values exist in audit_logs  
+        try { 
+          const r = await query(`SELECT DISTINCT user_id FROM audit_logs LIMIT 10`); 
+          checks.audit_logs_user_ids = r.rows.map(r => r.user_id);
+        } catch(e) { checks.audit_logs_user_ids = `ERR: ${e.message}`; }
+
+        // Check total rows in key tables
+        try { const r = await query(`SELECT COUNT(*) as cnt FROM patients`); checks.total_patients = parseInt(r.rows[0].cnt); } catch(e) {}
+        try { const r = await query(`SELECT COUNT(*) as cnt FROM treatment_plans`); checks.total_treatment_plans = parseInt(r.rows[0].cnt); } catch(e) {}
+        try { const r = await query(`SELECT COUNT(*) as cnt FROM audit_logs`); checks.total_audit_logs = parseInt(r.rows[0].cnt); } catch(e) {}
+        
+        debug[`${t.full_name} (id=${t.id}, role=${t.role})`] = checks;
+      }
+      
+      return res.status(200).json({ debug });
+    }
+
     default:
-      return res.status(400).json({ error: 'Invalid action. Use: all-trainees, trainee-detail, warnings' });
+      return res.status(400).json({ error: 'Invalid action. Use: all-trainees, trainee-detail, warnings, debug-metrics' });
   }
 }
 
