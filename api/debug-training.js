@@ -5,6 +5,9 @@ import { cors } from './_lib/auth.js';
 export default async function handler(req, res) {
   if (cors(req, res)) return;
 
+  // Allow ?mode=metrics to run the same getTraineeMetrics logic inline
+  const mode = req.query?.mode || 'raw';
+
   try {
     const debug = {};
 
@@ -75,8 +78,159 @@ export default async function handler(req, res) {
     } catch(e) {}
     
     debug.globals = g;
+
+    // ── If mode=metrics, also run the exact getTraineeMetrics logic for each trainee ──
+    if (mode === 'metrics') {
+      const metricsResults = [];
+      for (const t of trainees.rows) {
+        const userId = t.id;
+        const level = t.role || 'house_officer';
+        const fullName = t.full_name;
+        const username = t.username;
+        const m = { id: userId, name: fullName, level, errors: [] };
+
+        const uidInt = parseInt(userId);
+        const uid = String(userId);
+
+        async function safeCount(sql, params) {
+          try { const r = await query(sql, params); return parseInt(r.rows[0].cnt) || 0; }
+          catch (e) { m.errors.push(e.message.substring(0, 80)); return 0; }
+        }
+
+        // CBT
+        let cbtCompleted = 0, cbtAvgScore = 0;
+        try {
+          const cbt = await query(
+            `SELECT COUNT(*) as completed, COALESCE(AVG(
+              CASE WHEN percentage IS NOT NULL AND percentage > 0 THEN percentage
+                   WHEN score IS NOT NULL AND total_marks > 0 THEN (score::numeric / total_marks) * 100
+                   ELSE 0 END
+            ), 0) as avg_score
+             FROM cbt_attempts WHERE user_id = $1 AND (completed = true OR passed = true)`, [uidInt]
+          );
+          cbtCompleted = parseInt(cbt.rows[0].completed) || 0;
+          cbtAvgScore = parseFloat(cbt.rows[0].avg_score) || 0;
+        } catch (e) { m.errors.push('cbt1:' + e.message.substring(0, 60)); }
+
+        if (cbtCompleted === 0) {
+          try {
+            const cbt2 = await query(
+              `SELECT COUNT(*) as completed, COALESCE(AVG(
+                CASE WHEN percentage IS NOT NULL AND percentage > 0 THEN percentage
+                     WHEN score IS NOT NULL AND total_marks > 0 THEN (score::numeric / total_marks) * 100
+                     ELSE 0 END
+              ), 0) as avg_score
+               FROM cbt_attempts WHERE user_id::text = $1 AND (completed = true OR passed = true)`, [uid]
+            );
+            cbtCompleted = parseInt(cbt2.rows[0].completed) || 0;
+            cbtAvgScore = parseFloat(cbt2.rows[0].avg_score) || 0;
+          } catch (e) { m.errors.push('cbt2:' + e.message.substring(0, 60)); }
+        }
+        m.cbtCompleted = cbtCompleted;
+        m.cbtAvgScore = cbtAvgScore;
+
+        // Patient care
+        let patientCount = 0;
+        const clinicalTables = ['patients', 'treatment_plans', 'admissions', 'prescriptions', 'ward_rounds', 'lab_orders', 'surgeries'];
+        for (const tbl of clinicalTables) {
+          const c = await safeCount(`SELECT COUNT(*) as cnt FROM ${tbl} WHERE created_by = $1`, [uidInt]);
+          m['clinical_' + tbl] = c;
+          patientCount += c;
+        }
+
+        const auditUserClause = fullName
+          ? `(user_id = $1 OR LOWER(user_name) = LOWER($2))`
+          : `user_id = $1`;
+        const auditUserParams = fullName ? [uid, fullName] : [uid];
+
+        const auditPatient = await safeCount(
+          `SELECT COUNT(*) as cnt FROM audit_logs
+           WHERE ${auditUserClause} AND UPPER(action) IN ('CREATE', 'UPDATE')
+           AND UPPER(resource_type) IN ('PATIENT', 'TREATMENT_PLAN', 'ADMISSION', 'PRESCRIPTION', 'WARD_ROUND', 'LAB_ORDER', 'PROCEDURE', 'DISCHARGE', 'LAB')`,
+          auditUserParams
+        );
+        m.auditPatientCount = auditPatient;
+        patientCount += auditPatient;
+
+        const actPatient = await safeCount(
+          `SELECT COUNT(*) as cnt FROM activity_logs
+           WHERE user_id = $1 AND activity_type IN (
+             'patient_entry', 'patient_update', 'treatment_plan', 'prescription',
+             'ward_round', 'surgery_booking', 'surgery_completed', 'wound_care',
+             'discharge_summary', 'risk_assessment', 'admission', 'lab_order'
+           )`, [uidInt]
+        );
+        m.activityPatientCount = actPatient;
+        patientCount += actPatient;
+        m.totalPatientCount = patientCount;
+
+        // Duties
+        let dutiesCount = 0;
+        dutiesCount += await safeCount(
+          `SELECT COUNT(*) as cnt FROM duty_assignments WHERE user_id = $1 AND status = 'completed'`, [uidInt]
+        );
+        const auditDuty = await safeCount(
+          `SELECT COUNT(*) as cnt FROM audit_logs WHERE ${auditUserClause} AND UPPER(action) IN ('CREATE', 'UPDATE', 'COMPLETE', 'VIEW', 'EXPORT')`,
+          auditUserParams
+        );
+        dutiesCount += auditDuty;
+        m.dutiesCount = dutiesCount;
+
+        // Login days
+        let loginDays = 0;
+        loginDays = Math.max(loginDays, await safeCount(
+          `SELECT COUNT(DISTINCT DATE(created_at)) as cnt FROM activity_logs WHERE user_id = $1 AND activity_type = 'login'`, [uidInt]
+        ));
+        loginDays = Math.max(loginDays, await safeCount(
+          `SELECT COUNT(DISTINCT DATE(timestamp)) as cnt FROM audit_logs WHERE ${auditUserClause}`,
+          auditUserParams
+        ));
+        m.loginDays = loginDays;
+
+        // CME
+        let cmeTopics = 0;
+        cmeTopics = await safeCount(`SELECT COUNT(*) as cnt FROM cme_reading_progress WHERE user_id = $1`, [uid]);
+        if (cmeTopics === 0) {
+          cmeTopics = await safeCount(`SELECT COUNT(*) as cnt FROM cme_progress WHERE user_id = $1`, [uid]);
+        }
+        if (cmeTopics === 0) {
+          cmeTopics = await safeCount(`SELECT COUNT(*) as cnt FROM training_progress WHERE user_id = $1`, [uidInt]);
+        }
+        if (cmeTopics === 0) {
+          cmeTopics = await safeCount(`SELECT COUNT(*) as cnt FROM training_progress WHERE user_id::text = $1`, [uid]);
+        }
+        m.cmeTopics = cmeTopics;
+
+        // Score calculation
+        const requirements = {
+          house_officer: { cbt: 4, patients: 30, duties: 20, loginDays: 25, cme: 50 },
+          junior_resident: { cbt: 6, patients: 50, duties: 30, loginDays: 40, cme: 70 },
+          senior_resident: { cbt: 8, patients: 80, duties: 50, loginDays: 60, cme: 100 },
+          intern: { cbt: 4, patients: 30, duties: 20, loginDays: 25, cme: 50 },
+          registrar: { cbt: 6, patients: 50, duties: 30, loginDays: 40, cme: 70 },
+          senior_registrar: { cbt: 8, patients: 80, duties: 50, loginDays: 60, cme: 100 },
+        };
+        const req = requirements[level] || requirements.house_officer;
+        const cbtScore = Math.min((cbtCompleted / req.cbt) * 100, 100);
+        const patientScore = Math.min((patientCount / req.patients) * 100, 100);
+        const dutyScore = Math.min((dutiesCount / req.duties) * 100, 100);
+        const attendanceScore = Math.min((loginDays / req.loginDays) * 100, 100);
+        const overallScore = (cbtAvgScore * 0.30) + (patientScore * 0.35) + (dutyScore * 0.25) + (attendanceScore * 0.10);
+
+        m.cbtScore = cbtScore;
+        m.patientScore = patientScore;
+        m.dutyScore = dutyScore;
+        m.attendanceScore = attendanceScore;
+        m.overallScore = overallScore;
+        m.req = req;
+
+        metricsResults.push(m);
+      }
+      debug.metricsResults = metricsResults;
+    }
+
     return res.status(200).json(debug);
   } catch (error) {
-    return res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: error.message, stack: error.stack?.substring(0, 500) });
   }
 }
