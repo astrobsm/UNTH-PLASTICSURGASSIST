@@ -30,11 +30,13 @@ export default async function handler(req, res) {
     }
   } catch (error) {
     console.error('Admin Training API error:', error);
-    return res.status(500).json({ error: 'Internal server error', message: error.message });
+    return res.status(500).json({ error: `Server error: ${error.message}`, message: error.message, hint: error.detail || error.code || '' });
   }
 }
 
 async function ensureTables() {
+  // Ensure phone column on users
+  await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(50)`).catch(() => {});
   // Add created_by to clinical tables that are missing it
   const tablesNeedingCreatedBy = ['prescriptions', 'ward_rounds', 'lab_orders'];
   for (const tbl of tablesNeedingCreatedBy) {
