@@ -35,6 +35,12 @@ export default async function handler(req, res) {
 }
 
 async function ensureTables() {
+  // Add created_by to clinical tables that are missing it
+  const tablesNeedingCreatedBy = ['prescriptions', 'ward_rounds', 'lab_orders'];
+  for (const tbl of tablesNeedingCreatedBy) {
+    await query(`ALTER TABLE ${tbl} ADD COLUMN IF NOT EXISTS created_by INTEGER`).catch(() => {});
+  }
+
   await query(`
     CREATE TABLE IF NOT EXISTS training_warnings (
       id SERIAL PRIMARY KEY,
