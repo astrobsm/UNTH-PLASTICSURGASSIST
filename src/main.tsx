@@ -173,7 +173,7 @@ const queryClient = new QueryClient({
 
 // ─── Global error handler ────────────────────────────────────
 let indexedDBErrorCount = 0;
-const MAX_INDEXEDDB_ERRORS = 5;
+const MAX_INDEXEDDB_ERRORS = 10; // Raised from 5 — transient errors during sync should not trigger recovery
 
 window.addEventListener('unhandledrejection', (event) => {
   console.error('Unhandled promise rejection:', event.reason);
@@ -181,10 +181,9 @@ window.addEventListener('unhandledrejection', (event) => {
   const errorMessage = event.reason?.message || String(event.reason);
   const isIndexedDBError = 
     errorMessage.includes('Internal error opening backing store') ||
-    errorMessage.includes('DatabaseClosedError') ||
-    errorMessage.includes('UnknownError') ||
-    (event.reason?.name === 'DatabaseClosedError');
+    (event.reason?.name === 'DatabaseClosedError' && errorMessage.includes('DatabaseClosedError'));
   
+  // Only count genuine corruption signals, not transient UnknownError from concurrent writes
   if (isIndexedDBError) {
     indexedDBErrorCount++;
     console.error(`🚨 IndexedDB error detected (${indexedDBErrorCount}/${MAX_INDEXEDDB_ERRORS})`);

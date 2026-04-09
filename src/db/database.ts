@@ -1394,10 +1394,17 @@ export class PlasticSurgeonDB extends Dexie {
 export const db = new PlasticSurgeonDB();
 
 // Handle version changes from other tabs gracefully
-db.on('versionchange', () => {
-  db.close();
-  console.log('⚠️ Database updated in another tab, reloading...');
-  window.location.reload();
+// Don't force-close mid-write — let the user finish their current action
+db.on('versionchange', (event) => {
+  // Only close if no active transactions are likely in flight.
+  // Forcing db.close() while DataSyncService is writing 5000+ items
+  // leaves IndexedDB in a half-written state (= corruption).
+  console.warn('⚠️ Database schema updated in another tab. Please reload when ready.');
+  // Defer the close for a few seconds to let pending writes complete
+  setTimeout(() => {
+    db.close();
+    window.location.reload();
+  }, 3000);
 });
 
 // Handle database open errors

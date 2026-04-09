@@ -342,11 +342,28 @@ class ApiClient {
     return { entityType, entityId, tableName };
   }
 
+  // Tables managed by DataSyncService — cacheResponse must NOT clear() these
+  // because DataSyncService does its own merge-and-put logic concurrently.
+  // Doing clear() + bulkPut() here while sync is running causes IndexedDB corruption.
+  private static readonly SYNC_MANAGED_TABLES = new Set([
+    'patients', 'admissions', 'discharges', 'treatment_plans', 'prescriptions',
+    'lab_investigations', 'surgery_bookings', 'ward_rounds', 'wound_care',
+    'mdt_patient_teams', 'mdt_meetings', 'mdt_contact_logs',
+    'blood_transfusions', 'burn_patients', 'diabetic_foot_assessments',
+    'preoperative_assessments', 'dvt_assessments', 'pressure_sore_assessments',
+    'nutritional_assessments', 'procedures', 'who_safety_checklists',
+    'progress_notes', 'shopping_lists', 'call_duty_roster', 'clinic_duty_logs',
+    'cbt_attempts', 'substance_use_assessments', 'detox_monitoring_records',
+    'detox_follow_ups', 'substance_use_clinical_summaries',
+  ]);
+
   // Cache API response in IndexedDB
   private async cacheResponse(endpoint: string, entityInfo: { entityType: string; entityId?: string | number; tableName?: string }, data: any): Promise<void> {
     try {
       // If we have a dedicated table, cache entities there
-      if (entityInfo.tableName) {
+      // BUT skip destructive clear()+bulkPut() for tables managed by DataSyncService
+      // — those tables are written to by the sync loop and clear() would corrupt mid-write
+      if (entityInfo.tableName && !ApiClient.SYNC_MANAGED_TABLES.has(entityInfo.tableName)) {
         const table = (db as any)[entityInfo.tableName];
         if (table) {
           if (entityInfo.entityId) {

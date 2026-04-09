@@ -120,14 +120,18 @@ export const useAuthStore = create<AuthState>()(
               await apiClient.getCurrentUser();
               set({ loading: false });
             } catch (error) {
-              // Only clear auth if we're online and token is truly invalid
-              if (navigator.onLine) {
-                console.warn('Token validation failed, logging out');
+              // Only clear auth on CONFIRMED auth failures (401/403)
+              // Do NOT logout on transient errors (503 cold start, 500 server error, network timeout)
+              // — those would race with the sync service and wipe the token mid-sync
+              const errorMsg = error instanceof Error ? error.message : String(error);
+              const isAuthError = errorMsg.includes('expired') || errorMsg.includes('invalid') || errorMsg.includes('No token');
+              if (navigator.onLine && isAuthError) {
+                console.warn('Token confirmed invalid/expired, logging out');
                 set({ user: null, token: null, loading: false });
                 apiClient.logout();
               } else {
-                // Network error while checking — trust cached session
-                console.log('📴 Network error during auth check: trusting cached session');
+                // Transient error (503, 500, network) — trust cached session
+                console.log('⚠️ Auth check failed (transient), keeping session:', errorMsg);
                 set({ loading: false });
               }
             }

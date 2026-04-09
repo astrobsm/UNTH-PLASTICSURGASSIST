@@ -93,17 +93,18 @@ class DataSyncService {
   private readonly MAX_SYNC_INTERVAL = 10 * 60 * 1000; // 10 min cap
   private readonly BASE_SYNC_INTERVAL = 2 * 60 * 1000; // 2 min base
 
-  // Entity to API endpoint mapping - only entities with backend APIs
+  // Entity to API endpoint mapping - ALL entities route through /sync/ endpoints
+  // for consistent response format (raw arrays) and proper sync support
   private readonly entityEndpoints: Record<SyncableEntity, string> = {
     patients: '/sync/patients',
-    admissions: '/admissions',
-    discharges: '/discharge-summaries',
-    treatment_plans: '/treatment-plans',
-    prescriptions: '/prescriptions',
-    lab_investigations: '/lab-orders',
-    surgeries: '/surgeries',
-    ward_rounds: '/ward-rounds',
-    wound_care: '/wound-care',
+    admissions: '/sync/admissions',
+    discharges: '/sync/discharge-summaries',
+    treatment_plans: '/sync/treatment-plans',
+    prescriptions: '/sync/prescriptions',
+    lab_investigations: '/sync/lab-orders',
+    surgeries: '/sync/surgeries',
+    ward_rounds: '/sync/ward-rounds',
+    wound_care: '/sync/wound-care',
     mdt_patient_teams: '/sync/mdt-patient-teams',
     mdt_meetings: '/sync/mdt-meetings',
     mdt_contact_logs: '/sync/mdt-contact-logs',
@@ -381,6 +382,12 @@ class DataSyncService {
       return { pushed: 0, pulled: 0, errors: ['Sync already in progress'] };
     }
 
+    // Cooldown: don't re-sync within 30 seconds of last sync (page navigations trigger redundant syncs)
+    if (this.lastFullSyncTime && (Date.now() - this.lastFullSyncTime.getTime()) < 30000) {
+      logger.log('⏳ Sync completed recently, skipping...');
+      return { pushed: 0, pulled: 0, errors: ['Sync cooldown'] };
+    }
+
     if (!this.isOnline) {
       logger.log('📴 Offline, cannot sync');
       return { pushed: 0, pulled: 0, errors: ['Offline'] };
@@ -530,14 +537,46 @@ class DataSyncService {
       'substance_use_clinical_summaries'
     ];
 
+    let consecutive503s = 0;
+    const MAX_CONSECUTIVE_503s = 3; // After 3 consecutive 503s, the server is cold/overloaded — stop hammering it
+
     for (const entity of entitiesToPull) {
+      // Re-check token before each entity pull to avoid cascading failures
+      if (!apiClient.getToken()) {
+        console.warn('🔒 Token lost during sync — skipping remaining entity pulls');
+        result.errors.push('Token lost during sync');
+        break;
+      }
+
+      // If we've hit consecutive 503s, add a delay to let Vercel warm up
+      if (consecutive503s > 0) {
+        const backoffMs = Math.min(consecutive503s * 2000, 8000); // 2s, 4s, 6s, max 8s
+        console.log(`⏳ Server overloaded — waiting ${backoffMs / 1000}s before next pull...`);
+        await new Promise(resolve => setTimeout(resolve, backoffMs));
+      }
+
       try {
         const pullCount = await this.pullEntityFromCloud(entity);
         result.pulled += pullCount;
+        consecutive503s = 0; // Reset on success
       } catch (error) {
         const errorMsg = `Failed to pull ${entity}: ${error instanceof Error ? error.message : error}`;
         result.errors.push(errorMsg);
-        console.warn(`⚠️ ${errorMsg}`);
+
+        // Check if it's a 503 (server cold start / overloaded)
+        const is503 = error instanceof Error && (
+          error.message.includes('503') || error.message.includes('Service Unavailable')
+        );
+        if (is503) {
+          consecutive503s++;
+          if (consecutive503s >= MAX_CONSECUTIVE_503s) {
+            console.warn(`⏹️ ${MAX_CONSECUTIVE_503s} consecutive 503s — server is overloaded, aborting remaining pulls (will retry next cycle)`);
+            break;
+          }
+        } else {
+          consecutive503s = 0;
+          console.warn(`⚠️ ${errorMsg}`);
+        }
 
         // If this is a network failure, abort remaining pulls — they'll all fail too
         if (error instanceof TypeError && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError'))) {
@@ -545,8 +584,13 @@ class DataSyncService {
           break;
         }
 
-        // If this is an auth failure (401/403), abort remaining pulls
-        if (error instanceof Error && (error.message.includes('401') || error.message.includes('403') || error.message.includes('Not authenticated'))) {
+        // If this is an auth failure (401/403/token), abort remaining pulls
+        if (error instanceof Error && (
+          error.message.includes('401') || 
+          error.message.includes('403') || 
+          error.message.includes('Not authenticated') || 
+          error.message.includes('No token')
+        )) {
           console.warn('🔒 Auth failure — skipping remaining entity pulls');
           break;
         }
@@ -687,11 +731,23 @@ class DataSyncService {
 
       return [];
     } catch (error) {
-      // Don't fail silently for auth errors
-      if (error instanceof Error && 
-          (error.message.includes('401') || error.message.includes('403') || error.message.includes('Not authenticated'))) {
+      // Propagate auth errors so the pull loop can abort
+      if (error instanceof Error && (
+        error.message.includes('401') || 
+        error.message.includes('403') || 
+        error.message.includes('Not authenticated') ||
+        error.message.includes('No token')
+      )) {
         throw error;
       }
+
+      // Propagate 503 errors so the pull loop can apply backoff
+      if (error instanceof Error && (
+        error.message.includes('503') || error.message.includes('Service Unavailable')
+      )) {
+        throw error;
+      }
+
       console.warn(`⚠️ Failed to fetch from ${endpoint}:`, error);
       return [];
     }
@@ -703,40 +759,27 @@ class DataSyncService {
    */
   private async findLocalItem(table: any, serverItem: any): Promise<any | null> {
     try {
-      // Try by id first (primary key, always works)
+      // Try by id first (primary key — O(1) indexed lookup)
       if (serverItem.id) {
         const byId = await table.get(serverItem.id);
         if (byId) return byId;
       }
 
-      // Try by serverId using filter (no index required)
+      // Try by serverId using Dexie filter (scans but avoids full toArray())
       if (serverItem.id) {
         try {
-          const allItems = await table.toArray();
-          const byServerId = allItems.find((item: any) => item.serverId === serverItem.id);
+          const byServerId = await table.filter((item: any) => item.serverId === serverItem.id).first();
           if (byServerId) return byServerId;
         } catch (e) {
           // Ignore filter errors
         }
       }
 
-      // Try by hospital_number using filter (no index required)
+      // Try by hospital_number using Dexie filter
       if (serverItem.hospital_number) {
         try {
-          const allItems = await table.toArray();
-          const byHospitalNumber = allItems.find((item: any) => item.hospital_number === serverItem.hospital_number);
+          const byHospitalNumber = await table.filter((item: any) => item.hospital_number === serverItem.hospital_number).first();
           if (byHospitalNumber) return byHospitalNumber;
-        } catch (e) {
-          // Ignore filter errors
-        }
-      }
-
-      // Try by patient_id for clinical entities
-      if (serverItem.patient_id) {
-        try {
-          const allItems = await table.toArray();
-          const byPatientId = allItems.find((item: any) => item.patient_id === serverItem.patient_id);
-          if (byPatientId) return byPatientId;
         } catch (e) {
           // Ignore filter errors
         }

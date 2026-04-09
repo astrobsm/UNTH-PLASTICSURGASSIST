@@ -103,6 +103,7 @@ function App() {
   const { user, loading, initializeAuth, clearMustChangePassword, logout } = useAuthStore();
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
 
+  // Initialize auth ONCE on mount — NOT when user changes
   useEffect(() => {
     // Initialize CSRF protection
     initializeCSRFToken();
@@ -118,7 +119,14 @@ function App() {
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
-    // Request notification permissions for MCQ reminders and patient notifications
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // User-dependent setup (notifications, sync) — runs when user changes
+  useEffect(() => {
     if (user) {
       // Dynamically import notification services to reduce initial bundle
       import('./services/notificationBackgroundService').then(({ notificationService }) => {
@@ -137,11 +145,7 @@ function App() {
         });
       }
     }
-
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    };
-  }, [initializeAuth, user]);
+  }, [user]);
 
   if (loading) {
     return (

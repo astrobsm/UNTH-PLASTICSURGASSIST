@@ -54,133 +54,56 @@ export default async function handler(req, res) {
           }
           return await getSyncPatients(res);
         }
-        if (action === 'surgeries' || action === 'surgery-bookings') {
-          return await getSyncEntity('surgeries', res);
+
+        // Lookup table mapping URL action to database table name
+        const actionToTable = {
+          'surgeries': 'surgeries', 'surgery-bookings': 'surgeries',
+          'admissions': 'admissions',
+          'treatment-plans': 'treatment_plans',
+          'lab-orders': 'lab_orders', 'lab-investigations': 'lab_orders',
+          'prescriptions': 'prescriptions',
+          'wound-care': 'wound_care_records', 
+          'ward-rounds': 'ward_rounds',
+          'discharges': 'discharge_summaries', 'discharge-summaries': 'discharge_summaries',
+          'mdt-patient-teams': 'mdt_patient_teams', 'mdt_patient_teams': 'mdt_patient_teams',
+          'mdt-meetings': 'mdt_meetings', 'mdt_meetings': 'mdt_meetings',
+          'mdt-contact-logs': 'mdt_contact_logs', 'mdt_contact_logs': 'mdt_contact_logs',
+          'blood-transfusions': 'blood_transfusions', 'blood_transfusions': 'blood_transfusions',
+          'burn-patients': 'burn_patients', 'burn_patients': 'burn_patients',
+          'diabetic-foot-assessments': 'diabetic_foot_assessments', 'diabetic_foot_assessments': 'diabetic_foot_assessments',
+          'preoperative-assessments': 'preoperative_assessments', 'preoperative_assessments': 'preoperative_assessments',
+          'dvt-assessments': 'dvt_assessments', 'dvt_assessments': 'dvt_assessments',
+          'pressure-sore-assessments': 'pressure_sore_assessments', 'pressure_sore_assessments': 'pressure_sore_assessments',
+          'nutritional-assessments': 'nutritional_assessments', 'nutritional_assessments': 'nutritional_assessments',
+          'procedures': 'procedures',
+          'who-safety-checklists': 'who_safety_checklists', 'who_safety_checklists': 'who_safety_checklists',
+          'progress-notes': 'progress_notes', 'progress_notes': 'progress_notes',
+          'paperwork-documents': 'paperwork_documents', 'paperwork_documents': 'paperwork_documents',
+          'cme-topics': 'cme_topics', 'cme_topics': 'cme_topics',
+          'cme-test-sessions': 'cme_test_sessions', 'cme_test_sessions': 'cme_test_sessions',
+          'cme-progress': 'cme_progress', 'cme_progress': 'cme_progress',
+          'cme-certificates': 'cme_certificates', 'cme_certificates': 'cme_certificates',
+          'cme-articles': 'cme_articles', 'cme_articles': 'cme_articles',
+          'cme-reading-progress': 'cme_reading_progress', 'cme_reading_progress': 'cme_reading_progress',
+          'educational-topics': 'educational_topics', 'educational_topics': 'educational_topics',
+          'weekly-contents': 'weekly_contents', 'weekly_contents': 'weekly_contents',
+          'topic-schedules': 'topic_schedules', 'topic_schedules': 'topic_schedules',
+          'education-user-progress': 'education_user_progress', 'education_user_progress': 'education_user_progress',
+          'ps-unit-rosters': 'ps_unit_rosters', 'ps_unit_rosters': 'ps_unit_rosters',
+          'shopping-lists': 'shopping_lists', 'shopping_lists': 'shopping_lists',
+          'call-duty-roster': 'call_duty_roster', 'call_duty_roster': 'call_duty_roster',
+          'clinic-duty-logs': 'clinic_duty_logs', 'clinic_duty_logs': 'clinic_duty_logs',
+          'cbt-attempts': 'cbt_attempts', 'cbt_attempts': 'cbt_attempts',
+          'substance-use-assessments': 'substance_use_assessments', 'substance_use_assessments': 'substance_use_assessments',
+          'detox-monitoring-records': 'detox_monitoring_records', 'detox_monitoring_records': 'detox_monitoring_records',
+          'detox-follow-ups': 'detox_follow_ups', 'detox_follow_ups': 'detox_follow_ups',
+          'substance-use-clinical-summaries': 'substance_use_clinical_summaries', 'substance_use_clinical_summaries': 'substance_use_clinical_summaries',
+        };
+
+        if (action && actionToTable[action]) {
+          return await getSyncEntity(actionToTable[action], res, url.searchParams);
         }
-        if (action === 'admissions') {
-          return await getSyncEntity('admissions', res);
-        }
-        if (action === 'treatment-plans') {
-          return await getSyncEntity('treatment_plans', res);
-        }
-        if (action === 'lab-orders' || action === 'lab-investigations') {
-          return await getSyncEntity('lab_orders', res);
-        }
-        if (action === 'prescriptions') {
-          return await getSyncEntity('prescriptions', res);
-        }
-        if (action === 'wound-care') {
-          return await getSyncEntity('wound_care_records', res);
-        }
-        if (action === 'ward-rounds') {
-          return await getSyncEntity('ward_rounds', res);
-        }
-        if (action === 'discharges' || action === 'discharge-summaries') {
-          return await getSyncEntity('discharge_summaries', res);
-        }
-        // MDT tables
-        if (action === 'mdt-patient-teams' || action === 'mdt_patient_teams') {
-          return await getSyncEntity('mdt_patient_teams', res);
-        }
-        if (action === 'mdt-meetings' || action === 'mdt_meetings') {
-          return await getSyncEntity('mdt_meetings', res);
-        }
-        if (action === 'mdt-contact-logs' || action === 'mdt_contact_logs') {
-          return await getSyncEntity('mdt_contact_logs', res);
-        }
-        // Clinical assessment tables
-        if (action === 'blood-transfusions' || action === 'blood_transfusions') {
-          return await getSyncEntity('blood_transfusions', res);
-        }
-        if (action === 'burn-patients' || action === 'burn_patients') {
-          return await getSyncEntity('burn_patients', res);
-        }
-        if (action === 'diabetic-foot-assessments' || action === 'diabetic_foot_assessments') {
-          return await getSyncEntity('diabetic_foot_assessments', res);
-        }
-        if (action === 'preoperative-assessments' || action === 'preoperative_assessments') {
-          return await getSyncEntity('preoperative_assessments', res);
-        }
-        if (action === 'dvt-assessments' || action === 'dvt_assessments') {
-          return await getSyncEntity('dvt_assessments', res);
-        }
-        if (action === 'pressure-sore-assessments' || action === 'pressure_sore_assessments') {
-          return await getSyncEntity('pressure_sore_assessments', res);
-        }
-        if (action === 'nutritional-assessments' || action === 'nutritional_assessments') {
-          return await getSyncEntity('nutritional_assessments', res);
-        }
-        if (action === 'procedures') {
-          return await getSyncEntity('procedures', res);
-        }
-        if (action === 'who-safety-checklists' || action === 'who_safety_checklists') {
-          return await getSyncEntity('who_safety_checklists', res);
-        }
-        if (action === 'progress-notes' || action === 'progress_notes') {
-          return await getSyncEntity('progress_notes', res);
-        }
-        // Paperwork, CME, Education tables
-        if (action === 'paperwork-documents' || action === 'paperwork_documents') {
-          return await getSyncEntity('paperwork_documents', res);
-        }
-        if (action === 'cme-topics' || action === 'cme_topics') {
-          return await getSyncEntity('cme_topics', res);
-        }
-        if (action === 'cme-test-sessions' || action === 'cme_test_sessions') {
-          return await getSyncEntity('cme_test_sessions', res);
-        }
-        if (action === 'cme-progress' || action === 'cme_progress') {
-          return await getSyncEntity('cme_progress', res);
-        }
-        if (action === 'cme-certificates' || action === 'cme_certificates') {
-          return await getSyncEntity('cme_certificates', res);
-        }
-        if (action === 'cme-articles' || action === 'cme_articles') {
-          return await getSyncEntity('cme_articles', res);
-        }
-        if (action === 'cme-reading-progress' || action === 'cme_reading_progress') {
-          return await getSyncEntity('cme_reading_progress', res);
-        }
-        if (action === 'educational-topics' || action === 'educational_topics') {
-          return await getSyncEntity('educational_topics', res);
-        }
-        if (action === 'weekly-contents' || action === 'weekly_contents') {
-          return await getSyncEntity('weekly_contents', res);
-        }
-        if (action === 'topic-schedules' || action === 'topic_schedules') {
-          return await getSyncEntity('topic_schedules', res);
-        }
-        if (action === 'education-user-progress' || action === 'education_user_progress') {
-          return await getSyncEntity('education_user_progress', res);
-        }
-        if (action === 'ps-unit-rosters' || action === 'ps_unit_rosters') {
-          return await getSyncEntity('ps_unit_rosters', res);
-        }
-        if (action === 'shopping-lists' || action === 'shopping_lists') {
-          return await getSyncEntity('shopping_lists', res);
-        }
-        if (action === 'call-duty-roster' || action === 'call_duty_roster') {
-          return await getSyncEntity('call_duty_roster', res);
-        }
-        if (action === 'clinic-duty-logs' || action === 'clinic_duty_logs') {
-          return await getSyncEntity('clinic_duty_logs', res);
-        }
-        if (action === 'cbt-attempts' || action === 'cbt_attempts') {
-          return await getSyncEntity('cbt_attempts', res);
-        }
-        // Substance detox tables
-        if (action === 'substance-use-assessments' || action === 'substance_use_assessments') {
-          return await getSyncEntity('substance_use_assessments', res);
-        }
-        if (action === 'detox-monitoring-records' || action === 'detox_monitoring_records') {
-          return await getSyncEntity('detox_monitoring_records', res);
-        }
-        if (action === 'detox-follow-ups' || action === 'detox_follow_ups') {
-          return await getSyncEntity('detox_follow_ups', res);
-        }
-        if (action === 'substance-use-clinical-summaries' || action === 'substance_use_clinical_summaries') {
-          return await getSyncEntity('substance_use_clinical_summaries', res);
-        }
+
         return await getSyncStatus(auth.user, res);
       default:
         res.status(405).json({ error: 'Method not allowed' });
@@ -235,10 +158,20 @@ async function getSyncPatientById(id, res) {
   res.status(200).json({ patient: result.rows[0] });
 }
 
-async function getSyncEntity(tableName, res) {
-  const result = await query(
-    `SELECT * FROM ${tableName} ORDER BY updated_at DESC LIMIT 500`
-  );
+async function getSyncEntity(tableName, res, searchParams) {
+  const since = searchParams?.get('since');
+  let queryStr;
+  let params = [];
+
+  if (since) {
+    // Incremental sync: only return records updated after the given timestamp
+    queryStr = `SELECT * FROM ${tableName} WHERE updated_at > $1 ORDER BY updated_at DESC LIMIT 5000`;
+    params = [since];
+  } else {
+    queryStr = `SELECT * FROM ${tableName} ORDER BY updated_at DESC LIMIT 5000`;
+  }
+
+  const result = await query(queryStr, params);
   res.status(200).json(result.rows);
 }
 

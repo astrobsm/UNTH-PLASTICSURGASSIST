@@ -636,7 +636,8 @@ class MDTService {
       // Push to server via sync/push endpoint
       const changes: any[] = [];
       
-      teams.forEach(team => {
+      // Only push teams with valid patient_id (skip corrupt/orphaned records)
+      teams.filter(team => team.patient_id != null).forEach(team => {
         changes.push({
           entityType: 'mdt_patient_teams',
           entityId: team.id,
@@ -645,7 +646,12 @@ class MDTService {
         });
       });
       
-      meetings.forEach(meeting => {
+      const skippedTeams = teams.length - changes.length;
+      if (skippedTeams > 0) {
+        console.warn(`[MDT PUSH] Skipped ${skippedTeams} teams with missing patient_id`);
+      }
+      
+      meetings.filter(m => m.patient_id != null).forEach(meeting => {
         changes.push({
           entityType: 'mdt_meetings',
           entityId: meeting.id,
@@ -654,7 +660,7 @@ class MDTService {
         });
       });
       
-      contacts.forEach(contact => {
+      contacts.filter(c => c.patient_id != null).forEach(contact => {
         changes.push({
           entityType: 'mdt_contact_logs',
           entityId: contact.id,
