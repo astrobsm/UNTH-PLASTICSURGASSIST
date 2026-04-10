@@ -66,6 +66,11 @@ export const useAuthStore = create<AuthState>()(
           // Use backend API
           const response = await apiClient.login(email, password);
           
+          if (!response || !response.user || !response.user.id) {
+            console.error('Login response missing user data:', JSON.stringify(response));
+            throw new Error('Login failed — server returned an unexpected response. Please try again.');
+          }
+
           const user: User = {
             id: response.user.id,
             name: response.user.fullName,

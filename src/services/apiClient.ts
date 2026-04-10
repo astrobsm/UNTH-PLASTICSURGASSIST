@@ -474,6 +474,13 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify({ username: email, password })
     });
+    
+    // Diagnostic: log response shape to help debug auth issues
+    console.log('🔐 Login response keys:', data ? Object.keys(data) : 'null/undefined');
+    if (!data || !data.user) {
+      console.error('🔐 Login response missing user:', JSON.stringify(data));
+    }
+    
     this.setToken(data.token);
 
     // Log login activity for training tracking (non-blocking)

@@ -103,6 +103,8 @@ async function handleLogin(req, res) {
     fullName: fullName
   });
 
+  console.log('Login success for:', user.email, 'id:', user.id, 'role:', user.role);
+
   res.status(200).json({
     token,
     user: {

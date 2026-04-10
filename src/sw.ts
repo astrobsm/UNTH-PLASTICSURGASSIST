@@ -185,7 +185,7 @@ registerRoute(
 // Endpoints that need real-time responses (not suitable for background sync)
 const REALTIME_POST_PREFIXES = [
   '/api/ai/',        // OCR / AI processing — needs immediate structured data
-  '/api/auth/',      // Login / register — needs immediate auth response
+  '/api/auth',       // Login / register — needs immediate auth response (no trailing slash: /api/auth is the login endpoint)
   '/api/init-db',    // DB initialization — needs confirmation
 ];
 
