@@ -499,8 +499,13 @@ class MDTService {
         const updates = pullRes.updates || {};
         
         // Process MDT Patient Teams
-        const teams = updates.mdt_patient_teams || [];
-        if (Array.isArray(teams) && teams.length > 0) {
+        const rawTeams = updates.mdt_patient_teams || [];
+        // Filter out corrupt records with null/undefined/empty patient_id to prevent re-insertion loop
+        const teams = Array.isArray(rawTeams) ? rawTeams.filter(t => t.patient_id != null && t.patient_id !== '' && String(t.patient_id) !== 'null' && String(t.patient_id) !== 'undefined') : [];
+        if (rawTeams.length !== teams.length) {
+          console.warn(`[MDT PULL] Filtered out ${rawTeams.length - teams.length} corrupt server records with missing patient_id`);
+        }
+        if (teams.length > 0) {
           for (const team of teams) {
             try {
               // Normalize patient_id to string for consistency
@@ -609,6 +614,15 @@ class MDTService {
             });
           }
           console.log(`✅ Synced ${contacts.length} MDT contact logs from server`);
+        }
+
+        // Final cleanup: remove any corrupt records that may exist in IndexedDB
+        const allTeams = await db.mdt_patient_teams.toArray();
+        const corruptTeams = allTeams.filter(t => t.patient_id == null || t.patient_id === '' || String(t.patient_id) === 'null' || String(t.patient_id) === 'undefined');
+        if (corruptTeams.length > 0) {
+          const corruptIds = corruptTeams.map(t => t.id).filter(Boolean);
+          await db.mdt_patient_teams.bulkDelete(corruptIds as number[]);
+          console.warn(`[MDT PULL] Cleaned up ${corruptIds.length} corrupt team records after sync`);
         }
       }
     } catch (error) {

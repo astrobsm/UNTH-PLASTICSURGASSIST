@@ -333,8 +333,24 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
 
   const renderFieldValue = (value: any): string => {
     if (value === null || value === undefined) return 'N/A';
-    if (Array.isArray(value)) return value.map(v => typeof v === 'object' ? JSON.stringify(v) : String(v)).join(', ');
-    if (typeof value === 'object') return JSON.stringify(value, null, 2);
+    if (Array.isArray(value)) {
+      return value.map(v => {
+        if (typeof v === 'object' && v !== null) {
+          // Lab result: {test_name, result_value, unit, ...}
+          if (v.test_name || v.name) return `${v.test_name || v.name}: ${v.result_value || v.result || v.value || ''}${v.unit ? ' ' + v.unit : ''}${v.abnormal ? ' ⚠' : ''}`;
+          // Medication: {name, dose, route, frequency}
+          if (v.name && (v.dose || v.route)) return `${v.name} ${v.dose || ''} ${v.route || ''} ${v.frequency || ''}`.trim();
+          // Wound: {location, description}
+          if (v.location) return `${v.location}: ${v.description || ''}`;
+          return Object.values(v).filter(Boolean).join(', ');
+        }
+        return String(v);
+      }).join('\n');
+    }
+    if (typeof value === 'object') {
+      // Vitals object
+      return Object.entries(value).filter(([,v]) => v != null).map(([k, v]) => `${k.replace(/_/g, ' ')}: ${v}`).join(', ');
+    }
     return String(value);
   };
 

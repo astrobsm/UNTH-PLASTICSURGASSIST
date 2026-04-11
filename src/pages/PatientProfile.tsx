@@ -1424,13 +1424,47 @@ const InvestigationsTab: React.FC<{ patientId: string; hospitalNumber: string; p
 
   const handleOCRExtractedInv = (fields: Record<string, any>, scanType: 'form' | 'result') => {
     const testName = fields.test_name || fields.testName || fields.investigation || 'Scanned Investigation';
+    
+    // Extract structured lab results from OCR data
+    let labResults: any[] | undefined;
+    if (scanType === 'result') {
+      // AI-extracted lab_report results come as fields.results (array of {test_name, result_value, unit, reference_range, abnormal, flag})
+      if (Array.isArray(fields.results)) {
+        labResults = fields.results;
+      } else if (Array.isArray(fields.investigations)) {
+        // From rule-based extraction: {name, result, unit, abnormal}
+        labResults = fields.investigations.map((inv: any) => ({
+          test_name: inv.name || inv.test_name || 'Unknown',
+          result_value: inv.result || inv.result_value || inv.value || '',
+          unit: inv.unit || '',
+          reference_range: inv.reference_range || '',
+          abnormal: inv.abnormal || false,
+          flag: inv.flag || (inv.abnormal ? 'abnormal' : 'normal'),
+        }));
+      } else if (typeof fields === 'object') {
+        // Try to extract key-value pairs that look like lab results
+        labResults = Object.entries(fields)
+          .filter(([key]) => !['confidence', 'patient_name', 'hospital_number', 'collection_date', 'specimen_type', 'lab_comments', 'document_type', 'content_summary', 'key_findings', 'recommendations', 'test_name', 'testName', 'investigation'].includes(key))
+          .filter(([, val]) => val != null && val !== '' && typeof val !== 'object')
+          .map(([key, val]) => ({
+            test_name: key.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()),
+            result_value: String(val),
+            unit: '',
+            reference_range: '',
+            abnormal: false,
+            flag: 'normal',
+          }));
+        if (labResults.length === 0) labResults = undefined;
+      }
+    }
+
     const record: any = {
       patient_id: patientId,
       hospital_number: hospitalNumber,
       upload_type: scanType,
       test_name: testName,
       status: scanType === 'form' ? 'pending' : 'completed',
-      results: scanType === 'result' ? fields : undefined,
+      results: labResults || (scanType === 'result' ? fields : undefined),
       ocr_extracted: true,
       ocr_text: JSON.stringify(fields),
       uploaded_by: userName,
@@ -1654,11 +1688,33 @@ const InvestigationsTab: React.FC<{ patientId: string; hospitalNumber: string; p
                         <span className="px-2 py-0.5 bg-green-200 text-green-800 text-xs rounded-full font-medium">Completed</span>
                       </div>
                     </div>
-                    {inv.results && typeof inv.results === 'object' ? (
+                    {Array.isArray(inv.results) && inv.results.length > 0 ? (
+                      <div className="space-y-1">
+                        {inv.results.slice(0, 5).map((r: any, idx: number) => {
+                          const isAbn = r.abnormal || (r.flag && r.flag !== 'normal');
+                          return (
+                            <div key={idx} className="flex items-center justify-between text-xs">
+                              <span className="text-gray-600">{r.test_name || r.name || `Test ${idx+1}`}</span>
+                              <span className={`font-bold ${isAbn ? 'text-red-600' : 'text-green-700'}`}>
+                                {r.result_value || r.result || r.value || '-'}
+                                {r.unit && <span className="text-gray-400 font-normal ml-0.5">{r.unit}</span>}
+                                {isAbn && <span className="ml-1">{r.flag === 'high' || r.flag === 'critical_high' ? '↑' : r.flag === 'low' || r.flag === 'critical_low' ? '↓' : '⚠'}</span>}
+                              </span>
+                            </div>
+                          );
+                        })}
+                        {inv.results.length > 5 && <p className="text-[10px] text-gray-400">+{inv.results.length - 5} more results</p>}
+                        {inv.results.some((r: any) => r.abnormal || (r.flag && r.flag !== 'normal')) && (
+                          <div className="mt-1 px-2 py-0.5 bg-red-50 border border-red-200 rounded text-[10px] text-red-700 font-medium">
+                            ⚠️ {inv.results.filter((r: any) => r.abnormal || (r.flag && r.flag !== 'normal')).length} abnormal value{inv.results.filter((r: any) => r.abnormal || (r.flag && r.flag !== 'normal')).length !== 1 ? 's' : ''}
+                          </div>
+                        )}
+                      </div>
+                    ) : inv.results && typeof inv.results === 'object' ? (
                       <div className="grid grid-cols-2 gap-2">
-                        {Object.entries(inv.results).map(([key, val]) => (
+                        {Object.entries(inv.results).filter(([key]) => !['confidence', 'document_type'].includes(key)).slice(0, 6).map(([key, val]) => (
                           <div key={key} className="text-xs">
-                            <span className="text-gray-500">{key}:</span> <span className="font-medium text-gray-900">{String(val)}</span>
+                            <span className="text-gray-500">{key.replace(/_/g, ' ')}:</span> <span className="font-medium text-gray-900">{String(val)}</span>
                           </div>
                         ))}
                       </div>
@@ -1678,19 +1734,61 @@ const InvestigationsTab: React.FC<{ patientId: string; hospitalNumber: string; p
           ) : activeSection === 'trends' ? (
             /* Investigation Trends with SVG Charts */
             (() => {
-              const trendData: Record<string, { date: string; value: number }[]> = {};
+              const trendData: Record<string, { date: string; value: number; unit?: string; refRange?: string; abnormal?: boolean; flag?: string }[]> = {};
+              const refRanges: Record<string, string> = {};
+              const units: Record<string, string> = {};
+
               results.forEach((inv: any) => {
                 const dateStr = inv.completed_at || inv.result_date || inv.updated_at || inv.created_at;
                 if (!dateStr) return;
-                if (inv.results && typeof inv.results === 'object') {
+
+                // Extract from array results (lab_report format: [{test_name, result_value, unit, ...}])
+                const labResults = Array.isArray(inv.results) ? inv.results : null;
+                if (labResults) {
+                  labResults.forEach((r: any) => {
+                    const name = r.test_name || r.name;
+                    const val = parseFloat(String(r.result_value || r.result || r.value));
+                    if (name && !isNaN(val)) {
+                      if (!trendData[name]) trendData[name] = [];
+                      trendData[name].push({ date: dateStr, value: val, unit: r.unit, refRange: r.reference_range, abnormal: r.abnormal, flag: r.flag });
+                      if (r.unit) units[name] = r.unit;
+                      if (r.reference_range) refRanges[name] = r.reference_range;
+                    }
+                  });
+                }
+
+                // Extract from object results (key-value pairs)
+                if (inv.results && typeof inv.results === 'object' && !Array.isArray(inv.results)) {
                   Object.entries(inv.results).forEach(([key, val]) => {
                     const num = parseFloat(String(val));
-                    if (!isNaN(num) && key !== 'id' && key !== 'patient_id') {
+                    if (!isNaN(num) && !['id', 'patient_id', 'confidence'].includes(key)) {
                       if (!trendData[key]) trendData[key] = [];
                       trendData[key].push({ date: dateStr, value: num });
                     }
                   });
                 }
+
+                // Also try to extract from ocr_text JSON
+                if (inv.ocr_text && typeof inv.ocr_text === 'string') {
+                  try {
+                    const parsed = JSON.parse(inv.ocr_text);
+                    const ocrResults = parsed.results || parsed.investigations;
+                    if (Array.isArray(ocrResults)) {
+                      ocrResults.forEach((r: any) => {
+                        const name = r.test_name || r.name;
+                        const val = parseFloat(String(r.result_value || r.result || r.value));
+                        if (name && !isNaN(val) && !trendData[name]?.some(d => d.date === dateStr && d.value === val)) {
+                          if (!trendData[name]) trendData[name] = [];
+                          trendData[name].push({ date: dateStr, value: val, unit: r.unit, refRange: r.reference_range, abnormal: r.abnormal, flag: r.flag });
+                          if (r.unit) units[name] = r.unit;
+                          if (r.reference_range) refRanges[name] = r.reference_range;
+                        }
+                      });
+                    }
+                  } catch { /* not valid JSON */ }
+                }
+
+                // Single test_name + result_value
                 if (inv.test_name && inv.result_value) {
                   const num = parseFloat(String(inv.result_value));
                   if (!isNaN(num)) {
@@ -1699,34 +1797,77 @@ const InvestigationsTab: React.FC<{ patientId: string; hospitalNumber: string; p
                   }
                 }
               });
+
               const paramNames = Object.keys(trendData).filter(k => trendData[k].length >= 1);
               if (paramNames.length === 0) return <p className="text-center text-gray-500 py-8">No numeric results for trend analysis. Scan or upload results to see trends.</p>;
               const COLORS = ['#0E9F6E','#DC2626','#2563EB','#7C3AED','#D97706','#059669','#BE185D','#6366F1','#0891B2','#EA580C'];
+
+              // Helper to parse reference range string like "3.5-5.0" or "70-100"
+              const parseRefRange = (ref: string): { low: number; high: number } | null => {
+                if (!ref) return null;
+                const m = ref.match(/(\d+\.?\d*)\s*[-–]\s*(\d+\.?\d*)/);
+                if (m) return { low: parseFloat(m[1]), high: parseFloat(m[2]) };
+                return null;
+              };
+
               return (
                 <div className="space-y-6">
                   {paramNames.map((name, pi) => {
                     const pts = trendData[name].sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
                     const vals = pts.map(p => p.value);
-                    const mn = Math.min(...vals)*0.9, mx = Math.max(...vals)*1.1||1, rng = mx-mn||1;
+                    const ref = parseRefRange(refRanges[name] || '');
+                    const allVals = ref ? [...vals, ref.low, ref.high] : vals;
+                    const mn = Math.min(...allVals)*0.9, mx = Math.max(...allVals)*1.1||1, rng = mx-mn||1;
                     const color = COLORS[pi%COLORS.length];
-                    const W=600, H=180, P=50, cW=W-P*2, cH=H-P*2;
+                    const W=600, H=200, P=50, cW=W-P*2, cH=H-P*2;
                     const sp = pts.map((d,i) => ({
                       x: P+(pts.length===1?cW/2:(i/(pts.length-1))*cW),
                       y: P+cH-((d.value-mn)/rng)*cH,
-                      value: d.value, date: d.date
+                      value: d.value, date: d.date,
+                      abnormal: d.abnormal || (ref && (d.value < ref.low || d.value > ref.high)),
                     }));
                     const lp = sp.map((p,i) => `${i===0?'M':'L'} ${p.x} ${p.y}`).join(' ');
+                    
+                    // Reference range band
+                    let refBand = null;
+                    if (ref) {
+                      const refLowY = P+cH-((ref.low-mn)/rng)*cH;
+                      const refHighY = P+cH-((ref.high-mn)/rng)*cH;
+                      refBand = (
+                        <g>
+                          <rect x={P} y={refHighY} width={cW} height={refLowY-refHighY} fill="#0E9F6E" opacity="0.08" />
+                          <line x1={P} y1={refHighY} x2={W-P} y2={refHighY} stroke="#0E9F6E" strokeWidth="1" strokeDasharray="4,3" opacity="0.5" />
+                          <line x1={P} y1={refLowY} x2={W-P} y2={refLowY} stroke="#0E9F6E" strokeWidth="1" strokeDasharray="4,3" opacity="0.5" />
+                          <text x={W-P+3} y={refHighY+4} fill="#0E9F6E" fontSize="8" opacity="0.7">{ref.high}</text>
+                          <text x={W-P+3} y={refLowY+4} fill="#0E9F6E" fontSize="8" opacity="0.7">{ref.low}</text>
+                        </g>
+                      );
+                    }
+
                     return (
                       <div key={name} className="bg-gray-50 rounded-lg p-4">
-                        <h4 className="text-sm font-semibold mb-2" style={{color}}>{name}</h4>
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-sm font-semibold" style={{color}}>
+                            {name.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}
+                            {units[name] && <span className="text-xs text-gray-400 font-normal ml-1">({units[name]})</span>}
+                          </h4>
+                          {refRanges[name] && <span className="text-[10px] px-2 py-0.5 bg-green-50 text-green-600 rounded-full border border-green-200">Ref: {refRanges[name]}</span>}
+                        </div>
                         <div className="overflow-x-auto">
                           <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-2xl mx-auto" style={{minWidth:350}}>
                             {[0,0.25,0.5,0.75,1].map(f => {
                               const y=P+cH-f*cH, v=(mn+f*rng).toFixed(1);
                               return <g key={f}><line x1={P} y1={y} x2={W-P} y2={y} stroke="#E5E7EB" strokeWidth="1"/><text x={P-5} y={y+4} textAnchor="end" fill="#9CA3AF" fontSize="10">{v}</text></g>;
                             })}
+                            {refBand}
                             <path d={lp} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                            {sp.map((p,i) => <g key={i}><circle cx={p.x} cy={p.y} r="4" fill={color} stroke="white" strokeWidth="2"/><text x={p.x} y={p.y-10} textAnchor="middle" fill={color} fontSize="10" fontWeight="bold">{p.value}</text></g>)}
+                            {sp.map((p,i) => (
+                              <g key={i}>
+                                <circle cx={p.x} cy={p.y} r={p.abnormal ? 6 : 4} fill={p.abnormal ? '#DC2626' : color} stroke="white" strokeWidth="2"/>
+                                <text x={p.x} y={p.y-12} textAnchor="middle" fill={p.abnormal ? '#DC2626' : color} fontSize="10" fontWeight="bold">{p.value}</text>
+                                {p.abnormal && <text x={p.x} y={p.y+16} textAnchor="middle" fill="#DC2626" fontSize="8">⚠</text>}
+                              </g>
+                            ))}
                             {sp.map((p,i) => { const d=new Date(p.date); const lb=isNaN(d.getTime())?'':`${d.getDate()}/${d.getMonth()+1}`; return <text key={`xl${i}`} x={p.x} y={H-5} textAnchor="middle" fill="#9CA3AF" fontSize="9">{lb}</text>; })}
                           </svg>
                         </div>
@@ -1734,6 +1875,8 @@ const InvestigationsTab: React.FC<{ patientId: string; hospitalNumber: string; p
                           <span>{pts.length} data point{pts.length!==1?'s':''}</span>
                           <span>Range: {Math.min(...vals).toFixed(1)} – {Math.max(...vals).toFixed(1)}</span>
                           {pts.length>=2 && <span className={vals[vals.length-1]>vals[0]?'text-red-500':vals[vals.length-1]<vals[0]?'text-green-500':'text-gray-500'}>{vals[vals.length-1]>vals[0]?'↑ Rising':vals[vals.length-1]<vals[0]?'↓ Falling':'→ Stable'}</span>}
+                          {ref && <span className="text-green-600">■ Normal range</span>}
+                          {sp.some(p => p.abnormal) && <span className="text-red-500">● Abnormal values: {sp.filter(p => p.abnormal).length}</span>}
                         </div>
                       </div>
                     );
@@ -1787,40 +1930,247 @@ const InvestigationsTab: React.FC<{ patientId: string; hospitalNumber: string; p
                   />
                 </div>
               )}
-              {/* OCR Extracted Text */}
-              {viewingUpload.ocr_text && (
-                <div>
-                  <h4 className="text-sm font-semibold text-gray-700 mb-2">OCR Extracted Text</h4>
-                  <pre className="text-sm text-gray-800 bg-gray-50 p-3 rounded-lg border border-gray-200 whitespace-pre-wrap font-mono max-h-60 overflow-y-auto">
-                    {typeof viewingUpload.ocr_text === 'string' ? (
-                      (() => { try { return JSON.stringify(JSON.parse(viewingUpload.ocr_text), null, 2); } catch { return viewingUpload.ocr_text; } })()
-                    ) : JSON.stringify(viewingUpload.ocr_text, null, 2)}
-                  </pre>
-                </div>
-              )}
+              {/* OCR Extracted Results - Readable Clinical Format */}
+              {viewingUpload.ocr_text && (() => {
+                let parsed: any = null;
+                try { parsed = typeof viewingUpload.ocr_text === 'string' ? JSON.parse(viewingUpload.ocr_text) : viewingUpload.ocr_text; } catch { /* not JSON */ }
+                
+                // If we have structured OCR data, render it as readable clinical format
+                if (parsed && typeof parsed === 'object') {
+                  const sections: React.ReactNode[] = [];
+                  
+                  // Lab Results (from AI-extracted lab_report)
+                  const labResults = parsed.results || parsed.investigations;
+                  if (Array.isArray(labResults) && labResults.length > 0) {
+                    sections.push(
+                      <div key="lab-results">
+                        <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1">🔬 Laboratory Results</h4>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm border-collapse">
+                            <thead>
+                              <tr className="bg-gray-100">
+                                <th className="text-left px-3 py-2 text-gray-600 font-medium border-b">Test</th>
+                                <th className="text-right px-3 py-2 text-gray-600 font-medium border-b">Result</th>
+                                <th className="text-center px-3 py-2 text-gray-600 font-medium border-b">Unit</th>
+                                <th className="text-center px-3 py-2 text-gray-600 font-medium border-b">Reference</th>
+                                <th className="text-center px-3 py-2 text-gray-600 font-medium border-b">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {labResults.map((r: any, idx: number) => {
+                                const isAbnormal = r.abnormal === true || (r.flag && r.flag !== 'normal');
+                                const isCritical = r.flag?.includes('critical');
+                                const isHigh = r.flag === 'high' || r.flag === 'critical_high';
+                                const isLow = r.flag === 'low' || r.flag === 'critical_low';
+                                const rowBg = isCritical ? 'bg-red-50' : isAbnormal ? 'bg-orange-50' : idx % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+                                return (
+                                  <tr key={idx} className={rowBg}>
+                                    <td className="px-3 py-2 border-b border-gray-100 font-medium text-gray-900">
+                                      {r.test_name || r.name || `Test ${idx+1}`}
+                                    </td>
+                                    <td className={`px-3 py-2 border-b border-gray-100 text-right font-bold ${isCritical ? 'text-red-700' : isAbnormal ? 'text-orange-700' : 'text-green-700'}`}>
+                                      {r.result_value || r.result || r.value || '-'}
+                                    </td>
+                                    <td className="px-3 py-2 border-b border-gray-100 text-center text-gray-500">
+                                      {r.unit || ''}
+                                    </td>
+                                    <td className="px-3 py-2 border-b border-gray-100 text-center text-gray-400 text-xs">
+                                      {r.reference_range || ''}
+                                    </td>
+                                    <td className="px-3 py-2 border-b border-gray-100 text-center">
+                                      {isCritical ? (
+                                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-red-200 text-red-800 text-[10px] rounded-full font-bold">⚠️ CRITICAL {isHigh ? '↑' : isLow ? '↓' : ''}</span>
+                                      ) : isAbnormal ? (
+                                        <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] rounded-full font-bold ${isHigh ? 'bg-orange-100 text-orange-700' : isLow ? 'bg-blue-100 text-blue-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                                          {isHigh ? '↑ HIGH' : isLow ? '↓ LOW' : '⚠ ABN'}
+                                        </span>
+                                      ) : (
+                                        <span className="text-green-600 text-xs">✓</span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                        {labResults.some((r: any) => r.abnormal || (r.flag && r.flag !== 'normal')) && (
+                          <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-800">
+                            ⚠️ <strong>Abnormal values detected</strong> — {labResults.filter((r: any) => r.abnormal || (r.flag && r.flag !== 'normal')).length} of {labResults.length} values flagged
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+                  
+                  // Vitals
+                  if (parsed.vitals && typeof parsed.vitals === 'object' && Object.values(parsed.vitals).some((v: any) => v != null)) {
+                    const v = parsed.vitals;
+                    const vitalDisplays = [
+                      v.temperature && { label: 'Temp', value: `${v.temperature}°C`, abnormal: v.temperature > 37.5 || v.temperature < 36 },
+                      v.pulse && { label: 'Pulse', value: `${v.pulse} bpm`, abnormal: v.pulse > 100 || v.pulse < 60 },
+                      (v.bp_systolic && v.bp_diastolic) && { label: 'BP', value: `${v.bp_systolic}/${v.bp_diastolic} mmHg`, abnormal: v.bp_systolic > 140 || v.bp_systolic < 90 },
+                      v.respiratory_rate && { label: 'RR', value: `${v.respiratory_rate} /min`, abnormal: v.respiratory_rate > 20 || v.respiratory_rate < 12 },
+                      v.spo2 && { label: 'SpO₂', value: `${v.spo2}%`, abnormal: v.spo2 < 95 },
+                      v.pain_score != null && { label: 'Pain', value: `${v.pain_score}/10`, abnormal: v.pain_score > 5 },
+                    ].filter(Boolean);
+                    if (vitalDisplays.length > 0) {
+                      sections.push(
+                        <div key="vitals">
+                          <h4 className="text-sm font-semibold text-gray-700 mb-2">📊 Vital Signs</h4>
+                          <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                            {vitalDisplays.map((vd: any) => (
+                              <div key={vd.label} className={`text-center p-2 rounded-lg border ${vd.abnormal ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'}`}>
+                                <p className="text-[10px] text-gray-500 uppercase">{vd.label}</p>
+                                <p className={`text-sm font-bold ${vd.abnormal ? 'text-red-700' : 'text-green-700'}`}>{vd.value}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    }
+                  }
+                  
+                  // SOAP Notes
+                  const soapFields = ['subjective', 'objective', 'assessment', 'plan'];
+                  const hasSoap = soapFields.some(f => parsed[f]);
+                  if (hasSoap) {
+                    sections.push(
+                      <div key="soap">
+                        <h4 className="text-sm font-semibold text-gray-700 mb-2">📋 Clinical Notes</h4>
+                        <div className="space-y-2">
+                          {soapFields.map(f => parsed[f] && (
+                            <div key={f} className="bg-gray-50 p-2 rounded border border-gray-200">
+                              <span className="text-[10px] uppercase font-bold text-gray-500">{f.charAt(0).toUpperCase()}</span>
+                              <p className="text-sm text-gray-800">{parsed[f]}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  }
+                  
+                  // Medications
+                  if (Array.isArray(parsed.medications) && parsed.medications.length > 0) {
+                    sections.push(
+                      <div key="meds">
+                        <h4 className="text-sm font-semibold text-gray-700 mb-2">💊 Medications</h4>
+                        <div className="space-y-1">
+                          {parsed.medications.map((m: any, idx: number) => (
+                            <div key={idx} className="flex items-center gap-2 bg-gray-50 p-2 rounded border border-gray-200 text-sm">
+                              <span className="font-medium text-gray-900">{m.name || m.medication || String(m)}</span>
+                              {m.dose && <span className="text-gray-500">{m.dose}</span>}
+                              {m.route && <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">{m.route}</span>}
+                              {m.frequency && <span className="text-gray-500">{m.frequency}</span>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  }
+                  
+                  // Diagnoses
+                  if (Array.isArray(parsed.diagnoses) && parsed.diagnoses.length > 0) {
+                    sections.push(
+                      <div key="dx">
+                        <h4 className="text-sm font-semibold text-gray-700 mb-2">🩺 Diagnoses</h4>
+                        <div className="flex flex-wrap gap-1">
+                          {parsed.diagnoses.map((d: any, idx: number) => (
+                            <span key={idx} className="px-2 py-1 bg-purple-50 text-purple-700 text-xs rounded-full border border-purple-200">{typeof d === 'string' ? d : d.name || String(d)}</span>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  }
+                  
+                  // Specimen / Collection info
+                  if (parsed.specimen_type || parsed.collection_date || parsed.lab_comments) {
+                    sections.push(
+                      <div key="specimen" className="flex flex-wrap gap-3 text-xs text-gray-500">
+                        {parsed.specimen_type && <span>Specimen: <strong>{parsed.specimen_type}</strong></span>}
+                        {parsed.collection_date && <span>Collected: <strong>{parsed.collection_date}</strong></span>}
+                        {parsed.lab_comments && <span>Comments: <strong>{parsed.lab_comments}</strong></span>}
+                      </div>
+                    );
+                  }
+
+                  if (sections.length > 0) {
+                    return <div className="space-y-4">{sections}</div>;
+                  }
+                }
+                
+                // Fallback: show as formatted text (non-JSON or unrecognized format)
+                return (
+                  <div>
+                    <h4 className="text-sm font-semibold text-gray-700 mb-2">Extracted Text</h4>
+                    <pre className="text-sm text-gray-800 bg-gray-50 p-3 rounded-lg border border-gray-200 whitespace-pre-wrap font-mono max-h-60 overflow-y-auto">
+                      {typeof viewingUpload.ocr_text === 'string' && !parsed ? viewingUpload.ocr_text : JSON.stringify(parsed, null, 2)}
+                    </pre>
+                  </div>
+                );
+              })()}
               {/* Results Data */}
               {viewingUpload.results && typeof viewingUpload.results === 'object' && viewingUpload.results !== 'See scanned document' && (
                 <div>
-                  <h4 className="text-sm font-semibold text-gray-700 mb-2">Results</h4>
+                  <h4 className="text-sm font-semibold text-gray-700 mb-2">🔬 Results</h4>
                   {Array.isArray(viewingUpload.results) ? (
-                    <div className="space-y-2">
-                      {viewingUpload.results.map((r: any, idx: number) => (
-                        <div key={idx} className="flex items-center justify-between bg-gray-50 p-2 rounded border border-gray-200">
-                          <span className="text-sm font-medium text-gray-900">{r.test_name || r.name || `Test ${idx+1}`}</span>
-                          <div className="text-right">
-                            <span className={`text-sm font-bold ${r.abnormal ? 'text-red-600' : 'text-green-700'}`}>{r.result_value || r.value || '-'}</span>
-                            {r.unit && <span className="text-xs text-gray-500 ml-1">{r.unit}</span>}
-                            {r.reference_range && <p className="text-[10px] text-gray-400">Ref: {r.reference_range}</p>}
-                            {r.flag && r.flag !== 'normal' && <span className={`text-[10px] px-1 py-0.5 rounded ${r.flag.includes('critical') ? 'bg-red-200 text-red-800' : r.flag === 'high' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}`}>{r.flag}</span>}
-                          </div>
+                    <div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm border-collapse">
+                          <thead>
+                            <tr className="bg-gray-100">
+                              <th className="text-left px-3 py-2 text-gray-600 font-medium border-b">Test</th>
+                              <th className="text-right px-3 py-2 text-gray-600 font-medium border-b">Result</th>
+                              <th className="text-center px-3 py-2 text-gray-600 font-medium border-b">Unit</th>
+                              <th className="text-center px-3 py-2 text-gray-600 font-medium border-b">Reference</th>
+                              <th className="text-center px-3 py-2 text-gray-600 font-medium border-b">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {viewingUpload.results.map((r: any, idx: number) => {
+                              const isAbnormal = r.abnormal === true || (r.flag && r.flag !== 'normal');
+                              const isCritical = r.flag?.includes('critical');
+                              const isHigh = r.flag === 'high' || r.flag === 'critical_high';
+                              const isLow = r.flag === 'low' || r.flag === 'critical_low';
+                              const rowBg = isCritical ? 'bg-red-50' : isAbnormal ? 'bg-orange-50' : idx % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+                              return (
+                                <tr key={idx} className={rowBg}>
+                                  <td className="px-3 py-2 border-b border-gray-100 font-medium text-gray-900">{r.test_name || r.name || `Test ${idx+1}`}</td>
+                                  <td className={`px-3 py-2 border-b border-gray-100 text-right font-bold ${isCritical ? 'text-red-700' : isAbnormal ? 'text-orange-700' : 'text-green-700'}`}>
+                                    {r.result_value || r.result || r.value || '-'}
+                                  </td>
+                                  <td className="px-3 py-2 border-b border-gray-100 text-center text-gray-500">{r.unit || ''}</td>
+                                  <td className="px-3 py-2 border-b border-gray-100 text-center text-gray-400 text-xs">{r.reference_range || ''}</td>
+                                  <td className="px-3 py-2 border-b border-gray-100 text-center">
+                                    {isCritical ? (
+                                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-red-200 text-red-800 text-[10px] rounded-full font-bold">⚠️ CRITICAL {isHigh ? '↑' : isLow ? '↓' : ''}</span>
+                                    ) : isAbnormal ? (
+                                      <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] rounded-full font-bold ${isHigh ? 'bg-orange-100 text-orange-700' : isLow ? 'bg-blue-100 text-blue-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                                        {isHigh ? '↑ HIGH' : isLow ? '↓ LOW' : '⚠ ABN'}
+                                      </span>
+                                    ) : (
+                                      <span className="text-green-600 text-xs">✓</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                      {viewingUpload.results.some((r: any) => r.abnormal || (r.flag && r.flag !== 'normal')) && (
+                        <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-800">
+                          ⚠️ <strong>Abnormal values detected</strong> — {viewingUpload.results.filter((r: any) => r.abnormal || (r.flag && r.flag !== 'normal')).length} of {viewingUpload.results.length} values flagged
                         </div>
-                      ))}
+                      )}
                     </div>
                   ) : typeof viewingUpload.results === 'object' ? (
                     <div className="grid grid-cols-2 gap-2">
-                      {Object.entries(viewingUpload.results).map(([key, val]) => (
+                      {Object.entries(viewingUpload.results)
+                        .filter(([key]) => !['confidence', 'document_type'].includes(key))
+                        .map(([key, val]) => (
                         <div key={key} className="bg-gray-50 p-2 rounded border border-gray-200">
-                          <span className="text-xs text-gray-500">{key}</span>
+                          <span className="text-xs text-gray-500">{key.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}</span>
                           <p className="text-sm font-medium text-gray-900">{String(val)}</p>
                         </div>
                       ))}
