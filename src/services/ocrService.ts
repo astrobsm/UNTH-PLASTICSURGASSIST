@@ -212,13 +212,22 @@ class OCRService {
     }
 
     try {
-      // Preprocess image for better OCR
-      const processedImage = await this.preprocessImage(imageSource, documentType);
+      // Preprocess image for better OCR; fall back to raw source if preprocessing fails
+      let recognizeInput: any = imageSource;
+      try {
+        recognizeInput = await this.preprocessImage(imageSource, documentType);
+      } catch (preprocessErr) {
+        console.warn('Image preprocessing failed, using raw image:', preprocessErr);
+        // Convert File/Blob to base64 data URL so Tesseract can read it
+        if (imageSource instanceof File || imageSource instanceof Blob) {
+          recognizeInput = await this.imageToBase64(imageSource);
+        }
+      }
       
       onProgress?.({ status: 'recognizing', progress: 0.5 });
 
       // Perform OCR
-      const { data } = await this.worker.recognize(processedImage);
+      const { data } = await this.worker.recognize(recognizeInput);
 
       // Post-process based on document type
       let processedText = this.postProcessText(data.text, documentType);
@@ -359,7 +368,12 @@ class OCRService {
       }
       await new Promise<void>((res, rej) => {
         img.onload = () => res();
-        img.onerror = () => rej(new Error('Failed to load image for OCR preprocessing'));
+        img.onerror = () => {
+          if (blobUrl) URL.revokeObjectURL(blobUrl);
+          rej(new Error('Failed to load image for OCR preprocessing'));
+        };
+        // If the image is already cached / complete, resolve immediately
+        if (img.complete && img.naturalWidth > 0) res();
       });
     }
 

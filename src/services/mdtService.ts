@@ -648,7 +648,13 @@ class MDTService {
       
       const skippedTeams = teams.length - changes.length;
       if (skippedTeams > 0) {
-        console.warn(`[MDT PUSH] Skipped ${skippedTeams} teams with missing patient_id`);
+        console.warn(`[MDT PUSH] Skipped ${skippedTeams} teams with missing patient_id — deleting corrupt records`);
+        // Clean up corrupt records from IndexedDB so they don't pollute every sync
+        const corruptIds = teams.filter(t => t.patient_id == null).map(t => t.id).filter(Boolean);
+        if (corruptIds.length > 0) {
+          await db.mdt_patient_teams.bulkDelete(corruptIds as number[]);
+          console.log(`[MDT PUSH] Deleted ${corruptIds.length} corrupt team records from IndexedDB`);
+        }
       }
       
       meetings.filter(m => m.patient_id != null).forEach(meeting => {
