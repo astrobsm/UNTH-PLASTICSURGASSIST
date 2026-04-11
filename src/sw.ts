@@ -170,11 +170,11 @@ const navigationHandler = new NetworkFirst({
 // so the very first offline visit has the full SPA available.
 warmStrategyCache({
   urls: ['/'],
-  strategy: navigationHandler,
+  strategy: navigationHandler as any,
 });
 
 registerRoute(
-  new NavigationRoute(navigationHandler, {
+  new NavigationRoute(navigationHandler as any, {
     denylist: [
       /^\/api/,
       /^\/sw\.js$/,

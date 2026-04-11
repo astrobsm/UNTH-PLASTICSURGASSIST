@@ -74,6 +74,7 @@ const PreSurgicalConferencePage = lazyWithRetry(() => import('./pages/PreSurgica
 const WoundCarePage = lazyWithRetry(() => import('./pages/WoundCarePage'));
 const KeloidCarePage = lazyWithRetry(() => import('./pages/KeloidCarePage'));
 const SoftTissueInfectionPage = lazyWithRetry(() => import('./pages/SoftTissueInfectionPage'));
+const LymphedemaPage = lazyWithRetry(() => import('./pages/LymphedemaPage'));
 const PressureSorePage = lazyWithRetry(() => import('./pages/PressureSorePage'));
 const Settings = lazyWithRetry(() => import('./pages/Settings'));
 const DepartmentalMeetingsPage = lazyWithRetry(() => import('./pages/DepartmentalMeetingsPage'));
@@ -246,6 +247,7 @@ function App() {
               <Route path="/keloid-care" element={<KeloidCarePage />} />
               <Route path="/soft-tissue-infection" element={<SoftTissueInfectionPage />} />
               <Route path="/pressure-sore" element={<PressureSorePage />} />
+              <Route path="/lymphedema" element={<LymphedemaPage />} />
               <Route path="/medical-training" element={<MedicalTrainingPage />} />
               <Route path="/education" element={<Education />} />
               <Route path="/mcq-education" element={<MCQEducation />} />

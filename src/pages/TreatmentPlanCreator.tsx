@@ -1316,7 +1316,7 @@ const TreatmentPlanCreator: React.FC = () => {
         isOpen={ocrModal !== null}
         onClose={() => setOcrModal(null)}
         onFieldsExtracted={handleOCRFields}
-        documentType={ocrModal === 'clinical' ? 'clinical_notes' : ocrModal === 'investigation' ? 'lab_report' : ocrModal === 'prescription' ? 'prescription' : 'general'}
+        documentType={ocrModal === 'clinical' ? 'clinical_note' : ocrModal === 'investigation' ? 'lab_report' : ocrModal === 'prescription' ? 'prescription' : 'general'}
         patientContext={selectedPatient ? {
           name: selectedPatient.full_name || selectedPatient.name || `${selectedPatient.first_name || ''} ${selectedPatient.last_name || ''}`,
           hospitalNumber: selectedPatient.hospital_number,

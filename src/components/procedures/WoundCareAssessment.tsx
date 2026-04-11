@@ -78,7 +78,7 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
 
   // Initialize AI model on mount
   useEffect(() => {
-    aiWoundMeasurement.loadModel().catch(console.error);
+    aiWoundMeasurement.initialize().catch(console.error);
   }, []);
 
   const handleInputChange = (field: string, value: any) => {
@@ -133,7 +133,7 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
     let calibration: CalibrationReference;
 
     if (calibrationType === 'manual') {
-      calibration = aiWoundMeasurement.createManualCalibration(manualPixelsPerCm);
+      calibration = aiWoundMeasurement.createManualCalibration(manualPixelsPerCm, 1);
     } else if (calibrationType === 'reference_paper') {
       // Reference paper with bold line - RECOMMENDED METHOD
       const img = await loadImageFromFile(aiMeasurementPhoto);
@@ -144,7 +144,7 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
       ctx.drawImage(img, 0, 0);
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-      calibration = await aiWoundMeasurement.detectReferencePaper(imageData, referencePaperLength);
+      calibration = await aiWoundMeasurement.detectCalibration(imageData);
     } else {
       // For automatic detection, we'd need the image data
       const img = await loadImageFromFile(aiMeasurementPhoto);
@@ -155,7 +155,7 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
       ctx.drawImage(img, 0, 0);
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-      calibration = await aiWoundMeasurement.detectCalibrationReference(imageData, calibrationType);
+      calibration = await aiWoundMeasurement.detectCalibration(imageData);
     }
 
     setCalibrationReference(calibration);
@@ -175,7 +175,14 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
 
     setIsProcessing(true);
     try {
-      const result = await aiWoundMeasurement.measureWound(aiMeasurementPhoto, calibrationReference);
+      const img = await loadImageFromFile(aiMeasurementPhoto);
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d')!;
+      canvas.width = img.width;
+      canvas.height = img.height;
+      ctx.drawImage(img, 0, 0);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const result = await aiWoundMeasurement.measureWound(imageData, calibrationReference);
       setAIMeasurementResult(result);
 
       // Display segmentation mask

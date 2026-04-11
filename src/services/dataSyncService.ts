@@ -163,7 +163,9 @@ class DataSyncService {
     substance_use_assessments: 'substance_use_assessments',
     detox_monitoring_records: 'detox_monitoring_records',
     detox_follow_ups: 'detox_follow_ups',
-    substance_use_clinical_summaries: 'substance_use_clinical_summaries'
+    substance_use_clinical_summaries: 'substance_use_clinical_summaries',
+    investigation_uploads: 'investigation_uploads',
+    patient_assignments: 'patient_assignments'
   };
 
   constructor() {
@@ -528,9 +530,13 @@ class DataSyncService {
       'preoperative_assessments',
       'procedures',
       'who_safety_checklists',
-      'mdt_patient_teams',
-      'mdt_meetings',
-      'mdt_contact_logs',
+      // MDT entities are synced by mdtService.syncFromServer() which preserves
+      // snake_case field names. The generic pull here converts to camelCase,
+      // causing mdtService.pushToServer() to see patient_id as undefined
+      // and enter an infinite delete/re-pull loop. Skip them here.
+      // 'mdt_patient_teams',
+      // 'mdt_meetings',
+      // 'mdt_contact_logs',
       'shopping_lists',
       'call_duty_roster',
       'clinic_duty_logs',

@@ -35,6 +35,9 @@ import { db } from '../db/database';
 import { syncService } from '../db/syncService';
 import { sanitizeTextForPDF } from '../utils/pdfUtils';
 import { getCurrentUserName } from '../utils/getCurrentUser';
+import { aiWoundMeasurement } from '../services/aiWoundMeasurement';
+import type { WoundMeasurementResult, WoundProgressEntry } from '../services/aiWoundMeasurement';
+import WoundProgressChart from '../components/WoundProgressChart';
 
 // ============================================
 // TYPES & INTERFACES
@@ -273,6 +276,8 @@ const WoundCarePage: React.FC = () => {
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [cameraError, setCameraError] = useState('');
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
+  const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [lastMeasurementResult, setLastMeasurementResult] = useState<WoundMeasurementResult | null>(null);
 
   // Load patients and assessments
   useEffect(() => {
@@ -347,7 +352,7 @@ const WoundCarePage: React.FC = () => {
       } else if (fileInputRef.current) {
         fileInputRef.current.click();
       }
-      setCameraError('Camera not available — use file upload instead.');
+      setCameraError('Camera not available ï¿½ use file upload instead.');
     }
   };
 
@@ -392,10 +397,24 @@ const WoundCarePage: React.FC = () => {
     const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
 
     setIsAnalyzing(true);
-    const measurements = await simulateAIMeasurement(dataUrl);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const result = await aiWoundMeasurement.measureWound(imageData);
+    setLastMeasurementResult(result);
+    // Draw the overlay on the captured image
+    if (overlayCanvasRef.current) {
+      const oc = overlayCanvasRef.current;
+      oc.width = canvas.width;
+      oc.height = canvas.height;
+      const octx = oc.getContext('2d');
+      if (octx) {
+        octx.drawImage(canvas, 0, 0);
+        aiWoundMeasurement.renderOverlay(octx, result, oc.width, oc.height);
+      }
+    }
+    const measurements = { length: result.length, width: result.width, area: result.area, perimeter: result.perimeter };
     const newPhoto: WoundPhoto = {
       id: `photo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      dataUrl,
+      dataUrl: overlayCanvasRef.current?.toDataURL('image/jpeg', 0.9) || dataUrl,
       timestamp: new Date(),
       measurements
     };
@@ -404,7 +423,7 @@ const WoundCarePage: React.FC = () => {
       setFormData(prev => ({ ...prev, length: measurements.length, width: measurements.width }));
     }
     setTimeout(() => setIsAnalyzing(false), 2000);
-    // Don't stop camera — allow multiple captures
+    // Don't stop camera ï¿½ allow multiple captures
   };
 
   // Cleanup camera on unmount
@@ -416,7 +435,7 @@ const WoundCarePage: React.FC = () => {
     };
   }, [cameraStream]);
 
-  // Handle photo capture (legacy — triggers file input)
+  // Handle photo capture (legacy ï¿½ triggers file input)
   const handlePhotoCapture = async () => {
     if (fileInputRef.current) {
       fileInputRef.current.click();
@@ -434,12 +453,25 @@ const WoundCarePage: React.FC = () => {
       reader.onload = async (event) => {
         const dataUrl = event.target?.result as string;
         
-        // AI Measurement simulation (in production, use TensorFlow.js)
-        const measurements = await simulateAIMeasurement(dataUrl);
+        // Real AI wound measurement
+        const img = new Image();
+        img.onload = async () => {
+          const cvs = document.createElement('canvas');
+          cvs.width = img.naturalWidth;
+          cvs.height = img.naturalHeight;
+          const cctx = cvs.getContext('2d')!;
+          cctx.drawImage(img, 0, 0);
+          const imgData = cctx.getImageData(0, 0, cvs.width, cvs.height);
+          const result = await aiWoundMeasurement.measureWound(imgData);
+          setLastMeasurementResult(result);
+          // Draw overlay
+          aiWoundMeasurement.renderOverlay(cctx, result, cvs.width, cvs.height);
+          const overlayUrl = cvs.toDataURL('image/jpeg', 0.9);
+          const measurements = { length: result.length, width: result.width, area: result.area, perimeter: result.perimeter };
         
         const newPhoto: WoundPhoto = {
           id: `photo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-          dataUrl,
+          dataUrl: overlayUrl,
           timestamp: new Date(),
           measurements
         };
@@ -454,6 +486,8 @@ const WoundCarePage: React.FC = () => {
             width: measurements.width
           }));
         }
+        };
+        img.src = dataUrl;
       };
       reader.readAsDataURL(file);
     }
@@ -461,27 +495,14 @@ const WoundCarePage: React.FC = () => {
     setTimeout(() => setIsAnalyzing(false), 2000);
   };
 
-  // Simulate AI wound measurement (placeholder for TensorFlow integration)
-  const simulateAIMeasurement = async (imageDataUrl: string): Promise<{
-    length: number;
-    width: number;
-    area: number;
-    perimeter: number;
-  }> => {
-    // In production, this would use TensorFlow.js with a wound segmentation model
-    // For now, return simulated measurements
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    const length = Math.round((5 + Math.random() * 10) * 10) / 10;
-    const width = Math.round((3 + Math.random() * 8) * 10) / 10;
-    
-    return {
-      length,
-      width,
-      area: Math.round(length * width * 100) / 100,
-      perimeter: Math.round((2 * length + 2 * width) * 100) / 100
-    };
-  };
+  // Build progress data for selected patient's wound location
+  const getProgressData = useCallback((): WoundProgressEntry[] => {
+    if (!selectedAssessment) return [];
+    return assessments
+      .filter(a => a.patient_id === selectedAssessment.patient_id && a.location === selectedAssessment.location)
+      .sort((a, b) => new Date(a.assessment_date).getTime() - new Date(b.assessment_date).getTime())
+      .map(a => ({ date: new Date(a.assessment_date).toISOString(), length: a.length, width: a.width, area: a.area }));
+  }, [assessments, selectedAssessment]);
 
   // Save new assessment
   const handleSaveAssessment = async () => {
@@ -717,7 +738,7 @@ const WoundCarePage: React.FC = () => {
         });
       } else {
         // Donor site specific warnings
-        const warnings = DONOR_SITE_WARNINGS.map(w => `* ¸ ${w}`);
+        const warnings = DONOR_SITE_WARNINGS.map(w => `* ï¿½ï¿½ ${w}`);
         warnings.forEach(w => {
           const lines = doc.splitTextToSize(w, thermalWidth - margin * 2 - 2);
           lines.forEach((line: string) => {
@@ -807,7 +828,7 @@ const WoundCarePage: React.FC = () => {
       doc.setTextColor(100, 100, 100);
       doc.setFontSize(8);
       doc.setFont('helvetica', 'normal');
-      doc.text('Print at 100% scale (no scaling) • Cut along dashed lines • 0.5mm grid for precision', pageWidth / 2, 25, { align: 'center' });
+      doc.text('Print at 100% scale (no scaling) ï¿½ Cut along dashed lines ï¿½ 0.5mm grid for precision', pageWidth / 2, 25, { align: 'center' });
 
       // Draw multiple ruler strips on the page
       const startX = (pageWidth - rulerLength) / 2;
@@ -976,6 +997,20 @@ const WoundCarePage: React.FC = () => {
       doc.setFont('helvetica', 'normal');
       doc.text(`Ruler #${rulerNum}`, startX + 2, startY + height - 2);
       
+      // =======================================
+      // GREEN CALIBRATION MARKERS (for AI auto-detect)
+      // =======================================
+      const markerSize = 4; // 4mm squares
+      doc.setFillColor(14, 159, 110); // #0E9F6E green
+      // Top-left marker
+      doc.rect(startX - 3, startY - 3, markerSize, markerSize, 'F');
+      // Top-right marker
+      doc.rect(startX + width - markerSize + 3, startY - 3, markerSize, markerSize, 'F');
+      // Bottom-left marker
+      doc.rect(startX - 3, startY + height - markerSize + 3, markerSize, markerSize, 'F');
+      // Bottom-right marker
+      doc.rect(startX + width - markerSize + 3, startY + height - markerSize + 3, markerSize, markerSize, 'F');
+      
       // "cm" label
       doc.setTextColor(100, 100, 100);
       doc.setFontSize(6);
@@ -1001,7 +1036,7 @@ const WoundCarePage: React.FC = () => {
       doc.setTextColor(100, 100, 100);
       doc.setFontSize(8);
       doc.setFont('helvetica', 'normal');
-      doc.text('Print at 100% scale • Place beside wound for accurate AI measurement', pageWidth / 2, 25, { align: 'center' });
+      doc.text('Print at 100% scale ï¿½ Place beside wound for accurate AI measurement', pageWidth / 2, 25, { align: 'center' });
 
       const gridSize = 150; // 15cm
       const startX = (pageWidth - gridSize) / 2;
@@ -1099,6 +1134,16 @@ const WoundCarePage: React.FC = () => {
         const y = startY + (cm * 10);
         doc.text(`${cm}`, startX - 3, y + 1, { align: 'right' });
       }
+
+      // =======================================
+      // GREEN CALIBRATION MARKERS (for AI auto-detect)
+      // =======================================
+      const mkSz = 6; // 6mm squares for large grid
+      doc.setFillColor(14, 159, 110); // #0E9F6E green
+      doc.rect(startX - 5, startY - 5, mkSz, mkSz, 'F');
+      doc.rect(startX + gridSize - mkSz + 5, startY - 5, mkSz, mkSz, 'F');
+      doc.rect(startX - 5, startY + gridSize - mkSz + 5, mkSz, mkSz, 'F');
+      doc.rect(startX + gridSize - mkSz + 5, startY + gridSize - mkSz + 5, mkSz, mkSz, 'F');
 
       // =======================================
       // VERIFICATION BOX
@@ -1347,7 +1392,7 @@ const WoundCarePage: React.FC = () => {
           </div>
           {formData.length > 0 && formData.width > 0 && (
             <p className="text-sm text-gray-500 mt-2">
-              Area: {calculateArea(formData.length, formData.width)} cm²
+              Area: {calculateArea(formData.length, formData.width)} cmï¿½
             </p>
           )}
         </div>
@@ -1425,6 +1470,7 @@ const WoundCarePage: React.FC = () => {
           />
           {/* Hidden canvas for camera capture */}
           <canvas ref={canvasRef} className="hidden" />
+          <canvas ref={overlayCanvasRef} className="hidden" />
 
           {/* Camera Viewfinder */}
           {showCamera && (
@@ -1732,7 +1778,7 @@ const WoundCarePage: React.FC = () => {
               </div>
               <div className="bg-gray-50 p-2 rounded-lg">
                 <p className="text-lg font-bold">{assessment.area.toFixed(1)}</p>
-                <p className="text-xs text-gray-500">Area (cm²)</p>
+                <p className="text-xs text-gray-500">Area (cmï¿½)</p>
               </div>
             </div>
           </div>
@@ -1824,6 +1870,21 @@ const WoundCarePage: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* Wound Healing Progress Chart */}
+        {(() => {
+          const progressData = getProgressData();
+          const report = progressData.length >= 2 ? aiWoundMeasurement.generateProgressReport(progressData) : null;
+          return (
+            <div className="bg-white rounded-xl shadow-sm border p-4">
+              <h4 className="font-semibold mb-3 flex items-center">
+                <TrendingUp className="w-4 h-4 mr-2 text-green-600" />
+                Healing Progress
+              </h4>
+              <WoundProgressChart measurements={progressData} report={report} />
+            </div>
+          );
+        })()}
       </div>
     );
   };
@@ -1890,7 +1951,7 @@ const WoundCarePage: React.FC = () => {
                       <h3 className="font-semibold">{assessment.patient_name}</h3>
                       <p className="text-sm text-gray-500">{assessment.location} - {assessment.wound_type}</p>
                       <p className="text-xs text-gray-400 mt-1">
-                        {assessment.length} x {assessment.width} cm | Area: {assessment.area} cm²
+                        {assessment.length} x {assessment.width} cm | Area: {assessment.area} cmï¿½
                       </p>
                     </div>
                     <div className="text-right">

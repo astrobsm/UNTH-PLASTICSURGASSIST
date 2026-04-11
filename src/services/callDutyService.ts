@@ -5,6 +5,8 @@ import { userManagementService } from './userManagementService';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
+export type HOAssignment = 'ward' | 'emergency' | 'ward_and_emergency' | 'off';
+
 export interface CallDutyShift {
   id?: number;
   /** ISO date string for shift start (e.g. "2026-03-01T08:00:00") */
@@ -17,9 +19,26 @@ export interface CallDutyShift {
   /** User ID of the registrar (junior registrar) on call */
   registrar_id: string;
   registrar_name: string;
-  /** User ID of the house officer on call */
+
+  // ── House Officer assignments ──
+  /** Legacy single HO field (kept for compat) — same as ho_ward_id */
   house_officer_id: string;
   house_officer_name: string;
+  /** HO assigned to Ward duty */
+  ho_ward_id: string;
+  ho_ward_name: string;
+  ho_ward_phone: string;
+  /** HO assigned to Emergency duty (same as ward when only 2 HOs) */
+  ho_emergency_id: string;
+  ho_emergency_name: string;
+  ho_emergency_phone: string;
+  /** HO who is Off this shift */
+  ho_off_id: string;
+  ho_off_name: string;
+  ho_off_phone: string;
+  /** Number of house officers in the pool when roster was generated */
+  ho_count: number;
+
   /**
    * Roster key stored in the month_key column.
    * Legacy: "YYYY-MM" for monthly rosters.
@@ -38,6 +57,34 @@ export interface StaffMember {
   full_name: string;
   email: string;
   role: string;
+  phone: string;
+}
+
+// ─── Handover Notes ─────────────────────────────────────────────────────────
+
+export interface HandoverTask {
+  id: string;
+  text: string;
+  status: 'outstanding' | 'completed';
+  completed_by_id?: string;
+  completed_by_name?: string;
+  completed_at?: string;
+}
+
+export interface HandoverNote {
+  id?: number;
+  shift_id: number;
+  roster_key: string;
+  /** Which assignment the author had during this shift */
+  assignment: HOAssignment;
+  author_id: string;
+  author_name: string;
+  /** Free-text handover summary */
+  content: string;
+  /** Individual tasks / outstanding items */
+  tasks: HandoverTask[];
+  created_at: string;
+  updated_at: string;
 }
 
 /** Duration presets for roster generation */
@@ -144,6 +191,7 @@ class CallDutyService {
           full_name: u.full_name,
           email: u.email,
           role: u.role,
+          phone: u.phone || '',
         }));
     } catch (err) {
       console.error(`Error fetching ${role} users:`, err);
@@ -156,6 +204,11 @@ class CallDutyService {
    * Auto-generates a duty roster between startDate and endDate (inclusive of start, exclusive of end).
    * Each shift is 48 hours, starting at 08:00.
    * Staff are assigned round-robin so everyone gets roughly equal shifts.
+   *
+   * House Officer rotation:
+   * - 3+ HOs: Ward / Emergency / Off — rotating each shift cycle
+   * - 2 HOs:  Ward+Emergency / Off — alternating each shift
+   * - 1 HO:   Always on duty (ward + emergency), never off
    */
   async generateRoster(
     startDate: Date,
@@ -175,11 +228,12 @@ class CallDutyService {
 
     const rKey = rosterKey(startDate, endDate);
     const shifts: CallDutyShift[] = [];
+    const hoCount = houseOfficers.length;
 
     let shiftNumber = 1;
     let srIdx = 0;
     let rIdx = 0;
-    let hoIdx = 0;
+    let hoRotationIdx = 0;
 
     // Walk through the date range in 2-day (48-hour) increments
     const cursor = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate(), 8, 0, 0);
@@ -191,7 +245,31 @@ class CallDutyService {
 
       const sr = seniorRegs.length > 0 ? pick(seniorRegs, srIdx) : null;
       const r = registrars.length > 0 ? pick(registrars, rIdx) : null;
-      const ho = houseOfficers.length > 0 ? pick(houseOfficers, hoIdx) : null;
+
+      // ── House Officer rotation ─────────────────────────────────
+      let hoWard: StaffMember | null = null;
+      let hoEmergency: StaffMember | null = null;
+      let hoOff: StaffMember | null = null;
+
+      if (hoCount >= 3) {
+        // 3+ HOs:  idx+0 → Ward,  idx+1 → Emergency,  idx+2 → Off
+        // The rotation cycles through all HOs evenly.
+        hoWard     = houseOfficers[hoRotationIdx % hoCount];
+        hoEmergency = houseOfficers[(hoRotationIdx + 1) % hoCount];
+        hoOff      = houseOfficers[(hoRotationIdx + 2) % hoCount];
+      } else if (hoCount === 2) {
+        // 2 HOs:  even shifts → HO[0] on duty, HO[1] off; odd → swap
+        const onDutyIdx = hoRotationIdx % 2;
+        const offIdx    = (hoRotationIdx + 1) % 2;
+        hoWard     = houseOfficers[onDutyIdx];
+        hoEmergency = houseOfficers[onDutyIdx]; // same person covers both
+        hoOff      = houseOfficers[offIdx];
+      } else if (hoCount === 1) {
+        // 1 HO:  always on, never off
+        hoWard     = houseOfficers[0];
+        hoEmergency = houseOfficers[0];
+        hoOff      = null;
+      }
 
       shifts.push({
         start_date: shiftStart.toISOString(),
@@ -200,8 +278,20 @@ class CallDutyService {
         senior_registrar_name: sr?.full_name || 'TBD',
         registrar_id: r?.id || '',
         registrar_name: r?.full_name || 'TBD',
-        house_officer_id: ho?.id || '',
-        house_officer_name: ho?.full_name || 'TBD',
+        // Legacy compat — primary HO is the ward HO
+        house_officer_id: hoWard?.id || '',
+        house_officer_name: hoWard?.full_name || 'TBD',
+        // New granular HO assignments
+        ho_ward_id: hoWard?.id || '',
+        ho_ward_name: hoWard?.full_name || 'TBD',
+        ho_ward_phone: hoWard?.phone || '',
+        ho_emergency_id: hoEmergency?.id || '',
+        ho_emergency_name: hoEmergency?.full_name || 'TBD',
+        ho_emergency_phone: hoEmergency?.phone || '',
+        ho_off_id: hoOff?.id || '',
+        ho_off_name: hoOff?.full_name || 'Off',
+        ho_off_phone: hoOff?.phone || '',
+        ho_count: hoCount,
         month_key: rKey,
         shift_number: shiftNumber,
         created_by: createdBy,
@@ -211,7 +301,7 @@ class CallDutyService {
 
       srIdx++;
       rIdx++;
-      hoIdx++;
+      hoRotationIdx++;
       shiftNumber++;
       cursor.setDate(cursor.getDate() + 2);
     }
@@ -317,9 +407,9 @@ class CallDutyService {
     });
   }
 
-  // ── Staff summary (shift counts) ──────────────────────────────────
-  getStaffSummary(shifts: CallDutyShift[]): Record<string, { name: string; role: string; count: number }> {
-    const summary: Record<string, { name: string; role: string; count: number }> = {};
+  // ── Staff summary (shift counts) — now includes HO assignment breakdown ──
+  getStaffSummary(shifts: CallDutyShift[]): Record<string, { name: string; role: string; count: number; ward?: number; emergency?: number; off?: number }> {
+    const summary: Record<string, { name: string; role: string; count: number; ward?: number; emergency?: number; off?: number }> = {};
     for (const s of shifts) {
       if (s.senior_registrar_id) {
         if (!summary[s.senior_registrar_id]) summary[s.senior_registrar_id] = { name: s.senior_registrar_name, role: 'Senior Registrar', count: 0 };
@@ -329,13 +419,125 @@ class CallDutyService {
         if (!summary[s.registrar_id]) summary[s.registrar_id] = { name: s.registrar_name, role: 'Registrar', count: 0 };
         summary[s.registrar_id].count++;
       }
-      if (s.house_officer_id) {
+      // HO Ward
+      if (s.ho_ward_id) {
+        if (!summary[s.ho_ward_id]) summary[s.ho_ward_id] = { name: s.ho_ward_name, role: 'House Officer', count: 0, ward: 0, emergency: 0, off: 0 };
+        summary[s.ho_ward_id].count++;
+        summary[s.ho_ward_id].ward = (summary[s.ho_ward_id].ward || 0) + 1;
+      }
+      // HO Emergency (skip if same as ward — already counted)
+      if (s.ho_emergency_id && s.ho_emergency_id !== s.ho_ward_id) {
+        if (!summary[s.ho_emergency_id]) summary[s.ho_emergency_id] = { name: s.ho_emergency_name, role: 'House Officer', count: 0, ward: 0, emergency: 0, off: 0 };
+        summary[s.ho_emergency_id].count++;
+        summary[s.ho_emergency_id].emergency = (summary[s.ho_emergency_id].emergency || 0) + 1;
+      } else if (s.ho_emergency_id && s.ho_emergency_id === s.ho_ward_id) {
+        // Same person covers both — count as emergency too (already counted in count)
+        if (summary[s.ho_emergency_id]) summary[s.ho_emergency_id].emergency = (summary[s.ho_emergency_id].emergency || 0) + 1;
+      }
+      // HO Off
+      if (s.ho_off_id) {
+        if (!summary[s.ho_off_id]) summary[s.ho_off_id] = { name: s.ho_off_name, role: 'House Officer', count: 0, ward: 0, emergency: 0, off: 0 };
+        summary[s.ho_off_id].off = (summary[s.ho_off_id].off || 0) + 1;
+      }
+      // Fallback for legacy shifts without new HO fields
+      if (!s.ho_ward_id && s.house_officer_id) {
         if (!summary[s.house_officer_id]) summary[s.house_officer_id] = { name: s.house_officer_name, role: 'House Officer', count: 0 };
         summary[s.house_officer_id].count++;
       }
     }
     return summary;
   }
-}
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ── Handover Notes ────────────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /** Create or update a handover note for a shift */
+  async saveHandoverNote(note: HandoverNote): Promise<number> {
+    const now = new Date().toISOString();
+    if (note.id) {
+      await (db as any).call_duty_handover_notes.update(note.id, { ...note, updated_at: now });
+      return note.id;
+    }
+    const id = await (db as any).call_duty_handover_notes.add({ ...note, created_at: now, updated_at: now });
+    syncService.queueAction('create', 'call_duty_handover_notes' as any, id, { ...note, id });
+    return id;
+  }
+
+  /** Get all handover notes for a specific shift */
+  async getHandoverNotesByShift(shiftId: number): Promise<HandoverNote[]> {
+    try {
+      return await (db as any).call_duty_handover_notes
+        .where('shift_id')
+        .equals(shiftId)
+        .toArray();
+    } catch { return []; }
+  }
+
+  /** Get all handover notes for a roster */
+  async getHandoverNotesByRoster(rKey: string): Promise<HandoverNote[]> {
+    try {
+      return await (db as any).call_duty_handover_notes
+        .where('roster_key')
+        .equals(rKey)
+        .toArray();
+    } catch { return []; }
+  }
+
+  /** Get outstanding tasks from all handover notes for a roster (tasks not yet completed) */
+  getOutstandingTasks(notes: HandoverNote[]): Array<HandoverTask & { note_id: number; shift_id: number; author_name: string; assignment: HOAssignment }> {
+    const outstanding: Array<HandoverTask & { note_id: number; shift_id: number; author_name: string; assignment: HOAssignment }> = [];
+    for (const note of notes) {
+      for (const task of (note.tasks || [])) {
+        if (task.status === 'outstanding') {
+          outstanding.push({
+            ...task,
+            note_id: note.id!,
+            shift_id: note.shift_id,
+            author_name: note.author_name,
+            assignment: note.assignment,
+          });
+        }
+      }
+    }
+    return outstanding;
+  }
+
+  /** Mark a handover task as completed */
+  async completeTask(noteId: number, taskId: string, completedById: string, completedByName: string): Promise<void> {
+    const note: HandoverNote = await (db as any).call_duty_handover_notes.get(noteId);
+    if (!note) return;
+    const now = new Date().toISOString();
+    const updatedTasks = note.tasks.map(t =>
+      t.id === taskId
+        ? { ...t, status: 'completed' as const, completed_by_id: completedById, completed_by_name: completedByName, completed_at: now }
+        : t
+    );
+    await (db as any).call_duty_handover_notes.update(noteId, { tasks: updatedTasks, updated_at: now });
+  }
+
+  /** Reopen a completed task */
+  async reopenTask(noteId: number, taskId: string): Promise<void> {
+    const note: HandoverNote = await (db as any).call_duty_handover_notes.get(noteId);
+    if (!note) return;
+    const updatedTasks = note.tasks.map(t =>
+      t.id === taskId
+        ? { ...t, status: 'outstanding' as const, completed_by_id: undefined, completed_by_name: undefined, completed_at: undefined }
+        : t
+    );
+    await (db as any).call_duty_handover_notes.update(noteId, { tasks: updatedTasks, updated_at: new Date().toISOString() });
+  }
+
+  /** Find the current active shift for a given user (shift that contains now) */
+  async getCurrentShiftForUser(userId: string): Promise<CallDutyShift | null> {
+    try {
+      const now = new Date().toISOString();
+      const allShifts = await (db as any).call_duty_roster.toArray();
+      return allShifts.find((s: CallDutyShift) =>
+        s.start_date <= now && s.end_date > now &&
+        (s.ho_ward_id === userId || s.ho_emergency_id === userId || s.house_officer_id === userId)
+      ) || null;
+    } catch { return null; }
+  }
+}
 export const callDutyService = new CallDutyService();

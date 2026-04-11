@@ -42,7 +42,8 @@ import {
   Brain,
   CalendarCheck,
   Stethoscope,
-  Wine
+  Wine,
+  Waves
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import SyncStatusIndicator from './SyncStatusIndicator';
@@ -93,6 +94,7 @@ export const patientActions = [
   { name: 'Keloid Care', href: '/keloid-care', icon: Syringe },
   { name: 'Soft Tissue Infection', href: '/soft-tissue-infection', icon: Bug },
   { name: 'Pressure Sore', href: '/pressure-sore', icon: Armchair },
+  { name: 'Lymphedema', href: '/lymphedema', icon: Waves },
   { name: 'Substance Detox', href: '/substance-detox', icon: Wine },
   { name: 'Labs', href: '/labs', icon: FlaskConical },
   { name: 'Prescriptions', href: '/prescriptions', icon: Pill },

@@ -229,6 +229,8 @@ export class PlasticSurgeonDB extends Dexie {
   detox_monitoring_records!: Table<any>; // For detox vital signs / withdrawal monitoring
   detox_follow_ups!: Table<any>; // For detox follow-up visits
   substance_use_clinical_summaries!: Table<any>; // For generated clinical summaries
+  lymphedema_assessments!: Table<any>; // For lymphedema assessments
+  call_duty_handover_notes!: Table<any>; // For call duty handover notes & outstanding tasks
 
   constructor() {
     super('PlasticSurgeonDB');
@@ -1272,6 +1274,17 @@ export class PlasticSurgeonDB extends Dexie {
       detox_monitoring_records: 'id, assessmentId, patientId, recordedAt, synced',
       detox_follow_ups: 'id, assessmentId, patientId, scheduledDate, status, synced, createdAt',
       substance_use_clinical_summaries: 'id, assessmentId, patientId, generatedAt'
+    });
+
+    // Version 31: Add Lymphedema assessments table
+    this.version(31).stores({
+      lymphedema_assessments: '++id, patient_id, hospital_number, assessment_date, isl_stage, campisi_stage, affected_limb, status, assessed_by, created_at'
+    });
+
+    // Version 32: Extend call duty roster with HO ward/emergency/off assignments + handover notes
+    this.version(32).stores({
+      call_duty_roster: '++id, start_date, end_date, month_key, shift_number, senior_registrar_id, senior_registrar_name, registrar_id, registrar_name, house_officer_id, house_officer_name, ho_ward_id, ho_emergency_id, ho_off_id, ho_count, status, created_by, created_at',
+      call_duty_handover_notes: '++id, shift_id, roster_key, author_id, assignment, created_at'
     });
 
     // Add hooks to automatically track changes

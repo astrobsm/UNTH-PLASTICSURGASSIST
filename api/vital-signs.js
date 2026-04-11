@@ -45,15 +45,15 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'POST') {
-      const { patient_id, hospital_number, temperature, pulse, bp_systolic, bp_diastolic, respiratory_rate, spo2, weight, recorded_by } = req.body;
+      const { patient_id, hospital_number, temperature, pulse, bp_systolic, bp_diastolic, respiratory_rate, spo2, weight, recorded_by, date } = req.body;
 
       if (!patient_id) return res.status(400).json({ error: 'patient_id is required' });
 
       const result = await query(
         `INSERT INTO vital_signs (patient_id, hospital_number, temperature, pulse, bp_systolic, bp_diastolic, respiratory_rate, spo2, weight, recorded_by, date)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
          RETURNING *`,
-        [patient_id, hospital_number || null, temperature || null, pulse || null, bp_systolic || null, bp_diastolic || null, respiratory_rate || null, spo2 || null, weight || null, recorded_by || null]
+        [patient_id, hospital_number || null, temperature || null, pulse || null, bp_systolic || null, bp_diastolic || null, respiratory_rate || null, spo2 || null, weight || null, recorded_by || null, date || new Date().toISOString()]
       );
       return res.status(201).json({ vital: result.rows[0] });
     }
