@@ -48,6 +48,10 @@
       "destination": "/api/attendance"
     },
     {
+      "source": "/api/students/:path*",
+      "destination": "/api/students"
+    },
+    {
       "source": "/api/:path*",
       "destination": "/api/:path*"
     },

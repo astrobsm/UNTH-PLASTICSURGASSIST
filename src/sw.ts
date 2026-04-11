@@ -186,6 +186,8 @@ registerRoute(
 const REALTIME_POST_PREFIXES = [
   '/api/ai/',        // OCR / AI processing — needs immediate structured data
   '/api/auth',       // Login / register — needs immediate auth response (no trailing slash: /api/auth is the login endpoint)
+  '/api/students/register', // Student self-registration — needs immediate response
+  '/api/students/login',    // Student login — needs immediate auth response
   '/api/init-db',    // DB initialization — needs confirmation
 ];
 

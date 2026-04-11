@@ -166,7 +166,7 @@ class ApiClient {
     const isGet = method === 'GET';
     
     // Check if this is a protected endpoint that requires authentication
-    const isProtectedEndpoint = !endpoint.includes('/auth') && !endpoint.includes('/health') && !endpoint.includes('/diagnostics');
+    const isProtectedEndpoint = !endpoint.includes('/auth') && !endpoint.includes('/health') && !endpoint.includes('/diagnostics') && !endpoint.includes('/students/register') && !endpoint.includes('/students/login');
     
     // If it's a protected endpoint and we don't have a token, throw immediately
     if (isProtectedEndpoint && !token) {
