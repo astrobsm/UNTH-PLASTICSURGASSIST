@@ -213,7 +213,10 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
       if (key === 'confidence') continue;
       const path = prefix ? `${prefix}.${key}` : key;
       if (value !== null && value !== undefined && value !== '') {
-        if (typeof value === 'object' && !Array.isArray(value)) {
+        if (Array.isArray(value)) {
+          // Add each array index as a selectable field (e.g., vital_signs_series.0)
+          value.forEach((_: any, i: number) => result.add(`${path}.${i}`));
+        } else if (typeof value === 'object') {
           flattenFields(value, path, result);
         } else {
           result.add(path);
@@ -273,6 +276,16 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
         if (selectedFields.has('vitals.pain_score') && data.vitals.pain_score != null) vitals.painScore = data.vitals.pain_score;
         if (selectedFields.has('vitals.weight') && data.vitals.weight) vitals.weight = data.vitals.weight;
         if (Object.keys(vitals).length > 0) extractedFields.vital_signs = vitals;
+      }
+
+      // Map vital signs series (post-op chart time-series readings)
+      if (data.vital_signs_series && Array.isArray(data.vital_signs_series) && data.vital_signs_series.length > 0) {
+        const selectedSeries = data.vital_signs_series.filter((_: any, i: number) =>
+          selectedFields.has(`vital_signs_series.${i}`)
+        );
+        if (selectedSeries.length > 0) {
+          extractedFields.vital_signs_series = selectedSeries;
+        }
       }
 
       // Map medications
@@ -380,6 +393,25 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
       if (data.vitals.pain_score != null) vitalFields.push({ key: 'vitals.pain_score', label: 'Pain Score', value: `${data.vitals.pain_score}/10` });
       if (data.vitals.weight) vitalFields.push({ key: 'vitals.weight', label: 'Weight', value: `${data.vitals.weight} kg` });
       if (vitalFields.length > 0) sections.push({ title: 'Vital Signs', fields: vitalFields });
+    }
+
+    // Vital Signs Series (post-op / observation chart time-series)
+    if (data.vital_signs_series && Array.isArray(data.vital_signs_series) && data.vital_signs_series.length > 0) {
+      sections.push({
+        title: `Vital Signs Chart (${data.vital_signs_series.length} readings)`,
+        fields: data.vital_signs_series.map((v: any, i: number) => ({
+          key: `vital_signs_series.${i}`,
+          label: v.date || v.time || `Reading ${i + 1}`,
+          value: [
+            v.bp_systolic ? `BP: ${v.bp_systolic}/${v.bp_diastolic}` : '',
+            v.temperature ? `T: ${v.temperature}°C` : '',
+            v.pulse ? `P: ${v.pulse}` : '',
+            v.respiratory_rate ? `RR: ${v.respiratory_rate}` : '',
+            v.spo2 ? `SpO2: ${v.spo2}%` : '',
+            v.notes || '',
+          ].filter(Boolean).join(' | '),
+        })),
+      });
     }
 
     // Medications

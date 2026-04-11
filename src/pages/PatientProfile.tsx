@@ -1104,6 +1104,49 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; userN
 
   const handleVitalsOCRExtracted = (fields: Record<string, any>) => {
     const entries: VitalReading[] = [];
+
+    // Helper to parse chart date strings like "7/4/26 3:00pm" or "8/4/26 6am" into ISO
+    const parseChartDateTime = (dateStr: string, fallbackIndex: number, totalEntries: number): string => {
+      if (!dateStr) return new Date(Date.now() - (totalEntries - 1 - fallbackIndex) * 3600000).toISOString();
+      try {
+        // Try parsing "D/M/YY TIME" format common in Nigerian hospital charts
+        const parts = dateStr.match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\s*(.*)$/);
+        if (parts) {
+          const day = parseInt(parts[1]);
+          const month = parseInt(parts[2]) - 1; // JS months are 0-indexed
+          let year = parts[3] ? parseInt(parts[3]) : new Date().getFullYear();
+          if (year < 100) year += 2000; // "26" → 2026
+          const timeStr = (parts[4] || '').trim();
+          let hours = 0, minutes = 0;
+          if (timeStr) {
+            const tm = timeStr.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
+            if (tm) {
+              hours = parseInt(tm[1]);
+              minutes = tm[2] ? parseInt(tm[2]) : 0;
+              const ampm = (tm[3] || '').toLowerCase();
+              if (ampm === 'pm' && hours < 12) hours += 12;
+              if (ampm === 'am' && hours === 12) hours = 0;
+            }
+          }
+          const d = new Date(year, month, day, hours, minutes);
+          if (!isNaN(d.getTime())) return d.toISOString();
+        }
+        // Try just time like "3:00pm" — use today's date
+        const timeOnly = dateStr.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i);
+        if (timeOnly) {
+          let hours = parseInt(timeOnly[1]);
+          const minutes = timeOnly[2] ? parseInt(timeOnly[2]) : 0;
+          const ampm = (timeOnly[3] || '').toLowerCase();
+          if (ampm === 'pm' && hours < 12) hours += 12;
+          if (ampm === 'am' && hours === 12) hours = 0;
+          const d = new Date();
+          d.setHours(hours, minutes, 0, 0);
+          return d.toISOString();
+        }
+      } catch { /* fallback below */ }
+      return new Date(Date.now() - (totalEntries - 1 - fallbackIndex) * 3600000).toISOString();
+    };
+
     // Handle single set of vitals from OCR
     if (fields.vital_signs || fields.vitals) {
       const v = fields.vital_signs || fields.vitals;
@@ -1125,10 +1168,11 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; userN
     }
     // Handle array of vitals (series from chart)
     if (fields.vital_signs_series && Array.isArray(fields.vital_signs_series)) {
+      const total = fields.vital_signs_series.length;
       fields.vital_signs_series.forEach((v: any, i: number) => {
         entries.push({
           id: `vs_ocr_${Date.now()}_${i}`,
-          date: v.date || v.datetime || new Date(Date.now() - (fields.vital_signs_series.length - 1 - i) * 3600000).toISOString(),
+          date: parseChartDateTime(v.date || v.datetime || '', i, total),
           temperature: v.temperature || v.temp || undefined,
           pulse: v.pulse || v.heart_rate || undefined,
           bp_systolic: v.bp_systolic || undefined,

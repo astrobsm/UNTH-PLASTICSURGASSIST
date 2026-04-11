@@ -142,7 +142,8 @@ IMPORTANT RULES:
 4. Set abnormal flags based on standard reference ranges when results are present
 5. If no value is found for a field, use null (not empty string)
 6. The confidence field should reflect overall extraction quality (0.0-1.0)
-7. Always try to extract vitals even from shorthand like "T 37.2 P 80 BP 120/80 RR 18 SpO2 98%"`;
+7. Always try to extract vitals even from shorthand like "T 37.2 P 80 BP 120/80 RR 18 SpO2 98%"
+8. For POST-OPERATION CHARTS, OBSERVATION CHARTS, or MONITORING CHARTS with multiple time-stamped readings, extract ALL readings into a "vital_signs_series" array in addition to the first set in "vitals". Each entry should have: { "date": "D/M/YY", "time": "HH:MMam/pm", "temperature": number, "pulse": number, "bp_systolic": number, "bp_diastolic": number, "respiratory_rate": number, "spo2": number, "notes": "any annotation like Pre transfusion" }. Include ALL rows from the chart, preserving dates and times exactly as written.`;
 
 export default async function handler(req, res) {
   // CORS headers

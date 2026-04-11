@@ -887,6 +887,15 @@ class OCRService {
       aiConfidence = 0.5;
     }
 
+    // Step 5: Always try to extract vital signs series from raw text
+    // (AI may only extract a single vitals object from post-op charts)
+    if (structuredData && !structuredData.vital_signs_series) {
+      const series = this.parseVitalSignsSeries(ocrResult.text);
+      if (series && series.length > 1) {
+        structuredData.vital_signs_series = series;
+      }
+    }
+
     onProgress?.({ status: 'recognizing', progress: 1.0 });
 
     return {
@@ -897,6 +906,155 @@ class OCRService {
       processingTime: Date.now() - startTime,
       aiProcessed: structuredData !== null,
     };
+  }
+
+  /**
+   * Parse time-series vital signs from post-op charts, observation charts,
+   * and monitoring charts. Uses BP readings as anchor points and extracts
+   * surrounding vitals (temp, pulse, resp, SpO2) for each row.
+   */
+  private parseVitalSignsSeries(text: string): any[] | null {
+    // Find all BP readings as anchor points — these are the most reliable markers
+    const bpRegex = /(\d{2,3})\s*\/\s*(\d{2,3})/g;
+    const bpMatches: { index: number; systolic: number; diastolic: number }[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = bpRegex.exec(text)) !== null) {
+      const sys = parseInt(m[1]), dia = parseInt(m[2]);
+      // Filter to clinically plausible BP values
+      if (sys >= 50 && sys <= 260 && dia >= 20 && dia <= 160 && sys > dia) {
+        bpMatches.push({ index: m.index, systolic: sys, diastolic: dia });
+      }
+    }
+
+    // Need at least 2 BP readings to consider it a time-series chart
+    if (bpMatches.length < 2) return null;
+
+    // Find all date markers and their positions
+    const dateRegex = /(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?/g;
+    const datePositions: { index: number; dateStr: string }[] = [];
+    let dm: RegExpExecArray | null;
+    while ((dm = dateRegex.exec(text)) !== null) {
+      // Skip if this is part of a BP reading (e.g., 100/70)
+      const surrounding = text.substring(Math.max(0, dm.index - 5), Math.min(text.length, dm.index + dm[0].length + 5));
+      if (/\d\s*\/\s*\d/.test(surrounding) && !surrounding.match(/\d{1,2}\/\d{1,2}\/\d{2,4}/)) {
+        // Simple ratio like BP — check if day/month values make sense as dates
+        const d = parseInt(dm[1]), mo = parseInt(dm[2]);
+        if (d > 31 || mo > 12) continue; // Not a valid date
+        // Only treat as date if preceded by newline, start, or clear separator (not a digit)
+        const charBefore = dm.index > 0 ? text[dm.index - 1] : '\n';
+        if (/\d/.test(charBefore)) continue; // Part of a number sequence, not a date
+      }
+      datePositions.push({ index: dm.index, dateStr: dm[0] });
+    }
+
+    // Extract the header date if present
+    const headerDateMatch = text.match(/Date[:\s]*(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)/i);
+    let currentDate = headerDateMatch ? headerDateMatch[1] : '';
+
+    // Time patterns: "12:30", "3:00pm", "6am", "8:50", "12:10pm", "6:15", "6pm"
+    const timeRegex = /(\d{1,2}(?::\d{2})?)\s*(am|pm)?/gi;
+
+    const readings: any[] = [];
+
+    for (const bp of bpMatches) {
+      // Look backward up to 80 chars for a time pattern
+      const lookbackStart = Math.max(0, bp.index - 80);
+      const beforeBP = text.substring(lookbackStart, bp.index);
+
+      // Find the closest time before the BP  
+      let time = '';
+      let timeMatch: RegExpExecArray | null;
+      const allTimes: { time: string; index: number }[] = [];
+      const localTimeRegex = /(\d{1,2}(?::\d{2})?)\s*(am|pm)?/gi;
+      while ((timeMatch = localTimeRegex.exec(beforeBP)) !== null) {
+        const t = timeMatch[1] + (timeMatch[2] || '');
+        // Filter out numbers that are clearly not times
+        const num = parseInt(timeMatch[1]);
+        if (num >= 1 && num <= 24) {
+          allTimes.push({ time: t, index: timeMatch.index });
+        }
+      }
+      if (allTimes.length > 0) {
+        time = allTimes[allTimes.length - 1].time; // Closest time before BP
+      }
+
+      // Update current date if a date marker appears before this BP
+      for (const dp of datePositions) {
+        if (dp.index < bp.index) {
+          // Check it's a plausible date (not a BP ratio)
+          const parts = dp.dateStr.split('/');
+          if (parseInt(parts[0]) <= 31 && parseInt(parts[1]) <= 12) {
+            currentDate = dp.dateStr;
+          }
+        }
+      }
+
+      // Look forward after BP for: temperature, pulse, resp rate, SpO2
+      const bpEnd = bp.index + `${bp.systolic}/${bp.diastolic}`.length;
+      const afterBP = text.substring(bpEnd, Math.min(text.length, bpEnd + 80));
+
+      // Extract numbers following the BP — they should be: temp, pulse, resp, [spo2]
+      const numbersAfter = afterBP.match(/[\d.]+%?/g);
+      let temperature: number | undefined;
+      let pulse: number | undefined;
+      let respiratory_rate: number | undefined;
+      let spo2: number | undefined;
+      let notes = '';
+
+      if (numbersAfter) {
+        let idx = 0;
+        for (const numStr of numbersAfter) {
+          const num = parseFloat(numStr.replace('%', ''));
+          if (idx === 0 && num >= 30 && num <= 42) {
+            // Temperature (typically 34-40, but allow wider range for OCR errors)
+            temperature = num;
+            idx++;
+          } else if (idx === 1 && num >= 30 && num <= 220 && Number.isInteger(num)) {
+            // Pulse
+            pulse = num;
+            idx++;
+          } else if (idx === 2 && num >= 8 && num <= 60 && Number.isInteger(num)) {
+            // Respiratory rate
+            respiratory_rate = num;
+            idx++;
+          } else if (idx === 3 && num >= 50 && num <= 100) {
+            // SpO2
+            spo2 = numStr.includes('%') ? num : (num >= 80 ? num : undefined);
+            idx++;
+            break;
+          } else if (idx > 0) {
+            break; // Stop if number doesn't fit expected pattern
+          }
+        }
+      }
+
+      // Extract notes (text after numbers)
+      const notesMatch = afterBP.match(/[A-Za-z][A-Za-z\s,.-]+/);
+      if (notesMatch) notes = notesMatch[0].trim();
+
+      // Build ISO-ish datetime from date + time
+      let datetime = '';
+      if (currentDate && time) {
+        datetime = `${currentDate} ${time}`;
+      } else if (time) {
+        datetime = time;
+      }
+
+      readings.push({
+        date: datetime,
+        time: time,
+        chart_date: currentDate,
+        temperature,
+        pulse,
+        bp_systolic: bp.systolic,
+        bp_diastolic: bp.diastolic,
+        respiratory_rate,
+        spo2,
+        notes: notes || undefined,
+      });
+    }
+
+    return readings.length >= 2 ? readings : null;
   }
 
   /**
@@ -930,6 +1088,13 @@ class OCRService {
     if (painMatch) vitals.pain_score = parseInt(painMatch[1]);
 
     if (Object.keys(vitals).length > 0) result.vitals = vitals;
+
+    // Detect post-op / observation charts and extract time-series vital signs
+    const vitalsSeries = this.parseVitalSignsSeries(text);
+    if (vitalsSeries && vitalsSeries.length > 1) {
+      result.vital_signs_series = vitalsSeries;
+      result.confidence = 0.6; // Higher confidence for structured chart data
+    }
 
     // Extract lab values using existing patterns
     const labValues = this.extractLabValues(text);
