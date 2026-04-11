@@ -98,6 +98,8 @@ export default async function handler(req, res) {
           'detox-monitoring-records': 'detox_monitoring_records', 'detox_monitoring_records': 'detox_monitoring_records',
           'detox-follow-ups': 'detox_follow_ups', 'detox_follow_ups': 'detox_follow_ups',
           'substance-use-clinical-summaries': 'substance_use_clinical_summaries', 'substance_use_clinical_summaries': 'substance_use_clinical_summaries',
+          'patient-assignments': 'patient_assignments', 'patient_assignments': 'patient_assignments',
+          'investigation-uploads': 'investigation_uploads', 'investigation_uploads': 'investigation_uploads',
         };
 
         if (action && actionToTable[action]) {

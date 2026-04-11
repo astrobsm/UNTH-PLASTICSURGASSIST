@@ -1,43 +1,49 @@
 /// <reference lib="webworker" />
 /**
- * Service Worker — Plastic Surgeon Assistant PWA v5.0
+ * Service Worker — Plastic Surgeon Assistant PWA v7.0
  * 
- * Strategy:
+ * Workbox Production-Grade Offline-First Architecture:
  *   - injectManifest via vite-plugin-pwa (precache manifest injected at build)
+ *   - Navigation Preload → speeds up NetworkFirst by starting network + cache in parallel
  *   - Navigation → NetworkFirst (3s timeout) → serves cached app shell
- *   - API GET → NetworkFirst (4s timeout) → falls back to Cache API
- *   - API mutations (POST/PUT/PATCH/DELETE) → BackgroundSync queue
+ *   - API GET → NetworkFirst (4s timeout) → rich offline metadata in fallback
+ *   - API mutations (POST/PUT/PATCH/DELETE) → BackgroundSync queue with priority
  *   - Static assets (JS/CSS) → StaleWhileRevalidate
- *   - Images → CacheFirst (60 days)
+ *   - Images → CacheFirst (60 days) with offline placeholder
  *   - Fonts → CacheFirst (1 year)
+ *   - Warm strategy cache for critical routes on install
  *   - Push notifications with voice announcements
- *   - Periodic background sync for clinical data
+ *   - Periodic background sync for clinical data (15 min)
  */
 
-import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching';
-import { registerRoute, NavigationRoute, setCatchHandler } from 'workbox-routing';
+import { precacheAndRoute, cleanupOutdatedCaches, matchPrecache } from 'workbox-precaching';
+import { registerRoute, NavigationRoute, setCatchHandler, setDefaultHandler } from 'workbox-routing';
 import { NetworkFirst, CacheFirst, StaleWhileRevalidate, NetworkOnly } from 'workbox-strategies';
 import { BackgroundSyncPlugin } from 'workbox-background-sync';
 import { ExpirationPlugin } from 'workbox-expiration';
 import { CacheableResponsePlugin } from 'workbox-cacheable-response';
+import { warmStrategyCache } from 'workbox-recipes';
+import * as navigationPreload from 'workbox-navigation-preload';
 
 declare const self: ServiceWorkerGlobalScope;
 
 // ─── Cache names ────────────────────────────────────────────
-// Cache names use a FIXED version string so caches persist across SW restarts.
-// When deploying a new version, increment the version number below.
-// Workbox precache handles content-hash-based cache busting automatically.
-const CACHE_VERSION = 'v8';
+const CACHE_VERSION = 'v9';
 const API_CACHE = `api-cache-${CACHE_VERSION}`;
 const IMAGE_CACHE = `images-cache-${CACHE_VERSION}`;
 const FONT_CACHE = `fonts-cache-${CACHE_VERSION}`;
 const STATIC_CACHE = `static-cache-${CACHE_VERSION}`;
 
+// ─── Enable Navigation Preload (speeds up NetworkFirst) ─────
+// This makes the browser start a network request in parallel with the SW boot,
+// so NetworkFirst strategies don't wait for the SW to fully initialize first.
+navigationPreload.enable();
+
 // ─── Precache (injected by vite-plugin-pwa at build time) ───
 precacheAndRoute(self.__WB_MANIFEST);
 cleanupOutdatedCaches();
 
-// ─── Install: auto-skipWaiting to ensure latest code is served ─
+// ─── Install: skip waiting + pre-warm critical routes ───────
 self.addEventListener('install', () => {
   console.log('[SW] New service worker installed, activating immediately...');
   self.skipWaiting();
@@ -51,6 +57,7 @@ self.addEventListener('activate', (event) => {
       const currentCacheSuffixes = [
         API_CACHE, IMAGE_CACHE, FONT_CACHE, STATIC_CACHE,
         `app-shell-${CACHE_VERSION}`,
+        `default-cache-${CACHE_VERSION}`,
       ];
       await Promise.all(
         cacheNames
@@ -69,8 +76,30 @@ self.addEventListener('activate', (event) => {
             return caches.delete(name);
           })
       );
+
+      // Pre-warm critical API endpoints into cache on activation
+      // so they're available immediately for offline access.
+      const apiCache = await caches.open(API_CACHE);
+      const criticalEndpoints = [
+        '/api/patients',
+        '/api/admissions/active',
+        '/api/treatment-plans',
+        '/api/prescriptions',
+        '/api/users/approved',
+      ];
+      for (const url of criticalEndpoints) {
+        try {
+          const resp = await fetch(url, { credentials: 'same-origin' });
+          if (resp.ok) {
+            await apiCache.put(url, resp);
+          }
+        } catch {
+          // Offline during activation — skip, will be cached on first GET
+        }
+      }
+
       await self.clients.claim();
-      console.log('[SW] Activated and claimed clients');
+      console.log('[SW] Activated, claimed clients, and warmed API caches');
     })()
   );
 });
@@ -137,6 +166,13 @@ const navigationHandler = new NetworkFirst({
   ],
 });
 
+// Pre-warm the navigation cache with the app shell on install
+// so the very first offline visit has the full SPA available.
+warmStrategyCache({
+  urls: ['/'],
+  strategy: navigationHandler,
+});
+
 registerRoute(
   new NavigationRoute(navigationHandler, {
     denylist: [
@@ -169,13 +205,23 @@ registerRoute(
     url.pathname.startsWith('/api/') && request.method === 'GET',
   async (args) => {
     try {
-      return await apiGetStrategy.handle(args);
+      const response = await apiGetStrategy.handle(args);
+      return response;
     } catch (_err) {
-      // Network failed and no cache hit — return empty JSON so the app
-      // can continue working offline without unhandled promise rejections.
-      return new Response(JSON.stringify([]), {
+      // Network failed and no cache hit — return rich offline metadata
+      // so the app can distinguish "no data" from "offline, no cache".
+      return new Response(JSON.stringify({
+        _offline: true,
+        _cachedAt: null,
+        _error: 'No cached data available for this endpoint',
+        data: []
+      }), {
         status: 503,
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Offline': 'true',
+          'X-Cache-Status': 'miss',
+        },
       });
     }
   }
@@ -294,15 +340,38 @@ registerRoute(
   })
 );
 
+// ─── Default handler — catch any unmatched requests ─────────
+setDefaultHandler(new NetworkFirst({
+  cacheName: `default-cache-${CACHE_VERSION}`,
+  networkTimeoutSeconds: 5,
+  plugins: [
+    new CacheableResponsePlugin({ statuses: [0, 200] }),
+    new ExpirationPlugin({ maxEntries: 50, maxAgeSeconds: 7 * 24 * 60 * 60 }),
+  ],
+}));
+
 // ─── Global catch handler — prevents unhandled rejections ───
 setCatchHandler(async ({ request }) => {
-  // Return appropriate fallback for any route that fails
-  if (request.destination === 'image') {
-    return new Response('', { status: 404, statusText: 'Image not available offline' });
+  // For navigation failures, try the precached index.html first (SPA shell)
+  if (request.destination === 'document') {
+    const precached = await matchPrecache('/index.html');
+    if (precached) return precached;
+    const offlinePage = await caches.match('/offline.html');
+    if (offlinePage) return offlinePage;
   }
-  if (request.destination === 'document' || request.destination === 'manifest') {
-    const cache = await caches.match('/offline.html');
-    if (cache) return cache;
+  if (request.destination === 'image') {
+    // Return transparent 1×1 PNG for missing images
+    return new Response(
+      Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQABNjN9GQAAAAlwSFlzAAAWJQAAFiUBSVIk8AAAAA0lEQVQI12P4z8BQDwAEgAF/QualIQAAAABJRU5ErkJggg=='), c => c.charCodeAt(0)),
+      { headers: { 'Content-Type': 'image/png' } }
+    );
+  }
+  // For API requests, return offline JSON
+  if (request.url.includes('/api/')) {
+    return new Response(JSON.stringify({ _offline: true, data: [] }), {
+      status: 503,
+      headers: { 'Content-Type': 'application/json', 'X-Offline': 'true' },
+    });
   }
   return new Response('', { status: 503, statusText: 'Offline' });
 });
@@ -495,4 +564,33 @@ self.addEventListener('message', async (event) => {
   }
 });
 
-console.log('🏥 Plastic Surgeon Assistant Service Worker v6.0 loaded');
+// ─── Warm critical API routes on activation ─────────────────
+// Pre-cache the most important clinical API endpoints so they're
+// available immediately on first offline access.
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    (async () => {
+      // Warm key API endpoints into the api cache
+      const apiCache = await caches.open(API_CACHE);
+      const criticalEndpoints = [
+        '/api/patients',
+        '/api/admissions/active',
+        '/api/treatment-plans',
+        '/api/prescriptions',
+        '/api/users/approved',
+      ];
+      for (const url of criticalEndpoints) {
+        try {
+          const resp = await fetch(url, { credentials: 'same-origin' });
+          if (resp.ok) {
+            await apiCache.put(url, resp);
+          }
+        } catch {
+          // Offline during activation — skip, will be cached on first GET
+        }
+      }
+    })()
+  );
+});
+
+console.log('🏥 Plastic Surgeon Assistant Service Worker v7.0 loaded');

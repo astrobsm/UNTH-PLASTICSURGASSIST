@@ -224,11 +224,19 @@ class ApiClient {
 
         // Handle 503 from service worker (offline/queued)
         if (response.status === 503) {
+          // Check if SW sent rich offline metadata
+          const isOfflineResponse = response.headers.get('X-Offline') === 'true';
           if (isGet) {
             const cached = await this.getCachedResponse<T>(endpoint, entityInfo);
             if (cached !== null) {
-              console.log(`📦 SW 503: serving cached data for ${endpoint}`);
+              console.log(`📦 ${isOfflineResponse ? 'Offline' : 'SW 503'}: serving IndexedDB data for ${endpoint}`);
               return cached;
+            }
+            // If SW returned the _offline enriched response, return empty array
+            // so the app can continue (no unhandled rejection)
+            if (isOfflineResponse) {
+              console.log(`📴 Offline, no cached data for ${endpoint}`);
+              return [] as unknown as T;
             }
           }
         }

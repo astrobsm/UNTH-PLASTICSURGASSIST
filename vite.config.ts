@@ -20,6 +20,7 @@ export default defineConfig({
         'logo.png',
         'icon-192.png',
         'icon-512.png',
+        'offline.html',
       ],
 
       manifest: {
@@ -94,6 +95,10 @@ export default defineConfig({
       injectManifest: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2,json}'],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+        // Include offline.html in the precache so it's always available
+        additionalManifestEntries: [
+          { url: '/offline.html', revision: Date.now().toString() },
+        ],
       },
 
       // Development options

@@ -78,7 +78,7 @@ const navigation = [
 // Patient-specific actions — shown as dropdown when a patient is selected
 export const patientActions = [
   { name: 'Admission & Discharge', href: '/admission-discharge', icon: BedDouble },
-  { name: 'Treatment Planning', href: '/treatment-planning', icon: Activity },
+  { name: 'Treatment Planning', href: '/treatment-plan-manager', icon: Activity },
   { name: 'Patient Summaries', href: '/patient-summaries', icon: FileText },
   { name: 'Paperwork', href: '/paperwork', icon: FolderOpen },
   { name: 'MDT', href: '/mdt', icon: UserCog },

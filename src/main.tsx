@@ -8,7 +8,7 @@ import './index.css';
 import { offlineManager } from './services/offlineManager';
 
 // ─── App Version ─────────────────────────────────────────────
-const APP_VERSION = '5.0.0';
+const APP_VERSION = '7.0.0';
 console.log(`🚀 Plastic Surgeon Assistant v${APP_VERSION}`);
 console.log(`📅 Build: ${new Date().toISOString()}`);
 
@@ -75,9 +75,9 @@ if ('serviceWorker' in navigator) {
       if ('periodicSync' in registration) {
         try {
           await (registration as any).periodicSync.register('clinical-data-sync', {
-            minInterval: 60 * 60 * 1000, // 1 hour
+            minInterval: 15 * 60 * 1000, // 15 minutes — clinical data needs frequent updates
           });
-          console.log('⏰ Periodic Background Sync registered');
+          console.log('⏰ Periodic Background Sync registered (15 min interval)');
         } catch {
           console.log('Periodic Background Sync not available');
         }
@@ -113,6 +113,26 @@ if ('serviceWorker' in navigator) {
         console.log('⏰ Periodic sync trigger received');
         offlineManager.forceSync().catch(() => {});
         break;
+    }
+  });
+
+  // ── Aggressively pre-warm critical API caches when coming back online ──
+  window.addEventListener('online', () => {
+    if (navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({
+        type: 'CACHE_URLS',
+        payload: {
+          cacheName: `api-cache-v9`,
+          urls: [
+            '/api/patients',
+            '/api/admissions/active',
+            '/api/treatment-plans',
+            '/api/prescriptions',
+            '/api/users/approved',
+          ],
+        },
+      });
+      console.log('🔄 Re-warming critical API caches after reconnection');
     }
   });
 }
@@ -158,15 +178,26 @@ if (navigator.storage && navigator.storage.persist) {
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: 1,
+      retry: (failureCount, error: any) => {
+        // Don't retry when offline — serve cached data immediately
+        if (!navigator.onLine) return false;
+        // Don't retry 4xx errors (client errors)
+        if (error?.status >= 400 && error?.status < 500) return false;
+        return failureCount < 2;
+      },
       staleTime: 5 * 60 * 1000,
-      // Keep data in cache when offline
-      gcTime: 30 * 60 * 1000,
+      // Keep data in cache for 1 hour offline (increased from 30min)
+      gcTime: 60 * 60 * 1000,
       refetchOnWindowFocus: false, // Don't refetch when user switches back
       networkMode: 'offlineFirst', // Always return cached data first
+      refetchOnReconnect: true,    // Refresh stale data when coming back online
     },
     mutations: {
       networkMode: 'offlineFirst',
+      retry: (failureCount) => {
+        if (!navigator.onLine) return false;
+        return failureCount < 1;
+      },
     },
   },
 });

@@ -17,7 +17,9 @@ import {
   Activity,
   Zap,
   Download,
-  Loader2
+  Loader2,
+  Scan,
+  Camera
 } from 'lucide-react';
 import { 
   labService, 
@@ -38,6 +40,7 @@ import { useAuthStore } from '../store/authStore';
 import { dataSyncService } from '../services/dataSyncService';
 import jsPDF from 'jspdf';
 import toast from 'react-hot-toast';
+import { DocumentScannerModal } from '../components/DocumentScannerModal';
 
 type LabTab = 'investigations' | 'results' | 'upload' | 'trends' | 'requests' | 'gfr';
 
@@ -1047,6 +1050,22 @@ const UploadSection = ({ investigations, onRefresh }: any) => {
   });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [showOCRModal, setShowOCRModal] = useState(false);
+
+  const handleOCRFields = (fields: Record<string, any>) => {
+    setFormData(prev => ({
+      ...prev,
+      test_id: fields.test_name || fields.test_id || fields.investigation || prev.test_id,
+      result_value: fields.result_value || fields.result || fields.value || prev.result_value,
+      unit: fields.unit || fields.units || prev.unit,
+      reference_range: fields.reference_range || fields.normal_range || fields.range || prev.reference_range,
+      abnormal_flag: fields.abnormal_flag || fields.flag || prev.abnormal_flag,
+      lab_technician: fields.technician || fields.lab_technician || fields.reported_by || prev.lab_technician,
+      comments: fields.comments || fields.notes || fields.interpretation || prev.comments
+    }));
+    setShowOCRModal(false);
+    toast.success('Lab result fields extracted from scan');
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1088,9 +1107,19 @@ const UploadSection = ({ investigations, onRefresh }: any) => {
 
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
-      <div className="flex items-center space-x-3 mb-6">
-        <Upload className="h-6 w-6 text-green-600" />
-        <h2 className="text-xl font-semibold text-gray-900">Upload Lab Results</h2>
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center space-x-3">
+          <Upload className="h-6 w-6 text-green-600" />
+          <h2 className="text-xl font-semibold text-gray-900">Upload Lab Results</h2>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowOCRModal(true)}
+          className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          <Scan className="h-4 w-4" />
+          <span>Scan Lab Form</span>
+        </button>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -1237,6 +1266,14 @@ const UploadSection = ({ investigations, onRefresh }: any) => {
           </button>
         </div>
       </form>
+
+      <DocumentScannerModal
+        isOpen={showOCRModal}
+        onClose={() => setShowOCRModal(false)}
+        onFieldsExtracted={handleOCRFields}
+        documentType="lab_report"
+        targetForm="lab_entry"
+      />
     </div>
   );
 };

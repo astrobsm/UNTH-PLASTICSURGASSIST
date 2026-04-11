@@ -41,6 +41,22 @@ async function addMissingColumns() {
     { table: 'treatment_plans', column: 'deleted', sql: `ALTER TABLE treatment_plans ADD COLUMN IF NOT EXISTS deleted BOOLEAN DEFAULT FALSE` },
     { table: 'treatment_plans', column: 'synced', sql: `ALTER TABLE treatment_plans ADD COLUMN IF NOT EXISTS synced BOOLEAN DEFAULT FALSE` },
     { table: 'treatment_plans', column: 'admission_id', sql: `ALTER TABLE treatment_plans ADD COLUMN IF NOT EXISTS admission_id UUID` },
+    
+    // Treatment plans - JSONB columns needed by API and new TreatmentPlanCreator/Manager
+    { table: 'treatment_plans', column: 'objectives', sql: `ALTER TABLE treatment_plans ADD COLUMN IF NOT EXISTS objectives JSONB DEFAULT '[]'` },
+    { table: 'treatment_plans', column: 'procedures', sql: `ALTER TABLE treatment_plans ADD COLUMN IF NOT EXISTS procedures JSONB DEFAULT '[]'` },
+    { table: 'treatment_plans', column: 'medications', sql: `ALTER TABLE treatment_plans ADD COLUMN IF NOT EXISTS medications JSONB DEFAULT '[]'` },
+    { table: 'treatment_plans', column: 'investigations', sql: `ALTER TABLE treatment_plans ADD COLUMN IF NOT EXISTS investigations JSONB DEFAULT '[]'` },
+    { table: 'treatment_plans', column: 'follow_up_schedule', sql: `ALTER TABLE treatment_plans ADD COLUMN IF NOT EXISTS follow_up_schedule JSONB DEFAULT '[]'` },
+    { table: 'treatment_plans', column: 'medical_team', sql: `ALTER TABLE treatment_plans ADD COLUMN IF NOT EXISTS medical_team JSONB` },
+    { table: 'treatment_plans', column: 'discharge_plan', sql: `ALTER TABLE treatment_plans ADD COLUMN IF NOT EXISTS discharge_plan JSONB` },
+    { table: 'treatment_plans', column: 'risk_assessments', sql: `ALTER TABLE treatment_plans ADD COLUMN IF NOT EXISTS risk_assessments JSONB DEFAULT '[]'` },
+    { table: 'treatment_plans', column: 'meal_plan', sql: `ALTER TABLE treatment_plans ADD COLUMN IF NOT EXISTS meal_plan JSONB` },
+    { table: 'treatment_plans', column: 'ward_round_schedule', sql: `ALTER TABLE treatment_plans ADD COLUMN IF NOT EXISTS ward_round_schedule JSONB` },
+    { table: 'treatment_plans', column: 'discharge_criteria', sql: `ALTER TABLE treatment_plans ADD COLUMN IF NOT EXISTS discharge_criteria JSONB DEFAULT '[]'` },
+    { table: 'treatment_plans', column: 'treatment_type', sql: `ALTER TABLE treatment_plans ADD COLUMN IF NOT EXISTS treatment_type VARCHAR(100)` },
+    { table: 'treatment_plans', column: 'description', sql: `ALTER TABLE treatment_plans ADD COLUMN IF NOT EXISTS description TEXT` },
+    { table: 'treatment_plans', column: 'created_by', sql: `ALTER TABLE treatment_plans ADD COLUMN IF NOT EXISTS created_by VARCHAR(255)` },
   ];
   
   let successCount = 0;
@@ -438,6 +454,24 @@ async function createMissingTables() {
       left_at TIMESTAMPTZ,
       duration_seconds INTEGER,
       was_presenter BOOLEAN DEFAULT FALSE
+    )`,
+    
+    // Patient Assignments (team assignment tracking - matches IndexedDB schema)
+    `CREATE TABLE IF NOT EXISTS patient_assignments (
+      id SERIAL PRIMARY KEY,
+      patient_id INTEGER NOT NULL,
+      hospital_number VARCHAR(100),
+      consultant_id INTEGER,
+      senior_registrar_id INTEGER,
+      registrar_id INTEGER,
+      house_officer_id INTEGER,
+      assigned_date TIMESTAMPTZ DEFAULT NOW(),
+      is_active BOOLEAN DEFAULT TRUE,
+      created_by VARCHAR(255),
+      deleted BOOLEAN DEFAULT FALSE,
+      synced BOOLEAN DEFAULT FALSE,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
     )`,
   ];
   

@@ -70,10 +70,36 @@
       </ul>
     </div>
     <button onclick="window.location.reload()">Try Again</button>
+    <button onclick="tryLoadApp()" style="margin-top:0.5rem;background:#047857;">Open Cached App</button>
     <div class="brand">
       <img src="/logo.png" alt="PSA">
       <span>Plastic Surgeon Assistant</span>
     </div>
   </div>
+  <script>
+    // Try to navigate to the cached SPA shell
+    async function tryLoadApp() {
+      try {
+        // Check if there's a cached version of the app
+        const cacheNames = await caches.keys();
+        for (const name of cacheNames) {
+          if (name.startsWith('app-shell') || name.startsWith('workbox-precache')) {
+            const cache = await caches.open(name);
+            const keys = await cache.keys();
+            const indexEntry = keys.find(r => r.url.endsWith('/') || r.url.endsWith('/index.html'));
+            if (indexEntry) {
+              window.location.href = '/';
+              return;
+            }
+          }
+        }
+        alert('No cached version available yet. Use "Download for Offline Use" from the dashboard when online.');
+      } catch (e) {
+        alert('Could not load cached version. Please reconnect to the internet.');
+      }
+    }
+    // Auto-redirect if the app shell is cached
+    tryLoadApp();
+  </script>
 </body>
 </html>

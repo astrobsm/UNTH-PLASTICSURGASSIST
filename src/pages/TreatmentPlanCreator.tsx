@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   User, Search, Plus, Trash2, ChevronRight, ChevronDown, AlertTriangle,
   CheckCircle, Clock, Calendar, Pill, Activity, FileText, Heart,
-  Shield, Apple, Printer, Download, Bell, X, Info, Loader2, Beaker
+  Shield, Apple, Printer, Download, Bell, X, Info, Loader2, Beaker, Camera, Scan
 } from 'lucide-react';
 import { format, addDays, addWeeks } from 'date-fns';
 import { useAuthStore } from '../store/authStore';
@@ -14,6 +14,7 @@ import { medicalTeamService } from '../services/medicalTeamService';
 import { searchMedications, getMedicationByName, BNFMedication } from '../data/bnfMedications';
 import { searchInvestigations, getInvestigationByName } from '../data/investigationDatabase';
 import { medicationDosingService } from '../services/medicationDosingService';
+import { DocumentScannerModal } from '../components/DocumentScannerModal';
 import toast from 'react-hot-toast';
 
 // ─── PRESCRIPTION TEMPLATES ──────────────────────────────────────────────────
@@ -224,6 +225,9 @@ const TreatmentPlanCreator: React.FC = () => {
   // Step 7: Discharge
   const [plannedDischargeDate, setPlannedDischargeDate] = useState(format(addWeeks(new Date(), 1), 'yyyy-MM-dd'));
   const [dischargeCriteriaMet, setDischargeCriteriaMet] = useState<string[]>([]);
+
+  // OCR Scanner
+  const [ocrModal, setOcrModal] = useState<'clinical' | 'investigation' | 'prescription' | null>(null);
 
   // ── COMPUTED VALUES ────────────────────────────────────────────────────────
   const dvtScore = useMemo(() => {
@@ -587,6 +591,78 @@ const TreatmentPlanCreator: React.FC = () => {
     }
   };
 
+  // ── OCR FIELD EXTRACTION HANDLERS ────────────────────────────────────────
+  const handleOCRFields = (fields: Record<string, any>) => {
+    if (ocrModal === 'clinical') {
+      if (fields.diagnosis || fields.primary_diagnosis) {
+        setDiagnosis(prev => prev || fields.diagnosis || fields.primary_diagnosis || '');
+      }
+      if (fields.clinical_summary || fields.history || fields.presenting_complaint || fields.notes) {
+        const summary = fields.clinical_summary || fields.history || fields.presenting_complaint || fields.notes || '';
+        setClinicalSummary(prev => prev ? `${prev}\n${summary}` : summary);
+      }
+      if (fields.comorbidities && Array.isArray(fields.comorbidities)) {
+        setComorbidities(prev => [...new Set([...prev, ...fields.comorbidities])]);
+      }
+      toast.success('Clinical notes extracted from scan');
+    } else if (ocrModal === 'investigation') {
+      const extracted: any[] = [];
+      if (Array.isArray(fields.investigations)) {
+        fields.investigations.forEach((inv: any) => {
+          extracted.push({
+            id: Date.now() + Math.random(),
+            name: inv.name || inv.test_name || 'Unknown',
+            type: inv.type || 'lab',
+            frequency: 'once',
+            repeat_count: 1,
+            target_range: inv.reference_range || inv.normal_range || '',
+            notes: inv.result ? `Previous result: ${inv.result}${inv.unit ? ' ' + inv.unit : ''}` : '',
+          });
+        });
+      } else if (Array.isArray(fields.results)) {
+        fields.results.forEach((r: any) => {
+          extracted.push({
+            id: Date.now() + Math.random(),
+            name: r.test_name || r.name || 'Unknown',
+            type: 'lab',
+            frequency: 'once',
+            repeat_count: 1,
+            target_range: r.reference_range || '',
+            notes: r.result_value ? `Previous: ${r.result_value}${r.unit ? ' ' + r.unit : ''}` : '',
+          });
+        });
+      }
+      if (extracted.length > 0) {
+        setInvestigations(prev => [...prev, ...extracted]);
+        toast.success(`${extracted.length} investigation(s) extracted from scan`);
+      } else {
+        toast.error('No investigations could be extracted from this scan');
+      }
+    } else if (ocrModal === 'prescription') {
+      const extracted: any[] = [];
+      if (Array.isArray(fields.medications)) {
+        fields.medications.forEach((med: any) => {
+          extracted.push({
+            id: Date.now() + Math.random(),
+            name: med.name || med.drug_name || 'Unknown',
+            dosage: med.dosage || med.dose || '',
+            route: med.route || 'oral',
+            frequency: med.frequency || 'OD',
+            duration: med.duration || '7 days',
+            notes: med.notes || med.instructions || '',
+          });
+        });
+      }
+      if (extracted.length > 0) {
+        setMedications(prev => [...prev, ...extracted]);
+        toast.success(`${extracted.length} medication(s) extracted from scan`);
+      } else {
+        toast.error('No medications could be extracted from this scan');
+      }
+    }
+    setOcrModal(null);
+  };
+
   // ── STEP TITLES ────────────────────────────────────────────────────────────
   const steps = [
     { num: 1, title: 'Patient & Team', icon: <User className="w-4 h-4" /> },
@@ -711,7 +787,12 @@ const TreatmentPlanCreator: React.FC = () => {
 
             {/* Clinical Summary */}
             <div className="bg-white rounded-xl shadow-sm border p-4 space-y-3">
-              <h2 className="text-base font-semibold flex items-center gap-2"><FileText className="w-5 h-5 text-blue-600" /> Clinical Information</h2>
+              <div className="flex items-center justify-between">
+                <h2 className="text-base font-semibold flex items-center gap-2"><FileText className="w-5 h-5 text-blue-600" /> Clinical Information</h2>
+                <button onClick={() => setOcrModal('clinical')} className="flex items-center gap-1 px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg text-xs font-medium hover:bg-blue-200">
+                  <Scan className="w-3.5 h-3.5" /> Scan Notes
+                </button>
+              </div>
               <div>
                 <label className="text-xs font-medium text-gray-600">Diagnosis *</label>
                 <input value={diagnosis} onChange={e => setDiagnosis(e.target.value)} placeholder="Primary diagnosis..."
@@ -922,7 +1003,12 @@ const TreatmentPlanCreator: React.FC = () => {
         {step === 4 && (
           <div className="space-y-4">
             <div className="bg-white rounded-xl shadow-sm border p-4">
-              <h2 className="text-base font-semibold flex items-center gap-2 mb-3"><Beaker className="w-5 h-5 text-yellow-600" /> Investigations</h2>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-base font-semibold flex items-center gap-2"><Beaker className="w-5 h-5 text-yellow-600" /> Investigations</h2>
+                <button onClick={() => setOcrModal('investigation')} className="flex items-center gap-1 px-3 py-1.5 bg-yellow-100 text-yellow-700 rounded-lg text-xs font-medium hover:bg-yellow-200">
+                  <Scan className="w-3.5 h-3.5" /> Scan Lab Form
+                </button>
+              </div>
               {investigations.length > 0 && (
                 <div className="space-y-2 mb-4">
                   {investigations.map((inv, i) => (
@@ -985,7 +1071,12 @@ const TreatmentPlanCreator: React.FC = () => {
           <div className="space-y-4">
             {/* Quick Templates */}
             <div className="bg-white rounded-xl shadow-sm border p-4">
-              <h2 className="text-base font-semibold flex items-center gap-2 mb-3"><Pill className="w-5 h-5 text-purple-600" /> Quick Prescription Templates</h2>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-base font-semibold flex items-center gap-2"><Pill className="w-5 h-5 text-purple-600" /> Quick Prescription Templates</h2>
+                <button onClick={() => setOcrModal('prescription')} className="flex items-center gap-1 px-3 py-1.5 bg-purple-100 text-purple-700 rounded-lg text-xs font-medium hover:bg-purple-200">
+                  <Scan className="w-3.5 h-3.5" /> Scan Prescription
+                </button>
+              </div>
               <div className="flex flex-wrap gap-2">
                 <button onClick={addWoundCareSupplements} className="px-3 py-2 bg-green-100 text-green-700 rounded-lg text-sm font-medium hover:bg-green-200 flex items-center gap-1">
                   <Plus className="w-4 h-4" /> Wound Care Supplements
@@ -1219,6 +1310,21 @@ const TreatmentPlanCreator: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* OCR Document Scanner Modal */}
+      <DocumentScannerModal
+        isOpen={ocrModal !== null}
+        onClose={() => setOcrModal(null)}
+        onFieldsExtracted={handleOCRFields}
+        documentType={ocrModal === 'clinical' ? 'clinical_notes' : ocrModal === 'investigation' ? 'lab_report' : ocrModal === 'prescription' ? 'prescription' : 'general'}
+        patientContext={selectedPatient ? {
+          name: selectedPatient.full_name || selectedPatient.name || `${selectedPatient.first_name || ''} ${selectedPatient.last_name || ''}`,
+          hospitalNumber: selectedPatient.hospital_number,
+          ward: selectedPatient.ward,
+          diagnosis: diagnosis,
+        } : undefined}
+        targetForm={ocrModal === 'prescription' ? 'prescription' : ocrModal === 'investigation' ? 'lab_entry' : 'progress_note'}
+      />
     </div>
   );
 };

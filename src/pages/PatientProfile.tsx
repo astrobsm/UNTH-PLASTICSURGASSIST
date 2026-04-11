@@ -2285,7 +2285,7 @@ const TreatmentPlansTab: React.FC<{ patientId: string; patientName: string; navi
             <button onClick={() => setShowPlanOCR(true)} disabled={savingOCRPlan} className="flex items-center gap-1 px-3 py-1.5 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 disabled:opacity-50">
               {savingOCRPlan ? <Loader2 className="w-4 h-4 animate-spin" /> : <ScanLine className="w-4 h-4" />} Scan Plan
             </button>
-            <button onClick={() => navigate(`/treatment-planning?patientId=${patientId}&patientName=${encodeURIComponent(patientName)}`)} className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700">
+            <button onClick={() => navigate(`/treatment-plan-creator?patientId=${patientId}&patientName=${encodeURIComponent(patientName)}`)} className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700">
               <Plus className="w-4 h-4" /> New Plan
             </button>
           </div>
@@ -2408,9 +2408,9 @@ const TreatmentPlansTab: React.FC<{ patientId: string; patientName: string; navi
                           </div>
                         )}
                         <div className="flex gap-2 pt-2">
-                          <button onClick={(e) => { e.stopPropagation(); navigate(`/treatment-planning?patientId=${patientId}&patientName=${encodeURIComponent(patientName)}&planId=${plan.id}`); }}
+                          <button onClick={(e) => { e.stopPropagation(); navigate(`/treatment-plan-manager?planId=${plan.id}`); }}
                             className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white text-xs rounded-md hover:bg-blue-700">
-                            <FileText className="w-3.5 h-3.5" /> Edit Plan
+                            <FileText className="w-3.5 h-3.5" /> View Plan
                           </button>
                         </div>
                       </div>

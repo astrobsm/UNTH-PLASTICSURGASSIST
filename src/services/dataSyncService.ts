@@ -53,7 +53,9 @@ export type SyncableEntity =
   | 'substance_use_assessments'
   | 'detox_monitoring_records'
   | 'detox_follow_ups'
-  | 'substance_use_clinical_summaries';
+  | 'substance_use_clinical_summaries'
+  | 'patient_assignments'
+  | 'investigation_uploads';
 
 // Sync status for each entity
 interface EntitySyncStatus {
@@ -125,7 +127,9 @@ class DataSyncService {
     substance_use_assessments: '/sync/substance-use-assessments',
     detox_monitoring_records: '/sync/detox-monitoring-records',
     detox_follow_ups: '/sync/detox-follow-ups',
-    substance_use_clinical_summaries: '/sync/substance-use-clinical-summaries'
+    substance_use_clinical_summaries: '/sync/substance-use-clinical-summaries',
+    patient_assignments: '/sync/patient-assignments',
+    investigation_uploads: '/sync/investigation-uploads'
   };
 
   // Entity to IndexedDB table mapping
