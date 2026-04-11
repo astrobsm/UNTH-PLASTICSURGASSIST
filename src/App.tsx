@@ -67,6 +67,8 @@ const LimbSalvagePage = lazyWithRetry(() => import('./pages/LimbSalvagePage'));
 const BurnCarePage = lazyWithRetry(() => import('./pages/BurnCarePage'));
 const MedicalTrainingPage = lazyWithRetry(() => import('./pages/MedicalTrainingPage'));
 const TreatmentPlanBuilder = lazyWithRetry(() => import('./components/TreatmentPlanBuilder'));
+const TreatmentPlanCreator = lazyWithRetry(() => import('./pages/TreatmentPlanCreator'));
+const TreatmentPlanManager = lazyWithRetry(() => import('./pages/TreatmentPlanManager'));
 const BookingRegisterPage = lazyWithRetry(() => import('./pages/BookingRegisterPage'));
 const PreSurgicalConferencePage = lazyWithRetry(() => import('./pages/PreSurgicalConferencePage'));
 const WoundCarePage = lazyWithRetry(() => import('./pages/WoundCarePage'));
@@ -216,6 +218,8 @@ function App() {
               <Route path="/patient-action" element={<PatientActionRecords />} />
               <Route path="/patients/:id/plans/:planId" element={<TreatmentPlans />} />
               <Route path="/treatment-plan-builder" element={<TreatmentPlanBuilder />} />
+              <Route path="/treatment-plan-creator" element={<TreatmentPlanCreator />} />
+              <Route path="/treatment-plan-manager" element={<TreatmentPlanManager />} />
               <Route path="/treatment-planning" element={<TreatmentPlanningPage />} />
               <Route path="/patient-summaries" element={<PatientSummariesPage />} />
               <Route path="/paperwork" element={<PaperworkPage />} />

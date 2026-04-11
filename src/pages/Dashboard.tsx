@@ -14,7 +14,10 @@ import {
   Download,
   CheckCircle2,
   Loader2,
-  WifiOff
+  WifiOff,
+  FileText,
+  Pill,
+  Activity
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
@@ -78,6 +81,25 @@ export default function Dashboard() {
   const [staffList, setStaffList] = useState<ApprovedUser[]>([]);
   const [selectedStaffId, setSelectedStaffId] = useState('');
   const [staffPatients, setStaffPatients] = useState<DashboardPatient[]>([]);
+
+  // Treatment Plan Tracking
+  const [treatmentPlanSummaries, setTreatmentPlanSummaries] = useState<Array<{
+    id: string;
+    patientName: string;
+    hospitalNumber: string;
+    title: string;
+    status: string;
+    totalMeds: number;
+    activeMeds: number;
+    totalInvestigations: number;
+    completedInvestigations: number;
+    totalProcedures: number;
+    completedProcedures: number;
+    dischargeMet: number;
+    dischargeTotal: number;
+    compliancePercent: number;
+    createdAt: string;
+  }>>([]);
   const [staffLookupLoading, setStaffLookupLoading] = useState(false);
   const [autoAssigning, setAutoAssigning] = useState(false);
   const [autoAssignResult, setAutoAssignResult] = useState<string | null>(null);
@@ -294,6 +316,56 @@ export default function Dashboard() {
       }
 
       setRecentActivities(activities.slice(0, 3));
+
+      // Load treatment plan summaries for this user's patients
+      try {
+        const myPatientIds = new Set(dPatients.map(p => Number(p.id)));
+        const activePlans = allTreatmentPlans.filter(tp =>
+          !tp.deleted && (tp.status === 'active' || tp.status === 'draft') &&
+          (isAdmin || myPatientIds.has(Number(tp.patient_id)))
+        );
+
+        const planSummaries = activePlans.slice(0, 10).map(plan => {
+          const patient = activePatientsList.find((p: any) =>
+            Number(p.id || p.serverId) === Number(plan.patient_id)
+          );
+          const meds = (plan as any).medications || [];
+          const invs = (plan as any).investigations || [];
+          const procs = (plan as any).procedures || [];
+          const discharge = (plan as any).discharge_criteria || [];
+          const activeMeds = meds.filter((m: any) => m.status === 'active').length;
+          const completedInvs = invs.filter((i: any) => i.status === 'completed').length;
+          const completedProcs = procs.filter((p: any) => p.status === 'completed').length;
+          const dischargeMet = Array.isArray(discharge) ? discharge.filter((d: any) => d.met || d.completed).length : 0;
+          const dischargeTotal = Array.isArray(discharge) ? discharge.length : 0;
+
+          const totalItems = meds.length + invs.length + procs.length + dischargeTotal;
+          const completedItems = activeMeds + completedInvs + completedProcs + dischargeMet;
+          const compliancePercent = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
+
+          return {
+            id: String(plan.id || ''),
+            patientName: patient ? `${patient.first_name || ''} ${patient.last_name || ''}`.trim() : 'Unknown',
+            hospitalNumber: patient?.hospital_number || '',
+            title: plan.title || 'Treatment Plan',
+            status: plan.status || 'active',
+            totalMeds: meds.length,
+            activeMeds,
+            totalInvestigations: invs.length,
+            completedInvestigations: completedInvs,
+            totalProcedures: procs.length,
+            completedProcedures: completedProcs,
+            dischargeMet,
+            dischargeTotal,
+            compliancePercent,
+            createdAt: plan.created_at ? new Date(plan.created_at).toLocaleDateString() : ''
+          };
+        });
+
+        setTreatmentPlanSummaries(planSummaries);
+      } catch (e) {
+        console.error('Failed to load treatment plan summaries:', e);
+      }
     } catch (error) {
       console.error('Error loading dashboard data:', error);
     }
@@ -694,6 +766,106 @@ export default function Dashboard() {
         )}
       </div>
 
+      {/* Treatment Plan Tracking */}
+      <div className="card p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+          <h3 className="text-base sm:text-lg font-semibold text-clinical-dark flex items-center gap-2">
+            <ClipboardCheck className="h-5 w-5 text-primary-600" />
+            Treatment Plan Tracker
+            <span className="text-sm font-normal text-gray-500">({treatmentPlanSummaries.length})</span>
+          </h3>
+          <div className="flex gap-2">
+            <Link
+              to="/treatment-plan-creator"
+              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700"
+            >
+              + New Plan
+            </Link>
+            <Link
+              to="/treatment-plan-manager"
+              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200"
+            >
+              View All
+            </Link>
+          </div>
+        </div>
+
+        {treatmentPlanSummaries.length > 0 ? (
+          <div className="space-y-3">
+            {treatmentPlanSummaries.map(plan => (
+              <div
+                key={plan.id}
+                className="border border-gray-200 rounded-lg p-3 hover:bg-primary-50/50 cursor-pointer transition-colors"
+                onClick={() => navigate('/treatment-plan-manager')}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-medium text-clinical-dark truncate">{plan.patientName}</p>
+                      <span className="text-xs text-gray-500">{plan.hospitalNumber}</span>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                        plan.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {plan.status}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-0.5">{plan.title}</p>
+                    {/* Quick stats row */}
+                    <div className="flex flex-wrap gap-3 mt-2 text-xs text-gray-600">
+                      <span className="flex items-center gap-1">
+                        <Pill className="h-3 w-3 text-blue-500" />
+                        {plan.activeMeds}/{plan.totalMeds} meds
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <FlaskConical className="h-3 w-3 text-purple-500" />
+                        {plan.completedInvestigations}/{plan.totalInvestigations} labs
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Activity className="h-3 w-3 text-amber-500" />
+                        {plan.completedProcedures}/{plan.totalProcedures} procedures
+                      </span>
+                      {plan.dischargeTotal > 0 && (
+                        <span className="flex items-center gap-1">
+                          <FileText className="h-3 w-3 text-green-500" />
+                          {plan.dischargeMet}/{plan.dischargeTotal} discharge
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {/* Compliance ring */}
+                  <div className="flex-shrink-0">
+                    <svg width="44" height="44" viewBox="0 0 44 44" className="transform -rotate-90">
+                      <circle cx="22" cy="22" r="18" stroke="#e5e7eb" strokeWidth="4" fill="none" />
+                      <circle
+                        cx="22" cy="22" r="18"
+                        stroke={plan.compliancePercent >= 80 ? '#10b981' : plan.compliancePercent >= 50 ? '#f59e0b' : '#ef4444'}
+                        strokeWidth="4"
+                        fill="none"
+                        strokeDasharray={`${(plan.compliancePercent / 100) * 113.1} 113.1`}
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                    <p className="text-xs text-center font-medium mt-0.5" style={{
+                      color: plan.compliancePercent >= 80 ? '#10b981' : plan.compliancePercent >= 50 ? '#f59e0b' : '#ef4444'
+                    }}>
+                      {plan.compliancePercent}%
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8 text-gray-500">
+            <ClipboardCheck className="h-10 w-10 mx-auto mb-2 text-gray-300" />
+            <p className="text-sm">No active treatment plans found.</p>
+            <Link to="/treatment-plan-creator" className="text-xs text-primary-600 hover:underline mt-1 inline-block">
+              Create your first treatment plan
+            </Link>
+          </div>
+        )}
+      </div>
+
       {/* Staff Patient Lookup */}
       <div className="card p-4 sm:p-6">
         <h3 className="text-base sm:text-lg font-semibold text-clinical-dark flex items-center gap-2 mb-4">
@@ -818,7 +990,7 @@ export default function Dashboard() {
               <Users className="h-4 w-4 mr-2 flex-shrink-0" />
               <span className="truncate">Add New Patient</span>
             </Link>
-            <Link to="/treatment-planning" className="btn-secondary w-full justify-start">
+            <Link to="/treatment-plan-creator" className="btn-secondary w-full justify-start">
               <ClipboardCheck className="h-4 w-4 mr-2 flex-shrink-0" />
               <span className="truncate">Create Treatment Plan</span>
             </Link>

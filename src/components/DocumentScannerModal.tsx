@@ -40,7 +40,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [selectedFields, setSelectedFields] = useState<Set<string>>(new Set());
   const [showRawText, setShowRawText] = useState(false);
-  const [handwritingMode, setHandwritingMode] = useState(false);
+  const [handwritingMode, setHandwritingMode] = useState(true);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
