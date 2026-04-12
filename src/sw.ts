@@ -564,33 +564,4 @@ self.addEventListener('message', async (event) => {
   }
 });
 
-// ─── Warm critical API routes on activation ─────────────────
-// Pre-cache the most important clinical API endpoints so they're
-// available immediately on first offline access.
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    (async () => {
-      // Warm key API endpoints into the api cache
-      const apiCache = await caches.open(API_CACHE);
-      const criticalEndpoints = [
-        '/api/patients',
-        '/api/admissions/active',
-        '/api/treatment-plans',
-        '/api/prescriptions',
-        '/api/users/approved',
-      ];
-      for (const url of criticalEndpoints) {
-        try {
-          const resp = await fetch(url, { credentials: 'same-origin' });
-          if (resp.ok) {
-            await apiCache.put(url, resp);
-          }
-        } catch {
-          // Offline during activation — skip, will be cached on first GET
-        }
-      }
-    })()
-  );
-});
-
-console.log('🏥 Plastic Surgeon Assistant Service Worker v7.0 loaded');
+console.log('🏥 Plastic Surgeon Assistant Service Worker v7.1 loaded');
