@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  Activity, AlertCircle, ArrowRight, Calendar, CheckCircle, ChevronDown, ChevronUp,
+  Activity, AlertCircle, ArrowRight, Bell, Calendar, CheckCircle, ChevronDown, ChevronUp,
   Clock, ClipboardList, Download, FileText, Heart, Info, Loader2, Minus, Plus, Printer,
-  RefreshCw, Ruler, Save, Search, Trash2, TrendingDown, TrendingUp, User, X
+  RefreshCw, Ruler, Save, Search, Share2, Trash2, TrendingDown, TrendingUp, Upload, User, X
 } from 'lucide-react';
+import { notificationService } from '../services/notificationService';
 import { db } from '../db/database';
 import { syncService } from '../db/syncService';
 import { patientService } from '../services/patientService';
@@ -774,6 +775,37 @@ const LymphedemaPage: React.FC = () => {
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
   const [expandedTimeline, setExpandedTimeline] = useState<string | null>(null);
 
+  // Consent upload state
+  const [consentFile, setConsentFile] = useState<File | null>(null);
+  const [consentPreview, setConsentPreview] = useState<string>('');
+  const [consentUploaded, setConsentUploaded] = useState(false);
+  const consentInputRef = useRef<HTMLInputElement>(null);
+
+  // Treatment tracking state
+  const [trackingEntries, setTrackingEntries] = useState<Array<{
+    id: string; date: string; phase: string; activity: string;
+    notes: string; measurements_taken: boolean; volume_change_pct: number;
+    compliance: 'full' | 'partial' | 'missed'; next_due: string;
+  }>>([]);
+  const [showAddTracking, setShowAddTracking] = useState(false);
+  const [trackingForm, setTrackingForm] = useState({
+    phase: 'cdt_intensive', activity: '', notes: '',
+    measurements_taken: false, volume_change_pct: 0,
+    compliance: 'full' as 'full' | 'partial' | 'missed',
+    next_due: ''
+  });
+
+  // Reminder state
+  const [reminders, setReminders] = useState<Array<{
+    id: string; title: string; message: string; date: string;
+    time: string; sent: boolean; type: 'mld' | 'bandaging' | 'exercise' | 'garment' | 'followup' | 'medication' | 'custom';
+  }>>([]);
+  const [showAddReminder, setShowAddReminder] = useState(false);
+  const [reminderForm, setReminderForm] = useState({
+    type: 'mld' as 'mld' | 'bandaging' | 'exercise' | 'garment' | 'followup' | 'medication' | 'custom',
+    title: '', message: '', date: '', time: '09:00'
+  });
+
   // Form state for new assessment
   const [formData, setFormData] = useState({
     etiology: '' as LymphedemaEtiology | '',
@@ -891,6 +923,317 @@ const LymphedemaPage: React.FC = () => {
 
     return { met, notMet, candidate: met.length >= 2 };
   }, [computedISL, computedVolumes, formData]);
+
+  // ============================================
+  // PATIENT EDUCATION PDF GENERATION
+  // ============================================
+  const generatePatientEducationPDF = (assessment: LymphedemaAssessment) => {
+    const islInfo = ISL_STAGES[String(assessment.isl_stage)];
+    const campisiInfo = CAMPISI_STAGES[assessment.campisi_stage];
+    const patientName = assessment.patient_name;
+    const hospitalNum = assessment.hospital_number;
+    const date = new Date(assessment.assessment_date).toLocaleDateString();
+    const tp = assessment.treatment_plan;
+    const sc = { met: assessment.surgical_criteria_met, notMet: assessment.surgical_criteria_not_met, candidate: assessment.surgical_candidate };
+
+    const timelineForStage = TREATMENT_TIMELINE.filter(t => {
+      if (assessment.isl_stage === 0 || assessment.isl_stage === 1) return ['initial_assessment','cdt_intensive','cdt_transition','cdt_maintenance'].includes(t.phase);
+      if (assessment.surgical_candidate) return true;
+      return ['initial_assessment','cdt_intensive','cdt_transition','cdt_maintenance','surgical_evaluation'].includes(t.phase);
+    });
+
+    const htmlContent = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Lymphedema Care Plan - ${patientName}</title>
+<style>
+@media print{body{margin:0;padding:10mm}@page{size:A4;margin:10mm}}
+body{font-family:'Segoe UI',Arial,sans-serif;font-size:11pt;color:#222;line-height:1.5;max-width:210mm;margin:auto;padding:10mm}
+.header{background:linear-gradient(135deg,#0E9F6E,#047857);color:#fff;padding:20px;border-radius:8px;margin-bottom:20px}
+.header h1{margin:0;font-size:20pt}.header p{margin:4px 0;font-size:10pt;opacity:0.9}
+.section{margin-bottom:16px;border:1px solid #e5e7eb;border-radius:8px;padding:14px;break-inside:avoid}
+.section h2{color:#0E9F6E;font-size:13pt;margin:0 0 8px;border-bottom:2px solid #0E9F6E;padding-bottom:4px}
+.section h3{color:#374151;font-size:11pt;margin:10px 0 4px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.stat{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:8px;text-align:center}
+.stat .label{font-size:9pt;color:#666}.stat .value{font-size:14pt;font-weight:700;color:#0E9F6E}
+.alert{background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;padding:10px;margin:8px 0}
+.danger{background:#fef2f2;border:1px solid #fca5a5}
+table{width:100%;border-collapse:collapse;font-size:9pt;margin:8px 0}
+th{background:#f3f4f6;text-align:left;padding:6px;border:1px solid #e5e7eb}
+td{padding:6px;border:1px solid #e5e7eb}
+.timeline-item{display:flex;gap:10px;margin:8px 0;padding:8px;background:#f9fafb;border-radius:6px;break-inside:avoid}
+.timeline-num{width:24px;height:24px;border-radius:50%;background:#0E9F6E;color:#fff;display:flex;align-items:center;justify-content:center;font-size:10pt;font-weight:700;flex-shrink:0}
+ul{margin:4px 0;padding-left:18px}li{margin:2px 0;font-size:10pt}
+.consent-box{border:2px solid #374151;border-radius:8px;padding:16px;margin-top:20px;break-inside:avoid}
+.consent-box h2{color:#374151}.sig-line{border-bottom:1px solid #000;width:200px;display:inline-block;margin:0 8px}
+.footer{text-align:center;font-size:8pt;color:#9ca3af;margin-top:20px;border-top:1px solid #e5e7eb;padding-top:8px}
+.checklist{list-style:none;padding:0}.checklist li{padding:3px 0}.checklist li:before{content:"\\2610 ";font-size:12pt}
+</style></head><body>
+<div class="header">
+  <h1>Lymphedema Patient Care Plan & Education</h1>
+  <p><strong>Patient:</strong> ${patientName} &nbsp;|&nbsp; <strong>Hospital #:</strong> ${hospitalNum}</p>
+  <p><strong>Assessment Date:</strong> ${date} &nbsp;|&nbsp; <strong>Assessed By:</strong> ${assessment.assessed_by}</p>
+</div>
+
+<div class="section">
+  <h2>Your Diagnosis & Staging</h2>
+  <p>You have been diagnosed with <strong>lymphedema</strong> — a condition where the lymphatic system cannot drain fluid properly, causing swelling in your ${assessment.affected_limb.replace(/_/g, ' ')}.</p>
+  <div class="grid2" style="margin-top:10px">
+    <div class="stat"><div class="label">ISL Stage</div><div class="value">${islInfo?.name?.split('(')[0] || 'N/A'}</div></div>
+    <div class="stat"><div class="label">Campisi Stage</div><div class="value">${campisiInfo?.name || 'N/A'}</div></div>
+  </div>
+  <p style="margin-top:8px"><strong>What this means:</strong> ${islInfo?.description || ''}</p>
+  <h3>Your Measurements</h3>
+  <div class="grid3">
+    <div class="stat"><div class="label">Affected Limb Volume</div><div class="value">${assessment.volume_affected_ml} ml</div></div>
+    <div class="stat"><div class="label">Normal Limb Volume</div><div class="value">${assessment.volume_contralateral_ml} ml</div></div>
+    <div class="stat"><div class="label">Volume Difference</div><div class="value" style="color:${assessment.volume_difference_pct > 20 ? '#DC2626' : '#0E9F6E'}">${assessment.volume_difference_pct}%</div></div>
+  </div>
+  ${assessment.lefs_score !== undefined || assessment.dash_score !== undefined || assessment.quality_of_life_score !== undefined ? `
+  <h3>Functional & Quality of Life Scores</h3>
+  <div class="grid3">
+    ${assessment.lefs_score !== undefined ? `<div class="stat"><div class="label">LEFS (Lower Limb Function)</div><div class="value">${assessment.lefs_score}/80</div><div style="font-size:8pt;color:#666">${assessment.lefs_score >= 60 ? 'Good function' : assessment.lefs_score >= 40 ? 'Moderate limitation' : 'Significant limitation'}</div></div>` : ''}
+    ${assessment.dash_score !== undefined ? `<div class="stat"><div class="label">DASH (Upper Limb)</div><div class="value">${assessment.dash_score}/100</div><div style="font-size:8pt;color:#666">${assessment.dash_score <= 30 ? 'Mild disability' : assessment.dash_score <= 60 ? 'Moderate disability' : 'Severe disability'}</div></div>` : ''}
+    ${assessment.quality_of_life_score !== undefined ? `<div class="stat"><div class="label">QoL Score (LYMQOL)</div><div class="value">${assessment.quality_of_life_score}/10</div><div style="font-size:8pt;color:#666">${assessment.quality_of_life_score <= 3 ? 'Good QoL' : assessment.quality_of_life_score <= 6 ? 'Moderate impact' : 'Significant impact'}</div></div>` : ''}
+  </div>` : ''}
+</div>
+
+<div class="section">
+  <h2>Your Treatment Plan</h2>
+  <p>Your care team has designed a treatment plan based on your specific condition:</p>
+  <table>
+    <tr><th>Component</th><th>Details</th></tr>
+    <tr><td><strong>CDT Phase</strong></td><td>${assessment.cdt_phase === 'intensive' ? 'Phase I — Intensive (daily clinical treatment)' : 'Phase II — Maintenance (self-management)'}</td></tr>
+    <tr><td><strong>Manual Lymphatic Drainage (MLD)</strong></td><td>${tp.mld_frequency}</td></tr>
+    <tr><td><strong>Compression Bandaging</strong></td><td>${tp.bandaging_type}</td></tr>
+    <tr><td><strong>Compression Garment</strong></td><td>${tp.compression_garment}</td></tr>
+    <tr><td><strong>Exercises</strong></td><td>${tp.exercise_program.join(', ')}</td></tr>
+    <tr><td><strong>Skin Care</strong></td><td>${tp.skin_care_regimen.join(', ')}</td></tr>
+    <tr><td><strong>Pneumatic Compression</strong></td><td>${tp.pneumatic_compression ? 'Yes — as adjunct to MLD' : 'Not currently required'}</td></tr>
+  </table>
+  <h3>Follow-Up Schedule</h3>
+  <p>You will be seen at these intervals: <strong>${tp.follow_up_schedule.join(', ')}</strong></p>
+</div>
+
+<div class="section">
+  <h2>Treatment Timeline</h2>
+  <p>Your treatment follows a structured phased approach:</p>
+  ${timelineForStage.map((t, i) => `
+  <div class="timeline-item">
+    <div class="timeline-num">${i + 1}</div>
+    <div>
+      <strong>${t.name}</strong><br>
+      <span style="font-size:9pt;color:#666">${t.period}</span><br>
+      <span style="font-size:10pt">${t.description}</span>
+      <ul>${t.milestones.map(m => `<li><strong>Goal:</strong> ${m}</li>`).join('')}</ul>
+    </div>
+  </div>`).join('')}
+</div>
+
+<div class="section">
+  <h2>Important Self-Care Instructions</h2>
+  <h3>Daily Skin Care (CRITICAL — Prevents Infections)</h3>
+  <ul class="checklist">
+    <li>Wash your affected limb gently with pH-neutral soap every day</li>
+    <li>Pat dry thoroughly — especially between toes/fingers and skin folds</li>
+    <li>Apply moisturizer (urea 10% cream) to keep skin soft</li>
+    <li>Inspect your skin daily for cuts, redness, warmth, or swelling</li>
+    <li>Treat any fungal infections immediately</li>
+    <li>Protect from cuts, burns, and insect bites</li>
+    <li>NO blood draws, IVs, or blood pressure on the affected limb</li>
+  </ul>
+  <div class="${sc.candidate ? 'alert danger' : 'alert'}">
+    <strong>${sc.candidate ? '⚠️ Surgical Evaluation May Be Needed' : '✅ Continue Conservative Treatment'}</strong>
+    <p style="font-size:10pt;margin:4px 0">${sc.candidate ? 'Based on your assessment, surgical intervention may be considered. Your surgeon will discuss options with you.' : 'Your condition is being managed with CDT. Continue your daily routine and attend all follow-up appointments.'}</p>
+  </div>
+  <h3>When to Seek Urgent Help</h3>
+  <ul>
+    <li><strong>Signs of cellulitis:</strong> Sudden redness, warmth, pain, fever — <strong style="color:#DC2626">Go to hospital immediately</strong></li>
+    <li>Sudden increase in limb swelling</li>
+    <li>New wounds or fluid leaking from skin</li>
+    <li>Temperature above 38°C (100.4°F)</li>
+  </ul>
+</div>
+
+<div class="consent-box">
+  <h2>Consent to Treatment</h2>
+  <p>I, <strong>${patientName}</strong>, have been informed about my lymphedema diagnosis, the proposed treatment plan, and the expected timeline. I understand the importance of compliance with compression therapy, skin care, and follow-up appointments. I have had the opportunity to ask questions and I consent to the proposed treatment.</p>
+  <div style="margin-top:20px;display:flex;justify-content:space-between">
+    <div><p>Patient Signature: <span class="sig-line"></span></p><p>Date: <span class="sig-line"></span></p></div>
+    <div><p>Clinician Signature: <span class="sig-line"></span></p><p>Date: <span class="sig-line"></span></p></div>
+  </div>
+</div>
+
+<div class="footer">
+  <p>Plastic Surgery Department — Lymphedema Management Program | Generated: ${new Date().toLocaleString()}</p>
+  <p>This document is for patient education purposes. Always follow your care team's specific instructions.</p>
+</div>
+</body></html>`;
+    return htmlContent;
+  };
+
+  const handleDownloadPDF = (assessment: LymphedemaAssessment) => {
+    const html = generatePatientEducationPDF(assessment);
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Lymphedema_CarePlan_${assessment.patient_name.replace(/\s+/g, '_')}_${new Date(assessment.assessment_date).toISOString().split('T')[0]}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handlePrintPDF = (assessment: LymphedemaAssessment) => {
+    const html = generatePatientEducationPDF(assessment);
+    const printWin = window.open('', '_blank');
+    if (printWin) {
+      printWin.document.write(html);
+      printWin.document.close();
+      printWin.onload = () => printWin.print();
+    }
+  };
+
+  const handleSharePDF = async (assessment: LymphedemaAssessment) => {
+    const html = generatePatientEducationPDF(assessment);
+    const blob = new Blob([html], { type: 'text/html' });
+    const file = new File([blob], `Lymphedema_CarePlan_${assessment.patient_name.replace(/\s+/g, '_')}.html`, { type: 'text/html' });
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: `Lymphedema Care Plan - ${assessment.patient_name}`, files: [file] });
+      } catch { /* user cancelled */ }
+    } else {
+      handleDownloadPDF(assessment);
+    }
+  };
+
+  // ============================================
+  // CONSENT UPLOAD
+  // ============================================
+  const handleConsentUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) { alert('File too large (max 10MB)'); return; }
+    setConsentFile(file);
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (ev) => setConsentPreview(ev.target?.result as string);
+      reader.readAsDataURL(file);
+    } else {
+      setConsentPreview('');
+    }
+    setConsentUploaded(false);
+  };
+
+  const handleSaveConsent = async (assessmentId: string) => {
+    if (!consentFile) return;
+    try {
+      const reader = new FileReader();
+      reader.onload = async (ev) => {
+        const data = ev.target?.result as string;
+        await db.lymphedema_assessments.update(assessmentId as any, {
+          consent_document: data,
+          consent_filename: consentFile.name,
+          consent_uploaded_at: new Date().toISOString(),
+          updated_at: new Date()
+        } as any);
+        setConsentUploaded(true);
+        setAssessments(prev => prev.map(a => a.id === assessmentId ? { ...a, consent_document: data, consent_filename: consentFile.name } as any : a));
+        if (selectedAssessment?.id === assessmentId) {
+          setSelectedAssessment({ ...selectedAssessment, consent_document: data, consent_filename: consentFile.name } as any);
+        }
+      };
+      reader.readAsDataURL(consentFile);
+    } catch (e) {
+      console.error('Error saving consent:', e);
+      alert('Failed to save consent document');
+    }
+  };
+
+  // ============================================
+  // TREATMENT TRACKING
+  // ============================================
+  const handleAddTrackingEntry = async (assessmentId: string) => {
+    const entry = {
+      id: `track_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+      date: new Date().toISOString().split('T')[0],
+      ...trackingForm
+    };
+    const updated = [...trackingEntries, entry];
+    setTrackingEntries(updated);
+    try {
+      await db.lymphedema_assessments.update(assessmentId as any, {
+        tracking_entries: updated,
+        updated_at: new Date()
+      } as any);
+    } catch (e) { console.error('Error saving tracking entry:', e); }
+    setShowAddTracking(false);
+    setTrackingForm({ phase: 'cdt_intensive', activity: '', notes: '', measurements_taken: false, volume_change_pct: 0, compliance: 'full', next_due: '' });
+  };
+
+  // ============================================
+  // REMINDERS
+  // ============================================
+  const REMINDER_PRESETS: Record<string, { title: string; message: string }> = {
+    mld: { title: 'MLD Session Due', message: 'Time for your Manual Lymphatic Drainage session. Remember to follow proximal-to-distal sequence.' },
+    bandaging: { title: 'Compression Bandaging', message: 'Apply your multi-layer compression bandaging. Check skin condition before applying.' },
+    exercise: { title: 'Exercise Reminder', message: 'Time for your decongestive exercises. Wear your compression garment during exercise.' },
+    garment: { title: 'Garment Check', message: 'Check your compression garment fit. Replace every 4-6 months.' },
+    followup: { title: 'Follow-Up Appointment', message: 'You have a follow-up appointment coming up. Bring your measurement log.' },
+    medication: { title: 'Medication Reminder', message: 'Take your prescribed medication as directed.' },
+    custom: { title: '', message: '' }
+  };
+
+  const handleAddReminder = async (assessmentId: string, patientName: string) => {
+    const preset = REMINDER_PRESETS[reminderForm.type];
+    const title = reminderForm.title || preset.title;
+    const message = (reminderForm.message || preset.message).replace('{patient}', patientName);
+    const reminder = {
+      id: `rem_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+      type: reminderForm.type,
+      title, message,
+      date: reminderForm.date,
+      time: reminderForm.time,
+      sent: false
+    };
+    const updatedReminders = [...reminders, reminder];
+    setReminders(updatedReminders);
+    try {
+      await db.lymphedema_assessments.update(assessmentId as any, {
+        reminders: updatedReminders,
+        updated_at: new Date()
+      } as any);
+      // Schedule push notification
+      const scheduledDate = new Date(`${reminderForm.date}T${reminderForm.time}`);
+      if (scheduledDate > new Date()) {
+        await notificationService.scheduleLocalNotification({
+          title: `🔔 ${title}`,
+          message: `${patientName}: ${message}`,
+          type: 'reminder',
+          scheduledFor: scheduledDate,
+          url: '/lymphedema'
+        });
+      }
+    } catch (e) { console.error('Error saving reminder:', e); }
+    setShowAddReminder(false);
+    setReminderForm({ type: 'mld', title: '', message: '', date: '', time: '09:00' });
+  };
+
+  const handleDeleteReminder = async (assessmentId: string, reminderId: string) => {
+    const updated = reminders.filter(r => r.id !== reminderId);
+    setReminders(updated);
+    try {
+      await db.lymphedema_assessments.update(assessmentId as any, { reminders: updated, updated_at: new Date() } as any);
+    } catch (e) { console.error('Error removing reminder:', e); }
+  };
+
+  // Load tracking & reminders when assessment is selected
+  useEffect(() => {
+    if (selectedAssessment) {
+      setTrackingEntries((selectedAssessment as any).tracking_entries || []);
+      setReminders((selectedAssessment as any).reminders || []);
+      setConsentFile(null);
+      setConsentPreview('');
+      setConsentUploaded(false);
+    }
+  }, [selectedAssessment?.id]);
 
   // Save assessment
   const handleSaveAssessment = async () => {
@@ -1637,6 +1980,285 @@ const LymphedemaPage: React.FC = () => {
             <p className="text-sm text-gray-700 whitespace-pre-wrap">{a.notes}</p>
           </div>
         )}
+
+        {/* Patient Education & PDF Download */}
+        <div className="bg-white rounded-xl shadow-sm border p-4">
+          <h3 className="font-semibold mb-3 flex items-center gap-2 text-green-700">
+            <FileText className="w-5 h-5" />
+            Patient Education & Care Plan Document
+          </h3>
+          <p className="text-sm text-gray-600 mb-3">
+            Generate a comprehensive patient education document with diagnosis explanation, treatment plan, timeline, self-care instructions, and consent form.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => handlePrintPDF(a)}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700">
+              <Printer className="w-4 h-4" /> Print Care Plan
+            </button>
+            <button onClick={() => handleDownloadPDF(a)}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
+              <Download className="w-4 h-4" /> Download as PDF
+            </button>
+            <button onClick={() => handleSharePDF(a)}
+              className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700">
+              <Share2 className="w-4 h-4" /> Share with Patient
+            </button>
+          </div>
+        </div>
+
+        {/* Consent Upload Section */}
+        <div className="bg-white rounded-xl shadow-sm border p-4">
+          <h3 className="font-semibold mb-3 flex items-center gap-2 text-gray-700">
+            <Upload className="w-5 h-5" />
+            Patient Consent to Treatment
+          </h3>
+          {(a as any).consent_document ? (
+            <div className="bg-green-50 rounded-lg border border-green-200 p-3">
+              <div className="flex items-center gap-2">
+                <CheckCircle className="w-5 h-5 text-green-600" />
+                <div>
+                  <p className="text-sm font-medium text-green-800">Consent uploaded</p>
+                  <p className="text-xs text-green-600">{(a as any).consent_filename || 'consent_document'} — {(a as any).consent_uploaded_at ? new Date((a as any).consent_uploaded_at).toLocaleString() : ''}</p>
+                </div>
+              </div>
+              {(a as any).consent_document?.startsWith('data:image') && (
+                <img src={(a as any).consent_document} alt="Consent" className="mt-2 max-h-48 rounded border" />
+              )}
+            </div>
+          ) : (
+            <div>
+              <p className="text-sm text-gray-500 mb-3">Upload the signed consent form (photo/scan of signature, PDF, or image).</p>
+              <input ref={consentInputRef} type="file" accept="image/*,.pdf" onChange={handleConsentUpload} className="hidden" />
+              <div className="flex items-center gap-3">
+                <button onClick={() => consentInputRef.current?.click()}
+                  className="flex items-center gap-2 px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg text-sm hover:border-green-500 hover:bg-green-50 transition-colors">
+                  <Upload className="w-4 h-4 text-gray-500" />
+                  {consentFile ? consentFile.name : 'Choose file or take photo...'}
+                </button>
+                {consentFile && (
+                  <button onClick={() => handleSaveConsent(a.id)}
+                    disabled={consentUploaded}
+                    className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium disabled:opacity-50">
+                    <Save className="w-4 h-4" />
+                    {consentUploaded ? 'Saved ✓' : 'Save Consent'}
+                  </button>
+                )}
+              </div>
+              {consentPreview && (
+                <img src={consentPreview} alt="Consent preview" className="mt-3 max-h-48 rounded border" />
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Treatment Tracking & Monitoring */}
+        <div className="bg-white rounded-xl shadow-sm border p-4">
+          <div className="flex justify-between items-center mb-3">
+            <h3 className="font-semibold flex items-center gap-2 text-blue-700">
+              <Activity className="w-5 h-5" />
+              Treatment Tracking & Monitoring
+            </h3>
+            <button onClick={() => setShowAddTracking(!showAddTracking)}
+              className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium">
+              <Plus className="w-3 h-3" /> Add Entry
+            </button>
+          </div>
+
+          {showAddTracking && (
+            <div className="bg-blue-50 rounded-lg border border-blue-200 p-3 mb-3 space-y-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs font-medium text-gray-600">Phase</label>
+                  <select value={trackingForm.phase} onChange={e => setTrackingForm(prev => ({ ...prev, phase: e.target.value }))}
+                    className="w-full border rounded px-2 py-1.5 text-sm mt-0.5">
+                    <option value="cdt_intensive">CDT Intensive</option>
+                    <option value="cdt_maintenance">CDT Maintenance</option>
+                    <option value="transition">Transition</option>
+                    <option value="surgical_evaluation">Surgical Evaluation</option>
+                    <option value="postoperative">Post-Operative</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600">Activity</label>
+                  <input type="text" value={trackingForm.activity} placeholder="e.g., MLD session, garment fitting..."
+                    onChange={e => setTrackingForm(prev => ({ ...prev, activity: e.target.value }))}
+                    className="w-full border rounded px-2 py-1.5 text-sm mt-0.5" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600">Compliance</label>
+                  <select value={trackingForm.compliance} onChange={e => setTrackingForm(prev => ({ ...prev, compliance: e.target.value as any }))}
+                    className="w-full border rounded px-2 py-1.5 text-sm mt-0.5">
+                    <option value="full">Full Compliance</option>
+                    <option value="partial">Partial Compliance</option>
+                    <option value="missed">Missed</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600">Volume Change (%)</label>
+                  <input type="number" step="0.1" value={trackingForm.volume_change_pct}
+                    onChange={e => setTrackingForm(prev => ({ ...prev, volume_change_pct: Number(e.target.value) }))}
+                    className="w-full border rounded px-2 py-1.5 text-sm mt-0.5" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600">Next Due Date</label>
+                  <input type="date" value={trackingForm.next_due}
+                    onChange={e => setTrackingForm(prev => ({ ...prev, next_due: e.target.value }))}
+                    className="w-full border rounded px-2 py-1.5 text-sm mt-0.5" />
+                </div>
+                <label className="flex items-center gap-2 text-sm mt-4">
+                  <input type="checkbox" checked={trackingForm.measurements_taken}
+                    onChange={e => setTrackingForm(prev => ({ ...prev, measurements_taken: e.target.checked }))} className="rounded" />
+                  Measurements taken
+                </label>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600">Notes</label>
+                <textarea value={trackingForm.notes} onChange={e => setTrackingForm(prev => ({ ...prev, notes: e.target.value }))}
+                  rows={2} placeholder="Clinical notes for this entry..."
+                  className="w-full border rounded px-2 py-1.5 text-sm mt-0.5" />
+              </div>
+              <button onClick={() => handleAddTrackingEntry(a.id)}
+                disabled={!trackingForm.activity}
+                className="px-4 py-1.5 bg-blue-600 text-white rounded text-sm font-medium disabled:opacity-50">
+                Save Entry
+              </button>
+            </div>
+          )}
+
+          {trackingEntries.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-4">No tracking entries yet. Click "Add Entry" to start monitoring treatment progress.</p>
+          ) : (
+            <div className="space-y-2">
+              {trackingEntries.sort((a, b) => b.date.localeCompare(a.date)).map(entry => (
+                <div key={entry.id} className={`rounded-lg border p-3 ${
+                  entry.compliance === 'full' ? 'bg-green-50 border-green-200' :
+                  entry.compliance === 'partial' ? 'bg-yellow-50 border-yellow-200' : 'bg-red-50 border-red-200'
+                }`}>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-sm font-medium">{entry.activity}</p>
+                      <p className="text-xs text-gray-500">{new Date(entry.date).toLocaleDateString()} — Phase: {entry.phase.replace(/_/g, ' ')}</p>
+                    </div>
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                      entry.compliance === 'full' ? 'bg-green-200 text-green-800' :
+                      entry.compliance === 'partial' ? 'bg-yellow-200 text-yellow-800' : 'bg-red-200 text-red-800'
+                    }`}>{entry.compliance}</span>
+                  </div>
+                  {entry.volume_change_pct !== 0 && (
+                    <p className="text-xs mt-1">
+                      Volume change: <span className={entry.volume_change_pct < 0 ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>
+                        {entry.volume_change_pct > 0 ? '+' : ''}{entry.volume_change_pct}%
+                      </span>
+                    </p>
+                  )}
+                  {entry.notes && <p className="text-xs text-gray-600 mt-1">{entry.notes}</p>}
+                  {entry.next_due && <p className="text-xs text-blue-600 mt-1">Next due: {new Date(entry.next_due).toLocaleDateString()}</p>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Reminders & Notifications */}
+        <div className="bg-white rounded-xl shadow-sm border p-4">
+          <div className="flex justify-between items-center mb-3">
+            <h3 className="font-semibold flex items-center gap-2 text-orange-700">
+              <Bell className="w-5 h-5" />
+              Treatment Reminders & Notifications
+            </h3>
+            <button onClick={() => setShowAddReminder(!showAddReminder)}
+              className="flex items-center gap-1 px-3 py-1.5 bg-orange-600 text-white rounded-lg text-xs font-medium">
+              <Plus className="w-3 h-3" /> Schedule Reminder
+            </button>
+          </div>
+
+          {showAddReminder && (
+            <div className="bg-orange-50 rounded-lg border border-orange-200 p-3 mb-3 space-y-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs font-medium text-gray-600">Reminder Type</label>
+                  <select value={reminderForm.type} onChange={e => {
+                    const type = e.target.value as any;
+                    const preset = REMINDER_PRESETS[type];
+                    setReminderForm(prev => ({ ...prev, type, title: type !== 'custom' ? '' : prev.title, message: type !== 'custom' ? '' : prev.message }));
+                  }} className="w-full border rounded px-2 py-1.5 text-sm mt-0.5">
+                    <option value="mld">MLD Session</option>
+                    <option value="bandaging">Compression Bandaging</option>
+                    <option value="exercise">Exercise</option>
+                    <option value="garment">Garment Check/Replace</option>
+                    <option value="followup">Follow-Up Appointment</option>
+                    <option value="medication">Medication</option>
+                    <option value="custom">Custom</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600">Custom Title (optional)</label>
+                  <input type="text" value={reminderForm.title}
+                    placeholder={REMINDER_PRESETS[reminderForm.type]?.title || 'Reminder title'}
+                    onChange={e => setReminderForm(prev => ({ ...prev, title: e.target.value }))}
+                    className="w-full border rounded px-2 py-1.5 text-sm mt-0.5" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600">Date</label>
+                  <input type="date" value={reminderForm.date}
+                    onChange={e => setReminderForm(prev => ({ ...prev, date: e.target.value }))}
+                    className="w-full border rounded px-2 py-1.5 text-sm mt-0.5" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600">Time</label>
+                  <input type="time" value={reminderForm.time}
+                    onChange={e => setReminderForm(prev => ({ ...prev, time: e.target.value }))}
+                    className="w-full border rounded px-2 py-1.5 text-sm mt-0.5" />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600">Custom Message (optional)</label>
+                <textarea value={reminderForm.message}
+                  placeholder={REMINDER_PRESETS[reminderForm.type]?.message || 'Reminder message...'}
+                  onChange={e => setReminderForm(prev => ({ ...prev, message: e.target.value }))}
+                  rows={2} className="w-full border rounded px-2 py-1.5 text-sm mt-0.5" />
+              </div>
+              <button onClick={() => handleAddReminder(a.id, a.patient_name)}
+                disabled={!reminderForm.date}
+                className="px-4 py-1.5 bg-orange-600 text-white rounded text-sm font-medium disabled:opacity-50">
+                Schedule Reminder
+              </button>
+            </div>
+          )}
+
+          {reminders.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-4">No reminders scheduled. Click "Schedule Reminder" to set up treatment notifications.</p>
+          ) : (
+            <div className="space-y-2">
+              {reminders.sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`)).map(rem => {
+                const remDate = new Date(`${rem.date}T${rem.time}`);
+                const isPast = remDate < new Date();
+                return (
+                  <div key={rem.id} className={`rounded-lg border p-3 flex justify-between items-start ${
+                    isPast ? 'bg-gray-50 border-gray-200' : 'bg-orange-50 border-orange-200'
+                  }`}>
+                    <div>
+                      <p className={`text-sm font-medium ${isPast ? 'text-gray-500' : ''}`}>
+                        {rem.type === 'mld' ? '💆' : rem.type === 'bandaging' ? '🩹' : rem.type === 'exercise' ? '🏃' :
+                          rem.type === 'garment' ? '🧤' : rem.type === 'followup' ? '📅' : rem.type === 'medication' ? '💊' : '🔔'}
+                        {' '}{rem.title}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-0.5">{rem.message}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        📆 {remDate.toLocaleDateString()} at {remDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {isPast ? ' — Past' : ` — In ${Math.ceil((remDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))} day(s)`}
+                      </p>
+                    </div>
+                    <button onClick={() => handleDeleteReminder(a.id, rem.id)}
+                      className="text-red-400 hover:text-red-600 p-1" title="Remove reminder">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     );
   };

@@ -1375,7 +1375,7 @@ class TreatmentPlanningService {
     return await this.createModificationRequest(planId, {
       plan_id: planId,
       patient_id: plan.patient_id,
-      patient_name: plan.patient_name,
+      patient_name: plan.patient_name || 'Unknown Patient',
       requested_by: requestedBy,
       requested_by_role: requestedByRole,
       requested_at: new Date(),
@@ -1410,7 +1410,7 @@ class TreatmentPlanningService {
     return await this.createModificationRequest(planId, {
       plan_id: planId,
       patient_id: plan.patient_id,
-      patient_name: plan.patient_name,
+      patient_name: plan.patient_name || 'Unknown Patient',
       requested_by: requestedBy,
       requested_by_role: requestedByRole,
       requested_at: new Date(),
@@ -1450,7 +1450,7 @@ class TreatmentPlanningService {
       id: `mod_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       plan_id: planId,
       patient_id: plan.patient_id,
-      patient_name: plan.patient_name,
+      patient_name: plan.patient_name || 'Unknown Patient',
       requested_by: modifiedBy,
       requested_by_role: modifiedByRole as any,
       requested_at: new Date(),

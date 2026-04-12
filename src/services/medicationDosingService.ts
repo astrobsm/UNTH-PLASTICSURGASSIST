@@ -358,9 +358,11 @@ class MedicationDosingService {
           
           // Send push notification for urgent alerts
           if (alertLevel === 'urgent' || alertLevel === 'expired') {
+            const patientLabel = (plan as any).patient_name || 'Unknown Patient';
+            const medLabel = med.medication_name || 'Unknown medication';
             const message = alertLevel === 'expired' 
-              ? `${med.medication_name} has ended for ${plan.patient_name}. Review and consider continuation or discontinuation.`
-              : `${med.medication_name} for ${plan.patient_name} ends tomorrow. Review treatment plan.`;
+              ? `${medLabel} has ended for ${patientLabel}. Review and consider continuation or discontinuation.`
+              : `${medLabel} for ${patientLabel} ends tomorrow. Review treatment plan.`;
             
             await notificationService.showLocalNotification({
               title: alertLevel === 'expired' ? '⚠️ Medication Ended' : '⏰ Medication Ending Soon',

@@ -342,8 +342,8 @@ class ReviewNotificationService {
             todaysReviews.push({
               planId: plan.id,
               patientId: plan.patient_id,
-              patientName: plan.patient_name,
-              diagnosis: plan.diagnosis,
+              patientName: plan.patient_name || 'Unknown Patient',
+              diagnosis: plan.diagnosis || 'Unknown diagnosis',
               review: review
             });
           }
