@@ -1123,19 +1123,25 @@ export const Patients: React.FC = () => {
             </div>
             <div className="text-center">
               <div className="stat-value text-blue-600">
-                {filteredPatients.filter(p => p.sex === 'male').length}
+                {filteredPatients.filter(p => p.sex?.toLowerCase() === 'male' || p.gender?.toLowerCase() === 'male').length}
               </div>
               <div className="stat-label">Male</div>
             </div>
             <div className="text-center">
               <div className="stat-value text-pink-600">
-                {filteredPatients.filter(p => p.sex === 'female').length}
+                {filteredPatients.filter(p => p.sex?.toLowerCase() === 'female' || p.gender?.toLowerCase() === 'female').length}
               </div>
               <div className="stat-label">Female</div>
             </div>
             <div className="text-center">
               <div className="stat-value text-purple-600">
-                {filteredPatients.filter(p => p.allergies && p.allergies.length > 0).length}
+                {filteredPatients.filter(p => {
+                  const a = p.allergies as any;
+                  if (!a) return false;
+                  if (Array.isArray(a)) return a.length > 0;
+                  if (typeof a === 'string') return a.length > 0 && a.toLowerCase() !== 'none' && a.toLowerCase() !== 'nkda' && a !== '[]';
+                  return false;
+                }).length}
               </div>
               <div className="stat-label">With Allergies</div>
             </div>
