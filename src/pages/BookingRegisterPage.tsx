@@ -345,7 +345,7 @@ export default function BookingRegisterPage() {
   const loadPatients = useCallback(async () => {
     setLoadingPatients(true);
     try {
-      const list = await patientService.getPatients();
+      const list = await patientService.getAllPatients();
       setPatients(list);
     } catch { toast.error('Failed to load patients'); }
     setLoadingPatients(false);
