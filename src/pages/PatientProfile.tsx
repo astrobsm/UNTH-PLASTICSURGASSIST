@@ -92,7 +92,7 @@ export const PatientProfile: React.FC = () => {
         let lastSurgery: { procedure_name: string; date: string; daysPostOp: number } | undefined;
         let surgeryCount = 0;
         try {
-          const surgData: any = await apiClient.get(`/sync/surgeries`);
+          const surgData: any = await apiClient.get(`/sync/surgeries?patientId=${id}`);
           const allSurgeries = Array.isArray(surgData) ? surgData : (surgData?.surgeries || []);
           const patientSurgeries = allSurgeries
             .filter((s: any) => {

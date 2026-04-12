@@ -238,10 +238,11 @@ class PatientService {
       console.warn('IndexedDB lookup failed:', dbErr);
     }
 
-    // Try API if online
+    // Try API only if online AND patient isn't already synced locally
+    // (dataSyncService already pulls fresh data every 2 minutes)
     let apiPatient: any = null;
     try {
-      if (navigator.onLine) {
+      if (navigator.onLine && !localPatient?.synced) {
         apiPatient = await apiClient.getPatient(String(id));
       }
     } catch (error) {

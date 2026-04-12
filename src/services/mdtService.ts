@@ -574,13 +574,15 @@ class MDTService {
                   team_reviews: mergedReviews,
                   weekly_harmonizations: mergedHarmonizations,
                   id: existing.id,
-                  server_id: team.id
+                  server_id: team.id,
+                  synced: true
                 });
               } else {
                 await db.mdt_patient_teams.put({
                   ...normalizedTeam,
                   id: `mdt_team_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                  server_id: team.id
+                  server_id: team.id,
+                  synced: true
                 });
               }
             } catch (e) {
@@ -640,18 +642,28 @@ class MDTService {
         db.mdt_contact_logs.toArray()
       ]);
 
-      console.log(`[MDT PUSH] Found ${teams.length} teams, ${meetings.length} meetings, ${contacts.length} contacts in IndexedDB`);
+      // Filter to only unsynced records to avoid repeated pushes
+      const unsyncedTeams = teams.filter(team => team.patient_id != null && team.synced !== true);
+      const unsyncedMeetings = meetings.filter(m => m.patient_id != null && (m as any).synced !== true);
+      const unsyncedContacts = contacts.filter(c => c.patient_id != null && (c as any).synced !== true);
+
+      if (unsyncedTeams.length === 0 && unsyncedMeetings.length === 0 && unsyncedContacts.length === 0) {
+        // Nothing new to push
+        return;
+      }
+
+      console.log(`[MDT PUSH] Found ${unsyncedTeams.length} unsynced teams, ${unsyncedMeetings.length} meetings, ${unsyncedContacts.length} contacts`);
       
       // Log team details for debugging
-      teams.forEach(team => {
+      unsyncedTeams.forEach(team => {
         console.log(`[MDT PUSH] Team: patient_id=${team.patient_id}, name=${team.patient_name}, hospital=${team.hospital_number}`);
       });
 
       // Push to server via sync/push endpoint
       const changes: any[] = [];
       
-      // Only push teams with valid patient_id (skip corrupt/orphaned records)
-      teams.filter(team => team.patient_id != null).forEach(team => {
+      // Only push unsynced teams with valid patient_id
+      unsyncedTeams.forEach(team => {
         changes.push({
           entityType: 'mdt_patient_teams',
           entityId: team.id,
@@ -660,7 +672,7 @@ class MDTService {
         });
       });
       
-      const skippedTeams = teams.length - changes.length;
+      const skippedTeams = teams.filter(t => t.patient_id == null).length;
       if (skippedTeams > 0) {
         console.warn(`[MDT PUSH] Skipped ${skippedTeams} teams with missing patient_id — deleting corrupt records`);
         // Clean up corrupt records from IndexedDB so they don't pollute every sync
@@ -671,7 +683,7 @@ class MDTService {
         }
       }
       
-      meetings.filter(m => m.patient_id != null).forEach(meeting => {
+      unsyncedMeetings.forEach(meeting => {
         changes.push({
           entityType: 'mdt_meetings',
           entityId: meeting.id,
@@ -680,7 +692,7 @@ class MDTService {
         });
       });
       
-      contacts.filter(c => c.patient_id != null).forEach(contact => {
+      unsyncedContacts.forEach(contact => {
         changes.push({
           entityType: 'mdt_contact_logs',
           entityId: contact.id,
@@ -701,6 +713,25 @@ class MDTService {
           if (errors.length > 0) {
             console.warn('[MDT PUSH] Some records failed:', errors);
           }
+        }
+        
+        // Mark pushed records as synced so they won't be pushed again
+        const successIds = responseData.results
+          ? responseData.results.filter((r: any) => r.status !== 'error').map((r: any) => r.entityId)
+          : changes.map(c => c.entityId);
+        
+        const teamIds = unsyncedTeams.map(t => t.id).filter((tid): tid is number => tid != null && successIds.includes(tid));
+        const meetingIds = unsyncedMeetings.map(m => m.id).filter((mid): mid is number => mid != null && successIds.includes(mid));
+        const contactIds = unsyncedContacts.map(c => c.id).filter((cid): cid is number => cid != null && successIds.includes(cid));
+        
+        if (teamIds.length > 0) {
+          await Promise.all(teamIds.map(tid => db.mdt_patient_teams.update(tid, { synced: true })));
+        }
+        if (meetingIds.length > 0) {
+          await Promise.all(meetingIds.map(mid => db.mdt_meetings.update(mid, { synced: true })));
+        }
+        if (contactIds.length > 0) {
+          await Promise.all(contactIds.map(cid => db.mdt_contact_logs.update(cid, { synced: true })));
         }
         
         return responseData;
