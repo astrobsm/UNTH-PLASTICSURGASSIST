@@ -259,19 +259,31 @@ export default function Dashboard() {
 
       // Get treatment plans from database (exclude deleted)
       const allTreatmentPlans = await db.treatment_plans.toArray();
-      const pendingTasks = allTreatmentPlans.filter(tp => 
+      const activePlansAll = allTreatmentPlans.filter(tp => 
         (tp.status === 'active' || tp.status === 'draft') && !tp.deleted
-      ).length;
+      );
 
-      // Get urgent items
-      const urgentItems = allTreatmentPlans.filter(tp => 
-        tp.status === 'active' && !tp.deleted
-      ).length;
+      // Pending Tasks: count actual incomplete items within active plans
+      let pendingTasks = 0;
+      let urgentItems = 0;
+      for (const tp of activePlansAll) {
+        const meds = ((tp as any).medications || []).filter((m: any) => m.status !== 'active' && m.status !== 'completed');
+        const invs = ((tp as any).investigations || []).filter((i: any) => i.status !== 'completed');
+        const procs = ((tp as any).procedures || []).filter((p: any) => p.status !== 'completed');
+        const discharge = Array.isArray((tp as any).discharge_criteria) ? (tp as any).discharge_criteria.filter((d: any) => !d.met && !d.completed) : [];
+        pendingTasks += meds.length + invs.length + procs.length + discharge.length;
 
-      // Lab results
+        // Urgent: overdue investigations or procedures past their scheduled date
+        const now = Date.now();
+        const overdueInvs = invs.filter((i: any) => i.due_date && new Date(i.due_date).getTime() < now);
+        const overdueProcs = procs.filter((p: any) => p.scheduled_date && new Date(p.scheduled_date).getTime() < now);
+        urgentItems += overdueInvs.length + overdueProcs.length;
+      }
+
+      // Lab results: count completed results ready for review
       const allLabInvestigations = await db.lab_investigations?.toArray() || [];
       const labResults = allLabInvestigations.filter((li: any) => 
-        li.status === 'pending' || li.status === 'in_progress'
+        li.status === 'completed' || li.result
       ).length;
 
       setStats({
@@ -327,7 +339,9 @@ export default function Dashboard() {
 
         const planSummaries = activePlans.slice(0, 10).map(plan => {
           const patient = activePatientsList.find((p: any) =>
-            Number(p.id || p.serverId) === Number(plan.patient_id)
+            String(p.id) === String(plan.patient_id) ||
+            String(p.serverId) === String(plan.patient_id) ||
+            (p.hospital_number && p.hospital_number === (plan as any).hospital_number)
           );
           const meds = (plan as any).medications || [];
           const invs = (plan as any).investigations || [];
@@ -345,8 +359,10 @@ export default function Dashboard() {
 
           return {
             id: String(plan.id || ''),
-            patientName: patient ? `${patient.first_name || ''} ${patient.last_name || ''}`.trim() : 'Unknown',
-            hospitalNumber: patient?.hospital_number || '',
+            patientName: patient
+              ? (`${patient.first_name || ''} ${patient.last_name || ''}`.trim() || patient.full_name || plan.patient_name || 'Unnamed')
+              : (plan.patient_name || 'Unnamed'),
+            hospitalNumber: patient?.hospital_number || (plan as any).hospital_number || '',
             title: plan.title || 'Treatment Plan',
             status: plan.status || 'active',
             totalMeds: meds.length,
@@ -532,7 +548,7 @@ export default function Dashboard() {
       bg: 'bg-primary-50',
     },
     {
-      name: 'Pending Tasks',
+      name: 'Pending Items',
       value: stats.pendingTasks.toString(),
       icon: ClipboardCheck,
       color: 'text-yellow-600',
@@ -546,7 +562,7 @@ export default function Dashboard() {
       bg: 'bg-blue-50',
     },
     {
-      name: 'Urgent Items',
+      name: 'Overdue Items',
       value: stats.urgentItems.toString(),
       icon: AlertTriangle,
       color: 'text-danger-600',
