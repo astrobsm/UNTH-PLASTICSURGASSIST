@@ -889,10 +889,14 @@ class OCRService {
 
     // Step 5: Always try to extract vital signs series from raw text
     // (AI may only extract a single vitals object from post-op charts)
-    if (structuredData && !structuredData.vital_signs_series) {
+    // Always run the rule-based parser and keep whichever yields more readings
+    if (structuredData) {
       const series = this.parseVitalSignsSeries(ocrResult.text);
       if (series && series.length >= 1) {
-        structuredData.vital_signs_series = series;
+        const existingSeries = structuredData.vital_signs_series;
+        if (!existingSeries || series.length > existingSeries.length) {
+          structuredData.vital_signs_series = series;
+        }
       }
     }
 
@@ -913,14 +917,25 @@ class OCRService {
    * and monitoring charts. Uses a two-pass approach:
    *   Pass 1: Line-based extraction — split OCR text into lines, parse each row
    *   Pass 2: BP-anchor extraction — find BP readings and extract surrounding values
+   *   Pass 3: Column-oriented extraction — for charts where each parameter is on its own row
    * Returns whichever pass yields more readings.
    */
   private parseVitalSignsSeries(text: string): any[] | null {
     const lineResults = this.parseVitalsByLines(text);
     const anchorResults = this.parseVitalsByBPAnchor(text);
+    const columnResults = this.parseVitalsByColumns(text);
+
+    console.log('[OCR Series] Line-based:', lineResults?.length || 0, 'readings');
+    console.log('[OCR Series] BP-anchor:', anchorResults?.length || 0, 'readings');
+    console.log('[OCR Series] Column:', columnResults?.length || 0, 'readings');
 
     // Return whichever found more valid readings
-    const best = (lineResults?.length || 0) >= (anchorResults?.length || 0) ? lineResults : anchorResults;
+    const candidates = [lineResults, anchorResults, columnResults];
+    let best: any[] | null = null;
+    for (const c of candidates) {
+      if (c && c.length > (best?.length || 0)) best = c;
+    }
+    console.log('[OCR Series] Best pass yielded', best?.length || 0, 'readings');
     return best && best.length >= 1 ? best : null;
   }
 
@@ -951,11 +966,12 @@ class OCRService {
         }
       }
 
-      // Extract a BP reading from this line
-      const bpMatch = line.match(/(\d{2,3})\s*[\/\\]\s*(\d{2,3})/);
-      if (!bpMatch) continue;
-      const sys = parseInt(bpMatch[1]), dia = parseInt(bpMatch[2]);
-      if (sys < 50 || sys > 260 || dia < 20 || dia > 160 || sys <= dia) continue;
+      // Find ALL BP readings on this line (handles merged OCR lines)
+      const bpRegex = /(\d{2,3})\s*[\/\\]\s*(\d{2,3})/g;
+      let bpMatch: RegExpExecArray | null;
+      while ((bpMatch = bpRegex.exec(line)) !== null) {
+        const sys = parseInt(bpMatch[1]), dia = parseInt(bpMatch[2]);
+        if (sys < 50 || sys > 260 || dia < 20 || dia > 160 || sys <= dia) continue;
 
       // Extract a time from this line (before the BP if possible)
       const beforeBP = line.substring(0, bpMatch.index || 0);
@@ -1070,6 +1086,7 @@ class OCRService {
         spo2,
         notes: notes || undefined,
       });
+      } // end while (bpMatch)
     }
 
     return readings.length >= 1 ? readings : null;
@@ -1205,6 +1222,102 @@ class OCRService {
         respiratory_rate,
         spo2,
         notes: notes || undefined,
+      });
+    }
+
+    return readings.length >= 1 ? readings : null;
+  }
+
+  /**
+   * Pass 3: Column-oriented vital signs extraction.
+   * For observation charts where each parameter has its own row with multiple time-column values:
+   *   Time:  6am   9am   12pm  3pm   6pm
+   *   Temp:  36.8  37.0  37.2  37.1  36.9
+   *   BP:    120/80 118/78 130/84 ...
+   *   Pulse: 88    92    86    ...
+   */
+  private parseVitalsByColumns(text: string): any[] | null {
+    const lines = text.split(/\n/).map(l => l.trim()).filter(l => l.length > 2);
+
+    // Find time row — a line starting with "Time" or containing multiple time patterns
+    let times: string[] = [];
+    for (const line of lines) {
+      if (/^time/i.test(line) || (/\d{1,2}\s*(?:am|pm)/i.test(line) && (line.match(/\d{1,2}\s*(?:am|pm|:\d{2})/gi) || []).length >= 2)) {
+        const timeTokens = line.match(/\d{1,2}(?:[:.]\d{2})?\s*(?:am|pm)?/gi) || [];
+        if (timeTokens.length >= 2) {
+          times = timeTokens.map(t => t.trim());
+          break;
+        }
+      }
+    }
+
+    if (times.length < 2) return null;
+
+    const numSlots = times.length;
+    const temps: (number | undefined)[] = new Array(numSlots).fill(undefined);
+    const bpSys: (number | undefined)[] = new Array(numSlots).fill(undefined);
+    const bpDia: (number | undefined)[] = new Array(numSlots).fill(undefined);
+    const pulses: (number | undefined)[] = new Array(numSlots).fill(undefined);
+    const rrs: (number | undefined)[] = new Array(numSlots).fill(undefined);
+    const spo2s: (number | undefined)[] = new Array(numSlots).fill(undefined);
+
+    for (const line of lines) {
+      const isTemp = /^(?:temp|temperature|T)\b/i.test(line);
+      const isBP = /^(?:BP|B\.P|blood\s*pressure|B\/P)\b/i.test(line);
+      const isPulse = /^(?:pulse|PR|HR|heart\s*rate)\b/i.test(line);
+      const isRR = /^(?:RR|resp|respiratory)\b/i.test(line);
+      const isSpo2 = /^(?:SpO2|O2\s*sat|oxygen|sat)\b/i.test(line);
+
+      if (isTemp) {
+        const nums = line.match(/\d{2,3}\.\d/g) || [];
+        nums.forEach((n, i) => { if (i < numSlots) { const v = parseFloat(n); if (v >= 34 && v <= 42) temps[i] = v; } });
+      } else if (isBP) {
+        const bps = line.match(/\d{2,3}\s*[\/\\]\s*\d{2,3}/g) || [];
+        bps.forEach((bp, i) => {
+          if (i < numSlots) {
+            const parts = bp.split(/[\/\\]/);
+            const sys = parseInt(parts[0].trim()), dia = parseInt(parts[1].trim());
+            if (sys >= 50 && sys <= 260 && dia >= 20 && dia <= 160 && sys > dia) {
+              bpSys[i] = sys; bpDia[i] = dia;
+            }
+          }
+        });
+      } else if (isPulse) {
+        const nums = line.match(/\b\d{2,3}\b/g) || [];
+        const filtered = nums.map(Number).filter(n => n >= 30 && n <= 220);
+        filtered.forEach((n, i) => { if (i < numSlots) pulses[i] = n; });
+      } else if (isRR) {
+        const nums = line.match(/\b\d{1,2}\b/g) || [];
+        const filtered = nums.map(Number).filter(n => n >= 8 && n <= 60);
+        filtered.forEach((n, i) => { if (i < numSlots) rrs[i] = n; });
+      } else if (isSpo2) {
+        const nums = line.match(/\b\d{2,3}\b/g) || [];
+        const filtered = nums.map(Number).filter(n => n >= 80 && n <= 100);
+        filtered.forEach((n, i) => { if (i < numSlots) spo2s[i] = n; });
+      }
+    }
+
+    // Check if we found any actual data
+    const hasBP = bpSys.some(v => v !== undefined);
+    if (!hasBP) return null;
+
+    // Find header date
+    const headerDateMatch = text.match(/Date[:\s]*(\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?)/i);
+    const chartDate = headerDateMatch ? headerDateMatch[1].replace(/-/g, '/') : '';
+
+    const readings: any[] = [];
+    for (let i = 0; i < numSlots; i++) {
+      if (bpSys[i] === undefined && temps[i] === undefined && pulses[i] === undefined) continue;
+      readings.push({
+        date: chartDate && times[i] ? `${chartDate} ${times[i]}` : times[i] || chartDate || '',
+        time: times[i] || '',
+        chart_date: chartDate,
+        temperature: temps[i],
+        pulse: pulses[i],
+        bp_systolic: bpSys[i],
+        bp_diastolic: bpDia[i],
+        respiratory_rate: rrs[i],
+        spo2: spo2s[i],
       });
     }
 

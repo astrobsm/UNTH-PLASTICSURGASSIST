@@ -231,6 +231,7 @@ export class PlasticSurgeonDB extends Dexie {
   substance_use_clinical_summaries!: Table<any>; // For generated clinical summaries
   lymphedema_assessments!: Table<any>; // For lymphedema assessments
   call_duty_handover_notes!: Table<any>; // For call duty handover notes & outstanding tasks
+  fluid_balance!: Table<any>; // For fluid input/output balance tracking
 
   constructor() {
     super('PlasticSurgeonDB');
@@ -1285,6 +1286,11 @@ export class PlasticSurgeonDB extends Dexie {
     this.version(32).stores({
       call_duty_roster: '++id, start_date, end_date, month_key, shift_number, senior_registrar_id, senior_registrar_name, registrar_id, registrar_name, house_officer_id, house_officer_name, ho_ward_id, ho_emergency_id, ho_off_id, ho_count, status, created_by, created_at',
       call_duty_handover_notes: '++id, shift_id, roster_key, author_id, assignment, created_at'
+    });
+
+    // Version 33: Add fluid balance tracking table
+    this.version(33).stores({
+      fluid_balance: '++id, patient_id, hospital_number, chart_date, recorded_at, entry_type, fluid_type, volume_ml, route, recorded_by, created_at'
     });
 
     // Add hooks to automatically track changes

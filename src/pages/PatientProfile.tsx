@@ -14,6 +14,7 @@ import { useAuthStore } from '../store/authStore';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { speechToTextService } from '../services/speechToTextService';
 import { DocumentScannerModal } from '../components/DocumentScannerModal';
+import FluidBalanceChart from '../components/FluidBalanceChart';
 import {
   Activity, Camera, Calendar, Clock, FileText, Plus, TrendingUp,
   Scissors, ClipboardCheck, Pill, Heart, Image, AlertCircle,
@@ -261,6 +262,7 @@ export const PatientProfile: React.FC = () => {
     { id: 'mdt-care', name: 'MDT Care', icon: '🤝' },
     { id: 'clinical-photos', name: 'Clinical Photos', icon: '📷' },
     { id: 'wound-assessment', name: 'Wound Assessment', icon: '🩹' },
+    { id: 'fluid-io', name: 'Fluid I/O', icon: '💧' },
     { id: 'discharge', name: 'Discharge', icon: '🏠' }
   ];
 
@@ -282,6 +284,8 @@ export const PatientProfile: React.FC = () => {
         return <ClinicalPhotosTab patientId={id!} hospitalNumber={hospitalNumber} patientName={patientName} userName={user?.name || 'Unknown'} />;
       case 'wound-assessment':
         return <WoundAssessmentTab patientId={id!} patientName={patientName} hospitalNumber={hospitalNumber} navigate={navigate} />;
+      case 'fluid-io':
+        return <FluidBalanceChart patientId={id!} hospitalNumber={hospitalNumber} userName={user?.name || 'Unknown'} />;
       case 'discharge':
         return (
           <DischargePlanning
@@ -908,7 +912,28 @@ const EncountersTab: React.FC<{ patientId: string; hospitalNumber: string; patie
                       {enc.created_at ? new Date(enc.created_at).toLocaleString() : ''}
                     </div>
                   </div>
-                  <p className="text-sm text-gray-800 whitespace-pre-wrap">{(() => { const s = enc.soap; const txt = (typeof s === 'string' ? s : s?.note || s?.subjective || s?.assessment || ''); return txt || enc.content || enc.presenting_complaint || enc.reasons_for_admission || enc.notes || 'No content'; })()}</p>
+                  <div className="mt-1" style={{ fontFamily: 'Roboto, Arial, sans-serif', lineHeight: '2' }}>
+                    {(() => {
+                      const s = enc.soap;
+                      // Handle double-stringified SOAP
+                      let parsed = s;
+                      if (typeof parsed === 'string') { try { parsed = JSON.parse(parsed); } catch { /* keep */ } }
+                      if (typeof parsed === 'string') { try { parsed = JSON.parse(parsed); } catch { /* truly string */ } }
+                      const txt = (typeof parsed === 'string' ? parsed : parsed?.note || parsed?.subjective || parsed?.assessment || '');
+                      const rawContent = txt || enc.content || enc.presenting_complaint || enc.reasons_for_admission || enc.notes || 'No content';
+                      // Split into paragraphs and detect headings
+                      const headingPatterns = /^(vital signs|plan|assessment|subjective|objective|examination|investigation|diagnosis|management|on examination|impression|history|presenting complaint|complaints?|medications?|current medications|review|follow.?up|labs?|results?|summary|disposition|treatment|orders?|consultations?|procedure|allergies|social history|family history|past medical history|systems? review|physical exam)/i;
+                      return rawContent.split('\n').map((line: string, idx: number) => {
+                        const trimmed = line.trim();
+                        if (!trimmed) return <div key={idx} style={{ height: '0.75em' }} />;
+                        const isHeading = headingPatterns.test(trimmed) || /^[A-Z][A-Z\s\/]{3,}:?\s*$/.test(trimmed) || trimmed.endsWith(':') && trimmed.length < 40;
+                        if (isHeading) {
+                          return <p key={idx} style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 700, fontSize: '0.875rem', color: '#1f2937', marginTop: '0.5em', marginBottom: '0.15em' }}>{trimmed}</p>;
+                        }
+                        return <p key={idx} className="text-sm text-gray-800">{trimmed}</p>;
+                      });
+                    })()}
+                  </div>
                   <div className="mt-2 text-xs text-gray-400 flex flex-wrap items-center gap-1">
                     <span>By: {enc.author || enc.created_by || enc.admitting_doctor || 'Unknown'}</span>
                     {enc.geolocation && (() => { const g = typeof enc.geolocation === 'string' ? JSON.parse(enc.geolocation) : enc.geolocation; return g?.latitude ? (

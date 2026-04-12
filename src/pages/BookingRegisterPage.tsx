@@ -545,7 +545,7 @@ export default function BookingRegisterPage() {
     if (!planData || !selectedPatient) return;
     setSaving(true);
     try {
-      const booking: Partial<SurgeryBooking> = {
+      const booking: Record<string, any> = {
         patient_id: selectedPatient.id,
         procedure_name: planData.procedure_name,
         anaesthesia_type: planData.anaesthesia_type,
@@ -583,7 +583,7 @@ export default function BookingRegisterPage() {
     doc.text('OPERATION LIST', 105, y, { align: 'center' }); y += 7;
     doc.setFontSize(11);
     doc.text('Plastic Surgery Unit', 105, y, { align: 'center' }); y += 6;
-    doc.text(safeFormatDate(date), 105, y, { align: 'center' }); y += 10;
+    doc.text(safeFormatDate(date, 'EEEE, MMMM d, yyyy'), 105, y, { align: 'center' }); y += 10;
 
     // Table header
     doc.setFontSize(9);
@@ -1112,8 +1112,8 @@ export default function BookingRegisterPage() {
                           <input placeholder="Drug name" value={newMedication.drug_name || ''} onChange={e => setNewMedication(p => ({ ...p, drug_name: e.target.value }))} className="border rounded px-2 py-1.5 text-sm" />
                           <input placeholder="Dosage" value={newMedication.dosage || ''} onChange={e => setNewMedication(p => ({ ...p, dosage: e.target.value }))} className="border rounded px-2 py-1.5 text-sm" />
                           <input placeholder="Frequency" value={newMedication.frequency || ''} onChange={e => setNewMedication(p => ({ ...p, frequency: e.target.value }))} className="border rounded px-2 py-1.5 text-sm" />
-                          <select value={newMedication.route || 'oral'} onChange={e => setNewMedication(p => ({ ...p, route: e.target.value }))} className="border rounded px-2 py-1.5 text-sm">
-                            <option value="oral">Oral</option><option value="iv">IV</option><option value="im">IM</option><option value="sc">SC</option><option value="topical">Topical</option><option value="inhaled">Inhaled</option>
+                          <select value={newMedication.route || 'oral'} onChange={e => setNewMedication(p => ({ ...p, route: e.target.value as Medication['route'] }))} className="border rounded px-2 py-1.5 text-sm">
+                            <option value="oral">Oral</option><option value="IV">IV</option><option value="IM">IM</option><option value="SC">SC</option><option value="topical">Topical</option><option value="other">Other</option>
                           </select>
                           <input placeholder="Indication" value={newMedication.indication || ''} onChange={e => setNewMedication(p => ({ ...p, indication: e.target.value }))} className="border rounded px-2 py-1.5 text-sm" />
                         </div>
@@ -1130,7 +1130,7 @@ export default function BookingRegisterPage() {
                             {planData.surgical_risk_medications.map((srm, idx) => (
                               <div key={idx} className="bg-white rounded-lg p-2 border border-red-100">
                                 <div className="flex items-center gap-2">
-                                  <span className={`inline-block w-2 h-2 rounded-full ${hasResult ? (results.find(r => r.test_name === inv)?.flag === 'abnormal' ? 'bg-red-500' : 'bg-green-500') : 'bg-gray-300'}`} />
+                                  <span className="inline-block w-2 h-2 rounded-full bg-red-500" />
                                   <span className="font-medium text-sm">{srm.drug}</span>
                                   <span className="text-xs text-gray-500">({srm.class})</span>
                                 </div>
@@ -1152,7 +1152,7 @@ export default function BookingRegisterPage() {
                             {SURGICAL_RISK_MEDICATIONS.map((srm, idx) => (
                               <div key={idx} className="px-3 py-2 text-xs hover:bg-gray-50">
                                 <div className="flex items-center gap-2">
-                                  <span className={`w-2 h-2 rounded-full ${checked ? 'bg-green-500' : 'bg-gray-300'}`} />
+                                  <span className="w-2 h-2 rounded-full bg-gray-400" />
                                   <strong>{srm.drug}</strong> <span className="text-gray-500">({srm.class})</span>
                                 </div>
                                 <p className="text-gray-600 mt-0.5">{srm.action} — <strong>{srm.timing}</strong></p>
@@ -1237,7 +1237,7 @@ export default function BookingRegisterPage() {
                           <Zap size={14} /> Calculate Nutritional Risk
                         </button>
                         {planData.nutritional_risk && (
-                          <div className={`mt-3 rounded-lg p-3 ${matchedMeds.length > 0 ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200'}`}>
+                          <div className={`mt-3 rounded-lg p-3 ${planData.surgical_risk_medications.length > 0 ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200'}`}>
                             <p className="text-sm font-semibold">Score: {planData.nutritional_risk.score} — {planData.nutritional_risk.risk_level.toUpperCase()} risk</p>
                             {planData.nutritional_risk.recommendations.length > 0 && (
                               <ul className="mt-1 text-xs space-y-0.5">
@@ -1378,7 +1378,7 @@ export default function BookingRegisterPage() {
                             <button
                               key={cat}
                               onClick={() => setShoppingSearch(cat === 'all' ? '' : cat)}
-                              className={`px-2.5 py-1 rounded-full text-xs ${shoppingCategory === cat ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                              className={`px-2.5 py-1 rounded-full text-xs ${shoppingSearch === cat || (cat === 'all' && !shoppingSearch) ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
                             >
                               {cat === 'all' ? 'All' : cat}
                             </button>
@@ -1391,7 +1391,7 @@ export default function BookingRegisterPage() {
                               <button
                                 key={item.name}
                                 onClick={() => addShoppingItem(item)}
-                                className={`text-left text-xs px-2 py-1.5 rounded transition-colors ${isAdded ? 'bg-green-100 text-green-800' : 'hover:bg-gray-100'}`}
+                                className={`text-left text-xs px-2 py-1.5 rounded transition-colors ${isSelected ? 'bg-green-100 text-green-800' : 'hover:bg-gray-100'}`}
                               >
                                 {isSelected && <Check size={10} className="inline mr-1" />}{item.name}
                               </button>
@@ -1779,7 +1779,7 @@ export default function BookingRegisterPage() {
                   <div className="bg-gray-50 px-4 py-2.5 flex items-center justify-between border-b">
                     <div className="flex items-center gap-2">
                       <CalendarDays size={16} className="text-green-600" />
-                      <span className="text-sm font-semibold">{safeFormatDate(date)}</span>
+                      <span className="text-sm font-semibold">{safeFormatDate(date, 'EEE, MMM d, yyyy')}</span>
                       <span className="text-xs text-gray-500">({cases.length} case{cases.length !== 1 ? 's' : ''})</span>
                     </div>
                     <button
@@ -1890,7 +1890,7 @@ export default function BookingRegisterPage() {
           {selectedCalendarDay && (
             <div className="bg-white rounded-xl border p-4">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold">{safeFormatDate(selectedCalendarDay)}</h3>
+                <h3 className="text-sm font-semibold">{safeFormatDate(selectedCalendarDay, 'EEE, MMM d, yyyy')}</h3>
                 <div className="flex gap-2">
                   <span className="text-xs text-gray-500">
                     {getDayUsedSlots(selectedCalendarDay)}/{MAX_DAILY_SLOTS} slots used

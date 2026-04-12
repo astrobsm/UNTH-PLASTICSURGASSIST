@@ -78,12 +78,24 @@ export const PatientSummaryView: React.FC<PatientSummaryViewProps> = ({
       new Date(b.admission_date || b.created_at).getTime() - new Date(a.admission_date || a.created_at).getTime()
     )[0];
 
-    // Fetch encounters (progress notes) from server
+    // Fetch encounters (progress notes) from server and local DB
     let encounters: any[] = [];
     try {
       const encData = await apiClient.get(`/progress-notes?patientId=${patient.id}`);
-      encounters = encData?.notes || encData?.progressNotes || [];
-    } catch { /* offline — skip */ }
+      encounters = Array.isArray(encData) ? encData : (encData?.notes || encData?.progressNotes || encData?.data || []);
+    } catch { /* offline — try local */ }
+    // Supplement with local IndexedDB progress notes
+    try {
+      const pid = typeof patient.id === 'string' ? parseInt(patient.id, 10) : patient.id;
+      const localNotes = await db.progress_notes?.where('patient_id').equals(pid).toArray() || [];
+      // Merge: add local notes not already in server notes (by id)
+      const serverIds = new Set(encounters.map((e: any) => String(e.id || e.serverId)));
+      for (const ln of localNotes) {
+        if (!serverIds.has(String(ln.id)) && !serverIds.has(String(ln.serverId))) {
+          encounters.push(ln);
+        }
+      }
+    } catch { /* ok */ }
 
     // Fetch vital signs from server
     let vitals: any[] = [];
@@ -131,10 +143,23 @@ export const PatientSummaryView: React.FC<PatientSummaryViewProps> = ({
       const recentEncounters = encounters.slice(0, 5);
       content += `\n\nRecent Encounters (${encounters.length} total):`;
       recentEncounters.forEach((enc: any) => {
-        const dateStr = enc.created_at ? new Date(enc.created_at).toLocaleDateString() : 'Unknown date';
-        const typeLabel = enc.type === 'ward_round' ? 'Ward Round' : enc.type === 'consultation' ? 'Consultation' : enc.type === 'procedure_note' ? 'Procedure' : 'Progress Note';
-        const snippet = (enc.content || '').substring(0, 150);
-        content += `\n• [${dateStr}] ${typeLabel}: ${snippet}${snippet.length >= 150 ? '...' : ''}`;
+        const dateStr = (enc.created_at || enc.date) ? new Date(enc.created_at || enc.date).toLocaleDateString() : 'Unknown date';
+        // Extract type from top-level or inside soap
+        let soap = enc.soap;
+        // Handle JSON-stringified soap (backend may serialize JSONB as string or double-string)
+        if (typeof soap === 'string') {
+          try { soap = JSON.parse(soap); } catch { /* keep as string */ }
+        }
+        if (typeof soap === 'string') {
+          try { soap = JSON.parse(soap); } catch { /* truly a string */ }
+        }
+        const encType = enc.type || enc._type || (typeof soap === 'object' && soap?.type) || 'progress_note';
+        const typeLabel = encType === 'ward_round' ? 'Ward Round' : encType === 'consultation' ? 'Consultation' : encType === 'procedure_note' ? 'Procedure' : encType === 'clinic_visit' ? 'Clinic Visit' : encType === 'emergency' ? 'Emergency' : 'Progress Note';
+        // Extract content from SOAP structure or flat fields
+        const soapNote = typeof soap === 'string' ? soap : (soap?.note || soap?.subjective || [soap?.subjective, soap?.objective, soap?.assessment, soap?.plan].filter(Boolean).join(' | ') || '');
+        const rawContent = soapNote || enc.content || enc.presenting_complaint || enc.reasons_for_admission || enc.notes || enc.note || '';
+        const snippet = rawContent.substring(0, 200);
+        content += `\n• [${dateStr}] ${typeLabel}: ${snippet || '(No content recorded)'}${snippet.length >= 200 ? '...' : ''}`;
       });
     }
 

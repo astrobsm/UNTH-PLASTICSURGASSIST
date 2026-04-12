@@ -93,7 +93,7 @@ class DataSyncService {
   private entitySyncStatus: Map<SyncableEntity, EntitySyncStatus> = new Map();
   private consecutiveFailures = 0;
   private readonly MAX_SYNC_INTERVAL = 10 * 60 * 1000; // 10 min cap
-  private readonly BASE_SYNC_INTERVAL = 2 * 60 * 1000; // 2 min base
+  private readonly BASE_SYNC_INTERVAL = 5 * 60 * 1000; // 5 min base
 
   // Entity to API endpoint mapping - ALL entities route through /sync/ endpoints
   // for consistent response format (raw arrays) and proper sync support
@@ -173,11 +173,7 @@ class DataSyncService {
     this.setupEventListeners();
     this.loadSyncState();
     this.startPeriodicSync();
-    
-    // Perform initial sync on startup (only if authenticated)
-    if (this.isOnline && apiClient.getToken()) {
-      setTimeout(() => this.performFullSync(), 3000);
-    }
+    // Initial sync is triggered by main.tsx — no duplicate here
   }
 
   /**
@@ -211,12 +207,16 @@ class DataSyncService {
   /**
    * Setup event listeners for online/offline status
    */
+  private onlineDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
   private setupEventListeners(): void {
     window.addEventListener('online', () => {
       this.isOnline = true;
       logger.log('🌐 Back online - initiating full sync...');
       toast.success('Back online! Syncing data...', { id: 'connectivity', duration: 3000 });
-      this.performFullSync();
+      // Debounce: the online event can fire multiple times rapidly
+      if (this.onlineDebounceTimer) clearTimeout(this.onlineDebounceTimer);
+      this.onlineDebounceTimer = setTimeout(() => this.performFullSync(), 2000);
     });
 
     window.addEventListener('offline', () => {
@@ -232,8 +232,9 @@ class DataSyncService {
     // Listen for auth changes
     window.addEventListener('storage', (event) => {
       if (event.key === 'auth_token' && event.newValue) {
-        // User logged in on another tab, sync
-        this.performFullSync();
+        // User logged in on another tab — debounce
+        if (this.onlineDebounceTimer) clearTimeout(this.onlineDebounceTimer);
+        this.onlineDebounceTimer = setTimeout(() => this.performFullSync(), 2000);
       }
     });
   }
@@ -495,11 +496,26 @@ class DataSyncService {
   /**
    * PULL: Download all remote changes from cloud to local
    */
+  private isPulling = false;
+  private lastPullTime: Date | null = null;
+
   public async pullAllFromCloud(): Promise<{
     pulled: number;
     errors: string[];
   }> {
     const result = { pulled: 0, errors: [] as string[] };
+
+    // Re-entrancy guard — prevent concurrent pulls
+    if (this.isPulling) {
+      logger.log('⏳ Pull already in progress, skipping...');
+      return result;
+    }
+
+    // Cooldown: don't re-pull within 60 seconds
+    if (this.lastPullTime && (Date.now() - this.lastPullTime.getTime()) < 60000) {
+      logger.log('⏳ Pull completed recently, skipping...');
+      return result;
+    }
 
     // Auth guard — skip pull if not authenticated
     const token = apiClient.getToken();
@@ -507,6 +523,9 @@ class DataSyncService {
       logger.log('🔒 Not authenticated, skipping pull');
       return result;
     }
+
+    this.isPulling = true;
+    this.lastPullTime = new Date();
 
     // Define entities to pull in order (dependencies first)
     // IMPORTANT: ALL syncable entities must be listed here for cross-device sync
@@ -550,61 +569,65 @@ class DataSyncService {
     let consecutive503s = 0;
     const MAX_CONSECUTIVE_503s = 3; // After 3 consecutive 503s, the server is cold/overloaded — stop hammering it
 
-    for (const entity of entitiesToPull) {
-      // Re-check token before each entity pull to avoid cascading failures
-      if (!apiClient.getToken()) {
-        console.warn('🔒 Token lost during sync — skipping remaining entity pulls');
-        result.errors.push('Token lost during sync');
-        break;
-      }
+    try {
+      for (const entity of entitiesToPull) {
+        // Re-check token before each entity pull to avoid cascading failures
+        if (!apiClient.getToken()) {
+          console.warn('🔒 Token lost during sync — skipping remaining entity pulls');
+          result.errors.push('Token lost during sync');
+          break;
+        }
 
-      // If we've hit consecutive 503s, add a delay to let Vercel warm up
-      if (consecutive503s > 0) {
-        const backoffMs = Math.min(consecutive503s * 2000, 8000); // 2s, 4s, 6s, max 8s
-        console.log(`⏳ Server overloaded — waiting ${backoffMs / 1000}s before next pull...`);
-        await new Promise(resolve => setTimeout(resolve, backoffMs));
-      }
+        // If we've hit consecutive 503s, add a delay to let Vercel warm up
+        if (consecutive503s > 0) {
+          const backoffMs = Math.min(consecutive503s * 2000, 8000); // 2s, 4s, 6s, max 8s
+          console.log(`⏳ Server overloaded — waiting ${backoffMs / 1000}s before next pull...`);
+          await new Promise(resolve => setTimeout(resolve, backoffMs));
+        }
 
-      try {
-        const pullCount = await this.pullEntityFromCloud(entity);
-        result.pulled += pullCount;
-        consecutive503s = 0; // Reset on success
-      } catch (error) {
-        const errorMsg = `Failed to pull ${entity}: ${error instanceof Error ? error.message : error}`;
-        result.errors.push(errorMsg);
+        try {
+          const pullCount = await this.pullEntityFromCloud(entity);
+          result.pulled += pullCount;
+          consecutive503s = 0; // Reset on success
+        } catch (error) {
+          const errorMsg = `Failed to pull ${entity}: ${error instanceof Error ? error.message : error}`;
+          result.errors.push(errorMsg);
 
-        // Check if it's a 503 (server cold start / overloaded)
-        const is503 = error instanceof Error && (
-          error.message.includes('503') || error.message.includes('Service Unavailable')
-        );
-        if (is503) {
-          consecutive503s++;
-          if (consecutive503s >= MAX_CONSECUTIVE_503s) {
-            console.warn(`⏹️ ${MAX_CONSECUTIVE_503s} consecutive 503s — server is overloaded, aborting remaining pulls (will retry next cycle)`);
+          // Check if it's a 503 (server cold start / overloaded)
+          const is503 = error instanceof Error && (
+            error.message.includes('503') || error.message.includes('Service Unavailable')
+          );
+          if (is503) {
+            consecutive503s++;
+            if (consecutive503s >= MAX_CONSECUTIVE_503s) {
+              console.warn(`⏹️ ${MAX_CONSECUTIVE_503s} consecutive 503s — server is overloaded, aborting remaining pulls (will retry next cycle)`);
+              break;
+            }
+          } else {
+            consecutive503s = 0;
+            console.warn(`⚠️ ${errorMsg}`);
+          }
+
+          // If this is a network failure, abort remaining pulls — they'll all fail too
+          if (error instanceof TypeError && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError'))) {
+            console.warn('⏹️ Network down — skipping remaining entity pulls');
             break;
           }
-        } else {
-          consecutive503s = 0;
-          console.warn(`⚠️ ${errorMsg}`);
-        }
 
-        // If this is a network failure, abort remaining pulls — they'll all fail too
-        if (error instanceof TypeError && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError'))) {
-          console.warn('⏹️ Network down — skipping remaining entity pulls');
-          break;
-        }
-
-        // If this is an auth failure (401/403/token), abort remaining pulls
-        if (error instanceof Error && (
-          error.message.includes('401') || 
-          error.message.includes('403') || 
-          error.message.includes('Not authenticated') || 
-          error.message.includes('No token')
-        )) {
-          console.warn('🔒 Auth failure — skipping remaining entity pulls');
-          break;
+          // If this is an auth failure (401/403/token), abort remaining pulls
+          if (error instanceof Error && (
+            error.message.includes('401') || 
+            error.message.includes('403') || 
+            error.message.includes('Not authenticated') || 
+            error.message.includes('No token')
+          )) {
+            console.warn('🔒 Auth failure — skipping remaining entity pulls');
+            break;
+          }
         }
       }
+    } finally {
+      this.isPulling = false;
     }
 
     return result;
