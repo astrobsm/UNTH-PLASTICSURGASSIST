@@ -475,60 +475,110 @@ async function getTraineeMetrics(userId, level, fullName, username) {
   const cbtCompleted = parseInt(cbtRow.completed) || 0;
   const cbtAvgScore = parseFloat(cbtRow.avg_score) || 0;
 
-  // ── 2. Patient Care Entries (combined: created_by tables + audit_logs + activity_logs) ──
-  // 2a. Clinical tables with created_by (each wrapped separately since tables may not exist)
-  let patientCount = 0;
-  const clinicalCountRow = await safeQuery(
-    `SELECT
-       (SELECT COUNT(*) FROM patients WHERE created_by = $1) +
-       (SELECT COUNT(*) FROM treatment_plans WHERE created_by = $1) +
-       (SELECT COUNT(*) FROM admissions WHERE created_by = $1) +
-       (SELECT COUNT(*) FROM surgeries WHERE created_by = $1) as cnt`,
-    [uidInt], { cnt: 0 }
-  );
-  patientCount += parseInt(clinicalCountRow.cnt) || 0;
-
-  // Newer tables that might not have created_by yet (safe individual counts)
-  for (const tbl of ['prescriptions', 'ward_rounds', 'lab_orders']) {
-    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM ${tbl} WHERE created_by = $1`, [uidInt], { cnt: 0 });
-    patientCount += parseInt(r.cnt) || 0;
-  }
-
-  // 2b. Audit logs patient entries (user_id VARCHAR + user_name matching)
+  // ── User matching clause for VARCHAR user columns (audit_logs, etc.) ──
   const auditUserClause = fullName
     ? `(user_id = $1 OR LOWER(user_name) = LOWER($2))`
     : `user_id = $1`;
   const auditUserParams = fullName ? [uid, fullName] : [uid];
 
-  const auditPatientRow = await safeQuery(
-    `SELECT COUNT(*) as cnt FROM audit_logs
-     WHERE ${auditUserClause} AND UPPER(action) IN ('CREATE', 'UPDATE')
-     AND UPPER(resource_type) IN ('PATIENT', 'TREATMENT_PLAN', 'ADMISSION', 'PRESCRIPTION', 'WARD_ROUND', 'LAB_ORDER', 'PROCEDURE', 'DISCHARGE', 'LAB')`,
-    auditUserParams, { cnt: 0 }
-  );
-  patientCount += parseInt(auditPatientRow.cnt) || 0;
+  // Name-match clause for tables that store user as VARCHAR name string
+  // Match by full_name, username, or stringified user id
+  const nameMatchValues = [uid]; // $1 = user id as string
+  let nameMatchClause = `($COL = $1`;
+  let nameParamIdx = 1;
+  if (fullName) {
+    nameParamIdx++;
+    nameMatchValues.push(fullName);
+    nameMatchClause += ` OR LOWER($COL) = LOWER($${nameParamIdx})`;
+  }
+  if (username) {
+    nameParamIdx++;
+    nameMatchValues.push(username);
+    nameMatchClause += ` OR LOWER($COL) = LOWER($${nameParamIdx})`;
+  }
+  nameMatchClause += `)`;
 
-  // 2c. Activity logs patient entries
-  const actPatientRow = await safeQuery(
-    `SELECT COUNT(*) as cnt FROM activity_logs
-     WHERE user_id = $1 AND activity_type IN (
-       'patient_entry', 'patient_update', 'treatment_plan', 'prescription',
-       'ward_round', 'surgery_booking', 'surgery_completed', 'wound_care',
-       'discharge_summary', 'risk_assessment', 'admission', 'lab_order'
-     )`, [uidInt], { cnt: 0 }
-  );
-  patientCount += parseInt(actPatientRow.cnt) || 0;
+  // ── 2. Patient Care Entries — count from ALL clinical tables ──
+  let patientCount = 0;
 
-  // ── 3. Duties (combined: formal + audit log actions) — 2 queries ──
+  // 2a. Tables with created_by INTEGER
+  for (const tbl of ['patients', 'treatment_plans', 'admissions', 'surgeries', 'prescriptions', 'ward_rounds', 'lab_orders', 'discharge_summaries']) {
+    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM ${tbl} WHERE created_by = $1`, [uidInt], { cnt: 0 });
+    patientCount += parseInt(r.cnt) || 0;
+  }
+
+  // 2b. Tables with recorded_by INTEGER (wound_care_records)
+  const woundRow = await safeQuery(`SELECT COUNT(*) as cnt FROM wound_care_records WHERE recorded_by = $1`, [uidInt], { cnt: 0 });
+  patientCount += parseInt(woundRow.cnt) || 0;
+
+  // 2c. Tables with recorded_by VARCHAR — match by name/id
+  for (const tbl of ['vital_signs', 'fluid_balance']) {
+    const clause = nameMatchClause.replace(/\$COL/g, 'recorded_by');
+    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM ${tbl} WHERE ${clause}`, nameMatchValues, { cnt: 0 });
+    patientCount += parseInt(r.cnt) || 0;
+  }
+
+  // 2d. progress_notes — author VARCHAR
+  {
+    const clause = nameMatchClause.replace(/\$COL/g, 'author');
+    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM progress_notes WHERE ${clause}`, nameMatchValues, { cnt: 0 });
+    patientCount += parseInt(r.cnt) || 0;
+  }
+
+  // 2e. Assessment tables with assessed_by VARCHAR
+  for (const tbl of ['dvt_assessments', 'pressure_sore_assessments', 'nutritional_assessments', 'diabetic_foot_assessments', 'preoperative_assessments']) {
+    const clause = nameMatchClause.replace(/\$COL/g, 'assessed_by');
+    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM ${tbl} WHERE ${clause}`, nameMatchValues, { cnt: 0 });
+    patientCount += parseInt(r.cnt) || 0;
+  }
+
+  // 2f. blood_transfusions — administered_by VARCHAR
+  {
+    const clause = nameMatchClause.replace(/\$COL/g, 'administered_by');
+    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM blood_transfusions WHERE ${clause}`, nameMatchValues, { cnt: 0 });
+    patientCount += parseInt(r.cnt) || 0;
+  }
+
+  // ── 3. Duties — formal assignments + clinic duty logs + call duty roster ──
+  let dutiesCount = 0;
+
+  // 3a. Formal duty assignments completed
   const formalDutyRow = await safeQuery(
     `SELECT COUNT(*) as cnt FROM duty_assignments WHERE user_id = $1 AND status = 'completed'`,
     [uidInt], { cnt: 0 }
   );
-  const auditDutyRow = await safeQuery(
-    `SELECT COUNT(*) as cnt FROM audit_logs WHERE ${auditUserClause} AND UPPER(action) IN ('CREATE', 'UPDATE', 'COMPLETE', 'VIEW', 'EXPORT')`,
+  dutiesCount += parseInt(formalDutyRow.cnt) || 0;
+
+  // 3b. Clinic duty logs (user_id TEXT)
+  {
+    const clause = nameMatchClause.replace(/\$COL/g, 'user_id');
+    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM clinic_duty_logs WHERE ${clause}`, nameMatchValues, { cnt: 0 });
+    dutiesCount += parseInt(r.cnt) || 0;
+  }
+
+  // 3c. Call duty roster entries where this user was assigned
+  {
+    let callClause = `(senior_registrar_id = $1 OR registrar_id = $1 OR house_officer_id = $1`;
+    const callParams = [uid];
+    let pIdx = 1;
+    if (fullName) {
+      pIdx++;
+      callParams.push(fullName);
+      callClause += ` OR LOWER(senior_registrar_name) = LOWER($${pIdx}) OR LOWER(registrar_name) = LOWER($${pIdx}) OR LOWER(house_officer_name) = LOWER($${pIdx})`;
+    }
+    callClause += `)`;
+    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM call_duty_roster WHERE ${callClause}`, callParams, { cnt: 0 });
+    dutiesCount += parseInt(r.cnt) || 0;
+  }
+
+  // 3d. Clinical entries as duties (each entry in a patient section = a duty performed)
+  // This counts distinct clinical actions across all patient-facing tables
+  const clinicalDutyRow = await safeQuery(
+    `SELECT COUNT(*) as cnt FROM audit_logs WHERE ${auditUserClause} AND UPPER(action) IN ('CREATE', 'UPDATE', 'COMPLETE')
+     AND UPPER(resource_type) IN ('PATIENT', 'TREATMENT_PLAN', 'ADMISSION', 'PRESCRIPTION', 'WARD_ROUND', 'LAB_ORDER', 'PROCEDURE', 'DISCHARGE', 'VITAL_SIGNS', 'WOUND_CARE', 'PROGRESS_NOTE', 'FLUID_BALANCE', 'SURGERY', 'ASSESSMENT', 'BLOOD_TRANSFUSION', 'MDT')`,
     auditUserParams, { cnt: 0 }
   );
-  const dutiesCount = (parseInt(formalDutyRow.cnt) || 0) + (parseInt(auditDutyRow.cnt) || 0);
+  dutiesCount += parseInt(clinicalDutyRow.cnt) || 0;
 
   // ── 4. Login / Attendance Days (1 query from audit_logs) ──
   const loginRow = await safeQuery(
