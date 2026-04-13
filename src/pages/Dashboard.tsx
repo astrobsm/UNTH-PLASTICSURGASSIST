@@ -263,13 +263,25 @@ export default function Dashboard() {
         (tp.status === 'active' || tp.status === 'draft') && !tp.deleted
       );
 
-      // Pending Tasks: count actual incomplete items within active plans
+      // Deduplicate plans: keep only the most recent active plan per patient
+      const latestPlanByPatient = new Map<string, typeof activePlansAll[0]>();
+      for (const tp of activePlansAll) {
+        const pid = String(tp.patient_id || (tp as any).patientId || '');
+        if (!pid) continue;
+        const existing = latestPlanByPatient.get(pid);
+        if (!existing || new Date(tp.updated_at || tp.created_at || 0).getTime() > new Date(existing.updated_at || existing.created_at || 0).getTime()) {
+          latestPlanByPatient.set(pid, tp);
+        }
+      }
+      const dedupedPlans = Array.from(latestPlanByPatient.values());
+
+      // Pending Tasks: count actual incomplete items within deduped active plans
       let pendingTasks = 0;
       let urgentItems = 0;
-      for (const tp of activePlansAll) {
-        const meds = ((tp as any).medications || []).filter((m: any) => m.status !== 'active' && m.status !== 'completed');
-        const invs = ((tp as any).investigations || []).filter((i: any) => i.status !== 'completed');
-        const procs = ((tp as any).procedures || []).filter((p: any) => p.status !== 'completed');
+      for (const tp of dedupedPlans) {
+        const meds = ((tp as any).medications || []).filter((m: any) => m.status && m.status !== 'completed' && m.status !== 'discontinued' && m.status !== 'stopped');
+        const invs = ((tp as any).investigations || []).filter((i: any) => i.status && i.status !== 'completed');
+        const procs = ((tp as any).procedures || []).filter((p: any) => p.status && p.status !== 'completed');
         const discharge = Array.isArray((tp as any).discharge_criteria) ? (tp as any).discharge_criteria.filter((d: any) => !d.met && !d.completed) : [];
         pendingTasks += meds.length + invs.length + procs.length + discharge.length;
 
@@ -337,7 +349,20 @@ export default function Dashboard() {
           (isAdmin || myPatientIds.has(Number(tp.patient_id)))
         );
 
-        const planSummaries = activePlans.slice(0, 10).map(plan => {
+        // Deduplicate: keep only the most recent plan per patient for the tracker
+        const trackerByPatient = new Map<string, typeof activePlans[0]>();
+        for (const tp of activePlans) {
+          const pid = String(tp.patient_id || (tp as any).patientId || '');
+          if (!pid) continue;
+          const existing = trackerByPatient.get(pid);
+          if (!existing || new Date(tp.updated_at || tp.created_at || 0).getTime() > new Date(existing.updated_at || existing.created_at || 0).getTime()) {
+            trackerByPatient.set(pid, tp);
+          }
+        }
+        const uniquePatientPlans = Array.from(trackerByPatient.values())
+          .sort((a, b) => new Date(b.updated_at || b.created_at || 0).getTime() - new Date(a.updated_at || a.created_at || 0).getTime());
+
+        const planSummaries = uniquePatientPlans.slice(0, 10).map(plan => {
           const patient = activePatientsList.find((p: any) =>
             String(p.id) === String(plan.patient_id) ||
             String(p.serverId) === String(plan.patient_id) ||
