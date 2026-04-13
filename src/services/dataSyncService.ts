@@ -662,7 +662,7 @@ class DataSyncService {
         return 0;
       }
 
-      console.log(`📥 Pulling ${serverData.length} ${entity} from server...`);
+      console.log(`📥 Checking ${serverData.length} ${entity} from server...`);
 
       // Convert snake_case server fields to camelCase for local IndexedDB storage
       const toCamelCase = (str: string) => str.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
@@ -694,9 +694,15 @@ class DataSyncService {
               }
               // If local wins, keep local data (will be pushed on next sync)
             } else {
-              // No conflict: update local with server data
-              await table.put({ ...serverItem, synced: true, updated_at: new Date() });
-              mergedCount++;
+              // No conflict: update only if server data is actually newer
+              const serverTime = serverItem.updatedAt || serverItem.updated_at;
+              const localTime = localItem.updatedAt || localItem.updated_at;
+              const serverMs = serverTime ? new Date(serverTime).getTime() : 0;
+              const localMs = localTime ? new Date(localTime).getTime() : 0;
+              if (!localMs || serverMs > localMs) {
+                await table.put({ ...serverItem, synced: true, updated_at: new Date() });
+                mergedCount++;
+              }
             }
           } else {
             // New item from server - use put() to preserve server ID
@@ -711,7 +717,9 @@ class DataSyncService {
 
       entityStatus.lastPullTime = new Date();
       entityStatus.status = 'success';
-      console.log(`✅ Pulled ${mergedCount} ${entity} from server`);
+      if (mergedCount > 0) {
+        console.log(`📥 Synced ${mergedCount} ${entity} from server`);
+      }
 
       return mergedCount;
 

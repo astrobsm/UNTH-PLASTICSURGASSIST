@@ -52,7 +52,7 @@ export default async function handler(req, res) {
           if (subId) {
             return await getSyncPatientById(subId, res);
           }
-          return await getSyncPatients(res);
+          return await getSyncPatients(res, url.searchParams);
         }
 
         // Lookup table mapping URL action to database table name
@@ -120,13 +120,21 @@ export default async function handler(req, res) {
   }
 }
 
-async function getSyncPatients(res) {
-  const result = await query(
-    `SELECT id, hospital_number, first_name, last_name, date_of_birth, gender, 
+async function getSyncPatients(res, searchParams) {
+  const since = searchParams?.get('since');
+  let queryStr = `SELECT id, hospital_number, first_name, last_name, date_of_birth, gender, 
             phone, email, address, blood_group, allergies, medical_history,
             created_at, updated_at
-     FROM patients ORDER BY updated_at DESC LIMIT 500`
-  );
+     FROM patients`;
+  const params = [];
+
+  if (since) {
+    queryStr += ` WHERE updated_at > $1`;
+    params.push(since);
+  }
+
+  queryStr += ` ORDER BY updated_at DESC LIMIT 500`;
+  const result = await query(queryStr, params);
   res.status(200).json(result.rows);
 }
 

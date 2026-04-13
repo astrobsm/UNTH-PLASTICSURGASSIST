@@ -123,6 +123,9 @@ export interface MDTContactLog {
 }
 
 class MDTService {
+  private lastSyncTime: Date | null = null;
+  private static readonly SYNC_COOLDOWN = 60_000; // 60 seconds
+
   // Create or update MDT team for a patient
   async createPatientTeam(patientId: string, patientName: string, hospitalNumber: string): Promise<MDTPatientTeam> {
     const team: MDTPatientTeam = {
@@ -488,6 +491,12 @@ class MDTService {
 
   // Sync MDT data from server
   async syncFromServer(): Promise<void> {
+    // Cooldown: skip if synced within 60s
+    if (this.lastSyncTime && (Date.now() - this.lastSyncTime.getTime()) < MDTService.SYNC_COOLDOWN) {
+      return;
+    }
+    this.lastSyncTime = new Date();
+
     try {
       // Fetch all MDT data from server using sync/pull endpoint
       const pullRes = await apiClient.post('/sync/pull', {
