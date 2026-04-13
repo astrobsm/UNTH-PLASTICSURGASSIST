@@ -969,64 +969,68 @@ class OCRService {
       // Find ALL BP readings on this line (handles merged OCR lines)
       const bpRegex = /(\d{2,3})\s*[\/\\]\s*(\d{2,3})/g;
       let bpMatch: RegExpExecArray | null;
+      let bpFound = false;
+
+      // Extract line-level time once (used by both BP and non-BP paths)
+      let lineTime = '';
+      const lineTimeMatches = line.match(/(\d{1,2}(?:[:.]\d{2})?)\s*(am|pm)/gi);
+      if (lineTimeMatches && lineTimeMatches.length > 0) {
+        lineTime = lineTimeMatches[0].trim();
+      }
+      if (!lineTime) {
+        const ltm = line.match(/^(?:\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?\s+)?(\d{1,2}(?:[:.]\d{2})?)\s*(am|pm)?/i);
+        if (ltm) lineTime = (ltm[1] + (ltm[2] || '')).trim();
+      }
+
       while ((bpMatch = bpRegex.exec(line)) !== null) {
         const sys = parseInt(bpMatch[1]), dia = parseInt(bpMatch[2]);
         if (sys < 50 || sys > 260 || dia < 20 || dia > 160 || sys <= dia) continue;
+        bpFound = true;
 
-      // Extract a time from this line (before the BP if possible)
-      const beforeBP = line.substring(0, bpMatch.index || 0);
-      const afterBP = line.substring((bpMatch.index || 0) + bpMatch[0].length);
+        const beforeBP = line.substring(0, bpMatch.index || 0);
+        const afterBP = line.substring((bpMatch.index || 0) + bpMatch[0].length);
 
-      let time = '';
-      // Look for time patterns: "12:30", "3:00pm", "6am", "2:40", "7:32pm", etc.
-      const timeMatches = beforeBP.match(/(\d{1,2}(?:[:.]\d{2})?)\s*(am|pm)?/gi);
-      if (timeMatches && timeMatches.length > 0) {
-        time = timeMatches[timeMatches.length - 1].trim();
-      }
-      // If no time found before BP, check if line starts with a time
-      if (!time) {
-        const lineTimeMatch = line.match(/^(?:\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?\s+)?(\d{1,2}(?:[:.]\d{2})?)\s*(am|pm)?/i);
-        if (lineTimeMatch) {
-          time = (lineTimeMatch[1] + (lineTimeMatch[2] || '')).trim();
+        let time = '';
+        const timeMatches = beforeBP.match(/(\d{1,2}(?:[:.]\d{2})?)\s*(am|pm)?/gi);
+        if (timeMatches && timeMatches.length > 0) {
+          time = timeMatches[timeMatches.length - 1].trim();
         }
-      }
+        if (!time) time = lineTime;
 
-      // Extract all numbers from the part after BP
-      const allNums: number[] = [];
-      const numRegex = /(\d+\.?\d*)\s*%?/g;
-      let nm: RegExpExecArray | null;
-      while ((nm = numRegex.exec(afterBP)) !== null) {
-        allNums.push(parseFloat(nm[1]));
-      }
-
-      // Also extract numbers between time and BP (some charts put temp before BP)
-      const preNums: number[] = [];
-      const preNumRegex = /(\d+\.?\d*)/g;
-      let pnm: RegExpExecArray | null;
-      // Only look at numeric tokens between last time and BP
-      const afterTimeStr = timeMatches ? beforeBP.substring(beforeBP.lastIndexOf(timeMatches[timeMatches.length - 1]) + timeMatches[timeMatches.length - 1].length) : beforeBP;
-      while ((pnm = preNumRegex.exec(afterTimeStr)) !== null) {
-        const pn = parseFloat(pnm[1]);
-        if (pn > 0) preNums.push(pn);
-      }
-
-      // Classify the numbers contextually
-      let temperature: number | undefined;
-      let pulse: number | undefined;
-      let respiratory_rate: number | undefined;
-      let spo2: number | undefined;
-
-      // Check pre-BP numbers for temperature
-      for (const pn of preNums) {
-        if (pn >= 34 && pn <= 42 && String(pn).includes('.')) {
-          temperature = pn;
-          break;
+        // Extract all numbers from after BP
+        const allNums: number[] = [];
+        const numRegex = /(\d+\.?\d*)\s*%?/g;
+        let nm: RegExpExecArray | null;
+        while ((nm = numRegex.exec(afterBP)) !== null) {
+          allNums.push(parseFloat(nm[1]));
         }
-      }
 
-      // Classify post-BP numbers
-      const classify = (nums: number[]) => {
-        for (const n of nums) {
+        // Extract numbers between time and BP (temp before BP)
+        const preNums: number[] = [];
+        const preNumRegex = /(\d+\.?\d*)/g;
+        let pnm: RegExpExecArray | null;
+        const afterTimeStr = timeMatches ? beforeBP.substring(beforeBP.lastIndexOf(timeMatches[timeMatches.length - 1]) + timeMatches[timeMatches.length - 1].length) : beforeBP;
+        while ((pnm = preNumRegex.exec(afterTimeStr)) !== null) {
+          const pn = parseFloat(pnm[1]);
+          if (pn > 0) preNums.push(pn);
+        }
+
+        // RESET per-reading variables (Bug #1 fix: no variable contamination)
+        let temperature: number | undefined;
+        let pulse: number | undefined;
+        let respiratory_rate: number | undefined;
+        let spo2: number | undefined;
+
+        // Check pre-BP numbers for temperature (Bug #2 fix: removed .includes('.') check)
+        for (const pn of preNums) {
+          if (pn >= 34 && pn <= 42) {
+            temperature = pn;
+            break;
+          }
+        }
+
+        // Classify post-BP numbers
+        for (const n of allNums) {
           if (!temperature && n >= 34 && n <= 42) {
             temperature = n;
           } else if (!pulse && n >= 30 && n <= 220 && Number.isInteger(n)) {
@@ -1037,56 +1041,80 @@ class OCRService {
             spo2 = n;
           }
         }
-      };
-      classify(allNums);
 
-      // If still missing pulse, check if a pre-BP integer fits
-      if (!pulse) {
-        for (const pn of preNums) {
-          if (pn >= 30 && pn <= 220 && Number.isInteger(pn) && pn !== temperature) {
-            pulse = pn;
-            break;
+        if (!pulse) {
+          for (const pn of preNums) {
+            if (pn >= 30 && pn <= 220 && Number.isInteger(pn) && pn !== temperature) {
+              pulse = pn;
+              break;
+            }
           }
         }
-      }
 
-      // Extract notes — blood glucose, transfusion info, etc.
-      let notes = '';
-      const notesPatterns = [
-        /(?:FBG|RBG|FBS|RBS|RGB|FPG)\s*[-:=]\s*\d+\.?\d*\s*(?:mg\/?d?l?)?(?:\s*(?:at|@)\s*\S+)?/gi,
-        /(?:pre|post|intra)\s*[-]?\s*trans?fusion\s*r?\/?\s*s?/gi,
-        /blood\s*got\s*finished/gi,
-        /(?:\d+\s*(?:mg|ml|units?)(?:\/?(?:dl|l|kg|hr))?)/gi,
-      ];
-      for (const pat of notesPatterns) {
-        const nm2 = afterBP.match(pat) || (line.match(pat));
-        if (nm2) notes += (notes ? '; ' : '') + nm2.join('; ');
-      }
+        let datetime = '';
+        if (currentDate && time) datetime = `${currentDate} ${time}`;
+        else if (time) datetime = time;
+        else if (currentDate) datetime = currentDate;
 
-      // Build datetime string
-      let datetime = '';
-      if (currentDate && time) {
-        datetime = `${currentDate} ${time}`;
-      } else if (time) {
-        datetime = time;
-      } else if (currentDate) {
-        datetime = currentDate;
-      }
-
-      // Only add if we got at least BP
-      readings.push({
-        date: datetime,
-        time,
-        chart_date: currentDate,
-        temperature,
-        pulse,
-        bp_systolic: sys,
-        bp_diastolic: dia,
-        respiratory_rate,
-        spo2,
-        notes: notes || undefined,
-      });
+        readings.push({
+          date: datetime,
+          time,
+          chart_date: currentDate,
+          temperature,
+          pulse,
+          bp_systolic: sys,
+          bp_diastolic: dia,
+          respiratory_rate,
+          spo2,
+        });
       } // end while (bpMatch)
+
+      // Bug #6 fix: if no BP found on this line, still extract temp/pulse/RR/SpO2
+      if (!bpFound) {
+        const allLineNums: number[] = [];
+        const nlr = /(\d+\.?\d*)\s*%?/g;
+        let nlm: RegExpExecArray | null;
+        while ((nlm = nlr.exec(line)) !== null) {
+          const v = parseFloat(nlm[1]);
+          if (v > 0) allLineNums.push(v);
+        }
+        // Filter out date components already in currentDate
+        let temperature: number | undefined;
+        let pulse: number | undefined;
+        let respiratory_rate: number | undefined;
+        let spo2: number | undefined;
+
+        for (const n of allLineNums) {
+          if (!temperature && n >= 34 && n <= 42) {
+            temperature = n;
+          } else if (!pulse && n >= 30 && n <= 220 && Number.isInteger(n)) {
+            pulse = n;
+          } else if (!respiratory_rate && n >= 8 && n <= 60 && Number.isInteger(n) && pulse) {
+            respiratory_rate = n;
+          } else if (!spo2 && n >= 80 && n <= 100) {
+            spo2 = n;
+          }
+        }
+
+        if (temperature || pulse) {
+          let datetime = '';
+          if (currentDate && lineTime) datetime = `${currentDate} ${lineTime}`;
+          else if (lineTime) datetime = lineTime;
+          else if (currentDate) datetime = currentDate;
+
+          readings.push({
+            date: datetime,
+            time: lineTime,
+            chart_date: currentDate,
+            temperature,
+            pulse,
+            bp_systolic: undefined,
+            bp_diastolic: undefined,
+            respiratory_rate,
+            spo2,
+          });
+        }
+      }
     }
 
     return readings.length >= 1 ? readings : null;
@@ -1117,8 +1145,12 @@ class OCRService {
     while ((dm = dateRegex.exec(text)) !== null) {
       const d = parseInt(dm[1]), mo = parseInt(dm[2]);
       if (d >= 1 && d <= 31 && mo >= 1 && mo <= 12) {
-        // Ensure this isn't one of our BP matches
-        const isBP = bpMatches.some(bp => Math.abs(bp.index - dm!.index) < 3);
+        // Ensure this isn't one of our BP matches (check overlap, not proximity)
+        const isBP = bpMatches.some(bp => {
+          const bpEnd = bp.index + bp.matchLen;
+          const dmEnd = dm!.index + dm![0].length;
+          return (dm!.index >= bp.index && dm!.index < bpEnd) || (bp.index >= dm!.index && bp.index < dmEnd);
+        });
         if (!isBP) {
           datePositions.push({ index: dm.index, dateStr: dm[0].trim() });
         }
@@ -1168,7 +1200,7 @@ class OCRService {
 
       // Extract numbers before BP (between time and BP)
       const preNums: number[] = [];
-      const preR = /(\d+\.?\d+)/g; // Decimals only for temp before BP
+      const preR = /(\d+\.?\d*)/g; // Match integers and decimals for temp before BP
       let pn: RegExpExecArray | null;
       while ((pn = preR.exec(beforeBP)) !== null) {
         const v = parseFloat(pn[1]);
@@ -1269,7 +1301,7 @@ class OCRService {
       const isSpo2 = /^(?:SpO2|O2\s*sat|oxygen|sat)\b/i.test(line);
 
       if (isTemp) {
-        const nums = line.match(/\d{2,3}\.\d/g) || [];
+        const nums = line.match(/\d{2,3}\.?\d*/g) || [];
         nums.forEach((n, i) => { if (i < numSlots) { const v = parseFloat(n); if (v >= 34 && v <= 42) temps[i] = v; } });
       } else if (isBP) {
         const bps = line.match(/\d{2,3}\s*[\/\\]\s*\d{2,3}/g) || [];
@@ -1298,8 +1330,8 @@ class OCRService {
     }
 
     // Check if we found any actual data
-    const hasBP = bpSys.some(v => v !== undefined);
-    if (!hasBP) return null;
+    const hasAnyData = bpSys.some(v => v !== undefined) || temps.some(v => v !== undefined) || pulses.some(v => v !== undefined);
+    if (!hasAnyData) return null;
 
     // Find header date
     const headerDateMatch = text.match(/Date[:\s]*(\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?)/i);
