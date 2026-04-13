@@ -52,6 +52,10 @@
       "destination": "/api/students"
     },
     {
+      "source": "/api/mdt/:path*",
+      "destination": "/api/mdt"
+    },
+    {
       "source": "/api/:path*",
       "destination": "/api/:path*"
     },
