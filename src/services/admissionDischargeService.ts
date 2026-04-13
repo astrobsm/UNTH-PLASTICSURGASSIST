@@ -330,45 +330,42 @@ class AdmissionDischargeService {
     return await db.admissions.get(id);
   }
 
+  // Deduplication: reuse in-flight request and cache briefly
+  private _admInflight: Promise<Admission[]> | null = null;
+  private _admCache: Admission[] | null = null;
+  private _admCacheTime = 0;
+  private static ADM_CACHE_TTL = 30_000; // 30 seconds
+
   async getActiveAdmissions(): Promise<Admission[]> {
-    console.log('ðŸ” getActiveAdmissions: Starting...');
-    
+    if (this._admCache && Date.now() - this._admCacheTime < AdmissionDischargeService.ADM_CACHE_TTL) {
+      return this._admCache;
+    }
+    if (this._admInflight) {
+      return this._admInflight;
+    }
+    this._admInflight = this._fetchActiveAdmissions().finally(() => { this._admInflight = null; });
+    return this._admInflight;
+  }
+
+  private async _fetchActiveAdmissions(): Promise<Admission[]> {
     try {
-      // Try to fetch from server first
-      console.log('ðŸ“¡ Attempting to fetch admissions from server...');
       const serverAdmissions = await apiClient.getAdmissions();
-      console.log('ðŸ“¦ Server response:', serverAdmissions);
-      
       if (serverAdmissions && Array.isArray(serverAdmissions)) {
-        console.log(`ðŸ“¥ Received ${serverAdmissions.length} admissions from server`);
-        
-        // Merge with local database
         for (const admission of serverAdmissions) {
           await db.admissions.put({ ...admission, synced: true });
         }
-        console.log(`âœ… Synced ${serverAdmissions.length} admissions from server to local DB`);
-      } else {
-        console.warn('âš ï¸ Server response is not an array:', typeof serverAdmissions);
       }
     } catch (error) {
-      console.warn('âš ï¸ Could not fetch admissions from server, using local data:', error);
+      console.warn('Could not fetch admissions from server, using local data');
     }
 
-    // Return from local DB (now includes server data if available)
-    console.log('ðŸ’¾ Fetching all admissions from local DB...');
     const admissions = await db.admissions.toArray();
-    console.log(`ðŸ’¾ Found ${admissions.length} total admissions in local DB`);
-    
-    if (admissions.length > 0) {
-      console.log('ðŸ“‹ Sample admission:', admissions[0]);
-      console.log('ðŸ“Š Admission statuses:', admissions.map(a => ({ id: a.id, status: a.status })));
-    }
-    
     const activeAdmissions = admissions
       .filter(a => a.status === 'active')
       .sort((a, b) => new Date(b.admission_date).getTime() - new Date(a.admission_date).getTime());
-    
-    console.log(`âœ… Returning ${activeAdmissions.length} active admissions`);
+
+    this._admCache = activeAdmissions;
+    this._admCacheTime = Date.now();
     return activeAdmissions;
   }
 

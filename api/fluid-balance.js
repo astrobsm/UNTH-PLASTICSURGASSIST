@@ -46,26 +46,33 @@ let tableEnsured = false;
 
 async function ensureTable() {
   if (tableEnsured) return;
-  await query(`
-    CREATE TABLE IF NOT EXISTS fluid_balance (
-      id SERIAL PRIMARY KEY,
-      patient_id INTEGER NOT NULL,
-      hospital_number VARCHAR(50),
-      chart_date DATE NOT NULL DEFAULT CURRENT_DATE,
-      recorded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      entry_type VARCHAR(20) NOT NULL CHECK (entry_type IN ('input', 'output')),
-      fluid_type VARCHAR(100) NOT NULL,
-      volume_ml INTEGER NOT NULL DEFAULT 0,
-      route VARCHAR(50),
-      notes TEXT,
-      recorded_by VARCHAR(255),
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE INDEX IF NOT EXISTS idx_fluid_balance_patient ON fluid_balance(patient_id);
-    CREATE INDEX IF NOT EXISTS idx_fluid_balance_date ON fluid_balance(chart_date DESC);
-    CREATE INDEX IF NOT EXISTS idx_fluid_balance_patient_date ON fluid_balance(patient_id, chart_date);
-  `);
+  try {
+    await query(`
+      CREATE TABLE IF NOT EXISTS fluid_balance (
+        id SERIAL PRIMARY KEY,
+        patient_id INTEGER NOT NULL,
+        hospital_number VARCHAR(50),
+        chart_date DATE NOT NULL DEFAULT CURRENT_DATE,
+        recorded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        entry_type VARCHAR(20) NOT NULL CHECK (entry_type IN ('input', 'output')),
+        fluid_type VARCHAR(100) NOT NULL,
+        volume_ml INTEGER NOT NULL DEFAULT 0,
+        route VARCHAR(50),
+        notes TEXT,
+        recorded_by VARCHAR(255),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await query(`CREATE INDEX IF NOT EXISTS idx_fluid_balance_patient ON fluid_balance(patient_id)`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_fluid_balance_date ON fluid_balance(chart_date DESC)`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_fluid_balance_patient_date ON fluid_balance(patient_id, chart_date)`);
+  } catch (err) {
+    // Table/indexes may already exist — that's fine
+    if (!err.message?.includes('already exists')) {
+      throw err;
+    }
+  }
   tableEnsured = true;
 }
 

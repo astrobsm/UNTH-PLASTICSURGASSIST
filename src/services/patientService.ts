@@ -102,10 +102,30 @@ function mergePatientData(primary: any, secondary: any): any {
 }
 
 class PatientService {
+  // Deduplication: reuse in-flight request and cache result briefly
+  private _inflight: Promise<any[]> | null = null;
+  private _cache: any[] | null = null;
+  private _cacheTime = 0;
+  private static CACHE_TTL = 30_000; // 30 seconds
+
   /**
    * Get all patients - fetches from API and updates local IndexedDB
+   * Deduplicates concurrent calls and caches for 30s
    */
   async getAllPatients() {
+    // Return cache if fresh
+    if (this._cache && Date.now() - this._cacheTime < PatientService.CACHE_TTL) {
+      return this._cache;
+    }
+    // Reuse in-flight request
+    if (this._inflight) {
+      return this._inflight;
+    }
+    this._inflight = this._fetchAllPatients().finally(() => { this._inflight = null; });
+    return this._inflight;
+  }
+
+  private async _fetchAllPatients() {
     try {
       // Check if online first
       if (!navigator.onLine) {
@@ -163,6 +183,8 @@ class PatientService {
         ...localOnly.map(normalizePatientData)
       ];
       
+      this._cache = allNormalized;
+      this._cacheTime = Date.now();
       return allNormalized;
     } catch (error) {
       console.error('Error fetching patients from API:', error);
