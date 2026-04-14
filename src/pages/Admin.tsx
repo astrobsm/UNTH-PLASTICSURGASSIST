@@ -1669,6 +1669,11 @@ function StudentManagementTab() {
   const [evalScore, setEvalScore] = useState('');
   const [evalFeedback, setEvalFeedback] = useState('');
   const [evalSaving, setEvalSaving] = useState(false);
+  const [assigningPatients, setAssigningPatients] = useState(false);
+  const [patientPickerOpen, setPatientPickerOpen] = useState(false);
+  const [availablePatients, setAvailablePatients] = useState<any[]>([]);
+  const [patientSearch, setPatientSearch] = useState('');
+  const [loadingPatients, setLoadingPatients] = useState(false);
 
   const shareLink = `${window.location.origin}/student-register`;
 
@@ -1734,6 +1739,69 @@ function StudentManagementTab() {
       alert(err.message || 'Evaluation failed');
     } finally {
       setEvalSaving(false);
+    }
+  };
+
+  // Auto-assign patients to a student
+  const autoAssignPatients = async (studentId: number) => {
+    setAssigningPatients(true);
+    try {
+      const result = await apiClient.post('/students/assign-patients', { studentId });
+      alert(result.message || `${result.assigned} patients assigned`);
+      await loadData();
+      if (detail?.student?.id === studentId) await loadStudentDetail(studentId);
+    } catch (err: any) {
+      alert(err.message || 'Failed to assign patients');
+    } finally {
+      setAssigningPatients(false);
+    }
+  };
+
+  // Open patient picker for manual assignment
+  const openPatientPicker = async (studentId: number) => {
+    setPatientPickerOpen(true);
+    setPatientSearch('');
+    await searchAvailablePatients(studentId, '');
+  };
+
+  // Search available patients
+  const searchAvailablePatients = async (studentId: number, search: string) => {
+    setLoadingPatients(true);
+    try {
+      const params = new URLSearchParams({ studentId: String(studentId) });
+      if (search) params.set('search', search);
+      const patients = await apiClient.get(`/students/available-patients?${params}`);
+      setAvailablePatients(patients);
+    } catch (err) {
+      console.error('Failed to load patients:', err);
+      setAvailablePatients([]);
+    } finally {
+      setLoadingPatients(false);
+    }
+  };
+
+  // Manually assign a single patient
+  const assignSinglePatient = async (studentId: number, patientId: number) => {
+    try {
+      await apiClient.post('/students/assign-patient', { studentId, patientId });
+      await loadStudentDetail(studentId);
+      await loadData();
+      // Refresh available patients
+      await searchAvailablePatients(studentId, patientSearch);
+    } catch (err: any) {
+      alert(err.message || 'Failed to assign patient');
+    }
+  };
+
+  // Unassign a patient
+  const unassignPatient = async (studentId: number, patientId: string) => {
+    if (!confirm('Remove this patient from the student?')) return;
+    try {
+      await apiClient.put('/students/unassign-patient', { studentId, patientId });
+      await loadStudentDetail(studentId);
+      await loadData();
+    } catch (err: any) {
+      alert(err.message || 'Failed to unassign patient');
     }
   };
 
@@ -1806,15 +1874,76 @@ function StudentManagementTab() {
             </div>
 
             {/* Assigned Patients */}
-            <h4 className="font-semibold text-gray-800 mb-2 mt-4">Assigned Patients ({detail.patients?.length || 0}/5)</h4>
+            <div className="flex items-center justify-between mb-2 mt-4">
+              <h4 className="font-semibold text-gray-800">Assigned Patients ({detail.patients?.length || 0}/5)</h4>
+              <div className="flex gap-2">
+                {(detail.patients?.length || 0) < 5 && (
+                  <>
+                    <button onClick={() => autoAssignPatients(selectedStudent.id)} disabled={assigningPatients}
+                      className="px-3 py-1.5 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-1">
+                      {assigningPatients ? <Loader2 className="w-3 h-3 animate-spin" /> : <UserPlus className="w-3 h-3" />} Auto-Assign
+                    </button>
+                    <button onClick={() => openPatientPicker(selectedStudent.id)}
+                      className="px-3 py-1.5 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 flex items-center gap-1">
+                      <Plus className="w-3 h-3" /> Add Patient
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-4">
               {(detail.patients || []).map((p: any) => (
-                <div key={p.patient_id} className="bg-gray-50 rounded-lg p-3 text-sm">
-                  <p className="font-medium">{p.first_name} {p.last_name}</p>
-                  <p className="text-xs text-gray-500">Ward: {p.ward_id || 'N/A'} · Bed: {p.bed_number || 'N/A'}</p>
+                <div key={p.patient_id} className="bg-gray-50 rounded-lg p-3 text-sm flex items-center justify-between">
+                  <div>
+                    <p className="font-medium">{p.first_name} {p.last_name}</p>
+                    <p className="text-xs text-gray-500">
+                      {p.hospital_number ? `HN: ${p.hospital_number} · ` : ''}Ward: {p.ward_id || 'N/A'} · Bed: {p.bed_number || 'N/A'}
+                    </p>
+                  </div>
+                  <button onClick={() => unassignPatient(selectedStudent.id, p.patient_id)}
+                    className="p-1 hover:bg-red-100 rounded" title="Remove patient">
+                    <XCircle className="w-4 h-4 text-red-400" />
+                  </button>
                 </div>
               ))}
+              {(!detail.patients || detail.patients.length === 0) && (
+                <p className="text-sm text-gray-400 col-span-2">No patients assigned. Click "Auto-Assign" or "Add Patient" above.</p>
+              )}
             </div>
+
+            {/* Patient Picker Modal */}
+            {patientPickerOpen && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-semibold text-blue-900">Select Patient to Assign</h4>
+                  <button onClick={() => setPatientPickerOpen(false)} className="text-gray-400 hover:text-gray-600">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <input type="text" placeholder="Search by name or hospital number..." value={patientSearch}
+                  onChange={e => { setPatientSearch(e.target.value); searchAvailablePatients(selectedStudent.id, e.target.value); }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-3" />
+                {loadingPatients ? (
+                  <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-blue-500" /></div>
+                ) : availablePatients.length > 0 ? (
+                  <div className="max-h-48 overflow-y-auto space-y-1">
+                    {availablePatients.map((p: any) => (
+                      <div key={p.id} className="flex items-center justify-between bg-white rounded px-3 py-2 text-sm hover:bg-blue-50">
+                        <div>
+                          <span className="font-medium">{p.first_name || ''} {p.last_name || ''}</span>
+                          {p.full_name && !p.first_name && <span className="font-medium">{p.full_name}</span>}
+                          <span className="text-xs text-gray-500 ml-2">{p.hospital_number || ''} {p.ward_id ? `· Ward ${p.ward_id}` : ''}</span>
+                        </div>
+                        <button onClick={() => assignSinglePatient(selectedStudent.id, p.id)}
+                          className="px-2 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700">Assign</button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-400 text-center py-2">No available patients found</p>
+                )}
+              </div>
+            )}
 
             {/* Clerkings */}
             <h4 className="font-semibold text-gray-800 mb-2">Clerkings ({detail.clerkings?.length || 0})</h4>
@@ -1920,6 +2049,12 @@ function StudentManagementTab() {
                         <button onClick={() => loadStudentDetail(s.id)} className="p-1.5 hover:bg-gray-100 rounded" title="View detail">
                           <Eye className="w-4 h-4 text-gray-500" />
                         </button>
+                        {s.is_approved && s.is_active && (s.assigned_patients || 0) < 5 && (
+                          <button onClick={() => autoAssignPatients(s.id)} disabled={assigningPatients}
+                            className="p-1.5 hover:bg-green-100 rounded" title="Auto-assign patients">
+                            <UserPlus className="w-4 h-4 text-green-600" />
+                          </button>
+                        )}
                         {!s.is_approved && (
                           <button onClick={() => approveStudent(s.id, true)} className="p-1.5 hover:bg-green-100 rounded" title="Approve">
                             <CheckCircle className="w-4 h-4 text-green-600" />

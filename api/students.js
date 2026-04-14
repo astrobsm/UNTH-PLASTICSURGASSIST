@@ -46,6 +46,10 @@ export default async function handler(req, res) {
       if (method === 'PUT' && action === 'approve') return await approveStudent(req.body, res);
       if (method === 'PUT' && action === 'deactivate') return await deactivateStudent(req.body, res);
       if (method === 'PUT' && action === 'evaluate') return await evaluateClerking(auth.user, req.body, res);
+      if (method === 'POST' && action === 'assign-patients') return await adminAssignPatients(req.body, res);
+      if (method === 'POST' && action === 'assign-patient') return await adminAssignSinglePatient(req.body, res);
+      if (method === 'PUT' && action === 'unassign-patient') return await adminUnassignPatient(req.body, res);
+      if (method === 'GET' && action === 'available-patients') return await getAvailablePatients(url.searchParams, res);
       if (method === 'GET' && action && action !== 'register' && action !== 'login') {
         return await getStudentDetail(action, res);
       }
@@ -88,9 +92,26 @@ async function ensureTables() {
       hospital_number VARCHAR(100),
       assigned_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
       is_active BOOLEAN DEFAULT TRUE,
-      UNIQUE(patient_id, is_active)
+      UNIQUE(student_id, patient_id)
     )
   `);
+
+  // Migrate old constraint if it exists (UNIQUE(patient_id,is_active) → UNIQUE(student_id,patient_id))
+  try {
+    await query(`ALTER TABLE student_patient_assignments DROP CONSTRAINT IF EXISTS student_patient_assignments_patient_id_is_active_key`);
+    await query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'student_patient_assignments_student_id_patient_id_key'
+        ) THEN
+          ALTER TABLE student_patient_assignments ADD CONSTRAINT student_patient_assignments_student_id_patient_id_key UNIQUE (student_id, patient_id);
+        END IF;
+      END $$
+    `);
+  } catch (e) {
+    // Constraint migration is best-effort
+    console.warn('Constraint migration (non-fatal):', e.message);
+  }
 
   await query(`
     CREATE TABLE IF NOT EXISTS student_clerkings (
@@ -255,27 +276,29 @@ async function loginStudent(body, res) {
 // AUTO-ASSIGN PATIENTS (max 5, exclusive)
 // ═══════════════════════════════════════════════════════════════════════════
 async function autoAssignPatients(studentId) {
-  // Count current assignments
+  await ensureTables();
+  // Count current active assignments for THIS student
   const countResult = await query(
     'SELECT COUNT(*) as cnt FROM student_patient_assignments WHERE student_id = $1 AND is_active = true',
     [studentId]
   );
   const currentCount = parseInt(countResult.rows[0].cnt);
-  if (currentCount >= 5) return { assigned: 0 };
+  if (currentCount >= 5) return { assigned: 0, message: 'Already at max (5)' };
 
   const needed = 5 - currentCount;
 
-  // Find patients NOT assigned to any active student
+  // Find patients NOT yet assigned to THIS student (allow shared patients across students)
   const available = await query(`
     SELECT p.id, p.hospital_number 
     FROM patients p
     WHERE p.deleted IS NOT TRUE
       AND p.id::text NOT IN (
-        SELECT spa.patient_id FROM student_patient_assignments spa WHERE spa.is_active = true
+        SELECT spa.patient_id FROM student_patient_assignments spa 
+        WHERE spa.student_id = $1 AND spa.is_active = true
       )
     ORDER BY p.created_at DESC
-    LIMIT $1
-  `, [needed]);
+    LIMIT $2
+  `, [studentId, needed]);
 
   let assigned = 0;
   for (const patient of available.rows) {
@@ -283,16 +306,16 @@ async function autoAssignPatients(studentId) {
       await query(
         `INSERT INTO student_patient_assignments (student_id, patient_id, hospital_number, is_active)
          VALUES ($1, $2, $3, true)
-         ON CONFLICT (patient_id, is_active) DO NOTHING`,
+         ON CONFLICT (student_id, patient_id) DO UPDATE SET is_active = true, assigned_at = NOW()`,
         [studentId, String(patient.id), patient.hospital_number]
       );
       assigned++;
     } catch (e) {
-      // Skip duplicates
+      console.warn('Auto-assign skip:', e.message);
     }
   }
 
-  return { assigned };
+  return { assigned, total: currentCount + assigned };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -612,17 +635,24 @@ async function getStudentDetail(studentId, res) {
 }
 
 async function approveStudent(body, res) {
+  await ensureTables();
   const { studentId, approved } = body;
   if (!studentId) return res.status(400).json({ error: 'Student ID required' });
 
   await query('UPDATE students SET is_approved = $2, updated_at = NOW() WHERE id = $1', [studentId, approved !== false]);
 
   // Auto-assign patients on approval
+  let assignResult = { assigned: 0 };
   if (approved !== false) {
-    await autoAssignPatients(studentId);
+    assignResult = await autoAssignPatients(studentId);
   }
 
-  res.json({ message: approved !== false ? 'Student approved & patients assigned' : 'Student approval revoked' });
+  res.json({ 
+    message: approved !== false 
+      ? `Student approved & ${assignResult.assigned} patients assigned` 
+      : 'Student approval revoked',
+    ...assignResult
+  });
 }
 
 async function deactivateStudent(body, res) {
@@ -665,4 +695,107 @@ async function evaluateClerking(evaluator, body, res) {
   }
 
   res.status(400).json({ error: 'clerkingId or treatmentPlanId required' });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ADMIN: PATIENT ASSIGNMENT MANAGEMENT
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Trigger auto-assign for a specific student
+async function adminAssignPatients(body, res) {
+  await ensureTables();
+  const { studentId } = body;
+  if (!studentId) return res.status(400).json({ error: 'Student ID required' });
+
+  const student = await query('SELECT id, is_approved, is_active FROM students WHERE id = $1', [studentId]);
+  if (student.rows.length === 0) return res.status(404).json({ error: 'Student not found' });
+  if (!student.rows[0].is_approved) return res.status(400).json({ error: 'Student must be approved first' });
+  if (!student.rows[0].is_active) return res.status(400).json({ error: 'Student is deactivated' });
+
+  const result = await autoAssignPatients(studentId);
+  res.json({ message: `${result.assigned} patients assigned (total: ${result.total}/5)`, ...result });
+}
+
+// Manually assign a specific patient to a student
+async function adminAssignSinglePatient(body, res) {
+  await ensureTables();
+  const { studentId, patientId } = body;
+  if (!studentId || !patientId) return res.status(400).json({ error: 'studentId and patientId required' });
+
+  // Verify student exists and is active
+  const student = await query('SELECT id, is_approved, is_active FROM students WHERE id = $1', [studentId]);
+  if (student.rows.length === 0) return res.status(404).json({ error: 'Student not found' });
+
+  // Check current count
+  const countResult = await query(
+    'SELECT COUNT(*) as cnt FROM student_patient_assignments WHERE student_id = $1 AND is_active = true',
+    [studentId]
+  );
+  if (parseInt(countResult.rows[0].cnt) >= 5) {
+    return res.status(400).json({ error: 'Student already has maximum 5 patients' });
+  }
+
+  // Verify patient exists
+  const patient = await query('SELECT id, hospital_number FROM patients WHERE id = $1', [patientId]);
+  if (patient.rows.length === 0) return res.status(404).json({ error: 'Patient not found' });
+
+  await query(
+    `INSERT INTO student_patient_assignments (student_id, patient_id, hospital_number, is_active)
+     VALUES ($1, $2, $3, true)
+     ON CONFLICT (student_id, patient_id) DO UPDATE SET is_active = true, assigned_at = NOW()`,
+    [studentId, String(patientId), patient.rows[0].hospital_number]
+  );
+
+  res.json({ message: 'Patient assigned to student' });
+}
+
+// Remove a patient assignment
+async function adminUnassignPatient(body, res) {
+  const { studentId, patientId } = body;
+  if (!studentId || !patientId) return res.status(400).json({ error: 'studentId and patientId required' });
+
+  await query(
+    'UPDATE student_patient_assignments SET is_active = false WHERE student_id = $1 AND patient_id = $2',
+    [studentId, String(patientId)]
+  );
+
+  res.json({ message: 'Patient unassigned' });
+}
+
+// Get available patients for assignment
+async function getAvailablePatients(params, res) {
+  await ensureTables();
+  const studentId = params.get('studentId');
+  const search = params.get('search') || '';
+
+  let sql = `
+    SELECT p.id, p.hospital_number, p.first_name, p.last_name, p.full_name, 
+           p.ward_id, p.bed_number, p.sex
+    FROM patients p
+    WHERE p.deleted IS NOT TRUE
+  `;
+  const values = [];
+  let paramIndex = 1;
+
+  // Exclude patients already assigned to this student
+  if (studentId) {
+    sql += ` AND p.id::text NOT IN (
+      SELECT spa.patient_id FROM student_patient_assignments spa 
+      WHERE spa.student_id = $${paramIndex} AND spa.is_active = true
+    )`;
+    values.push(studentId);
+    paramIndex++;
+  }
+
+  // Search filter
+  if (search) {
+    sql += ` AND (p.hospital_number ILIKE $${paramIndex} OR p.first_name ILIKE $${paramIndex} OR p.last_name ILIKE $${paramIndex} OR p.full_name ILIKE $${paramIndex})`;
+    values.push(`%${search}%`);
+    paramIndex++;
+  }
+
+  sql += ' ORDER BY p.created_at DESC LIMIT 20';
+
+  const result = await query(sql, values);
+  res.json(result.rows);
 }
