@@ -17,7 +17,11 @@ import {
   WifiOff,
   FileText,
   Pill,
-  Activity
+  Activity,
+  Plus,
+  Siren,
+  X,
+  Edit3
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
@@ -25,12 +29,16 @@ import { useState, useEffect, useCallback } from 'react';
 import { db, Patient } from '../db/database';
 import { patientService } from '../services/patientService';
 import { admissionDischargeService, Admission } from '../services/admissionDischargeService';
+import { admissionService } from '../services/admissionService';
+import { schedulingService, SurgeryBooking } from '../services/schedulingService';
 import { warmCache, CacheWarmProgress } from '../services/cacheWarmer';
 import { syncService } from '../db/syncService';
 import toast from 'react-hot-toast';
 import UnitRosterWidget from '../components/UnitRosterWidget';
 import { userManagementService, ApprovedUser } from '../services/userManagementService';
 import { medicalTeamService } from '../services/medicalTeamService';
+import { getCurrentUserName } from '../utils/getCurrentUser';
+import { PS_UNITS, getCurrentAssignments, getTodaySchedule, UnitRosterConfig } from '../config/psUnits';
 
 interface DashboardPatient {
   id: number | string;
@@ -51,6 +59,7 @@ export default function Dashboard() {
   const [stats, setStats] = useState({
     activePatients: 0,
     myPatients: 0,
+    admittedPatients: 0,
     pendingTasks: 0,
     labResults: 0,
     urgentItems: 0
@@ -84,6 +93,39 @@ export default function Dashboard() {
   const [forceDischarging, setForceDischarging] = useState(false);
   const [selectedForDischarge, setSelectedForDischarge] = useState<Set<string | number>>(new Set());
 
+  // Force Admit modal state
+  const [showForceAdmitModal, setShowForceAdmitModal] = useState(false);
+  const [forceAdmitting, setForceAdmitting] = useState(false);
+  const [allPatients, setAllPatients] = useState<Patient[]>([]);
+  const [faPatientSearch, setFaPatientSearch] = useState('');
+  const [faSelectedPatient, setFaSelectedPatient] = useState<Patient | null>(null);
+  const [faWard, setFaWard] = useState('');
+  const [faBed, setFaBed] = useState('');
+  const [faDiagnosis, setFaDiagnosis] = useState('');
+  const [faConsultant, setFaConsultant] = useState('');
+  const [faReason, setFaReason] = useState('');
+
+  // Emergency Surgery Booking modal state
+  const [showEmergencySurgeryModal, setShowEmergencySurgeryModal] = useState(false);
+  const [bookingSurgery, setBookingSurgery] = useState(false);
+  const [esPatientSearch, setEsPatientSearch] = useState('');
+  const [esSelectedPatient, setEsSelectedPatient] = useState<Patient | null>(null);
+  const [esProcedure, setEsProcedure] = useState('');
+  const [esIndication, setEsIndication] = useState('');
+  const [esSurgeon, setEsSurgeon] = useState('');
+  const [esAssistant, setEsAssistant] = useState('');
+  const [esAnaesthetist, setEsAnaesthetist] = useState('');
+  const [esAnaesthesiaType, setEsAnaesthesiaType] = useState<'general' | 'regional' | 'local' | 'sedation'>('general');
+  const [esTheatre, setEsTheatre] = useState('');
+  const [esDuration, setEsDuration] = useState('60');
+  const [esDiagnosis, setEsDiagnosis] = useState('');
+  const [esBloodType, setEsBloodType] = useState('');
+  const [esInfected, setEsInfected] = useState(false);
+  const [esHivPositive, setEsHivPositive] = useState(false);
+  const [esDiabetic, setEsDiabetic] = useState(false);
+  const [esSpecialReqs, setEsSpecialReqs] = useState('');
+  const [esNotes, setEsNotes] = useState('');
+
   // Treatment Plan Tracking
   const [treatmentPlanSummaries, setTreatmentPlanSummaries] = useState<Array<{
     id: string;
@@ -105,6 +147,15 @@ export default function Dashboard() {
   const [staffLookupLoading, setStaffLookupLoading] = useState(false);
   const [autoAssigning, setAutoAssigning] = useState(false);
   const [autoAssignResult, setAutoAssignResult] = useState<string | null>(null);
+
+  // HO Duty Section
+  const [hoDutyData, setHoDutyData] = useState<{
+    todaySchedule: Array<{ unit: string; activity: string; time?: string }>;
+    unit1HO: string;
+    unit2HO: string;
+    unit1SR: string;
+    unit2SR: string;
+  } | null>(null);
 
   const isAdmin = user?.role === 'admin';
 
@@ -162,6 +213,7 @@ export default function Dashboard() {
   useEffect(() => {
     loadDashboardData();
     loadStaffList();
+    loadHODutyData();
   }, []);
 
   const loadDashboardData = async () => {
@@ -271,16 +323,29 @@ export default function Dashboard() {
       );
 
       // Deduplicate plans: keep only the most recent active plan per patient
+      // Use both patient_id and patient_name+hospital_number as dedup keys
       const latestPlanByPatient = new Map<string, typeof activePlansAll[0]>();
       for (const tp of activePlansAll) {
-        const pid = String(tp.patient_id || (tp as any).patientId || '');
-        if (!pid) continue;
-        const existing = latestPlanByPatient.get(pid);
+        const pid = String(tp.patient_id || (tp as any).patientId || '').trim();
+        const nameKey = `${(tp.patient_name || '').trim().toLowerCase()}|${((tp as any).hospital_number || '').trim().toLowerCase()}`;
+        // Use whichever key identifies this patient best
+        const key = pid && pid !== '0' && pid !== 'undefined' && pid !== 'null' ? pid : (nameKey !== '|' ? nameKey : '');
+        if (!key) continue;
+        const existing = latestPlanByPatient.get(key);
         if (!existing || new Date(tp.updated_at || tp.created_at || 0).getTime() > new Date(existing.updated_at || existing.created_at || 0).getTime()) {
-          latestPlanByPatient.set(pid, tp);
+          latestPlanByPatient.set(key, tp);
         }
       }
-      const dedupedPlans = Array.from(latestPlanByPatient.values());
+      // Second pass: also dedup by patient_name if different keys resolved to the same patient
+      const finalPlanByName = new Map<string, typeof activePlansAll[0]>();
+      for (const [, tp] of latestPlanByPatient) {
+        const nameKey = `${(tp.patient_name || '').trim().toLowerCase()}|${((tp as any).hospital_number || '').trim().toLowerCase()}`;
+        const existing = finalPlanByName.get(nameKey);
+        if (!existing || new Date(tp.updated_at || tp.created_at || 0).getTime() > new Date(existing.updated_at || existing.created_at || 0).getTime()) {
+          finalPlanByName.set(nameKey, tp);
+        }
+      }
+      const dedupedPlans = Array.from(finalPlanByName.values());
 
       // Pending Tasks: count actual incomplete items within deduped active plans
       let pendingTasks = 0;
@@ -305,9 +370,12 @@ export default function Dashboard() {
         li.status === 'completed' || li.result
       ).length;
 
+      const admittedPatients = dPatients.filter(p => p.admission_status === 'active').length;
+
       setStats({
         activePatients,
         myPatients: dPatients.length,
+        admittedPatients,
         pendingTasks,
         labResults,
         urgentItems
@@ -359,14 +427,25 @@ export default function Dashboard() {
         // Deduplicate: keep only the most recent plan per patient for the tracker
         const trackerByPatient = new Map<string, typeof activePlans[0]>();
         for (const tp of activePlans) {
-          const pid = String(tp.patient_id || (tp as any).patientId || '');
-          if (!pid) continue;
-          const existing = trackerByPatient.get(pid);
+          const pid = String(tp.patient_id || (tp as any).patientId || '').trim();
+          const nameKey = `${(tp.patient_name || '').trim().toLowerCase()}|${((tp as any).hospital_number || '').trim().toLowerCase()}`;
+          const key = pid && pid !== '0' && pid !== 'undefined' && pid !== 'null' ? pid : (nameKey !== '|' ? nameKey : '');
+          if (!key) continue;
+          const existing = trackerByPatient.get(key);
           if (!existing || new Date(tp.updated_at || tp.created_at || 0).getTime() > new Date(existing.updated_at || existing.created_at || 0).getTime()) {
-            trackerByPatient.set(pid, tp);
+            trackerByPatient.set(key, tp);
           }
         }
-        const uniquePatientPlans = Array.from(trackerByPatient.values())
+        // Second pass dedup by name+hospital_number
+        const trackerByName = new Map<string, typeof activePlans[0]>();
+        for (const [, tp] of trackerByPatient) {
+          const nameKey = `${(tp.patient_name || '').trim().toLowerCase()}|${((tp as any).hospital_number || '').trim().toLowerCase()}`;
+          const existing = trackerByName.get(nameKey);
+          if (!existing || new Date(tp.updated_at || tp.created_at || 0).getTime() > new Date(existing.updated_at || existing.created_at || 0).getTime()) {
+            trackerByName.set(nameKey, tp);
+          }
+        }
+        const uniquePatientPlans = Array.from(trackerByName.values())
           .sort((a, b) => new Date(b.updated_at || b.created_at || 0).getTime() - new Date(a.updated_at || a.created_at || 0).getTime());
 
         const planSummaries = uniquePatientPlans.slice(0, 10).map(plan => {
@@ -442,6 +521,38 @@ export default function Dashboard() {
         if (mapped.length > 0) setStaffList(mapped);
       } catch { /* no local fallback available */ }
     }
+  };
+
+  const loadHODutyData = async () => {
+    try {
+      const schedule = getTodaySchedule();
+      // Load roster config from IndexedDB (same source as UnitRosterWidget)
+      let config: UnitRosterConfig | null = null;
+      try {
+        const rosters = await db.ps_unit_rosters?.toArray() || [];
+        const active = rosters.find((r: any) => r.isActive || r.is_active);
+        if (active) {
+          config = {
+            startDate: active.startDate || active.start_date,
+            rotationWeeks: active.rotationWeeks || active.rotation_weeks || 2,
+            seniorRegistrars: active.seniorRegistrars || active.senior_registrars || [],
+            houseOfficers: active.houseOfficers || active.house_officers || [],
+            isActive: true,
+          };
+        }
+      } catch { /* roster table may not exist */ }
+
+      let unit1HO = '', unit2HO = '', unit1SR = '', unit2SR = '';
+      if (config) {
+        const assignments = getCurrentAssignments(config);
+        unit1HO = assignments.unit1.houseOfficer;
+        unit2HO = assignments.unit2.houseOfficer;
+        unit1SR = assignments.unit1.seniorRegistrar;
+        unit2SR = assignments.unit2.seniorRegistrar;
+      }
+
+      setHoDutyData({ todaySchedule: schedule, unit1HO, unit2HO, unit1SR, unit2SR });
+    } catch { /* non-critical */ }
   };
 
   const handleStaffLookup = async (staffId: string) => {
@@ -629,9 +740,135 @@ export default function Dashboard() {
     const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
     if (seconds < 60) return 'just now';
     if (seconds < 3600) return `${Math.floor(seconds / 60)} minutes ago`;
-    if (seconds < 86400) return `${Math.floor(seconds / 3600)} hours ago`;
+    if (seconds < 3600 * 24) return `${Math.floor(seconds / 3600)} hours ago`;
     if (seconds < 604800) return `${Math.floor(seconds / 86400)} days ago`;
     return `${Math.floor(seconds / 604800)} weeks ago`;
+  };
+
+  // Load all patients for Force Admit / Emergency Surgery modals
+  const loadAllPatients = async () => {
+    try {
+      const pts = await patientService.getAllPatients();
+      setAllPatients(pts.filter((p: any) => !p.deleted));
+    } catch { /* ignore */ }
+  };
+
+  const openForceAdmitModal = () => {
+    loadAllPatients();
+    setFaPatientSearch('');
+    setFaSelectedPatient(null);
+    setFaWard('');
+    setFaBed('');
+    setFaDiagnosis('');
+    setFaConsultant('');
+    setFaReason('');
+    setShowForceAdmitModal(true);
+  };
+
+  const handleForceAdmit = async () => {
+    if (!faSelectedPatient) { toast.error('Select a patient'); return; }
+    if (!faWard.trim()) { toast.error('Ward is required'); return; }
+    if (!faDiagnosis.trim()) { toast.error('Provisional diagnosis is required'); return; }
+
+    setForceAdmitting(true);
+    try {
+      const now = new Date();
+      const admissionData: Omit<Admission, 'id' | 'created_at' | 'updated_at'> = {
+        patient_id: faSelectedPatient.id!,
+        patient_name: faSelectedPatient.name || `${faSelectedPatient.first_name || ''} ${faSelectedPatient.last_name || ''}`.trim(),
+        hospital_number: faSelectedPatient.hospital_number || '',
+        admission_date: now.toISOString().split('T')[0],
+        admission_time: now.toTimeString().slice(0, 5),
+        ward_location: faWard.trim(),
+        bed_number: faBed.trim() || undefined,
+        route_of_admission: 'emergency',
+        reasons_for_admission: faReason.trim() || faDiagnosis.trim(),
+        presenting_complaint: faReason.trim() || faDiagnosis.trim(),
+        provisional_diagnosis: faDiagnosis.trim(),
+        admitting_doctor: getCurrentUserName(),
+        admitting_consultant: faConsultant || undefined,
+        status: 'active',
+        created_by: getCurrentUserName(),
+        created_at: now,
+        updated_at: now,
+      };
+
+      await admissionDischargeService.createAdmission(admissionData);
+      toast.success(`${admissionData.patient_name} admitted to ${faWard}`);
+      setShowForceAdmitModal(false);
+      await loadDashboardData();
+    } catch (err: any) {
+      toast.error(`Admission failed: ${err.message || 'Unknown error'}`);
+    } finally {
+      setForceAdmitting(false);
+    }
+  };
+
+  const openEmergencySurgeryModal = () => {
+    loadAllPatients();
+    setEsPatientSearch('');
+    setEsSelectedPatient(null);
+    setEsProcedure('');
+    setEsIndication('');
+    setEsSurgeon('');
+    setEsAssistant('');
+    setEsAnaesthetist('');
+    setEsAnaesthesiaType('general');
+    setEsTheatre('');
+    setEsDuration('60');
+    setEsDiagnosis('');
+    setEsBloodType('');
+    setEsInfected(false);
+    setEsHivPositive(false);
+    setEsDiabetic(false);
+    setEsSpecialReqs('');
+    setEsNotes('');
+    setShowEmergencySurgeryModal(true);
+  };
+
+  const handleEmergencySurgeryBooking = async () => {
+    if (!esSelectedPatient) { toast.error('Select a patient'); return; }
+    if (!esProcedure.trim()) { toast.error('Procedure name is required'); return; }
+    if (!esSurgeon.trim()) { toast.error('Primary surgeon is required'); return; }
+
+    setBookingSurgery(true);
+    try {
+      const now = new Date();
+      const booking: Omit<SurgeryBooking, 'id' | 'created_at' | 'updated_at'> = {
+        date: now.toISOString().split('T')[0],
+        theatre_number: esTheatre.trim() || 'Emergency Theatre',
+        start_time: now.toTimeString().slice(0, 5),
+        estimated_end_time: new Date(now.getTime() + parseInt(esDuration || '60') * 60000).toTimeString().slice(0, 5),
+        primary_surgeon: esSurgeon.trim(),
+        assistant_surgeon: esAssistant.trim() || undefined,
+        anaesthetist: esAnaesthetist.trim() || undefined,
+        patient_id: esSelectedPatient.id!,
+        patient_name: esSelectedPatient.name || `${esSelectedPatient.first_name || ''} ${esSelectedPatient.last_name || ''}`.trim(),
+        hospital_number: esSelectedPatient.hospital_number || '',
+        procedure_name: esProcedure.trim(),
+        urgency: 'emergency',
+        anaesthesia_type: esAnaesthesiaType,
+        estimated_duration_minutes: parseInt(esDuration || '60'),
+        is_emergency: true,
+        is_infected: esInfected,
+        is_hiv_positive: esHivPositive,
+        is_diabetic: esDiabetic,
+        case_category: 'emergency',
+        special_requirements: esSpecialReqs.trim() ? [esSpecialReqs.trim()] : [],
+        notes: [esNotes.trim(), esIndication.trim() ? `Indication: ${esIndication.trim()}` : ''].filter(Boolean).join('\n') || undefined,
+        medical_conditions: esDiagnosis.trim() ? [esDiagnosis.trim()] : [],
+        remarks: esBloodType.trim() ? [`Blood type: ${esBloodType.trim()}`] : [],
+        status: 'scheduled',
+      };
+
+      await schedulingService.createSurgeryBooking(booking);
+      toast.success(`Emergency surgery booked for ${booking.patient_name}`);
+      setShowEmergencySurgeryModal(false);
+    } catch (err: any) {
+      toast.error(`Booking failed: ${err.message || 'Unknown error'}`);
+    } finally {
+      setBookingSurgery(false);
+    }
   };
 
   // Filter patients by search, ward, and admission status (admitted only for admin)
@@ -654,6 +891,13 @@ export default function Dashboard() {
       icon: UserCheck,
       color: 'text-primary-600',
       bg: 'bg-primary-50',
+    },
+    {
+      name: 'On Admission',
+      value: stats.admittedPatients.toString(),
+      icon: Building2,
+      color: 'text-emerald-600',
+      bg: 'bg-emerald-50',
     },
     {
       name: 'Pending Items',
@@ -693,7 +937,7 @@ export default function Dashboard() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-6">
         {statsDisplay.map((stat) => (
           <div key={stat.name} className="stat-card">
             <div className="flex items-center">
@@ -740,6 +984,18 @@ export default function Dashboard() {
                   className="px-3 py-1.5 text-xs font-medium rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
                 >
                   {forceDischarging ? 'Discharging...' : `Force Discharge (${selectedForDischarge.size})`}
+                </button>
+                <button
+                  onClick={openForceAdmitModal}
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg bg-green-600 text-white hover:bg-green-700 flex items-center gap-1"
+                >
+                  <Plus className="h-3.5 w-3.5" /> Force Admit
+                </button>
+                <button
+                  onClick={openEmergencySurgeryModal}
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg bg-orange-600 text-white hover:bg-orange-700 flex items-center gap-1"
+                >
+                  <Siren className="h-3.5 w-3.5" /> Emergency Surgery
                 </button>
               </>
             )}
@@ -1119,6 +1375,56 @@ export default function Dashboard() {
       {/* PS Unit Roster & Schedule */}
       <UnitRosterWidget />
 
+      {/* HO Duty Section — Today's Assignments */}
+      {hoDutyData && hoDutyData.todaySchedule.length > 0 && (
+        <div className="card p-4 sm:p-6">
+          <h3 className="text-base sm:text-lg font-semibold text-clinical-dark mb-3 flex items-center gap-2">
+            <ClipboardCheck className="w-5 h-5 text-green-600" />
+            Today&apos;s Duty Assignments
+          </h3>
+          <div className="space-y-3">
+            {hoDutyData.todaySchedule.map((item, idx) => {
+              const isUnit1 = item.unit.includes('1');
+              const ho = isUnit1 ? hoDutyData.unit1HO : hoDutyData.unit2HO;
+              const sr = isUnit1 ? hoDutyData.unit1SR : hoDutyData.unit2SR;
+              const activityColor = item.activity.toLowerCase().includes('theatre')
+                ? 'bg-red-50 border-red-200 text-red-800'
+                : item.activity.toLowerCase().includes('clinic')
+                ? 'bg-blue-50 border-blue-200 text-blue-800'
+                : 'bg-green-50 border-green-200 text-green-800';
+              const roleBadge = item.activity.toLowerCase().includes('theatre') ? 'Theatre Coordinator' : 'Ward Coverage';
+
+              return (
+                <div key={idx} className={`rounded-lg border p-3 ${activityColor}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-sm">{item.unit}</span>
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-white bg-opacity-60 font-medium">{item.activity}</span>
+                    </div>
+                    {item.time && <span className="text-xs opacity-75">{item.time}</span>}
+                  </div>
+                  <div className="flex flex-wrap gap-3 text-xs">
+                    {sr && (
+                      <div className="flex items-center gap-1">
+                        <UserCheck className="w-3.5 h-3.5" />
+                        <span className="font-medium">SR:</span> {sr}
+                      </div>
+                    )}
+                    {ho && (
+                      <div className="flex items-center gap-1">
+                        <Users className="w-3.5 h-3.5" />
+                        <span className="font-medium">HO:</span> {ho}
+                        <span className="ml-1 px-1.5 py-0.5 bg-white bg-opacity-50 rounded text-[10px] font-medium">{roleBadge}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Recent Activities & Quick Actions */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         {/* Recent Activities */}
@@ -1302,6 +1608,405 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* Force Admit Modal */}
+      {showForceAdmitModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b bg-green-50 rounded-t-xl">
+              <h3 className="text-lg font-bold text-green-800 flex items-center gap-2">
+                <Plus className="h-5 w-5" /> Force Admit Patient
+              </h3>
+              <button onClick={() => setShowForceAdmitModal(false)} className="text-gray-500 hover:text-gray-700">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              <p className="text-xs text-gray-500">Quick admission — you can edit full details later from the patient's profile.</p>
+
+              {/* Patient Search */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Patient *</label>
+                {faSelectedPatient ? (
+                  <div className="flex items-center justify-between p-2 bg-green-50 border border-green-200 rounded-lg">
+                    <span className="text-sm font-medium">{faSelectedPatient.name || `${faSelectedPatient.first_name} ${faSelectedPatient.last_name}`} — {faSelectedPatient.hospital_number}</span>
+                    <button onClick={() => setFaSelectedPatient(null)} className="text-red-500 text-xs hover:underline">Change</button>
+                  </div>
+                ) : (
+                  <div>
+                    <input
+                      type="text"
+                      placeholder="Search by name or hospital number..."
+                      value={faPatientSearch}
+                      onChange={(e) => setFaPatientSearch(e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                    />
+                    {faPatientSearch.length >= 2 && (
+                      <div className="mt-1 max-h-32 overflow-y-auto border border-gray-200 rounded-lg bg-white">
+                        {allPatients
+                          .filter(p => {
+                            const q = faPatientSearch.toLowerCase();
+                            const name = (p.name || `${p.first_name || ''} ${p.last_name || ''}`).toLowerCase();
+                            return name.includes(q) || (p.hospital_number || '').toLowerCase().includes(q);
+                          })
+                          .slice(0, 10)
+                          .map(p => (
+                            <button
+                              key={p.id}
+                              onClick={() => { setFaSelectedPatient(p); setFaPatientSearch(''); }}
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-green-50 border-b border-gray-100 last:border-0"
+                            >
+                              {p.name || `${p.first_name} ${p.last_name}`} — {p.hospital_number}
+                            </button>
+                          ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Ward */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Ward *</label>
+                <select
+                  value={faWard}
+                  onChange={(e) => setFaWard(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+                >
+                  <option value="">Select Ward</option>
+                  <option value="Plastic Surgery Ward">Plastic Surgery Ward</option>
+                  <option value="Burns Ward">Burns Ward</option>
+                  <option value="Male Surgical Ward">Male Surgical Ward</option>
+                  <option value="Female Surgical Ward">Female Surgical Ward</option>
+                  <option value="Paediatric Ward">Paediatric Ward</option>
+                  <option value="ICU">ICU</option>
+                  <option value="Emergency Ward">Emergency Ward</option>
+                </select>
+              </div>
+
+              {/* Bed */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Bed Number</label>
+                <input
+                  type="text"
+                  value={faBed}
+                  onChange={(e) => setFaBed(e.target.value)}
+                  placeholder="e.g. B12"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                />
+              </div>
+
+              {/* Provisional Diagnosis */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Provisional Diagnosis *</label>
+                <input
+                  type="text"
+                  value={faDiagnosis}
+                  onChange={(e) => setFaDiagnosis(e.target.value)}
+                  placeholder="e.g. Hand burn, laceration of face..."
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                />
+              </div>
+
+              {/* Reason for Admission */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Reason for Admission</label>
+                <input
+                  type="text"
+                  value={faReason}
+                  onChange={(e) => setFaReason(e.target.value)}
+                  placeholder="e.g. For wound care and dressing"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                />
+              </div>
+
+              {/* Admitting Consultant */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Admitting Consultant</label>
+                <select
+                  value={faConsultant}
+                  onChange={(e) => setFaConsultant(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                >
+                  <option value="">Select Consultant</option>
+                  {staffList
+                    .filter(s => s.role === 'consultant')
+                    .map(s => (
+                      <option key={s.id} value={s.name}>{s.name}</option>
+                    ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 p-4 border-t bg-gray-50 rounded-b-xl">
+              <button
+                onClick={() => setShowForceAdmitModal(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleForceAdmit}
+                disabled={forceAdmitting}
+                className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                {forceAdmitting ? <><Loader2 className="h-4 w-4 animate-spin" /> Admitting...</> : 'Admit Patient'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Emergency Surgery Booking Modal */}
+      {showEmergencySurgeryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b bg-orange-50 rounded-t-xl">
+              <h3 className="text-lg font-bold text-orange-800 flex items-center gap-2">
+                <Siren className="h-5 w-5" /> Emergency Surgery Booking
+              </h3>
+              <button onClick={() => setShowEmergencySurgeryModal(false)} className="text-gray-500 hover:text-gray-700">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div className="bg-red-50 border border-red-200 rounded-lg p-2 text-xs text-red-700 flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 flex-shrink-0" /> Emergency case — booking is marked urgent and scheduled immediately.
+              </div>
+
+              {/* Patient Search */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Patient *</label>
+                {esSelectedPatient ? (
+                  <div className="flex items-center justify-between p-2 bg-orange-50 border border-orange-200 rounded-lg">
+                    <span className="text-sm font-medium">{esSelectedPatient.name || `${esSelectedPatient.first_name} ${esSelectedPatient.last_name}`} — {esSelectedPatient.hospital_number}</span>
+                    <button onClick={() => setEsSelectedPatient(null)} className="text-red-500 text-xs hover:underline">Change</button>
+                  </div>
+                ) : (
+                  <div>
+                    <input
+                      type="text"
+                      placeholder="Search by name or hospital number..."
+                      value={esPatientSearch}
+                      onChange={(e) => setEsPatientSearch(e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500"
+                    />
+                    {esPatientSearch.length >= 2 && (
+                      <div className="mt-1 max-h-32 overflow-y-auto border border-gray-200 rounded-lg bg-white">
+                        {allPatients
+                          .filter(p => {
+                            const q = esPatientSearch.toLowerCase();
+                            const name = (p.name || `${p.first_name || ''} ${p.last_name || ''}`).toLowerCase();
+                            return name.includes(q) || (p.hospital_number || '').toLowerCase().includes(q);
+                          })
+                          .slice(0, 10)
+                          .map(p => (
+                            <button
+                              key={p.id}
+                              onClick={() => { setEsSelectedPatient(p); setEsPatientSearch(''); }}
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-orange-50 border-b border-gray-100 last:border-0"
+                            >
+                              {p.name || `${p.first_name} ${p.last_name}`} — {p.hospital_number}
+                            </button>
+                          ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Procedure and Indication */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Procedure Name *</label>
+                  <input
+                    type="text"
+                    value={esProcedure}
+                    onChange={(e) => setEsProcedure(e.target.value)}
+                    placeholder="e.g. Wound debridement, Skin grafting"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Indication</label>
+                  <input
+                    type="text"
+                    value={esIndication}
+                    onChange={(e) => setEsIndication(e.target.value)}
+                    placeholder="e.g. Burn wound infection, traumatic avulsion"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                  />
+                </div>
+              </div>
+
+              {/* Diagnosis */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Diagnosis / Medical Conditions</label>
+                <input
+                  type="text"
+                  value={esDiagnosis}
+                  onChange={(e) => setEsDiagnosis(e.target.value)}
+                  placeholder="e.g. Deep dermal burn 20% TBSA"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                />
+              </div>
+
+              {/* Surgeon team */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Primary Surgeon *</label>
+                  <select
+                    value={esSurgeon}
+                    onChange={(e) => setEsSurgeon(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                  >
+                    <option value="">Select Surgeon</option>
+                    {staffList
+                      .filter(s => ['consultant', 'senior_registrar'].includes(s.role))
+                      .map(s => (
+                        <option key={s.id} value={s.name}>{s.name} ({s.role})</option>
+                      ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Assistant Surgeon</label>
+                  <select
+                    value={esAssistant}
+                    onChange={(e) => setEsAssistant(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                  >
+                    <option value="">Select Assistant</option>
+                    {staffList
+                      .filter(s => ['senior_registrar', 'junior_registrar'].includes(s.role))
+                      .map(s => (
+                        <option key={s.id} value={s.name}>{s.name}</option>
+                      ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Anaesthetist</label>
+                  <input
+                    type="text"
+                    value={esAnaesthetist}
+                    onChange={(e) => setEsAnaesthetist(e.target.value)}
+                    placeholder="Anaesthetist name"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                  />
+                </div>
+              </div>
+
+              {/* Theatre, Anaesthesia Type, Duration */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Theatre</label>
+                  <input
+                    type="text"
+                    value={esTheatre}
+                    onChange={(e) => setEsTheatre(e.target.value)}
+                    placeholder="e.g. Emergency Theatre 1"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Anaesthesia Type</label>
+                  <select
+                    value={esAnaesthesiaType}
+                    onChange={(e) => setEsAnaesthesiaType(e.target.value as any)}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                  >
+                    <option value="general">General</option>
+                    <option value="regional">Regional</option>
+                    <option value="local">Local</option>
+                    <option value="sedation">Sedation</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Est. Duration (min)</label>
+                  <input
+                    type="number"
+                    value={esDuration}
+                    onChange={(e) => setEsDuration(e.target.value)}
+                    min="15"
+                    step="15"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                  />
+                </div>
+              </div>
+
+              {/* Blood type */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Blood Group / Crossmatch</label>
+                <input
+                  type="text"
+                  value={esBloodType}
+                  onChange={(e) => setEsBloodType(e.target.value)}
+                  placeholder="e.g. O+, 2 units crossmatched"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                />
+              </div>
+
+              {/* Flags */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Clinical Flags</label>
+                <div className="flex flex-wrap gap-4">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={esInfected} onChange={(e) => setEsInfected(e.target.checked)} className="rounded border-gray-300" />
+                    Infected Case
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={esHivPositive} onChange={(e) => setEsHivPositive(e.target.checked)} className="rounded border-gray-300" />
+                    HIV Positive
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={esDiabetic} onChange={(e) => setEsDiabetic(e.target.checked)} className="rounded border-gray-300" />
+                    Diabetic
+                  </label>
+                </div>
+              </div>
+
+              {/* Special Requirements */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Special Requirements / Equipment</label>
+                <input
+                  type="text"
+                  value={esSpecialReqs}
+                  onChange={(e) => setEsSpecialReqs(e.target.value)}
+                  placeholder="e.g. Dermatome, mesh graft equipment, tourniquet"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                />
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Additional Notes</label>
+                <textarea
+                  value={esNotes}
+                  onChange={(e) => setEsNotes(e.target.value)}
+                  rows={2}
+                  placeholder="Any additional notes, pre-op instructions..."
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 p-4 border-t bg-gray-50 rounded-b-xl">
+              <button
+                onClick={() => setShowEmergencySurgeryModal(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleEmergencySurgeryBooking}
+                disabled={bookingSurgery}
+                className="px-4 py-2 text-sm font-medium text-white bg-orange-600 rounded-lg hover:bg-orange-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                {bookingSurgery ? <><Loader2 className="h-4 w-4 animate-spin" /> Booking...</> : <><Siren className="h-4 w-4" /> Book Emergency Surgery</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

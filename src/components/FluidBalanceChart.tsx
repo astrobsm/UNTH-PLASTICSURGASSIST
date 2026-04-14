@@ -115,7 +115,7 @@ const FluidBalanceChart: React.FC<FluidBalanceChartProps> = ({ patientId, hospit
   const handleOCRScan = async (file: File) => {
     setScanning(true);
     try {
-      const result = await ocrService.extractText(file, 'fluid_chart' as any);
+      const result = await ocrService.extractText(file, 'fluid_chart');
       const text = result?.text || '';
       console.log('📋 Fluid chart OCR raw text:', text);
       const parsed = parseFluidChartOCR(text);

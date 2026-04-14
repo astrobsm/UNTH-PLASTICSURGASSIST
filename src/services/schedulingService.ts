@@ -364,9 +364,24 @@ class SchedulingService {
       updated_at: now
     };
 
+    // Map fields to camelCase for the server API
+    const apiPayload: Record<string, any> = {
+      patientId: (booking as any).patient_id,
+      procedureName: booking.procedure_name,
+      procedureType: (booking as any).procedure_type || '',
+      scheduledDate: (booking as any).date || new Date().toISOString().split('T')[0],
+      estimatedDuration: (booking as any).estimated_duration_minutes || (booking as any).estimated_duration || 60,
+      surgeonId: (booking as any).surgeon_id || null,
+      anesthesiaType: booking.anaesthesia_type || (booking as any).anesthesia_type || '',
+      operatingRoom: booking.theatre_number || '',
+      preOpNotes: (booking as any).diagnosis || '',
+      requiredEquipment: booking.equipment_needed || [],
+      status: booking.status || 'scheduled',
+    };
+
     // Try to sync to server first
     try {
-      const saved = await apiClient.createSurgery(newBooking);
+      const saved = await apiClient.createSurgery(apiPayload);
       console.log('âœ… Surgery booking synced to server:', saved.id);
       await db.surgery_bookings.add({ ...newBooking, id: saved.id, synced: true });
       return saved.id;
@@ -380,13 +395,30 @@ class SchedulingService {
   }
 
   async getSurgeryBookings(date?: Date): Promise<SurgeryBooking[]> {
+    // Map server row (snake_case from PostgreSQL) to frontend SurgeryBooking format
+    const mapServerToBooking = (s: any): any => ({
+      ...s,
+      // Map PostgreSQL column names to frontend field names
+      date: s.date || (s.scheduled_date ? new Date(s.scheduled_date).toISOString().split('T')[0] : ''),
+      procedure_name: s.procedure_name || '',
+      patient_name: s.patient_name || [s.first_name, s.last_name].filter(Boolean).join(' ') || '',
+      hospital_number: s.hospital_number || '',
+      primary_surgeon: s.primary_surgeon || '',
+      anaesthesia_type: s.anaesthesia_type || s.anesthesia_type || '',
+      theatre_number: s.theatre_number || s.operating_room || '',
+      estimated_duration: s.estimated_duration || 0,
+      diagnosis: s.diagnosis || s.pre_op_notes || s.pre_op_diagnosis || '',
+      status: s.status || 'scheduled',
+    });
+
     // Try server first
     if (navigator.onLine) {
       try {
         const serverSurgeries = await apiClient.getSurgeries();
         if (Array.isArray(serverSurgeries) && serverSurgeries.length > 0) {
+          const mapped = serverSurgeries.map(mapServerToBooking);
           // Sync to local
-          for (const s of serverSurgeries) {
+          for (const s of mapped) {
             try { await db.surgery_bookings.put({ ...s, synced: true }); } catch { /* ignore */ }
           }
           if (date) {
@@ -394,14 +426,14 @@ class SchedulingService {
             startOfDay.setHours(0, 0, 0, 0);
             const endOfDay = new Date(date);
             endOfDay.setHours(23, 59, 59, 999);
-            return serverSurgeries
+            return mapped
               .filter((s: any) => {
-                const d = new Date(s.date);
+                const d = new Date(s.date || s.scheduled_date);
                 return d >= startOfDay && d <= endOfDay;
               })
               .sort((a: any, b: any) => (a.start_time || '').localeCompare(b.start_time || ''));
           }
-          return serverSurgeries;
+          return mapped;
         }
       } catch (e) {
         console.warn('Could not fetch surgeries from server:', e);

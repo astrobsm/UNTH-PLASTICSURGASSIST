@@ -379,21 +379,47 @@ async function getHOFullMetrics(userId, fullName, username) {
   nameMatchClause += `)`;
 
   // ── 2. Documentation Counts (individual counts for display) ──
-  const wardRoundRow = await safeQuery(`SELECT COUNT(*) as cnt FROM ward_rounds WHERE created_by = $1`, [uidInt], { cnt: 0 });
+  // ward_rounds: try both user_id (original) and created_by (added via ALTER)
+  const wardRoundRow = await safeQuery(`SELECT COUNT(*) as cnt FROM ward_rounds WHERE user_id = $1 OR created_by = $1`, [uidInt], { cnt: 0 });
   const wardRoundsDocumented = parseInt(wardRoundRow.cnt) || 0;
 
-  const prescriptionRow = await safeQuery(`SELECT COUNT(*) as cnt FROM prescriptions WHERE created_by = $1`, [uidInt], { cnt: 0 });
+  // prescriptions: column is prescribed_by (not created_by)
+  const prescriptionRow = await safeQuery(`SELECT COUNT(*) as cnt FROM prescriptions WHERE prescribed_by = $1`, [uidInt], { cnt: 0 });
   const prescriptionsWritten = parseInt(prescriptionRow.cnt) || 0;
 
-  const labOrderRow = await safeQuery(`SELECT COUNT(*) as cnt FROM lab_orders WHERE ordered_by = $1 OR created_by = $1`, [uidInt], { cnt: 0 });
+  const labOrderRow = await safeQuery(`SELECT COUNT(*) as cnt FROM lab_orders WHERE ordered_by = $1`, [uidInt], { cnt: 0 });
   const labOrdersPlaced = parseInt(labOrderRow.cnt) || 0;
 
-  // ── 3. Patient Entries — count from ALL clinical tables (same as admin-training) ──
+  // ── 3. Patient Entries — count from ALL clinical tables using correct column per table ──
   let patientCount = 0;
 
   // 3a. Tables with created_by INTEGER
-  for (const tbl of ['patients', 'treatment_plans', 'admissions', 'surgeries', 'prescriptions', 'ward_rounds', 'lab_orders', 'discharge_summaries']) {
+  for (const tbl of ['patients', 'treatment_plans', 'admissions', 'surgeries']) {
     const r = await safeQuery(`SELECT COUNT(*) as cnt FROM ${tbl} WHERE created_by = $1`, [uidInt], { cnt: 0 });
+    patientCount += parseInt(r.cnt) || 0;
+  }
+
+  // 3a2. prescriptions uses prescribed_by
+  {
+    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM prescriptions WHERE prescribed_by = $1`, [uidInt], { cnt: 0 });
+    patientCount += parseInt(r.cnt) || 0;
+  }
+
+  // 3a3. ward_rounds uses user_id or created_by
+  {
+    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM ward_rounds WHERE user_id = $1 OR created_by = $1`, [uidInt], { cnt: 0 });
+    patientCount += parseInt(r.cnt) || 0;
+  }
+
+  // 3a4. lab_orders uses ordered_by
+  {
+    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM lab_orders WHERE ordered_by = $1`, [uidInt], { cnt: 0 });
+    patientCount += parseInt(r.cnt) || 0;
+  }
+
+  // 3a5. discharge_summaries uses prepared_by
+  {
+    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM discharge_summaries WHERE prepared_by = $1`, [uidInt], { cnt: 0 });
     patientCount += parseInt(r.cnt) || 0;
   }
 
@@ -503,9 +529,9 @@ async function getHOFullMetrics(userId, fullName, username) {
   );
   cmeCount += parseInt(cmeProgRow.cnt) || 0;
 
-  // ── 7. Assigned patients ──
+  // ── 7. Assigned patients (house_officer_id is VARCHAR, so cast uidInt to text) ──
   const assignedCount = await safeQuery(
-    `SELECT COUNT(*) as cnt FROM patient_assignments WHERE house_officer_id = $1 AND is_active = true`, [uidInt], { cnt: 0 }
+    `SELECT COUNT(*) as cnt FROM patient_assignments WHERE (house_officer_id = $1::text OR house_officer_id = $2) AND is_active = true`, [uidInt, uid], { cnt: 0 }
   );
 
   // ── Calculate Scores ──

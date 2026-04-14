@@ -502,8 +502,32 @@ async function getTraineeMetrics(userId, level, fullName, username) {
   let patientCount = 0;
 
   // 2a. Tables with created_by INTEGER
-  for (const tbl of ['patients', 'treatment_plans', 'admissions', 'surgeries', 'prescriptions', 'ward_rounds', 'lab_orders', 'discharge_summaries']) {
+  for (const tbl of ['patients', 'treatment_plans', 'admissions', 'surgeries']) {
     const r = await safeQuery(`SELECT COUNT(*) as cnt FROM ${tbl} WHERE created_by = $1`, [uidInt], { cnt: 0 });
+    patientCount += parseInt(r.cnt) || 0;
+  }
+
+  // 2a2. prescriptions uses prescribed_by (not created_by)
+  {
+    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM prescriptions WHERE prescribed_by = $1`, [uidInt], { cnt: 0 });
+    patientCount += parseInt(r.cnt) || 0;
+  }
+
+  // 2a3. ward_rounds uses user_id or created_by
+  {
+    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM ward_rounds WHERE user_id = $1 OR created_by = $1`, [uidInt], { cnt: 0 });
+    patientCount += parseInt(r.cnt) || 0;
+  }
+
+  // 2a4. lab_orders uses ordered_by (not created_by)
+  {
+    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM lab_orders WHERE ordered_by = $1`, [uidInt], { cnt: 0 });
+    patientCount += parseInt(r.cnt) || 0;
+  }
+
+  // 2a5. discharge_summaries uses prepared_by (not created_by)
+  {
+    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM discharge_summaries WHERE prepared_by = $1`, [uidInt], { cnt: 0 });
     patientCount += parseInt(r.cnt) || 0;
   }
 

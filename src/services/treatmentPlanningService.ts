@@ -838,6 +838,25 @@ class TreatmentPlanningService {
               mergedPlans.push(merged);
             } catch { mergedPlans.push(plan); }
           }
+          // Clean up stale local-only records for this patient that don't match any server ID
+          try {
+            const serverIds = new Set(serverPlans.map((p: any) => Number(p.id)).filter((id: number) => !isNaN(id)));
+            const patientIdNum = parseInt(patientId);
+            let localPlans = await db.treatment_plans.where('patient_id').equals(patientIdNum).toArray();
+            if (localPlans.length === 0) {
+              localPlans = await db.treatment_plans.where('patient_id').equals(patientId).toArray();
+            }
+            for (const lp of localPlans) {
+              const lpId = Number(lp.id);
+              if (!isNaN(lpId) && !serverIds.has(lpId) && !(lp as any).synced === false) {
+                // This local record has an ID not found on server — likely a stale duplicate
+                // Only delete if there's a server plan with matching patient_id
+                if (serverIds.size > 0) {
+                  try { await db.treatment_plans.delete(lpId); } catch { /* ignore */ }
+                }
+              }
+            }
+          } catch { /* ignore cleanup errors */ }
           return mergedPlans.map((plan: any) => ({
             ...plan,
             id: plan.id?.toString() || '',
@@ -961,6 +980,17 @@ class TreatmentPlanningService {
               mergedAll.push(plan);
             }
           }
+          // Clean up stale local records that don't match any server ID
+          try {
+            const serverIds = new Set(serverPlans.map((p: any) => Number(p.id)).filter((id: number) => !isNaN(id)));
+            const allLocal = await db.treatment_plans.toArray();
+            for (const lp of allLocal) {
+              const lpId = Number(lp.id);
+              if (!isNaN(lpId) && !serverIds.has(lpId) && (lp as any).synced !== false) {
+                try { await db.treatment_plans.delete(lpId); } catch { /* ignore */ }
+              }
+            }
+          } catch { /* ignore cleanup errors */ }
           const activePlans = mergedAll.filter((p: any) => p.status === 'active');
           return activePlans.map((plan: any) => ({
             ...plan,

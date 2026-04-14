@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { unthPatientService, DischargeDetails } from '../services/unthPatientService';
+import { userManagementService, ApprovedUser } from '../services/userManagementService';
 
 interface DischargePlanningProps {
   patientId: string;
@@ -27,6 +28,19 @@ export const DischargePlanning: React.FC<DischargePlanningProps> = ({
   const [isGenerating, setIsGenerating] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
   const [aiGeneratedContent, setAiGeneratedContent] = useState<any>(null);
+  const [consultants, setConsultants] = useState<ApprovedUser[]>([]);
+
+  useEffect(() => {
+    const loadConsultants = async () => {
+      try {
+        const allUsers = await userManagementService.getAllApprovedUsers();
+        setConsultants(allUsers.filter(u => u.is_active && u.role === 'consultant'));
+      } catch (err) {
+        console.error('Failed to load consultants:', err);
+      }
+    };
+    loadConsultants();
+  }, []);
 
   const generateAIContent = async () => {
     setIsGenerating(true);
@@ -205,10 +219,9 @@ export const DischargePlanning: React.FC<DischargePlanningProps> = ({
             required
           >
             <option value="">Select Authorizing Doctor</option>
-            <option value="Prof. A. B. Chukwu">Prof. A. B. Chukwu</option>
-            <option value="Dr. C. D. Okafor">Dr. C. D. Okafor</option>
-            <option value="Dr. E. F. Adaeze">Dr. E. F. Adaeze</option>
-            <option value="Dr. G. H. Emeka">Dr. G. H. Emeka</option>
+            {consultants.map(c => (
+              <option key={c.id} value={c.full_name}>{c.full_name}</option>
+            ))}
           </select>
         </div>
 

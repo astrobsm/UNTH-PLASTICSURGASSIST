@@ -14,11 +14,14 @@ import {
   Upload, X, CalendarDays, Lock, Unlock, FlaskConical, Ban,
   ChevronLeft, ChevronRight, AlertOctagon, Baby, Droplets, Bug, Heart,
   Activity, Utensils, Zap, Save, Edit2, Check, RefreshCw, FileImage,
-  Scissors, Minus
+  Scissors, Minus, Camera, ScanLine
 } from 'lucide-react';
+import { DocumentScannerModal } from '../components/DocumentScannerModal';
+const PreoperativePlanningModule = lazy(() => import('../components/procedures/PreoperativePlanningModule'));
 import {
   createPDF, addPDFHeader, addSectionHeader, addBodyText, addBulletList,
   addSeparator, addFooter, addLabeledField, sanitizeTextForPDF, formatDateForPDF,
+  addTwoColumnText, needsNewPage, addSimpleTable, PDF_MARGINS, PDF_FONT_SIZES, PDF_LINE_HEIGHT, PDF_COLORS,
 } from '../utils/pdfUtils';
 import jsPDF from 'jspdf';
 import { useAuthStore } from '../store/authStore';
@@ -330,7 +333,10 @@ export default function BookingRegisterPage() {
   const [newMedication, setNewMedication] = useState<Partial<Medication>>({ drug_name: '', dosage: '', frequency: '', route: 'oral', indication: '' });
   const [invResultEntry, setInvResultEntry] = useState<Partial<InvestigationResult>>({ name: '', value: '', flag: 'normal' });
   const [shoppingSearch, setShoppingSearch] = useState('');
+  const [shoppingCategory, setShoppingCategory] = useState('all');
   const [showRiskMedDb, setShowRiskMedDb] = useState(false);
+  const [showInvOCRScanner, setShowInvOCRScanner] = useState(false);
+  const [generatingConsentPdf, setGeneratingConsentPdf] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const ecgInputRef = useRef<HTMLInputElement>(null);
   const consentInputRef = useRef<HTMLInputElement>(null);
@@ -359,6 +365,20 @@ export default function BookingRegisterPage() {
   }, []);
 
   useEffect(() => { loadPatients(); loadBookedCases(); }, [loadPatients, loadBookedCases]);
+
+  // Auto-select patient and section from URL query params (e.g. ?patientId=40&section=risk)
+  useEffect(() => {
+    const paramId = searchParams.get('patientId');
+    const paramSection = searchParams.get('section');
+    if (paramId && patients.length > 0 && !selectedPatient) {
+      const match = patients.find(p => String(p.id) === paramId);
+      if (match) {
+        setSelectedPatient(match);
+        setActiveSection((paramSection as PlanningSection) || 'risk');
+        setActiveTab('surgical-planning');
+      }
+    }
+  }, [searchParams, patients, selectedPatient]);
 
   // Load saved planning data when patient selected
   useEffect(() => {
@@ -545,14 +565,33 @@ export default function BookingRegisterPage() {
     if (!planData || !selectedPatient) return;
     setSaving(true);
     try {
+      const today = new Date().toISOString().split('T')[0];
       const booking: Record<string, any> = {
         patient_id: selectedPatient.id,
+        patient_name: selectedPatient.full_name || `${selectedPatient.first_name || ''} ${selectedPatient.last_name || ''}`.trim(),
+        hospital_number: selectedPatient.hospital_number || '',
+        patient_age_at_booking: patientAge ?? undefined,
+        patient_gender: selectedPatient.sex || selectedPatient.gender || '',
         procedure_name: planData.procedure_name,
+        diagnosis: planData.diagnosis || '',
         anaesthesia_type: planData.anaesthesia_type,
-        primary_surgeon: planData.assessed_by,
+        primary_surgeon: planData.assessed_by || user?.name || '',
+        proposed_ward: planData.proposed_ward || '',
+        date: today,
+        start_time: '08:00',
+        theatre_number: '',
         status: 'scheduled',
-        estimated_duration: planData.estimated_duration,
+        estimated_duration_minutes: planData.estimated_duration || 60,
+        estimated_duration: planData.estimated_duration || 60,
         urgency: 'elective',
+        special_requirements: [],
+        equipment_needed: planData.shopping_items?.map((i: any) => i.name) || [],
+        implants_needed: [],
+        anaesthetist: '',
+        scrub_nurse: '',
+        comorbidities: planData.comorbidities || [],
+        is_diabetic: (planData.comorbidities || []).some((c: string) => c.toLowerCase().includes('diabetes')),
+        is_hiv_positive: (planData.comorbidities || []).some((c: string) => c.toLowerCase().includes('hiv')),
       };
       await schedulingService.createSurgeryBooking(booking as any);
       toast.success('Patient booked for surgery!');
@@ -568,7 +607,7 @@ export default function BookingRegisterPage() {
       toast.error('Failed to book surgery');
     }
     setSaving(false);
-  }, [planData, selectedPatient, loadBookedCases]);
+  }, [planData, selectedPatient, patientAge, user, loadBookedCases]);
 
   // ============================
   // PDF GENERATORS
@@ -866,9 +905,10 @@ export default function BookingRegisterPage() {
 
   const filteredShoppingItems = useMemo(() => {
     let items = SHOPPING_ITEMS;
+    if (shoppingCategory !== 'all') items = items.filter(i => i.category === shoppingCategory);
     if (shoppingSearch) items = items.filter(i => i.name.toLowerCase().includes(shoppingSearch.toLowerCase()));
     return items;
-  }, [SHOPPING_ITEMS, shoppingSearch]);
+  }, [SHOPPING_ITEMS, shoppingSearch, shoppingCategory]);
 
   const addShoppingItem = useCallback((item: { name: string; category: string }) => {
     if (!planData) return;
@@ -1203,8 +1243,8 @@ export default function BookingRegisterPage() {
                       <button
                         onClick={() => {
                           if (!selectedPatient) return;
-                          // Open preoperative assessment inline
-                          navigate('/preoperative-planning?patientId=' + selectedPatient.id);
+                          // Open preoperative assessment inline - switch to risk section
+                          setActiveSection('risk');
                         }}
                         className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
                       >
@@ -1377,8 +1417,8 @@ export default function BookingRegisterPage() {
                           {shoppingCategories.map(cat => (
                             <button
                               key={cat}
-                              onClick={() => setShoppingSearch(cat === 'all' ? '' : cat)}
-                              className={`px-2.5 py-1 rounded-full text-xs ${shoppingSearch === cat || (cat === 'all' && !shoppingSearch) ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                              onClick={() => setShoppingCategory(cat)}
+                              className={`px-2.5 py-1 rounded-full text-xs ${shoppingCategory === cat ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
                             >
                               {cat === 'all' ? 'All' : cat}
                             </button>

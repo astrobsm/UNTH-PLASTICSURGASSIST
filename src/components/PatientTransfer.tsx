@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { unthPatientService, PatientTransfer, Ward } from '../services/unthPatientService';
+import { userManagementService, ApprovedUser } from '../services/userManagementService';
 
 interface PatientTransferFormProps {
   patientId: string;
@@ -30,9 +31,19 @@ export const PatientTransferForm: React.FC<PatientTransferFormProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [fromWardInfo, setFromWardInfo] = useState<Ward | null>(null);
   const [toWardInfo, setToWardInfo] = useState<Ward | null>(null);
+  const [consultants, setConsultants] = useState<ApprovedUser[]>([]);
 
   useEffect(() => {
     setAvailableWards(unthPatientService.getAvailableWards());
+    const loadConsultants = async () => {
+      try {
+        const allUsers = await userManagementService.getAllApprovedUsers();
+        setConsultants(allUsers.filter(u => u.is_active && u.role === 'consultant'));
+      } catch (err) {
+        console.error('Failed to load consultants:', err);
+      }
+    };
+    loadConsultants();
     
     if (currentWard) {
       const wardInfo = unthPatientService.getWardInfo(currentWard);
@@ -240,11 +251,9 @@ export const PatientTransferForm: React.FC<PatientTransferFormProps> = ({
                 required
               >
                 <option value="">Select authorizing doctor</option>
-                <option value="Prof. A. B. Chukwu">Prof. A. B. Chukwu</option>
-                <option value="Dr. C. D. Okafor">Dr. C. D. Okafor</option>
-                <option value="Dr. E. F. Adaeze">Dr. E. F. Adaeze</option>
-                <option value="Dr. G. H. Emeka">Dr. G. H. Emeka</option>
-                <option value="Dr. Registrar On Call">Dr. Registrar On Call</option>
+                {consultants.map(c => (
+                  <option key={c.id} value={c.full_name}>{c.full_name}</option>
+                ))}
               </select>
             </div>
 

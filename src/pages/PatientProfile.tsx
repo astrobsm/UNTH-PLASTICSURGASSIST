@@ -741,19 +741,33 @@ const EncountersTab: React.FC<{ patientId: string; hospitalNumber: string; patie
       for (const n of notes) {
         try { if (db.progress_notes) await db.progress_notes.put({ ...n, patient_id: typeof n.patient_id === 'string' ? parseInt(n.patient_id, 10) : n.patient_id, synced: true }); } catch { /* ok */ }
       }
+      // Also merge in any un-synced local notes
+      let localOnlyNotes: any[] = [];
+      try {
+        const allLocal = await db.progress_notes?.toArray() || [];
+        const syncedIds = new Set(notes.map((n: any) => String(n.id)));
+        localOnlyNotes = allLocal.filter((n: any) =>
+          (String(n.patient_id) === String(patientId) || String(n.patient_id) === String(pid)) && !n.synced && !syncedIds.has(String(n.id))
+        );
+      } catch { /* ok */ }
       // Merge and sort chronologically
       const all = [
         ...notes.map((n: any) => ({ ...n, _type: n.type || 'progress_note' })),
+        ...localOnlyNotes.map((n: any) => ({ ...n, _type: n.type || 'progress_note', _local: true })),
         ...admissions,
       ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       if (mountedRef.current) setEncounters(all);
     } catch {
-      // Fallback to IndexedDB when offline / API error
+      // Fallback to IndexedDB when offline / API error — query BOTH string and numeric patient_id
       try {
         const pid = Number(patientId) || patientId;
-        const localNotes = await db.progress_notes?.where('patient_id').equals(pid).toArray() || [];
-        const localAdm = (await db.admissions?.toArray() || []).filter((a: any) =>
-          String(a.patient_id) === String(patientId) || String(a.hospital_number) === String(patientId)
+        const allLocal = await db.progress_notes?.toArray() || [];
+        const localNotes = allLocal.filter((n: any) =>
+          String(n.patient_id) === String(patientId) || String(n.patient_id) === String(pid)
+        );
+        const allAdm = await db.admissions?.toArray() || [];
+        const localAdm = allAdm.filter((a: any) =>
+          String(a.patient_id) === String(patientId) || String(a.patient_id) === String(pid) || String(a.hospital_number) === String(patientId)
         );
         const all = [
           ...localNotes.map((n: any) => ({ ...n, _type: n.type || 'progress_note', created_at: n.created_at || n.date })),
@@ -983,13 +997,16 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; userN
   const [vitals, setVitals] = useState<VitalReading[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState<Partial<VitalReading>>({});
+  const [batchRows, setBatchRows] = useState<Partial<VitalReading>[]>([{ date: new Date().toISOString().slice(0, 16) }]);
   const [saving, setSaving] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [showVitalsOCR, setShowVitalsOCR] = useState(false);
   const [ocrVitalsEntries, setOcrVitalsEntries] = useState<VitalReading[]>([]);
   const [showOCRReview, setShowOCRReview] = useState(false);
   const [savingOCR, setSavingOCR] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { loadVitals(); }, [patientId]);
   useEffect(() => { if (vitals.length > 1) drawChart(); }, [vitals]);
@@ -997,13 +1014,11 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; userN
   const loadVitals = async () => {
     setLoading(true);
     try {
-      // Try API first, fall back to localStorage
       let data: VitalReading[] = [];
       try {
         const res = await apiClient.get(`/vital-signs?patientId=${patientId}`);
         data = res?.vitals || res?.vitalSigns || [];
       } catch {
-        // fallback localStorage
         const stored = localStorage.getItem(`vitals_${patientId}`);
         data = stored ? JSON.parse(stored) : [];
       }
@@ -1015,31 +1030,90 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; userN
     }
   };
 
-  const saveVital = async () => {
-    if (!form.temperature && !form.pulse && !form.bp_systolic) return;
+  // Batch row helpers
+  const updateBatchRow = (idx: number, field: string, value: any) => {
+    setBatchRows(prev => prev.map((r, i) => i === idx ? { ...r, [field]: value } : r));
+  };
+  const addBatchRow = () => {
+    setBatchRows(prev => [...prev, { date: new Date().toISOString().slice(0, 16) }]);
+  };
+  const removeBatchRow = (idx: number) => {
+    setBatchRows(prev => prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev);
+  };
+
+  const saveBatchVitals = async () => {
+    const validRows = batchRows.filter(r => r.temperature || r.pulse || r.bp_systolic || r.spo2);
+    if (validRows.length === 0) return;
     setSaving(true);
-    const reading: VitalReading = {
-      id: `vs_${Date.now()}`,
-      date: new Date().toISOString(),
-      ...form,
-      recorded_by: userName,
-    };
     try {
-      try {
-        await apiClient.post('/vital-signs', { ...reading, patient_id: patientId, hospital_number: hospitalNumber });
-      } catch {
-        // Save locally as fallback
-        const stored = localStorage.getItem(`vitals_${patientId}`);
-        const arr = stored ? JSON.parse(stored) : [];
-        arr.push(reading);
-        localStorage.setItem(`vitals_${patientId}`, JSON.stringify(arr));
+      for (const row of validRows) {
+        const reading: VitalReading = {
+          id: `vs_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          date: row.date ? new Date(row.date).toISOString() : new Date().toISOString(),
+          temperature: row.temperature,
+          pulse: row.pulse,
+          bp_systolic: row.bp_systolic,
+          bp_diastolic: row.bp_diastolic,
+          respiratory_rate: row.respiratory_rate,
+          spo2: row.spo2,
+          weight: row.weight,
+          recorded_by: userName,
+        };
+        try {
+          await apiClient.post('/vital-signs', { ...reading, patient_id: patientId, hospital_number: hospitalNumber });
+        } catch {
+          const stored = localStorage.getItem(`vitals_${patientId}`);
+          const arr = stored ? JSON.parse(stored) : [];
+          arr.push(reading);
+          localStorage.setItem(`vitals_${patientId}`, JSON.stringify(arr));
+        }
       }
-      setForm({});
+      setBatchRows([{ date: new Date().toISOString().slice(0, 16) }]);
       setShowForm(false);
       await loadVitals();
     } finally {
       setSaving(false);
     }
+  };
+
+  // ── Direct image → GPT-4o Vision OCR for vital signs chart ──
+  const handleVitalsScan = async (file: File) => {
+    setScanning(true);
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const res = await fetch('/api/ocr/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('auth_token') || ''}` },
+        body: JSON.stringify({
+          image: base64,
+          documentType: 'vital_signs_chart',
+          useVisionOCR: true,
+          aiPostProcess: true,
+          patientContext: { hospitalNumber },
+        }),
+      });
+
+      if (!res.ok) throw new Error(`OCR failed: ${res.status}`);
+      const data = await res.json();
+      handleVitalsOCRExtracted(data.structured || data);
+    } catch (err: any) {
+      console.error('Vital signs scan error:', err);
+      alert('Failed to scan vital signs chart. Please try again or enter manually.');
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  const onFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleVitalsScan(file);
+    e.target.value = '';
   };
 
   const drawChart = () => {
@@ -1256,42 +1330,82 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; userN
 
   return (
     <div className="space-y-4">
+      {/* Hidden file inputs for scan */}
+      <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={onFileSelected} />
+      <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onFileSelected} />
+
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+        <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between flex-wrap gap-2">
           <h3 className="text-lg font-semibold text-gray-900">Vital Signs Records</h3>
           <div className="flex gap-2">
-            <button onClick={() => setShowVitalsOCR(true)} className="flex items-center gap-1 px-3 py-1.5 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700">
-              <ScanLine className="w-4 h-4" /> Scan Vitals
+            <button
+              onClick={() => cameraInputRef.current?.click()}
+              disabled={scanning}
+              className="flex items-center gap-1 px-3 py-1.5 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 disabled:opacity-50"
+            >
+              {scanning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
+              {scanning ? 'Scanning...' : 'Scan Chart'}
+            </button>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={scanning}
+              className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+            >
+              <Upload className="w-4 h-4" /> Upload
             </button>
             <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700">
-            <Plus className="w-4 h-4" /> Record Vitals
-          </button>
+              <Plus className="w-4 h-4" /> Record Vitals
+            </button>
           </div>
         </div>
 
         {showForm && (
-          <div className="p-4 border-b border-gray-200 bg-green-50">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
-              <div><label className="block text-xs font-medium text-gray-700 mb-1">Temp (°C)</label>
-                <input type="number" step="0.1" value={form.temperature || ''} onChange={e => setForm({ ...form, temperature: parseFloat(e.target.value) || undefined })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" placeholder="36.5" /></div>
-              <div><label className="block text-xs font-medium text-gray-700 mb-1">Pulse (bpm)</label>
-                <input type="number" value={form.pulse || ''} onChange={e => setForm({ ...form, pulse: parseInt(e.target.value) || undefined })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" placeholder="72" /></div>
-              <div><label className="block text-xs font-medium text-gray-700 mb-1">BP Systolic</label>
-                <input type="number" value={form.bp_systolic || ''} onChange={e => setForm({ ...form, bp_systolic: parseInt(e.target.value) || undefined })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" placeholder="120" /></div>
-              <div><label className="block text-xs font-medium text-gray-700 mb-1">BP Diastolic</label>
-                <input type="number" value={form.bp_diastolic || ''} onChange={e => setForm({ ...form, bp_diastolic: parseInt(e.target.value) || undefined })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" placeholder="80" /></div>
-              <div><label className="block text-xs font-medium text-gray-700 mb-1">Resp Rate</label>
-                <input type="number" value={form.respiratory_rate || ''} onChange={e => setForm({ ...form, respiratory_rate: parseInt(e.target.value) || undefined })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" placeholder="18" /></div>
-              <div><label className="block text-xs font-medium text-gray-700 mb-1">SpO2 (%)</label>
-                <input type="number" value={form.spo2 || ''} onChange={e => setForm({ ...form, spo2: parseInt(e.target.value) || undefined })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" placeholder="98" /></div>
-              <div><label className="block text-xs font-medium text-gray-700 mb-1">Weight (kg)</label>
-                <input type="number" step="0.1" value={form.weight || ''} onChange={e => setForm({ ...form, weight: parseFloat(e.target.value) || undefined })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" placeholder="70" /></div>
-            </div>
-            <div className="flex gap-2">
-              <button onClick={saveVital} disabled={saving} className="flex items-center gap-1 px-4 py-2 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 disabled:opacity-50">
-                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save
+          <div className="p-4 border-b border-gray-200 bg-green-50 space-y-3">
+            <div className="flex items-center justify-between mb-1">
+              <h4 className="text-sm font-semibold text-gray-700">Manual Entry — {batchRows.length} reading{batchRows.length > 1 ? 's' : ''}</h4>
+              <button onClick={addBatchRow} className="flex items-center gap-1 text-xs text-green-700 hover:text-green-900 font-medium">
+                <Plus className="w-3.5 h-3.5" /> Add Row
               </button>
-              <button onClick={() => setShowForm(false)} className="px-4 py-2 text-gray-600 text-sm hover:bg-gray-100 rounded-md">Cancel</button>
+            </div>
+            {batchRows.map((row, idx) => (
+              <div key={idx} className="bg-white rounded-lg border border-gray-200 p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-medium text-gray-600">Row {idx + 1}</span>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="datetime-local"
+                      value={row.date || ''}
+                      onChange={e => updateBatchRow(idx, 'date', e.target.value)}
+                      className="px-2 py-1 text-xs border border-gray-300 rounded focus:ring-green-500"
+                    />
+                    {batchRows.length > 1 && (
+                      <button onClick={() => removeBatchRow(idx)} className="p-1 text-red-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
+                    )}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <div><label className="block text-[10px] font-medium text-gray-500 mb-0.5">Temp (°C)</label>
+                    <input type="number" step="0.1" value={row.temperature || ''} onChange={e => updateBatchRow(idx, 'temperature', parseFloat(e.target.value) || undefined)} className="w-full px-2 py-1 border border-gray-300 rounded text-sm" placeholder="36.5" /></div>
+                  <div><label className="block text-[10px] font-medium text-gray-500 mb-0.5">Pulse (bpm)</label>
+                    <input type="number" value={row.pulse || ''} onChange={e => updateBatchRow(idx, 'pulse', parseInt(e.target.value) || undefined)} className="w-full px-2 py-1 border border-gray-300 rounded text-sm" placeholder="72" /></div>
+                  <div><label className="block text-[10px] font-medium text-gray-500 mb-0.5">BP Systolic</label>
+                    <input type="number" value={row.bp_systolic || ''} onChange={e => updateBatchRow(idx, 'bp_systolic', parseInt(e.target.value) || undefined)} className="w-full px-2 py-1 border border-gray-300 rounded text-sm" placeholder="120" /></div>
+                  <div><label className="block text-[10px] font-medium text-gray-500 mb-0.5">BP Diastolic</label>
+                    <input type="number" value={row.bp_diastolic || ''} onChange={e => updateBatchRow(idx, 'bp_diastolic', parseInt(e.target.value) || undefined)} className="w-full px-2 py-1 border border-gray-300 rounded text-sm" placeholder="80" /></div>
+                  <div><label className="block text-[10px] font-medium text-gray-500 mb-0.5">Resp Rate</label>
+                    <input type="number" value={row.respiratory_rate || ''} onChange={e => updateBatchRow(idx, 'respiratory_rate', parseInt(e.target.value) || undefined)} className="w-full px-2 py-1 border border-gray-300 rounded text-sm" placeholder="18" /></div>
+                  <div><label className="block text-[10px] font-medium text-gray-500 mb-0.5">SpO2 (%)</label>
+                    <input type="number" value={row.spo2 || ''} onChange={e => updateBatchRow(idx, 'spo2', parseInt(e.target.value) || undefined)} className="w-full px-2 py-1 border border-gray-300 rounded text-sm" placeholder="98" /></div>
+                  <div><label className="block text-[10px] font-medium text-gray-500 mb-0.5">Weight (kg)</label>
+                    <input type="number" step="0.1" value={row.weight || ''} onChange={e => updateBatchRow(idx, 'weight', parseFloat(e.target.value) || undefined)} className="w-full px-2 py-1 border border-gray-300 rounded text-sm" placeholder="70" /></div>
+                </div>
+              </div>
+            ))}
+            <div className="flex gap-2 pt-1">
+              <button onClick={saveBatchVitals} disabled={saving} className="flex items-center gap-1 px-4 py-2 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 disabled:opacity-50">
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save {batchRows.filter(r => r.temperature || r.pulse || r.bp_systolic || r.spo2).length} Reading{batchRows.filter(r => r.temperature || r.pulse || r.bp_systolic || r.spo2).length !== 1 ? 's' : ''}
+              </button>
+              <button onClick={() => { setShowForm(false); setBatchRows([{ date: new Date().toISOString().slice(0, 16) }]); }} className="px-4 py-2 text-gray-600 text-sm hover:bg-gray-100 rounded-md">Cancel</button>
             </div>
           </div>
         )}
@@ -1334,48 +1448,84 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; userN
         </div>
       </div>
 
-      {/* Vitals OCR Scanner Modal */}
-      {showVitalsOCR && (
-        <DocumentScannerModal
-          isOpen={showVitalsOCR}
-          onClose={() => setShowVitalsOCR(false)}
-          onFieldsExtracted={handleVitalsOCRExtracted}
-          documentType="general"
-          patientContext={{ name: '', hospitalNumber }}
-          targetForm="ward_round"
-        />
-      )}
-
-      {/* OCR Vitals Review Modal */}
+      {/* OCR Vitals Review Modal — editable before saving */}
       {showOCRReview && ocrVitalsEntries.length > 0 && (
         <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4" onClick={() => setShowOCRReview(false)}>
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[80vh] overflow-auto" onClick={e => e.stopPropagation()}>
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
+          <div className="bg-white rounded-lg max-w-3xl w-full max-h-[85vh] overflow-auto" onClick={e => e.stopPropagation()}>
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between z-10">
               <h3 className="font-semibold text-gray-900">Review Scanned Vital Signs ({ocrVitalsEntries.length} reading{ocrVitalsEntries.length !== 1 ? 's' : ''})</h3>
               <button onClick={() => setShowOCRReview(false)} className="p-1 hover:bg-gray-100 rounded-full"><X className="w-5 h-5" /></button>
             </div>
             <div className="p-4 space-y-3">
+              <p className="text-xs text-gray-500">You can edit values or remove incorrect readings before saving.</p>
               {ocrVitalsEntries.map((entry, idx) => (
                 <div key={idx} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-medium text-gray-700">Reading #{idx + 1}</span>
-                    <span className="text-xs text-gray-500">{new Date(entry.date).toLocaleString()}</span>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="datetime-local"
+                        value={entry.date ? new Date(entry.date).toISOString().slice(0, 16) : ''}
+                        onChange={e => {
+                          const updated = [...ocrVitalsEntries];
+                          updated[idx] = { ...updated[idx], date: new Date(e.target.value).toISOString() };
+                          setOcrVitalsEntries(updated);
+                        }}
+                        className="px-2 py-1 text-xs border border-gray-300 rounded"
+                      />
+                      <button
+                        onClick={() => setOcrVitalsEntries(prev => prev.filter((_, i) => i !== idx))}
+                        className="p-1 text-red-400 hover:text-red-600"
+                        title="Remove this reading"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                   <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                    {entry.temperature && <div className="text-center p-1 bg-white rounded border"><div className="text-[10px] text-gray-500">Temp</div><div className="text-sm font-bold text-orange-600">{entry.temperature}°C</div></div>}
-                    {entry.pulse && <div className="text-center p-1 bg-white rounded border"><div className="text-[10px] text-gray-500">Pulse</div><div className="text-sm font-bold text-red-600">{entry.pulse}</div></div>}
-                    {entry.bp_systolic && <div className="text-center p-1 bg-white rounded border"><div className="text-[10px] text-gray-500">BP</div><div className="text-sm font-bold text-blue-600">{entry.bp_systolic}/{entry.bp_diastolic}</div></div>}
-                    {entry.respiratory_rate && <div className="text-center p-1 bg-white rounded border"><div className="text-[10px] text-gray-500">RR</div><div className="text-sm font-bold text-purple-600">{entry.respiratory_rate}</div></div>}
-                    {entry.spo2 && <div className="text-center p-1 bg-white rounded border"><div className="text-[10px] text-gray-500">SpO2</div><div className="text-sm font-bold text-green-600">{entry.spo2}%</div></div>}
-                    {entry.weight && <div className="text-center p-1 bg-white rounded border"><div className="text-[10px] text-gray-500">Wt</div><div className="text-sm font-bold text-gray-700">{entry.weight}kg</div></div>}
+                    <div className="text-center">
+                      <div className="text-[10px] text-gray-500 mb-0.5">Temp (°C)</div>
+                      <input type="number" step="0.1" className="w-full text-center text-sm font-bold text-orange-600 border rounded px-1 py-0.5"
+                        value={entry.temperature || ''} onChange={e => { const u = [...ocrVitalsEntries]; u[idx] = { ...u[idx], temperature: parseFloat(e.target.value) || undefined }; setOcrVitalsEntries(u); }} />
+                    </div>
+                    <div className="text-center">
+                      <div className="text-[10px] text-gray-500 mb-0.5">Pulse</div>
+                      <input type="number" className="w-full text-center text-sm font-bold text-red-600 border rounded px-1 py-0.5"
+                        value={entry.pulse || ''} onChange={e => { const u = [...ocrVitalsEntries]; u[idx] = { ...u[idx], pulse: parseInt(e.target.value) || undefined }; setOcrVitalsEntries(u); }} />
+                    </div>
+                    <div className="text-center">
+                      <div className="text-[10px] text-gray-500 mb-0.5">BP Sys</div>
+                      <input type="number" className="w-full text-center text-sm font-bold text-blue-600 border rounded px-1 py-0.5"
+                        value={entry.bp_systolic || ''} onChange={e => { const u = [...ocrVitalsEntries]; u[idx] = { ...u[idx], bp_systolic: parseInt(e.target.value) || undefined }; setOcrVitalsEntries(u); }} />
+                    </div>
+                    <div className="text-center">
+                      <div className="text-[10px] text-gray-500 mb-0.5">BP Dia</div>
+                      <input type="number" className="w-full text-center text-sm font-bold text-blue-600 border rounded px-1 py-0.5"
+                        value={entry.bp_diastolic || ''} onChange={e => { const u = [...ocrVitalsEntries]; u[idx] = { ...u[idx], bp_diastolic: parseInt(e.target.value) || undefined }; setOcrVitalsEntries(u); }} />
+                    </div>
+                    <div className="text-center">
+                      <div className="text-[10px] text-gray-500 mb-0.5">RR</div>
+                      <input type="number" className="w-full text-center text-sm font-bold text-purple-600 border rounded px-1 py-0.5"
+                        value={entry.respiratory_rate || ''} onChange={e => { const u = [...ocrVitalsEntries]; u[idx] = { ...u[idx], respiratory_rate: parseInt(e.target.value) || undefined }; setOcrVitalsEntries(u); }} />
+                    </div>
+                    <div className="text-center">
+                      <div className="text-[10px] text-gray-500 mb-0.5">SpO2 (%)</div>
+                      <input type="number" className="w-full text-center text-sm font-bold text-green-600 border rounded px-1 py-0.5"
+                        value={entry.spo2 || ''} onChange={e => { const u = [...ocrVitalsEntries]; u[idx] = { ...u[idx], spo2: parseInt(e.target.value) || undefined }; setOcrVitalsEntries(u); }} />
+                    </div>
+                    <div className="text-center">
+                      <div className="text-[10px] text-gray-500 mb-0.5">Wt (kg)</div>
+                      <input type="number" step="0.1" className="w-full text-center text-sm font-bold text-gray-700 border rounded px-1 py-0.5"
+                        value={entry.weight || ''} onChange={e => { const u = [...ocrVitalsEntries]; u[idx] = { ...u[idx], weight: parseFloat(e.target.value) || undefined }; setOcrVitalsEntries(u); }} />
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
-            <div className="sticky bottom-0 bg-white border-t border-gray-200 px-4 py-3 flex gap-2 justify-end">
+            <div className="sticky bottom-0 bg-white border-t border-gray-200 px-4 py-3 flex gap-2 justify-end z-10">
               <button onClick={() => setShowOCRReview(false)} className="px-4 py-2 text-gray-600 text-sm hover:bg-gray-100 rounded-md">Cancel</button>
-              <button onClick={saveOCRVitals} disabled={savingOCR} className="flex items-center gap-1 px-4 py-2 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 disabled:opacity-50">
-                {savingOCR ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save All Vitals
+              <button onClick={saveOCRVitals} disabled={savingOCR || ocrVitalsEntries.length === 0} className="flex items-center gap-1 px-4 py-2 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 disabled:opacity-50">
+                {savingOCR ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save All ({ocrVitalsEntries.length})
               </button>
             </div>
           </div>

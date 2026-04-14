@@ -198,18 +198,69 @@ IMPORTANT:
 - For vitals written in shorthand like "T37.2 P80 BP120/80 RR18 SpO2 98%", parse each value
 - Recognize common medical handwriting patterns: medication names, dosages, SOAP notes format`;
 
+// ─── Specialized Vital Signs Chart Extraction Prompt ──────────────
+const VITAL_SIGNS_CHART_PROMPT = `You are an expert medical vital signs chart reader. You are looking at a photograph of a hospital vital signs monitoring chart (observation chart / TPR chart). These charts typically contain handwritten recordings of patient vital signs taken at different times.
+
+Your task:
+1. Identify EVERY vital sign reading recorded on this chart
+2. Extract the date AND time for each reading
+3. Extract all available parameters: temperature, pulse, blood pressure (systolic/diastolic), respiratory rate, SpO2, weight, urine output, pain score
+4. Readings may be organized as rows (each row = one time point) or columns (each column = one time point)
+5. For handwritten numbers, use medical context to disambiguate (e.g. temperature is 35-42°C range, pulse 40-200, BP systolic 60-250, SpO2 70-100%)
+
+Respond with ONLY valid JSON in this format:
+{
+  "raw_text": "Complete transcription preserving layout",
+  "confidence": 0.0 to 1.0,
+  "handwriting_detected": true,
+  "vital_signs_series": [
+    {
+      "date": "D/M/YYYY",
+      "time": "HH:MM",
+      "datetime": "YYYY-MM-DDTHH:MM:SS",
+      "temperature": null,
+      "pulse": null,
+      "bp_systolic": null,
+      "bp_diastolic": null,
+      "respiratory_rate": null,
+      "spo2": null,
+      "weight": null,
+      "urine_output": null,
+      "pain_score": null
+    }
+  ]
+}
+
+IMPORTANT:
+- Extract ALL reading time points, even if some parameters are missing for that time
+- Use null for parameters not recorded at a particular time
+- Dates may be written as D/M/YY (Nigerian format) — convert to D/M/YYYY (e.g. 7/4/26 → 7/4/2026)
+- Times may be in 12-hour (3pm, 6am) or 24-hour format — normalize to HH:MM
+- Blood pressure is often written as "120/80" — split into bp_systolic=120, bp_diastolic=80
+- Temperature may be in °C (typical: 36-40) or °F (typical: 96-104) — always output in °C
+- Sort readings chronologically
+- Include datetime as ISO format when you can determine both date and time`;
+
 async function runGPT4oVisionOCR(base64Image, mimeType, documentType, patientContext, apiKey) {
   // Strip data URI prefix if present, then re-add for the API
   const cleanBase64 = base64Image.replace(/^data:[^;]+;base64,/, '');
   const dataUri = `data:${mimeType || 'image/jpeg'};base64,${cleanBase64}`;
 
-  let userMessage = `Please read and transcribe all text from this medical document image. Document type hint: ${documentType || 'general'}.`;
+  // Use specialized prompt for vital signs charts
+  const isVitalSignsChart = documentType === 'vital_signs_chart';
+  const systemPrompt = isVitalSignsChart ? VITAL_SIGNS_CHART_PROMPT : VISION_OCR_SYSTEM_PROMPT;
+
+  let userMessage = isVitalSignsChart
+    ? 'Please read this vital signs monitoring chart and extract ALL vital sign readings with their dates and times.'
+    : `Please read and transcribe all text from this medical document image. Document type hint: ${documentType || 'general'}.`;
 
   if (patientContext) {
     userMessage += `\n\nPatient context: ${patientContext.name || 'Unknown'}, Hospital# ${patientContext.hospitalNumber || 'Unknown'}, Ward: ${patientContext.ward || 'Unknown'}, Diagnosis: ${patientContext.diagnosis || 'Unknown'}`;
   }
 
-  userMessage += '\n\nExtract ALL text including handwritten portions and structure into the JSON schema. Pay special attention to handwriting accuracy.';
+  if (!isVitalSignsChart) {
+    userMessage += '\n\nExtract ALL text including handwritten portions and structure into the JSON schema. Pay special attention to handwriting accuracy.';
+  }
 
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -220,7 +271,7 @@ async function runGPT4oVisionOCR(base64Image, mimeType, documentType, patientCon
     body: JSON.stringify({
       model: 'gpt-4o',
       messages: [
-        { role: 'system', content: VISION_OCR_SYSTEM_PROMPT },
+        { role: 'system', content: systemPrompt },
         {
           role: 'user',
           content: [
@@ -245,6 +296,19 @@ async function runGPT4oVisionOCR(base64Image, mimeType, documentType, patientCon
   if (!content) throw new Error('Empty GPT-4o Vision response');
 
   const parsed = JSON.parse(content);
+
+  // For vital signs charts, wrap the series in the structured field
+  if (isVitalSignsChart && parsed.vital_signs_series) {
+    return {
+      raw_text: parsed.raw_text || '',
+      structured: { vital_signs_series: parsed.vital_signs_series },
+      confidence: parsed.confidence || 0.85,
+      documentType: 'vital_signs_chart',
+      handwritingDetected: parsed.handwriting_detected ?? true,
+      model: 'gpt-4o-vision',
+    };
+  }
+
   return {
     raw_text: parsed.raw_text || '',
     structured: parsed.structured || null,

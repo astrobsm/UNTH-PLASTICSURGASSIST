@@ -33,7 +33,7 @@ export interface OCRProgress {
   progress: number;
 }
 
-export type DocumentType = 'lab_report' | 'imaging_report' | 'prescription' | 'handwritten_note' | 'general' | 'clinical_note' | 'consultation';
+export type DocumentType = 'lab_report' | 'imaging_report' | 'prescription' | 'handwritten_note' | 'general' | 'clinical_note' | 'consultation' | 'fluid_chart' | 'vital_signs_chart';
 
 // Medical lab value patterns for extraction
 const LAB_VALUE_PATTERNS: Record<string, RegExp> = {
@@ -605,8 +605,8 @@ class OCRService {
 
     // Light cleanup only — avoid aggressive replacements that corrupt handwritten OCR
     processed = processed
-      .replace(/\s+/g, ' ')  // Multiple spaces to single
-      .replace(/\n\s*\n\s*\n/g, '\n\n');  // Multiple newlines to double
+      .replace(/[^\S\n]+/g, ' ')  // Multiple horizontal spaces to single (preserve newlines)
+      .replace(/\n\s*\n\s*\n/g, '\n\n');  // Multiple blank lines to double
 
     if (documentType === 'lab_report') {
       processed = this.formatLabReport(processed);
@@ -772,7 +772,7 @@ class OCRService {
 
     // ── Attempt 1: Unified backend (Cloud Vision + AI in one call) ──
     // If handwritingMode, use GPT-4o Vision for direct image-to-text+structured
-    const useVisionOCR = options?.handwritingMode ?? (documentType === 'handwritten_note');
+    const useVisionOCR = options?.handwritingMode ?? (documentType === 'handwritten_note' || documentType === 'fluid_chart' || documentType === 'vital_signs_chart');
     try {
       onProgress?.({ status: useVisionOCR ? 'Sending to AI Vision (handwriting)...' : 'Sending to Cloud Vision AI...', progress: 0.1 });
       const base64 = await this.imageToBase64(imageSource);

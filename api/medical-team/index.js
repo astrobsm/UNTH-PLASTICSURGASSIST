@@ -446,16 +446,16 @@ async function getTeamAnalytics(req, res) {
   const prescriptionCounts = {};
   const consultationCounts = {};
 
-  // Ward rounds
+  // Ward rounds — check both user_id (original) and created_by (added later)
   try {
     const result = await query(`
-      SELECT user_id, COUNT(*) as cnt FROM ward_rounds
+      SELECT COALESCE(user_id, created_by) as uid, COUNT(*) as cnt FROM ward_rounds
       WHERE round_date >= CURRENT_DATE - INTERVAL '${period} days'
-        AND user_id IS NOT NULL
-      GROUP BY user_id
+        AND (user_id IS NOT NULL OR created_by IS NOT NULL)
+      GROUP BY COALESCE(user_id, created_by)
     `);
     for (const row of result.rows) {
-      wardRoundCounts[row.user_id] = parseInt(row.cnt);
+      wardRoundCounts[row.uid] = parseInt(row.cnt);
     }
   } catch (e) { console.log('ward_rounds not available for analytics'); }
 
@@ -572,13 +572,13 @@ async function getTeamAnalytics(req, res) {
 
   try {
     const wrResult = await query(`
-      SELECT user_id, COUNT(DISTINCT patient_id) as patient_count FROM ward_rounds
+      SELECT COALESCE(user_id, created_by) as uid, COUNT(DISTINCT patient_id) as patient_count FROM ward_rounds
       WHERE round_date >= CURRENT_DATE - INTERVAL '14 days'
-        AND user_id IS NOT NULL
-      GROUP BY user_id
+        AND (user_id IS NOT NULL OR created_by IS NOT NULL)
+      GROUP BY COALESCE(user_id, created_by)
     `);
     for (const row of wrResult.rows) {
-      userPatients[row.user_id] = parseInt(row.patient_count);
+      userPatients[row.uid] = parseInt(row.patient_count);
     }
   } catch (e) { }
 
@@ -592,6 +592,31 @@ async function getTeamAnalytics(req, res) {
       if (!userPatients[row.created_by]) {
         userPatients[row.created_by] = parseInt(row.patient_count);
       }
+    }
+  } catch (e) { }
+
+  // Also count patients from prescriptions (prescribed_by) and lab_orders (ordered_by)
+  try {
+    const presResult = await query(`
+      SELECT prescribed_by as uid, COUNT(DISTINCT patient_id) as patient_count FROM prescriptions
+      WHERE prescribed_at >= CURRENT_DATE - INTERVAL '14 days'
+        AND prescribed_by IS NOT NULL
+      GROUP BY prescribed_by
+    `);
+    for (const row of presResult.rows) {
+      userPatients[row.uid] = Math.max(userPatients[row.uid] || 0, parseInt(row.patient_count));
+    }
+  } catch (e) { }
+
+  try {
+    const labResult = await query(`
+      SELECT ordered_by as uid, COUNT(DISTINCT patient_id) as patient_count FROM lab_orders
+      WHERE ordered_at >= CURRENT_DATE - INTERVAL '14 days'
+        AND ordered_by IS NOT NULL
+      GROUP BY ordered_by
+    `);
+    for (const row of labResult.rows) {
+      userPatients[row.uid] = Math.max(userPatients[row.uid] || 0, parseInt(row.patient_count));
     }
   } catch (e) { }
 
