@@ -200,7 +200,7 @@ export const PatientProfile: React.FC = () => {
             if (latestAdm?.admitting_doctor) {
               fallbackTeam.push({
                 id: 0, name: latestAdm.admitting_doctor, email: '',
-                role: 'resident', roleLabel: 'Admitting Doctor', color: 'bg-green-600', priority: 2
+                role: 'other', roleLabel: 'Admitted By', color: 'bg-gray-600', priority: 5
               });
             }
           } catch { /* ignore */ }

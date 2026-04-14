@@ -212,8 +212,13 @@ export default function Dashboard() {
 
         const ward = adm?.ward_location || p.ward_id || '';
         const bed = adm?.bed_number || p.bed_number || '';
-        const consultant = adm?.admitting_consultant || p.consultant_in_charge || '';
-        const resident = adm?.admitting_doctor || p.resident_in_charge || '';
+        // Resolve consultant from patient_assignments first, then fallback to admission/patient text fields
+        const assignedConsultant = assignment?.consultant_id ? userById.get(assignment.consultant_id) : null;
+        const consultant = assignedConsultant ? (assignedConsultant.full_name || assignedConsultant.name || '') : (adm?.admitting_consultant || p.consultant_in_charge || '');
+        // Resolve resident from patient_assignments (senior_registrar or registrar), NOT admitting_doctor
+        const srUser = assignment?.senior_registrar_id ? userById.get(assignment.senior_registrar_id) : null;
+        const regUser = assignment?.registrar_id ? userById.get(assignment.registrar_id) : null;
+        const resident = srUser ? (srUser.full_name || srUser.name || '') : regUser ? (regUser.full_name || regUser.name || '') : (p.resident_in_charge || '');
         const hoUser = assignment?.house_officer_id ? userById.get(assignment.house_officer_id) : null;
         const houseOfficer = hoUser ? (hoUser.full_name || hoUser.name || '') : '';
         const admStatus = adm ? 'active' as const : 'outpatient' as const;
@@ -486,26 +491,34 @@ export default function Dashboard() {
         const adm = admissionByPid.get(pid) || (hn ? admissionByHn.get(hn) : undefined);
         const assignment = assignmentByPid.get(numPid);
         const consultant = (adm?.admitting_consultant || p.consultant_in_charge || '').toLowerCase();
-        const resident = (adm?.admitting_doctor || p.resident_in_charge || '').toLowerCase();
+        // Resolve resident name from patient_assignments for matching, NOT admitting_doctor
+        const srMatch = assignment?.senior_registrar_id ? userById.get(assignment.senior_registrar_id) : null;
+        const regMatch = assignment?.registrar_id ? userById.get(assignment.registrar_id) : null;
+        const residentForMatch = (srMatch ? (srMatch.full_name || srMatch.name || '') : regMatch ? (regMatch.full_name || regMatch.name || '') : (p.resident_in_charge || '')).toLowerCase();
 
         const isAssigned = assignedPatientIds.has(numPid) ||
-          consultant.includes(staffName) || resident.includes(staffName) ||
+          consultant.includes(staffName) || residentForMatch.includes(staffName) ||
           (p.consultant_in_charge || '').toLowerCase().includes(staffName) ||
           (p.resident_in_charge || '').toLowerCase().includes(staffName) ||
-          adm?.admitting_doctor?.toLowerCase().includes(staffName) ||
           adm?.admitting_consultant?.toLowerCase().includes(staffName) ||
           adm?.created_by === staffId;
 
         if (isAssigned) {
           const hoUser = assignment?.house_officer_id ? userById.get(assignment.house_officer_id) : null;
+          // Resolve resident from patient_assignments (senior_registrar or registrar), NOT admitting_doctor
+          const srStaff = assignment?.senior_registrar_id ? userById.get(assignment.senior_registrar_id) : null;
+          const regStaff = assignment?.registrar_id ? userById.get(assignment.registrar_id) : null;
+          const residentName = srStaff ? (srStaff.full_name || srStaff.name || '') : regStaff ? (regStaff.full_name || regStaff.name || '') : (p.resident_in_charge || '');
+          const assignedConsultantUser = assignment?.consultant_id ? userById.get(assignment.consultant_id) : null;
+          const consultantName = assignedConsultantUser ? (assignedConsultantUser.full_name || assignedConsultantUser.name || '') : (adm?.admitting_consultant || p.consultant_in_charge || '');
           matched.push({
             id: p.id || p.serverId || '',
             name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.full_name || 'Unknown',
             hospital_number: p.hospital_number || '',
             ward: adm?.ward_location || p.ward_id || '',
             bed: adm?.bed_number || p.bed_number || '',
-            consultant: adm?.admitting_consultant || p.consultant_in_charge || '',
-            resident: adm?.admitting_doctor || p.resident_in_charge || '',
+            consultant: consultantName,
+            resident: residentName,
             house_officer: hoUser ? (hoUser.full_name || hoUser.name || '') : '',
             admission_status: adm ? 'active' as const : 'outpatient' as const,
             admission_date: adm ? new Date(adm.admission_date).toLocaleDateString() : undefined
