@@ -189,7 +189,7 @@ registerRoute(
 // instead of letting unhandled promise rejections flood the console.
 const apiGetStrategy = new NetworkFirst({
   cacheName: API_CACHE,
-  networkTimeoutSeconds: 4,   // 4s — then serve cached data for offline/slow nets
+  networkTimeoutSeconds: 2,   // 2s — app layer has stale-while-revalidate, so fast fallback is safe
   plugins: [
     new CacheableResponsePlugin({ statuses: [0, 200] }),
     new ExpirationPlugin({

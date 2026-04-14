@@ -202,6 +202,19 @@ class ApiClient {
       // Fall through to fetch which the SW will intercept
     }
 
+    // ─── Stale-while-revalidate for GETs on poor networks ───
+    // If we have cached data, return it immediately and refresh in background.
+    // This prevents the app from hanging 3-4s per request on slow connections.
+    if (navigator.onLine && isGet) {
+      const cached = await this.getCachedResponse<T>(endpoint, entityInfo);
+      if (cached !== null) {
+        // Return cached data immediately, refresh in background
+        this._backgroundRefresh<T>(endpoint, fetchOptions, entityInfo);
+        return cached;
+      }
+      // No cache — must wait for network (first load)
+    }
+
     // ─── Offline: queue mutations immediately ───
     if (!navigator.onLine && !isGet) {
       return this.queueOfflineMutation<T>(endpoint, method, options, token, entityInfo);
@@ -334,6 +347,32 @@ class ApiClient {
     }
     // Return a minimal success indicator
     return { success: true, _offline: true, _queued: true } as T;
+  }
+
+  // Background refresh: fetch from network and update IndexedDB cache silently.
+  // Used by stale-while-revalidate pattern — caller already returned cached data.
+  private _backgroundRefreshInFlight = new Set<string>();
+
+  private _backgroundRefresh<T>(endpoint: string, fetchOptions: RequestInit, entityInfo: { entityType: string; entityId?: string | number; tableName?: string }): void {
+    // Deduplicate: don't fire multiple background fetches for the same endpoint
+    if (this._backgroundRefreshInFlight.has(endpoint)) return;
+    this._backgroundRefreshInFlight.add(endpoint);
+
+    fetch(`${this.baseURL}${endpoint}`, fetchOptions)
+      .then(async (response) => {
+        if (response.ok) {
+          const data = await response.json();
+          if (data) {
+            await this.cacheResponse(endpoint, entityInfo, data).catch(() => {});
+          }
+        }
+      })
+      .catch(() => {
+        // Network failed — silently ignore, cached data already served
+      })
+      .finally(() => {
+        this._backgroundRefreshInFlight.delete(endpoint);
+      });
   }
 
   // Parse endpoint to extract entity type and ID

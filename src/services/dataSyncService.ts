@@ -664,22 +664,12 @@ class DataSyncService {
 
       console.log(`📥 Checking ${serverData.length} ${entity} from server...`);
 
-      // Convert snake_case server fields to camelCase for local IndexedDB storage
-      const toCamelCase = (str: string) => str.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
-      const transformItem = (item: any) => {
-        const transformed: any = {};
-        for (const [key, val] of Object.entries(item)) {
-          transformed[toCamelCase(key)] = val;
-        }
-        // Keep original id (don't transform)
-        if (item.id !== undefined) transformed.id = item.id;
-        return transformed;
-      };
+      // Server data is already in snake_case which matches our IndexedDB schema.
+      // Do NOT transform keys — Dexie indexes use snake_case (hospital_number, patient_id, etc.)
 
       // Merge server data with local data
       let mergedCount = 0;
-      for (const rawServerItem of serverData) {
-        const serverItem = transformItem(rawServerItem);
+      for (const serverItem of serverData) {
         try {
           const localItem = await this.findLocalItem(table, serverItem);
           
