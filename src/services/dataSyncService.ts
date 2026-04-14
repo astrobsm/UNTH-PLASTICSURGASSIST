@@ -389,8 +389,8 @@ class DataSyncService {
       return { pushed: 0, pulled: 0, errors: ['Sync already in progress'] };
     }
 
-    // Cooldown: don't re-sync within 30 seconds of last sync (page navigations trigger redundant syncs)
-    if (this.lastFullSyncTime && (Date.now() - this.lastFullSyncTime.getTime()) < 30000) {
+    // Cooldown: don't re-sync within 2 minutes of last sync (page navigations trigger redundant syncs)
+    if (this.lastFullSyncTime && (Date.now() - this.lastFullSyncTime.getTime()) < 120000) {
       logger.log('⏳ Sync completed recently, skipping...');
       return { pushed: 0, pulled: 0, errors: ['Sync cooldown'] };
     }

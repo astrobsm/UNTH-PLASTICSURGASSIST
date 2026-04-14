@@ -71,8 +71,13 @@ async function handleGet(req, res, currentUser) {
       const ho = user.rows[0];
       const metrics = await getHOFullMetrics(ho.id, ho.full_name, ho.username);
 
+      // Helper: safe query that returns empty rows on failure (missing tables, etc.)
+      const safeDetailQuery = async (sql, params) => {
+        try { return (await query(sql, params)).rows; } catch (e) { console.warn('ho-detail query failed:', e.message); return []; }
+      };
+
       // Documentation logs — ward rounds by this HO
-      const wardRounds = await query(`
+      const wardRounds = await safeDetailQuery(`
         SELECT wr.id, wr.patient_id, wr.round_date, wr.round_type, wr.clinical_notes,
                wr.progress_status, wr.treatment_plan_updated, wr.medications_changed,
                wr.wound_assessment_done, wr.created_at,
@@ -84,7 +89,7 @@ async function handleGet(req, res, currentUser) {
       `, [targetId, `%${ho.full_name}%`]);
 
       // Prescriptions written
-      const prescriptions = await query(`
+      const prescriptions = await safeDetailQuery(`
         SELECT pr.id, pr.patient_id, pr.medication_name, pr.dosage, pr.created_at,
                p.first_name, p.last_name, p.hospital_number
         FROM prescriptions pr
@@ -94,7 +99,7 @@ async function handleGet(req, res, currentUser) {
       `, [targetId]);
 
       // Lab orders placed
-      const labOrders = await query(`
+      const labOrders = await safeDetailQuery(`
         SELECT lo.id, lo.patient_id, lo.test_name, lo.urgency, lo.status, lo.created_at,
                p.first_name, p.last_name, p.hospital_number
         FROM lab_orders lo
@@ -104,28 +109,28 @@ async function handleGet(req, res, currentUser) {
       `, [targetId]);
 
       // Progress notes / activity logs
-      const activityLogs = await query(`
+      const activityLogs = await safeDetailQuery(`
         SELECT * FROM activity_logs
         WHERE user_id = $1
         ORDER BY created_at DESC LIMIT 100
       `, [targetId]);
 
       // CBT attempts
-      const cbtAttempts = await query(`
+      const cbtAttempts = await safeDetailQuery(`
         SELECT * FROM cbt_attempts
         WHERE user_id = $1 AND completed = true
         ORDER BY created_at DESC
       `, [targetId]);
 
       // Training/CME progress
-      const cmeProgress = await query(`
+      const cmeProgress = await safeDetailQuery(`
         SELECT * FROM training_progress
         WHERE user_id = $1
         ORDER BY completed_at DESC
       `, [targetId]);
 
       // Assigned patients
-      const assignedPatients = await query(`
+      const assignedPatients = await safeDetailQuery(`
         SELECT pa.*, p.first_name, p.last_name, p.hospital_number,
                a.ward_location, a.bed_number, a.status as admission_status
         FROM patient_assignments pa
@@ -136,7 +141,7 @@ async function handleGet(req, res, currentUser) {
       `, [targetId]);
 
       // Rotation
-      const rotation = await query(`
+      const rotationRows = await safeDetailQuery(`
         SELECT * FROM trainee_rotations
         WHERE user_id = $1 AND status IN ('active', 'extended', 'pending_signout')
         ORDER BY created_at DESC LIMIT 1
@@ -144,14 +149,14 @@ async function handleGet(req, res, currentUser) {
 
       return res.status(200).json({
         houseOfficer: { ...ho, ...metrics },
-        wardRounds: wardRounds.rows,
-        prescriptions: prescriptions.rows,
-        labOrders: labOrders.rows,
-        activityLogs: activityLogs.rows,
-        cbtAttempts: cbtAttempts.rows,
-        cmeProgress: cmeProgress.rows,
-        assignedPatients: assignedPatients.rows,
-        rotation: rotation.rows[0] || null,
+        wardRounds,
+        prescriptions,
+        labOrders,
+        activityLogs,
+        cbtAttempts,
+        cmeProgress,
+        assignedPatients,
+        rotation: rotationRows[0] || null,
       });
     }
 

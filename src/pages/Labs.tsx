@@ -70,13 +70,13 @@ export default function Labs() {
     loadLabStatistics();
   }, [selectedPatient]);
 
-  // Set up periodic sync every 30 seconds for real-time cross-device updates
+  // Set up periodic data refresh every 2 minutes for real-time cross-device updates
   useEffect(() => {
     const syncInterval = setInterval(() => {
       if (navigator.onLine && !isSyncing) {
         loadLabData();
       }
-    }, 30000); // 30 seconds
+    }, 120000); // 2 minutes
 
     return () => clearInterval(syncInterval);
   }, [selectedPatient, isSyncing]);

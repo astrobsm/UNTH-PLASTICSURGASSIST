@@ -123,7 +123,7 @@ class OfflineManager {
     this.notifyListeners();
   }
 
-  // Start periodic sync (every 2 minutes when online)
+  // Start periodic sync (every 5 minutes when online)
   private startPeriodicSync() {
     this.syncInterval = setInterval(async () => {
       if (this.isOnline && !this.syncInProgress) {
@@ -133,7 +133,7 @@ class OfflineManager {
           await this.syncAll();
         }
       }
-    }, 2 * 60 * 1000); // Every 2 minutes
+    }, 5 * 60 * 1000); // Every 5 minutes
   }
 
   // Queue a request for later sync

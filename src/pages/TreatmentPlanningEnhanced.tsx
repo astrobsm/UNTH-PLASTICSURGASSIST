@@ -133,18 +133,18 @@ export default function TreatmentPlanningEnhanced() {
     }
   }, [selectedPatient]);
 
-  // Real-time sync: Refresh every 30 seconds when online
+  // Real-time sync: Refresh every 2 minutes when online
   useEffect(() => {
     const syncInterval = setInterval(() => {
       if (navigator.onLine && !isSyncing && selectedPatient) {
         loadTreatmentPlans();
       }
-    }, 30000); // 30 seconds
+    }, 120000); // 2 minutes
 
-    // Also refresh when tab becomes visible
+    // Also refresh local data when tab becomes visible (without triggering full sync)
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible' && navigator.onLine && selectedPatient) {
-        handleSync();
+        loadTreatmentPlans();
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);

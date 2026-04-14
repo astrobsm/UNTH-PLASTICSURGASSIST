@@ -110,7 +110,7 @@ const CACHE_ENDPOINTS: { module: string; endpoints: string[] }[] = [
   },
   {
     module: 'Clinic Duties',
-    endpoints: ['/clinic-duty-logs'],
+    endpoints: ['/sync/clinic-duty-logs'],
   },
   {
     module: 'Clinic Appointments',

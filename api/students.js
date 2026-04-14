@@ -566,18 +566,28 @@ async function getStudentsOverview(res) {
 }
 
 async function getStudentDetail(studentId, res) {
-  await ensureTables();
+  try {
+    await ensureTables();
+  } catch (e) {
+    console.warn('ensureTables failed (non-fatal):', e.message);
+  }
+
   const student = await query('SELECT * FROM students WHERE id = $1', [studentId]);
   if (student.rows.length === 0) return res.status(404).json({ error: 'Student not found' });
 
-  const patients = await query(`
+  // Safe query helper — returns empty array if table/column is missing
+  const safeRows = async (sql, params) => {
+    try { return (await query(sql, params)).rows; } catch (e) { console.warn('student detail query failed:', e.message); return []; }
+  };
+
+  const patients = await safeRows(`
     SELECT spa.*, p.first_name, p.last_name, p.ward_id, p.bed_number
     FROM student_patient_assignments spa
     LEFT JOIN patients p ON p.id::text = spa.patient_id
     WHERE spa.student_id = $1 AND spa.is_active = true
   `, [studentId]);
 
-  const clerkings = await query(`
+  const clerkings = await safeRows(`
     SELECT sc.*, p.first_name, p.last_name
     FROM student_clerkings sc
     LEFT JOIN patients p ON p.id::text = sc.patient_id
@@ -585,7 +595,7 @@ async function getStudentDetail(studentId, res) {
     ORDER BY sc.created_at DESC
   `, [studentId]);
 
-  const plans = await query(`
+  const plans = await safeRows(`
     SELECT stp.*, p.first_name, p.last_name
     FROM student_treatment_plans stp
     LEFT JOIN patients p ON p.id::text = stp.patient_id
@@ -595,9 +605,9 @@ async function getStudentDetail(studentId, res) {
 
   res.json({
     student: student.rows[0],
-    patients: patients.rows,
-    clerkings: clerkings.rows,
-    treatmentPlans: plans.rows
+    patients,
+    clerkings,
+    treatmentPlans: plans
   });
 }
 
