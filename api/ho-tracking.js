@@ -51,7 +51,7 @@ async function handleGet(req, res, currentUser) {
       for (const ho of hos.rows) {
         enriched.push({
           ...ho,
-          ...(await getHOFullMetrics(ho.id)),
+          ...(await getHOFullMetrics(ho.id, ho.full_name, ho.username)),
         });
       }
 
@@ -69,7 +69,7 @@ async function handleGet(req, res, currentUser) {
       if (user.rows.length === 0) return res.status(404).json({ error: 'User not found' });
 
       const ho = user.rows[0];
-      const metrics = await getHOFullMetrics(ho.id);
+      const metrics = await getHOFullMetrics(ho.id, ho.full_name, ho.username);
 
       // Documentation logs — ward rounds by this HO
       const wardRounds = await query(`
@@ -324,85 +324,221 @@ function getDocumentationPoints(type) {
   return points[type] || 2;
 }
 
-async function getHOFullMetrics(userId) {
-  // CBT metrics
-  const cbt = await query(
-    `SELECT COUNT(*) as completed, COALESCE(AVG(percentage), 0) as avg_score,
-            MAX(percentage) as best_score, MIN(percentage) as worst_score
-     FROM cbt_attempts WHERE user_id = $1 AND completed = true`, [userId]
+async function getHOFullMetrics(userId, fullName, username) {
+  const uid = String(userId);       // For VARCHAR columns
+  const uidInt = parseInt(userId);   // For INTEGER columns
+
+  // Helper: safely run a query, returns default on error
+  async function safeQuery(sql, params, defaultVal) {
+    try {
+      const r = await query(sql, params);
+      return r.rows[0] || defaultVal;
+    } catch (e) { return defaultVal; }
+  }
+
+  // ── 1. CBT Tests ──
+  const cbt = await safeQuery(
+    `SELECT COUNT(*) as completed,
+            COALESCE(AVG(
+              CASE WHEN percentage IS NOT NULL AND percentage > 0 THEN percentage
+                   WHEN score IS NOT NULL AND total_marks > 0 THEN (score::numeric / total_marks) * 100
+                   ELSE 0 END
+            ), 0) as avg_score,
+            COALESCE(MAX(percentage), 0) as best_score,
+            COALESCE(MIN(NULLIF(percentage, 0)), 0) as worst_score
+     FROM cbt_attempts WHERE (user_id = $1 OR user_id::text = $2) AND (completed = true OR passed = true)`,
+    [uidInt, uid], { completed: 0, avg_score: 0, best_score: 0, worst_score: 0 }
+  );
+  const cbtCompleted = parseInt(cbt.completed) || 0;
+  const cbtAvgScore = parseFloat(cbt.avg_score) || 0;
+
+  // ── Name matching for VARCHAR columns ──
+  const auditUserClause = fullName
+    ? `(user_id = $1 OR LOWER(user_name) = LOWER($2))`
+    : `user_id = $1`;
+  const auditUserParams = fullName ? [uid, fullName] : [uid];
+
+  const nameMatchValues = [uid];
+  let nameMatchClause = `($COL = $1`;
+  let nameParamIdx = 1;
+  if (fullName) {
+    nameParamIdx++;
+    nameMatchValues.push(fullName);
+    nameMatchClause += ` OR LOWER($COL) = LOWER($${nameParamIdx})`;
+  }
+  if (username) {
+    nameParamIdx++;
+    nameMatchValues.push(username);
+    nameMatchClause += ` OR LOWER($COL) = LOWER($${nameParamIdx})`;
+  }
+  nameMatchClause += `)`;
+
+  // ── 2. Documentation Counts (individual counts for display) ──
+  const wardRoundRow = await safeQuery(`SELECT COUNT(*) as cnt FROM ward_rounds WHERE created_by = $1`, [uidInt], { cnt: 0 });
+  const wardRoundsDocumented = parseInt(wardRoundRow.cnt) || 0;
+
+  const prescriptionRow = await safeQuery(`SELECT COUNT(*) as cnt FROM prescriptions WHERE created_by = $1`, [uidInt], { cnt: 0 });
+  const prescriptionsWritten = parseInt(prescriptionRow.cnt) || 0;
+
+  const labOrderRow = await safeQuery(`SELECT COUNT(*) as cnt FROM lab_orders WHERE ordered_by = $1 OR created_by = $1`, [uidInt], { cnt: 0 });
+  const labOrdersPlaced = parseInt(labOrderRow.cnt) || 0;
+
+  // ── 3. Patient Entries — count from ALL clinical tables (same as admin-training) ──
+  let patientCount = 0;
+
+  // 3a. Tables with created_by INTEGER
+  for (const tbl of ['patients', 'treatment_plans', 'admissions', 'surgeries', 'prescriptions', 'ward_rounds', 'lab_orders', 'discharge_summaries']) {
+    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM ${tbl} WHERE created_by = $1`, [uidInt], { cnt: 0 });
+    patientCount += parseInt(r.cnt) || 0;
+  }
+
+  // 3b. wound_care_records — recorded_by INTEGER
+  const woundRow = await safeQuery(`SELECT COUNT(*) as cnt FROM wound_care_records WHERE recorded_by = $1`, [uidInt], { cnt: 0 });
+  patientCount += parseInt(woundRow.cnt) || 0;
+
+  // 3c. Tables with recorded_by VARCHAR — match by name/id
+  for (const tbl of ['vital_signs', 'fluid_balance']) {
+    const clause = nameMatchClause.replace(/\$COL/g, 'recorded_by');
+    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM ${tbl} WHERE ${clause}`, nameMatchValues, { cnt: 0 });
+    patientCount += parseInt(r.cnt) || 0;
+  }
+
+  // 3d. progress_notes — author VARCHAR
+  {
+    const clause = nameMatchClause.replace(/\$COL/g, 'author');
+    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM progress_notes WHERE ${clause}`, nameMatchValues, { cnt: 0 });
+    patientCount += parseInt(r.cnt) || 0;
+  }
+
+  // 3e. Assessment tables with assessed_by VARCHAR
+  for (const tbl of ['dvt_assessments', 'pressure_sore_assessments', 'nutritional_assessments', 'diabetic_foot_assessments', 'preoperative_assessments']) {
+    const clause = nameMatchClause.replace(/\$COL/g, 'assessed_by');
+    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM ${tbl} WHERE ${clause}`, nameMatchValues, { cnt: 0 });
+    patientCount += parseInt(r.cnt) || 0;
+  }
+
+  // 3f. blood_transfusions — administered_by VARCHAR
+  {
+    const clause = nameMatchClause.replace(/\$COL/g, 'administered_by');
+    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM blood_transfusions WHERE ${clause}`, nameMatchValues, { cnt: 0 });
+    patientCount += parseInt(r.cnt) || 0;
+  }
+
+  // ── 4. Duties — formal assignments + clinic duty logs + call duty roster + clinical actions ──
+  let dutiesCompleted = 0;
+
+  // 4a. Formal duty assignments completed
+  const formalDutyRow = await safeQuery(
+    `SELECT COUNT(*) as cnt FROM duty_assignments WHERE user_id = $1 AND status = 'completed'`,
+    [uidInt], { cnt: 0 }
+  );
+  dutiesCompleted += parseInt(formalDutyRow.cnt) || 0;
+
+  // 4b. Clinic duty logs
+  {
+    const clause = nameMatchClause.replace(/\$COL/g, 'user_id');
+    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM clinic_duty_logs WHERE ${clause}`, nameMatchValues, { cnt: 0 });
+    dutiesCompleted += parseInt(r.cnt) || 0;
+  }
+
+  // 4c. Call duty roster entries
+  {
+    let callClause = `(senior_registrar_id = $1 OR registrar_id = $1 OR house_officer_id = $1`;
+    const callParams = [uid];
+    let pIdx = 1;
+    if (fullName) {
+      pIdx++;
+      callParams.push(fullName);
+      callClause += ` OR LOWER(senior_registrar_name) = LOWER($${pIdx}) OR LOWER(registrar_name) = LOWER($${pIdx}) OR LOWER(house_officer_name) = LOWER($${pIdx})`;
+    }
+    callClause += `)`;
+    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM call_duty_roster WHERE ${callClause}`, callParams, { cnt: 0 });
+    dutiesCompleted += parseInt(r.cnt) || 0;
+  }
+
+  // 4d. Clinical actions from audit_logs
+  const clinicalDutyRow = await safeQuery(
+    `SELECT COUNT(*) as cnt FROM audit_logs WHERE ${auditUserClause} AND UPPER(action) IN ('CREATE', 'UPDATE', 'COMPLETE')
+     AND UPPER(resource_type) IN ('PATIENT', 'TREATMENT_PLAN', 'ADMISSION', 'PRESCRIPTION', 'WARD_ROUND', 'LAB_ORDER', 'PROCEDURE', 'DISCHARGE', 'VITAL_SIGNS', 'WOUND_CARE', 'PROGRESS_NOTE', 'FLUID_BALANCE', 'SURGERY', 'ASSESSMENT', 'BLOOD_TRANSFUSION', 'MDT')`,
+    auditUserParams, { cnt: 0 }
+  );
+  dutiesCompleted += parseInt(clinicalDutyRow.cnt) || 0;
+
+  // Total duty assignments (for display)
+  const dutiesTotal = await safeQuery(`SELECT COUNT(*) as cnt FROM duty_assignments WHERE user_id = $1`, [uidInt], { cnt: 0 });
+
+  // ── 5. Attendance / Login Days ──
+  const loginRow = await safeQuery(
+    `SELECT COUNT(DISTINCT DATE(timestamp)) as cnt FROM audit_logs WHERE ${auditUserClause}`,
+    auditUserParams, { cnt: 0 }
+  );
+  let loginDays = parseInt(loginRow.cnt) || 0;
+
+  const actLoginRow = await safeQuery(
+    `SELECT COUNT(DISTINCT DATE(created_at)) as cnt FROM activity_logs WHERE user_id = $1 AND activity_type = 'login'`,
+    [uidInt], { cnt: 0 }
+  );
+  loginDays = Math.max(loginDays, parseInt(actLoginRow.cnt) || 0);
+
+  // ── 6. CME / Education Topics ──
+  let cmeCount = 0;
+  const tpRow = await safeQuery(
+    `SELECT COUNT(*) as cnt FROM training_progress WHERE user_id = $1 OR user_id::text = $2`,
+    [uidInt, uid], { cnt: 0 }
+  );
+  cmeCount += parseInt(tpRow.cnt) || 0;
+
+  const cmeReadRow = await safeQuery(
+    `SELECT COUNT(DISTINCT article_id) as cnt FROM cme_reading_progress WHERE user_id = $1`, [uid], { cnt: 0 }
+  );
+  cmeCount += parseInt(cmeReadRow.cnt) || 0;
+
+  const cmeProgRow = await safeQuery(
+    `SELECT COUNT(*) as cnt FROM cme_progress WHERE user_id = $1 AND completed = true`, [uid], { cnt: 0 }
+  );
+  cmeCount += parseInt(cmeProgRow.cnt) || 0;
+
+  // ── 7. Assigned patients ──
+  const assignedCount = await safeQuery(
+    `SELECT COUNT(*) as cnt FROM patient_assignments WHERE house_officer_id = $1 AND is_active = true`, [uidInt], { cnt: 0 }
   );
 
-  // CME / training progress
-  const cme = await query(`SELECT COUNT(*) as cnt FROM training_progress WHERE user_id = $1`, [userId]);
-
-  // Documentation counts
-  const wardRoundCount = await query(
-    `SELECT COUNT(*) as cnt FROM ward_rounds WHERE created_by = $1`, [userId]
-  );
-  const prescriptionCount = await query(
-    `SELECT COUNT(*) as cnt FROM prescriptions WHERE created_by = $1`, [userId]
-  );
-  const labOrderCount = await query(
-    `SELECT COUNT(*) as cnt FROM lab_orders WHERE ordered_by = $1 OR created_by = $1`, [userId]
-  );
-  const patientEntries = await query(
-    `SELECT COUNT(*) as cnt FROM activity_logs WHERE user_id = $1 AND activity_type = 'patient_entry'`, [userId]
-  );
-
-  // Duties
-  const duties = await query(
-    `SELECT COUNT(*) as total,
-            COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed
-     FROM duty_assignments WHERE user_id = $1`, [userId]
-  );
-
-  // Attendance (login days)
-  const logins = await query(
-    `SELECT COUNT(DISTINCT DATE(created_at)) as days FROM activity_logs WHERE user_id = $1 AND activity_type = 'login'`, [userId]
-  );
-
-  // Assigned patients count
-  const assignedCount = await query(
-    `SELECT COUNT(*) as cnt FROM patient_assignments WHERE house_officer_id = $1 AND is_active = true`, [userId]
-  );
-
-  // Overall score
+  // ── Calculate Scores ──
   const reqs = { cbtTests: 4, patientEntries: 30, duties: 20, loginDays: 25, overallScore: 70 };
-  const cbtScore = parseFloat(cbt.rows[0].avg_score) || 0;
-  const patientScore = Math.min(100, (parseInt(patientEntries.rows[0].cnt) / reqs.patientEntries) * 100);
-  const dutyScore = Math.min(100, (parseInt(duties.rows[0].completed) / reqs.duties) * 100);
-  const attendanceScore = Math.min(100, (parseInt(logins.rows[0].days) / reqs.loginDays) * 100);
-  const overallScore = (cbtScore * 0.30) + (patientScore * 0.35) + (dutyScore * 0.25) + (attendanceScore * 0.10);
+  const patientScore = Math.min(100, (patientCount / reqs.patientEntries) * 100);
+  const dutyScore = Math.min(100, (dutiesCompleted / reqs.duties) * 100);
+  const attendanceScore = Math.min(100, (loginDays / reqs.loginDays) * 100);
+  const overallScore = (cbtAvgScore * 0.30) + (patientScore * 0.35) + (dutyScore * 0.25) + (attendanceScore * 0.10);
 
   // Eligibility
   const met = [];
   const notMet = [];
-  if (parseInt(cbt.rows[0].completed) >= reqs.cbtTests) met.push(`CBT: ${cbt.rows[0].completed}/${reqs.cbtTests}`);
-  else notMet.push(`CBT: ${cbt.rows[0].completed}/${reqs.cbtTests}`);
-  if (parseInt(patientEntries.rows[0].cnt) >= reqs.patientEntries) met.push(`Patient entries: ${patientEntries.rows[0].cnt}/${reqs.patientEntries}`);
-  else notMet.push(`Patient entries: ${patientEntries.rows[0].cnt}/${reqs.patientEntries}`);
-  if (parseInt(duties.rows[0].completed) >= reqs.duties) met.push(`Duties: ${duties.rows[0].completed}/${reqs.duties}`);
-  else notMet.push(`Duties: ${duties.rows[0].completed}/${reqs.duties}`);
-  if (parseInt(logins.rows[0].days) >= reqs.loginDays) met.push(`Attendance: ${logins.rows[0].days}/${reqs.loginDays}`);
-  else notMet.push(`Attendance: ${logins.rows[0].days}/${reqs.loginDays}`);
+  if (cbtCompleted >= reqs.cbtTests) met.push(`CBT: ${cbtCompleted}/${reqs.cbtTests}`);
+  else notMet.push(`CBT: ${cbtCompleted}/${reqs.cbtTests}`);
+  if (patientCount >= reqs.patientEntries) met.push(`Patient entries: ${patientCount}/${reqs.patientEntries}`);
+  else notMet.push(`Patient entries: ${patientCount}/${reqs.patientEntries}`);
+  if (dutiesCompleted >= reqs.duties) met.push(`Duties: ${dutiesCompleted}/${reqs.duties}`);
+  else notMet.push(`Duties: ${dutiesCompleted}/${reqs.duties}`);
+  if (loginDays >= reqs.loginDays) met.push(`Attendance: ${loginDays}/${reqs.loginDays}`);
+  else notMet.push(`Attendance: ${loginDays}/${reqs.loginDays}`);
   if (overallScore >= reqs.overallScore) met.push(`Overall: ${Math.round(overallScore)}%`);
   else notMet.push(`Overall: ${Math.round(overallScore)}% (need ${reqs.overallScore}%)`);
 
   return {
     metrics: {
-      cbtTestsCompleted: parseInt(cbt.rows[0].completed),
-      cbtAvgScore: Math.round(parseFloat(cbt.rows[0].avg_score) * 10) / 10,
-      cbtBestScore: Math.round(parseFloat(cbt.rows[0].best_score || 0) * 10) / 10,
-      cbtWorstScore: Math.round(parseFloat(cbt.rows[0].worst_score || 0) * 10) / 10,
-      cmeTopicsCompleted: parseInt(cme.rows[0].cnt),
-      wardRoundsDocumented: parseInt(wardRoundCount.rows[0].cnt),
-      prescriptionsWritten: parseInt(prescriptionCount.rows[0].cnt),
-      labOrdersPlaced: parseInt(labOrderCount.rows[0].cnt),
-      patientEntries: parseInt(patientEntries.rows[0].cnt),
-      dutiesTotal: parseInt(duties.rows[0].total),
-      dutiesCompleted: parseInt(duties.rows[0].completed),
-      loginDays: parseInt(logins.rows[0].days),
-      assignedPatients: parseInt(assignedCount.rows[0].cnt),
+      cbtTestsCompleted: cbtCompleted,
+      cbtAvgScore: Math.round(cbtAvgScore * 10) / 10,
+      cbtBestScore: Math.round(parseFloat(cbt.best_score || 0) * 10) / 10,
+      cbtWorstScore: Math.round(parseFloat(cbt.worst_score || 0) * 10) / 10,
+      cmeTopicsCompleted: cmeCount,
+      wardRoundsDocumented,
+      prescriptionsWritten,
+      labOrdersPlaced,
+      patientEntries: patientCount,
+      dutiesTotal: parseInt(dutiesTotal.cnt) || 0,
+      dutiesCompleted,
+      loginDays,
+      assignedPatients: parseInt(assignedCount.cnt) || 0,
       overallScore: Math.round(overallScore * 10) / 10,
     },
     eligibility: {
