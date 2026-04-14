@@ -72,6 +72,13 @@ export default async function handler(req, res) {
         }
         return await getAllAdmissions(url.searchParams, res);
       case 'POST':
+        // Check for bulk force discharge actions
+        if (req.body && req.body.action === 'force-discharge-all') {
+          return await forceDischargeAll(auth.user, res);
+        }
+        if (req.body && req.body.action === 'force-discharge-selected') {
+          return await forceDischargeSelected(req.body.patient_ids, auth.user, res);
+        }
         return await createAdmission(req.body, auth.user, res);
       case 'PUT':
       case 'PATCH':
@@ -375,4 +382,69 @@ async function deleteAdmission(id, res) {
   }
 
   res.status(200).json({ message: 'Admission deleted successfully' });
+}
+
+async function forceDischargeAll(user, res) {
+  // Only allow admins
+  if (user.role !== 'admin') {
+    return res.status(403).json({ error: 'Only admins can force discharge all patients' });
+  }
+
+  const now = new Date().toISOString();
+  const result = await query(
+    `UPDATE admissions 
+     SET status = 'discharged', 
+         discharge_date = $1,
+         updated_at = NOW()
+     WHERE status = 'active'
+     RETURNING id, patient_id`,
+    [now.split('T')[0]]
+  );
+
+  const count = result.rows.length;
+  console.log(`Force discharged ${count} admissions by admin ${user.name || user.id}`);
+
+  res.status(200).json({ 
+    message: `Successfully force-discharged ${count} active admissions`,
+    count,
+    discharged_ids: result.rows.map(r => r.id)
+  });
+}
+
+async function forceDischargeSelected(patientIds, user, res) {
+  // Only allow admins
+  if (user.role !== 'admin') {
+    return res.status(403).json({ error: 'Only admins can force discharge patients' });
+  }
+
+  if (!Array.isArray(patientIds) || patientIds.length === 0) {
+    return res.status(400).json({ error: 'patient_ids array is required' });
+  }
+
+  // Sanitize: ensure all IDs are integers
+  const sanitizedIds = patientIds.map(id => parseInt(id, 10)).filter(id => !isNaN(id));
+  if (sanitizedIds.length === 0) {
+    return res.status(400).json({ error: 'No valid patient IDs provided' });
+  }
+
+  const now = new Date().toISOString().split('T')[0];
+  const placeholders = sanitizedIds.map((_, i) => `$${i + 2}`).join(', ');
+  const result = await query(
+    `UPDATE admissions 
+     SET status = 'discharged', 
+         discharge_date = $1,
+         updated_at = NOW()
+     WHERE status = 'active' AND patient_id IN (${placeholders})
+     RETURNING id, patient_id`,
+    [now, ...sanitizedIds]
+  );
+
+  const count = result.rows.length;
+  console.log(`Force discharged ${count} admissions (${sanitizedIds.length} patients selected) by admin ${user.name || user.id}`);
+
+  res.status(200).json({ 
+    message: `Successfully force-discharged ${count} admissions for ${sanitizedIds.length} patients`,
+    count,
+    discharged_ids: result.rows.map(r => r.id)
+  });
 }

@@ -81,6 +81,8 @@ export default function Dashboard() {
   const [staffList, setStaffList] = useState<ApprovedUser[]>([]);
   const [selectedStaffId, setSelectedStaffId] = useState('');
   const [staffPatients, setStaffPatients] = useState<DashboardPatient[]>([]);
+  const [forceDischarging, setForceDischarging] = useState(false);
+  const [selectedForDischarge, setSelectedForDischarge] = useState<Set<string | number>>(new Set());
 
   // Treatment Plan Tracking
   const [treatmentPlanSummaries, setTreatmentPlanSummaries] = useState<Array<{
@@ -555,6 +557,74 @@ export default function Dashboard() {
     } finally { setAutoAssigning(false); }
   };
 
+  const toggleSelectPatient = (id: string | number) => {
+    setSelectedForDischarge(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedForDischarge.size === filteredPatients.length) {
+      setSelectedForDischarge(new Set());
+    } else {
+      setSelectedForDischarge(new Set(filteredPatients.map(p => p.id)));
+    }
+  };
+
+  const handleForceDischargeSelected = async () => {
+    const selectedIds = Array.from(selectedForDischarge);
+    if (selectedIds.length === 0) {
+      toast.error('No patients selected for discharge');
+      return;
+    }
+    const confirmed = window.confirm(
+      `⚠️ FORCE DISCHARGE ${selectedIds.length} PATIENT(S) ⚠️\n\nThis will discharge the ${selectedIds.length} selected patient(s).\n\nThis action is intended for clearing test data and cannot be undone.\n\nAre you sure?`
+    );
+    if (!confirmed) return;
+
+    setForceDischarging(true);
+    try {
+      const selectedPidSet = new Set(selectedIds.map(String));
+
+      // 1. Call server API to discharge selected in PostgreSQL
+      const { apiClient } = await import('../services/apiClient');
+      try {
+        const response = await apiClient.post('/admissions', {
+          action: 'force-discharge-selected',
+          patient_ids: selectedIds.map(Number)
+        });
+        toast.success(`Server: ${response.message || `Discharged ${response.count} admissions`}`);
+      } catch (apiErr: any) {
+        console.warn('Server force-discharge failed (will still update local):', apiErr.message);
+      }
+
+      // 2. Update matching active admissions in local IndexedDB
+      const allAdmissions = await db.admissions.toArray();
+      const now = new Date().toISOString().split('T')[0];
+      let localCount = 0;
+      for (const adm of allAdmissions) {
+        if (adm.status === 'active' && selectedPidSet.has(String(adm.patient_id))) {
+          await db.admissions.update(adm.id!, {
+            status: 'discharged',
+            discharge_date: now,
+            updated_at: new Date()
+          });
+          localCount++;
+        }
+      }
+
+      toast.success(`Force-discharged ${localCount} admissions locally`);
+      setSelectedForDischarge(new Set());
+      await loadDashboardData();
+    } catch (err: any) {
+      toast.error(`Error: ${err.message || 'Failed to force discharge'}`);
+    } finally {
+      setForceDischarging(false);
+    }
+  };
+
   const formatTimeAgo = (date: Date): string => {
     const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
     if (seconds < 60) return 'just now';
@@ -664,6 +734,13 @@ export default function Dashboard() {
                 >
                   {autoAssigning ? 'Reassigning...' : 'Reassign All HOs'}
                 </button>
+                <button
+                  onClick={handleForceDischargeSelected}
+                  disabled={forceDischarging || selectedForDischarge.size === 0}
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                >
+                  {forceDischarging ? 'Discharging...' : `Force Discharge (${selectedForDischarge.size})`}
+                </button>
               </>
             )}
             {/* Search */}
@@ -706,6 +783,17 @@ export default function Dashboard() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-gray-50 text-left">
+                    {isAdmin && (
+                      <th className="px-3 py-2 w-8">
+                        <input
+                          type="checkbox"
+                          checked={filteredPatients.length > 0 && selectedForDischarge.size === filteredPatients.length}
+                          onChange={toggleSelectAll}
+                          className="h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500 cursor-pointer"
+                          title="Select all for discharge"
+                        />
+                      </th>
+                    )}
                     <th className="px-3 py-2 font-medium text-gray-600">Patient</th>
                     <th className="px-3 py-2 font-medium text-gray-600">Hospital #</th>
                     <th className="px-3 py-2 font-medium text-gray-600">
@@ -726,9 +814,19 @@ export default function Dashboard() {
                   {filteredPatients.map((p) => (
                     <tr
                       key={p.id}
-                      className="hover:bg-primary-50/50 cursor-pointer transition-colors"
+                      className={`hover:bg-primary-50/50 cursor-pointer transition-colors ${selectedForDischarge.has(p.id) ? 'bg-red-50' : ''}`}
                       onClick={() => navigate(`/patients/${p.id}`)}
                     >
+                      {isAdmin && (
+                        <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={selectedForDischarge.has(p.id)}
+                            onChange={() => toggleSelectPatient(p.id)}
+                            className="h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500 cursor-pointer"
+                          />
+                        </td>
+                      )}
                       <td className="px-3 py-3 font-medium text-clinical-dark">{p.name}</td>
                       <td className="px-3 py-3 text-gray-600">{p.hospital_number}</td>
                       <td className="px-3 py-3">
@@ -771,13 +869,24 @@ export default function Dashboard() {
               {filteredPatients.map((p) => (
                 <div
                   key={p.id}
-                  className="border border-gray-200 rounded-lg p-3 hover:bg-primary-50/50 cursor-pointer transition-colors"
+                  className={`border rounded-lg p-3 hover:bg-primary-50/50 cursor-pointer transition-colors ${selectedForDischarge.has(p.id) ? 'border-red-300 bg-red-50' : 'border-gray-200'}`}
                   onClick={() => navigate(`/patients/${p.id}`)}
                 >
                   <div className="flex justify-between items-start">
-                    <div>
-                      <p className="font-medium text-clinical-dark">{p.name}</p>
-                      <p className="text-xs text-gray-500">{p.hospital_number}</p>
+                    <div className="flex items-center gap-2">
+                      {isAdmin && (
+                        <input
+                          type="checkbox"
+                          checked={selectedForDischarge.has(p.id)}
+                          onChange={() => toggleSelectPatient(p.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500 cursor-pointer"
+                        />
+                      )}
+                      <div>
+                        <p className="font-medium text-clinical-dark">{p.name}</p>
+                        <p className="text-xs text-gray-500">{p.hospital_number}</p>
+                      </div>
                     </div>
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                       p.admission_status === 'active' 
