@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { userManagementService } from '../services/userManagementService';
 import { apiClient } from '../services/apiClient';
 import { encrypt, decrypt, initializeEncryption, clearEncryption } from '../utils/encryption';
+import { storeOfflineCredential, verifyOfflineCredential } from '../services/offlineAuthService';
 
 export interface User {
   id: string;
@@ -51,16 +52,23 @@ export const useAuthStore = create<AuthState>()(
           set({ useBackend: backendAvailable });
 
           if (!backendAvailable) {
-            // ─── Offline login: allow access if user was previously authenticated ───
-            const state = get();
-            if (state.token && state.user && state.user.email === email) {
-              // User was previously logged in with this email — allow offline access
-              console.log('📴 Offline login: restoring previous session for', email);
+            // ─── Offline login: verify password against stored PBKDF2 hash ───
+            console.log('📴 Offline login: verifying credentials for', email);
+            const offlineUser = await verifyOfflineCredential(email, password);
+            if (offlineUser) {
+              const user: User = {
+                id: offlineUser.id,
+                name: offlineUser.name,
+                email: offlineUser.email,
+                role: offlineUser.role as any,
+                privileges: [],
+              };
               await initializeEncryption(password);
-              set({ loading: false });
+              set({ user, loading: false });
+              console.log('✅ Offline login succeeded for', email);
               return;
             }
-            throw new Error('Unable to connect to server. Please check your connection and try again.');
+            throw new Error('Offline login failed. Either you have never logged in online on this device, or the password is incorrect.');
           }
 
           // Use backend API
@@ -87,6 +95,18 @@ export const useAuthStore = create<AuthState>()(
           await initializeEncryption(password);
           const encryptedUser = await encrypt(JSON.stringify(user));
           
+          // ─── Store hashed credential for future offline logins ───
+          try {
+            await storeOfflineCredential(email, password, {
+              id: user.id,
+              name: user.name,
+              role: user.role,
+            });
+            console.log('🔐 Offline credential stored for', email);
+          } catch (credErr) {
+            console.warn('Failed to store offline credential (non-fatal):', credErr);
+          }
+
           set({ user, token: response.token });
           set({ loading: false });
         } catch (error) {

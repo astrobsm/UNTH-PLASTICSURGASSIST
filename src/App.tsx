@@ -9,6 +9,7 @@ import { useAuthStore } from './store/authStore';
 import { PWAInstallPrompt } from './components/PWAInstallPrompt';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { SWUpdateBanner } from './components/SWUpdateBanner';
+import { SessionLockScreen } from './components/SessionLockScreen';
 import { initializeCSRFToken } from './utils/csrf';
 import { logger } from './utils/logger';
 
@@ -201,6 +202,7 @@ function App() {
   }
 
   return (
+    <SessionLockScreen>
     <Suspense fallback={<PageLoader />}>
       <ErrorBoundary>
         <Routes>
@@ -280,6 +282,7 @@ function App() {
         </Routes>
       </ErrorBoundary>
     </Suspense>
+    </SessionLockScreen>
   );
 }
 

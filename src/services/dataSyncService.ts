@@ -677,7 +677,7 @@ class DataSyncService {
             // Check if local has unsynced changes
             if (localItem.synced === false) {
               // Conflict: local has changes, server has changes
-              const resolution = this.resolveConflict(localItem, serverItem);
+              const resolution = this.resolveConflict(localItem, serverItem, entity);
               if (resolution.winner === 'server') {
                 await table.put({ ...serverItem, synced: true, updated_at: new Date() });
                 mergedCount++;
@@ -825,20 +825,47 @@ class DataSyncService {
   /**
    * Resolve conflict between local and server data
    * Current strategy: Server wins (for cross-device consistency)
+   * Logs all conflicts to sync_conflicts table for audit/review
    */
-  private resolveConflict(localItem: any, serverItem: any): ConflictResolution {
+  private resolveConflict(localItem: any, serverItem: any, entity?: string): ConflictResolution {
     // Compare timestamps if available
     const localUpdated = localItem.updated_at ? new Date(localItem.updated_at).getTime() : 0;
     const serverUpdated = serverItem.updated_at ? new Date(serverItem.updated_at).getTime() : 0;
 
+    let winner: 'local' | 'server';
+
     // Server wins by default, but if local is significantly newer, keep local
     if (localUpdated > serverUpdated + 60000) { // Local is more than 1 minute newer
       console.log('🔀 Conflict resolution: Local data is newer, keeping local');
-      return { resolved: true, winner: 'local' };
+      winner = 'local';
+    } else {
+      console.log('🔀 Conflict resolution: Server data wins');
+      winner = 'server';
     }
 
-    console.log('🔀 Conflict resolution: Server data wins');
-    return { resolved: true, winner: 'server' };
+    // Log conflict for audit trail
+    this.logConflict(entity || 'unknown', localItem, serverItem, winner).catch(() => {});
+
+    return { resolved: true, winner };
+  }
+
+  /**
+   * Log a sync conflict to the sync_conflicts IndexedDB table
+   */
+  private async logConflict(entity: string, localData: any, serverData: any, winner: 'local' | 'server'): Promise<void> {
+    try {
+      await db.table('sync_conflicts').add({
+        entity,
+        entityId: localData?.id || serverData?.id || 0,
+        localData: JSON.stringify(localData),
+        serverData: JSON.stringify(serverData),
+        winner,
+        resolvedAt: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+      });
+    } catch (e) {
+      console.warn('Failed to log sync conflict:', e);
+    }
   }
 
   /**

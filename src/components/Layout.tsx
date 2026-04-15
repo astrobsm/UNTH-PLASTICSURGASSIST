@@ -43,11 +43,13 @@ import {
   CalendarCheck,
   Stethoscope,
   Wine,
-  Waves
+  Waves,
+  Search
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import SyncStatusIndicator from './SyncStatusIndicator';
 import { HeaderCheckForUpdates } from './SWUpdateBanner';
+import { OfflineSearchModal } from './OfflineSearchModal';
 
 interface LayoutProps {
   children: ReactNode;
@@ -116,6 +118,9 @@ export default function Layout({ children }: LayoutProps) {
     const saved = localStorage.getItem('sidebar-collapsed');
     return saved ? JSON.parse(saved) : false;
   });
+
+  // Global offline search modal
+  const [searchOpen, setSearchOpen] = useState(false);
 
   useEffect(() => {
     localStorage.setItem('sidebar-collapsed', JSON.stringify(isCollapsed));
@@ -188,6 +193,15 @@ export default function Layout({ children }: LayoutProps) {
             
             {/* Right side - User actions */}
             <div className="flex items-center space-x-1 sm:space-x-4">
+              {/* Global Search */}
+              <button
+                onClick={() => setSearchOpen(true)}
+                className="p-2 text-sky-300 hover:text-white rounded-full hover:bg-navy-700"
+                title="Search (offline)"
+              >
+                <Search className="h-5 w-5 sm:h-6 sm:w-6" />
+              </button>
+
               {/* Check for Updates */}
               <HeaderCheckForUpdates />
               
@@ -363,6 +377,9 @@ export default function Layout({ children }: LayoutProps) {
           </div>
         </main>
       </div>
+
+      {/* Global Offline Search Modal */}
+      <OfflineSearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>
   );
 }

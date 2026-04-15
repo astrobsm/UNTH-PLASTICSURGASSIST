@@ -33,6 +33,7 @@ import { bulkMigrationService, MigrationProgress } from '../services/bulkMigrati
 import { db } from '../db/database';
 import { useAuthStore } from '../store/authStore';
 import toast from 'react-hot-toast';
+import { SyncConflictsViewer } from '../components/SyncConflictsViewer';
 
 interface LocalDataSummary {
   entity: string;
@@ -717,6 +718,9 @@ export default function Settings() {
           </div>
         )}
       </div>
+
+      {/* ──────────────────────── SYNC CONFLICTS LOG ──────────────────────── */}
+      <SyncConflictsViewer />
 
       {/* ──────────────────────── ACCOUNT SECTION ──────────────────────── */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">

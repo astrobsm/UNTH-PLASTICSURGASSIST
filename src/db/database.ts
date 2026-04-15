@@ -232,6 +232,8 @@ export class PlasticSurgeonDB extends Dexie {
   lymphedema_assessments!: Table<any>; // For lymphedema assessments
   call_duty_handover_notes!: Table<any>; // For call duty handover notes & outstanding tasks
   fluid_balance!: Table<any>; // For fluid input/output balance tracking
+  offline_credentials!: Table<any>; // Offline auth: hashed credentials for offline login
+  sync_conflicts!: Table<any>; // Sync conflict log for manual resolution
 
   constructor() {
     super('PlasticSurgeonDB');
@@ -1291,6 +1293,12 @@ export class PlasticSurgeonDB extends Dexie {
     // Version 33: Add fluid balance tracking table
     this.version(33).stores({
       fluid_balance: '++id, patient_id, hospital_number, chart_date, recorded_at, entry_type, fluid_type, volume_ml, route, recorded_by, created_at'
+    });
+
+    // Version 34: Offline auth credentials + sync conflict log
+    this.version(34).stores({
+      offline_credentials: '++id, &email, userId, updatedAt',
+      sync_conflicts: '++id, entity, entityId, resolvedAt, created_at'
     });
 
     // Add hooks to automatically track changes

@@ -17,9 +17,9 @@ interface SyncResult {
 }
 
 // Maximum retries before an item is permanently removed from the queue
-const MAX_RETRIES = 3;
-// Maximum age (in ms) for a sync queue item before it's considered stale (7 days)
-const MAX_ITEM_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const MAX_RETRIES = 5;
+// Maximum age (in ms) for a sync queue item before it's considered stale (30 days)
+const MAX_ITEM_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 class SyncService {
   private isOnline = navigator.onLine;

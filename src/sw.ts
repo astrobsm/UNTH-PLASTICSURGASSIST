@@ -106,7 +106,7 @@ self.addEventListener('activate', (event) => {
 
 // ─── Background Sync Plugin for offline mutations ───────────
 const bgSyncPlugin = new BackgroundSyncPlugin('offlineMutationQueue', {
-  maxRetentionTime: 24 * 60, // 24 hours in minutes
+  maxRetentionTime: 30 * 24 * 60, // 30 days in minutes
   onSync: async ({ queue }) => {
     let entry;
     let syncedCount = 0;
