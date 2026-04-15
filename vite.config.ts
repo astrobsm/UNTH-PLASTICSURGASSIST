@@ -116,14 +116,8 @@ export default defineConfig({
   // Build optimization for offline
   build: {
     sourcemap: false,
-    minify: 'terser',
-    terserOptions: {
-      compress: {
-        drop_console: false,
-        drop_debugger: true,
-        passes: 2,
-      },
-    },
+    // Use esbuild (default) for much faster minification (~10x faster than terser)
+    minify: 'esbuild',
     cssCodeSplit: true,
     rollupOptions: {
       output: {

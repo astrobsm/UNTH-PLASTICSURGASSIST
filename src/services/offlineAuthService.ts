@@ -31,9 +31,10 @@ export interface OfflineCredential {
 
 // ── Crypto helpers ───────────────────────────────────────────────────
 
-/** Convert ArrayBuffer → hex string */
-function bufToHex(buffer: ArrayBuffer): string {
-  return Array.from(new Uint8Array(buffer))
+/** Convert ArrayBuffer or Uint8Array → hex string */
+function bufToHex(buffer: ArrayBuffer | Uint8Array): string {
+  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+  return Array.from(bytes)
     .map(b => b.toString(16).padStart(2, '0'))
     .join('');
 }
@@ -61,7 +62,7 @@ async function deriveHash(password: string, salt: Uint8Array): Promise<string> {
   const bits = await crypto.subtle.deriveBits(
     {
       name: 'PBKDF2',
-      salt,
+      salt: salt.buffer as ArrayBuffer,
       iterations: 100_000,
       hash: 'SHA-256',
     },

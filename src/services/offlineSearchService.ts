@@ -176,18 +176,18 @@ export async function offlineSearch(
         !s.deleted &&
         (matches(s.procedure_name, q) ||
          matches(s.patient_name, q) ||
-         matches(s.surgeon_name, q) ||
+         matches(s.primary_surgeon, q) ||
          matches(s.notes, q))
       ).limit(limit).toArray();
 
       for (const s of surgeries) {
         if (full()) break;
         push({
-          type: 'surgery', id: s.id!, patientId: s.patient_id,
+          type: 'surgery', id: Number(s.id) || 0, patientId: s.patient_id,
           title: s.procedure_name || 'Surgery',
-          subtitle: `${s.patient_name || ''} • ${s.surgeon_name || ''}`.trim(),
+          subtitle: `${s.patient_name || ''} • ${s.primary_surgeon || ''}`.trim(),
           matchedField: matches(s.procedure_name, q) ? 'Procedure' : 'Name',
-          timestamp: s.surgery_date ? new Date(s.surgery_date) : undefined,
+          timestamp: s.date ? new Date(s.date) : undefined,
         });
       }
     } catch { /* */ }
@@ -199,16 +199,16 @@ export async function offlineSearch(
       const rounds = await db.ward_rounds.filter((w: any) =>
         !w.deleted &&
         (matches(w.notes, q) ||
-         matches(w.findings, q) ||
-         matches(w.instructions, q))
+         matches(w.clinical_notes, q) ||
+         matches(w.assessment, q))
       ).limit(limit).toArray();
 
       for (const w of rounds) {
         if (full()) break;
         push({
-          type: 'ward_round', id: w.id!, patientId: w.patient_id,
+          type: 'ward_round', id: Number(w.id) || 0, patientId: w.patient_id,
           title: `Ward Round ${w.id}`,
-          subtitle: (w.notes || w.findings || '').slice(0, 80),
+          subtitle: (w.notes || w.clinical_notes || '').slice(0, 80),
           matchedField: 'Notes',
           timestamp: w.date ? new Date(w.date) : undefined,
         });
@@ -221,18 +221,18 @@ export async function offlineSearch(
     try {
       const labs = await db.lab_investigations.filter((l: any) =>
         !l.deleted &&
-        (matches(l.test_name, q) ||
-         matches(l.category, q) ||
-         matches(l.notes, q))
+        (matches(l.clinical_indication, q) ||
+         matches(l.patient_name, q) ||
+         matches(l.special_instructions, q))
       ).limit(limit).toArray();
 
       for (const l of labs) {
         if (full()) break;
         push({
-          type: 'lab', id: l.id!, patientId: l.patient_id,
-          title: l.test_name || 'Lab Investigation',
-          subtitle: `${l.category || ''} • ${l.status || ''}`.trim(),
-          matchedField: 'Test', timestamp: l.created_at ? new Date(l.created_at) : undefined,
+          type: 'lab', id: Number(l.id) || 0, patientId: l.patient_id,
+          title: l.clinical_indication || 'Lab Investigation',
+          subtitle: `${l.patient_name || ''} • ${l.status || ''}`.trim(),
+          matchedField: 'Lab', timestamp: l.created_at ? new Date(l.created_at) : undefined,
         });
       }
     } catch { /* */ }

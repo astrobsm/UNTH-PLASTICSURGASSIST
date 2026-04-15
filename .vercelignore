@@ -1,0 +1,27 @@
+# Skip uploading files that are not needed for the Vercel build
+*.md
+*.sql
+*.bat
+*.html
+!index.html
+!public/**
+tsc-output*.txt
+local-server.js
+compare-schemas.js
+create-*.js
+check-*.js
+fix-*.js
+fix-*.cjs
+fix-*.py
+test-*.js
+test-*.html
+migrate-*.js
+migrate-*.mjs
+run-migrations.js
+approve-*.js
+approve-*.html
+clear-db.html
+unregister-sw.html
+openapi.yaml
+.github/
+server/
