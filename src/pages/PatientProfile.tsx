@@ -38,6 +38,15 @@ export const PatientProfile: React.FC = () => {
 
   useEffect(() => {
     if (id) {
+      // CRITICAL: Reset all state when patient changes to prevent cross-patient data contamination
+      setPatient(null);
+      setAdmissionStatus(null);
+      setMedicalTeam([]);
+      setMdtInfo(null);
+      setShowEditModal(false);
+      setShowPrescriptionModal(false);
+      setEditFormData({});
+      setLoading(true);
       loadPatientData();
       loadAdmissionStatus();
       loadMDTInfo();
@@ -182,12 +191,12 @@ export const PatientProfile: React.FC = () => {
         // Also check latest admission for admitting doctor/consultant
         if (fallbackTeam.length === 0) {
           try {
-            const admissions = await db.admissions?.toArray() || [];
-            const patientAdmissions = admissions.filter(a => 
-              (String(a.patient_id) === String(id) || 
-               String((a as any).hospital_number) === String(patient?.hospital_number)) && 
-              a.status === 'active'
-            );
+            const pid = typeof id === 'string' ? parseInt(id, 10) : Number(id);
+            let admissions = await db.admissions?.where('patient_id').equals(pid).toArray() || [];
+            if (admissions.length === 0) {
+              admissions = await db.admissions?.where('patient_id').equals(String(id)).toArray() || [];
+            }
+            const patientAdmissions = admissions.filter(a => a.status === 'active');
             const latestAdm = patientAdmissions.sort((a, b) => 
               new Date(b.admission_date || b.created_at).getTime() - new Date(a.admission_date || a.created_at).getTime()
             )[0];
@@ -674,6 +683,12 @@ const EncountersTab: React.FC<{ patientId: string; hospitalNumber: string; patie
 
   useEffect(() => {
     mountedRef.current = true;
+    // CRITICAL: Reset state to prevent showing previous patient's data
+    setEncounters([]);
+    setNewNote('');
+    setShowNewEncounter(false);
+    setShowOCRScanner(false);
+    setLoading(true);
     loadEncounters();
     // Re-fetch when user returns to tab or comes back online
     const onVisible = () => { if (document.visibilityState === 'visible' && mountedRef.current) loadEncounters(true); };
@@ -747,13 +762,21 @@ const EncountersTab: React.FC<{ patientId: string; hospitalNumber: string; patie
       for (const n of notes) {
         try { if (db.progress_notes) await db.progress_notes.put({ ...n, patient_id: typeof n.patient_id === 'string' ? parseInt(n.patient_id, 10) : n.patient_id, synced: true }); } catch { /* ok */ }
       }
-      // Also merge in any un-synced local notes
+      // Also merge in any un-synced local notes — use indexed query instead of full table scan
       let localOnlyNotes: any[] = [];
       try {
-        const allLocal = await db.progress_notes?.toArray() || [];
         const syncedIds = new Set(notes.map((n: any) => String(n.id)));
-        localOnlyNotes = allLocal.filter((n: any) =>
-          (String(n.patient_id) === String(patientId) || String(n.patient_id) === String(pid)) && !n.synced && !syncedIds.has(String(n.id))
+        const pid = Number(patientId) || patientId;
+        // Use indexed query for patient_id to avoid loading all records
+        let localNotes: any[] = [];
+        try {
+          localNotes = await db.progress_notes?.where('patient_id').equals(pid).toArray() || [];
+        } catch {
+          // Fallback to string match if type mismatch 
+          localNotes = await db.progress_notes?.where('patient_id').equals(String(patientId)).toArray() || [];
+        }
+        localOnlyNotes = localNotes.filter((n: any) =>
+          !n.synced && !syncedIds.has(String(n.id))
         );
       } catch { /* ok */ }
       // Merge and sort chronologically
@@ -764,17 +787,21 @@ const EncountersTab: React.FC<{ patientId: string; hospitalNumber: string; patie
       ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       if (mountedRef.current) setEncounters(all);
     } catch {
-      // Fallback to IndexedDB when offline / API error — query BOTH string and numeric patient_id
+      // Fallback to IndexedDB when offline / API error — use indexed queries
       try {
         const pid = Number(patientId) || patientId;
-        const allLocal = await db.progress_notes?.toArray() || [];
-        const localNotes = allLocal.filter((n: any) =>
-          String(n.patient_id) === String(patientId) || String(n.patient_id) === String(pid)
-        );
-        const allAdm = await db.admissions?.toArray() || [];
-        const localAdm = allAdm.filter((a: any) =>
-          String(a.patient_id) === String(patientId) || String(a.patient_id) === String(pid) || String(a.hospital_number) === String(patientId)
-        );
+        let localNotes: any[] = [];
+        try {
+          localNotes = await db.progress_notes?.where('patient_id').equals(pid).toArray() || [];
+        } catch {
+          localNotes = await db.progress_notes?.where('patient_id').equals(String(patientId)).toArray() || [];
+        }
+        let localAdm: any[] = [];
+        try {
+          localAdm = await db.admissions?.where('patient_id').equals(pid).toArray() || [];
+        } catch {
+          localAdm = await db.admissions?.where('patient_id').equals(String(patientId)).toArray() || [];
+        }
         const all = [
           ...localNotes.map((n: any) => ({ ...n, _type: n.type || 'progress_note', created_at: n.created_at || n.date })),
           ...localAdm.map((a: any) => ({ ...a, _type: 'admission', created_at: a.admission_date || a.created_at })),
@@ -1014,7 +1041,16 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; userN
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { loadVitals(); }, [patientId]);
+  // CRITICAL: Reset ALL local state when patient changes to prevent data contamination
+  useEffect(() => {
+    setVitals([]);
+    setBatchRows([{ date: new Date().toISOString().slice(0, 16) }]);
+    setOcrVitalsEntries([]);
+    setShowForm(false);
+    setShowVitalsOCR(false);
+    setShowOCRReview(false);
+    loadVitals();
+  }, [patientId]);
   useEffect(() => { if (vitals.length > 1) drawChart(); }, [vitals]);
 
   const loadVitals = async () => {

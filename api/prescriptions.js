@@ -48,20 +48,21 @@ async function getAllPrescriptions(searchParams, res) {
   const patientId = searchParams.get('patientId');
   const status = searchParams.get('status');
 
+  // SECURITY: patientId is REQUIRED to prevent cross-patient data leakage
+  if (!patientId) {
+    return res.status(400).json({ error: 'patientId is required' });
+  }
+
   let queryStr = `
     SELECT pr.*, p.first_name, p.last_name, p.hospital_number
     FROM prescriptions pr
     LEFT JOIN patients p ON pr.patient_id = p.id
-    WHERE 1=1
+    WHERE pr.patient_id = $1
   `;
-  const params = [];
-  let paramCount = 1;
+  const params = [patientId];
+  let paramCount = 2;
 
-  if (patientId) {
-    queryStr += ` AND pr.patient_id = $${paramCount}`;
-    params.push(patientId);
-    paramCount++;
-  }
+  if (false) { /* patientId is always applied above */ }
 
   if (status) {
     queryStr += ` AND pr.status = $${paramCount}`;

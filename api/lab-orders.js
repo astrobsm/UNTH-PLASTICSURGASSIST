@@ -48,22 +48,23 @@ async function getAllLabOrders(searchParams, res) {
   const patientId = searchParams.get('patientId');
   const status = searchParams.get('status');
 
+  // SECURITY: patientId is REQUIRED to prevent cross-patient data leakage
+  if (!patientId) {
+    return res.status(400).json({ error: 'patientId is required' });
+  }
+
   let queryStr = `
     SELECT lo.*, p.first_name, p.last_name, p.hospital_number,
            u.full_name AS ordered_by_name, u.username AS ordered_by_username
     FROM lab_orders lo
     LEFT JOIN patients p ON lo.patient_id = p.id
     LEFT JOIN users u ON lo.ordered_by::text = u.id::text
-    WHERE 1=1
+    WHERE lo.patient_id = $1
   `;
-  const params = [];
-  let paramCount = 1;
+  const params = [patientId];
+  let paramCount = 2;
 
-  if (patientId) {
-    queryStr += ` AND lo.patient_id = $${paramCount}`;
-    params.push(patientId);
-    paramCount++;
-  }
+  if (false) { /* patientId is always applied above */ }
 
   if (status) {
     queryStr += ` AND lo.status = $${paramCount}`;

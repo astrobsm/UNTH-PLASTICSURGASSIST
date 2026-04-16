@@ -118,6 +118,15 @@ export const useAuthStore = create<AuthState>()(
       logout: () => {
         clearEncryption();
         localStorage.removeItem('userId');
+        // SECURITY: Clear all patient-specific data from localStorage to prevent cross-user data leakage
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('vitals_')) {
+            keysToRemove.push(key);
+          }
+        }
+        keysToRemove.forEach(k => localStorage.removeItem(k));
         set({ user: null, token: null, loading: false });
         apiClient.logout();
       },

@@ -170,15 +170,46 @@ async function getSyncPatientById(id, res) {
 
 async function getSyncEntity(tableName, res, searchParams) {
   const since = searchParams?.get('since');
+  const patientId = searchParams?.get('patientId');
   let queryStr;
   let params = [];
 
-  if (since) {
-    // Incremental sync: only return records updated after the given timestamp
-    queryStr = `SELECT * FROM ${tableName} WHERE updated_at > $1 ORDER BY updated_at DESC LIMIT 5000`;
-    params = [since];
+  // Tables that are NOT patient-scoped (global/system tables)
+  const nonPatientTables = [
+    'cme_topics', 'cme_articles', 'cme_reading_progress', 'cme_test_sessions',
+    'cme_progress', 'cme_certificates', 'educational_topics', 'weekly_contents',
+    'topic_schedules', 'education_user_progress', 'ps_unit_rosters',
+    'shopping_lists', 'call_duty_roster', 'cbt_attempts', 'notice_board',
+    'rotation_configs', 'assigned_responsibilities'
+  ];
+
+  const isPatientScoped = !nonPatientTables.includes(tableName);
+
+  if (isPatientScoped && patientId) {
+    // Patient-scoped query: ALWAYS filter by patient_id when provided
+    const parsedPatientId = parseInt(patientId, 10);
+    if (isNaN(parsedPatientId)) {
+      return res.status(400).json({ error: 'Invalid patientId' });
+    }
+    if (since) {
+      queryStr = `SELECT * FROM ${tableName} WHERE patient_id = $1 AND updated_at > $2 ORDER BY updated_at DESC LIMIT 1000`;
+      params = [parsedPatientId, since];
+    } else {
+      queryStr = `SELECT * FROM ${tableName} WHERE patient_id = $1 ORDER BY updated_at DESC LIMIT 1000`;
+      params = [parsedPatientId];
+    }
+  } else if (isPatientScoped && !patientId) {
+    // Patient-scoped table but no patientId provided: return empty to prevent data leakage
+    // Callers MUST provide patientId for patient-scoped tables
+    return res.status(400).json({ error: 'patientId is required for patient-scoped data' });
   } else {
-    queryStr = `SELECT * FROM ${tableName} ORDER BY updated_at DESC LIMIT 5000`;
+    // Non-patient-scoped table: return all (with since filter if applicable)
+    if (since) {
+      queryStr = `SELECT * FROM ${tableName} WHERE updated_at > $1 ORDER BY updated_at DESC LIMIT 5000`;
+      params = [since];
+    } else {
+      queryStr = `SELECT * FROM ${tableName} ORDER BY updated_at DESC LIMIT 5000`;
+    }
   }
 
   const result = await query(queryStr, params);

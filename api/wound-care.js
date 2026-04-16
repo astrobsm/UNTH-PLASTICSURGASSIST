@@ -47,20 +47,19 @@ export default async function handler(req, res) {
 async function getAllWoundCareRecords(searchParams, res) {
   const patientId = searchParams.get('patientId');
 
+  // SECURITY: patientId is REQUIRED to prevent cross-patient data leakage
+  if (!patientId) {
+    return res.status(400).json({ error: 'patientId is required' });
+  }
+
   let queryStr = `
     SELECT wcr.*, p.first_name, p.last_name, p.hospital_number
     FROM wound_care_records wcr
     LEFT JOIN patients p ON wcr.patient_id = p.id
-    WHERE 1=1
+    WHERE wcr.patient_id = $1
   `;
-  const params = [];
-  let paramCount = 1;
-
-  if (patientId) {
-    queryStr += ` AND wcr.patient_id = $${paramCount}`;
-    params.push(patientId);
-    paramCount++;
-  }
+  const params = [patientId];
+  let paramCount = 2;
 
   queryStr += ` ORDER BY wcr.recorded_at DESC`;
 

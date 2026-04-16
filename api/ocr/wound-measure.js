@@ -91,6 +91,10 @@ async function analyzeWound(body, user, res) {
     return res.status(400).json({ error: 'imageBase64 is required' });
   }
 
+  if (!patientId) {
+    return res.status(400).json({ error: 'patientId is required' });
+  }
+
   // Validate base64 length (max 15MB)
   if (imageBase64.length > 20_000_000) {
     return res.status(400).json({ error: 'Image too large. Maximum 15MB.' });

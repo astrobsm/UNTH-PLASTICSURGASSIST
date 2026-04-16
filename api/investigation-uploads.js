@@ -69,16 +69,16 @@ async function ensureTable() {
 async function getAllUploads(searchParams, res) {
   const patientId = searchParams.get('patientId');
 
+  // SECURITY: patientId is REQUIRED to prevent cross-patient data leakage
+  if (!patientId) {
+    return res.status(400).json({ error: 'patientId is required' });
+  }
+
   let queryStr = `SELECT id, patient_id, hospital_number, upload_type, file_name, 
     ocr_text, test_name, results, ocr_extracted, status, uploaded_by, created_at 
-    FROM investigation_uploads WHERE 1=1`;
-  const params = [];
-  let paramCount = 1;
-
-  if (patientId) {
-    queryStr += ` AND patient_id = $${paramCount++}`;
-    params.push(parseInt(patientId, 10));
-  }
+    FROM investigation_uploads WHERE patient_id = $1`;
+  const params = [parseInt(patientId, 10)];
+  let paramCount = 2;
 
   queryStr += ` ORDER BY created_at DESC LIMIT 200`;
 

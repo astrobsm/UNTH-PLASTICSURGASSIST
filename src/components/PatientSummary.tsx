@@ -69,11 +69,22 @@ export const PatientSummaryView: React.FC<PatientSummaryViewProps> = ({
   };
 
   const generateSummaryFromPatientData = async (patient: any, type: PatientSummary['summary_type']): Promise<PatientSummary> => {
-    // Get related data from local DB
-    const allAdmissions = await db.admissions?.toArray() || [];
-    const admissions = allAdmissions.filter(a => String(a.patient_id) === String(patient.id));
-    const allTreatmentPlans = await db.treatment_plans?.toArray() || [];
-    const treatmentPlans = allTreatmentPlans.filter(tp => String(tp.patient_id) === String(patient.id));
+    // Get related data from local DB — use indexed queries, not toArray().filter()
+    const pid = typeof patient.id === 'string' ? parseInt(patient.id, 10) : patient.id;
+    let admissions: any[] = [];
+    try {
+      admissions = await db.admissions?.where('patient_id').equals(pid).toArray() || [];
+      if (admissions.length === 0) {
+        admissions = await db.admissions?.where('patient_id').equals(String(patient.id)).toArray() || [];
+      }
+    } catch { admissions = []; }
+    let treatmentPlans: any[] = [];
+    try {
+      treatmentPlans = await db.treatment_plans?.where('patient_id').equals(pid).toArray() || [];
+      if (treatmentPlans.length === 0) {
+        treatmentPlans = await db.treatment_plans?.where('patient_id').equals(String(patient.id)).toArray() || [];
+      }
+    } catch { treatmentPlans = []; }
     const latestAdmission = admissions.sort((a, b) => 
       new Date(b.admission_date || b.created_at).getTime() - new Date(a.admission_date || a.created_at).getTime()
     )[0];
@@ -214,10 +225,15 @@ export const PatientSummaryView: React.FC<PatientSummaryViewProps> = ({
       }
     });
     
-    // Medications from treatment plans or prescriptions
+    // Medications from treatment plans or prescriptions — use indexed queries
     const medications: string[] = [];
-    const allPrescriptions = await db.prescriptions?.toArray() || [];
-    const prescriptions = allPrescriptions.filter(p => String(p.patient_id) === String(patient.id));
+    let prescriptions: any[] = [];
+    try {
+      prescriptions = await db.prescriptions?.where('patient_id').equals(pid).toArray() || [];
+      if (prescriptions.length === 0) {
+        prescriptions = await db.prescriptions?.where('patient_id').equals(String(patient.id)).toArray() || [];
+      }
+    } catch { prescriptions = []; }
     prescriptions.forEach(p => {
       // Handle bundled prescription format: { prescriptions: [{medication, dosage, ...}] }
       if (p.prescriptions && Array.isArray(p.prescriptions)) {
@@ -600,16 +616,26 @@ export const QuickSummaryCard: React.FC<{ patientId: string }> = ({ patientId })
               const patient = await patientService.getPatient(patientId);
               if (patient) {
                 const { PatientSummaryView } = await import('./PatientSummary');
-                // Generate from real data
-                const allAdmissions = await db.admissions?.toArray() || [];
-                const admissions = allAdmissions.filter(a => String(a.patient_id) === String(patient.id));
-                const allTreatmentPlans = await db.treatment_plans?.toArray() || [];
-                const treatmentPlans = allTreatmentPlans.filter(tp => String(tp.patient_id) === String(patient.id));
+                // Generate from real data — use indexed queries, not toArray().filter()
+                const pid2 = typeof patient.id === 'string' ? parseInt(patient.id, 10) : patient.id;
+                let admissions: any[] = [];
+                try {
+                  admissions = await db.admissions?.where('patient_id').equals(pid2).toArray() || [];
+                  if (admissions.length === 0) admissions = await db.admissions?.where('patient_id').equals(String(patient.id)).toArray() || [];
+                } catch { admissions = []; }
+                let treatmentPlans: any[] = [];
+                try {
+                  treatmentPlans = await db.treatment_plans?.where('patient_id').equals(pid2).toArray() || [];
+                  if (treatmentPlans.length === 0) treatmentPlans = await db.treatment_plans?.where('patient_id').equals(String(patient.id)).toArray() || [];
+                } catch { treatmentPlans = []; }
                 const latestAdmission = admissions.sort((a, b) =>
                   new Date(b.admission_date || b.created_at).getTime() - new Date(a.admission_date || a.created_at).getTime()
                 )[0];
-                const allPrescriptions = await db.prescriptions?.toArray() || [];
-                const prescriptions = allPrescriptions.filter(p => String(p.patient_id) === String(patient.id));
+                let prescriptions: any[] = [];
+                try {
+                  prescriptions = await db.prescriptions?.where('patient_id').equals(pid2).toArray() || [];
+                  if (prescriptions.length === 0) prescriptions = await db.prescriptions?.where('patient_id').equals(String(patient.id)).toArray() || [];
+                } catch { prescriptions = []; }
 
                 const patientName = `${patient.first_name} ${patient.last_name}`;
                 const diagnosis = patient.primary_diagnosis || latestAdmission?.provisional_diagnosis || latestAdmission?.admitting_diagnosis || 'Not specified';
