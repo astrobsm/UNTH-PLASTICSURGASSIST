@@ -2112,6 +2112,93 @@ async function createTables() {
         ALTER TABLE call_duty_roster ADD COLUMN status VARCHAR(50) DEFAULT 'active';
       END IF;
     END $$;
+
+    -- =====================================================
+    -- OCR SCAN HISTORY & WOUND MEASUREMENTS
+    -- =====================================================
+
+    -- OCR Scan History — audit trail for all OCR scans
+    CREATE TABLE IF NOT EXISTS ocr_scan_history (
+      id SERIAL PRIMARY KEY,
+      patient_id INTEGER,
+      hospital_number VARCHAR(100),
+      document_type VARCHAR(50) NOT NULL DEFAULT 'general',
+      scan_source VARCHAR(30) DEFAULT 'camera',
+      ocr_method VARCHAR(30),
+      ai_processed BOOLEAN DEFAULT FALSE,
+      confidence DECIMAL(4,3) DEFAULT 0,
+      raw_text TEXT,
+      structured_data JSONB DEFAULT '{}',
+      image_quality VARCHAR(20),
+      processing_time_ms INTEGER,
+      error_message TEXT,
+      scanned_by INTEGER,
+      applied_to_form VARCHAR(50),
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_ocr_scan_history_patient ON ocr_scan_history(patient_id);
+    CREATE INDEX IF NOT EXISTS idx_ocr_scan_history_date ON ocr_scan_history(created_at);
+
+    -- Wound Measurements — serial wound measurements for trending
+    CREATE TABLE IF NOT EXISTS wound_measurements (
+      id SERIAL PRIMARY KEY,
+      patient_id INTEGER NOT NULL,
+      wound_record_id INTEGER,
+      measured_by INTEGER,
+      length_cm DECIMAL(6,2),
+      width_cm DECIMAL(6,2),
+      depth_cm DECIMAL(6,2),
+      area_cm2 DECIMAL(8,2),
+      granulation_pct DECIMAL(5,2),
+      slough_pct DECIMAL(5,2),
+      necrotic_pct DECIMAL(5,2),
+      epithelialization_pct DECIMAL(5,2),
+      wound_type VARCHAR(100),
+      wound_bed_color VARCHAR(100),
+      edges VARCHAR(100),
+      exudate VARCHAR(50),
+      exudate_type VARCHAR(50),
+      surrounding_skin VARCHAR(100),
+      healing_stage VARCHAR(50),
+      signs_of_infection JSONB DEFAULT '[]',
+      graft_viability VARCHAR(50) DEFAULT 'N/A',
+      flap_status VARCHAR(50) DEFAULT 'N/A',
+      calibration_type VARCHAR(50) DEFAULT 'none',
+      ai_confidence DECIMAL(4,3) DEFAULT 0,
+      ai_raw_response JSONB DEFAULT '{}',
+      observations TEXT,
+      image_data TEXT,
+      measured_at TIMESTAMPTZ DEFAULT NOW(),
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_wound_measurements_patient ON wound_measurements(patient_id);
+    CREATE INDEX IF NOT EXISTS idx_wound_measurements_record ON wound_measurements(wound_record_id);
+    CREATE INDEX IF NOT EXISTS idx_wound_measurements_date ON wound_measurements(measured_at);
+
+    -- Clinical Notes OCR Extractions — structured entities from clinical notes
+    CREATE TABLE IF NOT EXISTS clinical_notes_extractions (
+      id SERIAL PRIMARY KEY,
+      patient_id INTEGER NOT NULL,
+      hospital_number VARCHAR(100),
+      source_type VARCHAR(50) NOT NULL DEFAULT 'ward_round',
+      scan_id INTEGER,
+      diagnoses JSONB DEFAULT '[]',
+      procedures_mentioned JSONB DEFAULT '[]',
+      medications_extracted JSONB DEFAULT '[]',
+      allergies_extracted JSONB DEFAULT '[]',
+      vitals_extracted JSONB DEFAULT '{}',
+      labs_extracted JSONB DEFAULT '[]',
+      soap_note JSONB DEFAULT '{}',
+      entities JSONB DEFAULT '[]',
+      confidence DECIMAL(4,3) DEFAULT 0,
+      reviewed BOOLEAN DEFAULT FALSE,
+      reviewed_by INTEGER,
+      reviewed_at TIMESTAMPTZ,
+      extracted_by INTEGER,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_clinical_notes_ext_patient ON clinical_notes_extractions(patient_id);
+    CREATE INDEX IF NOT EXISTS idx_clinical_notes_ext_date ON clinical_notes_extractions(created_at);
   `;
 
   await query(schema);

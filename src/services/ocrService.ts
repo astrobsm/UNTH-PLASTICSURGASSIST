@@ -9,6 +9,8 @@
 
 import { createWorker, Worker, PSM, OEM } from 'tesseract.js';
 import { apiClient } from './apiClient';
+import { validateVitals, validateLabValue, assessImageQuality, type ValidatedVitalReading, type VitalAlert } from './medicalValidation';
+import { extractClinicalNotes, type ClinicalNotesExtractionResult } from './clinicalNotesExtraction';
 
 export interface OCRResult {
   text: string;
@@ -1388,23 +1390,51 @@ class OCRService {
 
     if (Object.keys(vitals).length > 0) result.vitals = vitals;
 
+    // Validate vitals using medical validation service
+    if (result.vitals && Object.keys(result.vitals).length > 0) {
+      const validated = validateVitals(result.vitals);
+      result.validatedVitals = validated;
+      result.alerts = validated.alerts;
+      if (validated.overallConfidence > result.confidence) {
+        result.confidence = Math.min(result.confidence + 0.1, validated.overallConfidence);
+      }
+    }
+
     // Detect post-op / observation charts and extract time-series vital signs
     const vitalsSeries = this.parseVitalSignsSeries(text);
     if (vitalsSeries && vitalsSeries.length >= 1) {
       result.vital_signs_series = vitalsSeries;
       result.confidence = 0.6; // Higher confidence for structured chart data
+
+      // Validate each reading in the series
+      result.validated_series = vitalsSeries.map((reading: any) => {
+        const validated = validateVitals(reading);
+        return { ...reading, validation: validated };
+      });
+      // Collect all alerts from series
+      const seriesAlerts: VitalAlert[] = [];
+      for (const r of result.validated_series) {
+        if (r.validation?.alerts) seriesAlerts.push(...r.validation.alerts);
+      }
+      result.series_alerts = seriesAlerts;
     }
 
-    // Extract lab values using existing patterns
+    // Extract lab values using existing patterns + validate
     const labValues = this.extractLabValues(text);
     if (Object.keys(labValues).length > 0) {
-      result.investigations = Object.entries(labValues).map(([name, data]) => ({
-        type: 'lab',
-        name: name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
-        result: data.value,
-        unit: data.unit || '',
-        abnormal: false,
-      }));
+      result.investigations = Object.entries(labValues).map(([name, data]) => {
+        const validation = validateLabValue(name, data.value);
+        return {
+          type: 'lab',
+          name: name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+          result: data.value,
+          unit: data.unit || '',
+          abnormal: validation.severity !== 'normal',
+          severity: validation.severity,
+          validationMessage: validation.message,
+          confidence: validation.confidence,
+        };
+      });
     }
 
     // Extract medications (simple pattern matching)
@@ -1460,6 +1490,11 @@ export interface AIEnhancedOCRResult extends OCRResult {
   structuredData: any;
   aiConfidence: number;
   aiProcessed: boolean;
+  validatedVitals?: ValidatedVitalReading;
+  alerts?: VitalAlert[];
+  validated_series?: any[];
+  series_alerts?: VitalAlert[];
+  clinicalExtraction?: ClinicalNotesExtractionResult;
 }
 
 export const ocrService = new OCRService();

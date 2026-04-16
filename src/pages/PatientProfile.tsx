@@ -3591,9 +3591,8 @@ const MDTCareTab: React.FC<{
         <DocumentScannerModal
           isOpen={showOCRScanner}
           onClose={() => setShowOCRScanner(false)}
-          onExtracted={handleOCRExtracted}
+          onFieldsExtracted={handleOCRExtracted}
           documentType="consultation"
-          {...{} as any}
         />
       )}
     </div>

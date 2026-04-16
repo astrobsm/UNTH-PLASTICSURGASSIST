@@ -241,17 +241,51 @@ IMPORTANT:
 - Sort readings chronologically
 - Include datetime as ISO format when you can determine both date and time`;
 
+const FLUID_CHART_PROMPT = `You are an expert medical fluid balance chart reader. You are reading a photograph of a hospital intake/output (I&O) or fluid balance chart. These are typically handwritten on standard hospital forms.
+
+Extract ALL fluid entries and return as JSON:
+{
+  "date": "YYYY-MM-DD",
+  "entries": [
+    {
+      "time": "HH:MM",
+      "type": "input" | "output",
+      "fluid_type": "e.g. Normal Saline, Ringers Lactate, Urine, Drain, Blood",
+      "route": "IV | Oral | NG | Drain | Catheter | Other",
+      "volume_ml": number,
+      "rate_ml_hr": number | null,
+      "notes": "any additional notes"
+    }
+  ],
+  "subtotals": {
+    "total_input_ml": number,
+    "total_output_ml": number,
+    "net_balance_ml": number
+  }
+}
+
+IMPORTANT:
+- Nigerian hospitals commonly use: N/S (Normal Saline), R/L (Ringer's Lactate), D5W (5% Dextrose), D/S (Dextrose Saline)
+- Output categories: Urine, Drain, NGT aspirate, Vomitus, Wound drainage
+- Volumes may be in ml or litres — convert all to ml
+- Times may be in 12-hour or 24-hour format — standardize to 24-hour
+- If handwriting is unclear, provide best estimate with a note
+- Include running totals if visible on chart`;
+
 async function runGPT4oVisionOCR(base64Image, mimeType, documentType, patientContext, apiKey) {
   // Strip data URI prefix if present, then re-add for the API
   const cleanBase64 = base64Image.replace(/^data:[^;]+;base64,/, '');
   const dataUri = `data:${mimeType || 'image/jpeg'};base64,${cleanBase64}`;
 
-  // Use specialized prompt for vital signs charts
+  // Use specialized prompt for vital signs charts or fluid charts
   const isVitalSignsChart = documentType === 'vital_signs_chart';
-  const systemPrompt = isVitalSignsChart ? VITAL_SIGNS_CHART_PROMPT : VISION_OCR_SYSTEM_PROMPT;
+  const isFluidChart = documentType === 'fluid_chart';
+  const systemPrompt = isVitalSignsChart ? VITAL_SIGNS_CHART_PROMPT : isFluidChart ? FLUID_CHART_PROMPT : VISION_OCR_SYSTEM_PROMPT;
 
   let userMessage = isVitalSignsChart
     ? 'Please read this vital signs monitoring chart and extract ALL vital sign readings with their dates and times.'
+    : isFluidChart
+    ? 'Please read this fluid balance/intake-output chart and extract ALL fluid entries with times, types, routes, and volumes.'
     : `Please read and transcribe all text from this medical document image. Document type hint: ${documentType || 'general'}.`;
 
   if (patientContext) {
