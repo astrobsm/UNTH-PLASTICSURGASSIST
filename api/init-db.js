@@ -1628,6 +1628,490 @@ async function createTables() {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
     CREATE INDEX IF NOT EXISTS idx_detox_followups_assessment ON detox_follow_ups(assessment_id);
+
+    -- =====================================================
+    -- VITAL SIGNS & FLUID BALANCE
+    -- =====================================================
+
+    CREATE TABLE IF NOT EXISTS vital_signs (
+      id SERIAL PRIMARY KEY,
+      patient_id VARCHAR(100) NOT NULL,
+      hospital_number VARCHAR(100),
+      temperature DECIMAL(4,1),
+      pulse INTEGER,
+      bp_systolic INTEGER,
+      bp_diastolic INTEGER,
+      respiratory_rate INTEGER,
+      spo2 INTEGER,
+      weight DECIMAL(5,1),
+      recorded_by VARCHAR(255),
+      date TIMESTAMPTZ DEFAULT NOW(),
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_vital_signs_patient ON vital_signs(patient_id);
+
+    CREATE TABLE IF NOT EXISTS fluid_balance (
+      id SERIAL PRIMARY KEY,
+      patient_id INTEGER NOT NULL,
+      hospital_number VARCHAR(50),
+      chart_date DATE NOT NULL DEFAULT CURRENT_DATE,
+      recorded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      entry_type VARCHAR(20) NOT NULL CHECK (entry_type IN ('input', 'output')),
+      fluid_type VARCHAR(100) NOT NULL,
+      volume_ml INTEGER NOT NULL DEFAULT 0,
+      route VARCHAR(50),
+      notes TEXT,
+      recorded_by VARCHAR(255),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_fluid_balance_patient ON fluid_balance(patient_id);
+    CREATE INDEX IF NOT EXISTS idx_fluid_balance_date ON fluid_balance(chart_date);
+
+    -- =====================================================
+    -- NOTICE BOARD & APPOINTMENTS
+    -- =====================================================
+
+    CREATE TABLE IF NOT EXISTS notice_board (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      category TEXT NOT NULL DEFAULT 'general',
+      content TEXT NOT NULL,
+      posted_by TEXT,
+      posted_by_name TEXT,
+      posted_by_role TEXT,
+      is_pinned BOOLEAN DEFAULT false,
+      is_active BOOLEAN DEFAULT true,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS clinic_appointments (
+      id SERIAL PRIMARY KEY,
+      patient_number VARCHAR(100) NOT NULL,
+      date DATE NOT NULL,
+      time_slot VARCHAR(20) NOT NULL,
+      doctor_assigned VARCHAR(255) NOT NULL,
+      status VARCHAR(50) DEFAULT 'booked',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(date, time_slot)
+    );
+
+    -- =====================================================
+    -- PROGRESS NOTES
+    -- =====================================================
+
+    CREATE TABLE IF NOT EXISTS progress_notes (
+      id SERIAL PRIMARY KEY,
+      patient_id INTEGER,
+      patient_name VARCHAR(255),
+      author VARCHAR(255),
+      author_role VARCHAR(100),
+      date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      vital_signs JSONB DEFAULT '{}',
+      lmp VARCHAR(100),
+      soap JSONB DEFAULT '{}',
+      clinical_images JSONB DEFAULT '[]',
+      status VARCHAR(50) DEFAULT 'active',
+      geolocation JSONB DEFAULT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_progress_notes_patient ON progress_notes(patient_id);
+
+    -- =====================================================
+    -- STUDENT MANAGEMENT
+    -- =====================================================
+
+    CREATE TABLE IF NOT EXISTS students (
+      id SERIAL PRIMARY KEY,
+      full_name VARCHAR(255) NOT NULL,
+      email VARCHAR(255) UNIQUE NOT NULL,
+      password_hash VARCHAR(255) NOT NULL,
+      university VARCHAR(255),
+      matric_number VARCHAR(100),
+      posting_start DATE NOT NULL,
+      posting_end DATE NOT NULL,
+      is_approved BOOLEAN DEFAULT FALSE,
+      is_active BOOLEAN DEFAULT TRUE,
+      max_patients INTEGER DEFAULT 5,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS student_patient_assignments (
+      id SERIAL PRIMARY KEY,
+      student_id INTEGER NOT NULL REFERENCES students(id),
+      patient_id VARCHAR(255) NOT NULL,
+      hospital_number VARCHAR(100),
+      assigned_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      is_active BOOLEAN DEFAULT TRUE,
+      UNIQUE(student_id, patient_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS student_clerkings (
+      id SERIAL PRIMARY KEY,
+      student_id INTEGER NOT NULL REFERENCES students(id),
+      patient_id VARCHAR(255) NOT NULL,
+      hospital_number VARCHAR(100),
+      chief_complaint TEXT,
+      history_of_present_illness TEXT,
+      past_medical_history TEXT,
+      past_surgical_history TEXT,
+      family_history TEXT,
+      social_history TEXT,
+      drug_history TEXT,
+      allergies TEXT,
+      review_of_systems JSONB DEFAULT '{}',
+      physical_examination JSONB DEFAULT '{}',
+      vital_signs JSONB DEFAULT '{}',
+      provisional_diagnosis TEXT,
+      differential_diagnoses JSONB DEFAULT '[]',
+      investigations_requested JSONB DEFAULT '[]',
+      plan TEXT,
+      evaluation_score INTEGER,
+      evaluation_feedback TEXT,
+      evaluated_by VARCHAR(255),
+      evaluated_at TIMESTAMP WITH TIME ZONE,
+      status VARCHAR(50) DEFAULT 'draft',
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS student_treatment_plans (
+      id SERIAL PRIMARY KEY,
+      student_id INTEGER NOT NULL REFERENCES students(id),
+      patient_id VARCHAR(255) NOT NULL,
+      hospital_number VARCHAR(100),
+      diagnosis TEXT,
+      treatment_goals JSONB DEFAULT '[]',
+      medications JSONB DEFAULT '[]',
+      investigations JSONB DEFAULT '[]',
+      procedures JSONB DEFAULT '[]',
+      nursing_care TEXT,
+      diet TEXT,
+      follow_up_plan TEXT,
+      discharge_criteria TEXT,
+      evaluation_score INTEGER,
+      evaluation_feedback TEXT,
+      evaluated_by VARCHAR(255),
+      evaluated_at TIMESTAMP WITH TIME ZONE,
+      status VARCHAR(50) DEFAULT 'draft',
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- =====================================================
+    -- PATIENT TRANSFERS & TEAM ASSIGNMENTS
+    -- =====================================================
+
+    CREATE TABLE IF NOT EXISTS patient_transfers (
+      id SERIAL PRIMARY KEY,
+      patient_id VARCHAR(255),
+      from_ward VARCHAR(255),
+      to_ward VARCHAR(255),
+      from_bed VARCHAR(100),
+      to_bed VARCHAR(100),
+      transfer_type VARCHAR(100),
+      reason TEXT,
+      authorized_by VARCHAR(255),
+      receiving_team VARCHAR(255),
+      status VARCHAR(50) DEFAULT 'completed',
+      transfer_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_patient_transfers_patient ON patient_transfers(patient_id);
+
+    CREATE TABLE IF NOT EXISTS patient_assignments (
+      id SERIAL PRIMARY KEY,
+      patient_id VARCHAR(255) NOT NULL,
+      hospital_number VARCHAR(100),
+      consultant_id VARCHAR(50),
+      senior_registrar_id VARCHAR(50),
+      registrar_id VARCHAR(50),
+      house_officer_id VARCHAR(50),
+      admission_type VARCHAR(50),
+      assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      is_active BOOLEAN DEFAULT TRUE,
+      UNIQUE(patient_id)
+    );
+
+    -- =====================================================
+    -- KELOID CARE PROGRAM
+    -- =====================================================
+
+    CREATE TABLE IF NOT EXISTS keloid_care_plans (
+      id SERIAL PRIMARY KEY,
+      patient_id INTEGER NOT NULL REFERENCES patients(id),
+      clinical_summary TEXT NOT NULL,
+      keloid_locations TEXT[] DEFAULT '{}',
+      problems_concerns TEXT[] DEFAULT '{}',
+      comorbidities TEXT[] DEFAULT '{}',
+      has_no_comorbidities BOOLEAN DEFAULT FALSE,
+      risk_factors TEXT[] DEFAULT '{}',
+      preop_triamcinolone_count INTEGER DEFAULT 0,
+      preop_injection_interval_weeks INTEGER DEFAULT 3,
+      surgery_planned BOOLEAN DEFAULT FALSE,
+      surgery_date DATE,
+      surgery_technique TEXT,
+      surgery_notes TEXT,
+      postop_triamcinolone_count INTEGER DEFAULT 0,
+      postop_injection_interval_weeks INTEGER DEFAULT 3,
+      silicone_sheet_start_date DATE,
+      silicone_sheet_duration_months INTEGER,
+      compression_therapy_start_date DATE,
+      compression_therapy_duration_months INTEGER,
+      radiotherapy_indicated BOOLEAN DEFAULT FALSE,
+      radiotherapy_indications TEXT[] DEFAULT '{}',
+      radiotherapy_timing TEXT,
+      radiotherapy_dose TEXT,
+      radiotherapy_fractions INTEGER,
+      radiotherapy_side_effects TEXT[] DEFAULT '{}',
+      radiotherapy_management TEXT,
+      status VARCHAR(50) DEFAULT 'active',
+      phase VARCHAR(50) DEFAULT 'pre_treatment',
+      compliance_notes TEXT,
+      created_by INTEGER REFERENCES users(id),
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_keloid_plans_patient ON keloid_care_plans(patient_id);
+
+    CREATE TABLE IF NOT EXISTS keloid_pretreatment_tests (
+      id SERIAL PRIMARY KEY,
+      keloid_plan_id INTEGER NOT NULL REFERENCES keloid_care_plans(id) ON DELETE CASCADE,
+      test_type VARCHAR(100) NOT NULL,
+      test_name VARCHAR(255) NOT NULL,
+      ordered_date DATE NOT NULL,
+      result_date DATE,
+      result_value TEXT,
+      result_status VARCHAR(50) DEFAULT 'pending',
+      is_within_normal BOOLEAN,
+      notes TEXT,
+      created_by INTEGER REFERENCES users(id),
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS keloid_injections (
+      id SERIAL PRIMARY KEY,
+      keloid_plan_id INTEGER NOT NULL REFERENCES keloid_care_plans(id) ON DELETE CASCADE,
+      injection_number INTEGER NOT NULL,
+      injection_phase VARCHAR(20) NOT NULL,
+      scheduled_date DATE NOT NULL,
+      actual_date DATE,
+      dose_mg DECIMAL(10,2),
+      concentration VARCHAR(50),
+      volume_ml DECIMAL(10,2),
+      injection_site TEXT,
+      response_notes TEXT,
+      adverse_effects TEXT,
+      administered_by INTEGER REFERENCES users(id),
+      status VARCHAR(50) DEFAULT 'scheduled',
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- =====================================================
+    -- ROTATION CONFIG & RESPONSIBILITIES
+    -- =====================================================
+
+    CREATE TABLE IF NOT EXISTS rotation_configs (
+      id SERIAL PRIMARY KEY,
+      level VARCHAR(50) NOT NULL,
+      commencement_date DATE NOT NULL,
+      end_date DATE NOT NULL,
+      department VARCHAR(100) DEFAULT 'Plastic Surgery',
+      is_active BOOLEAN DEFAULT true,
+      notes TEXT DEFAULT '',
+      created_by VARCHAR(100),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS assigned_responsibilities (
+      id SERIAL PRIMARY KEY,
+      user_id VARCHAR(100) NOT NULL,
+      title VARCHAR(255) NOT NULL,
+      description TEXT DEFAULT '',
+      assigned_by VARCHAR(100) NOT NULL,
+      due_date DATE,
+      status VARCHAR(50) DEFAULT 'pending',
+      priority VARCHAR(20) DEFAULT 'medium',
+      completion_notes TEXT,
+      completed_at TIMESTAMP,
+      score INTEGER,
+      assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- =====================================================
+    -- CLINICAL TABLES MISSING FROM INIT (Dexie-backed)
+    -- =====================================================
+
+    -- GFR/CKD Calculations
+    CREATE TABLE IF NOT EXISTS gfr_calculations (
+      id SERIAL PRIMARY KEY,
+      patient_id INTEGER REFERENCES patients(id) ON DELETE CASCADE,
+      hospital_number VARCHAR(100),
+      patient_name VARCHAR(255),
+      calculation_date DATE NOT NULL DEFAULT CURRENT_DATE,
+      age INTEGER,
+      gender VARCHAR(10),
+      serum_creatinine DECIMAL(6,2),
+      gfr_value DECIMAL(8,2),
+      ckd_stage VARCHAR(20),
+      formula_used VARCHAR(50) DEFAULT 'CKD-EPI',
+      notes TEXT,
+      calculated_by VARCHAR(255),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_gfr_patient ON gfr_calculations(patient_id);
+
+    -- Lymphedema Assessments
+    CREATE TABLE IF NOT EXISTS lymphedema_assessments (
+      id SERIAL PRIMARY KEY,
+      patient_id INTEGER REFERENCES patients(id) ON DELETE CASCADE,
+      hospital_number VARCHAR(100),
+      patient_name VARCHAR(255),
+      assessment_date DATE NOT NULL DEFAULT CURRENT_DATE,
+      affected_limb VARCHAR(50),
+      isl_stage VARCHAR(20),
+      campisi_stage VARCHAR(20),
+      circumference_measurements JSONB DEFAULT '{}',
+      volume_measurements JSONB DEFAULT '{}',
+      wifi_score INTEGER,
+      total_score INTEGER,
+      risk_category VARCHAR(50),
+      treatment_plan TEXT,
+      compression_therapy JSONB DEFAULT '{}',
+      mld_therapy JSONB DEFAULT '{}',
+      exercise_plan TEXT,
+      status VARCHAR(50) DEFAULT 'active',
+      assessed_by VARCHAR(255),
+      notes TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_lymphedema_patient ON lymphedema_assessments(patient_id);
+
+    -- Call Duty Handover Notes
+    CREATE TABLE IF NOT EXISTS call_duty_handover_notes (
+      id SERIAL PRIMARY KEY,
+      shift_id INTEGER,
+      roster_key VARCHAR(100),
+      author_id VARCHAR(100),
+      author_name VARCHAR(255),
+      assignment VARCHAR(100),
+      content TEXT,
+      patients_seen JSONB DEFAULT '[]',
+      pending_tasks JSONB DEFAULT '[]',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_handover_shift ON call_duty_handover_notes(shift_id);
+
+    -- AI Medical Scribe Sessions
+    CREATE TABLE IF NOT EXISTS scribe_sessions (
+      id VARCHAR(255) PRIMARY KEY,
+      patient_id INTEGER REFERENCES patients(id) ON DELETE CASCADE,
+      context VARCHAR(50),
+      status VARCHAR(50) DEFAULT 'active',
+      ward_round_id INTEGER,
+      raw_transcript TEXT,
+      structured_data JSONB DEFAULT '{}',
+      recorded_by VARCHAR(255),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_scribe_patient ON scribe_sessions(patient_id);
+
+    -- Clinic Sessions
+    CREATE TABLE IF NOT EXISTS clinic_sessions (
+      id SERIAL PRIMARY KEY,
+      patient_id INTEGER REFERENCES patients(id) ON DELETE CASCADE,
+      date DATE NOT NULL,
+      clinic_type VARCHAR(100),
+      consultant VARCHAR(255),
+      presenting_complaint TEXT,
+      examination_findings TEXT,
+      assessment TEXT,
+      plan TEXT,
+      follow_up_date DATE,
+      status VARCHAR(50) DEFAULT 'scheduled',
+      created_by VARCHAR(255),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_clinic_sessions_patient ON clinic_sessions(patient_id);
+    CREATE INDEX IF NOT EXISTS idx_clinic_sessions_date ON clinic_sessions(date);
+
+    -- Chat & Video Conference (messaging backbone)
+    CREATE TABLE IF NOT EXISTS chat_rooms (
+      id SERIAL PRIMARY KEY,
+      name VARCHAR(255),
+      type VARCHAR(50) DEFAULT 'group',
+      patient_id INTEGER,
+      is_active BOOLEAN DEFAULT TRUE,
+      created_by VARCHAR(255),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS chat_messages (
+      id SERIAL PRIMARY KEY,
+      room_id INTEGER REFERENCES chat_rooms(id) ON DELETE CASCADE,
+      sender_id VARCHAR(100),
+      sender_name VARCHAR(255),
+      content TEXT,
+      type VARCHAR(50) DEFAULT 'text',
+      attachments JSONB DEFAULT '[]',
+      is_read BOOLEAN DEFAULT FALSE,
+      timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_chat_messages_room ON chat_messages(room_id);
+
+    CREATE TABLE IF NOT EXISTS video_conferences (
+      id SERIAL PRIMARY KEY,
+      room_id INTEGER REFERENCES chat_rooms(id),
+      patient_id INTEGER,
+      host_id VARCHAR(100),
+      host_name VARCHAR(255),
+      status VARCHAR(50) DEFAULT 'scheduled',
+      scheduled_at TIMESTAMP,
+      started_at TIMESTAMP,
+      ended_at TIMESTAMP,
+      participants JSONB DEFAULT '[]',
+      recording_url TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- =====================================================
+    -- ADD MISSING COLUMNS TO EXISTING TABLES
+    -- =====================================================
+
+    -- call_duty_roster: add HO assignment columns (Dexie v32)
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'call_duty_roster' AND column_name = 'ho_ward_id') THEN
+        ALTER TABLE call_duty_roster ADD COLUMN ho_ward_id TEXT;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'call_duty_roster' AND column_name = 'ho_emergency_id') THEN
+        ALTER TABLE call_duty_roster ADD COLUMN ho_emergency_id TEXT;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'call_duty_roster' AND column_name = 'ho_off_id') THEN
+        ALTER TABLE call_duty_roster ADD COLUMN ho_off_id TEXT;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'call_duty_roster' AND column_name = 'ho_count') THEN
+        ALTER TABLE call_duty_roster ADD COLUMN ho_count INTEGER DEFAULT 0;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'call_duty_roster' AND column_name = 'status') THEN
+        ALTER TABLE call_duty_roster ADD COLUMN status VARCHAR(50) DEFAULT 'active';
+      END IF;
+    END $$;
   `;
 
   await query(schema);

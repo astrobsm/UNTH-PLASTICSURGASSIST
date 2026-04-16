@@ -1,3 +1,7 @@
+-- ⚠️ DEPRECATED: These columns are already included in api/init-db.js
+-- which is the single source of truth for the production database schema.
+-- Do NOT run this file on production. Kept for historical reference only.
+--
 -- Migration: Add missing JSONB columns to treatment_plans table
 -- Required by: TreatmentPlanCreator, TreatmentPlanManager, API /api/treatment-plans
 -- Run this on the production PostgreSQL database

@@ -1,5 +1,9 @@
 #!/usr/bin/env node
 /**
+ * ⚠️ DEPRECATED: This script runs the old UUID-based schema.sql.
+ * The production schema is managed by api/init-db.js (single source of truth).
+ * Do NOT run this file on production. Kept for historical reference only.
+ *
  * Database Migration Script for Supabase
  * Runs schema.sql and seed.sql to set up the database
  */

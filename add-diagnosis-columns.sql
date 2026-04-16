@@ -1,3 +1,6 @@
+-- ⚠️ DEPRECATED: These columns are already in api/init-db.js (single source of truth).
+-- Do NOT run on production. Kept for historical reference only.
+--
 -- Add diagnosis columns to patients table
 -- Run this in Supabase SQL Editor (https://supabase.com/dashboard/project/your-project/sql/new)
 

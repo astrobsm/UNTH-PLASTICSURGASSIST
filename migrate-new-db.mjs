@@ -1,4 +1,8 @@
 /**
+ * ⚠️ DEPRECATED: One-time migration script for the old Supabase→new Supabase migration.
+ * The production schema is now managed by api/init-db.js (single source of truth).
+ * Do NOT run this file on production. Kept for historical reference only.
+ *
  * Comprehensive Migration Script for NEW Supabase Database
  * Target: postgresql://postgres.lienvjmyymwwbaunemiz:***@aws-1-eu-west-1.pooler.supabase.com:5432/postgres
  * 

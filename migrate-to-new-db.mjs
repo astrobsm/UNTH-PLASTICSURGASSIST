@@ -1,3 +1,6 @@
+// ⚠️ DEPRECATED: One-time migration script. Production schema is managed by api/init-db.js.
+// Do NOT run on production. Kept for historical reference only.
+//
 // Migration script to initialize the NEW Supabase database (eu-west-1)
 // Run: node migrate-to-new-db.mjs
 

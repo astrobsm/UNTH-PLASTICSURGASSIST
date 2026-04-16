@@ -1,3 +1,7 @@
+// ⚠️ DEPRECATED: This script targets the OLD UUID-based database.
+// The production schema is managed by api/init-db.js (SERIAL-based).
+// Do NOT run this file on production. Kept for historical reference only.
+
 import pg from 'pg';
 
 const pool = new pg.Pool({

@@ -528,7 +528,13 @@ async function handlePush(data, user, res) {
             'blood_transfusions', 'burn_patients', 'procedures',
             'who_safety_checklists', 'progress_notes', 'sjs_assessments',
             'investigation_uploads', 'notice_board', 'patient_transfers',
-            'ho_tracking_assignments', 'ho_task_logs'
+            'vital_signs', 'fluid_balance', 'clinic_appointments',
+            'gfr_calculations', 'lymphedema_assessments', 'clinic_sessions',
+            'chat_rooms', 'chat_messages', 'video_conferences',
+            'call_duty_handover_notes', 'patient_assignments',
+            'keloid_care_plans', 'keloid_pretreatment_tests', 'keloid_injections',
+            'rotation_configs', 'assigned_responsibilities',
+            'students', 'student_patient_assignments', 'student_clerkings', 'student_treatment_plans'
           ];
           const isSerialKey = serialKeyTables.includes(resolvedEntityType);
 
@@ -544,90 +550,10 @@ async function handlePush(data, user, res) {
             columns = columns.filter(k => validColumns.has(k));
           }
           
-          // Ensure the table exists — auto-create if needed
+          // Ensure the table exists — all tables should be created by init-db.js
+          // If a table doesn't exist, log a warning (init-db POST should be run first)
           if (validColumns === null) {
-            // Table might not exist — try creating critical missing tables
-            const createTableSQL = {
-              'substance_use_assessments': `CREATE TABLE IF NOT EXISTS substance_use_assessments (
-                id VARCHAR(255) PRIMARY KEY,
-                patient_id VARCHAR(255),
-                patient_name VARCHAR(255),
-                hospital_number VARCHAR(100),
-                hospital_id VARCHAR(100),
-                primary_substance VARCHAR(100),
-                substances JSONB DEFAULT '[]',
-                poly_substance_use BOOLEAN DEFAULT FALSE,
-                addiction_severity_score JSONB DEFAULT '{}',
-                withdrawal_risk_prediction JSONB DEFAULT '{}',
-                care_setting_decision JSONB DEFAULT '{}',
-                pain_management_support JSONB,
-                comorbidities JSONB DEFAULT '[]',
-                comorbidity_modifications JSONB DEFAULT '[]',
-                social_factors JSONB DEFAULT '{}',
-                previous_detox_attempts INTEGER DEFAULT 0,
-                previous_treatment_history TEXT,
-                consent_obtained BOOLEAN DEFAULT FALSE,
-                consent_document JSONB,
-                status VARCHAR(50) DEFAULT 'initial_assessment',
-                assessed_by VARCHAR(255),
-                assessment_date TIMESTAMP,
-                audit_log JSONB DEFAULT '[]',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-              )`,
-              'detox_monitoring_records': `CREATE TABLE IF NOT EXISTS detox_monitoring_records (
-                id VARCHAR(255) PRIMARY KEY,
-                assessment_id VARCHAR(255),
-                patient_id VARCHAR(255),
-                monitoring_date TIMESTAMP,
-                vital_signs JSONB DEFAULT '{}',
-                withdrawal_score JSONB DEFAULT '{}',
-                symptoms JSONB DEFAULT '[]',
-                medications_administered JSONB DEFAULT '[]',
-                clinical_notes TEXT,
-                recorded_by VARCHAR(255),
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-              )`,
-              'detox_follow_ups': `CREATE TABLE IF NOT EXISTS detox_follow_ups (
-                id VARCHAR(255) PRIMARY KEY,
-                assessment_id VARCHAR(255),
-                patient_id VARCHAR(255),
-                follow_up_date TIMESTAMP,
-                status VARCHAR(50),
-                notes TEXT,
-                next_appointment TIMESTAMP,
-                created_by VARCHAR(255),
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-              )`,
-              'substance_use_clinical_summaries': `CREATE TABLE IF NOT EXISTS substance_use_clinical_summaries (
-                id VARCHAR(255) PRIMARY KEY,
-                assessment_id VARCHAR(255),
-                patient_id VARCHAR(255),
-                summary_type VARCHAR(100),
-                content TEXT,
-                created_by VARCHAR(255),
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-              )`
-            };
-            if (createTableSQL[resolvedEntityType]) {
-              try {
-                await query(createTableSQL[resolvedEntityType]);
-                // Clear cache so we re-query columns
-                delete tableColumnsCache[resolvedEntityType];
-                // Re-fetch columns after table creation
-                const newCols = await getTableColumns(resolvedEntityType);
-                if (newCols) {
-                  validColumns = newCols;
-                  columns = Object.keys(snakePayload).filter(k => !skipKeys.includes(k));
-                  columns = columns.filter(k => newCols.has(k));
-                }
-              } catch (createErr) {
-                console.error(`Failed to auto-create table ${resolvedEntityType}:`, createErr.message);
-              }
-            }
+            console.warn(`⚠️ Table "${resolvedEntityType}" not found in database. Run POST /api/init-db to create all tables.`);
           }
 
           // Compute values and placeholders AFTER table creation and column validation

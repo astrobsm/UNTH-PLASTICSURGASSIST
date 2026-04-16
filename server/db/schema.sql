@@ -1,6 +1,11 @@
 -- =====================================================
 -- PLASTIC SURGEON ASSISTANT - PostgreSQL Database Schema
--- Supabase PostgreSQL
+-- ⚠️ DEPRECATED: This file uses UUID primary keys and is NOT
+-- the production schema. The actual production schema uses
+-- SERIAL (integer) primary keys and is managed by:
+--   api/init-db.js  (single source of truth)
+-- Do NOT use this file for migrations or deployments.
+-- Supabase PostgreSQL (legacy reference only)
 -- =====================================================
 
 -- Enable UUID extension
