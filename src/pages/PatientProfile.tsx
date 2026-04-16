@@ -566,6 +566,7 @@ export const PatientProfile: React.FC = () => {
                     value={editFormData.first_name || ''}
                     onChange={(e) => setEditFormData({ ...editFormData, first_name: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                    aria-label="First Name"
                   />
                 </div>
                 <div>
@@ -575,6 +576,7 @@ export const PatientProfile: React.FC = () => {
                     value={editFormData.last_name || ''}
                     onChange={(e) => setEditFormData({ ...editFormData, last_name: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                    aria-label="Last Name"
                   />
                 </div>
               </div>
@@ -585,6 +587,7 @@ export const PatientProfile: React.FC = () => {
                   value={editFormData.dob || ''}
                   onChange={(e) => setEditFormData({ ...editFormData, dob: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                  aria-label="Date of Birth"
                 />
                 {(editFormData.dob || editFormData.date_of_birth) && (
                   <p className="text-sm text-gray-500 mt-1">Age: {calculateAge(editFormData.dob || editFormData.date_of_birth) ?? 'N/A'} years</p>
@@ -597,6 +600,7 @@ export const PatientProfile: React.FC = () => {
                     value={editFormData.sex || 'Male'}
                     onChange={(e) => setEditFormData({ ...editFormData, sex: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                    aria-label="Sex"
                   >
                     <option value="Male">Male</option>
                     <option value="Female">Female</option>
@@ -609,6 +613,7 @@ export const PatientProfile: React.FC = () => {
                     value={editFormData.phone || ''}
                     onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                    aria-label="Phone"
                   />
                 </div>
               </div>
@@ -619,6 +624,7 @@ export const PatientProfile: React.FC = () => {
                   onChange={(e) => setEditFormData({ ...editFormData, address: e.target.value })}
                   rows={2}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+                  aria-label="Address"
                 />
               </div>
             </div>
@@ -838,7 +844,7 @@ const EncountersTab: React.FC<{ patientId: string; hospitalNumber: string; patie
           <div className="p-4 border-b border-gray-200 bg-green-50">
             <div className="mb-3">
               <label className="block text-sm font-medium text-gray-700 mb-1">Encounter Type</label>
-              <select value={encounterType} onChange={e => setEncounterType(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+              <select value={encounterType} onChange={e => setEncounterType(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" aria-label="Encounter Type">
                 <option value="progress_note">Progress Note</option>
                 <option value="ward_round">Ward Round Note</option>
                 <option value="consultation">Consultation</option>
@@ -1331,8 +1337,8 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; userN
   return (
     <div className="space-y-4">
       {/* Hidden file inputs for scan */}
-      <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={onFileSelected} />
-      <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onFileSelected} />
+      <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={onFileSelected} aria-label="Upload vitals chart" />
+      <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onFileSelected} aria-label="Capture vitals chart" />
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
         <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between flex-wrap gap-2">
@@ -1377,9 +1383,10 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; userN
                       value={row.date || ''}
                       onChange={e => updateBatchRow(idx, 'date', e.target.value)}
                       className="px-2 py-1 text-xs border border-gray-300 rounded focus:ring-green-500"
+                      aria-label="Reading date and time"
                     />
                     {batchRows.length > 1 && (
-                      <button onClick={() => removeBatchRow(idx)} className="p-1 text-red-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => removeBatchRow(idx)} className="p-1 text-red-400 hover:text-red-600" aria-label="Remove row"><Trash2 className="w-3.5 h-3.5" /></button>
                     )}
                   </div>
                 </div>
@@ -1454,7 +1461,7 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; userN
           <div className="bg-white rounded-lg max-w-3xl w-full max-h-[85vh] overflow-auto" onClick={e => e.stopPropagation()}>
             <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between z-10">
               <h3 className="font-semibold text-gray-900">Review Scanned Vital Signs ({ocrVitalsEntries.length} reading{ocrVitalsEntries.length !== 1 ? 's' : ''})</h3>
-              <button onClick={() => setShowOCRReview(false)} className="p-1 hover:bg-gray-100 rounded-full"><X className="w-5 h-5" /></button>
+              <button onClick={() => setShowOCRReview(false)} className="p-1 hover:bg-gray-100 rounded-full" aria-label="Close review"><X className="w-5 h-5" /></button>
             </div>
             <div className="p-4 space-y-3">
               <p className="text-xs text-gray-500">You can edit values or remove incorrect readings before saving.</p>
@@ -1472,6 +1479,7 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; userN
                           setOcrVitalsEntries(updated);
                         }}
                         className="px-2 py-1 text-xs border border-gray-300 rounded"
+                        aria-label="Reading date and time"
                       />
                       <button
                         onClick={() => setOcrVitalsEntries(prev => prev.filter((_, i) => i !== idx))}
@@ -1486,37 +1494,37 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; userN
                     <div className="text-center">
                       <div className="text-[10px] text-gray-500 mb-0.5">Temp (°C)</div>
                       <input type="number" step="0.1" className="w-full text-center text-sm font-bold text-orange-600 border rounded px-1 py-0.5"
-                        value={entry.temperature || ''} onChange={e => { const u = [...ocrVitalsEntries]; u[idx] = { ...u[idx], temperature: parseFloat(e.target.value) || undefined }; setOcrVitalsEntries(u); }} />
+                        value={entry.temperature || ''} onChange={e => { const u = [...ocrVitalsEntries]; u[idx] = { ...u[idx], temperature: parseFloat(e.target.value) || undefined }; setOcrVitalsEntries(u); }} aria-label="Temperature" />
                     </div>
                     <div className="text-center">
                       <div className="text-[10px] text-gray-500 mb-0.5">Pulse</div>
                       <input type="number" className="w-full text-center text-sm font-bold text-red-600 border rounded px-1 py-0.5"
-                        value={entry.pulse || ''} onChange={e => { const u = [...ocrVitalsEntries]; u[idx] = { ...u[idx], pulse: parseInt(e.target.value) || undefined }; setOcrVitalsEntries(u); }} />
+                        value={entry.pulse || ''} onChange={e => { const u = [...ocrVitalsEntries]; u[idx] = { ...u[idx], pulse: parseInt(e.target.value) || undefined }; setOcrVitalsEntries(u); }} aria-label="Pulse" />
                     </div>
                     <div className="text-center">
                       <div className="text-[10px] text-gray-500 mb-0.5">BP Sys</div>
                       <input type="number" className="w-full text-center text-sm font-bold text-blue-600 border rounded px-1 py-0.5"
-                        value={entry.bp_systolic || ''} onChange={e => { const u = [...ocrVitalsEntries]; u[idx] = { ...u[idx], bp_systolic: parseInt(e.target.value) || undefined }; setOcrVitalsEntries(u); }} />
+                        value={entry.bp_systolic || ''} onChange={e => { const u = [...ocrVitalsEntries]; u[idx] = { ...u[idx], bp_systolic: parseInt(e.target.value) || undefined }; setOcrVitalsEntries(u); }} aria-label="BP Systolic" />
                     </div>
                     <div className="text-center">
                       <div className="text-[10px] text-gray-500 mb-0.5">BP Dia</div>
                       <input type="number" className="w-full text-center text-sm font-bold text-blue-600 border rounded px-1 py-0.5"
-                        value={entry.bp_diastolic || ''} onChange={e => { const u = [...ocrVitalsEntries]; u[idx] = { ...u[idx], bp_diastolic: parseInt(e.target.value) || undefined }; setOcrVitalsEntries(u); }} />
+                        value={entry.bp_diastolic || ''} onChange={e => { const u = [...ocrVitalsEntries]; u[idx] = { ...u[idx], bp_diastolic: parseInt(e.target.value) || undefined }; setOcrVitalsEntries(u); }} aria-label="BP Diastolic" />
                     </div>
                     <div className="text-center">
                       <div className="text-[10px] text-gray-500 mb-0.5">RR</div>
                       <input type="number" className="w-full text-center text-sm font-bold text-purple-600 border rounded px-1 py-0.5"
-                        value={entry.respiratory_rate || ''} onChange={e => { const u = [...ocrVitalsEntries]; u[idx] = { ...u[idx], respiratory_rate: parseInt(e.target.value) || undefined }; setOcrVitalsEntries(u); }} />
+                        value={entry.respiratory_rate || ''} onChange={e => { const u = [...ocrVitalsEntries]; u[idx] = { ...u[idx], respiratory_rate: parseInt(e.target.value) || undefined }; setOcrVitalsEntries(u); }} aria-label="Respiratory Rate" />
                     </div>
                     <div className="text-center">
                       <div className="text-[10px] text-gray-500 mb-0.5">SpO2 (%)</div>
                       <input type="number" className="w-full text-center text-sm font-bold text-green-600 border rounded px-1 py-0.5"
-                        value={entry.spo2 || ''} onChange={e => { const u = [...ocrVitalsEntries]; u[idx] = { ...u[idx], spo2: parseInt(e.target.value) || undefined }; setOcrVitalsEntries(u); }} />
+                        value={entry.spo2 || ''} onChange={e => { const u = [...ocrVitalsEntries]; u[idx] = { ...u[idx], spo2: parseInt(e.target.value) || undefined }; setOcrVitalsEntries(u); }} aria-label="SpO2" />
                     </div>
                     <div className="text-center">
                       <div className="text-[10px] text-gray-500 mb-0.5">Wt (kg)</div>
                       <input type="number" step="0.1" className="w-full text-center text-sm font-bold text-gray-700 border rounded px-1 py-0.5"
-                        value={entry.weight || ''} onChange={e => { const u = [...ocrVitalsEntries]; u[idx] = { ...u[idx], weight: parseFloat(e.target.value) || undefined }; setOcrVitalsEntries(u); }} />
+                        value={entry.weight || ''} onChange={e => { const u = [...ocrVitalsEntries]; u[idx] = { ...u[idx], weight: parseFloat(e.target.value) || undefined }; setOcrVitalsEntries(u); }} aria-label="Weight" />
                     </div>
                   </div>
                 </div>
@@ -1766,9 +1774,9 @@ const InvestigationsTab: React.FC<{ patientId: string; hospitalNumber: string; p
     <div className="space-y-4">
       {/* Hidden file inputs */}
       <input type="file" ref={formFileRef} className="hidden" accept="image/*,.pdf" capture="environment"
-        onChange={e => { const f = e.target.files?.[0]; if (f) handleFileUpload(f, 'form'); e.target.value = ''; }} />
+        onChange={e => { const f = e.target.files?.[0]; if (f) handleFileUpload(f, 'form'); e.target.value = ''; }} aria-label="Upload investigation form" />
       <input type="file" ref={resultFileRef} className="hidden" accept="image/*,.pdf" capture="environment"
-        onChange={e => { const f = e.target.files?.[0]; if (f) handleFileUpload(f, 'result'); e.target.value = ''; }} />
+        onChange={e => { const f = e.target.files?.[0]; if (f) handleFileUpload(f, 'result'); e.target.value = ''; }} aria-label="Upload investigation result" />
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
         <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
@@ -2132,7 +2140,7 @@ const InvestigationsTab: React.FC<{ patientId: string; hospitalNumber: string; p
                   {viewingUpload.uploaded_by && ` • By: ${viewingUpload.uploaded_by}`}
                 </p>
               </div>
-              <button onClick={() => setViewingUpload(null)} className="p-1 hover:bg-gray-100 rounded-full">
+              <button onClick={() => setViewingUpload(null)} className="p-1 hover:bg-gray-100 rounded-full" aria-label="Close upload viewer">
                 <X className="w-5 h-5 text-gray-600" />
               </button>
             </div>
@@ -2734,8 +2742,8 @@ const ClinicalPhotosTab: React.FC<{ patientId: string; hospitalNumber: string; p
               <Upload className="w-4 h-4" /> Upload
             </button>
           </div>
-          <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={e => handleFiles(e.target.files)} />
-          <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={e => handleFiles(e.target.files)} />
+          <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={e => handleFiles(e.target.files)} aria-label="Upload photos" />
+          <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={e => handleFiles(e.target.files)} aria-label="Capture photo" />
         </div>
 
         <div className="p-4">
@@ -2751,7 +2759,7 @@ const ClinicalPhotosTab: React.FC<{ patientId: string; hospitalNumber: string; p
                     <p className="text-xs text-gray-400">{new Date(photo.date).toLocaleDateString()}</p>
                     <p className="text-xs text-gray-400">By: {photo.taken_by}</p>
                   </div>
-                  <button onClick={() => deletePhoto(photo.id)} className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button onClick={() => deletePhoto(photo.id)} className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity" aria-label="Delete photo">
                     <Trash2 className="w-3 h-3" />
                   </button>
                 </div>
@@ -2765,7 +2773,7 @@ const ClinicalPhotosTab: React.FC<{ patientId: string; hospitalNumber: string; p
       {selectedPhoto && (
         <div className="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center p-4" onClick={() => setSelectedPhoto(null)}>
           <div className="relative max-w-3xl w-full" onClick={e => e.stopPropagation()}>
-            <button onClick={() => setSelectedPhoto(null)} className="absolute -top-10 right-0 text-white"><X className="w-6 h-6" /></button>
+            <button onClick={() => setSelectedPhoto(null)} className="absolute -top-10 right-0 text-white" aria-label="Close lightbox"><X className="w-6 h-6" /></button>
             {(() => {
               const photo = photos.find(p => p.id === selectedPhoto);
               return photo ? (
@@ -3087,14 +3095,14 @@ const WoundAssessmentTab: React.FC<{ patientId: string; patientName: string; hos
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <div><label className="block text-xs font-medium text-gray-700 mb-1">Wound Type*</label>
-                <select value={form.wound_type || ''} onChange={e => setForm({ ...form, wound_type: e.target.value })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm">
+                <select value={form.wound_type || ''} onChange={e => setForm({ ...form, wound_type: e.target.value })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" aria-label="Wound type">
                   <option value="">Select...</option>
                   {WOUND_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                 </select></div>
               <div><label className="block text-xs font-medium text-gray-700 mb-1">Location*</label>
                 <input value={form.location || ''} onChange={e => setForm({ ...form, location: e.target.value })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" placeholder="e.g., Left anterior leg" /></div>
               <div><label className="block text-xs font-medium text-gray-700 mb-1">Healing Phase</label>
-                <select value={form.healing_phase || healingPhases[0]} onChange={e => setForm({ ...form, healing_phase: e.target.value })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm">
+                <select value={form.healing_phase || healingPhases[0]} onChange={e => setForm({ ...form, healing_phase: e.target.value })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" aria-label="Healing phase">
                   {healingPhases.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
                 {form.wound_nature === 'Chronic' && form.healing_phase && CHRONIC_PHASE_INFO[form.healing_phase] && (
@@ -3112,7 +3120,7 @@ const WoundAssessmentTab: React.FC<{ patientId: string; patientName: string; hos
                     const autoPhase = pct === 0 ? 'Extension' : pct <= 40 ? 'Transition' : 'Repair';
                     setForm({ ...form, granulation_percentage: pct, healing_phase: autoPhase });
                   }}
-                  className="w-full" />
+                  className="w-full" aria-label="Granulation percentage" />
                 <div className="flex justify-between text-[10px] text-gray-400">
                   <span>0% (Extension)</span><span>40% (Transition→Repair)</span><span>100%</span>
                 </div>
@@ -3120,19 +3128,19 @@ const WoundAssessmentTab: React.FC<{ patientId: string; patientName: string; hos
             )}
             <div className="grid grid-cols-3 gap-3">
               <div><label className="block text-xs font-medium text-gray-700 mb-1">Length (cm)</label>
-                <input type="number" step="0.1" value={form.length || ''} onChange={e => setForm({ ...form, length: parseFloat(e.target.value) || 0 })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" /></div>
+                <input type="number" step="0.1" value={form.length || ''} onChange={e => setForm({ ...form, length: parseFloat(e.target.value) || 0 })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" aria-label="Wound length" /></div>
               <div><label className="block text-xs font-medium text-gray-700 mb-1">Width (cm)</label>
-                <input type="number" step="0.1" value={form.width || ''} onChange={e => setForm({ ...form, width: parseFloat(e.target.value) || 0 })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" /></div>
+                <input type="number" step="0.1" value={form.width || ''} onChange={e => setForm({ ...form, width: parseFloat(e.target.value) || 0 })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" aria-label="Wound width" /></div>
               <div><label className="block text-xs font-medium text-gray-700 mb-1">Depth (cm)</label>
-                <input type="number" step="0.1" value={form.depth || ''} onChange={e => setForm({ ...form, depth: parseFloat(e.target.value) || 0 })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" /></div>
+                <input type="number" step="0.1" value={form.depth || ''} onChange={e => setForm({ ...form, depth: parseFloat(e.target.value) || 0 })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" aria-label="Wound depth" /></div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div><label className="block text-xs font-medium text-gray-700 mb-1">Exudate Amount</label>
-                <select value={form.exudate_amount || 'None'} onChange={e => setForm({ ...form, exudate_amount: e.target.value })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm">
+                <select value={form.exudate_amount || 'None'} onChange={e => setForm({ ...form, exudate_amount: e.target.value })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" aria-label="Exudate amount">
                   {EXUDATE_AMOUNTS.map(a => <option key={a} value={a}>{a}</option>)}
                 </select></div>
               <div><label className="block text-xs font-medium text-gray-700 mb-1">Pain Level (0-10): {form.pain_level || 0}</label>
-                <input type="range" min="0" max="10" value={form.pain_level || 0} onChange={e => setForm({ ...form, pain_level: parseInt(e.target.value) })} className="w-full" /></div>
+                <input type="range" min="0" max="10" value={form.pain_level || 0} onChange={e => setForm({ ...form, pain_level: parseInt(e.target.value) })} className="w-full" aria-label="Pain level" /></div>
             </div>
             <div><label className="block text-xs font-medium text-gray-700 mb-1">Tissue Types Present</label>
               <div className="flex flex-wrap gap-2">
@@ -3147,7 +3155,7 @@ const WoundAssessmentTab: React.FC<{ patientId: string; patientName: string; hos
               </div>
             </div>
             <div><label className="block text-xs font-medium text-gray-700 mb-1">Notes</label>
-              <textarea value={form.notes || ''} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" /></div>
+              <textarea value={form.notes || ''} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" aria-label="Wound notes" /></div>
             <div className="flex gap-2">
               <button onClick={saveAssessment} className="flex items-center gap-1 px-4 py-2 bg-green-600 text-white text-sm rounded-md hover:bg-green-700"><Save className="w-4 h-4" /> Save & Generate Protocol</button>
               <button onClick={() => setShowForm(false)} className="px-4 py-2 text-gray-600 text-sm hover:bg-gray-100 rounded-md">Cancel</button>
@@ -3399,7 +3407,7 @@ const MDTCareTab: React.FC<{
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Patient Type</label>
               <select value={patientType} onChange={e => setPatientType(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-green-500 focus:border-green-500">
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-green-500 focus:border-green-500" aria-label="Patient type">
                 <option value="primary">Primary (Our Unit&apos;s Patient)</option>
                 <option value="consult">Consult/MDT (Invited via Consult)</option>
               </select>
@@ -3408,7 +3416,7 @@ const MDTCareTab: React.FC<{
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Primary Managing Unit</label>
                 <select value={consultingUnit} onChange={e => setConsultingUnit(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-green-500 focus:border-green-500">
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-green-500 focus:border-green-500" aria-label="Primary managing unit">
                   <option value="">Select Unit...</option>
                   {CONSULTING_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
                 </select>
@@ -3430,19 +3438,20 @@ const MDTCareTab: React.FC<{
                 <div className="flex flex-wrap gap-2 mb-2">
                   {specialties.map(s => (
                     <span key={s} className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded-full">
-                      {s} <button onClick={() => removeSpecialty(s)} className="text-purple-500 hover:text-purple-700"><X className="w-3 h-3" /></button>
+                      {s} <button onClick={() => removeSpecialty(s)} className="text-purple-500 hover:text-purple-700" aria-label={`Remove ${s}`}><X className="w-3 h-3" /></button>
                     </span>
                   ))}
                   {specialties.length === 0 && <span className="text-xs text-gray-400">No co-managing teams added yet</span>}
                 </div>
                 <div className="flex gap-2">
                   <select value={newSpecialty} onChange={e => setNewSpecialty(e.target.value)}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm">
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm" aria-label="Co-managing unit">
                     <option value="">Add a co-managing unit...</option>
                     {CONSULTING_UNITS.filter(u => !specialties.includes(u)).map(u => <option key={u} value={u}>{u}</option>)}
                   </select>
                   <button onClick={addSpecialty} disabled={!newSpecialty}
-                    className="px-3 py-2 bg-purple-600 text-white text-sm rounded-md hover:bg-purple-700 disabled:opacity-50">
+                    className="px-3 py-2 bg-purple-600 text-white text-sm rounded-md hover:bg-purple-700 disabled:opacity-50"
+                    aria-label="Add specialty">
                     <Plus className="w-4 h-4" />
                   </button>
                 </div>
@@ -3487,7 +3496,7 @@ const MDTCareTab: React.FC<{
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Team/Unit</label>
                 <select value={docTeam} onChange={e => setDocTeam(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" aria-label="Team">
                   <option value="">Select team...</option>
                   {[...specialties, consultingUnit, 'Burns, Plastic and Reconstructive Surgery'].filter(Boolean).map((s, i) =>
                     <option key={i} value={s}>{s}</option>
@@ -3500,7 +3509,7 @@ const MDTCareTab: React.FC<{
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Documentation Type</label>
                 <select value={docType} onChange={e => setDocType(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" aria-label="Documentation type">
                   <option value="clinical_note">Clinical Note</option>
                   <option value="consult_review">Consult Review</option>
                   <option value="recommendation">Recommendation</option>
