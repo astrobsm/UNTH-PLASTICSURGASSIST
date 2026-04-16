@@ -367,7 +367,7 @@ async function getTeamActivities(req, res) {
   const staffId = url.searchParams.get('staff_id');
   const patientId = url.searchParams.get('patient_id');
   const activityType = url.searchParams.get('type');
-  const limit = parseInt(url.searchParams.get('limit')) || 100;
+  const limit = Math.min(Math.max(1, parseInt(url.searchParams.get('limit')) || 100), 500);
 
   let queryStr = `
     SELECT ta.*, u.full_name as performed_by, u.role as performer_role,

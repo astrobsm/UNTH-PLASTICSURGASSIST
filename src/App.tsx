@@ -3,6 +3,7 @@ import { useState, useEffect, lazy, Suspense } from 'react';
 import { useLocation } from 'react-router-dom';
 import Layout from './components/Layout';
 import ErrorBoundary from './components/ErrorBoundary';
+import { ProtectedRoute } from './components/ProtectedRoute';
 import { patientService } from './services/patientService';
 import ForcePasswordChange from './components/ForcePasswordChange';
 import { useAuthStore } from './store/authStore';
@@ -253,7 +254,6 @@ function App() {
               <Route path="/medical-training" element={<MedicalTrainingPage />} />
               <Route path="/education" element={<Education />} />
               <Route path="/mcq-education" element={<MCQEducation />} />
-              <Route path="/topic-management" element={<TopicManagement />} />
               <Route path="/notifications" element={<NotificationManager />} />
               <Route path="/chat" element={<ChatRooms />} />
               <Route path="/chat/:roomId" element={<ChatRooms />} />
@@ -263,9 +263,10 @@ function App() {
               <Route path="/clinic-appointments" element={<ClinicAppointmentsPage />} />
               <Route path="/consults" element={<ConsultsPage />} />
               <Route path="/settings" element={<Settings />} />
-              <Route path="/admin-training" element={<AdminTrainingPage />} />
-              <Route path="/ho-tracking" element={<HOTrackingPage />} />
-              <Route path="/admin" element={<Admin />} />
+              <Route path="/admin-training" element={<ProtectedRoute allowedRoles={['admin', 'consultant']}><AdminTrainingPage /></ProtectedRoute>} />
+              <Route path="/ho-tracking" element={<ProtectedRoute allowedRoles={['admin', 'consultant', 'senior_registrar']}><HOTrackingPage /></ProtectedRoute>} />
+              <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><Admin /></ProtectedRoute>} />
+              <Route path="/topic-management" element={<ProtectedRoute allowedRoles={['admin', 'consultant']}><TopicManagement /></ProtectedRoute>} />
             </Routes>
             
             {deferredPrompt && (

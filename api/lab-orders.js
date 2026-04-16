@@ -49,9 +49,11 @@ async function getAllLabOrders(searchParams, res) {
   const status = searchParams.get('status');
 
   let queryStr = `
-    SELECT lo.*, p.first_name, p.last_name, p.hospital_number
+    SELECT lo.*, p.first_name, p.last_name, p.hospital_number,
+           u.full_name AS ordered_by_name, u.username AS ordered_by_username
     FROM lab_orders lo
     LEFT JOIN patients p ON lo.patient_id = p.id
+    LEFT JOIN users u ON lo.ordered_by::text = u.id::text
     WHERE 1=1
   `;
   const params = [];
@@ -72,19 +74,6 @@ async function getAllLabOrders(searchParams, res) {
   queryStr += ` ORDER BY lo.ordered_at DESC`;
 
   const result = await query(queryStr, params);
-
-  // Resolve ordered_by names separately to avoid column mismatch issues
-  for (const row of result.rows) {
-    if (row.ordered_by) {
-      try {
-        const userResult = await query('SELECT username, full_name FROM users WHERE id = $1', [row.ordered_by]);
-        if (userResult.rows.length > 0) {
-          row.ordered_by_name = userResult.rows[0].full_name || userResult.rows[0].username;
-          row.ordered_by_username = userResult.rows[0].username;
-        }
-      } catch { /* user lookup failed, leave as-is */ }
-    }
-  }
 
   res.status(200).json({ labOrders: result.rows });
 }

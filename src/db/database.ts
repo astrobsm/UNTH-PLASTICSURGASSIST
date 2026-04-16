@@ -234,6 +234,7 @@ export class PlasticSurgeonDB extends Dexie {
   fluid_balance!: Table<any>; // For fluid input/output balance tracking
   offline_credentials!: Table<any>; // Offline auth: hashed credentials for offline login
   sync_conflicts!: Table<any>; // Sync conflict log for manual resolution
+  sync_dead_letter!: Table<any>; // Dead letter queue for permanently failed sync items
 
   constructor() {
     super('PlasticSurgeonDB');
@@ -1299,6 +1300,11 @@ export class PlasticSurgeonDB extends Dexie {
     this.version(34).stores({
       offline_credentials: '++id, &email, userId, updatedAt',
       sync_conflicts: '++id, entity, entityId, resolvedAt, created_at'
+    });
+
+    // Version 35: Dead letter queue for permanently failed sync items
+    this.version(35).stores({
+      sync_dead_letter: '++id, table, action, local_id, created_at, failed_at, retries, last_error'
     });
 
     // Add hooks to automatically track changes

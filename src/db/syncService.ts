@@ -131,9 +131,23 @@ class SyncService {
           const newRetries = (item.retries || 0) + 1;
           
           if (newRetries >= MAX_RETRIES) {
-            // Permanently remove items that have exceeded max retries
+            // Move to dead letter queue instead of permanently deleting
+            try {
+              await db.sync_dead_letter.add({
+                table: item.table,
+                action: item.action,
+                local_id: item.local_id,
+                data: item.data,
+                created_at: item.created_at,
+                failed_at: new Date(),
+                retries: newRetries,
+                last_error: String(error)
+              });
+            } catch (dlqError) {
+              console.error('Failed to move item to dead letter queue:', dlqError);
+            }
             await db.sync_queue.delete(item.id!);
-            console.warn(`🗑️ Removed sync item ${item.table}/${item.local_id} after ${MAX_RETRIES} failed attempts: ${error}`);
+            console.warn(`📦 Moved sync item ${item.table}/${item.local_id} to dead letter queue after ${MAX_RETRIES} failed attempts: ${error}`);
           } else {
             await db.sync_queue.update(item.id!, {
               retries: newRetries,
@@ -175,6 +189,21 @@ class SyncService {
         );
         
         if (isTooOld || isTooManyRetries || hasInvalidUrl) {
+          // Move to dead letter queue before deleting (preserve data for recovery)
+          if (!hasInvalidUrl) {
+            try {
+              await db.sync_dead_letter.add({
+                table: item.table,
+                action: item.action,
+                local_id: item.local_id,
+                data: item.data,
+                created_at: item.created_at,
+                failed_at: new Date(),
+                retries: item.retries || 0,
+                last_error: isTooOld ? 'Exceeded max age' : 'Exceeded max retries'
+              });
+            } catch { /* dead letter add failed — still remove from queue */ }
+          }
           await db.sync_queue.delete(item.id!);
           purgedCount++;
         }

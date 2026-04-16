@@ -336,7 +336,14 @@ class ApiClient {
       });
       console.log(`📥 Queued offline ${method} to ${endpoint}`);
     } catch (queueError) {
-      console.error('Failed to queue request:', queueError);
+      console.error('CRITICAL: Failed to queue offline request — data may be lost:', queueError);
+      // Notify the user that their action wasn't saved
+      if (typeof window !== 'undefined' && 'dispatchEvent' in window) {
+        window.dispatchEvent(new CustomEvent('sync-queue-error', {
+          detail: { error: queueError, endpoint, method }
+        }));
+      }
+      throw new Error(`Failed to save offline change for ${method} ${endpoint}. Please try again.`);
     }
     this.syncState.pendingChanges++;
     this.notifySyncListeners();

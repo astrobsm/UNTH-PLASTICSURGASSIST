@@ -101,34 +101,23 @@ async function assignPatientsToNewUser(userId, userRole, userName) {
       }
 
       try {
-        // Check if patient already has an assignment for this role
-        const existingAssignment = await query(
-          `SELECT id, ${roleColumn} FROM patient_assignments WHERE patient_id = $1`,
-          [patient.id]
+        // Use ON CONFLICT to atomically assign — avoids race conditions
+        const result = await query(
+          `INSERT INTO patient_assignments (patient_id, hospital_number, ${roleColumn}, is_active) 
+           VALUES ($1, $2, $3, TRUE)
+           ON CONFLICT (patient_id) DO UPDATE 
+           SET ${roleColumn} = COALESCE(patient_assignments.${roleColumn}, EXCLUDED.${roleColumn})
+           RETURNING (xmax = 0) AS inserted, ${roleColumn}`,
+          [patient.id, patient.hospital_number, userId]
         );
-
-        if (existingAssignment.rows.length > 0) {
-          const existing = existingAssignment.rows[0];
-          // If this role is not yet assigned, assign the new user
-          if (!existing[roleColumn]) {
-            await query(
-              `UPDATE patient_assignments 
-               SET ${roleColumn} = $1 
-               WHERE patient_id = $2`,
-              [userId, patient.id]
-            );
+        
+        if (result.rows.length > 0) {
+          const row = result.rows[0];
+          // Count if we actually assigned (new row or previously null role)
+          if (row.inserted || row[roleColumn] === userId) {
             assignedCount++;
             console.log(`✅ Assigned patient ${patient.hospital_number} to ${userName} (${userRole})`);
           }
-        } else {
-          // Create new assignment with this user for their role
-          await query(
-            `INSERT INTO patient_assignments (patient_id, hospital_number, ${roleColumn}, is_active) 
-             VALUES ($1, $2, $3, TRUE)`,
-            [patient.id, patient.hospital_number, userId]
-          );
-          assignedCount++;
-          console.log(`✅ Created new assignment for patient ${patient.hospital_number} with ${userName} (${userRole})`);
         }
       } catch (error) {
         console.error(`Failed to assign patient ${patient.id}:`, error);

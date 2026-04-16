@@ -3,14 +3,19 @@ import { query } from '../_lib/db.js';
 import { cors, authenticateRequest } from '../_lib/auth.js';
 import webpush from 'web-push';
 
-const EXTERNAL_BASE = 'https://ps-consult-unth.vercel.app/api';
-const DOCTOR_CODE = process.env.PS_CONSULT_CODE || 'BLACKVELVET';
+const EXTERNAL_BASE = process.env.PS_CONSULT_EXTERNAL_BASE || 'https://ps-consult-unth.vercel.app/api';
+const DOCTOR_CODE = process.env.PS_CONSULT_CODE;
+if (!DOCTOR_CODE) {
+  console.error('WARNING: PS_CONSULT_CODE env var not set. External consult processing will fail.');
+}
 
-const vapidPublicKey = 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LhPVhJveYTGq-eAqD1Qj2HhVBNvRfGLr1JiOF0j-T_Hxxw';
-const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY || 'your-private-key-here';
+const vapidPublicKey = process.env.VAPID_PUBLIC_KEY || 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LhPVhJveYTGq-eAqD1Qj2HhVBNvRfGLr1JiOF0j-T_Hxxw';
+const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
 
 try {
-  webpush.setVapidDetails('mailto:admin@plasticsurgeryassistant.com', vapidPublicKey, vapidPrivateKey);
+  if (vapidPrivateKey) {
+    webpush.setVapidDetails('mailto:admin@plasticsurgeryassistant.com', vapidPublicKey, vapidPrivateKey);
+  }
 } catch (_) { /* ignore if keys not ready */ }
 
 // ── External auth ──────────────────────────────────────────────

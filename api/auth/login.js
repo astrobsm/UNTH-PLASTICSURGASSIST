@@ -75,7 +75,7 @@ async function handleLogin(req, res) {
           'UPDATE users SET password_hash = $1 WHERE id = $2',
           [hashedPassword, user.id]
         );
-        console.log(`Auto-hashed plaintext password for user ${user.email}`);
+        console.log('Auto-hashed plaintext password for a user during login');
       } catch (hashErr) {
         console.error('Failed to auto-hash password:', hashErr.message);
       }

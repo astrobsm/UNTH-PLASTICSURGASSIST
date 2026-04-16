@@ -45,8 +45,8 @@ export default async function handler(req, res) {
 }
 
 async function getAllPatients(searchParams, res) {
-  const page = parseInt(searchParams.get('page')) || 1;
-  const limit = parseInt(searchParams.get('limit')) || 50;
+  const page = Math.max(1, parseInt(searchParams.get('page')) || 1);
+  const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit')) || 50), 500);
   const search = searchParams.get('search') || '';
   const offset = (page - 1) * limit;
 

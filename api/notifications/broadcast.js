@@ -4,14 +4,19 @@ import { cors, authenticateRequest } from '../_lib/auth.js';
 import webpush from 'web-push';
 
 // Configure web-push with VAPID keys
-const vapidPublicKey = 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LhPVhJveYTGq-eAqD1Qj2HhVBNvRfGLr1JiOF0j-T_Hxxw';
-const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY || 'your-private-key-here';
+const vapidPublicKey = process.env.VAPID_PUBLIC_KEY || 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LhPVhJveYTGq-eAqD1Qj2HhVBNvRfGLr1JiOF0j-T_Hxxw';
+const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
+if (!vapidPrivateKey) {
+  console.error('WARNING: VAPID_PRIVATE_KEY env var not set. Push notifications will fail.');
+}
 
-webpush.setVapidDetails(
-  'mailto:admin@plasticsurgeryassistant.com',
-  vapidPublicKey,
-  vapidPrivateKey
-);
+if (vapidPrivateKey) {
+  webpush.setVapidDetails(
+    'mailto:admin@plasticsurgeryassistant.com',
+    vapidPublicKey,
+    vapidPrivateKey
+  );
+}
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;

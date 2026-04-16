@@ -185,9 +185,9 @@ async function handlePost(req, res, userId, userRole) {
       const newRotation = await query(
         `INSERT INTO trainee_rotations 
          (user_id, level, department, start_date, expected_end_date, status)
-         VALUES ($1, $2, $3, CURRENT_DATE, CURRENT_DATE + INTERVAL '${durationDays} days', 'active')
+         VALUES ($1, $2, $3, CURRENT_DATE, CURRENT_DATE + ($4 || ' days')::INTERVAL, 'active')
          RETURNING *`,
-        [userId, level, department]
+        [userId, level, department, String(durationDays)]
       );
       
       // Update user's training level

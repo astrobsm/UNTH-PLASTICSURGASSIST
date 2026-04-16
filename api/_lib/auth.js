@@ -1,13 +1,15 @@
 // Shared authentication utilities for Vercel serverless functions
 
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback-dev-secret-please-set-jwt-secret-in-env';
-
-// Log warning if using fallback (only in development)
-if (!process.env.JWT_SECRET && process.env.NODE_ENV !== 'production') {
-  console.warn('WARNING: JWT_SECRET not set, using fallback. Set JWT_SECRET in environment variables.');
+if (!process.env.JWT_SECRET) {
+  if (process.env.NODE_ENV === 'production' || process.env.VERCEL) {
+    throw new Error('FATAL: JWT_SECRET environment variable is required in production');
+  }
+  console.error('WARNING: JWT_SECRET not set. Using random secret (sessions will not persist across restarts).');
 }
+const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
 
 export function verifyToken(token) {
   try {
@@ -59,8 +61,8 @@ export function cors(req, res) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Credentials', 'true');
   } else if (!origin) {
-    // Allow requests with no origin (e.g., same-origin requests, curl, etc.)
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    // Same-origin requests or server-to-server (no origin header)
+    // Do NOT set wildcard — omit Access-Control-Allow-Origin for security
   }
   
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
@@ -76,4 +78,19 @@ export function cors(req, res) {
   return false;
 }
 
-export default { verifyToken, signToken, getTokenFromRequest, authenticateRequest, cors };
+// Role-based access control helper
+// Usage: const { user } = requireRole(req, res, ['admin', 'consultant']); if (!user) return;
+export function requireRole(req, res, allowedRoles) {
+  const auth = authenticateRequest(req);
+  if (!auth.authenticated) {
+    res.status(401).json({ error: auth.error });
+    return { user: null };
+  }
+  if (allowedRoles && allowedRoles.length > 0 && !allowedRoles.includes(auth.user.role)) {
+    res.status(403).json({ error: 'Insufficient permissions' });
+    return { user: null };
+  }
+  return { user: auth.user };
+}
+
+export default { verifyToken, signToken, getTokenFromRequest, authenticateRequest, cors, requireRole };
