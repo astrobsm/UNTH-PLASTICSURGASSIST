@@ -739,8 +739,37 @@ const EncountersTab: React.FC<{ patientId: string; hospitalNumber: string; patie
   };
 
   const handleOCRExtracted = (fields: Record<string, any>) => {
+    // Format extracted fields into readable text, handling arrays/objects properly
+    const formatVal = (v: any): string => {
+      if (v == null) return '';
+      if (Array.isArray(v)) {
+        return v.map((item, i) => {
+          if (typeof item === 'object' && item !== null) {
+            const parts = Object.entries(item)
+              .filter(([, val]) => val != null && val !== '')
+              .map(([key, val]) => `${key.replace(/_/g, ' ')}: ${val}`);
+            return `  ${i + 1}. ${parts.join(', ')}`;
+          }
+          return `  - ${item}`;
+        }).join('\n');
+      }
+      if (typeof v === 'object') {
+        return Object.entries(v)
+          .filter(([, val]) => val != null && val !== '')
+          .map(([key, val]) => `${key.replace(/_/g, ' ')}: ${val}`)
+          .join(', ');
+      }
+      return String(v);
+    };
+
     const extractedText = fields.rawText || fields.content || fields.text || 
-      Object.entries(fields).map(([k, v]) => `${k}: ${v}`).join('\n');
+      Object.entries(fields)
+        .filter(([, v]) => v != null && v !== '')
+        .map(([k, v]) => {
+          const formatted = formatVal(v);
+          if (Array.isArray(v)) return `${k.replace(/_/g, ' ')}:\n${formatted}`;
+          return `${k.replace(/_/g, ' ')}: ${formatted}`;
+        }).join('\n');
     setNewNote(prev => prev ? prev + '\n\n--- OCR Extracted ---\n' + extractedText : extractedText);
     setShowOCRScanner(false);
   };
@@ -1711,6 +1740,41 @@ const InvestigationsTab: React.FC<{ patientId: string; hospitalNumber: string; p
         status: uploadType === 'form' ? 'pending' : 'completed',
       };
 
+      // Auto-OCR for result uploads to extract structured lab data for trends
+      if (uploadType === 'result') {
+        try {
+          const base64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
+          const ocrResp = await apiClient.post<any>('/ocr/scan', {
+            image: base64,
+            documentType: 'lab_report',
+            aiPostProcess: true,
+            patientContext: { name: patientName, hospitalNumber },
+          });
+          if (ocrResp?.success && ocrResp.structured) {
+            const fields = ocrResp.structured;
+            let labResults: any[] | undefined;
+            if (Array.isArray(fields.results)) {
+              labResults = fields.results;
+            } else if (Array.isArray(fields.investigations)) {
+              labResults = fields.investigations.map((inv: any) => ({
+                test_name: inv.name || inv.test_name || 'Unknown',
+                result_value: inv.result || inv.result_value || inv.value || '',
+                unit: inv.unit || '',
+                reference_range: inv.reference_range || '',
+                abnormal: inv.abnormal || false,
+                flag: inv.flag || (inv.abnormal ? 'abnormal' : 'normal'),
+              }));
+            }
+            if (labResults && labResults.length > 0) {
+              record.results = labResults;
+              record.test_name = fields.test_name || fields.testName || record.test_name;
+            }
+            record.ocr_text = JSON.stringify(fields);
+            record.ocr_extracted = true;
+          }
+        } catch { /* OCR failed — continue with basic upload */ }
+      }
+
       // Save to IndexedDB
       try {
         const localId = await db.investigation_uploads.add({ ...record, created_at: new Date().toISOString() });
@@ -1732,7 +1796,7 @@ const InvestigationsTab: React.FC<{ patientId: string; hospitalNumber: string; p
       if (uploadType === 'form') {
         setRequested(prev => [{ ...record, _type: 'upload' }, ...prev]);
       } else {
-        setResults(prev => [{ ...record, results: 'See scanned document', _type: 'upload' }, ...prev]);
+        setResults(prev => [{ ...record, results: record.results || 'See scanned document', _type: 'upload' }, ...prev]);
       }
     } catch (err) {
       alert('Failed to process uploaded file');
@@ -2061,8 +2125,14 @@ const InvestigationsTab: React.FC<{ patientId: string; hospitalNumber: string; p
                 const dateStr = inv.completed_at || inv.result_date || inv.updated_at || inv.created_at;
                 if (!dateStr) return;
 
+                // Parse results: handle string (JSON-encoded) or direct array/object
+                let parsedResults = inv.results;
+                if (typeof parsedResults === 'string' && parsedResults !== 'See scanned document') {
+                  try { parsedResults = JSON.parse(parsedResults); } catch { /* not JSON */ }
+                }
+
                 // Extract from array results (lab_report format: [{test_name, result_value, unit, ...}])
-                const labResults = Array.isArray(inv.results) ? inv.results : null;
+                const labResults = Array.isArray(parsedResults) ? parsedResults : null;
                 if (labResults) {
                   labResults.forEach((r: any) => {
                     const name = r.test_name || r.name;
@@ -2077,8 +2147,8 @@ const InvestigationsTab: React.FC<{ patientId: string; hospitalNumber: string; p
                 }
 
                 // Extract from object results (key-value pairs)
-                if (inv.results && typeof inv.results === 'object' && !Array.isArray(inv.results)) {
-                  Object.entries(inv.results).forEach(([key, val]) => {
+                if (parsedResults && typeof parsedResults === 'object' && !Array.isArray(parsedResults)) {
+                  Object.entries(parsedResults).forEach(([key, val]) => {
                     const num = parseFloat(String(val));
                     if (!isNaN(num) && !['id', 'patient_id', 'confidence'].includes(key)) {
                       if (!trendData[key]) trendData[key] = [];
@@ -3445,8 +3515,37 @@ const MDTCareTab: React.FC<{
   };
 
   const handleOCRExtracted = (fields: Record<string, any>) => {
+    // Format extracted fields into readable text, handling arrays/objects properly
+    const formatValue = (v: any): string => {
+      if (v == null) return '';
+      if (Array.isArray(v)) {
+        return v.map((item, i) => {
+          if (typeof item === 'object' && item !== null) {
+            const parts = Object.entries(item)
+              .filter(([, val]) => val != null && val !== '')
+              .map(([key, val]) => `${key.replace(/_/g, ' ')}: ${val}`);
+            return `  ${i + 1}. ${parts.join(', ')}`;
+          }
+          return `  - ${item}`;
+        }).join('\n');
+      }
+      if (typeof v === 'object') {
+        return Object.entries(v)
+          .filter(([, val]) => val != null && val !== '')
+          .map(([key, val]) => `${key.replace(/_/g, ' ')}: ${val}`)
+          .join(', ');
+      }
+      return String(v);
+    };
+
     const extractedText = fields.rawText || fields.content || fields.text ||
-      Object.entries(fields).map(([k, v]) => `${k}: ${v}`).join('\n');
+      Object.entries(fields)
+        .filter(([, v]) => v != null && v !== '')
+        .map(([k, v]) => {
+          const formatted = formatValue(v);
+          if (Array.isArray(v)) return `${k.replace(/_/g, ' ')}:\n${formatted}`;
+          return `${k.replace(/_/g, ' ')}: ${formatted}`;
+        }).join('\n');
     setDocContent(prev => prev ? prev + '\n\n--- OCR Extracted ---\n' + extractedText : extractedText);
     setShowOCRScanner(false);
   };
