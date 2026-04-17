@@ -414,6 +414,41 @@ function SummaryTab({ ho, metrics: m, requirements: r, progressBar }: {
           </div>
         </div>
       </div>
+
+      {/* Score Breakdown */}
+      {m.scoreBreakdown && (
+        <div className="bg-gray-50 rounded-lg p-4">
+          <h4 className="font-medium text-sm text-gray-700 mb-3 flex items-center gap-2">
+            <BarChart3 className="h-4 w-4 text-primary-600" /> Overall Score Breakdown
+          </h4>
+          <div className="space-y-2">
+            {[
+              { label: 'CBT (30%)', ...m.scoreBreakdown.cbt },
+              { label: 'Patient Care (35%)', ...m.scoreBreakdown.patientCare },
+              { label: 'Duties (25%)', ...m.scoreBreakdown.duties },
+              { label: 'Attendance (10%)', ...m.scoreBreakdown.attendance },
+            ].map(item => (
+              <div key={item.label} className="flex items-center gap-3 text-sm">
+                <span className="w-36 text-gray-600">{item.label}</span>
+                <div className="flex-1 bg-gray-200 rounded-full h-2">
+                  <div className={`h-2 rounded-full ${item.score >= 70 ? 'bg-green-500' : item.score >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}
+                       style={{ width: `${Math.min(100, item.score)}%` }} />
+                </div>
+                <span className="w-16 text-right text-xs font-medium text-gray-700">{item.score}% → {item.contribution}%</span>
+              </div>
+            ))}
+            <div className="border-t pt-2 mt-2 flex justify-between text-sm font-semibold">
+              <span className="text-gray-700">Overall Score</span>
+              <span className={m.overallScore >= 70 ? 'text-green-600' : 'text-amber-600'}>{m.overallScore}%</span>
+            </div>
+          </div>
+          {m.rotationStart && (
+            <p className="text-[10px] text-gray-400 mt-2">
+              Metrics scoped to current rotation starting {new Date(m.rotationStart).toLocaleDateString()}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

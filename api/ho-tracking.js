@@ -94,7 +94,7 @@ async function handleGet(req, res, currentUser) {
                p.first_name, p.last_name, p.hospital_number
         FROM prescriptions pr
         LEFT JOIN patients p ON pr.patient_id::text = p.id::text
-        WHERE pr.created_by = $1
+        WHERE pr.prescribed_by = $1 OR pr.created_by = $1
         ORDER BY pr.created_at DESC LIMIT 50
       `, [targetId]);
 
@@ -185,7 +185,7 @@ async function handleGet(req, res, currentUser) {
           [ho.id, `%${ho.full_name}%`, fromDate, toDate]
         );
         const rx = await query(
-          `SELECT COUNT(*) as cnt FROM prescriptions WHERE created_by = $1 AND created_at BETWEEN $2 AND $3`,
+          `SELECT COUNT(*) as cnt FROM prescriptions WHERE (prescribed_by = $1 OR created_by = $1) AND created_at BETWEEN $2 AND $3`,
           [ho.id, fromDate, toDate]
         );
         const labs = await query(
@@ -341,6 +341,25 @@ async function getHOFullMetrics(userId, fullName, username) {
     } catch (e) { return defaultVal; }
   }
 
+  // ── 0. Rotation date scope — only count activity within the active rotation ──
+  let rotationDateClause = '';      // e.g. " AND created_at >= '2026-03-01'"
+  let rotationDateClauseTs = '';    // for columns named "timestamp"
+  let rotationStart = null;
+  const rotRow = await safeQuery(
+    `SELECT start_date FROM trainee_rotations
+     WHERE user_id = $1 AND status IN ('active', 'extended', 'pending_signout')
+     ORDER BY created_at DESC LIMIT 1`,
+    [uidInt], null
+  );
+  if (rotRow && rotRow.start_date) {
+    rotationStart = rotRow.start_date;
+    // Use parameterised dates where possible; for the loop-based queries we
+    // append a safe literal (ISO date) so we don't have to renumber all $N placeholders.
+    const iso = new Date(rotRow.start_date).toISOString();
+    rotationDateClause = ` AND created_at >= '${iso}'`;
+    rotationDateClauseTs = ` AND timestamp >= '${iso}'`;
+  }
+
   // ── 1. CBT Tests ──
   const cbt = await safeQuery(
     `SELECT COUNT(*) as completed,
@@ -351,7 +370,7 @@ async function getHOFullMetrics(userId, fullName, username) {
             ), 0) as avg_score,
             COALESCE(MAX(percentage), 0) as best_score,
             COALESCE(MIN(NULLIF(percentage, 0)), 0) as worst_score
-     FROM cbt_attempts WHERE (user_id = $1 OR user_id::text = $2) AND (completed = true OR passed = true)`,
+     FROM cbt_attempts WHERE (user_id = $1 OR user_id::text = $2) AND (completed = true OR passed = true)${rotationDateClause}`,
     [uidInt, uid], { completed: 0, avg_score: 0, best_score: 0, worst_score: 0 }
   );
   const cbtCompleted = parseInt(cbt.completed) || 0;
@@ -378,89 +397,107 @@ async function getHOFullMetrics(userId, fullName, username) {
   }
   nameMatchClause += `)`;
 
-  // ── 2. Documentation Counts (individual counts for display) ──
-  // ward_rounds: try both user_id (original) and created_by (added via ALTER)
-  const wardRoundRow = await safeQuery(`SELECT COUNT(*) as cnt FROM ward_rounds WHERE user_id = $1 OR created_by = $1`, [uidInt], { cnt: 0 });
-  const wardRoundsDocumented = parseInt(wardRoundRow.cnt) || 0;
+  // ── 2. Documentation Counts — use name-matching so VARCHAR author columns are found ──
 
-  // prescriptions: column is prescribed_by (not created_by)
-  const prescriptionRow = await safeQuery(`SELECT COUNT(*) as cnt FROM prescriptions WHERE prescribed_by = $1`, [uidInt], { cnt: 0 });
-  const prescriptionsWritten = parseInt(prescriptionRow.cnt) || 0;
+  // ward_rounds: match by integer user_id/created_by OR by name in reviewing_doctor
+  {
+    let wrClause = `(user_id = $1 OR created_by = $1`;
+    const wrParams = [uidInt];
+    let pIdx = 1;
+    if (fullName) {
+      pIdx++; wrParams.push(fullName);
+      wrClause += ` OR LOWER(reviewing_doctor) = LOWER($${pIdx})`;
+    }
+    wrClause += `)`;
+    const wardRoundRow = await safeQuery(
+      `SELECT COUNT(*) as cnt FROM ward_rounds WHERE ${wrClause}${rotationDateClause}`, wrParams, { cnt: 0 }
+    );
+    var wardRoundsDocumented = parseInt(wardRoundRow.cnt) || 0;
+  }
 
-  const labOrderRow = await safeQuery(`SELECT COUNT(*) as cnt FROM lab_orders WHERE ordered_by = $1`, [uidInt], { cnt: 0 });
-  const labOrdersPlaced = parseInt(labOrderRow.cnt) || 0;
+  // prescriptions: match by prescribed_by (INT) OR created_by (INT)
+  {
+    const prescriptionRow = await safeQuery(
+      `SELECT COUNT(*) as cnt FROM prescriptions WHERE (prescribed_by = $1 OR created_by = $1)${rotationDateClause}`, [uidInt], { cnt: 0 }
+    );
+    var prescriptionsWritten = parseInt(prescriptionRow.cnt) || 0;
+  }
 
-  // ── 3. Patient Entries — count from ALL clinical tables using correct column per table ──
+  // lab_orders: match by ordered_by OR created_by
+  {
+    const labOrderRow = await safeQuery(
+      `SELECT COUNT(*) as cnt FROM lab_orders WHERE (ordered_by = $1 OR created_by = $1)${rotationDateClause}`, [uidInt], { cnt: 0 }
+    );
+    var labOrdersPlaced = parseInt(labOrderRow.cnt) || 0;
+  }
+
+  // ── 3. Patient Entries — count DISTINCT patient interactions across clinical tables ──
+  //    Each table contributes unique patient-touching records by this HO.
+  //    Ward rounds, prescriptions, and lab orders already counted above are NOT double-counted
+  //    in patientCount — we sum ALL clinical documentation as "patient entries".
   let patientCount = 0;
 
   // 3a. Tables with created_by INTEGER
   for (const tbl of ['patients', 'treatment_plans', 'admissions', 'surgeries']) {
-    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM ${tbl} WHERE created_by = $1`, [uidInt], { cnt: 0 });
+    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM ${tbl} WHERE created_by = $1${rotationDateClause}`, [uidInt], { cnt: 0 });
     patientCount += parseInt(r.cnt) || 0;
   }
 
-  // 3a2. prescriptions uses prescribed_by
-  {
-    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM prescriptions WHERE prescribed_by = $1`, [uidInt], { cnt: 0 });
-    patientCount += parseInt(r.cnt) || 0;
-  }
+  // 3a2. prescriptions — already counted individually above, add to patient entries total too
+  patientCount += prescriptionsWritten;
 
-  // 3a3. ward_rounds uses user_id or created_by
-  {
-    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM ward_rounds WHERE user_id = $1 OR created_by = $1`, [uidInt], { cnt: 0 });
-    patientCount += parseInt(r.cnt) || 0;
-  }
+  // 3a3. ward_rounds — already counted individually above
+  patientCount += wardRoundsDocumented;
 
-  // 3a4. lab_orders uses ordered_by
-  {
-    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM lab_orders WHERE ordered_by = $1`, [uidInt], { cnt: 0 });
-    patientCount += parseInt(r.cnt) || 0;
-  }
+  // 3a4. lab_orders — already counted individually above
+  patientCount += labOrdersPlaced;
 
   // 3a5. discharge_summaries uses prepared_by
   {
-    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM discharge_summaries WHERE prepared_by = $1`, [uidInt], { cnt: 0 });
+    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM discharge_summaries WHERE prepared_by = $1${rotationDateClause}`, [uidInt], { cnt: 0 });
     patientCount += parseInt(r.cnt) || 0;
   }
 
   // 3b. wound_care_records — recorded_by INTEGER
-  const woundRow = await safeQuery(`SELECT COUNT(*) as cnt FROM wound_care_records WHERE recorded_by = $1`, [uidInt], { cnt: 0 });
-  patientCount += parseInt(woundRow.cnt) || 0;
+  {
+    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM wound_care_records WHERE recorded_by = $1${rotationDateClause}`, [uidInt], { cnt: 0 });
+    patientCount += parseInt(r.cnt) || 0;
+  }
 
   // 3c. Tables with recorded_by VARCHAR — match by name/id
   for (const tbl of ['vital_signs', 'fluid_balance']) {
     const clause = nameMatchClause.replace(/\$COL/g, 'recorded_by');
-    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM ${tbl} WHERE ${clause}`, nameMatchValues, { cnt: 0 });
+    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM ${tbl} WHERE ${clause}${rotationDateClause}`, nameMatchValues, { cnt: 0 });
     patientCount += parseInt(r.cnt) || 0;
   }
 
   // 3d. progress_notes — author VARCHAR
   {
     const clause = nameMatchClause.replace(/\$COL/g, 'author');
-    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM progress_notes WHERE ${clause}`, nameMatchValues, { cnt: 0 });
+    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM progress_notes WHERE ${clause}${rotationDateClause}`, nameMatchValues, { cnt: 0 });
     patientCount += parseInt(r.cnt) || 0;
   }
 
   // 3e. Assessment tables with assessed_by VARCHAR
   for (const tbl of ['dvt_assessments', 'pressure_sore_assessments', 'nutritional_assessments', 'diabetic_foot_assessments', 'preoperative_assessments']) {
     const clause = nameMatchClause.replace(/\$COL/g, 'assessed_by');
-    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM ${tbl} WHERE ${clause}`, nameMatchValues, { cnt: 0 });
+    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM ${tbl} WHERE ${clause}${rotationDateClause}`, nameMatchValues, { cnt: 0 });
     patientCount += parseInt(r.cnt) || 0;
   }
 
   // 3f. blood_transfusions — administered_by VARCHAR
   {
     const clause = nameMatchClause.replace(/\$COL/g, 'administered_by');
-    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM blood_transfusions WHERE ${clause}`, nameMatchValues, { cnt: 0 });
+    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM blood_transfusions WHERE ${clause}${rotationDateClause}`, nameMatchValues, { cnt: 0 });
     patientCount += parseInt(r.cnt) || 0;
   }
 
-  // ── 4. Duties — formal assignments + clinic duty logs + call duty roster + clinical actions ──
+  // ── 4. Duties — formal assignments + clinic/call duties (NO audit_log double-count) ──
   let dutiesCompleted = 0;
 
   // 4a. Formal duty assignments completed
   const formalDutyRow = await safeQuery(
-    `SELECT COUNT(*) as cnt FROM duty_assignments WHERE user_id = $1 AND status = 'completed'`,
+    `SELECT COUNT(*) as cnt FROM duty_assignments WHERE user_id = $1 AND status = 'completed'${rotationDateClause}`,
     [uidInt], { cnt: 0 }
   );
   dutiesCompleted += parseInt(formalDutyRow.cnt) || 0;
@@ -468,7 +505,7 @@ async function getHOFullMetrics(userId, fullName, username) {
   // 4b. Clinic duty logs
   {
     const clause = nameMatchClause.replace(/\$COL/g, 'user_id');
-    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM clinic_duty_logs WHERE ${clause}`, nameMatchValues, { cnt: 0 });
+    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM clinic_duty_logs WHERE ${clause}${rotationDateClause}`, nameMatchValues, { cnt: 0 });
     dutiesCompleted += parseInt(r.cnt) || 0;
   }
 
@@ -483,33 +520,26 @@ async function getHOFullMetrics(userId, fullName, username) {
       callClause += ` OR LOWER(senior_registrar_name) = LOWER($${pIdx}) OR LOWER(registrar_name) = LOWER($${pIdx}) OR LOWER(house_officer_name) = LOWER($${pIdx})`;
     }
     callClause += `)`;
-    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM call_duty_roster WHERE ${callClause}`, callParams, { cnt: 0 });
+    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM call_duty_roster WHERE ${callClause}${rotationDateClause}`, callParams, { cnt: 0 });
     dutiesCompleted += parseInt(r.cnt) || 0;
   }
 
-  // 4d. Clinical actions from audit_logs
-  const clinicalDutyRow = await safeQuery(
-    `SELECT COUNT(*) as cnt FROM audit_logs WHERE ${auditUserClause} AND UPPER(action) IN ('CREATE', 'UPDATE', 'COMPLETE')
-     AND UPPER(resource_type) IN ('PATIENT', 'TREATMENT_PLAN', 'ADMISSION', 'PRESCRIPTION', 'WARD_ROUND', 'LAB_ORDER', 'PROCEDURE', 'DISCHARGE', 'VITAL_SIGNS', 'WOUND_CARE', 'PROGRESS_NOTE', 'FLUID_BALANCE', 'SURGERY', 'ASSESSMENT', 'BLOOD_TRANSFUSION', 'MDT')`,
-    auditUserParams, { cnt: 0 }
-  );
-  dutiesCompleted += parseInt(clinicalDutyRow.cnt) || 0;
+  // NOTE: Removed audit_log clinical-action counting (section 4d) — those actions are already
+  // captured in patient entries and should not be double-counted as duties.
 
   // Total duty assignments (for display)
-  const dutiesTotal = await safeQuery(`SELECT COUNT(*) as cnt FROM duty_assignments WHERE user_id = $1`, [uidInt], { cnt: 0 });
+  const dutiesTotal = await safeQuery(`SELECT COUNT(*) as cnt FROM duty_assignments WHERE user_id = $1${rotationDateClause}`, [uidInt], { cnt: 0 });
 
-  // ── 5. Attendance / Login Days ──
+  // ── 5. Attendance / Login Days — UNION both sources for accurate count ──
   const loginRow = await safeQuery(
-    `SELECT COUNT(DISTINCT DATE(timestamp)) as cnt FROM audit_logs WHERE ${auditUserClause}`,
-    auditUserParams, { cnt: 0 }
+    `SELECT COUNT(*) as cnt FROM (
+       SELECT DISTINCT DATE(timestamp) as d FROM audit_logs WHERE ${auditUserClause}${rotationDateClauseTs}
+       UNION
+       SELECT DISTINCT DATE(created_at) as d FROM activity_logs WHERE user_id = $${auditUserParams.length + 1} AND activity_type = 'login'${rotationDateClause}
+     ) combined_logins`,
+    [...auditUserParams, uidInt], { cnt: 0 }
   );
   let loginDays = parseInt(loginRow.cnt) || 0;
-
-  const actLoginRow = await safeQuery(
-    `SELECT COUNT(DISTINCT DATE(created_at)) as cnt FROM activity_logs WHERE user_id = $1 AND activity_type = 'login'`,
-    [uidInt], { cnt: 0 }
-  );
-  loginDays = Math.max(loginDays, parseInt(actLoginRow.cnt) || 0);
 
   // ── 6. CME / Education Topics ──
   let cmeCount = 0;
@@ -571,6 +601,14 @@ async function getHOFullMetrics(userId, fullName, username) {
       loginDays,
       assignedPatients: parseInt(assignedCount.cnt) || 0,
       overallScore: Math.round(overallScore * 10) / 10,
+      // Score breakdown for transparency
+      scoreBreakdown: {
+        cbt: { score: Math.round(cbtAvgScore * 10) / 10, weight: 0.30, contribution: Math.round(cbtAvgScore * 0.30 * 10) / 10 },
+        patientCare: { score: Math.round(patientScore * 10) / 10, weight: 0.35, contribution: Math.round(patientScore * 0.35 * 10) / 10 },
+        duties: { score: Math.round(dutyScore * 10) / 10, weight: 0.25, contribution: Math.round(dutyScore * 0.25 * 10) / 10 },
+        attendance: { score: Math.round(attendanceScore * 10) / 10, weight: 0.10, contribution: Math.round(attendanceScore * 0.10 * 10) / 10 },
+      },
+      rotationStart: rotationStart || null,
     },
     eligibility: {
       eligible: notMet.length === 0,

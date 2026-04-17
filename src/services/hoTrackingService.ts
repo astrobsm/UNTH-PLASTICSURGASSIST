@@ -21,6 +21,13 @@ export interface HOMetrics {
   loginDays: number;
   assignedPatients: number;
   overallScore: number;
+  scoreBreakdown?: {
+    cbt: { score: number; weight: number; contribution: number };
+    patientCare: { score: number; weight: number; contribution: number };
+    duties: { score: number; weight: number; contribution: number };
+    attendance: { score: number; weight: number; contribution: number };
+  };
+  rotationStart?: string | null;
 }
 
 export interface HOEligibility {
