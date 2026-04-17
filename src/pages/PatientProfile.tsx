@@ -1088,6 +1088,7 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; userN
     if (validRows.length === 0) return;
     setSaving(true);
     try {
+      const savedReadings: VitalReading[] = [];
       for (const row of validRows) {
         const reading: VitalReading = {
           id: `vs_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
@@ -1102,17 +1103,22 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; userN
           recorded_by: userName,
         };
         try {
-          await apiClient.post('/vital-signs', { ...reading, patient_id: patientId, hospital_number: hospitalNumber });
+          const result = await apiClient.post('/vital-signs', { ...reading, patient_id: patientId, hospital_number: hospitalNumber });
+          savedReadings.push(result.vital || reading);
         } catch {
           const stored = localStorage.getItem(`vitals_${patientId}`);
           const arr = stored ? JSON.parse(stored) : [];
           arr.push(reading);
           localStorage.setItem(`vitals_${patientId}`, JSON.stringify(arr));
+          savedReadings.push(reading);
         }
       }
+      // Optimistically update state — avoids stale-while-revalidate cache returning empty
+      setVitals(prev =>
+        [...prev, ...savedReadings].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      );
       setBatchRows([{ date: new Date().toISOString().slice(0, 16) }]);
       setShowForm(false);
-      await loadVitals();
     } finally {
       setSaving(false);
     }
@@ -1352,19 +1358,25 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; userN
   const saveOCRVitals = async () => {
     setSavingOCR(true);
     try {
+      const savedReadings: VitalReading[] = [];
       for (const reading of ocrVitalsEntries) {
         try {
-          await apiClient.post('/vital-signs', { ...reading, patient_id: patientId, hospital_number: hospitalNumber });
+          const result = await apiClient.post('/vital-signs', { ...reading, patient_id: patientId, hospital_number: hospitalNumber });
+          savedReadings.push(result.vital || reading);
         } catch {
           const stored = localStorage.getItem(`vitals_${patientId}`);
           const arr = stored ? JSON.parse(stored) : [];
           arr.push(reading);
           localStorage.setItem(`vitals_${patientId}`, JSON.stringify(arr));
+          savedReadings.push(reading);
         }
       }
+      // Optimistically update state — avoids stale-while-revalidate cache returning empty
+      setVitals(prev =>
+        [...prev, ...savedReadings].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      );
       setOcrVitalsEntries([]);
       setShowOCRReview(false);
-      await loadVitals();
     } finally {
       setSavingOCR(false);
     }
