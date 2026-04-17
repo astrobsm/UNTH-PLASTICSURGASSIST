@@ -1,5 +1,6 @@
 import { ConferencePatient } from '../../services/preSurgicalConferenceService';
 import { User, Calendar, Droplet, AlertTriangle, FileText } from 'lucide-react';
+import { displayArrayField } from '../../services/patientService';
 
 interface Props {
   patient: ConferencePatient;
@@ -41,7 +42,7 @@ export default function ClinicalSummarySlide({ patient }: Props) {
         <InfoCard
           icon={<AlertTriangle className="h-6 w-6 text-red-400" />}
           label="Allergies"
-          value={patient.allergies || 'No known allergies'}
+          value={displayArrayField(patient.allergies, 'No known allergies')}
           highlight={!!patient.allergies}
         />
         <InfoCard

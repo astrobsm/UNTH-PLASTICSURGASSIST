@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { db } from '../db/database';
 import { Patient } from '../db/database';
-import { patientService } from '../services/patientService';
+import { patientService, normalizeArrayField } from '../services/patientService';
 import { unthPatientService } from '../services/unthPatientService';
 import { PatientSummaryView, QuickSummaryCard } from '../components/PatientSummary';
 import { DischargePlanning } from '../components/DischargePlanning';
@@ -413,7 +413,7 @@ export const PatientProfile: React.FC = () => {
                   <div>
                     <span className="text-gray-500 text-sm">Allergies:</span>
                     <div className="mt-1 space-y-1">
-                      {patient.allergies.map((allergy, index) => (
+                      {normalizeArrayField(patient.allergies).map((allergy, index) => (
                         <span key={index} className="inline-block bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full mr-1">
                           {allergy}
                         </span>
@@ -425,7 +425,7 @@ export const PatientProfile: React.FC = () => {
                   <div>
                     <span className="text-gray-500 text-sm">Comorbidities:</span>
                     <div className="mt-1 space-y-1">
-                      {patient.comorbidities.map((condition, index) => (
+                      {normalizeArrayField(patient.comorbidities).map((condition, index) => (
                         <span key={index} className="inline-block bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full mr-1 mb-1">
                           {condition}
                         </span>

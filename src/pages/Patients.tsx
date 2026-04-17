@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { db } from '../db/database';
 import { Patient } from '../db/database';
 import { PatientRegistrationForm } from '../components/PatientRegistrationForm';
-import patientService from '../services/patientService';
+import patientService, { normalizeArrayField } from '../services/patientService';
 import { apiClient } from '../services/apiClient';
 import { preoperativeService } from '../services/preoperativeService';
 import { patientActions } from '../components/Layout';
@@ -800,13 +800,13 @@ export const Patients: React.FC = () => {
                             <div className="flex items-center space-x-1">
                               <span className="text-xs text-red-600 font-medium">Allergies:</span>
                               <div className="flex flex-wrap gap-1">
-                                {patient.allergies.slice(0, 2).map((allergy: any, index: number) => (
+                                {normalizeArrayField(patient.allergies).slice(0, 2).map((allergy: string, index: number) => (
                                   <span key={index} className="inline-block bg-red-100 text-red-800 text-xs px-2 py-0.5 rounded-full">
-                                    {typeof allergy === 'object' && allergy !== null ? (allergy.name || allergy.allergen || JSON.stringify(allergy)) : String(allergy)}
+                                    {allergy}
                                   </span>
                                 ))}
-                                {patient.allergies.length > 2 && (
-                                  <span className="text-xs text-red-600">+{patient.allergies.length - 2}</span>
+                                {normalizeArrayField(patient.allergies).length > 2 && (
+                                  <span className="text-xs text-red-600">+{normalizeArrayField(patient.allergies).length - 2}</span>
                                 )}
                               </div>
                             </div>
@@ -1135,13 +1135,7 @@ export const Patients: React.FC = () => {
             </div>
             <div className="text-center">
               <div className="stat-value text-purple-600">
-                {filteredPatients.filter(p => {
-                  const a = p.allergies as any;
-                  if (!a) return false;
-                  if (Array.isArray(a)) return a.length > 0;
-                  if (typeof a === 'string') return a.length > 0 && a.toLowerCase() !== 'none' && a.toLowerCase() !== 'nkda' && a !== '[]';
-                  return false;
-                }).length}
+                {filteredPatients.filter(p => normalizeArrayField(p.allergies).length > 0).length}
               </div>
               <div className="stat-label">With Allergies</div>
             </div>

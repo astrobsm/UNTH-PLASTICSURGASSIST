@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { unthPatientService, PatientSummary } from '../services/unthPatientService';
-import { patientService } from '../services/patientService';
+import { patientService, normalizeArrayField } from '../services/patientService';
 import { apiClient } from '../services/apiClient';
 import { db } from '../db/database';
 
@@ -129,7 +129,7 @@ export const PatientSummaryView: React.FC<PatientSummaryViewProps> = ({
     // Build content from actual patient data
     const patientName = `${patient.first_name} ${patient.last_name}`;
     const diagnosis = patient.primary_diagnosis || latestAdmission?.provisional_diagnosis || latestAdmission?.admitting_diagnosis || 'Not specified';
-    const allergies = Array.isArray(patient.allergies) ? patient.allergies : (patient.allergies ? [patient.allergies] : []);
+    const allergies = normalizeArrayField(patient.allergies);
     const ward = latestAdmission?.ward_location || latestAdmission?.ward || patient.ward || 'Not assigned';
     
     let content = `Patient ${patientName}`;
@@ -640,7 +640,7 @@ export const QuickSummaryCard: React.FC<{ patientId: string }> = ({ patientId })
                 const patientName = `${patient.first_name} ${patient.last_name}`;
                 const diagnosis = patient.primary_diagnosis || latestAdmission?.provisional_diagnosis || latestAdmission?.admitting_diagnosis || 'Not specified';
                 const ward = latestAdmission?.ward_location || latestAdmission?.ward || patient.ward || 'Not assigned';
-                const allergies = Array.isArray(patient.allergies) ? patient.allergies : (patient.allergies ? [patient.allergies] : []);
+                const allergies = normalizeArrayField(patient.allergies);
 
                 let content = `Patient ${patientName}`;
                 if (patient.hospital_number) content += ` (${patient.hospital_number})`;

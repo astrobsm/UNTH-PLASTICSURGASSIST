@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { patientService } from '../services/patientService';
+import { patientService, displayArrayField } from '../services/patientService';
 import { MedicalTextInput } from '../components/MedicalTextInput';
 import MedicalAutocompleteTextarea from '../components/MedicalAutocompleteTextarea';
 import { 
@@ -778,13 +778,13 @@ function ActivePatientsTab({ admissions, searchTerm, setSearchTerm, onDischarge,
                                   {admission.allergies && (
                                     <div>
                                       <span className="font-medium text-gray-700">Allergies: </span>
-                                      <span className="text-red-600">{admission.allergies}</span>
+                                      <span className="text-red-600">{displayArrayField(admission.allergies, 'None')}</span>
                                     </div>
                                   )}
                                   {admission.comorbidities && admission.comorbidities.length > 0 && (
                                     <div>
                                       <span className="font-medium text-gray-700">Comorbidities: </span>
-                                      <span className="text-gray-600">{Array.isArray(admission.comorbidities) ? admission.comorbidities.join(', ') : admission.comorbidities}</span>
+                                      <span className="text-gray-600">{displayArrayField(admission.comorbidities, 'None')}</span>
                                     </div>
                                   )}
                                 </div>

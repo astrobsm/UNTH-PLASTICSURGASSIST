@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Clock, FileText, Activity, Pill, Stethoscope, Clipboard, Scissors, Droplet, AlertTriangle, UserCheck, ChevronDown, ChevronUp } from 'lucide-react';
 import { db } from '../db/database';
+import { displayArrayField } from '../services/patientService';
 import { format } from 'date-fns';
 
 interface PatientChronologicalTimelineProps {
@@ -401,8 +402,8 @@ export function PatientChronologicalTimeline({ patientId, hospitalNumber }: Pati
             details: [
               ...(po.asa_class ? [{ label: 'ASA Class', value: po.asa_class }] : []),
               ...(po.fitness_status ? [{ label: 'Fitness', value: po.fitness_status }] : []),
-              ...(po.allergies ? [{ label: 'Allergies', value: Array.isArray(po.allergies) ? po.allergies.join(', ') : po.allergies }] : []),
-              ...(po.comorbidities ? [{ label: 'Comorbidities', value: Array.isArray(po.comorbidities) ? po.comorbidities.join(', ') : po.comorbidities }] : []),
+              ...(po.allergies ? [{ label: 'Allergies', value: displayArrayField(po.allergies) }] : []),
+              ...(po.comorbidities ? [{ label: 'Comorbidities', value: displayArrayField(po.comorbidities) }] : []),
               ...(po.airway_assessment ? [{ label: 'Airway', value: po.airway_assessment }] : []),
               ...(po.cardiac_status ? [{ label: 'Cardiac', value: po.cardiac_status }] : []),
               ...(po.respiratory_status ? [{ label: 'Respiratory', value: po.respiratory_status }] : []),

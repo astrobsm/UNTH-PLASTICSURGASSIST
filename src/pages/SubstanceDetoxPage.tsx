@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { db } from '../db/database';
+import { normalizeArrayField } from '../services/patientService';
 import {
   substanceDefinitions,
   calculatePhysicalDependenceScore,
@@ -147,7 +148,7 @@ export default function SubstanceDetoxPage() {
             withdrawalRiskPrediction: typeof a.withdrawal_risk_prediction === 'string' ? JSON.parse(a.withdrawal_risk_prediction) : (a.withdrawal_risk_prediction || a.withdrawalRiskPrediction || {}),
             careSettingDecision: typeof a.care_setting_decision === 'string' ? JSON.parse(a.care_setting_decision) : (a.care_setting_decision || a.careSettingDecision || {}),
             painManagementSupport: typeof a.pain_management_support === 'string' ? JSON.parse(a.pain_management_support) : (a.pain_management_support || a.painManagementSupport),
-            comorbidities: typeof a.comorbidities === 'string' ? JSON.parse(a.comorbidities) : (a.comorbidities || []),
+            comorbidities: normalizeArrayField(a.comorbidities),
             comorbidityModifications: typeof a.comorbidity_modifications === 'string' ? JSON.parse(a.comorbidity_modifications) : (a.comorbidity_modifications || a.comorbidityModifications || []),
             socialFactors: typeof a.social_factors === 'string' ? JSON.parse(a.social_factors) : (a.social_factors || a.socialFactors || {}),
             previousDetoxAttempts: a.previous_detox_attempts ?? a.previousDetoxAttempts ?? 0,

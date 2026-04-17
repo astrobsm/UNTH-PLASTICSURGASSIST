@@ -1,6 +1,7 @@
 import React from 'react';
 import { X, User, Calendar, Droplet, AlertTriangle, FileText, MapPin, BedDouble } from 'lucide-react';
 import { ConferencePatient } from '../../services/preSurgicalConferenceService';
+import { displayArrayField } from '../../services/patientService';
 
 interface Props {
   patient: ConferencePatient;
@@ -86,7 +87,7 @@ const PatientSummarySlide: React.FC<Props> = ({ patient, onExit }) => {
                 <AlertTriangle className="h-7 w-7 text-red-600" />
                 <h3 className="text-lg sm:text-2xl font-bold text-red-700">⚠️ Allergies</h3>
               </div>
-              <p className="text-xl text-red-800 font-semibold">{patient.allergies}</p>
+              <p className="text-xl text-red-800 font-semibold">{displayArrayField(patient.allergies, 'No known allergies')}</p>
             </div>
           )}
 

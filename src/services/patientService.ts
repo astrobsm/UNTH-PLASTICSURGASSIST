@@ -10,19 +10,54 @@ import { pushNotificationService } from './pushNotificationService';
 
 /**
  * Safely convert an array field to an array of strings.
- * Handles cases where items are objects (e.g., {condition, currentlyManaged}) instead of plain strings.
+ * Handles: double-stringified JSON, PostgreSQL array literals like '{item1,item2}',
+ * object items with condition/name/label fields, and filters meaningless values.
  */
-function normalizeArrayField(value: any): string[] {
+export function normalizeArrayField(value: any): string[] {
   if (!value) return [];
-  const arr = Array.isArray(value) ? value : [value];
+
+  // Unwrap stringified JSON (handles double-stringified values too)
+  let parsed = value;
+  if (typeof parsed === 'string') {
+    // Try JSON.parse up to 2 levels (handles '["NONE"]' and '"[\\"NONE\\"]"')
+    for (let i = 0; i < 2; i++) {
+      if (typeof parsed !== 'string') break;
+      try { parsed = JSON.parse(parsed); } catch { break; }
+    }
+  }
+  // Handle PostgreSQL array literal: '{NONE}' or '{item1,item2}'
+  if (typeof parsed === 'string' && parsed.startsWith('{') && parsed.endsWith('}')) {
+    const inner = parsed.slice(1, -1).trim();
+    if (inner) {
+      parsed = inner.split(',').map((s: string) => s.trim().replace(/^"|"$/g, ''));
+    } else {
+      return [];
+    }
+  }
+
+  const arr = Array.isArray(parsed) ? parsed : [parsed];
   return arr.map((item: any) => {
-    if (typeof item === 'string') return item;
+    if (typeof item === 'string') {
+      // Filter out empty/null-like values
+      const trimmed = item.trim();
+      if (!trimmed || trimmed === '{}' || trimmed === '[]' || trimmed === 'null' || trimmed === 'NONE' || trimmed === 'None' || trimmed === 'none' || trimmed === 'nil') return '';
+      return trimmed;
+    }
     if (typeof item === 'object' && item !== null) {
       // Handle {condition: "...", currentlyManaged: true/false} objects
       return item.condition || item.name || item.label || JSON.stringify(item);
     }
     return String(item);
   }).filter(Boolean);
+}
+
+/**
+ * Display helper: normalize any array-like field and join as comma-separated string.
+ * Safe for direct use in JSX — never returns raw JSON strings.
+ */
+export function displayArrayField(value: any, fallback = 'None'): string {
+  const items = normalizeArrayField(value);
+  return items.length > 0 ? items.join(', ') : fallback;
 }
 
 /**

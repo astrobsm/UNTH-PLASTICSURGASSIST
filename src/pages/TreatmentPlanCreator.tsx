@@ -8,6 +8,7 @@ import { format, addDays, addWeeks } from 'date-fns';
 import { useAuthStore } from '../store/authStore';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { db } from '../db/database';
+import { normalizeArrayField } from '../services/patientService';
 import { apiClient } from '../services/apiClient';
 import { treatmentPlanningService } from '../services/treatmentPlanningService';
 import { medicalTeamService } from '../services/medicalTeamService';
@@ -332,7 +333,7 @@ const TreatmentPlanCreator: React.FC = () => {
     setShowPatientDropdown(false);
     // Load comorbidities from patient data
     const co = p.comorbidities || p.medical_history || [];
-    if (Array.isArray(co)) setComorbidities(co.map((c: any) => typeof c === 'string' ? c : c.name || c.condition || ''));
+    setComorbidities(normalizeArrayField(co));
     if (p.diagnosis) setDiagnosis(p.diagnosis);
   };
 
