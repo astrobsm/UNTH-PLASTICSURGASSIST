@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { DocumentScannerModal } from '../components/DocumentScannerModal';
 const PreoperativePlanningModule = lazy(() => import('../components/procedures/PreoperativePlanningModule'));
+const PreoperativeAssessmentForm = lazy(() => import('../components/PreoperativeAssessmentForm'));
 import {
   createPDF, addPDFHeader, addSectionHeader, addBodyText, addBulletList,
   addSeparator, addFooter, addLabeledField, sanitizeTextForPDF, formatDateForPDF,
@@ -337,6 +338,7 @@ export default function BookingRegisterPage() {
   const [showRiskMedDb, setShowRiskMedDb] = useState(false);
   const [showInvOCRScanner, setShowInvOCRScanner] = useState(false);
   const [generatingConsentPdf, setGeneratingConsentPdf] = useState(false);
+  const [showPreopAssessment, setShowPreopAssessment] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const ecgInputRef = useRef<HTMLInputElement>(null);
   const consentInputRef = useRef<HTMLInputElement>(null);
@@ -726,6 +728,225 @@ export default function BookingRegisterPage() {
     doc.save('Shopping_List_' + selectedPatient.hospital_number + '.pdf');
     toast.success('Thermal shopping list generated');
   }, [planData, selectedPatient]);
+
+  // --- A4 PDF: Investigation Request ---
+  const generateInvestigationRequestPDF = useCallback(() => {
+    if (!planData || !selectedPatient) return;
+    const doc = createPDF();
+    let y = addPDFHeader(doc, 'INVESTIGATION REQUEST FORM');
+    y += 2;
+    addLabeledField(doc, 'Patient Name', selectedPatient.full_name || `${selectedPatient.first_name} ${selectedPatient.last_name}`, PDF_MARGINS.left, y);
+    y += PDF_LINE_HEIGHT;
+    addTwoColumnText(doc, 'Hospital No: ' + (selectedPatient.hospital_number || '-'), 'Date: ' + formatDateForPDF(new Date().toISOString()), y);
+    y += PDF_LINE_HEIGHT;
+    addTwoColumnText(doc, 'Gender: ' + (selectedPatient.gender || '-'), 'Age: ' + (patientAge ?? '-') + ' years', y);
+    y += PDF_LINE_HEIGHT;
+    if (planData.diagnosis) {
+      addLabeledField(doc, 'Diagnosis', sanitizeTextForPDF(planData.diagnosis), PDF_MARGINS.left, y);
+      y += PDF_LINE_HEIGHT;
+    }
+    if (planData.procedure_name) {
+      addLabeledField(doc, 'Proposed Procedure', sanitizeTextForPDF(planData.procedure_name), PDF_MARGINS.left, y);
+      y += PDF_LINE_HEIGHT;
+    }
+    y += 2;
+    addSeparator(doc, y); y += 4;
+
+    y = addSectionHeader(doc, 'COMPULSORY PRE-OPERATIVE INVESTIGATIONS', y);
+    const compulsoryItems = COMPULSORY_INVESTIGATIONS.map((inv, idx) => {
+      const hasResult = planData.investigation_results.some(r => r.name === inv);
+      return `${idx + 1}. ${inv}${hasResult ? ' ✓ (Result received)' : ''}`;
+    });
+    y = addBulletList(doc, compulsoryItems, y);
+    y += 4;
+
+    const optionalOrdered = planData.ordered_investigations.filter(inv => !COMPULSORY_INVESTIGATIONS.includes(inv));
+    if (optionalOrdered.length > 0) {
+      y = addSectionHeader(doc, 'ADDITIONAL INVESTIGATIONS REQUESTED', y);
+      const optItems = optionalOrdered.map((inv, idx) => {
+        const hasResult = planData.investigation_results.some(r => r.name === inv);
+        return `${idx + 1}. ${inv}${hasResult ? ' ✓ (Result received)' : ''}`;
+      });
+      y = addBulletList(doc, optItems, y);
+      y += 4;
+    }
+
+    y += 6;
+    doc.setFontSize(PDF_FONT_SIZES.body);
+    doc.text('Total Investigations: ' + planData.ordered_investigations.length, PDF_MARGINS.left, y);
+    y += PDF_LINE_HEIGHT * 2;
+    doc.text('Requested by: ' + (planData.assessed_by || '-'), PDF_MARGINS.left, y);
+    y += PDF_LINE_HEIGHT;
+    doc.text('Signature: ____________________________', PDF_MARGINS.left, y);
+
+    addFooter(doc, 'Investigation Request');
+    doc.save('Investigation_Request_' + selectedPatient.hospital_number + '.pdf');
+    toast.success('Investigation request PDF downloaded');
+  }, [planData, selectedPatient, patientAge]);
+
+  // --- A4 PDF: Shopping List ---
+  const generateShoppingListPDF = useCallback(() => {
+    if (!planData || !selectedPatient || planData.shopping_items.length === 0) {
+      toast.error('No items in shopping list'); return;
+    }
+    const doc = createPDF();
+    let y = addPDFHeader(doc, 'SURGICAL SHOPPING LIST');
+    y += 2;
+    addLabeledField(doc, 'Patient Name', selectedPatient.full_name || `${selectedPatient.first_name} ${selectedPatient.last_name}`, PDF_MARGINS.left, y);
+    y += PDF_LINE_HEIGHT;
+    addTwoColumnText(doc, 'Hospital No: ' + (selectedPatient.hospital_number || '-'), 'Date: ' + formatDateForPDF(new Date().toISOString()), y);
+    y += PDF_LINE_HEIGHT;
+    if (planData.procedure_name) {
+      addLabeledField(doc, 'Proposed Procedure', sanitizeTextForPDF(planData.procedure_name), PDF_MARGINS.left, y);
+      y += PDF_LINE_HEIGHT;
+    }
+    if (planData.anaesthesia_type) {
+      addLabeledField(doc, 'Anaesthesia Type', planData.anaesthesia_type, PDF_MARGINS.left, y);
+      y += PDF_LINE_HEIGHT;
+    }
+    y += 2;
+    addSeparator(doc, y); y += 4;
+
+    // Group by category
+    const grouped: Record<string, typeof planData.shopping_items> = {};
+    planData.shopping_items.forEach(item => {
+      if (!grouped[item.category]) grouped[item.category] = [];
+      grouped[item.category].push(item);
+    });
+
+    Object.entries(grouped).forEach(([cat, items]) => {
+      if (needsNewPage(doc, y, 30)) { doc.addPage(); y = PDF_MARGINS.top; }
+      y = addSectionHeader(doc, cat.toUpperCase(), y);
+      const tableData = items.map((item, idx) => [
+        String(idx + 1),
+        item.name,
+        String(item.quantity),
+        '☐', // checkbox for procurement
+      ]);
+      y = addSimpleTable(doc, ['S/N', 'Item', 'Qty', 'Procured'], tableData, y);
+      y += 4;
+    });
+
+    y += 6;
+    doc.setFontSize(PDF_FONT_SIZES.body);
+    doc.text('Total Items: ' + planData.shopping_items.length, PDF_MARGINS.left, y);
+    y += PDF_LINE_HEIGHT * 2;
+    doc.text('Prepared by: ' + (planData.assessed_by || '-'), PDF_MARGINS.left, y);
+    y += PDF_LINE_HEIGHT;
+    doc.text('Verified by: ____________________________', PDF_MARGINS.left, y);
+
+    addFooter(doc, 'Surgical Shopping List');
+    doc.save('Shopping_List_' + selectedPatient.hospital_number + '.pdf');
+    toast.success('Shopping list PDF downloaded');
+  }, [planData, selectedPatient]);
+
+  // --- Informed Consent Form PDF ---
+  const generateInformedConsentPDF = useCallback(() => {
+    if (!planData || !selectedPatient) return;
+    setGeneratingConsentPdf(true);
+    try {
+      const doc = createPDF();
+      let y = addPDFHeader(doc, 'INFORMED CONSENT FOR SURGICAL PROCEDURE');
+      y += 4;
+
+      // Patient information
+      y = addSectionHeader(doc, 'PATIENT INFORMATION', y);
+      addLabeledField(doc, 'Patient Name', selectedPatient.full_name || `${selectedPatient.first_name} ${selectedPatient.last_name}`, PDF_MARGINS.left, y);
+      y += PDF_LINE_HEIGHT;
+      addTwoColumnText(doc, 'Hospital No: ' + (selectedPatient.hospital_number || '-'), 'Date: ' + formatDateForPDF(new Date().toISOString()), y);
+      y += PDF_LINE_HEIGHT;
+      addTwoColumnText(doc, 'Gender: ' + (selectedPatient.gender || '-'), 'Age: ' + (patientAge ?? '-') + ' years', y);
+      y += PDF_LINE_HEIGHT;
+      if (planData.diagnosis) {
+        addLabeledField(doc, 'Diagnosis', sanitizeTextForPDF(planData.diagnosis), PDF_MARGINS.left, y);
+        y += PDF_LINE_HEIGHT;
+      }
+      y += 2;
+      addSeparator(doc, y); y += 6;
+
+      // Procedure details
+      y = addSectionHeader(doc, 'PROCEDURE DETAILS', y);
+      addLabeledField(doc, 'Name of Procedure', sanitizeTextForPDF(planData.procedure_name || '____________________________'), PDF_MARGINS.left, y);
+      y += PDF_LINE_HEIGHT;
+      addLabeledField(doc, 'Anaesthesia Type', planData.anaesthesia_type || '____________________________', PDF_MARGINS.left, y);
+      y += PDF_LINE_HEIGHT;
+      addLabeledField(doc, 'Surgeon', planData.assessed_by || '____________________________', PDF_MARGINS.left, y);
+      y += PDF_LINE_HEIGHT + 2;
+      addSeparator(doc, y); y += 6;
+
+      // Consent declaration
+      y = addSectionHeader(doc, 'CONSENT DECLARATION', y);
+      const consentText = [
+        'I, the undersigned, hereby confirm that:',
+        '',
+        '1. I have been informed about my diagnosis and the nature of the proposed surgical procedure described above.',
+        '',
+        '2. The surgeon has explained to me the expected benefits, potential risks, and possible complications of the procedure, including but not limited to: bleeding, infection, scarring, nerve damage, adverse reaction to anaesthesia, and the possibility of additional procedures.',
+        '',
+        '3. I have been informed of alternative treatment options, including the option of no treatment, and their respective risks and benefits.',
+        '',
+        '4. I understand that no guarantees have been made regarding the outcome of the procedure.',
+        '',
+        '5. I have had the opportunity to ask questions and all my questions have been answered to my satisfaction.',
+        '',
+        '6. I voluntarily consent to the performance of the above-described procedure and any additional procedures that the surgeon deems necessary during the course of surgery.',
+        '',
+        '7. I consent to the administration of anaesthesia as described above.',
+        '',
+        '8. I consent to the disposal of any tissues or body parts removed during the procedure.',
+      ];
+
+      doc.setFontSize(PDF_FONT_SIZES.body);
+      const maxWidth = PDF_PAGE.contentWidth;
+      consentText.forEach(line => {
+        if (needsNewPage(doc, y, 10)) { doc.addPage(); y = PDF_MARGINS.top; }
+        if (line === '') { y += 3; return; }
+        const lines = doc.splitTextToSize(line, maxWidth);
+        doc.text(lines, PDF_MARGINS.left, y);
+        y += lines.length * (PDF_LINE_HEIGHT * 0.7);
+      });
+
+      y += 8;
+      if (needsNewPage(doc, y, 60)) { doc.addPage(); y = PDF_MARGINS.top; }
+
+      // Signature section
+      y = addSectionHeader(doc, 'SIGNATURES', y);
+      y += 4;
+      doc.setFontSize(PDF_FONT_SIZES.body);
+
+      // Patient signature
+      doc.text('Patient / Guardian Signature: ____________________________', PDF_MARGINS.left, y);
+      y += PDF_LINE_HEIGHT;
+      doc.text('Print Name: ____________________________', PDF_MARGINS.left, y);
+      y += PDF_LINE_HEIGHT;
+      doc.text('Date: ____________________________', PDF_MARGINS.left, y);
+      y += PDF_LINE_HEIGHT;
+      doc.text('Relationship (if guardian): ____________________________', PDF_MARGINS.left, y);
+      y += PDF_LINE_HEIGHT * 1.5;
+
+      // Witness
+      doc.text('Witness Signature: ____________________________', PDF_MARGINS.left, y);
+      y += PDF_LINE_HEIGHT;
+      doc.text('Print Name: ____________________________', PDF_MARGINS.left, y);
+      y += PDF_LINE_HEIGHT;
+      doc.text('Date: ____________________________', PDF_MARGINS.left, y);
+      y += PDF_LINE_HEIGHT * 1.5;
+
+      // Surgeon
+      doc.text('Surgeon Signature: ____________________________', PDF_MARGINS.left, y);
+      y += PDF_LINE_HEIGHT;
+      doc.text('Print Name: ' + (planData.assessed_by || '____________________________'), PDF_MARGINS.left, y);
+      y += PDF_LINE_HEIGHT;
+      doc.text('Date: ' + formatDateForPDF(new Date().toISOString()), PDF_MARGINS.left, y);
+
+      addFooter(doc, 'Informed Consent Form');
+      doc.save('Informed_Consent_' + selectedPatient.hospital_number + '.pdf');
+      toast.success('Informed consent form downloaded');
+    } catch {
+      toast.error('Failed to generate consent form');
+    }
+    setGeneratingConsentPdf(false);
+  }, [planData, selectedPatient, patientAge]);
 
   // ============================
   // THEATRE CALENDAR HELPERS
@@ -1243,8 +1464,7 @@ export default function BookingRegisterPage() {
                       <button
                         onClick={() => {
                           if (!selectedPatient) return;
-                          // Open preoperative assessment inline - switch to risk section
-                          setActiveSection('risk');
+                          setShowPreopAssessment(true);
                         }}
                         className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
                       >
@@ -1296,6 +1516,9 @@ export default function BookingRegisterPage() {
                       <div className="flex items-center justify-between">
                         <h3 className="text-lg font-semibold flex items-center gap-2"><FlaskConical size={20} className="text-green-600" /> Investigation Requests</h3>
                         <div className="flex gap-2">
+                          <button onClick={generateInvestigationRequestPDF} className="flex items-center gap-1 px-3 py-1.5 border rounded-lg text-sm hover:bg-gray-50">
+                            <Download size={14} /> PDF
+                          </button>
                           <button onClick={generateInvestigationRequestThermal} className="flex items-center gap-1 px-3 py-1.5 border rounded-lg text-sm hover:bg-gray-50">
                             <Printer size={14} /> Thermal Print
                           </button>
@@ -1369,6 +1592,9 @@ export default function BookingRegisterPage() {
                       <div className="flex items-center justify-between">
                         <h3 className="text-lg font-semibold flex items-center gap-2"><ShoppingCart size={20} className="text-green-600" /> Surgical Shopping List</h3>
                         <div className="flex gap-2">
+                          <button onClick={generateShoppingListPDF} className="flex items-center gap-1 px-3 py-1.5 border rounded-lg text-sm hover:bg-gray-50">
+                            <Download size={14} /> PDF
+                          </button>
                           <button onClick={generateShoppingListThermal} className="flex items-center gap-1 px-3 py-1.5 border rounded-lg text-sm hover:bg-gray-50">
                             <Printer size={14} /> Thermal Print
                           </button>
@@ -1667,6 +1893,19 @@ export default function BookingRegisterPage() {
                         </button>
                       </div>
 
+                      {/* Informed Consent Form Download */}
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <h4 className="text-sm font-semibold text-blue-800 mb-2 flex items-center gap-2"><FileText size={16} /> Informed Consent Form</h4>
+                        <p className="text-xs text-blue-700 mb-3">Download a pre-filled informed consent form with patient and procedure details. Print, obtain signatures from the patient, witness and surgeon, then upload the signed copy below.</p>
+                        <button
+                          onClick={generateInformedConsentPDF}
+                          disabled={generatingConsentPdf}
+                          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
+                        >
+                          <Download size={14} /> {generatingConsentPdf ? 'Generating...' : 'Download Informed Consent Form (PDF)'}
+                        </button>
+                      </div>
+
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {/* Payment evidence */}
                         <div>
@@ -1684,19 +1923,21 @@ export default function BookingRegisterPage() {
                             </button>
                           )}
                         </div>
-                        {/* Consent document */}
+                        {/* Signed consent upload */}
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Signed Consent Form</label>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Upload Signed Consent</label>
                           <input type="file" ref={consentInputRef} accept="image/*,.pdf" onChange={e => { if (e.target.files?.[0]) handleFileUpload(e.target.files[0], 'consent_document'); }} className="hidden" />
                           {planData.consent_document ? (
                             <div className="relative">
-                              <img src={planData.consent_document} alt="Consent" className="w-full rounded-lg border max-h-40 object-contain bg-gray-50" />
+                              <img src={planData.consent_document} alt="Signed consent" className="w-full rounded-lg border max-h-40 object-contain bg-gray-50" />
                               <button onClick={() => updatePlan({ consent_document: undefined })} className="absolute top-1 right-1 p-0.5 bg-red-500 text-white rounded-full"><X size={12} /></button>
+                              <div className="mt-1 flex items-center gap-1 text-green-600 text-xs"><CheckCircle size={12} /> Signed consent uploaded</div>
                             </div>
                           ) : (
                             <button onClick={() => consentInputRef.current?.click()} className="w-full border-2 border-dashed rounded-xl p-6 text-center hover:bg-gray-50 transition-colors">
-                              <FileText size={24} className="mx-auto text-gray-300 mb-2" />
-                              <p className="text-sm text-gray-500">Upload signed consent</p>
+                              <Upload size={24} className="mx-auto text-gray-300 mb-2" />
+                              <p className="text-sm text-gray-500">Upload signed consent form</p>
+                              <p className="text-xs text-gray-400 mt-1">Photo or scanned PDF</p>
                             </button>
                           )}
                         </div>
@@ -1974,6 +2215,17 @@ export default function BookingRegisterPage() {
       )}
 
       {/* Hidden file inputs (already declared via refs) */}
+
+      {/* Pre-operative Assessment Form Modal */}
+      {showPreopAssessment && selectedPatient && (
+        <Suspense fallback={<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"><div className="bg-white rounded-lg p-6">Loading assessment...</div></div>}>
+          <PreoperativeAssessmentForm
+            patientId={selectedPatient.id}
+            onClose={() => setShowPreopAssessment(false)}
+            onSave={() => setShowPreopAssessment(false)}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }
