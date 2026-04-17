@@ -211,7 +211,20 @@ export default function Dashboard() {
   }, [handleSyncDiagnostics]);
 
   useEffect(() => {
-    loadDashboardData();
+    const init = async () => {
+      await loadDashboardData();
+      // Auto-assign HOs to any newly admitted patients on startup
+      try {
+        const result = await medicalTeamService.autoAssignAdmittedPatientsToHouseOfficers();
+        if (result.assigned > 0) {
+          // Reload to reflect new assignments
+          await loadDashboardData();
+        }
+      } catch {
+        // Silently ignore — assignment is best-effort on load
+      }
+    };
+    init();
     loadStaffList();
     loadHODutyData();
   }, []);
