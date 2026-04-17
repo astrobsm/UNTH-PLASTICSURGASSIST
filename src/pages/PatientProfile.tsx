@@ -750,10 +750,16 @@ const EncountersTab: React.FC<{ patientId: string; hospitalNumber: string; patie
     try {
       const pid = Number(patientId) || patientId;
       const data = await apiClient.get(`/progress-notes?patientId=${patientId}`);
-      const notes = data?.notes || data?.progressNotes || [];
+      // Handle both shapes: API returns { notes: [...] }, but cache may return raw array
+      let notes: any[];
+      if (Array.isArray(data)) {
+        notes = data.filter((n: any) => String(n.patient_id) === String(patientId));
+      } else {
+        notes = data?.notes || data?.progressNotes || [];
+      }
       // Also fetch admissions for encounter context
       const admData = await apiClient.get(`/admissions?patientId=${patientId}`);
-      const admissions = (admData?.admissions || []).map((a: any) => ({
+      const admissions = (Array.isArray(admData) ? admData : admData?.admissions || []).map((a: any) => ({
         ...a,
         _type: 'admission',
         created_at: a.admission_date || a.created_at,
@@ -781,8 +787,17 @@ const EncountersTab: React.FC<{ patientId: string; hospitalNumber: string; patie
       } catch { /* ok */ }
       // Merge and sort chronologically
       const all = [
-        ...notes.map((n: any) => ({ ...n, _type: n.type || 'progress_note' })),
-        ...localOnlyNotes.map((n: any) => ({ ...n, _type: n.type || 'progress_note', _local: true })),
+        ...notes.map((n: any) => {
+          // Type is stored inside soap JSON, not as a top-level column
+          let soapParsed = n.soap;
+          if (typeof soapParsed === 'string') { try { soapParsed = JSON.parse(soapParsed); } catch { /* keep */ } }
+          return { ...n, _type: n.type || soapParsed?.type || 'progress_note' };
+        }),
+        ...localOnlyNotes.map((n: any) => {
+          let soapParsed = n.soap;
+          if (typeof soapParsed === 'string') { try { soapParsed = JSON.parse(soapParsed); } catch { /* keep */ } }
+          return { ...n, _type: n.type || soapParsed?.type || 'progress_note', _local: true };
+        }),
         ...admissions,
       ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       if (mountedRef.current) setEncounters(all);

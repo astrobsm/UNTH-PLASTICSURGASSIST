@@ -79,6 +79,13 @@ async function ensureTable() {
   try {
     await query(`ALTER TABLE progress_notes ADD COLUMN IF NOT EXISTS geolocation JSONB DEFAULT NULL`);
   } catch(e) { /* column may already exist */ }
+  try {
+    await query(`ALTER TABLE progress_notes ADD COLUMN IF NOT EXISTS type VARCHAR(50) DEFAULT 'progress_note'`);
+  } catch(e) { /* column may already exist */ }
+  // Backfill type from soap JSON for existing records
+  try {
+    await query(`UPDATE progress_notes SET type = soap->>'type' WHERE type IS NULL AND soap->>'type' IS NOT NULL`);
+  } catch(e) { /* ok */ }
   tableEnsured = true;
 }
 
@@ -127,16 +134,18 @@ async function createProgressNote(body, user, res) {
 
   // Support both field naming conventions
   const authorName = author || created_by || (user && user.full_name) || 'Unknown';
+  // Resolve encounter type
+  const noteType = type || (soap && soap.type) || 'progress_note';
   // If content/type provided but soap not, build soap from them
   let soapData = soap || {};
   if (content && !soap) {
-    soapData = { note: content, type: type || 'progress_note' };
+    soapData = { note: content, type: noteType };
   }
 
   const result = await query(
     `INSERT INTO progress_notes 
-     (patient_id, patient_name, author, author_role, date, vital_signs, lmp, soap, clinical_images, geolocation)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+     (patient_id, patient_name, author, author_role, date, vital_signs, lmp, soap, clinical_images, geolocation, type)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
      RETURNING *`,
     [
       parseInt(patient_id, 10),
@@ -148,7 +157,8 @@ async function createProgressNote(body, user, res) {
       lmp || null,
       JSON.stringify(soapData),
       JSON.stringify(clinical_images || []),
-      geolocation ? JSON.stringify(geolocation) : null
+      geolocation ? JSON.stringify(geolocation) : null,
+      noteType
     ]
   );
 

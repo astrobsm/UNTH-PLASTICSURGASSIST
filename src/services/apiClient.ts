@@ -456,8 +456,13 @@ class ApiClient {
   // Retrieve cached response from IndexedDB
   private async getCachedResponse<T>(endpoint: string, entityInfo: { entityType: string; entityId?: string | number; tableName?: string }): Promise<T | null> {
     try {
-      // Try dedicated entity table first
-      if (entityInfo.tableName) {
+      // Only use the dedicated entity table for single-entity lookups (by ID in path).
+      // For filtered queries (endpoints with query params like ?patientId=X),
+      // the entity table can't filter — it would return ALL records as a raw array,
+      // which has the wrong shape (raw array vs { notes: [...] }) and wrong data
+      // (all patients instead of one). Use api_cache for those instead.
+      const hasQueryParams = endpoint.includes('?');
+      if (entityInfo.tableName && !hasQueryParams) {
         const table = (db as any)[entityInfo.tableName];
         if (table) {
           if (entityInfo.entityId) {
@@ -471,7 +476,7 @@ class ApiClient {
         }
       }
 
-      // Always check generic api_cache as fallback (covers endpoints not mapped to entity tables)
+      // Check generic api_cache (keyed by full endpoint including query params)
       const cached = await db.api_cache.get(endpoint);
       if (cached && cached.data) {
         // Check freshness — skip data older than 30 days
