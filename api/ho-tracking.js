@@ -84,9 +84,9 @@ async function handleGet(req, res, currentUser) {
                p.first_name, p.last_name, p.hospital_number
         FROM ward_rounds wr
         LEFT JOIN patients p ON wr.patient_id::text = p.id::text
-        WHERE wr.created_by = $1 OR wr.reviewing_doctor ILIKE $2
+        WHERE wr.user_id = $1
         ORDER BY wr.created_at DESC LIMIT 50
-      `, [targetId, `%${ho.full_name}%`]);
+      `, [targetId]);
 
       // Prescriptions written
       const prescriptions = await safeDetailQuery(`
@@ -94,7 +94,7 @@ async function handleGet(req, res, currentUser) {
                p.first_name, p.last_name, p.hospital_number
         FROM prescriptions pr
         LEFT JOIN patients p ON pr.patient_id::text = p.id::text
-        WHERE pr.prescribed_by = $1 OR pr.created_by = $1
+        WHERE pr.prescribed_by = $1
         ORDER BY pr.created_at DESC LIMIT 50
       `, [targetId]);
 
@@ -104,7 +104,7 @@ async function handleGet(req, res, currentUser) {
                p.first_name, p.last_name, p.hospital_number
         FROM lab_orders lo
         LEFT JOIN patients p ON lo.patient_id::text = p.id::text
-        WHERE lo.ordered_by = $1 OR lo.created_by = $1
+        WHERE lo.ordered_by = $1
         ORDER BY lo.created_at DESC LIMIT 50
       `, [targetId]);
 
@@ -180,16 +180,16 @@ async function handleGet(req, res, currentUser) {
       for (const ho of hoUsers.rows) {
         const wr = await query(
           `SELECT COUNT(*) as cnt FROM ward_rounds
-           WHERE (created_by = $1 OR reviewing_doctor ILIKE $2)
-             AND created_at BETWEEN $3 AND $4`,
-          [ho.id, `%${ho.full_name}%`, fromDate, toDate]
+           WHERE user_id = $1
+             AND created_at BETWEEN $2 AND $3`,
+          [ho.id, fromDate, toDate]
         );
         const rx = await query(
-          `SELECT COUNT(*) as cnt FROM prescriptions WHERE (prescribed_by = $1 OR created_by = $1) AND created_at BETWEEN $2 AND $3`,
+          `SELECT COUNT(*) as cnt FROM prescriptions WHERE prescribed_by = $1 AND created_at BETWEEN $2 AND $3`,
           [ho.id, fromDate, toDate]
         );
         const labs = await query(
-          `SELECT COUNT(*) as cnt FROM lab_orders WHERE (ordered_by = $1 OR created_by = $1) AND created_at BETWEEN $2 AND $3`,
+          `SELECT COUNT(*) as cnt FROM lab_orders WHERE ordered_by = $1 AND created_at BETWEEN $2 AND $3`,
           [ho.id, fromDate, toDate]
         );
         const notes = await query(
@@ -397,36 +397,28 @@ async function getHOFullMetrics(userId, fullName, username) {
   }
   nameMatchClause += `)`;
 
-  // ── 2. Documentation Counts — use name-matching so VARCHAR author columns are found ──
+  // ── 2. Documentation Counts ──
 
-  // ward_rounds: match by integer user_id/created_by OR by name in reviewing_doctor
+  // ward_rounds: match by user_id (the only populated author column)
   {
-    let wrClause = `(user_id = $1 OR created_by = $1`;
-    const wrParams = [uidInt];
-    let pIdx = 1;
-    if (fullName) {
-      pIdx++; wrParams.push(fullName);
-      wrClause += ` OR LOWER(reviewing_doctor) = LOWER($${pIdx})`;
-    }
-    wrClause += `)`;
     const wardRoundRow = await safeQuery(
-      `SELECT COUNT(*) as cnt FROM ward_rounds WHERE ${wrClause}${rotationDateClause}`, wrParams, { cnt: 0 }
+      `SELECT COUNT(*) as cnt FROM ward_rounds WHERE user_id = $1${rotationDateClause}`, [uidInt], { cnt: 0 }
     );
     var wardRoundsDocumented = parseInt(wardRoundRow.cnt) || 0;
   }
 
-  // prescriptions: match by prescribed_by (INT) OR created_by (INT)
+  // prescriptions: match by prescribed_by (the only author column)
   {
     const prescriptionRow = await safeQuery(
-      `SELECT COUNT(*) as cnt FROM prescriptions WHERE (prescribed_by = $1 OR created_by = $1)${rotationDateClause}`, [uidInt], { cnt: 0 }
+      `SELECT COUNT(*) as cnt FROM prescriptions WHERE prescribed_by = $1${rotationDateClause}`, [uidInt], { cnt: 0 }
     );
     var prescriptionsWritten = parseInt(prescriptionRow.cnt) || 0;
   }
 
-  // lab_orders: match by ordered_by OR created_by
+  // lab_orders: match by ordered_by (the only author column)
   {
     const labOrderRow = await safeQuery(
-      `SELECT COUNT(*) as cnt FROM lab_orders WHERE (ordered_by = $1 OR created_by = $1)${rotationDateClause}`, [uidInt], { cnt: 0 }
+      `SELECT COUNT(*) as cnt FROM lab_orders WHERE ordered_by = $1${rotationDateClause}`, [uidInt], { cnt: 0 }
     );
     var labOrdersPlaced = parseInt(labOrderRow.cnt) || 0;
   }
