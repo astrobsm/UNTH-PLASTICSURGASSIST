@@ -179,7 +179,7 @@ async function getSyncEntity(tableName, res, searchParams) {
     'cme_topics', 'cme_articles', 'cme_reading_progress', 'cme_test_sessions',
     'cme_progress', 'cme_certificates', 'educational_topics', 'weekly_contents',
     'topic_schedules', 'education_user_progress', 'ps_unit_rosters',
-    'shopping_lists', 'call_duty_roster', 'cbt_attempts', 'notice_board',
+    'shopping_lists', 'call_duty_roster', 'clinic_duty_logs', 'cbt_attempts', 'notice_board',
     'rotation_configs', 'assigned_responsibilities'
   ];
 

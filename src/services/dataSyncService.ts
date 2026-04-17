@@ -528,42 +528,17 @@ class DataSyncService {
     this.lastPullTime = new Date();
 
     // Define entities to pull in order (dependencies first)
-    // IMPORTANT: ALL syncable entities must be listed here for cross-device sync
+    // Only non-patient-scoped entities are bulk-synced here.
+    // Patient-scoped entities (admissions, treatment_plans, prescriptions,
+    // lab_investigations, surgeries, ward_rounds, wound_care, etc.) require
+    // a patientId and are synced per-patient when viewing PatientProfile.
+    // MDT entities are synced by mdtService.syncFromServer().
     const entitiesToPull: SyncableEntity[] = [
       'patients',       // Must be first - other entities reference patients
-      'admissions',
-      'discharges',
-      'treatment_plans',
-      'prescriptions',
-      'lab_investigations',
-      'surgeries',
-      'ward_rounds',
-      'wound_care',
-      'blood_transfusions',
-      'progress_notes',
-      'dvt_assessments',
-      'pressure_sore_assessments',
-      'nutritional_assessments',
-      'burn_patients',
-      'diabetic_foot_assessments',
-      'preoperative_assessments',
-      'procedures',
-      'who_safety_checklists',
-      // MDT entities are synced by mdtService.syncFromServer() which preserves
-      // snake_case field names. The generic pull here converts to camelCase,
-      // causing mdtService.pushToServer() to see patient_id as undefined
-      // and enter an infinite delete/re-pull loop. Skip them here.
-      // 'mdt_patient_teams',
-      // 'mdt_meetings',
-      // 'mdt_contact_logs',
       'shopping_lists',
       'call_duty_roster',
       'clinic_duty_logs',
       'cbt_attempts',
-      'substance_use_assessments',
-      'detox_monitoring_records',
-      'detox_follow_ups',
-      'substance_use_clinical_summaries'
     ];
 
     let consecutive503s = 0;
