@@ -62,8 +62,6 @@ async function getAllPlans(searchParams, res) {
   const params = [patientId];
   let paramCount = 2;
 
-  if (false) { /* patientId is always applied above */ }
-
   if (status) {
     queryStr += ` AND tp.status = $${paramCount}`;
     params.push(status);

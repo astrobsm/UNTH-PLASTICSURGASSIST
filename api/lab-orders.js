@@ -64,8 +64,6 @@ async function getAllLabOrders(searchParams, res) {
   const params = [patientId];
   let paramCount = 2;
 
-  if (false) { /* patientId is always applied above */ }
-
   if (status) {
     queryStr += ` AND lo.status = $${paramCount}`;
     params.push(status);
