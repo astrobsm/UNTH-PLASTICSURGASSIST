@@ -234,12 +234,17 @@ Respond with ONLY valid JSON in this format:
 IMPORTANT:
 - Extract ALL reading time points, even if some parameters are missing for that time
 - Use null for parameters not recorded at a particular time
+- CRITICAL: Each reading has a UNIQUE time recorded in the Time column — extract it precisely
+- The Time column is usually the first or leftmost column and contains entries like "12:30", "3:00pm", "6am", "7:32pm", "2:40"
+- Each row in the chart is a DIFFERENT time point — never assign the same time to multiple readings
 - Dates may be written as D/M/YY (Nigerian format) — convert to D/M/YYYY (e.g. 7/4/26 → 7/4/2026)
-- Times may be in 12-hour (3pm, 6am) or 24-hour format — normalize to HH:MM
+- Date headers may appear once for a group of readings — apply that date to all readings below it until the next date header
+- Times may be in 12-hour (3pm, 6am) or 24-hour format — normalize to HH:MM (24-hour)
+- The "datetime" field MUST combine the correct date AND time for each reading
 - Blood pressure is often written as "120/80" — split into bp_systolic=120, bp_diastolic=80
-- Temperature may be in °C (typical: 36-40) or °F (typical: 96-104) — always output in °C
+- Temperature may be in °C (typical: 35-42) or °F (typical: 96-104) — always output in °C
 - Sort readings chronologically
-- Include datetime as ISO format when you can determine both date and time`;
+- Include datetime as ISO format combining the row's date and time`;
 
 const FLUID_CHART_PROMPT = `You are an expert medical fluid balance chart reader. You are reading a photograph of a hospital intake/output (I&O) or fluid balance chart. These are typically handwritten on standard hospital forms.
 

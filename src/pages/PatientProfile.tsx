@@ -1271,6 +1271,11 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; userN
     const parseChartDateTime = (dateStr: string, fallbackIndex: number, totalEntries: number): string => {
       if (!dateStr) return new Date(Date.now() - (totalEntries - 1 - fallbackIndex) * 3600000).toISOString();
       try {
+        // Try ISO datetime first (e.g. "2026-04-09T06:00:00")
+        if (dateStr.includes('T') || dateStr.match(/^\d{4}-\d{2}-\d{2}/)) {
+          const d = new Date(dateStr);
+          if (!isNaN(d.getTime())) return d.toISOString();
+        }
         // Try parsing "D/M/YY TIME" format common in Nigerian hospital charts
         const parts = dateStr.match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\s*(.*)$/);
         if (parts) {
@@ -1293,7 +1298,19 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; userN
           const d = new Date(year, month, day, hours, minutes);
           if (!isNaN(d.getTime())) return d.toISOString();
         }
-        // Try just time like "3:00pm" — use today's date
+        // Try "YYYY-MM-DD HH:MM" without T separator
+        const isoSpace = dateStr.match(/^(\d{4}-\d{2}-\d{2})\s+(\d{1,2}):(\d{2})\s*(am|pm)?$/i);
+        if (isoSpace) {
+          const base = new Date(isoSpace[1] + 'T00:00:00');
+          let hours = parseInt(isoSpace[2]);
+          const minutes = parseInt(isoSpace[3]);
+          const ampm = (isoSpace[4] || '').toLowerCase();
+          if (ampm === 'pm' && hours < 12) hours += 12;
+          if (ampm === 'am' && hours === 12) hours = 0;
+          base.setHours(hours, minutes, 0, 0);
+          if (!isNaN(base.getTime())) return base.toISOString();
+        }
+        // Try just time like "3:00pm" or "14:30" — use today's date
         const timeOnly = dateStr.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i);
         if (timeOnly) {
           let hours = parseInt(timeOnly[1]);
@@ -1332,9 +1349,21 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; userN
     if (fields.vital_signs_series && Array.isArray(fields.vital_signs_series)) {
       const total = fields.vital_signs_series.length;
       fields.vital_signs_series.forEach((v: any, i: number) => {
+        // Build the best date+time string:
+        // 1. Prefer datetime (full ISO) if available
+        // 2. Otherwise combine date + time fields
+        // 3. Fall back to date alone
+        let dtInput = '';
+        if (v.datetime) {
+          dtInput = v.datetime;
+        } else if (v.date && v.time) {
+          dtInput = `${v.date} ${v.time}`;
+        } else {
+          dtInput = v.date || '';
+        }
         entries.push({
           id: `vs_ocr_${Date.now()}_${i}`,
-          date: parseChartDateTime(v.date || v.datetime || '', i, total),
+          date: parseChartDateTime(dtInput, i, total),
           temperature: v.temperature || v.temp || undefined,
           pulse: v.pulse || v.heart_rate || undefined,
           bp_systolic: v.bp_systolic || undefined,
