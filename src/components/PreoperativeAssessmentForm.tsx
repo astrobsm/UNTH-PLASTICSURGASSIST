@@ -16,6 +16,7 @@ import {
 import { db } from '../db/database';
 import { syncService } from '../db/syncService';
 import { patientService } from '../services/patientService';
+import { apiClient } from '../services/apiClient';
 import { 
   preoperativeService,
   Medication,
@@ -94,11 +95,30 @@ export default function PreoperativeAssessmentForm({
         setSurgery(surgeryData);
       }
 
-      // Load existing assessment if available
-      const existing = await db.preoperative_assessments
+      // Load existing assessment: try IndexedDB first, then API fallback
+      let existing = await db.preoperative_assessments
         .where('patient_id').equals(patientId)
         .and(a => surgeryBookingId ? a.surgery_booking_id === surgeryBookingId : true)
-        .first();
+        .last(); // Use .last() to get the most recent
+
+      // If not found locally, try the server
+      if (!existing) {
+        try {
+          const serverAssessments = await apiClient.getPreoperativeAssessments(patientId);
+          if (serverAssessments && serverAssessments.length > 0) {
+            // Find matching assessment (by surgery_booking_id if provided)
+            existing = surgeryBookingId
+              ? serverAssessments.find((a: any) => a.surgery_booking_id === surgeryBookingId) || serverAssessments[0]
+              : serverAssessments[0];
+            // Cache locally for future loads
+            if (existing) {
+              await db.preoperative_assessments.put({ ...existing, synced: true });
+            }
+          }
+        } catch (apiErr) {
+          console.warn('Could not fetch preoperative assessments from server:', apiErr);
+        }
+      }
 
       if (existing) {
         if (existing.current_medications) setMedications(existing.current_medications);
@@ -287,9 +307,39 @@ export default function PreoperativeAssessmentForm({
         updated_at: new Date()
       };
 
-      const localId = await db.preoperative_assessments.add(assessment);
-      // Queue for cloud sync
-      await syncService.queueAction('create', 'preoperative_assessments', localId as number, assessment);
+      // Upsert in IndexedDB: find existing and update, or create new
+      const existingLocal = await db.preoperative_assessments
+        .where('patient_id').equals(patientId)
+        .and(a => surgeryBookingId ? a.surgery_booking_id === surgeryBookingId : true)
+        .last();
+
+      let localId: number;
+      if (existingLocal?.id) {
+        await db.preoperative_assessments.update(existingLocal.id, { ...assessment, synced: false });
+        localId = existingLocal.id as number;
+      } else {
+        localId = await db.preoperative_assessments.add({ ...assessment, synced: false }) as number;
+      }
+
+      // Save directly to server API (don't rely solely on background sync)
+      try {
+        const apiPayload = {
+          ...assessment,
+          patient_name: patient ? `${patient.first_name || ''} ${patient.last_name || ''}`.trim() : undefined,
+          hospital_number: patient?.hospital_number,
+        };
+        const serverResult = await apiClient.createPreoperativeAssessment(apiPayload);
+        if (serverResult?.id) {
+          // Mark as synced in IndexedDB
+          await db.preoperative_assessments.update(localId, { synced: true, server_id: serverResult.id });
+        }
+        console.log('✅ Preoperative assessment saved to server');
+      } catch (apiErr) {
+        console.warn('Could not save to server, queued for background sync:', apiErr);
+        // Queue for background sync as fallback
+        await syncService.queueAction('create', 'preoperative_assessments', localId, assessment);
+      }
+
       alert('Preoperative assessment saved successfully!');
       if (onSave) onSave();
     } catch (error) {

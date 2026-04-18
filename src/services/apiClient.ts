@@ -992,7 +992,25 @@ class ApiClient {
     return data.assessments || [];
   }
 
-  // Surgeries
+  // Surgery Planning (pre-operative booking register data)
+  async getSurgeryPlanning(patientId: string) {
+    try {
+      const data = await this.request(`/surgery-planning?patientId=${patientId}`);
+      return data.planning || null;
+    } catch {
+      return null;
+    }
+  }
+
+  async saveSurgeryPlanning(planningData: any) {
+    const data = await this.request('/surgery-planning', {
+      method: 'POST',
+      body: JSON.stringify(planningData)
+    });
+    return data.planning;
+  }
+
+  // Surgeries (booking/scheduling)
   async createSurgery(surgeryData: any) {
     const data = await this.request('/surgeries', {
       method: 'POST',

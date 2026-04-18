@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { patientService } from '../services/patientService';
 import { preoperativeService, PreoperativeAssessment, Medication } from '../services/preoperativeService';
 import { schedulingService, SurgeryBooking } from '../services/schedulingService';
+import { apiClient } from '../services/apiClient';
 import { db } from '../db/database';
 import toast from 'react-hot-toast';
 import { safeFormatDate } from '../utils/dateUtils';
@@ -385,27 +386,54 @@ export default function BookingRegisterPage() {
   // Load saved planning data when patient selected
   useEffect(() => {
     if (!selectedPatient) { setPlanData(null); return; }
-    const saved = loadJSON<Record<string, PreopPlanningData>>(PLANNING_DATA_KEY, {});
-    if (saved[selectedPatient.id]) {
-      setPlanData(saved[selectedPatient.id]);
-      // Mark all non-empty sections as saved
-      const d = saved[selectedPatient.id];
-      setSectionSaved({
-        patient: true,
-        clinical: !!(d.diagnosis || d.comorbidities.length || d.current_medications.length),
-        risk: !!(d.bleeding_risk || d.dvt_risk || d.cardiovascular_risk || d.pressure_sore_risk || d.nutritional_risk),
-        investigations: d.ordered_investigations.length > 0,
-        shopping: d.shopping_items.length > 0,
-        procedure: !!d.procedure_name,
-        results: d.investigation_results.length > 0,
-        ecg: !!d.ecg_image,
-        payment: !!d.payment_evidence,
-        checklist: Object.values(d.checklist).some(v => v),
-      });
-    } else {
-      setPlanData(makeDefaultPlan(selectedPatient.id, user?.full_name || 'Unknown'));
-    }
-    setActiveSection('clinical');
+    
+    const loadPlanData = async () => {
+      // 1. Try loading from localStorage first (fastest, for immediate display)
+      const saved = loadJSON<Record<string, PreopPlanningData>>(PLANNING_DATA_KEY, {});
+      let localData = saved[selectedPatient.id] || null;
+      
+      // 2. Try loading from server API (authoritative source)
+      try {
+        const serverData = await apiClient.getSurgeryPlanning(String(selectedPatient.id));
+        if (serverData && Object.keys(serverData).length > 1) {
+          // Server data is more reliable - use it and update localStorage
+          const merged: PreopPlanningData = {
+            ...makeDefaultPlan(selectedPatient.id, user?.full_name || 'Unknown'),
+            ...serverData,
+            patient_id: selectedPatient.id,
+          };
+          localData = merged;
+          // Update localStorage cache
+          saved[selectedPatient.id] = merged;
+          saveJSON(PLANNING_DATA_KEY, saved);
+        }
+      } catch (err) {
+        console.warn('Could not fetch planning data from server, using local:', err);
+      }
+      
+      if (localData) {
+        setPlanData(localData);
+        // Mark all non-empty sections as saved
+        const d = localData;
+        setSectionSaved({
+          patient: true,
+          clinical: !!(d.diagnosis || d.comorbidities.length || d.current_medications.length),
+          risk: !!(d.bleeding_risk || d.dvt_risk || d.cardiovascular_risk || d.pressure_sore_risk || d.nutritional_risk),
+          investigations: d.ordered_investigations.length > 0,
+          shopping: d.shopping_items.length > 0,
+          procedure: !!d.procedure_name,
+          results: d.investigation_results.length > 0,
+          ecg: !!d.ecg_image,
+          payment: !!d.payment_evidence,
+          checklist: Object.values(d.checklist).some(v => v),
+        });
+      } else {
+        setPlanData(makeDefaultPlan(selectedPatient.id, user?.full_name || 'Unknown'));
+      }
+      setActiveSection('clinical');
+    };
+
+    loadPlanData();
   }, [selectedPatient, user]);
 
   // Auto-detect age-conditional labs
@@ -434,11 +462,24 @@ export default function BookingRegisterPage() {
   const saveSection = useCallback(async (section: PlanningSection) => {
     setSaving(true);
     try {
-      // Save locally
       if (planData) {
+        // 1. Save to localStorage (instant cache)
         const all = loadJSON<Record<string, PreopPlanningData>>(PLANNING_DATA_KEY, {});
         all[planData.patient_id] = planData;
         saveJSON(PLANNING_DATA_KEY, all);
+
+        // 2. Save to server API (persistent cloud storage)
+        try {
+          await apiClient.saveSurgeryPlanning({
+            patient_id: String(planData.patient_id),
+            assessed_by: planData.assessed_by,
+            ...planData
+          });
+          console.log('✅ Surgery planning data saved to server');
+        } catch (apiErr) {
+          console.warn('Could not save planning to server:', apiErr);
+          // Data is still in localStorage, will sync on next successful save
+        }
       }
       setSectionSaved(prev => ({ ...prev, [section]: true }));
       toast.success(`${section.charAt(0).toUpperCase() + section.slice(1)} section saved`);

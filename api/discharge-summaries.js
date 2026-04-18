@@ -2,6 +2,49 @@
 import { query } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
 
+async function ensureTable() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS discharge_summaries (
+      id SERIAL PRIMARY KEY,
+      patient_id VARCHAR(100),
+      admission_id VARCHAR(100),
+      prepared_by VARCHAR(255),
+      discharge_date TIMESTAMPTZ,
+      admission_date TIMESTAMPTZ,
+      patient_name VARCHAR(255),
+      hospital_number VARCHAR(100),
+      age INTEGER,
+      gender VARCHAR(20),
+      primary_diagnosis TEXT,
+      secondary_diagnoses JSONB DEFAULT '[]',
+      comorbidities JSONB DEFAULT '[]',
+      hospital_course TEXT,
+      procedures_performed JSONB DEFAULT '[]',
+      investigations JSONB DEFAULT '[]',
+      discharge_medications JSONB DEFAULT '[]',
+      follow_up_instructions TEXT,
+      follow_up_date TIMESTAMPTZ,
+      follow_up_clinic VARCHAR(255),
+      dietary_advice TEXT,
+      activity_restrictions TEXT,
+      wound_care_instructions TEXT,
+      warning_symptoms TEXT,
+      emergency_contact VARCHAR(255),
+      referrals JSONB DEFAULT '[]',
+      condition_at_discharge VARCHAR(100),
+      discharge_type VARCHAR(100),
+      discharge_readiness_score INTEGER,
+      discharging_doctor VARCHAR(255),
+      discharging_consultant VARCHAR(255),
+      notes TEXT,
+      status VARCHAR(50) DEFAULT 'draft',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  try { await query('CREATE INDEX IF NOT EXISTS idx_discharge_summaries_patient ON discharge_summaries(patient_id)'); } catch {}
+}
+
 export default async function handler(req, res) {
   if (cors(req, res)) return;
 
@@ -16,6 +59,8 @@ export default async function handler(req, res) {
   const userRole = authResult.user.role;
 
   try {
+    await ensureTable();
+
     switch (method) {
       case 'GET':
         return await handleGet(req, res, userId, userRole);

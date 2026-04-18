@@ -2,6 +2,26 @@
 import { query } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
 
+async function ensureTable() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS prescriptions (
+      id SERIAL PRIMARY KEY,
+      patient_id VARCHAR(100) NOT NULL,
+      medication_name VARCHAR(255),
+      dosage VARCHAR(100),
+      frequency VARCHAR(100),
+      duration VARCHAR(100),
+      route VARCHAR(50),
+      instructions TEXT,
+      status VARCHAR(50) DEFAULT 'active',
+      prescribed_by VARCHAR(255),
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  try { await query('CREATE INDEX IF NOT EXISTS idx_prescriptions_patient ON prescriptions(patient_id)'); } catch {}
+}
+
 export default async function handler(req, res) {
   if (cors(req, res)) return;
 
@@ -16,6 +36,8 @@ export default async function handler(req, res) {
   const prescriptionId = pathParts[0];
 
   try {
+    await ensureTable();
+
     switch (method) {
       case 'GET':
         if (prescriptionId) {
