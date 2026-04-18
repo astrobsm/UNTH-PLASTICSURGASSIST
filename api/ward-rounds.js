@@ -407,6 +407,19 @@ let columnsEnsured = false;
 async function ensureWardRoundColumns() {
   if (columnsEnsured) return;
   try {
+    // Ensure the table exists first
+    await query(`
+      CREATE TABLE IF NOT EXISTS ward_rounds (
+        id SERIAL PRIMARY KEY,
+        patient_id VARCHAR(100),
+        date DATE DEFAULT CURRENT_DATE,
+        ward_name VARCHAR(255),
+        consultant VARCHAR(255),
+        status VARCHAR(50) DEFAULT 'active',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
     await query(`ALTER TABLE ward_rounds ADD COLUMN IF NOT EXISTS round_date DATE DEFAULT CURRENT_DATE`).catch(() => {});
     await query(`ALTER TABLE ward_rounds ADD COLUMN IF NOT EXISTS round_type VARCHAR(50) DEFAULT 'routine'`).catch(() => {});
     await query(`ALTER TABLE ward_rounds ADD COLUMN IF NOT EXISTS consultant_reviewed BOOLEAN DEFAULT false`).catch(() => {});

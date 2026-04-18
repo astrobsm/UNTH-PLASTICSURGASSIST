@@ -27,6 +27,7 @@ import {
 } from '../utils/pdfUtils';
 import jsPDF from 'jspdf';
 import { useAuthStore } from '../store/authStore';
+import { ocrService } from '../services/ocrService';
 
 // ============================
 // TYPES & INTERFACES
@@ -262,6 +263,39 @@ const INVESTIGATION_PARAMETERS: Record<string, InvestigationParameter[]> = {
     { parameter: 'A/G Ratio', unit: '', reference_range: '1.0-2.2', type: 'numeric' },
   ],
 };
+/** Maps OCR extractLabValues() keys to { investigation, parameter } for auto-filling */
+const OCR_KEY_TO_PARAM: Record<string, { investigation: string; parameter: string }> = {
+  hemoglobin:    { investigation: 'Full Blood Count (FBC)', parameter: 'Hemoglobin (Hb)' },
+  wbc:           { investigation: 'Full Blood Count (FBC)', parameter: 'White Blood Cell (WBC)' },
+  platelets:     { investigation: 'Full Blood Count (FBC)', parameter: 'Platelet Count' },
+  hematocrit:    { investigation: 'Full Blood Count (FBC)', parameter: 'Packed Cell Volume (PCV)' },
+  rbc:           { investigation: 'Full Blood Count (FBC)', parameter: 'Red Blood Cell (RBC)' },
+  mcv:           { investigation: 'Full Blood Count (FBC)', parameter: 'MCV' },
+  mch:           { investigation: 'Full Blood Count (FBC)', parameter: 'MCH' },
+  mchc:          { investigation: 'Full Blood Count (FBC)', parameter: 'MCHC' },
+  sodium:        { investigation: 'Serum Electrolytes, Urea & Creatinine (E/U/Cr)', parameter: 'Sodium (Na⁺)' },
+  potassium:     { investigation: 'Serum Electrolytes, Urea & Creatinine (E/U/Cr)', parameter: 'Potassium (K⁺)' },
+  chloride:      { investigation: 'Serum Electrolytes, Urea & Creatinine (E/U/Cr)', parameter: 'Chloride (Cl⁻)' },
+  bicarbonate:   { investigation: 'Serum Electrolytes, Urea & Creatinine (E/U/Cr)', parameter: 'Bicarbonate (HCO₃⁻)' },
+  urea:          { investigation: 'Serum Electrolytes, Urea & Creatinine (E/U/Cr)', parameter: 'Urea' },
+  creatinine:    { investigation: 'Serum Electrolytes, Urea & Creatinine (E/U/Cr)', parameter: 'Creatinine' },
+  bilirubin:     { investigation: 'Liver Function Tests (LFT)', parameter: 'Total Bilirubin' },
+  alt:           { investigation: 'Liver Function Tests (LFT)', parameter: 'ALT (SGPT)' },
+  ast:           { investigation: 'Liver Function Tests (LFT)', parameter: 'AST (SGOT)' },
+  alp:           { investigation: 'Liver Function Tests (LFT)', parameter: 'ALP' },
+  albumin:       { investigation: 'Liver Function Tests (LFT)', parameter: 'Albumin' },
+  totalProtein:  { investigation: 'Liver Function Tests (LFT)', parameter: 'Total Protein' },
+  pt:            { investigation: 'Coagulation Profile (PT/INR/aPTT)', parameter: 'PT (Prothrombin Time)' },
+  inr:           { investigation: 'Coagulation Profile (PT/INR/aPTT)', parameter: 'INR' },
+  aptt:          { investigation: 'Coagulation Profile (PT/INR/aPTT)', parameter: 'aPTT' },
+  glucose:       { investigation: 'Fasting Blood Sugar (FBS)', parameter: 'Fasting Blood Glucose' },
+  hba1c:         { investigation: 'HbA1c', parameter: 'HbA1c' },
+  tsh:           { investigation: 'Thyroid Function Tests (TFT)', parameter: 'TSH' },
+  t3:            { investigation: 'Thyroid Function Tests (TFT)', parameter: 'Free T3' },
+  t4:            { investigation: 'Thyroid Function Tests (TFT)', parameter: 'Free T4' },
+  specificGravity: { investigation: 'Urinalysis', parameter: 'Specific Gravity' },
+  ph:            { investigation: 'Urinalysis', parameter: 'pH' },
+};
 
 /** Auto-flag a numeric result based on its reference range string */
 const autoFlagResult = (value: string, refRange: string, type: 'numeric' | 'qualitative'): InvestigationFlag => {
@@ -451,6 +485,10 @@ export default function BookingRegisterPage() {
   const [shoppingCategory, setShoppingCategory] = useState('all');
   const [showRiskMedDb, setShowRiskMedDb] = useState(false);
   const [showInvOCRScanner, setShowInvOCRScanner] = useState(false);
+  const [ocrScanning, setOcrScanning] = useState(false);
+  const [ocrProgress, setOcrProgress] = useState(0);
+  const [ocrProgressText, setOcrProgressText] = useState('');
+  const ocrFileRef = useRef<HTMLInputElement>(null);
   const [generatingConsentPdf, setGeneratingConsentPdf] = useState(false);
   const [showPreopAssessment, setShowPreopAssessment] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -680,6 +718,133 @@ export default function BookingRegisterPage() {
     updatePlan({ investigation_results: [...planData.investigation_results, result] });
     setInvResultEntry({ name: '', value: '', flag: 'normal' });
   }, [invResultEntry, selectedInvForEntry, paramEntries, planData, updatePlan, user]);
+
+  // OCR scan for investigation results — extracts lab values and auto-fills parameters
+  const handleOCRInvestigationScan = useCallback(async (file: File) => {
+    if (!planData) return;
+    setOcrScanning(true);
+    setOcrProgress(0);
+    setOcrProgressText('Initializing OCR...');
+
+    try {
+      // Use AI-enhanced OCR for best extraction
+      const aiResult = await ocrService.processDocumentWithAI(
+        file,
+        'lab_report',
+        { name: selectedPatient?.full_name, hospitalNumber: selectedPatient?.hospital_number },
+        (p) => {
+          setOcrProgress(Math.round(p.progress * 100));
+          if (p.progress < 0.3) setOcrProgressText('Scanning document...');
+          else if (p.progress < 0.6) setOcrProgressText('Extracting text...');
+          else if (p.progress < 0.85) setOcrProgressText('Identifying lab values...');
+          else setOcrProgressText('Mapping to parameters...');
+        }
+      );
+
+      // Extract lab values from raw OCR text using regex patterns
+      const labValues = ocrService.extractLabValues(aiResult.text);
+
+      // Also try to get structured results from AI processing
+      const aiResults: Array<{ test_name: string; result_value: string }> = [];
+      if (aiResult.structuredData?.results && Array.isArray(aiResult.structuredData.results)) {
+        aiResults.push(...aiResult.structuredData.results);
+      } else if (aiResult.structuredData?.investigations && Array.isArray(aiResult.structuredData.investigations)) {
+        aiResult.structuredData.investigations.forEach((inv: any) => {
+          if (inv.name && (inv.result || inv.result_value)) {
+            aiResults.push({ test_name: inv.name, result_value: String(inv.result || inv.result_value) });
+          }
+        });
+      }
+
+      // Build a combined map: ocrKey → value
+      const extractedValues: Record<string, string> = {};
+      for (const [key, data] of Object.entries(labValues)) {
+        extractedValues[key] = data.value;
+      }
+
+      // Group extractions by investigation
+      const byInvestigation: Record<string, Record<string, string>> = {};
+      let totalMapped = 0;
+
+      for (const [ocrKey, value] of Object.entries(extractedValues)) {
+        const mapping = OCR_KEY_TO_PARAM[ocrKey];
+        if (mapping) {
+          if (!byInvestigation[mapping.investigation]) byInvestigation[mapping.investigation] = {};
+          byInvestigation[mapping.investigation][mapping.parameter] = value;
+          totalMapped++;
+        }
+      }
+
+      // Also try matching AI results by name similarity
+      for (const aiRes of aiResults) {
+        const testNameLower = (aiRes.test_name || '').toLowerCase();
+        for (const [ocrKey, mapping] of Object.entries(OCR_KEY_TO_PARAM)) {
+          const paramLower = mapping.parameter.toLowerCase();
+          if (testNameLower.includes(paramLower) || paramLower.includes(testNameLower) ||
+              testNameLower.includes(ocrKey.toLowerCase())) {
+            if (!byInvestigation[mapping.investigation]) byInvestigation[mapping.investigation] = {};
+            if (!byInvestigation[mapping.investigation][mapping.parameter]) {
+              byInvestigation[mapping.investigation][mapping.parameter] = aiRes.result_value;
+              totalMapped++;
+            }
+          }
+        }
+      }
+
+      if (totalMapped === 0) {
+        toast.error('No lab values could be extracted from this document. Try a clearer image.');
+        setOcrScanning(false);
+        return;
+      }
+
+      // If a specific investigation is selected, fill its param entries
+      if (selectedInvForEntry && byInvestigation[selectedInvForEntry]) {
+        const mapped = byInvestigation[selectedInvForEntry];
+        setParamEntries(prev => ({ ...prev, ...mapped }));
+        const count = Object.keys(mapped).length;
+        toast.success(`Auto-filled ${count} parameter(s) for ${selectedInvForEntry}`);
+        delete byInvestigation[selectedInvForEntry];
+      }
+
+      // For remaining investigations, auto-add results directly
+      const autoAdded: InvestigationResult[] = [];
+      for (const [invName, params] of Object.entries(byInvestigation)) {
+        const invParams = INVESTIGATION_PARAMETERS[invName];
+        if (!invParams) continue;
+        for (const [paramName, value] of Object.entries(params)) {
+          const paramDef = invParams.find(p => p.parameter === paramName);
+          if (paramDef && value?.trim()) {
+            autoAdded.push({
+              name: `${invName} - ${paramName}`,
+              value,
+              unit: paramDef.unit,
+              reference_range: paramDef.reference_range,
+              flag: autoFlagResult(value, paramDef.reference_range, paramDef.type),
+              enteredBy: `OCR (${user?.full_name || 'Unknown'})`,
+              enteredAt: new Date().toISOString(),
+            });
+          }
+        }
+      }
+
+      if (autoAdded.length > 0) {
+        updatePlan({ investigation_results: [...planData.investigation_results, ...autoAdded] });
+        toast.success(`Auto-added ${autoAdded.length} result(s) from other investigations`);
+      }
+
+      if (totalMapped > 0 && autoAdded.length === 0 && !selectedInvForEntry) {
+        toast.success(`Extracted ${totalMapped} value(s) — select an investigation to see filled parameters`);
+      }
+
+    } catch (err: any) {
+      console.error('OCR investigation scan failed:', err);
+      toast.error(err.message || 'OCR scan failed. Try again with a clearer image.');
+    } finally {
+      setOcrScanning(false);
+      setOcrProgress(0);
+      setOcrProgressText('');
+    }
+  }, [planData, selectedInvForEntry, selectedPatient, updatePlan, user]);
 
   // File uploads
   const handleFileUpload = useCallback((file: File, field: 'ecg_image' | 'payment_evidence' | 'consent_document') => {
@@ -2040,10 +2205,38 @@ export default function BookingRegisterPage() {
                               >
                                 <Plus size={14} /> Add All Results
                               </button>
+                              <button
+                                onClick={() => ocrFileRef.current?.click()}
+                                disabled={ocrScanning}
+                                className="flex items-center gap-1 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700 disabled:opacity-50"
+                              >
+                                <Camera size={14} /> {ocrScanning ? 'Scanning...' : 'Scan & Auto-Fill'}
+                              </button>
+                              <input
+                                type="file"
+                                ref={ocrFileRef}
+                                accept="image/*,.pdf"
+                                className="hidden"
+                                onChange={e => {
+                                  if (e.target.files?.[0]) handleOCRInvestigationScan(e.target.files[0]);
+                                  e.target.value = '';
+                                }}
+                              />
                               <span className="text-xs text-gray-500">
                                 {Object.values(paramEntries).filter(v => v?.trim()).length} of {INVESTIGATION_PARAMETERS[selectedInvForEntry].length} parameters filled
                               </span>
                             </div>
+                            {ocrScanning && (
+                              <div className="mt-2 space-y-1">
+                                <div className="flex items-center gap-2 text-sm text-purple-700">
+                                  <div className="animate-spin w-4 h-4 border-2 border-purple-300 border-t-purple-700 rounded-full" />
+                                  <span>{ocrProgressText || 'Processing...'}</span>
+                                </div>
+                                <div className="w-full bg-purple-100 rounded-full h-2">
+                                  <div className="bg-purple-600 h-2 rounded-full transition-all duration-300" style={{ width: `${ocrProgress}%` }} />
+                                </div>
+                              </div>
+                            )}
                           </div>
                         )}
 
@@ -2071,10 +2264,38 @@ export default function BookingRegisterPage() {
                       {/* Upload documents */}
                       <div className="border-t pt-4">
                         <h4 className="text-sm font-medium mb-2">Upload Result Documents</h4>
-                        <input type="file" ref={fileInputRef} accept="image/*,.pdf" onChange={e => { if (e.target.files?.[0]) handleInvDocUpload(e.target.files[0]); }} className="hidden" />
-                        <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1 px-3 py-1.5 border rounded-lg text-sm hover:bg-gray-50">
-                          <FileImage size={14} /> Upload Document
-                        </button>
+                        <div className="flex flex-wrap gap-2 mb-2">
+                          <input type="file" ref={fileInputRef} accept="image/*,.pdf" onChange={e => { if (e.target.files?.[0]) handleInvDocUpload(e.target.files[0]); }} className="hidden" />
+                          <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1 px-3 py-1.5 border rounded-lg text-sm hover:bg-gray-50">
+                            <FileImage size={14} /> Upload Document
+                          </button>
+                          <button
+                            onClick={() => {
+                              const inp = document.createElement('input');
+                              inp.type = 'file';
+                              inp.accept = 'image/*,.pdf';
+                              inp.onchange = () => {
+                                if (inp.files?.[0]) handleOCRInvestigationScan(inp.files[0]);
+                              };
+                              inp.click();
+                            }}
+                            disabled={ocrScanning}
+                            className="flex items-center gap-1 px-3 py-1.5 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700 disabled:opacity-50"
+                          >
+                            <Camera size={14} /> {ocrScanning ? 'Scanning...' : 'Scan Lab Report (OCR)'}
+                          </button>
+                        </div>
+                        {ocrScanning && (
+                          <div className="mb-2 space-y-1">
+                            <div className="flex items-center gap-2 text-sm text-purple-700">
+                              <div className="animate-spin w-4 h-4 border-2 border-purple-300 border-t-purple-700 rounded-full" />
+                              <span>{ocrProgressText || 'Processing...'}</span>
+                            </div>
+                            <div className="w-full bg-purple-100 rounded-full h-2">
+                              <div className="bg-purple-600 h-2 rounded-full transition-all duration-300" style={{ width: `${ocrProgress}%` }} />
+                            </div>
+                          </div>
+                        )}
                         {planData.investigation_docs.length > 0 && (
                           <div className="mt-2 space-y-1">
                             {planData.investigation_docs.map((doc, idx) => (
