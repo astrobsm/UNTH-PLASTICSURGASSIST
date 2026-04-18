@@ -58,6 +58,7 @@ const ENDPOINT_TO_TABLE: Record<string, string> = {
   'mdt-meetings': 'mdt_meetings',
   'mdt-contact-logs': 'mdt_contact_logs',
   'mdt-patient-teams': 'mdt_patient_teams',
+  'vital-signs': 'vital_signs',
 };
 
 // Sync state for cross-device sync
@@ -518,6 +519,18 @@ class ApiClient {
 
   async delete<T = any>(endpoint: string): Promise<T> {
     return this.request<T>(endpoint, { method: 'DELETE' });
+  }
+
+  /**
+   * Invalidate stale-while-revalidate cache for a specific endpoint.
+   * Call after mutations (POST/PUT/DELETE) so the next GET fetches fresh data.
+   */
+  async invalidateCache(endpoint: string): Promise<void> {
+    try {
+      await db.api_cache.delete(endpoint);
+    } catch {
+      // Best-effort — ignore errors
+    }
   }
 
   private updateSyncTimestamp() {

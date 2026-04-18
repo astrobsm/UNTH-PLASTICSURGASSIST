@@ -1116,11 +1116,31 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; patie
     try {
       let data: VitalReading[] = [];
       try {
+        // Invalidate stale cache first so we always get fresh data from the server
+        await apiClient.invalidateCache(`/vital-signs?patientId=${patientId}`);
         const res = await apiClient.get(`/vital-signs?patientId=${patientId}`);
         data = res?.vitals || res?.vitalSigns || [];
       } catch {
+        // Offline fallback: try localStorage
         const stored = localStorage.getItem(`vitals_${patientId}`);
         data = stored ? JSON.parse(stored) : [];
+      }
+      // Also merge any localStorage-only entries (saved during offline periods)
+      const stored = localStorage.getItem(`vitals_${patientId}`);
+      if (stored && data.length > 0) {
+        const localEntries: VitalReading[] = JSON.parse(stored);
+        // Merge local entries that aren't already in server data (by date+recorded_by)
+        const serverDates = new Set(data.map(v => `${v.date}_${v.recorded_by}`));
+        const missing = localEntries.filter(v => !serverDates.has(`${v.date}_${v.recorded_by}`));
+        if (missing.length > 0) {
+          data = [...data, ...missing];
+          // Try to push missing entries to server
+          for (const entry of missing) {
+            apiClient.post('/vital-signs', { ...entry, patient_id: patientId, hospital_number: hospitalNumber }).catch(() => {});
+          }
+        }
+        // Clear localStorage since data is now on server
+        localStorage.removeItem(`vitals_${patientId}`);
       }
       setVitals(data.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()));
     } catch {
@@ -1175,6 +1195,8 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; patie
       setVitals(prev =>
         [...prev, ...savedReadings].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
       );
+      // Invalidate GET cache so next page load fetches fresh data from server
+      await apiClient.invalidateCache(`/vital-signs?patientId=${patientId}`);
       setBatchRows([{ date: new Date().toISOString().slice(0, 16) }]);
       setShowForm(false);
     } finally {
@@ -1462,6 +1484,8 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; patie
       setVitals(prev =>
         [...prev, ...savedReadings].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
       );
+      // Invalidate GET cache so next page load fetches fresh data from server
+      await apiClient.invalidateCache(`/vital-signs?patientId=${patientId}`);
       setOcrVitalsEntries([]);
       setShowOCRReview(false);
     } finally {

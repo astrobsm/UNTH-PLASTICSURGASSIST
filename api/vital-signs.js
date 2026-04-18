@@ -58,6 +58,28 @@ export default async function handler(req, res) {
       return res.status(201).json({ vital: result.rows[0] });
     }
 
+    if (req.method === 'PUT') {
+      const { id, temperature, pulse, bp_systolic, bp_diastolic, respiratory_rate, spo2, weight, recorded_by, date } = req.body;
+      if (!id) return res.status(400).json({ error: 'id is required' });
+
+      const result = await query(
+        `UPDATE vital_signs SET temperature=$1, pulse=$2, bp_systolic=$3, bp_diastolic=$4, respiratory_rate=$5, spo2=$6, weight=$7, recorded_by=$8, date=$9
+         WHERE id=$10 RETURNING *`,
+        [temperature || null, pulse || null, bp_systolic || null, bp_diastolic || null, respiratory_rate || null, spo2 || null, weight || null, recorded_by || null, date || new Date().toISOString(), id]
+      );
+      if (result.rows.length === 0) return res.status(404).json({ error: 'Vital sign record not found' });
+      return res.status(200).json({ vital: result.rows[0] });
+    }
+
+    if (req.method === 'DELETE') {
+      const id = req.query.id;
+      if (!id) return res.status(400).json({ error: 'id query parameter is required' });
+
+      const result = await query('DELETE FROM vital_signs WHERE id = $1 RETURNING id', [id]);
+      if (result.rows.length === 0) return res.status(404).json({ error: 'Vital sign record not found' });
+      return res.status(200).json({ success: true, deleted: result.rows[0].id });
+    }
+
     return res.status(405).json({ error: 'Method not allowed' });
   } catch (error) {
     console.error('Vital signs API error:', error);

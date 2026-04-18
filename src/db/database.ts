@@ -235,6 +235,7 @@ export class PlasticSurgeonDB extends Dexie {
   offline_credentials!: Table<any>; // Offline auth: hashed credentials for offline login
   sync_conflicts!: Table<any>; // Sync conflict log for manual resolution
   sync_dead_letter!: Table<any>; // Dead letter queue for permanently failed sync items
+  vital_signs!: Table<any>; // For vital signs records with server persistence
 
   constructor() {
     super('PlasticSurgeonDB');
@@ -1305,6 +1306,11 @@ export class PlasticSurgeonDB extends Dexie {
     // Version 35: Dead letter queue for permanently failed sync items
     this.version(35).stores({
       sync_dead_letter: '++id, table, action, local_id, created_at, failed_at, retries, last_error'
+    });
+
+    // Version 36: Vital signs table for offline-first vital signs caching
+    this.version(36).stores({
+      vital_signs: '++id, patient_id, hospital_number, date, created_at'
     });
 
     // Add hooks to automatically track changes
