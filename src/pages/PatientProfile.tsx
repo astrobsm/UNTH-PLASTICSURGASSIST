@@ -15,6 +15,8 @@ import { ErrorBoundary } from '../components/ErrorBoundary';
 import { speechToTextService } from '../services/speechToTextService';
 import { DocumentScannerModal } from '../components/DocumentScannerModal';
 import FluidBalanceChart from '../components/FluidBalanceChart';
+import { DocumenterLink, ConsultantCommentSection, RecommendationsPanel } from '../components/ClinicalInteractionComponents';
+import { generateVitalSignRecommendations, generateLabRecommendations, type ClinicalRecommendation } from '../utils/clinicalUtils';
 import {
   Activity, Camera, Calendar, Clock, FileText, Plus, TrendingUp,
   Scissors, ClipboardCheck, Pill, Heart, Image, AlertCircle,
@@ -282,7 +284,7 @@ export const PatientProfile: React.FC = () => {
       case 'summary':
         return <PatientSummaryView patientId={id!} />;
       case 'vital-signs':
-        return <VitalSignsTab patientId={id!} hospitalNumber={hospitalNumber} userName={user?.name || 'Unknown'} />;
+        return <VitalSignsTab patientId={id!} hospitalNumber={hospitalNumber} patientName={patientName} userName={user?.name || 'Unknown'} />;
       case 'investigations':
         return <InvestigationsTab patientId={id!} hospitalNumber={hospitalNumber} patientName={patientName} userName={user?.name || 'Unknown'} />;
       case 'treatment-plans':
@@ -1026,7 +1028,14 @@ const EncountersTab: React.FC<{ patientId: string; hospitalNumber: string; patie
                     })()}
                   </div>
                   <div className="mt-2 text-xs text-gray-400 flex flex-wrap items-center gap-1">
-                    <span>By: {enc.author || enc.created_by || enc.admitting_doctor || 'Unknown'}</span>
+                    <span>By: </span>
+                    <DocumenterLink
+                      authorName={enc.author || enc.created_by || enc.admitting_doctor || 'Unknown'}
+                      authorRole={enc.author_role || enc._type}
+                      patientName={patientName}
+                      patientHospitalNumber={hospitalNumber}
+                      context={`${enc._type === 'admission' ? 'Admission' : enc._type === 'ward_round' ? 'Ward Round' : 'Progress Note'} from ${enc.created_at ? new Date(enc.created_at).toLocaleDateString() : 'unknown date'}`}
+                    />
                     {enc.geolocation && (() => { const g = typeof enc.geolocation === 'string' ? JSON.parse(enc.geolocation) : enc.geolocation; return g?.latitude ? (
                       <span className="ml-2 px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded text-[10px] flex items-center gap-0.5" title={g.address || `${g.latitude.toFixed(5)}, ${g.longitude.toFixed(5)}`}>
                         📍 {g.address ? g.address.split(',').slice(0, 2).join(',') : `${g.latitude.toFixed(4)}, ${g.longitude.toFixed(4)}`}
@@ -1034,6 +1043,11 @@ const EncountersTab: React.FC<{ patientId: string; hospitalNumber: string; patie
                       </span>
                     ) : null; })()}
                   </div>
+                  <ConsultantCommentSection
+                    entityType="encounter"
+                    entityId={String(enc.id || i)}
+                    patientName={patientName}
+                  />
                 </div>
               ))}
             </div>
@@ -1070,7 +1084,7 @@ interface VitalReading {
   recorded_by?: string;
 }
 
-const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; userName: string }> = ({ patientId, hospitalNumber, userName }) => {
+const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; patientName: string; userName: string }> = ({ patientId, hospitalNumber, patientName, userName }) => {
   const [vitals, setVitals] = useState<VitalReading[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -1567,7 +1581,16 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; userN
                     <td className="text-center">{v.respiratory_rate || '-'}</td>
                     <td className="text-center">{v.spo2 ? `${v.spo2}%` : '-'}</td>
                     <td className="text-center">{v.weight || '-'}</td>
-                    <td className="text-xs text-gray-400">{v.recorded_by || '-'}</td>
+                    <td className="text-xs text-gray-400">
+                      {v.recorded_by ? (
+                        <DocumenterLink
+                          authorName={v.recorded_by}
+                          patientName={patientName || ''}
+                          patientHospitalNumber={hospitalNumber}
+                          context={`Vital signs recorded on ${new Date(v.date).toLocaleDateString()}`}
+                        />
+                      ) : '-'}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -1575,6 +1598,30 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; userN
           )}
         </div>
       </div>
+
+      {/* Auto-Recommendations based on latest vital signs */}
+      {vitals.length > 0 && (() => {
+        const latest = [...vitals].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+        const recs = generateVitalSignRecommendations({
+          temperature: latest.temperature ? Number(latest.temperature) : undefined,
+          systolic_bp: latest.bp_systolic ? Number(latest.bp_systolic) : undefined,
+          diastolic_bp: latest.bp_diastolic ? Number(latest.bp_diastolic) : undefined,
+          pulse: latest.pulse ? Number(latest.pulse) : undefined,
+          respiratory_rate: latest.respiratory_rate ? Number(latest.respiratory_rate) : undefined,
+          spo2: latest.spo2 ? Number(latest.spo2) : undefined,
+          blood_sugar: (latest as any).blood_sugar ? Number((latest as any).blood_sugar) : undefined,
+          urine_output: (latest as any).urine_output ? Number((latest as any).urine_output) : undefined,
+          pain_score: (latest as any).pain_score ? Number((latest as any).pain_score) : undefined,
+        });
+        return recs.length > 0 ? <RecommendationsPanel recommendations={recs} title="Auto-Recommendations (Latest Vitals)" /> : null;
+      })()}
+
+      {/* Consultant Comments on Vital Signs */}
+      <ConsultantCommentSection
+        entityType="vital_signs"
+        entityId={`vitals_${patientId}`}
+        patientName={patientName}
+      />
 
       {/* OCR Vitals Review Modal — editable before saving */}
       {showOCRReview && ocrVitalsEntries.length > 0 && (
@@ -2033,9 +2080,15 @@ const InvestigationsTab: React.FC<{ patientId: string; hospitalNumber: string; p
                       </div>
                     </div>
                     {(inv.ordered_by_name || inv.ordered_by_username || inv.ordered_by) && (
-                      <p className="text-xs text-gray-400 mt-1">By: {inv.ordered_by_name || inv.ordered_by_username || `User #${inv.ordered_by}`}</p>
+                      <p className="text-xs text-gray-400 mt-1">By: <DocumenterLink
+                        authorName={inv.ordered_by_name || inv.ordered_by_username || `User #${inv.ordered_by}`}
+                        patientName={patientName}
+                        patientHospitalNumber={hospitalNumber}
+                        context={`Investigation ordered on ${inv.ordered_at ? new Date(inv.ordered_at).toLocaleDateString() : 'unknown date'}`}
+                      /></p>
                     )}
                     {inv.test_type && <p className="text-[10px] text-gray-400 mt-0.5">Category: {inv.test_type}</p>}
+                    <ConsultantCommentSection entityType="investigation" entityId={String(inv.id || i)} patientName={patientName} />
                   </div>
                 ))}
               </div>
@@ -2107,9 +2160,28 @@ const InvestigationsTab: React.FC<{ patientId: string; hospitalNumber: string; p
                     <div className="flex flex-wrap items-center gap-x-3 mt-2">
                       <p className="text-xs text-gray-400">Resulted: {inv.completed_at ? new Date(inv.completed_at).toLocaleString() : inv.result_date ? new Date(inv.result_date).toLocaleString() : inv.updated_at ? new Date(inv.updated_at).toLocaleString() : ''}</p>
                       {(inv.ordered_by_name || inv.ordered_by_username) && (
-                        <p className="text-xs text-gray-400">By: {inv.ordered_by_name || inv.ordered_by_username}</p>
+                        <p className="text-xs text-gray-400">By: <DocumenterLink
+                          authorName={inv.ordered_by_name || inv.ordered_by_username}
+                          patientName={patientName}
+                          patientHospitalNumber={hospitalNumber}
+                          context={`Investigation result from ${inv.completed_at ? new Date(inv.completed_at).toLocaleDateString() : 'unknown date'}`}
+                        /></p>
                       )}
                     </div>
+                    {/* Auto-Recommendations for lab results */}
+                    {Array.isArray(inv.results) && inv.results.length > 0 && (() => {
+                      const labResults = inv.results.map((r: any) => ({
+                        test_name: r.test_name || r.name || `Test`,
+                        result_value: r.result_value || r.result || r.value,
+                        unit: r.unit,
+                        reference_range: r.reference_range,
+                        abnormal: r.abnormal,
+                        flag: r.flag,
+                      }));
+                      const recs = generateLabRecommendations(labResults);
+                      return recs.length > 0 ? <RecommendationsPanel recommendations={recs} title="Auto-Recommendations (Lab Results)" /> : null;
+                    })()}
+                    <ConsultantCommentSection entityType="investigation" entityId={String(inv.id || i)} patientName={patientName} />
                   </div>
                 ))}
               </div>
@@ -2919,7 +2991,12 @@ const ClinicalPhotosTab: React.FC<{ patientId: string; hospitalNumber: string; p
                   <div className="p-2">
                     <p className="text-xs text-gray-800 font-medium truncate">{photo.caption || 'No caption'}</p>
                     <p className="text-xs text-gray-400">{new Date(photo.date).toLocaleDateString()}</p>
-                    <p className="text-xs text-gray-400">By: {photo.taken_by}</p>
+                    <p className="text-xs text-gray-400">By: <DocumenterLink
+                      authorName={photo.taken_by}
+                      patientName={patientName}
+                      patientHospitalNumber={hospitalNumber}
+                      context={`Clinical photo from ${new Date(photo.date).toLocaleDateString()}`}
+                    /></p>
                   </div>
                   <button onClick={() => deletePhoto(photo.id)} className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity" aria-label="Delete photo">
                     <Trash2 className="w-3 h-3" />
@@ -2943,7 +3020,15 @@ const ClinicalPhotosTab: React.FC<{ patientId: string; hospitalNumber: string; p
                   <img src={photo.dataUrl} alt={photo.caption} className="w-full rounded-lg" />
                   <div className="mt-2 text-white text-sm">
                     <p className="font-medium">{photo.caption}</p>
-                    <p className="text-gray-300">{new Date(photo.date).toLocaleString()} • By: {photo.taken_by}</p>
+                    <p className="text-gray-300">{new Date(photo.date).toLocaleString()} • By: <DocumenterLink
+                      authorName={photo.taken_by}
+                      patientName={patientName}
+                      patientHospitalNumber={hospitalNumber}
+                      context={`Clinical photo from ${new Date(photo.date).toLocaleDateString()}`}
+                    /></p>
+                  </div>
+                  <div className="mt-2">
+                    <ConsultantCommentSection entityType="clinical_image" entityId={photo.id} patientName={patientName} />
                   </div>
                 </div>
               ) : null;

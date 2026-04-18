@@ -3,6 +3,7 @@ import { db } from '../../db/database';
 import { apiClient } from '../../services/apiClient';
 import { useAuthStore } from '../../store/authStore';
 import { RefreshCw } from 'lucide-react';
+import { DocumenterLink, ConsultantCommentSection } from '../ClinicalInteractionComponents';
 
 interface Encounter {
   id: number | string;
@@ -479,9 +480,20 @@ export const PatientEncounters: React.FC<PatientEncountersProps> = ({ patientId,
                   <div className="flex items-center gap-3 mt-2 text-xs text-gray-400">
                     <span>📅 {formatDateTime(enc.date)}</span>
                     {enc.created_by_name && (
-                      <span>👤 {enc.created_by_name} {enc.created_by_role ? `(${enc.created_by_role})` : ''}</span>
+                      <DocumenterLink
+                        authorName={enc.created_by_name}
+                        authorRole={enc.created_by_role}
+                        patientName={patientName}
+                        patientHospitalNumber={hospitalNumber}
+                        context={`${enc.type} - ${enc.title}`}
+                      />
                     )}
                   </div>
+                  <ConsultantCommentSection
+                    entityType="encounter"
+                    entityId={String(enc.id)}
+                    patientName={patientName}
+                  />
                 </div>
               </div>
             </div>
