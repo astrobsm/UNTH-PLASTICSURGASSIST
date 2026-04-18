@@ -129,8 +129,15 @@ async function getAllAdmissions(searchParams, res) {
 
   const result = await query(queryStr, params);
 
-  // Transform all rows to frontend format
-  const transformedAdmissions = result.rows.map(transformAdmission);
+  // Transform all rows to frontend format, filtering out ghost admissions with no patient data
+  const transformedAdmissions = result.rows
+    .map(transformAdmission)
+    .filter(a => {
+      // Skip admissions that have no identifiable patient info at all
+      const hasName = a.patient_name && a.patient_name.trim();
+      const hasHospNum = a.hospital_number && a.hospital_number.trim();
+      return hasName || hasHospNum;
+    });
 
   res.status(200).json({ admissions: transformedAdmissions });
 }

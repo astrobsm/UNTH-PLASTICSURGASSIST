@@ -125,7 +125,26 @@ export default function AdmissionDischargePage() {
         admissionDischargeService.getStatistics()
       ]);
       setPatients(patientsData);
-      setActiveAdmissions(admissionsData);
+      
+      // Enrich admissions with patient data for records missing patient_name/hospital_number
+      const patientMap = new Map(patientsData.map((p: any) => [p.id, p]));
+      const enrichedAdmissions = admissionsData.map((admission: any) => {
+        if ((!admission.patient_name || !admission.patient_name.trim()) && admission.patient_id) {
+          const patient = patientMap.get(admission.patient_id);
+          if (patient) {
+            return {
+              ...admission,
+              patient_name: admission.patient_name || `${patient.first_name || ''} ${patient.last_name || ''}`.trim() || patient.name || '',
+              hospital_number: admission.hospital_number || patient.hospital_number || '',
+              age: admission.age || patient.age || '',
+              gender: admission.gender || patient.gender || '',
+            };
+          }
+        }
+        return admission;
+      });
+      
+      setActiveAdmissions(enrichedAdmissions);
       setDischarges(dischargesData);
       setStatistics(statsData);
       console.log('Data loaded successfully');
@@ -591,12 +610,15 @@ function ActivePatientsTab({ admissions, searchTerm, setSearchTerm, onDischarge,
                     <tr className={`hover:bg-gray-50 cursor-pointer ${isExpanded ? 'bg-green-50' : ''}`}
                         onClick={() => handleExpand(admission)}>
                       <td className="px-4 py-3">
-                        <div className="font-medium text-gray-900">{admission.patient_name}</div>
-                        <div className="text-xs text-gray-500">{admission.age}y / {admission.gender}</div>
+                        <div className="font-medium text-gray-900">{admission.patient_name || 'Unknown Patient'}</div>
+                        <div className="text-xs text-gray-500">
+                          {admission.age ? `${admission.age}y` : ''}{admission.age && admission.gender ? ' / ' : ''}{admission.gender || ''}
+                          {!admission.age && !admission.gender ? '—' : ''}
+                        </div>
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{admission.hospital_number}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{admission.hospital_number || '—'}</td>
                       <td className="px-4 py-3 text-sm">
-                        <span className="font-medium">{admission.ward_location}</span>
+                        <span className="font-medium">{admission.ward_location || '—'}</span>
                         {admission.bed_number && <span className="text-gray-500"> / {admission.bed_number}</span>}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-600">
@@ -612,7 +634,7 @@ function ActivePatientsTab({ admissions, searchTerm, setSearchTerm, onDischarge,
                         </span>
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-600">
-                        <div className="max-w-xs truncate">{admission.provisional_diagnosis}</div>
+                        <div className="max-w-xs truncate">{admission.provisional_diagnosis || '—'}</div>
                       </td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-1 text-xs rounded-full ${

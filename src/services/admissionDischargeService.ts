@@ -348,9 +348,17 @@ class AdmissionDischargeService {
   }
 
   private async _fetchActiveAdmissions(): Promise<Admission[]> {
+    let serverSuccess = false;
     try {
       const serverAdmissions = await apiClient.getAdmissions();
       if (serverAdmissions && Array.isArray(serverAdmissions)) {
+        serverSuccess = true;
+        // Clear old synced admissions and replace with fresh server data
+        const existingAdmissions = await db.admissions.toArray();
+        const syncedIds = existingAdmissions.filter(a => a.synced).map(a => a.id);
+        if (syncedIds.length > 0) {
+          await db.admissions.bulkDelete(syncedIds);
+        }
         for (const admission of serverAdmissions) {
           await db.admissions.put({ ...admission, synced: true });
         }
@@ -362,6 +370,8 @@ class AdmissionDischargeService {
     const admissions = await db.admissions.toArray();
     const activeAdmissions = admissions
       .filter(a => a.status === 'active')
+      // Filter out ghost admissions with no patient data
+      .filter(a => (a.patient_name && a.patient_name.trim()) || (a.hospital_number && a.hospital_number.trim()))
       .sort((a, b) => new Date(b.admission_date).getTime() - new Date(a.admission_date).getTime());
 
     this._admCache = activeAdmissions;
