@@ -118,6 +118,17 @@ interface PreopPlanningData {
   anaesthesia_type: string;
   proposed_ward: string;
   estimated_duration: number;
+  // Procedure - Surgical Team & Scheduling
+  operating_unit: '' | 'PS1' | 'PS2';
+  case_category: '' | 'minor' | 'intermediate' | 'major';
+  is_multispecialist: boolean;
+  primary_surgeon: string;
+  assistants: string[];
+  special_equipment: string[];
+  needs_blood_transfusion: boolean;
+  blood_units_requested: number;
+  scheduled_date?: string;
+  scheduled_start_time?: string;
   // ECG
   ecg_image?: string;
   ecg_interpretation?: string;
@@ -366,6 +377,26 @@ const COMORBIDITY_OPTIONS = [
 
 const ANAESTHESIA_TYPES = ['General Anaesthesia', 'Regional (Spinal)', 'Regional (Epidural)', 'Local Anaesthesia', 'Local + Sedation', 'IV Sedation', 'Nerve Block'];
 
+const SPECIAL_EQUIPMENT_OPTIONS = [
+  'Diathermy (Monopolar)', 'Diathermy (Bipolar)', 'Humby Knife', 'Dermatome (Electric)',
+  'Dermatome (Air)', 'Skin Mesher', 'Tissue Expander Set', 'Microsurgery Set',
+  'Loupes (Magnification)', 'Operating Microscope', 'Drill Set', 'K-Wire Set',
+  'Mini-Plate & Screw Set', 'External Fixator', 'Bone Graft Set', 'Suction Machine',
+  'Tourniquet', 'Image Intensifier (C-Arm)', 'Laser', 'Liposuction Cannula Set',
+  'VAC (Negative Pressure) System', 'Doppler Probe', 'Nerve Stimulator',
+];
+
+/** Duration estimates per case category (minutes including turnover) */
+const CASE_DURATIONS: Record<string, number> = {
+  minor: 90,        // ~60min surgery + 30min turnover
+  intermediate: 150, // ~120min surgery + 30min turnover
+  major: 240,       // ~210min surgery + 30min turnover
+};
+/** Theatre operating window: 8:00 AM - 4:00 PM */
+const THEATRE_START_HOUR = 8;
+const THEATRE_END_HOUR = 16; // 4:00 PM
+const TURNOVER_MINUTES = 30; // 30-minute gap between cases
+
 const CASE_WEIGHTS: Record<CaseCategory, number> = { minor: 1, intermediate: 2, major: 2, super_major: 4 };
 const MAX_DAILY_SLOTS = 4;
 const CASE_CATEGORY_LABELS: Record<CaseCategory, string> = { minor: 'Minor', intermediate: 'Intermediate', major: 'Major', super_major: 'Super Major' };
@@ -384,6 +415,9 @@ const makeDefaultPlan = (patientId: string, user: string): PreopPlanningData => 
   investigation_results: [], investigation_docs: [],
   shopping_items: [],
   procedure_name: '', anaesthesia_type: '', proposed_ward: '', estimated_duration: 60,
+  operating_unit: '', case_category: '', is_multispecialist: false,
+  primary_surgeon: user, assistants: [], special_equipment: [],
+  needs_blood_transfusion: false, blood_units_requested: 0,
   ecg_image: undefined, ecg_interpretation: undefined, ecg_recommendations: undefined,
   payment_evidence: undefined, consent_document: undefined,
   checklist: { ...DEFAULT_CHECKLIST },
@@ -922,43 +956,129 @@ export default function BookingRegisterPage() {
 
   const canAutoBook = useMemo(() => {
     if (!planData || !selectedPatient) return false;
-    return allChecklistComplete && missingMandatoryLabs.length === 0 && !!planData.procedure_name && !!planData.anaesthesia_type;
+    return allChecklistComplete && missingMandatoryLabs.length === 0 && !!planData.procedure_name && !!planData.anaesthesia_type && !!planData.case_category && !!planData.operating_unit;
   }, [planData, selectedPatient, allChecklistComplete, missingMandatoryLabs]);
+
+  /** Find the next available theatre slot respecting daily schedule rules:
+   *  - Theatre runs 8:00 AM - 4:00 PM
+   *  - 30 min turnover between cases
+   *  - Weekdays only (Mon-Fri)
+   *  - Must fit case duration before 4:00 PM
+   */
+  const findNextAvailableSlot = useCallback((caseCategory: string): { date: string; startTime: string } | null => {
+    const caseDuration = CASE_DURATIONS[caseCategory] || 150;
+    const caseMins = caseDuration - TURNOVER_MINUTES; // actual surgery time (turnover is gap after)
+
+    // Start searching from tomorrow
+    const searchDate = new Date();
+    searchDate.setDate(searchDate.getDate() + 1);
+    const maxSearch = 90; // search up to 90 days ahead
+
+    for (let i = 0; i < maxSearch; i++) {
+      const dayOfWeek = searchDate.getDay();
+      // Skip weekends
+      if (dayOfWeek === 0 || dayOfWeek === 6) {
+        searchDate.setDate(searchDate.getDate() + 1);
+        continue;
+      }
+
+      const dateStr = searchDate.toISOString().split('T')[0];
+      const dayCases = bookedCases.filter(c => c.date === dateStr && (c.status === 'scheduled' || c.status === 'confirmed'));
+
+      // Calculate end time of last case
+      let dayEndMinutes = THEATRE_START_HOUR * 60; // 8:00 AM = 480 minutes
+
+      if (dayCases.length > 0) {
+        // Sort by start time
+        const sorted = [...dayCases].sort((a, b) => {
+          const aTime = a.start_time ? parseInt(a.start_time.split(':')[0]) * 60 + parseInt(a.start_time.split(':')[1]) : 480;
+          const bTime = b.start_time ? parseInt(b.start_time.split(':')[0]) * 60 + parseInt(b.start_time.split(':')[1]) : 480;
+          return aTime - bTime;
+        });
+
+        // Find the end time of the last case + turnover
+        for (const existing of sorted) {
+          const startMins = existing.start_time
+            ? parseInt(existing.start_time.split(':')[0]) * 60 + parseInt(existing.start_time.split(':')[1])
+            : dayEndMinutes;
+          const existingDuration = existing.estimated_duration_minutes || CASE_DURATIONS[existing.case_category as string] || 150;
+          const existingEnd = startMins + (existingDuration - TURNOVER_MINUTES) + TURNOVER_MINUTES;
+          if (existingEnd > dayEndMinutes) dayEndMinutes = existingEnd;
+        }
+      }
+
+      // Check if the new case fits before 4:00 PM
+      const newCaseEnd = dayEndMinutes + caseMins;
+      if (newCaseEnd <= THEATRE_END_HOUR * 60) {
+        const startHour = Math.floor(dayEndMinutes / 60);
+        const startMin = dayEndMinutes % 60;
+        return {
+          date: dateStr,
+          startTime: `${String(startHour).padStart(2, '0')}:${String(startMin).padStart(2, '0')}`,
+        };
+      }
+
+      searchDate.setDate(searchDate.getDate() + 1);
+    }
+    return null;
+  }, [bookedCases]);
 
   const handleAutoBook = useCallback(async () => {
     if (!planData || !selectedPatient) return;
     setSaving(true);
     try {
-      const today = new Date().toISOString().split('T')[0];
+      // Auto-assign date/time based on theatre calendar
+      let bookingDate = planData.scheduled_date;
+      let bookingTime = planData.scheduled_start_time || '08:00';
+
+      if (!bookingDate) {
+        const slot = findNextAvailableSlot(planData.case_category || 'intermediate');
+        if (!slot) {
+          toast.error('No available theatre slot found in the next 90 days. Please check the theatre calendar.');
+          setSaving(false);
+          return;
+        }
+        bookingDate = slot.date;
+        bookingTime = slot.startTime;
+        // Update planData with scheduled slot
+        updatePlan({ scheduled_date: bookingDate, scheduled_start_time: bookingTime });
+      }
+
       const booking: Record<string, any> = {
         patient_id: selectedPatient.id,
         patient_name: selectedPatient.full_name || `${selectedPatient.first_name || ''} ${selectedPatient.last_name || ''}`.trim(),
         hospital_number: selectedPatient.hospital_number || '',
         patient_age_at_booking: patientAge ?? undefined,
-        patient_gender: selectedPatient.sex || selectedPatient.gender || '',
+        patient_gender: selectedPatient.gender || '',
         procedure_name: planData.procedure_name,
         diagnosis: planData.diagnosis || '',
         anaesthesia_type: planData.anaesthesia_type,
-        primary_surgeon: planData.assessed_by || user?.name || '',
+        primary_surgeon: planData.primary_surgeon || planData.assessed_by || user?.name || '',
+        assistant_surgeon: planData.assistants?.join(', ') || '',
         proposed_ward: planData.proposed_ward || '',
-        date: today,
-        start_time: '08:00',
-        theatre_number: '',
+        date: bookingDate,
+        start_time: bookingTime,
+        theatre_number: planData.operating_unit || '',
+        case_category: planData.case_category || 'intermediate',
         status: 'scheduled',
-        estimated_duration_minutes: planData.estimated_duration || 60,
-        estimated_duration: planData.estimated_duration || 60,
+        estimated_duration_minutes: planData.estimated_duration || CASE_DURATIONS[planData.case_category || 'intermediate'] || 150,
+        estimated_duration: planData.estimated_duration || CASE_DURATIONS[planData.case_category || 'intermediate'] || 150,
         urgency: 'elective',
-        special_requirements: [],
-        equipment_needed: planData.shopping_items?.map((i: any) => i.name) || [],
+        special_requirements: planData.special_equipment || [],
+        equipment_needed: [...(planData.special_equipment || []), ...(planData.shopping_items?.map((i: any) => i.name) || [])],
         implants_needed: [],
         anaesthetist: '',
         scrub_nurse: '',
         comorbidities: planData.comorbidities || [],
         is_diabetic: (planData.comorbidities || []).some((c: string) => c.toLowerCase().includes('diabetes')),
         is_hiv_positive: (planData.comorbidities || []).some((c: string) => c.toLowerCase().includes('hiv')),
+        is_multispecialist: planData.is_multispecialist || false,
+        needs_blood_transfusion: planData.needs_blood_transfusion || false,
+        blood_units_requested: planData.blood_units_requested || 0,
+        surgeon_team: planData.assistants || [],
       };
       await schedulingService.createSurgeryBooking(booking as any);
-      toast.success('Patient booked for surgery!');
+      toast.success(`Patient booked for surgery on ${bookingDate} at ${bookingTime}!`);
       // Clear planning data for this patient
       const all = loadJSON<Record<string, PreopPlanningData>>(PLANNING_DATA_KEY, {});
       delete all[selectedPatient.id];
@@ -971,7 +1091,7 @@ export default function BookingRegisterPage() {
       toast.error('Failed to book surgery');
     }
     setSaving(false);
-  }, [planData, selectedPatient, patientAge, user, loadBookedCases]);
+  }, [planData, selectedPatient, patientAge, user, loadBookedCases, findNextAvailableSlot, updatePlan]);
 
   // ============================
   // PDF GENERATORS
@@ -979,48 +1099,170 @@ export default function BookingRegisterPage() {
   const generateOperationListPDF = useCallback((date: string) => {
     const dayCases = bookedCases.filter(c => c.date === date).sort(prioritySort);
     if (dayCases.length === 0) { toast.error('No cases booked for this date'); return; }
-    const doc = new jsPDF('p', 'mm', 'a4');
-    doc.setFont('Georgia', 'normal');
-    let y = 15;
-    doc.setFontSize(16);
-    doc.text('OPERATION LIST', 105, y, { align: 'center' }); y += 7;
-    doc.setFontSize(11);
-    doc.text('Plastic Surgery Unit', 105, y, { align: 'center' }); y += 6;
-    doc.text(safeFormatDate(date, 'EEEE, MMMM d, yyyy'), 105, y, { align: 'center' }); y += 10;
 
-    // Table header
-    doc.setFontSize(9);
-    doc.setFont('Georgia', 'bold');
-    const cols = [10, 45, 60, 80, 20, 18, 30, 45, 50];
-    const headers = ['S/N', 'Patient Name', 'PT Number', 'Diagnosis', 'Age', 'Sex', 'Ward', 'Procedure', 'Surgeon'];
-    headers.forEach((h, i) => doc.text(h, cols[i], y));
-    y += 2;
-    doc.setDrawColor(0); doc.line(10, y, 200, y); y += 5;
-    doc.setFont('Georgia', 'normal');
+    // Use landscape A4 for more horizontal space
+    const doc = new jsPDF('l', 'mm', 'a4'); // 297 x 210 mm
+    const pageW = 297;
+    const marginL = 10;
+    const marginR = 10;
+    const usableW = pageW - marginL - marginR;
+
+    // ── Title Block ──
+    let y = 14;
+    doc.setFont('times', 'bold');
+    doc.setFontSize(16);
+    doc.text('OPERATION LIST', pageW / 2, y, { align: 'center' }); y += 7;
+    doc.setFontSize(12);
+    doc.text('Plastic Surgery Unit', pageW / 2, y, { align: 'center' }); y += 6;
+    doc.setFont('times', 'normal');
+    doc.setFontSize(11);
+    doc.text(safeFormatDate(date, 'EEEE, MMMM d, yyyy'), pageW / 2, y, { align: 'center' }); y += 10;
+
+    // ── Column definitions  (x-start, width, header) ──
+    const columns: { x: number; w: number; header: string }[] = [
+      { x: marginL,      w: 10,  header: 'S/N' },
+      { x: 20,           w: 12,  header: 'Time' },
+      { x: 32,           w: 38,  header: 'Patient Name' },
+      { x: 70,           w: 22,  header: 'PT Number' },
+      { x: 92,           w: 10,  header: 'Age' },
+      { x: 102,          w: 8,   header: 'Sex' },
+      { x: 110,          w: 18,  header: 'Ward' },
+      { x: 128,          w: 38,  header: 'Diagnosis' },
+      { x: 166,          w: 40,  header: 'Procedure' },
+      { x: 206,          w: 28,  header: 'Surgeon' },
+      { x: 234,          w: 30,  header: 'Equipment / Remarks' },
+      { x: 264,          w: 23,  header: 'Blood' },
+    ];
+
+    // helper: split text to lines that fit a column width
+    const wrapText = (text: string, maxW: number): string[] => {
+      if (!text || text === '-') return [text || '-'];
+      const words = text.split(' ');
+      const lines: string[] = [];
+      let line = '';
+      for (const w of words) {
+        const test = line ? line + ' ' + w : w;
+        if (doc.getTextWidth(test) > maxW - 1) {
+          if (line) lines.push(line);
+          line = w;
+        } else { line = test; }
+      }
+      if (line) lines.push(line);
+      return lines.length ? lines : ['-'];
+    };
+
+    // ── Draw table header ──
+    const drawHeader = () => {
+      doc.setFillColor(14, 159, 110); // green #0E9F6E
+      doc.rect(marginL, y - 4.5, usableW, 7, 'F');
+      doc.setFont('times', 'bold');
+      doc.setFontSize(7.5);
+      doc.setTextColor(255, 255, 255);
+      columns.forEach(col => doc.text(col.header, col.x + 1, y));
+      doc.setTextColor(0, 0, 0);
+      y += 5;
+    };
+    drawHeader();
+
+    // ── Draw rows ──
+    doc.setFont('times', 'normal');
+    doc.setFontSize(7);
+    const lineH = 3.8; // line height for wrapped text
 
     dayCases.forEach((c, idx) => {
-      if (y > 270) { doc.addPage(); y = 15; }
-      const row = [
+      // Build cell data
+      const equipList = [
+        ...(c.special_requirements || []),
+        ...(c.equipment_needed || []),
+      ].filter(Boolean);
+      const equipStr = equipList.length > 0 ? equipList.join(', ') : '-';
+
+      const bloodStr = (c as any).needs_blood_transfusion
+        ? `Yes (${(c as any).blood_units_requested || '?'} units)`
+        : 'No';
+
+      const cells: string[] = [
         String(idx + 1),
-        c.patient_name || c.patient?.full_name || '-',
-        c.hospital_number || c.patient?.hospital_number || '-',
-        c.diagnosis || '-',
+        c.start_time || '-',
+        c.patient_name || '-',
+        c.hospital_number || '-',
         c.patient_age_at_booking ? String(c.patient_age_at_booking) : '-',
-        c.patient_gender || c.patient?.gender?.charAt(0)?.toUpperCase() || '-',
-        c.proposed_ward || '-',
+        c.patient_gender ? c.patient_gender.charAt(0).toUpperCase() : '-',
+        c.proposed_ward || (c as any).ward || '-',
+        c.diagnosis || '-',
         c.procedure_name || '-',
         c.primary_surgeon || '-',
+        equipStr,
+        bloodStr,
       ];
-      row.forEach((cell, i) => {
-        const maxW = (cols[i + 1] || 200) - cols[i] - 2;
-        doc.text(String(cell).substring(0, maxW / 2), cols[i], y);
+
+      // Wrap cells that may be long
+      const wrappedCells = cells.map((cell, ci) => wrapText(cell, columns[ci].w));
+      const rowLines = Math.max(...wrappedCells.map(w => w.length));
+      const rowH = rowLines * lineH + 2;
+
+      // Page break if needed (keep 25mm for footer)
+      if (y + rowH > 195) {
+        addFooter(doc, 'Operation List');
+        doc.addPage('a4', 'l');
+        y = 14;
+        drawHeader();
+      }
+
+      // Alternate row shading
+      if (idx % 2 === 0) {
+        doc.setFillColor(245, 245, 245);
+        doc.rect(marginL, y - 3.5, usableW, rowH, 'F');
+      }
+
+      // Priority flags
+      if (c.is_emergency) {
+        doc.setFillColor(254, 226, 226);
+        doc.rect(marginL, y - 3.5, usableW, rowH, 'F');
+      }
+
+      // Draw each cell's wrapped lines
+      wrappedCells.forEach((lines, ci) => {
+        let ly = y;
+        lines.forEach(line => {
+          doc.text(line, columns[ci].x + 1, ly);
+          ly += lineH;
+        });
       });
-      y += 6;
+
+      // Bottom border
+      doc.setDrawColor(220, 220, 220);
+      doc.line(marginL, y - 3.5 + rowH, marginL + usableW, y - 3.5 + rowH);
+
+      y += rowH;
     });
 
-    y += 5;
+    // ── Summary ──
+    y += 4;
+    doc.setFont('times', 'bold');
+    doc.setFontSize(9);
+    doc.text(`Total Cases: ${dayCases.length}`, marginL, y);
+
+    // Count by category
+    const catCounts: Record<string, number> = {};
+    dayCases.forEach(c => {
+      const cat = (c.case_category || 'unclassified') as string;
+      catCounts[cat] = (catCounts[cat] || 0) + 1;
+    });
+    const catSummary = Object.entries(catCounts).map(([k, v]) => `${k}: ${v}`).join('  |  ');
+    doc.setFont('times', 'normal');
     doc.setFontSize(8);
-    doc.text('Total Cases: ' + dayCases.length, 10, y);
+    doc.text(catSummary, marginL, y + 5);
+
+    // Blood requirements summary
+    const bloodCases = dayCases.filter(c => (c as any).needs_blood_transfusion);
+    if (bloodCases.length > 0) {
+      const totalUnits = bloodCases.reduce((sum, c) => sum + ((c as any).blood_units_requested || 0), 0);
+      doc.setTextColor(220, 38, 38);
+      doc.text(`Blood Required: ${bloodCases.length} case(s), ${totalUnits} total unit(s)`, marginL, y + 10);
+      doc.setTextColor(0, 0, 0);
+    }
+
     addFooter(doc, 'Operation List');
     doc.save('Operation_List_' + date + '.pdf');
     toast.success('Operation list PDF downloaded');
@@ -2037,6 +2279,8 @@ export default function BookingRegisterPage() {
                           <Save size={14} /> Save
                         </button>
                       </div>
+
+                      {/* Row 1: Procedure name & Case category */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">Name of Procedure</label>
@@ -2049,6 +2293,35 @@ export default function BookingRegisterPage() {
                           />
                         </div>
                         <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Case Category <span className="text-red-500">*</span></label>
+                          <select
+                            value={planData.case_category}
+                            onChange={e => updatePlan({ case_category: e.target.value as any })}
+                            className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500"
+                          >
+                            <option value="">Select...</option>
+                            <option value="minor">Minor (~1 hr)</option>
+                            <option value="intermediate">Intermediate (~2 hrs)</option>
+                            <option value="major">Major (~3.5 hrs)</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Row 2: Operating Unit & Anaesthesia */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Operating Unit <span className="text-red-500">*</span></label>
+                          <select
+                            value={planData.operating_unit}
+                            onChange={e => updatePlan({ operating_unit: e.target.value as any })}
+                            className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500"
+                          >
+                            <option value="">Select...</option>
+                            <option value="PS1">PS 1</option>
+                            <option value="PS2">PS 2</option>
+                          </select>
+                        </div>
+                        <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">Anaesthesia Type</label>
                           <select
                             value={planData.anaesthesia_type}
@@ -2059,6 +2332,68 @@ export default function BookingRegisterPage() {
                             {ANAESTHESIA_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                           </select>
                         </div>
+                      </div>
+
+                      {/* Row 3: Surgeon & Multi-specialist toggle */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Primary Surgeon</label>
+                          <input
+                            type="text"
+                            value={planData.primary_surgeon}
+                            onChange={e => updatePlan({ primary_surgeon: e.target.value })}
+                            className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500"
+                            placeholder="Surgeon name"
+                          />
+                        </div>
+                        <div className="flex items-center gap-3 pt-6">
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={planData.is_multispecialist}
+                              onChange={e => updatePlan({ is_multispecialist: e.target.checked })}
+                              className="sr-only peer"
+                            />
+                            <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-green-600"></div>
+                            <span className="ml-2 text-sm font-medium text-gray-700">Multi-Specialist Surgery</span>
+                          </label>
+                        </div>
+                      </div>
+
+                      {/* Row 4: Assistants */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          <Users size={14} className="inline mr-1" />
+                          Assistants / Surgical Team
+                        </label>
+                        <div className="flex gap-2 mb-2">
+                          <input
+                            type="text"
+                            placeholder="Add assistant name and press Enter"
+                            className="flex-1 border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500"
+                            onKeyDown={e => {
+                              if (e.key === 'Enter' && (e.target as HTMLInputElement).value.trim()) {
+                                const name = (e.target as HTMLInputElement).value.trim();
+                                updatePlan({ assistants: [...(planData.assistants || []), name] });
+                                (e.target as HTMLInputElement).value = '';
+                              }
+                            }}
+                          />
+                        </div>
+                        {planData.assistants?.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5">
+                            {planData.assistants.map((name: string, idx: number) => (
+                              <span key={idx} className="inline-flex items-center gap-1 bg-green-50 text-green-800 text-xs px-2 py-1 rounded-full border border-green-200">
+                                <User size={12} /> {name}
+                                <button onClick={() => updatePlan({ assistants: planData.assistants.filter((_: string, i: number) => i !== idx) })} className="text-red-400 hover:text-red-600"><X size={12} /></button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Row 5: Proposed Ward & Estimated Duration */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">Proposed Ward</label>
                           <input
@@ -2080,6 +2415,81 @@ export default function BookingRegisterPage() {
                           />
                         </div>
                       </div>
+
+                      {/* Row 6: Special Equipment */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          <Zap size={14} className="inline mr-1" />
+                          Special Equipment Required
+                        </label>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-44 overflow-y-auto border rounded-lg p-2">
+                          {SPECIAL_EQUIPMENT_OPTIONS.map(eq => {
+                            const isSelected = (planData.special_equipment || []).includes(eq);
+                            return (
+                              <button
+                                key={eq}
+                                type="button"
+                                onClick={() => {
+                                  const current = planData.special_equipment || [];
+                                  updatePlan({ special_equipment: isSelected ? current.filter((e: string) => e !== eq) : [...current, eq] });
+                                }}
+                                className={`text-left text-xs px-2 py-1.5 rounded transition-colors ${isSelected ? 'bg-green-100 text-green-800 font-medium' : 'hover:bg-gray-100 text-gray-700'}`}
+                              >
+                                {isSelected && <Check size={10} className="inline mr-1" />}{eq}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Row 7: Blood Transfusion */}
+                      <div className="bg-red-50 border border-red-200 rounded-lg p-3 space-y-2">
+                        <div className="flex items-center gap-3">
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={planData.needs_blood_transfusion}
+                              onChange={e => updatePlan({ needs_blood_transfusion: e.target.checked, blood_units_requested: e.target.checked ? (planData.blood_units_requested || 1) : 0 })}
+                              className="sr-only peer"
+                            />
+                            <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-red-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-red-600"></div>
+                            <span className="ml-2 text-sm font-medium text-red-800">
+                              <Droplets size={14} className="inline mr-1" />
+                              Blood Transfusion Required
+                            </span>
+                          </label>
+                        </div>
+                        {planData.needs_blood_transfusion && (
+                          <div className="flex items-center gap-3">
+                            <label className="text-sm text-red-800 font-medium">Units:</label>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => updatePlan({ blood_units_requested: Math.max(1, (planData.blood_units_requested || 1) - 1) })}
+                                className="w-7 h-7 flex items-center justify-center rounded bg-red-200 text-red-800 hover:bg-red-300"
+                              ><Minus size={14} /></button>
+                              <span className="w-8 text-center text-lg font-bold text-red-800">{planData.blood_units_requested || 1}</span>
+                              <button
+                                type="button"
+                                onClick={() => updatePlan({ blood_units_requested: Math.min(20, (planData.blood_units_requested || 1) + 1) })}
+                                className="w-7 h-7 flex items-center justify-center rounded bg-red-200 text-red-800 hover:bg-red-300"
+                              ><Plus size={14} /></button>
+                            </div>
+                            <span className="text-xs text-red-600">unit(s) of packed red cells</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Scheduled Slot Preview */}
+                      {planData.scheduled_date && (
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                          <p className="text-sm text-blue-800 font-medium flex items-center gap-2">
+                            <Calendar size={16} />
+                            Auto-assigned: {safeFormatDate(planData.scheduled_date, 'EEEE, MMMM d, yyyy')} at {planData.scheduled_start_time || '08:00'}
+                            &nbsp;|&nbsp; Theatre: {planData.operating_unit}
+                          </p>
+                        </div>
+                      )}
                     </div>
                   )}
 
