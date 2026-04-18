@@ -562,6 +562,20 @@ export default function BookingRegisterPage() {
         console.warn('Could not fetch planning data from server, using local:', err);
       }
       
+      // 3. Also load risk assessment data from preoperativeService (IndexedDB/API)
+      try {
+        const assessment = await preoperativeService.getAssessmentByPatient(String(selectedPatient.id));
+        if (assessment && localData) {
+          if (assessment.bleeding_risk) localData.bleeding_risk = assessment.bleeding_risk;
+          if (assessment.dvt_risk) localData.dvt_risk = assessment.dvt_risk;
+          if (assessment.cardiovascular_risk) localData.cardiovascular_risk = assessment.cardiovascular_risk;
+          if (assessment.pressure_sore_risk) localData.pressure_sore_risk = assessment.pressure_sore_risk;
+          if (assessment.current_medications?.length) localData.current_medications = assessment.current_medications;
+        }
+      } catch (err) {
+        console.warn('Could not load preoperative assessment data:', err);
+      }
+      
       if (localData) {
         setPlanData(localData);
         // Mark all non-empty sections as saved
@@ -1787,15 +1801,18 @@ export default function BookingRegisterPage() {
                           { label: 'Pressure Sore', key: 'pressure_sore_risk', data: planData.pressure_sore_risk },
                           { label: 'Nutritional', key: 'nutritional_risk', data: planData.nutritional_risk },
                         ].map(item => {
-                          const level = item.data?.risk_level;
-                          const color = level === 'high' || level === 'severe' ? 'bg-red-50 border-red-200 text-red-700'
+                          const d = item.data as any;
+                          const level = d?.risk_level || d?.risk_category;
+                          const score = d?.risk_score ?? d?.total_score ?? d?.rcri_score ?? d?.braden_total ?? d?.score;
+                          const color = level === 'high' || level === 'severe' || level === 'very-high' ? 'bg-red-50 border-red-200 text-red-700'
                             : level === 'moderate' || level === 'intermediate' ? 'bg-yellow-50 border-yellow-200 text-yellow-700'
-                            : level ? 'bg-green-50 border-green-200 text-green-700'
+                            : level && level !== 'no-risk' ? 'bg-green-50 border-green-200 text-green-700'
+                            : level === 'no-risk' ? 'bg-green-50 border-green-200 text-green-700'
                             : 'bg-gray-50 border-gray-200 text-gray-400';
                           return (
                             <div key={item.key} className={`rounded-xl border p-3 text-center ${color}`}>
                               <p className="text-xs font-medium opacity-75">{item.label}</p>
-                              <p className="text-lg font-bold mt-1">{item.data?.risk_score ?? item.data?.score ?? '--'}</p>
+                              <p className="text-lg font-bold mt-1">{score ?? '--'}</p>
                               <p className="text-xs uppercase font-semibold">{level || 'Not assessed'}</p>
                             </div>
                           );
@@ -2701,7 +2718,33 @@ export default function BookingRegisterPage() {
           <PreoperativeAssessmentForm
             patientId={selectedPatient.id}
             onClose={() => setShowPreopAssessment(false)}
-            onSave={() => setShowPreopAssessment(false)}
+            onSave={async () => {
+              setShowPreopAssessment(false);
+              // Reload risk assessment data from preoperativeService into planData
+              try {
+                const assessment = await preoperativeService.getAssessmentByPatient(String(selectedPatient.id));
+                if (assessment) {
+                  setPlanData(prev => {
+                    if (!prev) return prev;
+                    const updated = {
+                      ...prev,
+                      bleeding_risk: assessment.bleeding_risk ?? prev.bleeding_risk,
+                      dvt_risk: assessment.dvt_risk ?? prev.dvt_risk,
+                      cardiovascular_risk: assessment.cardiovascular_risk ?? prev.cardiovascular_risk,
+                      pressure_sore_risk: assessment.pressure_sore_risk ?? prev.pressure_sore_risk,
+                      current_medications: assessment.current_medications ?? prev.current_medications,
+                    };
+                    // Persist to localStorage
+                    const all = loadJSON<Record<string, PreopPlanningData>>(PLANNING_DATA_KEY, {});
+                    all[selectedPatient.id] = updated;
+                    saveJSON(PLANNING_DATA_KEY, all);
+                    return updated;
+                  });
+                }
+              } catch (err) {
+                console.warn('Could not reload risk assessment data:', err);
+              }
+            }}
           />
         </Suspense>
       )}
