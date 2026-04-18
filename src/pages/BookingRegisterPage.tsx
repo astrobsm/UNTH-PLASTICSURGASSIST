@@ -1199,27 +1199,21 @@ export default function BookingRegisterPage() {
 
       // Patient information
       y = addSectionHeader(doc, 'PATIENT INFORMATION', y);
-      addLabeledField(doc, 'Patient Name', selectedPatient.full_name || `${selectedPatient.first_name} ${selectedPatient.last_name}`, PDF_MARGINS.left, y);
-      y += PDF_LINE_HEIGHT;
-      addTwoColumnText(doc, 'Hospital No: ' + (selectedPatient.hospital_number || '-'), 'Date: ' + formatDateForPDF(new Date().toISOString()), y);
-      y += PDF_LINE_HEIGHT;
-      addTwoColumnText(doc, 'Gender: ' + (selectedPatient.gender || '-'), 'Age: ' + (patientAge ?? '-') + ' years', y);
-      y += PDF_LINE_HEIGHT;
+      y = addLabeledField(doc, 'Patient Name', selectedPatient.full_name || `${selectedPatient.first_name} ${selectedPatient.last_name}`, y);
+      y = addTwoColumnText(doc, 'Hospital No:', selectedPatient.hospital_number || '-', 'Date:', formatDateForPDF(new Date().toISOString()), y);
+      y = addTwoColumnText(doc, 'Gender:', selectedPatient.gender || '-', 'Age:', (patientAge ?? '-') + ' years', y);
       if (planData.diagnosis) {
-        addLabeledField(doc, 'Diagnosis', sanitizeTextForPDF(planData.diagnosis), PDF_MARGINS.left, y);
-        y += PDF_LINE_HEIGHT;
+        y = addLabeledField(doc, 'Diagnosis', sanitizeTextForPDF(planData.diagnosis), y);
       }
       y += 2;
       addSeparator(doc, y); y += 6;
 
       // Procedure details
       y = addSectionHeader(doc, 'PROCEDURE DETAILS', y);
-      addLabeledField(doc, 'Name of Procedure', sanitizeTextForPDF(planData.procedure_name || '____________________________'), PDF_MARGINS.left, y);
-      y += PDF_LINE_HEIGHT;
-      addLabeledField(doc, 'Anaesthesia Type', planData.anaesthesia_type || '____________________________', PDF_MARGINS.left, y);
-      y += PDF_LINE_HEIGHT;
-      addLabeledField(doc, 'Surgeon', planData.assessed_by || '____________________________', PDF_MARGINS.left, y);
-      y += PDF_LINE_HEIGHT + 2;
+      y = addLabeledField(doc, 'Name of Procedure', sanitizeTextForPDF(planData.procedure_name || '____________________________'), y);
+      y = addLabeledField(doc, 'Anaesthesia Type', planData.anaesthesia_type || '____________________________', y);
+      y = addLabeledField(doc, 'Surgeon', planData.assessed_by || '____________________________', y);
+      y += 2;
       addSeparator(doc, y); y += 6;
 
       // Consent declaration
@@ -1283,14 +1277,15 @@ export default function BookingRegisterPage() {
       // Surgeon
       doc.text('Surgeon Signature: ____________________________', PDF_MARGINS.left, y);
       y += PDF_LINE_HEIGHT;
-      doc.text('Print Name: ' + (planData.assessed_by || '____________________________'), PDF_MARGINS.left, y);
+      doc.text('Print Name: ' + sanitizeTextForPDF(planData.assessed_by || '____________________________'), PDF_MARGINS.left, y);
       y += PDF_LINE_HEIGHT;
       doc.text('Date: ' + formatDateForPDF(new Date().toISOString()), PDF_MARGINS.left, y);
 
       addFooter(doc, 'Informed Consent Form');
       doc.save('Informed_Consent_' + selectedPatient.hospital_number + '.pdf');
       toast.success('Informed consent form downloaded');
-    } catch {
+    } catch (err) {
+      console.error('Consent form generation error:', err);
       toast.error('Failed to generate consent form');
     }
     setGeneratingConsentPdf(false);
