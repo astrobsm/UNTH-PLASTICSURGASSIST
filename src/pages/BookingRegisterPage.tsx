@@ -15,7 +15,7 @@ import {
   Upload, X, CalendarDays, Lock, Unlock, FlaskConical, Ban,
   ChevronLeft, ChevronRight, AlertOctagon, Baby, Droplets, Bug, Heart,
   Activity, Utensils, Zap, Save, Edit2, Check, RefreshCw, FileImage,
-  Scissors, Minus, Camera, ScanLine
+  Scissors, Minus, Camera, ScanLine, TestTube
 } from 'lucide-react';
 import { DocumentScannerModal } from '../components/DocumentScannerModal';
 const PreoperativePlanningModule = lazy(() => import('../components/procedures/PreoperativePlanningModule'));
@@ -172,6 +172,117 @@ const OPTIONAL_INVESTIGATIONS = [
   'CT Scan',
   'MRI',
 ];
+
+/** Detailed parameters for each investigation with units and reference ranges */
+interface InvestigationParameter {
+  parameter: string;
+  unit: string;
+  reference_range: string;
+  type: 'numeric' | 'qualitative';
+  options?: string[]; // for qualitative tests
+}
+
+const INVESTIGATION_PARAMETERS: Record<string, InvestigationParameter[]> = {
+  'Full Blood Count (FBC)': [
+    { parameter: 'Hemoglobin (Hb)', unit: 'g/dL', reference_range: '12.0-17.5', type: 'numeric' },
+    { parameter: 'White Blood Cell (WBC)', unit: '×10⁹/L', reference_range: '4.0-11.0', type: 'numeric' },
+    { parameter: 'Platelet Count', unit: '×10⁹/L', reference_range: '150-400', type: 'numeric' },
+    { parameter: 'Packed Cell Volume (PCV)', unit: '%', reference_range: '36-54', type: 'numeric' },
+    { parameter: 'Red Blood Cell (RBC)', unit: '×10¹²/L', reference_range: '3.8-5.5', type: 'numeric' },
+    { parameter: 'MCV', unit: 'fL', reference_range: '80-100', type: 'numeric' },
+    { parameter: 'MCH', unit: 'pg', reference_range: '27-33', type: 'numeric' },
+    { parameter: 'MCHC', unit: 'g/dL', reference_range: '32-36', type: 'numeric' },
+    { parameter: 'Neutrophils', unit: '×10⁹/L', reference_range: '2.0-7.5', type: 'numeric' },
+    { parameter: 'Lymphocytes', unit: '×10⁹/L', reference_range: '1.5-4.0', type: 'numeric' },
+    { parameter: 'Eosinophils', unit: '×10⁹/L', reference_range: '0.04-0.4', type: 'numeric' },
+    { parameter: 'Monocytes', unit: '×10⁹/L', reference_range: '0.2-0.8', type: 'numeric' },
+    { parameter: 'Basophils', unit: '×10⁹/L', reference_range: '0.0-0.1', type: 'numeric' },
+  ],
+  'Serum Electrolytes, Urea & Creatinine (E/U/Cr)': [
+    { parameter: 'Sodium (Na⁺)', unit: 'mmol/L', reference_range: '135-145', type: 'numeric' },
+    { parameter: 'Potassium (K⁺)', unit: 'mmol/L', reference_range: '3.5-5.0', type: 'numeric' },
+    { parameter: 'Chloride (Cl⁻)', unit: 'mmol/L', reference_range: '98-106', type: 'numeric' },
+    { parameter: 'Bicarbonate (HCO₃⁻)', unit: 'mmol/L', reference_range: '22-28', type: 'numeric' },
+    { parameter: 'Urea', unit: 'mmol/L', reference_range: '2.5-6.7', type: 'numeric' },
+    { parameter: 'Creatinine', unit: 'µmol/L', reference_range: '62-106', type: 'numeric' },
+  ],
+  'HIV Screening': [
+    { parameter: 'HIV 1&2 Antibody', unit: '', reference_range: 'Non-Reactive', type: 'qualitative', options: ['Non-Reactive', 'Reactive', 'Indeterminate'] },
+  ],
+  'Hepatitis B Surface Antigen (HBsAg)': [
+    { parameter: 'HBsAg', unit: '', reference_range: 'Non-Reactive', type: 'qualitative', options: ['Non-Reactive', 'Reactive'] },
+  ],
+  'Hepatitis C Virus (HCV)': [
+    { parameter: 'HCV Antibody', unit: '', reference_range: 'Non-Reactive', type: 'qualitative', options: ['Non-Reactive', 'Reactive'] },
+  ],
+  'Fasting Blood Sugar (FBS)': [
+    { parameter: 'Fasting Blood Glucose', unit: 'mmol/L', reference_range: '3.9-5.6', type: 'numeric' },
+  ],
+  'Liver Function Tests (LFT)': [
+    { parameter: 'Total Bilirubin', unit: 'µmol/L', reference_range: '3-21', type: 'numeric' },
+    { parameter: 'Direct Bilirubin', unit: 'µmol/L', reference_range: '0-5', type: 'numeric' },
+    { parameter: 'ALT (SGPT)', unit: 'U/L', reference_range: '7-56', type: 'numeric' },
+    { parameter: 'AST (SGOT)', unit: 'U/L', reference_range: '10-40', type: 'numeric' },
+    { parameter: 'ALP', unit: 'U/L', reference_range: '44-147', type: 'numeric' },
+    { parameter: 'Total Protein', unit: 'g/L', reference_range: '60-83', type: 'numeric' },
+    { parameter: 'Albumin', unit: 'g/L', reference_range: '35-50', type: 'numeric' },
+    { parameter: 'GGT', unit: 'U/L', reference_range: '9-48', type: 'numeric' },
+  ],
+  'Coagulation Profile (PT/INR/aPTT)': [
+    { parameter: 'PT (Prothrombin Time)', unit: 'seconds', reference_range: '11-13.5', type: 'numeric' },
+    { parameter: 'INR', unit: '', reference_range: '0.8-1.2', type: 'numeric' },
+    { parameter: 'aPTT', unit: 'seconds', reference_range: '25-35', type: 'numeric' },
+    { parameter: 'Fibrinogen', unit: 'g/L', reference_range: '2.0-4.0', type: 'numeric' },
+  ],
+  'Thyroid Function Tests (TFT)': [
+    { parameter: 'TSH', unit: 'mIU/L', reference_range: '0.4-4.0', type: 'numeric' },
+    { parameter: 'Free T4', unit: 'pmol/L', reference_range: '12-22', type: 'numeric' },
+    { parameter: 'Free T3', unit: 'pmol/L', reference_range: '3.1-6.8', type: 'numeric' },
+  ],
+  'HbA1c': [
+    { parameter: 'HbA1c', unit: '%', reference_range: '4.0-5.6', type: 'numeric' },
+  ],
+  'Blood Group & Cross-match': [
+    { parameter: 'Blood Group', unit: '', reference_range: '', type: 'qualitative', options: ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] },
+    { parameter: 'Antibody Screen', unit: '', reference_range: 'Negative', type: 'qualitative', options: ['Negative', 'Positive'] },
+  ],
+  'Urinalysis': [
+    { parameter: 'Protein', unit: '', reference_range: 'Negative', type: 'qualitative', options: ['Negative', 'Trace', '+', '++', '+++'] },
+    { parameter: 'Glucose', unit: '', reference_range: 'Negative', type: 'qualitative', options: ['Negative', 'Trace', '+', '++', '+++'] },
+    { parameter: 'Blood', unit: '', reference_range: 'Negative', type: 'qualitative', options: ['Negative', 'Trace', '+', '++', '+++'] },
+    { parameter: 'Leukocytes', unit: '', reference_range: 'Negative', type: 'qualitative', options: ['Negative', 'Trace', '+', '++', '+++'] },
+    { parameter: 'Nitrites', unit: '', reference_range: 'Negative', type: 'qualitative', options: ['Negative', 'Positive'] },
+    { parameter: 'pH', unit: '', reference_range: '4.5-8.0', type: 'numeric' },
+    { parameter: 'Specific Gravity', unit: '', reference_range: '1.005-1.030', type: 'numeric' },
+  ],
+  'Serum Protein & Albumin': [
+    { parameter: 'Total Protein', unit: 'g/L', reference_range: '60-83', type: 'numeric' },
+    { parameter: 'Albumin', unit: 'g/L', reference_range: '35-50', type: 'numeric' },
+    { parameter: 'Globulin', unit: 'g/L', reference_range: '20-35', type: 'numeric' },
+    { parameter: 'A/G Ratio', unit: '', reference_range: '1.0-2.2', type: 'numeric' },
+  ],
+};
+
+/** Auto-flag a numeric result based on its reference range string */
+const autoFlagResult = (value: string, refRange: string, type: 'numeric' | 'qualitative'): InvestigationFlag => {
+  if (type === 'qualitative') {
+    const v = value.toLowerCase();
+    if (v === 'reactive' || v === 'positive' || v === '+++' || v === '++') return 'abnormal';
+    if (v === 'trace' || v === '+' || v === 'indeterminate') return 'borderline';
+    return 'normal';
+  }
+  const num = parseFloat(value);
+  if (isNaN(num) || !refRange) return 'normal';
+  const match = refRange.match(/([\d.]+)\s*[-–]\s*([\d.]+)/);
+  if (!match) return 'normal';
+  const low = parseFloat(match[1]);
+  const high = parseFloat(match[2]);
+  if (num < low || num > high) return 'abnormal';
+  // borderline if within 10% of limits
+  const margin = (high - low) * 0.1;
+  if (num < low + margin || num > high - margin) return 'borderline';
+  return 'normal';
+};
 
 /** Surgical risk medications database */
 const SURGICAL_RISK_MEDICATIONS: SurgicalRiskMedication[] = [
@@ -334,6 +445,8 @@ export default function BookingRegisterPage() {
   });
   const [newMedication, setNewMedication] = useState<Partial<Medication>>({ drug_name: '', dosage: '', frequency: '', route: 'oral', indication: '' });
   const [invResultEntry, setInvResultEntry] = useState<Partial<InvestigationResult>>({ name: '', value: '', flag: 'normal' });
+  const [selectedInvForEntry, setSelectedInvForEntry] = useState('');
+  const [paramEntries, setParamEntries] = useState<Record<string, string>>({});
   const [shoppingSearch, setShoppingSearch] = useState('');
   const [shoppingCategory, setShoppingCategory] = useState('all');
   const [showRiskMedDb, setShowRiskMedDb] = useState(false);
@@ -527,7 +640,34 @@ export default function BookingRegisterPage() {
 
   // Investigation result entry
   const addInvestigationResult = useCallback(() => {
-    if (!invResultEntry.name || !invResultEntry.value || !planData) return;
+    if (!planData) return;
+
+    // Multi-parameter mode (from INVESTIGATION_PARAMETERS)
+    if (selectedInvForEntry && INVESTIGATION_PARAMETERS[selectedInvForEntry]) {
+      const params = INVESTIGATION_PARAMETERS[selectedInvForEntry];
+      const filledParams = params.filter(p => paramEntries[p.parameter]?.trim());
+      if (filledParams.length === 0) {
+        alert('Please enter at least one parameter value');
+        return;
+      }
+      const newResults: InvestigationResult[] = filledParams.map(p => ({
+        name: `${selectedInvForEntry} - ${p.parameter}`,
+        value: paramEntries[p.parameter],
+        unit: p.unit,
+        reference_range: p.reference_range,
+        flag: autoFlagResult(paramEntries[p.parameter], p.reference_range, p.type),
+        enteredBy: user?.full_name || 'Unknown',
+        enteredAt: new Date().toISOString(),
+      }));
+      updatePlan({ investigation_results: [...planData.investigation_results, ...newResults] });
+      setSelectedInvForEntry('');
+      setParamEntries({});
+      toast.success(`${filledParams.length} parameter(s) added for ${selectedInvForEntry}`);
+      return;
+    }
+
+    // Legacy single-value mode (fallback)
+    if (!invResultEntry.name || !invResultEntry.value) return;
     const result: InvestigationResult = {
       name: invResultEntry.name || '',
       value: invResultEntry.value || '',
@@ -539,7 +679,7 @@ export default function BookingRegisterPage() {
     };
     updatePlan({ investigation_results: [...planData.investigation_results, result] });
     setInvResultEntry({ name: '', value: '', flag: 'normal' });
-  }, [invResultEntry, planData, updatePlan, user]);
+  }, [invResultEntry, selectedInvForEntry, paramEntries, planData, updatePlan, user]);
 
   // File uploads
   const handleFileUpload = useCallback((file: File, field: 'ecg_image' | 'payment_evidence' | 'consent_document') => {
@@ -595,8 +735,10 @@ export default function BookingRegisterPage() {
 
   const missingMandatoryLabs = useMemo(() => {
     if (!planData) return COMPULSORY_INVESTIGATIONS;
-    const resultNames = new Set(planData.investigation_results.map(r => r.name));
-    return COMPULSORY_INVESTIGATIONS.filter(inv => !resultNames.has(inv));
+    const resultNames = planData.investigation_results.map(r => r.name);
+    return COMPULSORY_INVESTIGATIONS.filter(inv =>
+      !resultNames.some(name => name === inv || name.startsWith(`${inv} -`) || name.startsWith(`${inv} –`))
+    );
   }, [planData]);
 
   const canAutoBook = useMemo(() => {
@@ -1827,23 +1969,103 @@ export default function BookingRegisterPage() {
                       {/* Add result manually */}
                       <div className="border-t pt-4">
                         <h4 className="text-sm font-medium mb-2">Enter Result</h4>
-                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                          <select value={invResultEntry.name || ''} onChange={e => setInvResultEntry(p => ({ ...p, name: e.target.value }))} className="border rounded px-2 py-1.5 text-sm col-span-2 sm:col-span-1">
-                            <option value="">Investigation...</option>
-                            {planData.ordered_investigations.map(inv => <option key={inv} value={inv}>{inv}</option>)}
-                          </select>
-                          <input placeholder="Value" value={invResultEntry.value || ''} onChange={e => setInvResultEntry(p => ({ ...p, value: e.target.value }))} className="border rounded px-2 py-1.5 text-sm" />
-                          <input placeholder="Unit" value={invResultEntry.unit || ''} onChange={e => setInvResultEntry(p => ({ ...p, unit: e.target.value }))} className="border rounded px-2 py-1.5 text-sm" />
-                          <input placeholder="Ref. range" value={invResultEntry.reference_range || ''} onChange={e => setInvResultEntry(p => ({ ...p, reference_range: e.target.value }))} className="border rounded px-2 py-1.5 text-sm" />
-                          <select value={invResultEntry.flag || 'normal'} onChange={e => setInvResultEntry(p => ({ ...p, flag: e.target.value as InvestigationFlag }))} className="border rounded px-2 py-1.5 text-sm">
-                            <option value="normal">Normal</option>
-                            <option value="borderline">Borderline</option>
-                            <option value="abnormal">Abnormal</option>
-                          </select>
-                        </div>
-                        <button onClick={addInvestigationResult} disabled={!invResultEntry.name || !invResultEntry.value} className="mt-2 flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50">
-                          <Plus size={14} /> Add Result
-                        </button>
+
+                        {/* Investigation selector */}
+                        <select
+                          value={selectedInvForEntry}
+                          onChange={e => {
+                            setSelectedInvForEntry(e.target.value);
+                            setParamEntries({});
+                            setInvResultEntry({ name: '', value: '', flag: 'normal' });
+                          }}
+                          className="border rounded px-3 py-2 text-sm w-full mb-3 font-medium"
+                        >
+                          <option value="">Select Investigation...</option>
+                          {planData.ordered_investigations.map(inv => <option key={inv} value={inv}>{inv}</option>)}
+                        </select>
+
+                        {/* Multi-parameter entry (when investigation has defined parameters) */}
+                        {selectedInvForEntry && INVESTIGATION_PARAMETERS[selectedInvForEntry] && (
+                          <div className="bg-gray-50 border rounded-lg p-4 space-y-3">
+                            <h5 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+                              <TestTube size={16} className="text-green-600" />
+                              {selectedInvForEntry} — Enter Parameters
+                            </h5>
+                            <div className="space-y-2">
+                              {INVESTIGATION_PARAMETERS[selectedInvForEntry].map(param => (
+                                <div key={param.parameter} className="grid grid-cols-12 gap-2 items-center">
+                                  <label className="col-span-4 text-sm text-gray-700 font-medium truncate" title={param.parameter}>
+                                    {param.parameter}
+                                  </label>
+                                  <div className="col-span-3">
+                                    {param.type === 'qualitative' && param.options ? (
+                                      <select
+                                        value={paramEntries[param.parameter] || ''}
+                                        onChange={e => setParamEntries(prev => ({ ...prev, [param.parameter]: e.target.value }))}
+                                        className="w-full border rounded px-2 py-1.5 text-sm"
+                                      >
+                                        <option value="">Select...</option>
+                                        {param.options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                      </select>
+                                    ) : (
+                                      <input
+                                        type="number"
+                                        step="any"
+                                        placeholder="Value"
+                                        value={paramEntries[param.parameter] || ''}
+                                        onChange={e => setParamEntries(prev => ({ ...prev, [param.parameter]: e.target.value }))}
+                                        className="w-full border rounded px-2 py-1.5 text-sm"
+                                      />
+                                    )}
+                                  </div>
+                                  <span className="col-span-2 text-xs text-gray-500">{param.unit}</span>
+                                  <span className="col-span-2 text-xs text-gray-400">{param.reference_range}</span>
+                                  <div className="col-span-1 text-center">
+                                    {paramEntries[param.parameter] && (
+                                      <span className={`inline-block w-2 h-2 rounded-full ${
+                                        autoFlagResult(paramEntries[param.parameter], param.reference_range, param.type) === 'abnormal' ? 'bg-red-500' :
+                                        autoFlagResult(paramEntries[param.parameter], param.reference_range, param.type) === 'borderline' ? 'bg-yellow-500' :
+                                        'bg-green-500'
+                                      }`} />
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="flex items-center gap-3 pt-2">
+                              <button
+                                onClick={addInvestigationResult}
+                                disabled={!Object.values(paramEntries).some(v => v?.trim())}
+                                className="flex items-center gap-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
+                              >
+                                <Plus size={14} /> Add All Results
+                              </button>
+                              <span className="text-xs text-gray-500">
+                                {Object.values(paramEntries).filter(v => v?.trim()).length} of {INVESTIGATION_PARAMETERS[selectedInvForEntry].length} parameters filled
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Single-value fallback (for investigations without defined parameters like CXR, CT, MRI) */}
+                        {selectedInvForEntry && !INVESTIGATION_PARAMETERS[selectedInvForEntry] && (
+                          <div className="bg-gray-50 border rounded-lg p-4 space-y-3">
+                            <h5 className="text-sm font-semibold text-gray-800">{selectedInvForEntry}</h5>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                              <input placeholder="Value / Finding" value={invResultEntry.value || ''} onChange={e => setInvResultEntry(p => ({ ...p, name: selectedInvForEntry, value: e.target.value }))} className="border rounded px-2 py-1.5 text-sm" />
+                              <input placeholder="Unit" value={invResultEntry.unit || ''} onChange={e => setInvResultEntry(p => ({ ...p, unit: e.target.value }))} className="border rounded px-2 py-1.5 text-sm" />
+                              <input placeholder="Ref. range" value={invResultEntry.reference_range || ''} onChange={e => setInvResultEntry(p => ({ ...p, reference_range: e.target.value }))} className="border rounded px-2 py-1.5 text-sm" />
+                              <select value={invResultEntry.flag || 'normal'} onChange={e => setInvResultEntry(p => ({ ...p, flag: e.target.value as InvestigationFlag }))} className="border rounded px-2 py-1.5 text-sm">
+                                <option value="normal">Normal</option>
+                                <option value="borderline">Borderline</option>
+                                <option value="abnormal">Abnormal</option>
+                              </select>
+                            </div>
+                            <button onClick={addInvestigationResult} disabled={!invResultEntry.value} className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50">
+                              <Plus size={14} /> Add Result
+                            </button>
+                          </div>
+                        )}
                       </div>
 
                       {/* Upload documents */}
