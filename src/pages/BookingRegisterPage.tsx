@@ -23,7 +23,7 @@ const PreoperativeAssessmentForm = lazy(() => import('../components/Preoperative
 import {
   createPDF, addPDFHeader, addSectionHeader, addBodyText, addBulletList,
   addSeparator, addFooter, addLabeledField, sanitizeTextForPDF, formatDateForPDF,
-  addTwoColumnText, needsNewPage, addSimpleTable, PDF_MARGINS, PDF_FONT_SIZES, PDF_LINE_HEIGHT, PDF_COLORS,
+  addTwoColumnText, needsNewPage, addSimpleTable, PDF_MARGINS, PDF_FONT_SIZES, PDF_LINE_HEIGHT, PDF_COLORS, PDF_PAGE,
 } from '../utils/pdfUtils';
 import jsPDF from 'jspdf';
 import { useAuthStore } from '../store/authStore';
