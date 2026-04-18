@@ -2,6 +2,25 @@
 import { query } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
 
+async function ensureTable() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS activity_logs (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      activity_type VARCHAR(100) NOT NULL,
+      description TEXT,
+      points INTEGER DEFAULT 0,
+      metadata JSONB DEFAULT '{}',
+      reference_id VARCHAR(255),
+      reference_type VARCHAR(100),
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  // Create index for user queries
+  await query(`CREATE INDEX IF NOT EXISTS idx_activity_logs_user_id ON activity_logs(user_id)`).catch(() => {});
+  await query(`CREATE INDEX IF NOT EXISTS idx_activity_logs_type ON activity_logs(activity_type)`).catch(() => {});
+}
+
 export default async function handler(req, res) {
   if (cors(req, res)) return;
 
@@ -16,6 +35,8 @@ export default async function handler(req, res) {
   const userRole = authResult.user.role;
 
   try {
+    await ensureTable();
+
     switch (method) {
       case 'GET':
         return await handleGet(req, res, userId, userRole);
