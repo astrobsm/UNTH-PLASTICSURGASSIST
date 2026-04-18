@@ -3,6 +3,15 @@ import bcrypt from 'bcryptjs';
 import { query } from '../_lib/db.js';
 import { cors, authenticateRequest } from '../_lib/auth.js';
 
+// Ensure phone column exists on users table
+async function ensurePhoneColumn() {
+  try {
+    await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(50)`);
+  } catch (e) {
+    // Column may already exist or table not yet created — ignore
+  }
+}
+
 // Generate a random password with at least one of each type
 function generatePassword(length = 12) {
   const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%';
@@ -142,6 +151,8 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: auth.error });
     }
 
+    await ensurePhoneColumn();
+
     const { method } = req;
     
     // Safe URL parsing
@@ -199,7 +210,7 @@ async function getAllUsers(currentUser, res) {
   // Write operations (create, update, delete) have their own admin checks
 
   const result = await query(
-    `SELECT id, username, email, full_name, role, is_approved, is_active, created_at, last_login
+    `SELECT id, username, email, full_name, role, phone, is_approved, is_active, created_at, last_login
      FROM users WHERE (app_id = 'psa' OR app_id IS NULL) ORDER BY created_at DESC`
   );
 
@@ -208,7 +219,7 @@ async function getAllUsers(currentUser, res) {
 
 async function getUser(id, res) {
   const result = await query(
-    `SELECT id, username, email, full_name, role, is_approved, is_active, created_at, last_login
+    `SELECT id, username, email, full_name, role, phone, is_approved, is_active, created_at, last_login
      FROM users WHERE id = $1`,
     [id]
   );
@@ -225,7 +236,7 @@ async function createUser(data, currentUser, res) {
     return res.status(403).json({ error: 'Access denied' });
   }
 
-  const { email, fullName, role = 'house_officer' } = data;
+  const { email, fullName, role = 'house_officer', phone } = data;
 
   if (!email || !fullName) {
     return res.status(400).json({ error: 'Email and full name are required' });
@@ -252,10 +263,10 @@ async function createUser(data, currentUser, res) {
   const mustChangePassword = role !== 'admin';
 
   const result = await query(
-    `INSERT INTO users (username, password_hash, email, full_name, role, is_approved, is_active, must_change_password, app_id)
-     VALUES ($1, $2, $3, $4, $5, true, true, $6, 'psa')
-     RETURNING id, username, email, full_name, role, is_approved, is_active`,
-    [username, passwordHash, email, fullName, role, mustChangePassword]
+    `INSERT INTO users (username, password_hash, email, full_name, role, phone, is_approved, is_active, must_change_password, app_id)
+     VALUES ($1, $2, $3, $4, $5, $6, true, true, $7, 'psa')
+     RETURNING id, username, email, full_name, role, phone, is_approved, is_active`,
+    [username, passwordHash, email, fullName, role, phone || null, mustChangePassword]
   );
 
   const createdUser = result.rows[0];
@@ -293,7 +304,7 @@ async function updateUser(id, data, currentUser, res) {
   const values = [];
   let paramCount = 1;
 
-  const allowedFields = ['email', 'full_name'];
+  const allowedFields = ['email', 'full_name', 'phone'];
   if (['admin', 'super_admin', 'consultant'].includes(currentUser.role)) {
     allowedFields.push('role', 'is_active', 'is_approved');
   }
@@ -301,6 +312,7 @@ async function updateUser(id, data, currentUser, res) {
   const fieldMap = {
     email: 'email',
     fullName: 'full_name',
+    phone: 'phone',
     role: 'role',
     isActive: 'is_active',
     isApproved: 'is_approved'
@@ -322,7 +334,7 @@ async function updateUser(id, data, currentUser, res) {
 
   const result = await query(
     `UPDATE users SET ${fields.join(', ')} WHERE id = $${paramCount}
-     RETURNING id, username, email, full_name, role, is_approved, is_active`,
+     RETURNING id, username, email, full_name, role, phone, is_approved, is_active`,
     values
   );
 

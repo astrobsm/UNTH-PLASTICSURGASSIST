@@ -604,10 +604,23 @@ class ApiClient {
   async createUser(userData: {
     fullName: string;
     email: string;
+    phone?: string;
     role?: string;
   }) {
     return this.request('/users', {
       method: 'POST',
+      body: JSON.stringify(userData)
+    });
+  }
+
+  async updateUser(userId: string, userData: {
+    fullName?: string;
+    email?: string;
+    phone?: string;
+    role?: string;
+  }) {
+    return this.request(`/users/${encodeURIComponent(userId)}`, {
+      method: 'PUT',
       body: JSON.stringify(userData)
     });
   }

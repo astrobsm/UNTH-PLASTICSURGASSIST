@@ -68,6 +68,7 @@ interface User {
   username?: string;
   email: string;
   name: string;
+  phone?: string;
   role: 'admin' | 'consultant' | 'senior_registrar' | 'junior_registrar' | 'house_officer';
   department: string;
   status: 'active' | 'inactive' | 'suspended';
@@ -167,6 +168,7 @@ export default function Admin() {
         username: u.username || '',
         email: u.email || '',
         name: u.full_name || u.name || '',
+        phone: u.phone || '',
         role: u.role || 'house_officer',
         department: u.department || 'Plastic Surgery',
         status: u.is_active ? 'active' : 'inactive',
@@ -604,6 +606,11 @@ export default function Admin() {
                       <div>
                         <p className="font-medium text-gray-900">{user.name}</p>
                         <p className="text-xs text-gray-500">{user.email}</p>
+                        {user.phone && (
+                          <p className="text-xs text-gray-500 flex items-center gap-1">
+                            <Phone className="h-3 w-3" />{user.phone}
+                          </p>
+                        )}
                       </div>
                     </div>
                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
@@ -685,6 +692,11 @@ export default function Admin() {
                           <div className="ml-4">
                             <div className="text-sm font-medium text-gray-900">{user.name}</div>
                             <div className="text-sm text-gray-500">{user.email}</div>
+                            {user.phone && (
+                              <div className="text-xs text-gray-400 flex items-center gap-1">
+                                <Phone className="h-3 w-3" />{user.phone}
+                              </div>
+                            )}
                           </div>
                         </div>
                       </td>
@@ -1270,6 +1282,7 @@ const UserModal = ({
   const [formData, setFormData] = useState({
     name: user?.name || '',
     email: user?.email || '',
+    phone: user?.phone || '',
     role: user?.role || 'house_officer',
     department: user?.department || '',
     status: user?.status || 'active'
@@ -1293,7 +1306,17 @@ const UserModal = ({
 
     try {
       if (user) {
-        // Update existing user - just local state for now
+        // Update existing user via API
+        try {
+          await apiClient.updateUser(user.id, {
+            fullName: formData.name,
+            email: formData.email,
+            phone: formData.phone,
+            role: formData.role
+          });
+        } catch (err) {
+          console.warn('Server update failed, updating locally:', err);
+        }
         const userData: User = {
           id: user.id,
           ...formData,
@@ -1308,6 +1331,7 @@ const UserModal = ({
         const response = await apiClient.createUser({
           fullName: formData.name,
           email: formData.email,
+          phone: formData.phone,
           role: formData.role
         });
 
@@ -1505,6 +1529,22 @@ const UserModal = ({
               {!user && (
                 <p className="text-xs text-gray-500 mt-1">Username will be generated from email</p>
               )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Phone Number
+              </label>
+              <div className="relative">
+                <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  type="tel"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg pl-10 pr-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  placeholder="e.g., +234 801 234 5678"
+                />
+              </div>
             </div>
 
             <div>
