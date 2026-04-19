@@ -423,66 +423,113 @@ async function getHOFullMetrics(userId, fullName, username) {
     var labOrdersPlaced = parseInt(labOrderRow.cnt) || 0;
   }
 
-  // ── 3. Patient Entries — count DISTINCT patient interactions across clinical tables ──
-  //    Each table contributes unique patient-touching records by this HO.
-  //    Ward rounds, prescriptions, and lab orders already counted above are NOT double-counted
-  //    in patientCount — we sum ALL clinical documentation as "patient entries".
-  let patientCount = 0;
+  // ── 3. Patient Documentation — count records AND distinct patients across clinical tables ──
+  //    `totalDocumentation` = raw record count (for display only)
+  //    `distinctPatientsServed` = unique patient_id count (used for scoring)
+  let totalDocumentation = 0;
+  const patientIdSets = []; // arrays of patient_id results for DISTINCT counting
 
-  // 3a. Tables with created_by INTEGER
+  // 3a. Tables with created_by INTEGER and id/patient_id
   for (const tbl of ['patients', 'treatment_plans', 'admissions', 'surgeries']) {
+    const colId = tbl === 'patients' ? 'id' : 'patient_id';
     const r = await safeQuery(`SELECT COUNT(*) as cnt FROM ${tbl} WHERE created_by = $1${rotationDateClause}`, [uidInt], { cnt: 0 });
-    patientCount += parseInt(r.cnt) || 0;
+    totalDocumentation += parseInt(r.cnt) || 0;
+    const pids = await safeQuery(`SELECT DISTINCT ${colId}::text as pid FROM ${tbl} WHERE created_by = $1${rotationDateClause}`, [uidInt], null);
+    if (pids && pids.pid) patientIdSets.push(pids.pid);
+    // safeQuery returns first row; use full query for arrays
+    try {
+      const pr = await query(`SELECT DISTINCT ${colId}::text as pid FROM ${tbl} WHERE created_by = $1${rotationDateClause}`, [uidInt]);
+      pr.rows.forEach(r => patientIdSets.push(r.pid));
+    } catch {}
   }
 
-  // 3a2. prescriptions — already counted individually above, add to patient entries total too
-  patientCount += prescriptionsWritten;
+  // 3a2. prescriptions — already counted individually above, add to total too
+  totalDocumentation += prescriptionsWritten;
+  try {
+    const pr = await query(`SELECT DISTINCT patient_id::text as pid FROM prescriptions WHERE prescribed_by = $1${rotationDateClause}`, [uidInt]);
+    pr.rows.forEach(r => patientIdSets.push(r.pid));
+  } catch {}
 
   // 3a3. ward_rounds — already counted individually above
-  patientCount += wardRoundsDocumented;
+  totalDocumentation += wardRoundsDocumented;
+  try {
+    const pr = await query(`SELECT DISTINCT patient_id::text as pid FROM ward_rounds WHERE user_id = $1${rotationDateClause}`, [uidInt]);
+    pr.rows.forEach(r => patientIdSets.push(r.pid));
+  } catch {}
 
   // 3a4. lab_orders — already counted individually above
-  patientCount += labOrdersPlaced;
+  totalDocumentation += labOrdersPlaced;
+  try {
+    const pr = await query(`SELECT DISTINCT patient_id::text as pid FROM lab_orders WHERE ordered_by = $1${rotationDateClause}`, [uidInt]);
+    pr.rows.forEach(r => patientIdSets.push(r.pid));
+  } catch {}
 
   // 3a5. discharge_summaries uses prepared_by
   {
     const r = await safeQuery(`SELECT COUNT(*) as cnt FROM discharge_summaries WHERE prepared_by = $1${rotationDateClause}`, [uidInt], { cnt: 0 });
-    patientCount += parseInt(r.cnt) || 0;
+    totalDocumentation += parseInt(r.cnt) || 0;
+    try {
+      const pr = await query(`SELECT DISTINCT patient_id::text as pid FROM discharge_summaries WHERE prepared_by = $1${rotationDateClause}`, [uidInt]);
+      pr.rows.forEach(r => patientIdSets.push(r.pid));
+    } catch {}
   }
 
   // 3b. wound_care_records — recorded_by INTEGER
   {
     const r = await safeQuery(`SELECT COUNT(*) as cnt FROM wound_care_records WHERE recorded_by = $1${rotationDateClause}`, [uidInt], { cnt: 0 });
-    patientCount += parseInt(r.cnt) || 0;
+    totalDocumentation += parseInt(r.cnt) || 0;
+    try {
+      const pr = await query(`SELECT DISTINCT patient_id::text as pid FROM wound_care_records WHERE recorded_by = $1${rotationDateClause}`, [uidInt]);
+      pr.rows.forEach(r => patientIdSets.push(r.pid));
+    } catch {}
   }
 
   // 3c. Tables with recorded_by VARCHAR — match by name/id
   for (const tbl of ['vital_signs', 'fluid_balance']) {
     const clause = nameMatchClause.replace(/\$COL/g, 'recorded_by');
     const r = await safeQuery(`SELECT COUNT(*) as cnt FROM ${tbl} WHERE ${clause}${rotationDateClause}`, nameMatchValues, { cnt: 0 });
-    patientCount += parseInt(r.cnt) || 0;
+    totalDocumentation += parseInt(r.cnt) || 0;
+    try {
+      const pr = await query(`SELECT DISTINCT patient_id::text as pid FROM ${tbl} WHERE ${clause}${rotationDateClause}`, nameMatchValues);
+      pr.rows.forEach(r => patientIdSets.push(r.pid));
+    } catch {}
   }
 
   // 3d. progress_notes — author VARCHAR
   {
     const clause = nameMatchClause.replace(/\$COL/g, 'author');
     const r = await safeQuery(`SELECT COUNT(*) as cnt FROM progress_notes WHERE ${clause}${rotationDateClause}`, nameMatchValues, { cnt: 0 });
-    patientCount += parseInt(r.cnt) || 0;
+    totalDocumentation += parseInt(r.cnt) || 0;
+    try {
+      const pr = await query(`SELECT DISTINCT patient_id::text as pid FROM progress_notes WHERE ${clause}${rotationDateClause}`, nameMatchValues);
+      pr.rows.forEach(r => patientIdSets.push(r.pid));
+    } catch {}
   }
 
   // 3e. Assessment tables with assessed_by VARCHAR
   for (const tbl of ['dvt_assessments', 'pressure_sore_assessments', 'nutritional_assessments', 'diabetic_foot_assessments', 'preoperative_assessments']) {
     const clause = nameMatchClause.replace(/\$COL/g, 'assessed_by');
     const r = await safeQuery(`SELECT COUNT(*) as cnt FROM ${tbl} WHERE ${clause}${rotationDateClause}`, nameMatchValues, { cnt: 0 });
-    patientCount += parseInt(r.cnt) || 0;
+    totalDocumentation += parseInt(r.cnt) || 0;
+    try {
+      const pr = await query(`SELECT DISTINCT patient_id::text as pid FROM ${tbl} WHERE ${clause}${rotationDateClause}`, nameMatchValues);
+      pr.rows.forEach(r => patientIdSets.push(r.pid));
+    } catch {}
   }
 
   // 3f. blood_transfusions — administered_by VARCHAR
   {
     const clause = nameMatchClause.replace(/\$COL/g, 'administered_by');
     const r = await safeQuery(`SELECT COUNT(*) as cnt FROM blood_transfusions WHERE ${clause}${rotationDateClause}`, nameMatchValues, { cnt: 0 });
-    patientCount += parseInt(r.cnt) || 0;
+    totalDocumentation += parseInt(r.cnt) || 0;
+    try {
+      const pr = await query(`SELECT DISTINCT patient_id::text as pid FROM blood_transfusions WHERE ${clause}${rotationDateClause}`, nameMatchValues);
+      pr.rows.forEach(r => patientIdSets.push(r.pid));
+    } catch {}
   }
+
+  // Count distinct patients served (unique patient IDs across all tables)
+  const distinctPatientsServed = new Set(patientIdSets.filter(Boolean)).size;
 
   // ── 4. Duties — formal assignments + clinic/call duties (NO audit_log double-count) ──
   let dutiesCompleted = 0;
@@ -557,19 +604,20 @@ async function getHOFullMetrics(userId, fullName, username) {
   );
 
   // ── Calculate Scores ──
+  // Use distinctPatientsServed for scoring (more realistic than raw entry count)
   const reqs = { cbtTests: 4, patientEntries: 30, duties: 20, loginDays: 25, overallScore: 70 };
-  const patientScore = Math.min(100, (patientCount / reqs.patientEntries) * 100);
+  const patientScore = Math.min(100, (distinctPatientsServed / reqs.patientEntries) * 100);
   const dutyScore = Math.min(100, (dutiesCompleted / reqs.duties) * 100);
   const attendanceScore = Math.min(100, (loginDays / reqs.loginDays) * 100);
   const overallScore = (cbtAvgScore * 0.30) + (patientScore * 0.35) + (dutyScore * 0.25) + (attendanceScore * 0.10);
 
-  // Eligibility
+  // Eligibility — use distinct patients, not raw entries
   const met = [];
   const notMet = [];
   if (cbtCompleted >= reqs.cbtTests) met.push(`CBT: ${cbtCompleted}/${reqs.cbtTests}`);
   else notMet.push(`CBT: ${cbtCompleted}/${reqs.cbtTests}`);
-  if (patientCount >= reqs.patientEntries) met.push(`Patient entries: ${patientCount}/${reqs.patientEntries}`);
-  else notMet.push(`Patient entries: ${patientCount}/${reqs.patientEntries}`);
+  if (distinctPatientsServed >= reqs.patientEntries) met.push(`Patients served: ${distinctPatientsServed}/${reqs.patientEntries}`);
+  else notMet.push(`Patients served: ${distinctPatientsServed}/${reqs.patientEntries}`);
   if (dutiesCompleted >= reqs.duties) met.push(`Duties: ${dutiesCompleted}/${reqs.duties}`);
   else notMet.push(`Duties: ${dutiesCompleted}/${reqs.duties}`);
   if (loginDays >= reqs.loginDays) met.push(`Attendance: ${loginDays}/${reqs.loginDays}`);
@@ -587,7 +635,8 @@ async function getHOFullMetrics(userId, fullName, username) {
       wardRoundsDocumented,
       prescriptionsWritten,
       labOrdersPlaced,
-      patientEntries: patientCount,
+      patientEntries: distinctPatientsServed,
+      totalDocumentation,
       dutiesTotal: parseInt(dutiesTotal.cnt) || 0,
       dutiesCompleted,
       loginDays,

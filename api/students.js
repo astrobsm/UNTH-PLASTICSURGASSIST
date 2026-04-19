@@ -44,6 +44,8 @@ export default async function handler(req, res) {
       if (method === 'GET' && !action) return await listStudents(url.searchParams, res);
       if (method === 'GET' && action === 'overview') return await getStudentsOverview(res);
       if (method === 'PUT' && action === 'approve') return await approveStudent(req.body, res);
+      if (method === 'POST' && action === 'bulk-approve') return await bulkApproveStudents(res);
+      if (method === 'POST' && action === 'auto-assign-all') return await autoAssignAllStudents(res);
       if (method === 'PUT' && action === 'deactivate') return await deactivateStudent(req.body, res);
       if (method === 'PUT' && action === 'evaluate') return await evaluateClerking(auth.user, req.body, res);
       if (method === 'POST' && action === 'assign-patients') return await adminAssignPatients(req.body, res);
@@ -199,14 +201,20 @@ async function registerStudent(body, res) {
   const passwordHash = await bcrypt.hash(password, 10);
 
   const result = await query(
-    `INSERT INTO students (full_name, email, password_hash, university, matric_number, posting_start, posting_end)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `INSERT INTO students (full_name, email, password_hash, university, matric_number, posting_start, posting_end, is_approved)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, true)
      RETURNING id, full_name, email, university, posting_start, posting_end, is_approved`,
     [full_name, email, passwordHash, university || null, matric_number || null, posting_start, posting_end]
   );
 
+  // Auto-assign patients immediately on registration
+  let assignResult = { assigned: 0 };
+  try {
+    assignResult = await autoAssignPatients(result.rows[0].id);
+  } catch (e) { console.warn('Auto-assign on register (non-fatal):', e.message); }
+
   res.status(201).json({
-    message: 'Registration successful. Awaiting admin approval.',
+    message: `Registration successful. Auto-approved with ${assignResult.assigned} patients assigned.`,
     student: result.rows[0]
   });
 }
@@ -238,8 +246,9 @@ async function loginStudent(body, res) {
     return res.status(403).json({ error: 'Your account has been deactivated' });
   }
 
+  // Auto-approve if not yet approved
   if (!student.is_approved) {
-    return res.status(403).json({ error: 'Your account is pending admin approval' });
+    await query('UPDATE students SET is_approved = true, updated_at = NOW() WHERE id = $1', [student.id]);
   }
 
   // Check posting dates
@@ -551,6 +560,31 @@ async function updateStudentTreatmentPlan(studentId, planId, body, res) {
 // ═══════════════════════════════════════════════════════════════════════════
 async function listStudents(params, res) {
   await ensureTables();
+
+  // Auto-approve pending students with active postings
+  try {
+    const pendingActive = await query(`
+      SELECT id FROM students
+      WHERE is_approved = false AND is_active = true AND posting_end >= NOW()
+    `);
+    for (const s of pendingActive.rows) {
+      await query('UPDATE students SET is_approved = true, updated_at = NOW() WHERE id = $1', [s.id]);
+    }
+  } catch (e) { console.warn('Auto-approve on list (non-fatal):', e.message); }
+
+  // Auto-assign patients for all approved+active students who have < 5 patients
+  try {
+    const needAssign = await query(`
+      SELECT s.id FROM students s
+      WHERE s.is_approved = true AND s.is_active = true
+        AND s.posting_end >= NOW()
+        AND (SELECT COUNT(*) FROM student_patient_assignments spa WHERE spa.student_id = s.id AND spa.is_active = true) < 5
+    `);
+    for (const s of needAssign.rows) {
+      await autoAssignPatients(s.id);
+    }
+  } catch (e) { console.warn('Auto-assign on list (non-fatal):', e.message); }
+
   const result = await query(`
     SELECT s.*, 
       (SELECT COUNT(*) FROM student_patient_assignments spa WHERE spa.student_id = s.id AND spa.is_active = true) as assigned_patients,
@@ -653,6 +687,49 @@ async function approveStudent(body, res) {
       : 'Student approval revoked',
     ...assignResult
   });
+}
+
+async function bulkApproveStudents(res) {
+  await ensureTables();
+  // Approve all pending, active students whose posting hasn't expired
+  const pending = await query(`
+    SELECT id FROM students WHERE is_approved = false AND is_active = true AND posting_end >= NOW()
+  `);
+
+  let approved = 0;
+  let totalAssigned = 0;
+  for (const s of pending.rows) {
+    await query('UPDATE students SET is_approved = true, updated_at = NOW() WHERE id = $1', [s.id]);
+    approved++;
+    const result = await autoAssignPatients(s.id);
+    totalAssigned += result.assigned || 0;
+  }
+
+  // Also approve expired-posting students (just approve, no patient assignment)
+  const pendingExpired = await query(`
+    SELECT id FROM students WHERE is_approved = false AND is_active = true AND posting_end < NOW()
+  `);
+  for (const s of pendingExpired.rows) {
+    await query('UPDATE students SET is_approved = true, updated_at = NOW() WHERE id = $1', [s.id]);
+    approved++;
+  }
+
+  res.json({ message: `${approved} students approved, ${totalAssigned} patients assigned across active students` });
+}
+
+async function autoAssignAllStudents(res) {
+  await ensureTables();
+  const active = await query(`
+    SELECT id FROM students WHERE is_approved = true AND is_active = true AND posting_end >= NOW()
+  `);
+
+  let totalAssigned = 0;
+  for (const s of active.rows) {
+    const result = await autoAssignPatients(s.id);
+    totalAssigned += result.assigned || 0;
+  }
+
+  res.json({ message: `${totalAssigned} patients assigned across ${active.rows.length} active students` });
 }
 
 async function deactivateStudent(body, res) {

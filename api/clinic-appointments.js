@@ -6,27 +6,30 @@ let tableEnsured = false;
 
 async function ensureTable() {
   if (tableEnsured) return;
-  await query(`
-    CREATE TABLE IF NOT EXISTS clinic_appointments (
-      id SERIAL PRIMARY KEY,
-      patient_number VARCHAR(100) NOT NULL,
-      patient_name VARCHAR(255),
-      phone_number VARCHAR(20),
-      appointment_date DATE NOT NULL,
-      time_slot VARCHAR(20) NOT NULL,
-      doctor_assigned VARCHAR(255) NOT NULL,
-      status VARCHAR(50) DEFAULT 'booked',
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(appointment_date, time_slot, doctor_assigned)
-    )
-  `);
-  await query(`CREATE INDEX IF NOT EXISTS idx_clinic_appt_date ON clinic_appointments(appointment_date)`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_clinic_appt_doctor ON clinic_appointments(doctor_assigned)`);
-  await query(`CREATE INDEX IF NOT EXISTS idx_clinic_appt_patient ON clinic_appointments(patient_number)`);
-  // Add columns if missing (for existing tables)
-  await query(`ALTER TABLE clinic_appointments ADD COLUMN IF NOT EXISTS patient_name VARCHAR(255)`).catch(() => {});
-  await query(`ALTER TABLE clinic_appointments ADD COLUMN IF NOT EXISTS phone_number VARCHAR(20)`).catch(() => {});
+  try {
+    await query(`
+      CREATE TABLE IF NOT EXISTS clinic_appointments (
+        id SERIAL PRIMARY KEY,
+        patient_number VARCHAR(100) NOT NULL,
+        patient_name VARCHAR(255),
+        phone_number VARCHAR(20),
+        appointment_date DATE NOT NULL,
+        time_slot VARCHAR(20) NOT NULL,
+        doctor_assigned VARCHAR(255) NOT NULL,
+        status VARCHAR(50) DEFAULT 'booked',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(appointment_date, time_slot, doctor_assigned)
+      )
+    `);
+  } catch (e) {
+    console.warn('ensureTable CREATE:', e.message);
+  }
+  try { await query(`CREATE INDEX IF NOT EXISTS idx_clinic_appt_date ON clinic_appointments(appointment_date)`); } catch {}
+  try { await query(`CREATE INDEX IF NOT EXISTS idx_clinic_appt_doctor ON clinic_appointments(doctor_assigned)`); } catch {}
+  try { await query(`CREATE INDEX IF NOT EXISTS idx_clinic_appt_patient ON clinic_appointments(patient_number)`); } catch {}
+  try { await query(`ALTER TABLE clinic_appointments ADD COLUMN IF NOT EXISTS patient_name VARCHAR(255)`); } catch {}
+  try { await query(`ALTER TABLE clinic_appointments ADD COLUMN IF NOT EXISTS phone_number VARCHAR(20)`); } catch {}
   tableEnsured = true;
 }
 
@@ -123,9 +126,17 @@ export default async function handler(req, res) {
   if (cors(req, res)) return;
 
   const { method } = req;
-  const url = new URL(req.url, `http://${req.headers.host}`);
-  const pathParts = url.pathname.replace('/api/clinic-appointments', '').split('/').filter(Boolean);
-  const action = pathParts[0];
+  // Use req.query (Vercel pre-parsed) with URL fallback
+  let action, searchParams;
+  try {
+    const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+    const pathParts = url.pathname.replace('/api/clinic-appointments', '').split('/').filter(Boolean);
+    action = pathParts[0] || req.query?.action;
+    searchParams = url.searchParams;
+  } catch {
+    action = req.query?.action;
+    searchParams = { get: (k) => req.query?.[k] };
+  }
 
   try {
     // clinic-dates is pure JS date math — no DB needed
@@ -184,6 +195,11 @@ async function getAvailableSlots(params, res) {
     return res.status(400).json({ error: 'date parameter is required (YYYY-MM-DD)' });
   }
 
+  // Validate date format
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
+  }
+
   const d = new Date(date + 'T00:00:00');
   const dow = d.getDay();
   if (dow !== 2 && dow !== 3) {
@@ -192,22 +208,25 @@ async function getAvailableSlots(params, res) {
 
   const config = dow === 2 ? CLINIC_CONFIG.tuesday : CLINIC_CONFIG.wednesday;
   const allSlots = generateTimeSlots(dow);
-
-  // Query booked slots for this date
-  const result = await query(
-    `SELECT time_slot, doctor_assigned FROM clinic_appointments 
-     WHERE appointment_date::date = $1::date AND status != 'cancelled'`,
-    [date]
-  );
-
-  const bookedSlots = result.rows.map(r => r.time_slot);
-
-  // Determine doctors for this day
   const doctors = config.doctors;
+
+  // Query booked slots for this date (graceful fallback if DB is down)
+  let bookedRows = [];
+  try {
+    const result = await query(
+      `SELECT time_slot, doctor_assigned FROM clinic_appointments 
+       WHERE appointment_date = $1 AND status != 'cancelled'`,
+      [date]
+    );
+    bookedRows = result.rows;
+  } catch (e) {
+    console.error('getAvailableSlots DB error:', e.message);
+    // Return all slots as available if DB query fails
+  }
 
   // For each slot, check availability across all doctors
   const slots = allSlots.map(slot => {
-    const doctorsBookedForSlot = result.rows
+    const doctorsBookedForSlot = bookedRows
       .filter(r => r.time_slot === slot)
       .map(r => r.doctor_assigned);
     

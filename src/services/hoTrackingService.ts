@@ -16,6 +16,7 @@ export interface HOMetrics {
   prescriptionsWritten: number;
   labOrdersPlaced: number;
   patientEntries: number;
+  totalDocumentation: number;
   dutiesTotal: number;
   dutiesCompleted: number;
   loginDays: number;

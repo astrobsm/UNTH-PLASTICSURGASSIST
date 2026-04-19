@@ -181,7 +181,7 @@ const HOTrackingPage: React.FC = () => {
 
                 <div className="grid grid-cols-3 gap-2 text-center mb-3">
                   <div><p className="text-lg font-bold text-primary-600">{ho.metrics.cbtAvgScore}%</p><p className="text-[10px] text-gray-500">CBT Avg</p></div>
-                  <div><p className="text-lg font-bold text-blue-600">{ho.metrics.assignedPatients}</p><p className="text-[10px] text-gray-500">Patients</p></div>
+                  <div><p className="text-lg font-bold text-blue-600">{ho.metrics.patientEntries}</p><p className="text-[10px] text-gray-500">Patients Served</p></div>
                   <div><p className={`text-lg font-bold ${scoreColor(ho.metrics.overallScore)}`}>{ho.metrics.overallScore}%</p><p className="text-[10px] text-gray-500">Overall</p></div>
                 </div>
 
@@ -191,8 +191,12 @@ const HOTrackingPage: React.FC = () => {
                     <span className="font-medium">{ho.metrics.wardRoundsDocumented}</span>
                   </div>
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-gray-600">Documentation</span>
-                    <span className="font-medium">{ho.metrics.prescriptionsWritten + ho.metrics.labOrdersPlaced + ho.metrics.patientEntries}</span>
+                    <span className="text-gray-600">Prescriptions</span>
+                    <span className="font-medium">{ho.metrics.prescriptionsWritten}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-gray-600">Lab Orders</span>
+                    <span className="font-medium">{ho.metrics.labOrdersPlaced}</span>
                   </div>
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-gray-600">CBT Tests</span>
@@ -271,7 +275,7 @@ const HOTrackingPage: React.FC = () => {
               { label: 'Ward Rounds', value: String(m!.wardRoundsDocumented), icon: Stethoscope, color: 'text-blue-600' },
               { label: 'Prescriptions', value: String(m!.prescriptionsWritten), icon: Pill, color: 'text-purple-600' },
               { label: 'Lab Orders', value: String(m!.labOrdersPlaced), icon: FlaskConical, color: 'text-indigo-600' },
-              { label: 'Patients', value: String(m!.assignedPatients), icon: Users, color: 'text-cyan-600' },
+              { label: 'Patients Served', value: String(m!.patientEntries), icon: Users, color: 'text-cyan-600' },
             ].map(stat => (
               <div key={stat.label} className="card p-3 text-center">
                 <stat.icon className={`h-5 w-5 mx-auto mb-1 ${stat.color}`} />

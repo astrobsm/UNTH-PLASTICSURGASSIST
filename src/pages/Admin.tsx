@@ -1710,6 +1710,7 @@ function StudentManagementTab() {
   const [evalFeedback, setEvalFeedback] = useState('');
   const [evalSaving, setEvalSaving] = useState(false);
   const [assigningPatients, setAssigningPatients] = useState(false);
+  const [bulkApproving, setBulkApproving] = useState(false);
   const [patientPickerOpen, setPatientPickerOpen] = useState(false);
   const [availablePatients, setAvailablePatients] = useState<any[]>([]);
   const [patientSearch, setPatientSearch] = useState('');
@@ -1779,6 +1780,35 @@ function StudentManagementTab() {
       alert(err.message || 'Evaluation failed');
     } finally {
       setEvalSaving(false);
+    }
+  };
+
+  // Bulk approve all pending students
+  const bulkApproveAll = async () => {
+    if (!confirm('Approve ALL pending students and auto-assign patients?')) return;
+    setBulkApproving(true);
+    try {
+      const result = await apiClient.post('/students/bulk-approve', {});
+      alert(result.message || 'Students approved');
+      await loadData();
+    } catch (err: any) {
+      alert(err.message || 'Bulk approve failed');
+    } finally {
+      setBulkApproving(false);
+    }
+  };
+
+  // Auto-assign patients for all active students
+  const autoAssignAll = async () => {
+    setAssigningPatients(true);
+    try {
+      const result = await apiClient.post('/students/auto-assign-all', {});
+      alert(result.message || 'Patients assigned');
+      await loadData();
+    } catch (err: any) {
+      alert(err.message || 'Auto-assign failed');
+    } finally {
+      setAssigningPatients(false);
     }
   };
 
@@ -1865,6 +1895,24 @@ function StudentManagementTab() {
           </button>
         </div>
       </div>
+
+      {/* Bulk Actions */}
+      {overview && (parseInt(overview.pending_approval) > 0 || parseInt(overview.active_students) > 0) && (
+        <div className="flex flex-wrap gap-2">
+          {parseInt(overview.pending_approval) > 0 && (
+            <button onClick={bulkApproveAll} disabled={bulkApproving}
+              className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-1.5">
+              {bulkApproving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+              Approve All Pending ({overview.pending_approval})
+            </button>
+          )}
+          <button onClick={autoAssignAll} disabled={assigningPatients}
+            className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1.5">
+            {assigningPatients ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+            Auto-Assign Patients to All
+          </button>
+        </div>
+      )}
 
       {/* Overview Stats */}
       {overview && (

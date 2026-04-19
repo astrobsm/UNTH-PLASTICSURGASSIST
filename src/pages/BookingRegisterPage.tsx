@@ -28,6 +28,7 @@ import {
 import jsPDF from 'jspdf';
 import { useAuthStore } from '../store/authStore';
 import { ocrService } from '../services/ocrService';
+import { getUnitTeam, UnitRosterConfig, PS_UNITS } from '../config/psUnits';
 
 // ============================
 // TYPES & INTERFACES
@@ -525,6 +526,8 @@ export default function BookingRegisterPage() {
   const ocrFileRef = useRef<HTMLInputElement>(null);
   const [generatingConsentPdf, setGeneratingConsentPdf] = useState(false);
   const [showPreopAssessment, setShowPreopAssessment] = useState(false);
+  const [rosterConfig, setRosterConfig] = useState<UnitRosterConfig | null>(null);
+  const [unitTeamInfo, setUnitTeamInfo] = useState<{ consultants: string[]; seniorRegistrar: string; houseOfficer: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const ecgInputRef = useRef<HTMLInputElement>(null);
   const consentInputRef = useRef<HTMLInputElement>(null);
@@ -552,7 +555,15 @@ export default function BookingRegisterPage() {
     } catch (err) { console.error('Failed to load booked cases:', err); }
   }, []);
 
-  useEffect(() => { loadPatients(); loadBookedCases(); }, [loadPatients, loadBookedCases]);
+  useEffect(() => { loadPatients(); loadBookedCases(); loadRosterConfig(); }, [loadPatients, loadBookedCases]);
+
+  const loadRosterConfig = async () => {
+    try {
+      const configs = await db.ps_unit_rosters.toArray();
+      const active = configs.find((c: UnitRosterConfig) => c.isActive);
+      if (active) setRosterConfig(active);
+    } catch { /* table may not exist yet */ }
+  };
 
   // Auto-select patient and section from URL query params (e.g. ?patientId=40&section=risk)
   useEffect(() => {
@@ -2313,7 +2324,24 @@ export default function BookingRegisterPage() {
                           <label className="block text-sm font-medium text-gray-700 mb-1">Operating Unit <span className="text-red-500">*</span></label>
                           <select
                             value={planData.operating_unit}
-                            onChange={e => updatePlan({ operating_unit: e.target.value as any })}
+                            onChange={e => {
+                              const unit = e.target.value as any;
+                              updatePlan({ operating_unit: unit });
+                              // Auto-fill surgical team from roster
+                              if (unit === 'PS1' || unit === 'PS2') {
+                                const unitId = unit === 'PS1' ? 'PS-UNIT-1' : 'PS-UNIT-2';
+                                const team = getUnitTeam(unitId as 'PS-UNIT-1' | 'PS-UNIT-2', rosterConfig);
+                                setUnitTeamInfo(team);
+                                const leadConsultant = team.consultants[0] || '';
+                                const teamMembers: string[] = [];
+                                if (team.seniorRegistrar) teamMembers.push(team.seniorRegistrar);
+                                if (team.houseOfficer) teamMembers.push(team.houseOfficer);
+                                if (team.consultants.length > 1) teamMembers.push(...team.consultants.slice(1));
+                                updatePlan({ operating_unit: unit, primary_surgeon: leadConsultant, assistants: teamMembers });
+                              } else {
+                                setUnitTeamInfo(null);
+                              }
+                            }}
                             className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500"
                           >
                             <option value="">Select...</option>
@@ -2333,6 +2361,19 @@ export default function BookingRegisterPage() {
                           </select>
                         </div>
                       </div>
+
+                      {/* Unit Team Info Card */}
+                      {unitTeamInfo && planData.operating_unit && (
+                        <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                          <h4 className="text-sm font-semibold text-green-800 flex items-center gap-1 mb-2"><Users size={14} /> {planData.operating_unit === 'PS1' ? 'PS-UNIT 1' : 'PS-UNIT 2'} Team</h4>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-green-900">
+                            <div><span className="font-medium">Consultants:</span> {unitTeamInfo.consultants.join(', ') || '-'}</div>
+                            <div><span className="font-medium">Sr. Registrar:</span> {unitTeamInfo.seniorRegistrar || '-'}</div>
+                            <div><span className="font-medium">House Officer:</span> {unitTeamInfo.houseOfficer || '-'}</div>
+                            <div><span className="font-medium">Theatre Day:</span> {(() => { const u = PS_UNITS.find(u => u.id === (planData.operating_unit === 'PS1' ? 'PS-UNIT-1' : 'PS-UNIT-2')); return u?.schedule.theatre.day || '-'; })()}</div>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Row 3: Surgeon & Multi-specialist toggle */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
