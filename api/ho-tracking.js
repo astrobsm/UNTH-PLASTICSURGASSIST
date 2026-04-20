@@ -138,7 +138,7 @@ async function handleGet(req, res, currentUser) {
                a.ward, a.bed_number, a.status as admission_status
         FROM patient_assignments pa
         LEFT JOIN patients p ON pa.patient_id::text = p.id::text
-        LEFT JOIN admissions a ON a.patient_id::text = pa.patient_id::text AND a.status = 'admitted'
+        LEFT JOIN admissions a ON a.patient_id::text = pa.patient_id::text AND a.status IN ('active', 'admitted')
         WHERE (pa.house_officer_id = $1::text OR pa.house_officer_id = $2) AND pa.is_active = true
         ORDER BY pa.assigned_at DESC
       `, [targetId, uid], 'assignedPatients');
@@ -238,7 +238,7 @@ async function handleGet(req, res, currentUser) {
           `SELECT p.id, p.first_name, p.last_name, p.hospital_number,
                   a.ward, a.bed_number, a.status as admission_status
            FROM patients p
-           LEFT JOIN admissions a ON a.patient_id::text = p.id::text AND a.status = 'admitted'
+           LEFT JOIN admissions a ON a.patient_id::text = p.id::text AND a.status IN ('active', 'admitted')
            WHERE p.id::text IN (${placeholders})`,
           docPids, 'documentedPatients-batch'
         );
@@ -448,7 +448,10 @@ async function getHOFullMetrics(userId, fullName, username) {
     try {
       const r = await query(sql, params);
       return r.rows[0] || defaultVal;
-    } catch (e) { return defaultVal; }
+    } catch (e) {
+      console.warn(`[HO-Metrics] safeQuery failed for user ${uid}:`, e.message, '| SQL:', sql.substring(0, 80));
+      return defaultVal;
+    }
   }
 
   // ── 0. Rotation date scope — only count activity within the active rotation ──
@@ -734,6 +737,9 @@ async function getHOFullMetrics(userId, fullName, username) {
   else notMet.push(`Attendance: ${loginDays}/${reqs.loginDays}`);
   if (overallScore >= reqs.overallScore) met.push(`Overall: ${Math.round(overallScore)}%`);
   else notMet.push(`Overall: ${Math.round(overallScore)}% (need ${reqs.overallScore}%)`);
+
+  // Debug log for troubleshooting
+  console.log(`[HO-Metrics] User ${uid} (${fullName}): CBT=${cbtCompleted}, WR=${wardRoundsDocumented}, Rx=${prescriptionsWritten}, Labs=${labOrdersPlaced}, Docs=${totalDocumentation}, Patients=${distinctPatientsServed}, Duties=${dutiesCompleted}, Logins=${loginDays}, CME=${cmeCount}, Overall=${Math.round(overallScore)}%, Rotation=${rotationStart || 'none'}`);
 
   return {
     metrics: {

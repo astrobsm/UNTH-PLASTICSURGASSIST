@@ -195,7 +195,7 @@ async function getTeamWorkload(res) {
   try {
     const admResult = await query(`
       SELECT created_by, patient_id FROM admissions
-      WHERE status = 'admitted' AND created_by IS NOT NULL AND patient_id IS NOT NULL
+      WHERE status IN ('active', 'admitted') AND created_by IS NOT NULL AND patient_id IS NOT NULL
     `);
     for (const row of admResult.rows) {
       if (!userPatients[row.created_by]) userPatients[row.created_by] = new Set();
@@ -585,7 +585,7 @@ async function getTeamAnalytics(req, res) {
   try {
     const admResult = await query(`
       SELECT created_by, COUNT(DISTINCT patient_id) as patient_count FROM admissions
-      WHERE status = 'admitted' AND created_by IS NOT NULL
+      WHERE status IN ('active', 'admitted') AND created_by IS NOT NULL
       GROUP BY created_by
     `);
     for (const row of admResult.rows) {

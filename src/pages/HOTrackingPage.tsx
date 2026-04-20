@@ -714,7 +714,7 @@ function PatientsTab({ detail }: { detail: HODetail }) {
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                         (p.admission_status === 'active' || p.admission_status === 'admitted') ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
                       }`}>
-                        {p.admission_status === 'active' ? 'Admitted' : p.admission_status || 'Outpatient'}
+                        {(p.admission_status === 'active' || p.admission_status === 'admitted') ? 'Admitted' : p.admission_status || 'Outpatient'}
                       </span>
                       <p className="text-xs text-gray-400 mt-1">{p.total_docs} doc{p.total_docs !== 1 ? 's' : ''}</p>
                     </div>
