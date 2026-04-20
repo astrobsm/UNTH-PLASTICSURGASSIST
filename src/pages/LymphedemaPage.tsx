@@ -1743,7 +1743,7 @@ ul{margin:4px 0;padding-left:18px}li{margin:2px 0;font-size:10pt}
           </table>
         </div>
         {/* Volume Summary */}
-        <div className="mt-3 grid grid-cols-3 gap-2">
+        <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
           <div className="bg-blue-50 rounded-lg p-2 text-center">
             <p className="text-xs text-blue-600">Affected Volume</p>
             <p className="text-lg font-bold text-blue-800">{computedVolumes.affected} ml</p>
@@ -1902,7 +1902,7 @@ ul{margin:4px 0;padding-left:18px}li{margin:2px 0;font-size:10pt}
         {/* Volumes */}
         <div className="bg-white rounded-xl shadow-sm border p-4">
           <h3 className="font-semibold mb-3">Volume Assessment</h3>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="bg-blue-50 rounded-lg p-3 text-center">
               <p className="text-xs text-blue-600">Affected</p>
               <p className="text-xl font-bold text-blue-800">{a.volume_affected_ml} ml</p>

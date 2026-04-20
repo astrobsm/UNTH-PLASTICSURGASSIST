@@ -271,7 +271,7 @@ class ClinicDutyService {
       const all = await apiClient.getUsers();
       if (!Array.isArray(all)) return [];
       return all
-        .filter((u: any) => matchRole(u.role) && u.is_approved !== false && u.is_active !== false)
+        .filter((u: any) => matchRole(u.role) && u.is_approved === true && u.is_active === true)
         .map((u: any) => ({
           id: String(u.id),
           full_name: u.full_name || u.name || u.username || 'Unknown',
@@ -279,7 +279,7 @@ class ClinicDutyService {
           email: u.email,
         }));
     } catch {
-      const local = await db.approved_users.filter((u: any) => matchRole(u.role) && u.is_active !== false).toArray();
+      const local = await db.approved_users.filter((u: any) => matchRole(u.role) && u.is_active === true).toArray();
       return local.map((u: any) => ({
         id: String(u.id),
         full_name: u.full_name || u.name || 'Unknown',

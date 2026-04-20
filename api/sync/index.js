@@ -756,7 +756,8 @@ async function handlePull(data, user, res) {
     notice_board: { table: 'notice_board', userField: null },
     patient_transfers: { table: 'patient_transfers', userField: null },
     ho_tracking_assignments: { table: 'ho_tracking_assignments', userField: null },
-    ho_task_logs: { table: 'ho_task_logs', userField: null }
+    ho_task_logs: { table: 'ho_task_logs', userField: null },
+    patient_assignments: { table: 'patient_assignments', userField: null }
   };
 
   for (const [entityName, config] of Object.entries(entityConfigs)) {

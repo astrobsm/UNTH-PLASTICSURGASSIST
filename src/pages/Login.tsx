@@ -34,10 +34,9 @@ export default function Login() {
     setLoading(true);
     setError('');
     
-    // Validate email format
-    const emailValidation = validateEmail(email);
-    if (!emailValidation.isValid) {
-      setError(emailValidation.error || 'Invalid email format');
+    // Validate: require non-empty input (accept username or email)
+    if (!email.trim()) {
+      setError('Username or email is required');
       setLoading(false);
       return;
     }
@@ -162,15 +161,15 @@ export default function Login() {
           <div className="space-y-4">
             <div>
               <label htmlFor="email" className="form-label">
-                Email address
+                Username or Email
               </label>
               <input
                 id="email"
                 name="email"
-                type="email"
+                type="text"
                 required
                 className="form-input"
-                placeholder="doctor@hospital.com"
+                placeholder="admin or doctor@hospital.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />

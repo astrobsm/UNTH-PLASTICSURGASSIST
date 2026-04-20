@@ -573,7 +573,7 @@ export default function WardRounds() {
                         {round.clinical_images && round.clinical_images.length > 0 && (
                           <div className="bg-gray-50 rounded p-2">
                             <h4 className="text-xs font-semibold text-gray-700 mb-1">Clinical Images ({round.clinical_images.length})</h4>
-                            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
                               {round.clinical_images.map((img, i) => (
                                 <div key={img.id || i} className="relative">
                                   <img src={img.data} alt={img.caption || img.type} className="w-full h-20 object-cover rounded" />

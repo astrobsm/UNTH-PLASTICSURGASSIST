@@ -128,13 +128,17 @@ export const ROTATION_DURATIONS: Record<TrainingLevel, number> = {
 };
 
 export const PERFORMANCE_WEIGHTS = {
-  cbt: 0.30,           // 30%
-  patientCare: 0.35,   // 35%
-  dutyPromptness: 0.25, // 25%
-  attendance: 0.10     // 10%
+  cbt: 0.10,           // 10% - CBT tests
+  patientCare: 0.70,   // 70% - Patient care (primary sign-out criteria)
+  dutyPromptness: 0.10, // 10% - Duty promptness
+  attendance: 0.10     // 10% - Attendance
 };
 
 export const SIGN_OUT_THRESHOLD = 70; // 70% required to sign out
+
+// Minimum weighted contribution per section (6.5% of total)
+// Each section's (score × weight) must be ≥ 6.5
+export const MINIMUM_SECTION_CONTRIBUTION = 6.5;
 
 export const MINIMUM_REQUIREMENTS: Record<TrainingLevel, {
   cbtTests: number;
@@ -578,6 +582,35 @@ const checkSignOutEligibility = (userId: string, level: TrainingLevel): {
     notMet.push(`Login days: ${loginDays}/${requirements.loginDays}`);
   }
   
+  // Check minimum section contributions (6.5% weighted minimum per section)
+  const sectionContributions = {
+    cbt: metrics.cbtScore * PERFORMANCE_WEIGHTS.cbt,
+    patientCare: metrics.patientCareScore * PERFORMANCE_WEIGHTS.patientCare,
+    dutyPromptness: metrics.dutyPromptnessScore * PERFORMANCE_WEIGHTS.dutyPromptness,
+    attendance: metrics.attendanceScore * PERFORMANCE_WEIGHTS.attendance,
+  };
+  
+  if (sectionContributions.cbt >= MINIMUM_SECTION_CONTRIBUTION) {
+    met.push(`CBT contribution: ${sectionContributions.cbt.toFixed(1)}% (≥6.5%)`);
+  } else {
+    notMet.push(`CBT contribution: ${sectionContributions.cbt.toFixed(1)}% (need ≥6.5% — score must be ≥${Math.ceil(MINIMUM_SECTION_CONTRIBUTION / PERFORMANCE_WEIGHTS.cbt)}%)`);
+  }
+  if (sectionContributions.patientCare >= MINIMUM_SECTION_CONTRIBUTION) {
+    met.push(`Patient Care contribution: ${sectionContributions.patientCare.toFixed(1)}% (≥6.5%)`);
+  } else {
+    notMet.push(`Patient Care contribution: ${sectionContributions.patientCare.toFixed(1)}% (need ≥6.5% — score must be ≥${Math.ceil(MINIMUM_SECTION_CONTRIBUTION / PERFORMANCE_WEIGHTS.patientCare)}%)`);
+  }
+  if (sectionContributions.dutyPromptness >= MINIMUM_SECTION_CONTRIBUTION) {
+    met.push(`Duties contribution: ${sectionContributions.dutyPromptness.toFixed(1)}% (≥6.5%)`);
+  } else {
+    notMet.push(`Duties contribution: ${sectionContributions.dutyPromptness.toFixed(1)}% (need ≥6.5% — score must be ≥${Math.ceil(MINIMUM_SECTION_CONTRIBUTION / PERFORMANCE_WEIGHTS.dutyPromptness)}%)`);
+  }
+  if (sectionContributions.attendance >= MINIMUM_SECTION_CONTRIBUTION) {
+    met.push(`Attendance contribution: ${sectionContributions.attendance.toFixed(1)}% (≥6.5%)`);
+  } else {
+    notMet.push(`Attendance contribution: ${sectionContributions.attendance.toFixed(1)}% (need ≥6.5% — score must be ≥${Math.ceil(MINIMUM_SECTION_CONTRIBUTION / PERFORMANCE_WEIGHTS.attendance)}%)`);
+  }
+
   // Check overall score
   if (metrics.overallScore >= SIGN_OUT_THRESHOLD) {
     met.push(`Overall score: ${metrics.overallScore}% (≥70%)`);
@@ -597,9 +630,21 @@ const checkSignOutEligibility = (userId: string, level: TrainingLevel): {
   const eligible = notMet.length === 0 && metrics.overallScore >= SIGN_OUT_THRESHOLD;
   
   // Generate recommendation
+  const minContribFailed = [
+    sectionContributions.cbt < MINIMUM_SECTION_CONTRIBUTION ? 'CBT' : '',
+    sectionContributions.patientCare < MINIMUM_SECTION_CONTRIBUTION ? 'Patient Care' : '',
+    sectionContributions.dutyPromptness < MINIMUM_SECTION_CONTRIBUTION ? 'Duties' : '',
+    sectionContributions.attendance < MINIMUM_SECTION_CONTRIBUTION ? 'Attendance' : '',
+  ].filter(Boolean);
+
   let recommendation = '';
   if (eligible) {
     recommendation = 'Congratulations! You have met all requirements for sign-out. Please request approval from your supervisor.';
+  } else if (minContribFailed.length > 0) {
+    recommendation = `Each section must contribute at least 6.5% to your overall score. Sections below minimum: ${minContribFailed.join(', ')}. `;
+    if (metrics.overallScore < SIGN_OUT_THRESHOLD) {
+      recommendation += `You also need to raise your overall score to 70% (currently ${metrics.overallScore}%).`;
+    }
   } else if (metrics.overallScore >= SIGN_OUT_THRESHOLD && notMet.length > 0) {
     recommendation = `Your score is ${metrics.overallScore}%, but you need to complete: ${notMet.join(', ')}`;
   } else {

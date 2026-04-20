@@ -325,3 +325,76 @@ export function toStorageFormat(geo: GeoLocationResult): Record<string, unknown>
     geofenceName: geo.geofenceName,
   };
 }
+
+// ── Background location tracking for automatic stamping ─────────────────
+let _cachedLocation: GeoLocationResult | null = null;
+let _watchId: number | null = null;
+let _refreshTimer: ReturnType<typeof setInterval> | null = null;
+
+/**
+ * Get the last cached location instantly (non-blocking).
+ * Returns null if no location has been captured yet.
+ */
+export function getCachedLocation(): GeoLocationResult | null {
+  return _cachedLocation;
+}
+
+/**
+ * Start background location tracking. Call once at app startup.
+ * Uses watchPosition for continuous updates + periodic captureLocation
+ * for best accuracy refreshes every 2 minutes.
+ */
+export function startBackgroundTracking(): void {
+  if (_watchId !== null) return; // already tracking
+
+  // Initial capture
+  captureLocation({ skipReverseGeocode: false }).then(loc => {
+    if (loc) _cachedLocation = loc;
+  }).catch(() => {});
+
+  // Continuous watch for real-time updates
+  if (navigator.geolocation) {
+    _watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const { latitude, longitude, accuracy, altitude, altitudeAccuracy, heading, speed } = pos.coords;
+        const fence = checkGeofences(latitude, longitude);
+        _cachedLocation = {
+          latitude,
+          longitude,
+          accuracy,
+          altitude: altitude ?? null,
+          altitudeAccuracy: altitudeAccuracy ?? null,
+          heading: heading ?? null,
+          speed: speed ?? null,
+          timestamp: pos.timestamp,
+          accuracyLevel: classifyAccuracy(accuracy),
+          isInsideGeofence: fence.inside,
+          geofenceName: fence.zone?.name,
+        };
+      },
+      () => { /* ignore watch errors — we still have the cached position */ },
+      { enableHighAccuracy: true, timeout: 30_000, maximumAge: 60_000 },
+    );
+  }
+
+  // Periodic high-accuracy refresh with reverse geocoding every 2 minutes
+  _refreshTimer = setInterval(() => {
+    captureLocation({ skipReverseGeocode: false }).then(loc => {
+      if (loc) _cachedLocation = loc;
+    }).catch(() => {});
+  }, 120_000);
+}
+
+/**
+ * Stop background tracking. Call on logout.
+ */
+export function stopBackgroundTracking(): void {
+  if (_watchId !== null && navigator.geolocation) {
+    navigator.geolocation.clearWatch(_watchId);
+    _watchId = null;
+  }
+  if (_refreshTimer !== null) {
+    clearInterval(_refreshTimer);
+    _refreshTimer = null;
+  }
+}

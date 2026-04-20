@@ -328,10 +328,9 @@ export const PatientProfile: React.FC = () => {
                   </h1>
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs sm:text-sm text-gray-500">
                     <span>#{patient.hospital_number}</span>
-                    <span className="hidden sm:inline"></span>
+                    <span>•</span>
                     <span>{calculateAge(patient.dob || patient.date_of_birth) ?? 'N/A'}y, {patient.sex || patient.gender}</span>
-                    <span className="hidden sm:inline"></span>
-                    <span className="hidden sm:inline">{patient.phone}</span>
+                    {patient.phone && <><span>•</span><span>{patient.phone}</span></>}
                   </div>
                 </div>
               </div>
@@ -532,8 +531,7 @@ export const PatientProfile: React.FC = () => {
                           : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                       }`}
                     >
-                      <span className="hidden sm:inline">{tab.name}</span>
-                      <span className="sm:hidden">{tab.name.split(' ')[0]}</span>
+                      {tab.name}
                     </button>
                   ))}
                 </nav>
@@ -564,7 +562,7 @@ export const PatientProfile: React.FC = () => {
       {/* Edit Patient Modal */}
       {showEditModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0 sm:p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-none sm:rounded-lg shadow-xl w-full sm:max-w-lg h-full sm:h-auto sm:max-h-[90vh] overflow-y-auto">
             <div className="px-3 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900">Edit Patient Details</h3>
             </div>
@@ -863,30 +861,12 @@ const EncountersTab: React.FC<{ patientId: string; hospitalNumber: string; patie
     if (!newNote.trim()) return;
     setSaving(true);
     try {
-      // Get geolocation for anti-fraud documentation verification
-      let geoLocation: { latitude: number; longitude: number; accuracy: number; address?: string } | null = null;
-      try {
-        const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 });
-        });
-        geoLocation = { latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy };
-        // Reverse geocode for human-readable address
-        try {
-          const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${pos.coords.latitude}&lon=${pos.coords.longitude}&zoom=18&addressdetails=1`, { headers: { 'User-Agent': 'UNTH-PlasticSurg-Assistant/1.0' } });
-          if (geoRes.ok) {
-            const geoData = await geoRes.json();
-            geoLocation.address = geoData.display_name || '';
-          }
-        } catch { /* geocode failed, coordinates still valid */ }
-      } catch { /* geolocation unavailable */ }
-
       await apiClient.post('/progress-notes', {
         patient_id: patientId,
         patient_name: patientName,
         author: userName,
         type: encounterType,
         soap: { note: newNote, type: encounterType },
-        geolocation: geoLocation,
       });
       setNewNote('');
       setShowNewEncounter(false);
@@ -1549,7 +1529,7 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; patie
                     )}
                   </div>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
                   <div><label className="block text-[10px] font-medium text-gray-500 mb-0.5">Temp (°C)</label>
                     <input type="number" step="0.1" value={row.temperature || ''} onChange={e => updateBatchRow(idx, 'temperature', parseFloat(e.target.value) || undefined)} className="w-full px-2 py-1 border border-gray-300 rounded text-sm" placeholder="36.5" /></div>
                   <div><label className="block text-[10px] font-medium text-gray-500 mb-0.5">Pulse (bpm)</label>
@@ -1591,7 +1571,7 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; patie
           ) : vitals.length === 0 ? (
             <p className="text-center text-gray-500 py-6">No vital signs recorded yet</p>
           ) : (
-            <table className="w-full text-sm">
+            <table className="w-full text-sm min-w-[600px]">
               <thead><tr className="border-b border-gray-200 text-gray-500 text-xs">
                 <th className="py-2 text-left">Date/Time</th><th>Temp</th><th>Pulse</th><th>BP</th><th>RR</th><th>SpO2</th><th>Wt</th><th>By</th>
               </tr></thead>
@@ -1649,8 +1629,8 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; patie
 
       {/* OCR Vitals Review Modal — editable before saving */}
       {showOCRReview && ocrVitalsEntries.length > 0 && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4" onClick={() => setShowOCRReview(false)}>
-          <div className="bg-white rounded-lg max-w-3xl w-full max-h-[85vh] overflow-auto" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-0 sm:p-4" onClick={() => setShowOCRReview(false)}>
+          <div className="bg-white rounded-none sm:rounded-lg w-full sm:max-w-3xl h-full sm:h-auto sm:max-h-[85vh] overflow-auto" onClick={e => e.stopPropagation()}>
             <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between z-10">
               <h3 className="font-semibold text-gray-900">Review Scanned Vital Signs ({ocrVitalsEntries.length} reading{ocrVitalsEntries.length !== 1 ? 's' : ''})</h3>
               <button onClick={() => setShowOCRReview(false)} className="p-1 hover:bg-gray-100 rounded-full" aria-label="Close review"><X className="w-5 h-5" /></button>
@@ -1682,7 +1662,7 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; patie
                       </button>
                     </div>
                   </div>
-                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     <div className="text-center">
                       <div className="text-[10px] text-gray-500 mb-0.5">Temp (°C)</div>
                       <input type="number" step="0.1" className="w-full text-center text-sm font-bold text-orange-600 border rounded px-1 py-0.5"
@@ -2503,7 +2483,7 @@ const InvestigationsTab: React.FC<{ patientId: string; hospitalNumber: string; p
                       sections.push(
                         <div key="vitals">
                           <h4 className="text-sm font-semibold text-gray-700 mb-2">📊 Vital Signs</h4>
-                          <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
                             {vitalDisplays.map((vd: any) => (
                               <div key={vd.label} className={`text-center p-2 rounded-lg border ${vd.abnormal ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'}`}>
                                 <p className="text-[10px] text-gray-500 uppercase">{vd.label}</p>
@@ -3364,7 +3344,7 @@ const WoundAssessmentTab: React.FC<{ patientId: string; patientName: string; hos
                 ))}
               </div>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div><label className="block text-xs font-medium text-gray-700 mb-1">Wound Type*</label>
                 <select value={form.wound_type || ''} onChange={e => setForm({ ...form, wound_type: e.target.value })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" aria-label="Wound type">
                   <option value="">Select...</option>
@@ -3397,7 +3377,7 @@ const WoundAssessmentTab: React.FC<{ patientId: string; patientName: string; hos
                 </div>
               </div>
             )}
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div><label className="block text-xs font-medium text-gray-700 mb-1">Length (cm)</label>
                 <input type="number" step="0.1" value={form.length || ''} onChange={e => setForm({ ...form, length: parseFloat(e.target.value) || 0 })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" aria-label="Wound length" /></div>
               <div><label className="block text-xs font-medium text-gray-700 mb-1">Width (cm)</label>

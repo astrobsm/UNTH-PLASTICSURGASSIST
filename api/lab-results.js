@@ -35,7 +35,7 @@ export default async function handler(req, res) {
 
       let sql = `
         SELECT * FROM lab_orders 
-        WHERE patient_id = $1 AND (status = 'completed' OR result IS NOT NULL)
+        WHERE patient_id = $1 AND (status = 'completed' OR results IS NOT NULL)
       `;
       const params = [patientId];
       let paramCount = 2;

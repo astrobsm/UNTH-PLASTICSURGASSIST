@@ -77,6 +77,7 @@ export interface HODetail {
   cbtAttempts: any[];
   cmeProgress: any[];
   assignedPatients: any[];
+  documentedPatients: any[];
   rotation: any | null;
 }
 
@@ -190,6 +191,7 @@ class HOTrackingService {
             prescriptionsWritten: 0,
             labOrdersPlaced: 0,
             patientEntries: 0,
+            totalDocumentation: 0,
             dutiesTotal: 0,
             dutiesCompleted: 0,
             loginDays: 0,
@@ -248,7 +250,7 @@ class HOTrackingService {
             cbtTestsCompleted: 0, cbtAvgScore: 0, cbtBestScore: 0, cbtWorstScore: 0,
             cmeTopicsCompleted: 0, wardRoundsDocumented: wardRounds.length,
             prescriptionsWritten: 0, labOrdersPlaced: 0, patientEntries: 0,
-            dutiesTotal: 0, dutiesCompleted: 0, loginDays: 0,
+            totalDocumentation: 0, dutiesTotal: 0, dutiesCompleted: 0, loginDays: 0,
             assignedPatients: assignedPatients.length, overallScore: 0,
           },
           eligibility: { eligible: false, met: [], notMet: ['Offline — limited data'] },
@@ -261,6 +263,7 @@ class HOTrackingService {
         cbtAttempts: [],
         cmeProgress: [],
         assignedPatients,
+        documentedPatients: [],
         rotation: null,
       };
     } catch {

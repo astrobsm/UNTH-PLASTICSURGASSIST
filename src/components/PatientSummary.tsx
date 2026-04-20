@@ -637,56 +637,108 @@ function generateComprehensiveSummary(data: ComprehensiveData, patientId: string
   const allergies = normalizeArrayField(patient.allergies);
   const comorbidities = patient.chronic_conditions || patient.comorbidities || patient.medical_history || '';
 
-  // ── Build comprehensive narrative ──
-  let content = `**PATIENT:** ${patientName} (${hospitalNumber}), ${age ? `${age}-year-old` : 'Age unknown'} ${gender}.\n`;
+  // ── Build Medical Scribe Summary ──
+  const line = '─'.repeat(60);
+  let content = '';
+
+  // ── Header ──
+  content += `${line}\n`;
+  content += `**MEDICAL SCRIBE SUMMARY**\n`;
+  content += `**Date:** ${format(new Date(), 'dd MMMM yyyy, HH:mm')}  |  **Institution:** UNTH Plastic Surgery Unit\n`;
+  content += `${line}\n\n`;
+
+  // ── Patient Demographics ──
+  content += `**PATIENT IDENTIFICATION**\n`;
+  content += `  Name: ${patientName}\n`;
+  content += `  Hospital No: ${hospitalNumber}\n`;
+  content += `  Age/Sex: ${age ? `${age} years` : 'Unknown'} / ${gender}\n`;
+  if (patient.blood_group) content += `  Blood Group: ${patient.blood_group}${patient.genotype ? ` | Genotype: ${patient.genotype}` : ''}\n`;
+  content += `  Allergies: ${allergies.length > 0 ? allergies.join(', ') : 'NKDA (No Known Drug Allergies)'}\n`;
+  if (comorbidities) content += `  Comorbidities: ${comorbidities}\n`;
+  content += '\n';
+
+  // ── Admission Details ──
   if (latestAdmission) {
-    content += `**ADMISSION:** ${ward} ward`;
-    if (admissionDate) content += `, admitted ${format(new Date(admissionDate), 'dd MMM yyyy')}`;
-    content += ` (Day ${los} of admission).\n`;
+    content += `**ADMISSION DETAILS**\n`;
+    content += `  Ward: ${ward}\n`;
+    if (admissionDate) content += `  Date of Admission: ${format(new Date(admissionDate), 'dd MMM yyyy')}\n`;
+    content += `  Length of Stay: Day ${los}\n`;
+    if (latestAdmission.admitting_diagnosis) content += `  Admitting Diagnosis: ${latestAdmission.admitting_diagnosis}\n`;
+    if (latestAdmission.admitting_doctor) content += `  Admitting Doctor: ${latestAdmission.admitting_doctor}\n`;
+    content += '\n';
   }
-  content += `**DIAGNOSIS:** ${uniqueDiagnoses.length > 0 ? uniqueDiagnoses.join('; ') : 'Not specified'}.\n`;
-  content += `**ALLERGIES:** ${allergies.length > 0 ? allergies.join(', ') : 'NKDA (No Known Drug Allergies)'}.\n`;
-  if (comorbidities) content += `**COMORBIDITIES:** ${comorbidities}.\n`;
-  if (patient.blood_group) content += `**BLOOD GROUP:** ${patient.blood_group}${patient.genotype ? ` | GENOTYPE: ${patient.genotype}` : ''}.\n`;
 
-  // ── Presenting complaint ──
+  // ── Diagnoses ──
+  content += `**DIAGNOSIS**\n`;
+  if (uniqueDiagnoses.length > 0) {
+    uniqueDiagnoses.forEach((dx, i) => {
+      content += `  ${i === 0 ? 'Primary' : `Secondary (${i})`}: ${dx}\n`;
+    });
+  } else {
+    content += '  Not yet specified\n';
+  }
+  content += '\n';
+
+  // ── Presenting Complaint & History ──
   const presentingComplaint = latestAdmission?.presenting_complaint || latestAdmission?.reasons_for_admission || patient.presenting_complaint || '';
-  if (presentingComplaint) content += `\n**PRESENTING COMPLAINT:** ${presentingComplaint}\n`;
+  if (presentingComplaint) {
+    content += `**PRESENTING COMPLAINT / HISTORY OF PRESENTING ILLNESS**\n`;
+    content += `${presentingComplaint}\n\n`;
+  }
 
-  // ── Encounters / Progress Notes ──
+  // ── Clinical Encounters / Progress Notes (FULL TEXT — no truncation) ──
   const sortedEncounters = [...encounters].sort((a, b) => new Date(b.created_at || b.date || 0).getTime() - new Date(a.created_at || a.date || 0).getTime());
   if (sortedEncounters.length > 0) {
-    content += `\n**ENCOUNTERS** (${sortedEncounters.length} total):\n`;
-    sortedEncounters.slice(0, 10).forEach(enc => {
-      const dateStr = (enc.created_at || enc.date) ? format(new Date(enc.created_at || enc.date), 'dd/MM/yyyy') : 'Unknown';
+    content += `**CLINICAL ENCOUNTERS** (${sortedEncounters.length})\n`;
+    content += `${'─'.repeat(40)}\n`;
+    sortedEncounters.forEach((enc, idx) => {
+      const dateStr = (enc.created_at || enc.date) ? format(new Date(enc.created_at || enc.date), 'dd/MM/yyyy HH:mm') : 'Unknown';
       let soap = enc.soap;
       if (typeof soap === 'string') try { soap = JSON.parse(soap); } catch {}
       if (typeof soap === 'string') try { soap = JSON.parse(soap); } catch {}
       const encType = enc.type || enc._type || (typeof soap === 'object' && soap?.type) || 'progress_note';
-      const typeLabel: Record<string, string> = { ward_round: 'Ward Round', consultation: 'Consultation', procedure_note: 'Procedure', clinic_visit: 'Clinic Visit', emergency: 'Emergency' };
+      const typeLabel: Record<string, string> = { ward_round: 'Ward Round', consultation: 'Consultation', procedure_note: 'Procedure Note', clinic_visit: 'Clinic Visit', emergency: 'Emergency Review' };
       const label = typeLabel[encType] || 'Progress Note';
-      const rawContent = (typeof soap === 'object' && soap ? (soap.note || soap.subjective || [soap.subjective, soap.objective, soap.assessment, soap.plan].filter(Boolean).join(' | ')) : '') || enc.content || enc.notes || enc.note || enc.presenting_complaint || '';
-      content += `  - [${dateStr}] ${label}: ${rawContent.substring(0, 300)}${rawContent.length > 300 ? '...' : ''}\n`;
+      const author = enc.author || enc.created_by || enc.admitting_doctor || '';
+
+      content += `\n  [${idx + 1}] ${label} — ${dateStr}${author ? ` — Dr. ${author}` : ''}\n`;
+
+      // Full SOAP note rendering
+      if (typeof soap === 'object' && soap) {
+        if (soap.subjective) content += `      S: ${soap.subjective}\n`;
+        if (soap.objective) content += `      O: ${soap.objective}\n`;
+        if (soap.assessment) content += `      A: ${soap.assessment}\n`;
+        if (soap.plan) content += `      P: ${soap.plan}\n`;
+        if (soap.note) content += `      ${soap.note}\n`;
+      }
+      // Fallback to raw content
+      const rawContent = (typeof soap === 'object' && soap ? '' : (typeof soap === 'string' ? soap : '')) || enc.content || enc.notes || enc.note || enc.presenting_complaint || '';
+      if (rawContent) content += `      ${rawContent}\n`;
     });
+    content += '\n';
   }
 
   // ── Ward Rounds ──
   const sortedRounds = [...wardRounds].sort((a, b) => new Date(b.round_date || b.created_at || 0).getTime() - new Date(a.round_date || a.created_at || 0).getTime());
   if (sortedRounds.length > 0) {
-    content += `\n**WARD ROUNDS** (${sortedRounds.length} total):\n`;
-    sortedRounds.slice(0, 8).forEach(r => {
+    content += `**WARD ROUND NOTES** (${sortedRounds.length})\n`;
+    content += `${'─'.repeat(40)}\n`;
+    sortedRounds.forEach((r, idx) => {
       const f = parseFindingsObj(r);
       const dateStr = r.round_date ? format(new Date(r.round_date), 'dd/MM/yyyy') : 'Unknown';
       const roundType = f.round_type || r.round_type || 'Routine';
-      const status = f.progress_status || r.progress_status || 'N/A';
-      const doctor = f.reviewing_doctor || r.reviewing_doctor || r.documented_by_name || 'N/A';
-      content += `  - [${dateStr}] ${roundType} | Status: ${status} | By: ${doctor}\n`;
-      if (f.chief_complaint || r.chief_complaint) content += `    Complaint: ${f.chief_complaint || r.chief_complaint}\n`;
-      if (f.clinical_notes) content += `    Notes: ${f.clinical_notes.substring(0, 200)}\n`;
-      if (f.assessment_notes) content += `    Assessment: ${f.assessment_notes.substring(0, 200)}\n`;
-      if (r.plan || f.follow_up_plan) content += `    Plan: ${r.plan || f.follow_up_plan}\n`;
-      if (f.complications) content += `    !! Complications: ${f.complications}\n`;
+      const status = f.progress_status || r.progress_status || '';
+      const doctor = f.reviewing_doctor || r.reviewing_doctor || r.documented_by_name || '';
+
+      content += `\n  [${idx + 1}] ${roundType} Round — ${dateStr}${doctor ? ` — ${doctor}` : ''}${status ? ` — Status: ${status}` : ''}\n`;
+      if (f.chief_complaint || r.chief_complaint) content += `      Complaint: ${f.chief_complaint || r.chief_complaint}\n`;
+      if (f.clinical_notes) content += `      Clinical Notes: ${f.clinical_notes}\n`;
+      if (f.assessment_notes) content += `      Assessment: ${f.assessment_notes}\n`;
+      if (r.plan || f.follow_up_plan) content += `      Plan: ${r.plan || f.follow_up_plan}\n`;
+      if (f.discharge_planning) content += `      Discharge Planning: ${f.discharge_planning}\n`;
+      if (f.complications) content += `      ⚠ Complications: ${f.complications}\n`;
     });
+    content += '\n';
   }
 
   // ── Vital Signs ──
@@ -694,61 +746,80 @@ function generateComprehensiveSummary(data: ComprehensiveData, patientId: string
   if (vitals.length > 0) {
     const latest = vitals[0];
     const prev = vitals.length > 1 ? vitals[1] : null;
-    content += `\n**VITAL SIGNS** (Latest: ${latest.date || latest.created_at ? format(new Date(latest.date || latest.created_at), 'dd/MM/yyyy HH:mm') : 'Recent'}):\n`;
+    content += `**VITAL SIGNS** (Latest: ${latest.date || latest.created_at ? format(new Date(latest.date || latest.created_at), 'dd/MM/yyyy HH:mm') : 'Recent'})\n`;
+    const vitalLines: string[] = [];
     if (latest.temperature) {
       const dir = prev?.temperature ? (latest.temperature > prev.temperature ? 'rising' : latest.temperature < prev.temperature ? 'falling' : 'stable') : 'unknown';
-      const arrow = dir === 'rising' ? ' [UP]' : dir === 'falling' ? ' [DOWN]' : '';
-      content += `  Temperature: ${latest.temperature} C${arrow}\n`;
-      vitalTrends.push({ parameter: 'Temperature', current: `${latest.temperature} C`, previous: prev?.temperature ? `${prev.temperature} C` : undefined, direction: dir as any, alert: latest.temperature >= 38 ? 'Febrile' : latest.temperature < 36 ? 'Hypothermia' : undefined });
+      const arrow = dir === 'rising' ? ' ↑' : dir === 'falling' ? ' ↓' : '';
+      vitalLines.push(`Temp: ${latest.temperature}°C${arrow}`);
+      vitalTrends.push({ parameter: 'Temperature', current: `${latest.temperature}°C`, previous: prev?.temperature ? `${prev.temperature}°C` : undefined, direction: dir as any, alert: latest.temperature >= 38 ? 'Febrile' : latest.temperature < 36 ? 'Hypothermia' : undefined });
     }
     if (latest.pulse) {
       const dir = prev?.pulse ? (latest.pulse > prev.pulse ? 'rising' : latest.pulse < prev.pulse ? 'falling' : 'stable') : 'unknown';
-      const arrow = dir === 'rising' ? ' [UP]' : dir === 'falling' ? ' [DOWN]' : '';
-      content += `  Pulse: ${latest.pulse} bpm${arrow}\n`;
+      const arrow = dir === 'rising' ? ' ↑' : dir === 'falling' ? ' ↓' : '';
+      vitalLines.push(`PR: ${latest.pulse} bpm${arrow}`);
       vitalTrends.push({ parameter: 'Heart Rate', current: `${latest.pulse} bpm`, previous: prev?.pulse ? `${prev.pulse} bpm` : undefined, direction: dir as any, alert: latest.pulse > 100 ? 'Tachycardia' : latest.pulse < 60 ? 'Bradycardia' : undefined });
     }
     if (latest.bp_systolic && latest.bp_diastolic) {
-      content += `  Blood Pressure: ${latest.bp_systolic}/${latest.bp_diastolic} mmHg\n`;
+      vitalLines.push(`BP: ${latest.bp_systolic}/${latest.bp_diastolic} mmHg`);
       vitalTrends.push({ parameter: 'Blood Pressure', current: `${latest.bp_systolic}/${latest.bp_diastolic}`, previous: prev?.bp_systolic ? `${prev.bp_systolic}/${prev.bp_diastolic}` : undefined, direction: !prev?.bp_systolic ? 'unknown' : latest.bp_systolic > prev.bp_systolic ? 'rising' : latest.bp_systolic < prev.bp_systolic ? 'falling' : 'stable', alert: latest.bp_systolic >= 140 ? 'Hypertension' : latest.bp_systolic < 90 ? 'Hypotension' : undefined });
     }
     if (latest.respiratory_rate) {
-      content += `  Respiratory Rate: ${latest.respiratory_rate}/min\n`;
+      vitalLines.push(`RR: ${latest.respiratory_rate}/min`);
       vitalTrends.push({ parameter: 'Respiratory Rate', current: `${latest.respiratory_rate}/min`, direction: 'unknown', alert: latest.respiratory_rate > 20 ? 'Tachypnea' : undefined });
     }
     if (latest.spo2) {
-      content += `  SpO2: ${latest.spo2}%\n`;
+      vitalLines.push(`SpO2: ${latest.spo2}%`);
       vitalTrends.push({ parameter: 'SpO2', current: `${latest.spo2}%`, previous: prev?.spo2 ? `${prev.spo2}%` : undefined, direction: !prev?.spo2 ? 'unknown' : latest.spo2 > prev.spo2 ? 'rising' : latest.spo2 < prev.spo2 ? 'falling' : 'stable', alert: latest.spo2 < 94 ? 'Hypoxemia' : undefined });
     }
+    content += `  ${vitalLines.join('  |  ')}\n`;
+    // Flag abnormals
+    const alerts = vitalTrends.filter(v => v.alert);
+    if (alerts.length > 0) content += `  ⚠ Abnormal: ${alerts.map(a => `${a.alert} (${a.current})`).join(', ')}\n`;
+    content += '\n';
   }
 
   // ── Investigations ──
   const allLabs = [...labInvestigations, ...labResults];
   if (allLabs.length > 0) {
-    content += `\n**INVESTIGATIONS** (${allLabs.length} total):\n`;
-    const recentLabs = [...allLabs].sort((a, b) => new Date(b.ordered_date || b.result_date || b.created_at || 0).getTime() - new Date(a.ordered_date || a.result_date || a.created_at || 0).getTime()).slice(0, 10);
-    recentLabs.forEach(lab => {
-      const dateStr = lab.ordered_date || lab.result_date || lab.created_at ? format(new Date(lab.ordered_date || lab.result_date || lab.created_at), 'dd/MM/yyyy') : '';
-      const testName = lab.test_name || lab.investigation_name || lab.investigation_type || 'Lab Test';
-      const status = (lab.status || 'pending').toUpperCase();
-      const result = lab.result || lab.result_value || '';
-      content += `  - [${dateStr}] ${testName}: ${status}${result ? ` -> ${result}` : ''}\n`;
-    });
+    content += `**INVESTIGATIONS & RESULTS** (${allLabs.length})\n`;
+    const recentLabs = [...allLabs].sort((a, b) => new Date(b.ordered_date || b.result_date || b.created_at || 0).getTime() - new Date(a.ordered_date || a.result_date || a.created_at || 0).getTime());
+    const pendingLabs = recentLabs.filter(l => ['pending', 'ordered', 'in_progress'].includes((l.status || '').toLowerCase()));
+    const completedLabs = recentLabs.filter(l => !['pending', 'ordered', 'in_progress'].includes((l.status || '').toLowerCase()));
+    if (completedLabs.length > 0) {
+      content += '  Results:\n';
+      completedLabs.slice(0, 15).forEach(lab => {
+        const dateStr = lab.ordered_date || lab.result_date || lab.created_at ? format(new Date(lab.ordered_date || lab.result_date || lab.created_at), 'dd/MM') : '';
+        const testName = lab.test_name || lab.investigation_name || lab.investigation_type || 'Lab Test';
+        const result = lab.result || lab.result_value || '';
+        content += `    ${dateStr ? `[${dateStr}] ` : ''}${testName}${result ? `: ${result}` : ' — reported'}\n`;
+      });
+    }
+    if (pendingLabs.length > 0) {
+      content += `  Pending (${pendingLabs.length}): ${pendingLabs.map(l => l.test_name || l.investigation_name || 'Lab').join(', ')}\n`;
+    }
+    content += '\n';
   }
 
-  // ── Prescriptions / Medications ──
+  // ── Current Medications ──
   const allMeds = extractAllMedications(prescriptions);
   if (allMeds.length > 0) {
-    content += `\n**CURRENT MEDICATIONS** (${allMeds.length}):\n`;
-    allMeds.forEach(med => content += `  - ${med}\n`);
+    content += `**CURRENT MEDICATIONS** (${allMeds.length})\n`;
+    allMeds.forEach((med, i) => content += `  ${i + 1}. ${med}\n`);
+    content += '\n';
   }
 
-  // ── Surgeries / Booking Register ──
+  // ── Surgical History / Bookings ──
   if (surgeries.length > 0) {
-    content += `\n**SURGICAL HISTORY / BOOKINGS** (${surgeries.length}):\n`;
-    surgeries.forEach(s => {
+    content += `**SURGICAL HISTORY / BOOKINGS** (${surgeries.length})\n`;
+    surgeries.forEach((s, i) => {
       const dateStr = s.surgery_date || s.date || s.created_at ? format(new Date(s.surgery_date || s.date || s.created_at), 'dd/MM/yyyy') : 'TBD';
-      content += `  - [${dateStr}] ${s.procedure_name || s.surgery_type || 'Procedure'} | ${s.anaesthesia_type || 'N/A'} | ${(s.status || 'planned').toUpperCase()}\n`;
+      const proc = s.procedure_name || s.surgery_type || 'Procedure';
+      const anaes = s.anaesthesia_type ? ` under ${s.anaesthesia_type}` : '';
+      const status = (s.status || 'planned').toUpperCase();
+      content += `  ${i + 1}. [${dateStr}] ${proc}${anaes} — ${status}\n`;
     });
+    content += '\n';
   }
 
   // ── Run multi-specialty analysis ──
@@ -824,14 +895,32 @@ function generateComprehensiveSummary(data: ComprehensiveData, patientId: string
   if (pendingInvestigations.length > 0) plan.push(`Awaiting results: ${pendingInvestigations.join(', ')}`);
   if (plan.length === 0) plan.push('Continue monitoring', 'Review treatment response');
 
-  // ── Add recommendations section to content ──
+  // ── Active Problem List ──
+  content += `**ACTIVE PROBLEM LIST**\n`;
+  currentProblems.forEach((p, i) => content += `  ${i + 1}. ${p}\n`);
+  content += '\n';
+
+  // ── Management Plan ──
+  content += `**MANAGEMENT PLAN**\n`;
+  plan.forEach((item, i) => content += `  ${i + 1}. ${item}\n`);
+  content += '\n';
+
+  // ── Multi-specialty recommendations ──
   if (specialtyFlags.length > 0) {
-    content += `\n**MULTI-SPECIALTY RECOMMENDATIONS** (${specialtyFlags.length} findings):\n`;
+    content += `**CLINICAL RECOMMENDATIONS** (${specialtyFlags.length} findings)\n`;
     sortedFlags.forEach(f => {
-      const icon = f.severity === 'critical' ? 'CRITICAL' : f.severity === 'warning' ? 'WARNING' : 'INFO';
-      content += `  [${icon}] [${f.specialty}] ${f.finding}\n    -> ${f.recommendation}\n`;
+      const severity = f.severity === 'critical' ? 'CRITICAL' : f.severity === 'warning' ? 'CAUTION' : 'NOTE';
+      content += `  [${severity}] ${f.specialty}: ${f.finding}\n`;
+      content += `    → ${f.recommendation}\n`;
     });
+    content += '\n';
   }
+
+  // ── Signature block ──
+  content += `${line}\n`;
+  content += `**Scribe Note** — Auto-generated ${format(new Date(), 'dd/MM/yyyy HH:mm')}\n`;
+  content += `Reviewed by: ____________________  Signature: ____________________\n`;
+  content += `${line}\n`;
 
   return {
     id: `summary-${Date.now()}`,
@@ -939,7 +1028,7 @@ export const PatientSummaryView: React.FC<PatientSummaryViewProps> = ({
         pre { white-space: pre-wrap; font-family: inherit; }
         @media print { body { padding: 0; } }
       </style></head><body>
-      <h1>Comprehensive Clinical Summary</h1>
+      <h1>Medical Scribe Summary</h1>
       <pre>${selectedSummary.content}</pre>
       <h2>Key Clinical Points</h2>
       <ul>${selectedSummary.key_points.map(p => `<li>${p}</li>`).join('')}</ul>
@@ -965,7 +1054,7 @@ export const PatientSummaryView: React.FC<PatientSummaryViewProps> = ({
     try {
       const { createPDF, addPDFHeader, addSectionHeader, PDF_MARGINS, PDF_LINE_HEIGHT, PDF_FONT_SIZES, PDF_COLORS, PDF_PAGE, addFooter, needsNewPage } = await import('../utils/pdfUtils');
       const doc = createPDF();
-      let y = addPDFHeader(doc, 'Comprehensive Clinical Summary', format(selectedSummary.generated_at, 'dd MMM yyyy'));
+      let y = addPDFHeader(doc, 'Medical Scribe Summary', format(selectedSummary.generated_at, 'dd MMM yyyy'));
 
       // Parse the content into sections
       const sections = selectedSummary.content.split('\n\n').filter(Boolean);
@@ -981,7 +1070,7 @@ export const PatientSummaryView: React.FC<PatientSummaryViewProps> = ({
             y = PDF_MARGINS.top;
           }
           // Bold lines that start with known headers
-          if (/^(PATIENT:|ADMISSION:|DIAGNOSIS:|ALLERGIES:|COMORBIDITIES:|BLOOD GROUP:|PRESENTING COMPLAINT:|ENCOUNTERS|WARD ROUNDS|VITAL SIGNS|INVESTIGATIONS|CURRENT MEDICATIONS|SURGICAL HISTORY|MULTI-SPECIALTY)/i.test(line.trim())) {
+          if (/^(MEDICAL SCRIBE|PATIENT|ADMISSION|DIAGNOSIS|ALLERGIES|COMORBIDITIES|BLOOD GROUP|PRESENTING COMPLAINT|CLINICAL ENCOUNTERS|WARD ROUND|VITAL SIGNS|INVESTIGATIONS|CURRENT MEDICATIONS|SURGICAL HISTORY|MULTI-SPECIALTY|Date:|Institution:)/i.test(line.trim())) {
             doc.setFont('helvetica', 'bold');
             doc.setTextColor(PDF_COLORS.primary.r, PDF_COLORS.primary.g, PDF_COLORS.primary.b);
           } else {
@@ -1023,7 +1112,7 @@ export const PatientSummaryView: React.FC<PatientSummaryViewProps> = ({
       <div className="bg-white rounded-xl border p-8">
         <div className="flex flex-col items-center justify-center gap-3">
           <div className="w-10 h-10 border-4 border-green-200 border-t-green-600 rounded-full animate-spin" />
-          <p className="text-gray-500 text-sm">Generating comprehensive clinical summary...</p>
+          <p className="text-gray-500 text-sm">Generating medical scribe summary...</p>
           <p className="text-gray-400 text-xs">Fetching encounters, ward rounds, prescriptions, investigations, vitals, bookings...</p>
         </div>
       </div>
@@ -1071,8 +1160,8 @@ export const PatientSummaryView: React.FC<PatientSummaryViewProps> = ({
         <div className="px-4 py-3 border-b bg-gradient-to-r from-green-50 to-white flex items-center justify-between flex-wrap gap-2">
           <div>
             <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-              <span className="w-8 h-8 bg-green-100 text-green-700 rounded-full flex items-center justify-center text-sm font-bold">&Sigma;</span>
-              Comprehensive Clinical Summary
+              <span className="w-8 h-8 bg-green-100 text-green-700 rounded-full flex items-center justify-center text-sm font-bold">&#9998;</span>
+              Medical Scribe Summary
             </h2>
             <p className="text-xs text-gray-500 mt-0.5">
               Generated {selectedSummary.generated_at.toLocaleDateString()} at {selectedSummary.generated_at.toLocaleTimeString()} |
@@ -1140,7 +1229,7 @@ export const PatientSummaryView: React.FC<PatientSummaryViewProps> = ({
         {/* Full Clinical Summary */}
         <div className="px-4 py-3 border-b">
           <button onClick={() => toggleSection('content')} className="w-full flex items-center justify-between text-left">
-            <h3 className="text-sm font-semibold text-gray-900">Full Clinical Summary</h3>
+            <h3 className="text-sm font-semibold text-gray-900">Full Scribe Note</h3>
             <span className="text-gray-400 text-xs">{expandedSections.has('content') ? '▼' : '▶'}</span>
           </button>
           {expandedSections.has('content') && (

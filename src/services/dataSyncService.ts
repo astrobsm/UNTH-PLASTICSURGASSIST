@@ -20,6 +20,7 @@ import { syncService } from '../db/syncService';
 import { logger } from '../utils/logger';
 import toast from 'react-hot-toast';
 import { mdtService } from './mdtService';
+import { medicalTeamService } from './medicalTeamService';
 
 // Entity types that need cross-device sync
 // NOTE: Only include entities that have corresponding backend API endpoints
@@ -434,6 +435,13 @@ class DataSyncService {
         logger.warn('MDT sync failed:', mdtError);
       }
 
+      // Step 4: Push patient_assignments to server
+      try {
+        await medicalTeamService.pushAssignmentsToServer();
+      } catch (assignErr) {
+        logger.warn('Patient assignments sync failed:', assignErr);
+      }
+
       this.lastFullSyncTime = new Date();
       this.saveSyncState();
 
@@ -535,6 +543,7 @@ class DataSyncService {
     // MDT entities are synced by mdtService.syncFromServer().
     const entitiesToPull: SyncableEntity[] = [
       'patients',       // Must be first - other entities reference patients
+      'patient_assignments',
       'shopping_lists',
       'call_duty_roster',
       'clinic_duty_logs',

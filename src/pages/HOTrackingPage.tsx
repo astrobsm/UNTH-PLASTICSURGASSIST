@@ -179,7 +179,7 @@ const HOTrackingPage: React.FC = () => {
                   </span>
                 </div>
 
-                <div className="grid grid-cols-3 gap-2 text-center mb-3">
+                <div className="grid grid-cols-3 gap-1 sm:gap-2 text-center mb-3">
                   <div><p className="text-lg font-bold text-primary-600">{ho.metrics.cbtAvgScore}%</p><p className="text-[10px] text-gray-500">CBT Avg</p></div>
                   <div><p className="text-lg font-bold text-blue-600">{ho.metrics.patientEntries}</p><p className="text-[10px] text-gray-500">Patients Served</p></div>
                   <div><p className={`text-lg font-bold ${scoreColor(ho.metrics.overallScore)}`}>{ho.metrics.overallScore}%</p><p className="text-[10px] text-gray-500">Overall</p></div>
@@ -545,7 +545,7 @@ function CBTTab({ detail, scoreColor }: { detail: HODetail; scoreColor: (s: numb
       ) : (
         <>
           {/* Score Summary */}
-          <div className="grid grid-cols-3 gap-3 mb-4">
+          <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-4">
             <div className="bg-green-50 rounded-lg p-3 text-center">
               <p className="text-xs text-green-600">Passed</p>
               <p className="text-2xl font-bold text-green-700">{attempts.filter((a: any) => a.passed).length}</p>
@@ -659,48 +659,127 @@ function CMETab({ detail }: { detail: HODetail }) {
 
 // ── Patients Tab ──
 function PatientsTab({ detail }: { detail: HODetail }) {
-  const patients = detail.assignedPatients || [];
+  const assigned = detail.assignedPatients || [];
+  const documented = detail.documentedPatients || [];
+
+  // Merge: documented patients + assigned-only patients not yet documented
+  const documentedIds = new Set(documented.map((p: any) => String(p.id)));
+  const assignedOnly = assigned.filter((p: any) => !documentedIds.has(String(p.patient_id)));
+
+  const typeIcons: Record<string, { icon: React.ElementType; color: string }> = {
+    'Ward Round': { icon: Stethoscope, color: 'bg-blue-100 text-blue-700' },
+    'Prescription': { icon: Pill, color: 'bg-purple-100 text-purple-700' },
+    'Lab Order': { icon: FlaskConical, color: 'bg-indigo-100 text-indigo-700' },
+    'Vital Signs': { icon: Activity, color: 'bg-green-100 text-green-700' },
+    'Progress Note': { icon: FileText, color: 'bg-amber-100 text-amber-700' },
+    'Treatment Plan': { icon: Target, color: 'bg-teal-100 text-teal-700' },
+    'Patient Created': { icon: User, color: 'bg-cyan-100 text-cyan-700' },
+  };
 
   return (
-    <div className="space-y-4">
-      <h3 className="text-lg font-semibold text-clinical-dark flex items-center gap-2">
-        <Users className="h-5 w-5 text-primary-600" /> Assigned Patients
-      </h3>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-semibold text-clinical-dark flex items-center gap-2">
+          <Users className="h-5 w-5 text-primary-600" /> Patients & Documentation
+        </h3>
+        <span className="text-sm text-gray-500">
+          {documented.length + assignedOnly.length} total patient{documented.length + assignedOnly.length !== 1 ? 's' : ''}
+        </span>
+      </div>
 
-      {patients.length === 0 ? (
-        <p className="text-center py-8 text-gray-500">No patients currently assigned.</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50 text-left">
-                <th className="px-3 py-2 font-medium text-gray-600">Patient Name</th>
-                <th className="px-3 py-2 font-medium text-gray-600">Hospital #</th>
-                <th className="px-3 py-2 font-medium text-gray-600">Ward</th>
-                <th className="px-3 py-2 font-medium text-gray-600">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {patients.map((p: any, i: number) => (
-                <tr key={i} className="hover:bg-gray-50">
-                  <td className="px-3 py-2 font-medium text-clinical-dark">
-                    {[p.first_name, p.last_name].filter(Boolean).join(' ') || 'Unknown'}
-                  </td>
-                  <td className="px-3 py-2 text-gray-600">{p.hospital_number || '—'}</td>
-                  <td className="px-3 py-2 text-gray-600">
-                    {p.ward_location || '—'}{p.bed_number ? `, Bed ${p.bed_number}` : ''}
-                  </td>
-                  <td className="px-3 py-2">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                      p.admission_status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
-                    }`}>
-                      {p.admission_status === 'active' ? 'Admitted' : p.admission_status || 'Active'}
+      {/* Documented Patients */}
+      {documented.length > 0 && (
+        <div className="space-y-3">
+          <h4 className="font-medium text-sm text-gray-700 flex items-center gap-2">
+            <CheckCircle className="h-4 w-4 text-green-500" />
+            Documented Patients ({documented.length})
+          </h4>
+          <div className="space-y-2">
+            {documented.map((p: any, i: number) => {
+              const docTypes = (p.documentation_types || '').split(', ').filter(Boolean);
+              return (
+                <div key={p.id || i} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-sm transition-shadow">
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <p className="font-semibold text-clinical-dark">
+                        {[p.first_name, p.last_name].filter(Boolean).join(' ') || 'Unknown'}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {p.hospital_number || '—'}
+                        {(p.ward || p.ward_location) ? ` · Ward: ${p.ward || p.ward_location}` : ''}
+                        {p.bed_number ? ` · Bed ${p.bed_number}` : ''}
+                      </p>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                        (p.admission_status === 'active' || p.admission_status === 'admitted') ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
+                      }`}>
+                        {p.admission_status === 'active' ? 'Admitted' : p.admission_status || 'Outpatient'}
+                      </span>
+                      <p className="text-xs text-gray-400 mt-1">{p.total_docs} doc{p.total_docs !== 1 ? 's' : ''}</p>
+                    </div>
+                  </div>
+                  {/* Documentation Types */}
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {docTypes.map((dt: string) => {
+                      const info = typeIcons[dt] || { icon: FileText, color: 'bg-gray-100 text-gray-600' };
+                      const Icon = info.icon;
+                      return (
+                        <span key={dt} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${info.color}`}>
+                          <Icon className="h-3 w-3" /> {dt}
+                        </span>
+                      );
+                    })}
+                  </div>
+                  {/* Timeline */}
+                  <div className="flex items-center gap-4 text-xs text-gray-500">
+                    <span className="flex items-center gap-1">
+                      <Calendar className="h-3 w-3" />
+                      First: {p.first_documented ? new Date(p.first_documented).toLocaleDateString() : '—'}
                     </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    <span className="flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      Last: {p.last_documented ? new Date(p.last_documented).toLocaleDateString() : '—'}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Assigned but not yet documented */}
+      {assignedOnly.length > 0 && (
+        <div className="space-y-3">
+          <h4 className="font-medium text-sm text-gray-700 flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-amber-500" />
+            Assigned — Not Yet Documented ({assignedOnly.length})
+          </h4>
+          <div className="space-y-2">
+            {assignedOnly.map((p: any, i: number) => (
+              <div key={i} className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-clinical-dark">
+                    {[p.first_name, p.last_name].filter(Boolean).join(' ') || 'Unknown'}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {p.hospital_number || '—'}
+                    {(p.ward || p.ward_location) ? ` · Ward: ${p.ward || p.ward_location}` : ''}
+                    {p.bed_number ? ` · Bed ${p.bed_number}` : ''}
+                  </p>
+                </div>
+                <span className="text-xs text-amber-600 font-medium">Needs Documentation</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {documented.length === 0 && assignedOnly.length === 0 && (
+        <div className="text-center py-8 text-gray-500">
+          <Users className="h-10 w-10 mx-auto mb-2 text-gray-300" />
+          <p>No patients documented or assigned yet.</p>
         </div>
       )}
     </div>

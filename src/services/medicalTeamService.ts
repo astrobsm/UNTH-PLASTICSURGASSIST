@@ -1,5 +1,6 @@
 import { db } from '../db/database';
 import { apiClient } from './apiClient';
+import { syncService } from '../db/syncService';
 
 export interface MedicalTeamAssignment {
   id?: number;
@@ -85,7 +86,13 @@ class MedicalTeamService {
         is_active: true
       };
 
-      await db.patient_assignments.add(assignment);
+      const localId = await db.patient_assignments.add(assignment);
+      // Queue sync to server
+      try {
+        await syncService.queueAction('create', 'patient_assignments', localId as number, { ...assignment, id: localId });
+      } catch (syncErr) {
+        console.warn('Failed to queue patient_assignment sync:', syncErr);
+      }
       console.log(`✅ Assigned medical team to patient ${hospitalNumber}`);
     } catch (error) {
       console.error('Error assigning medical team:', error);
@@ -147,7 +154,13 @@ class MedicalTeamService {
           is_active: true
         };
 
-        await db.patient_assignments.add(assignment);
+        const localId = await db.patient_assignments.add(assignment);
+        // Queue sync to server
+        try {
+          await syncService.queueAction('create', 'patient_assignments', localId as number, { ...assignment, id: localId });
+        } catch (syncErr) {
+          console.warn('Failed to queue patient_assignment sync:', syncErr);
+        }
 
         // Increment indices for round-robin
         consultantIndex++;
@@ -639,6 +652,52 @@ class MedicalTeamService {
       console.error('Error reassigning house officers:', error);
       throw error;
     }
+  }
+
+  /**
+   * Push all local patient_assignments to the server (for initial sync / catch-up)
+   */
+  async pushAssignmentsToServer(): Promise<{ pushed: number; errors: number }> {
+    const result = { pushed: 0, errors: 0 };
+    try {
+      const assignments = await db.patient_assignments.toArray();
+      if (assignments.length === 0) return result;
+
+      for (const assignment of assignments) {
+        try {
+          const payload = {
+            patient_id: String(assignment.patient_id),
+            hospital_number: assignment.hospital_number || '',
+            consultant_id: assignment.consultant_id ? String(assignment.consultant_id) : null,
+            senior_registrar_id: assignment.senior_registrar_id ? String(assignment.senior_registrar_id) : null,
+            registrar_id: assignment.registrar_id ? String(assignment.registrar_id) : null,
+            house_officer_id: assignment.house_officer_id ? String(assignment.house_officer_id) : null,
+            admission_type: assignment.admission_type || null,
+            is_active: assignment.is_active !== false,
+            assigned_at: assignment.assigned_at ? new Date(assignment.assigned_at).toISOString() : new Date().toISOString(),
+          };
+
+          await apiClient.request('/sync/push', {
+            method: 'POST',
+            body: JSON.stringify({
+              changes: [{
+                entityType: 'patient_assignments',
+                entityId: assignment.id,
+                action: 'create',
+                payload
+              }]
+            })
+          });
+          result.pushed++;
+        } catch (err) {
+          result.errors++;
+        }
+      }
+      console.log(`📤 Pushed ${result.pushed} patient_assignments to server (${result.errors} errors)`);
+    } catch (error) {
+      console.error('Error pushing assignments to server:', error);
+    }
+    return result;
   }
 }
 

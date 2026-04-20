@@ -38,7 +38,7 @@ export const PatientTransferForm: React.FC<PatientTransferFormProps> = ({
     const loadConsultants = async () => {
       try {
         const allUsers = await userManagementService.getAllApprovedUsers();
-        setConsultants(allUsers.filter(u => u.is_active && u.role === 'consultant'));
+        setConsultants(allUsers.filter(u => u.role === 'consultant'));
       } catch (err) {
         console.error('Failed to load consultants:', err);
       }

@@ -19,7 +19,8 @@ import {
   BarChart3,
   AlertTriangle,
   Bell,
-  X
+  X,
+  BookOpen
 } from 'lucide-react';
 import { 
   medicalTrainingService, 
@@ -441,7 +442,7 @@ const MedicalTrainingPage: React.FC = () => {
                 <div className="bg-white/10 rounded-lg p-3">
                   <div className="flex items-center justify-between mb-1">
                     <p className="text-green-100 text-xs font-medium">CBT Tests</p>
-                    <span className="text-xs text-green-200">30%</span>
+                    <span className="text-xs text-green-200">10%</span>
                   </div>
                   <p className={`text-xl font-bold ${myParticipation.cbtScore >= 70 ? 'text-yellow-300' : 'text-white'}`}>
                     {myParticipation.cbtScore}%
@@ -453,7 +454,7 @@ const MedicalTrainingPage: React.FC = () => {
                 <div className="bg-white/10 rounded-lg p-3">
                   <div className="flex items-center justify-between mb-1">
                     <p className="text-green-100 text-xs font-medium">Patient Care</p>
-                    <span className="text-xs text-green-200">35%</span>
+                    <span className="text-xs text-green-200">70%</span>
                   </div>
                   <p className={`text-xl font-bold ${myParticipation.patientCareScore >= 70 ? 'text-yellow-300' : 'text-white'}`}>
                     {myParticipation.patientCareScore}%
@@ -465,7 +466,7 @@ const MedicalTrainingPage: React.FC = () => {
                 <div className="bg-white/10 rounded-lg p-3">
                   <div className="flex items-center justify-between mb-1">
                     <p className="text-green-100 text-xs font-medium">Duties</p>
-                    <span className="text-xs text-green-200">25%</span>
+                    <span className="text-xs text-green-200">10%</span>
                   </div>
                   <p className={`text-xl font-bold ${myParticipation.dutyPromptnessScore >= 70 ? 'text-yellow-300' : 'text-white'}`}>
                     {myParticipation.dutyPromptnessScore}%
@@ -636,6 +637,64 @@ const MedicalTrainingPage: React.FC = () => {
                 )}
               </>
             )}
+          </div>
+
+          {/* CBT & Training Instructions Card */}
+          <div className="mt-6 bg-white/15 backdrop-blur rounded-xl p-5 border border-white/20">
+            <div className="flex items-center gap-3 mb-4">
+              <BookOpen className="h-6 w-6 text-yellow-300" />
+              <h3 className="font-bold text-lg">Training & Assessment Instructions</h3>
+            </div>
+            <div className="space-y-3 text-sm">
+              {/* Sign-out Weights */}
+              <div className="bg-white/10 rounded-lg p-3">
+                <p className="font-semibold text-yellow-300 mb-2">Sign-Out Criteria Weights</p>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full bg-blue-400 inline-block"></span>
+                    <span>Patient Care: <strong>70%</strong> (Primary)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full bg-purple-400 inline-block"></span>
+                    <span>CBT Tests: <strong>10%</strong></span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full bg-green-400 inline-block"></span>
+                    <span>Duty Promptness: <strong>10%</strong></span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full bg-amber-400 inline-block"></span>
+                    <span>Attendance: <strong>10%</strong></span>
+                  </div>
+                </div>
+                <p className="text-xs text-red-300 mt-2 font-semibold">
+                  ⚠ Minimum 6.5% weighted contribution required from EACH section for sign-out eligibility.
+                </p>
+              </div>
+              {/* CBT Instructions */}
+              <div className="bg-white/10 rounded-lg p-3">
+                <p className="font-semibold text-yellow-300 mb-2">CBT Test Instructions</p>
+                <ul className="space-y-1.5 text-green-100 text-xs">
+                  <li>• <strong>Frequency:</strong> You may take the CBT <strong>once per week</strong> (resets every Monday)</li>
+                  <li>• <strong>Format:</strong> 25 MCQs from your CME training modules • 10-minute time limit</li>
+                  <li>• <strong>Pass Mark:</strong> 75% required to pass • Cumulative average tracked</li>
+                  <li>• <strong>Anti-Cheating:</strong> Tab switching, screenshots, and screen recording are monitored</li>
+                  <li>• <strong>Best Practice:</strong> Study your CME articles thoroughly before attempting</li>
+                  <li>• <strong>Tip:</strong> Focus on patient care (70% of sign-out). CBT tests only count for 10%</li>
+                </ul>
+              </div>
+              {/* CME Reading Instructions */}
+              <div className="bg-white/10 rounded-lg p-3">
+                <p className="font-semibold text-yellow-300 mb-2">CME Article Reading</p>
+                <ul className="space-y-1.5 text-green-100 text-xs">
+                  <li>• <strong>Reading Tracker:</strong> Your reading is monitored — you must open and read each section</li>
+                  <li>• <strong>Minimum Time:</strong> Spend at least 30 seconds on each section to prove reading</li>
+                  <li>• <strong>MCQ Unlock:</strong> Self-assessment MCQs only unlock after reading all sections</li>
+                  <li>• <strong>Fraud Detection:</strong> Rapid scrolling is detected and will reset your progress</li>
+                  <li>• <strong>Completion:</strong> Answer all MCQs correctly after verified reading to mark a topic complete</li>
+                </ul>
+              </div>
+            </div>
           </div>
           
           {/* Performance Dashboard Button */}

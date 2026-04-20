@@ -204,6 +204,44 @@ async function createTables() {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
+    -- Add surgery booking demographic/planning columns if they don't exist
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'surgeries' AND column_name = 'diagnosis') THEN
+        ALTER TABLE surgeries ADD COLUMN diagnosis TEXT;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'surgeries' AND column_name = 'primary_surgeon') THEN
+        ALTER TABLE surgeries ADD COLUMN primary_surgeon VARCHAR(255);
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'surgeries' AND column_name = 'start_time') THEN
+        ALTER TABLE surgeries ADD COLUMN start_time VARCHAR(10);
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'surgeries' AND column_name = 'case_category') THEN
+        ALTER TABLE surgeries ADD COLUMN case_category VARCHAR(50);
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'surgeries' AND column_name = 'ward') THEN
+        ALTER TABLE surgeries ADD COLUMN ward VARCHAR(100);
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'surgeries' AND column_name = 'patient_age_at_booking') THEN
+        ALTER TABLE surgeries ADD COLUMN patient_age_at_booking INTEGER;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'surgeries' AND column_name = 'patient_gender') THEN
+        ALTER TABLE surgeries ADD COLUMN patient_gender VARCHAR(20);
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'surgeries' AND column_name = 'needs_blood_transfusion') THEN
+        ALTER TABLE surgeries ADD COLUMN needs_blood_transfusion BOOLEAN DEFAULT FALSE;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'surgeries' AND column_name = 'blood_units_requested') THEN
+        ALTER TABLE surgeries ADD COLUMN blood_units_requested INTEGER DEFAULT 0;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'surgeries' AND column_name = 'is_emergency') THEN
+        ALTER TABLE surgeries ADD COLUMN is_emergency BOOLEAN DEFAULT FALSE;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'surgeries' AND column_name = 'is_diabetic') THEN
+        ALTER TABLE surgeries ADD COLUMN is_diabetic BOOLEAN DEFAULT FALSE;
+      END IF;
+    END $$;
+
     -- Admissions table
     CREATE TABLE IF NOT EXISTS admissions (
       id SERIAL PRIMARY KEY,
@@ -1834,8 +1872,17 @@ async function createTables() {
       admission_type VARCHAR(50),
       assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       is_active BOOLEAN DEFAULT TRUE,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(patient_id)
     );
+
+    -- Add updated_at to patient_assignments if missing (for existing databases)
+    DO $$ 
+    BEGIN 
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'patient_assignments' AND column_name = 'updated_at') THEN
+        ALTER TABLE patient_assignments ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+      END IF;
+    END $$;
 
     -- =====================================================
     -- KELOID CARE PROGRAM
@@ -2226,15 +2273,11 @@ async function createDefaultUsers() {
     console.log('   Password: Admin@123!');
   } else {
     console.log('ℹ️ Admin user already exists');
-    // Update existing admin with new email and password
-    const passwordHash = await bcrypt.hash('Admin@123!', 10);
+    // Ensure admin has correct email (but don't overwrite password)
     await query(
-      `UPDATE users SET email = $1, password_hash = $2 WHERE username = $3`,
-      ['admin@hospital.com', passwordHash, 'admin']
+      `UPDATE users SET email = COALESCE(NULLIF(email, ''), $1) WHERE username = $2 AND (email IS NULL OR email = '')`,
+      ['admin@hospital.com', 'admin']
     );
-    console.log('✅ Admin user updated with new credentials');
-    console.log('   Email: admin@hospital.com');
-    console.log('   Password: Admin@123!');
   }
 }
 

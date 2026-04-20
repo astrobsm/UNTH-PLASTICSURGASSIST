@@ -6,6 +6,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { patientService } from './services/patientService';
 import ForcePasswordChange from './components/ForcePasswordChange';
+import HOResponsibilitiesGuide from './components/HOResponsibilitiesGuide';
 import { useAuthStore } from './store/authStore';
 import { PWAInstallPrompt } from './components/PWAInstallPrompt';
 import { OfflineIndicator } from './components/OfflineIndicator';
@@ -13,6 +14,7 @@ import { SWUpdateBanner } from './components/SWUpdateBanner';
 import { SessionLockScreen } from './components/SessionLockScreen';
 import { initializeCSRFToken } from './utils/csrf';
 import { logger } from './utils/logger';
+import { startBackgroundTracking, stopBackgroundTracking } from './services/geolocationService';
 
 // Auto-retry dynamic imports: if a chunk fails (stale cache after deploy),
 // clear caches and reload the page once to get fresh assets.
@@ -107,6 +109,7 @@ function App() {
   const location = useLocation();
   const { user, loading, initializeAuth, clearMustChangePassword, logout } = useAuthStore();
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [hoAcknowledged, setHoAcknowledged] = useState<boolean | null>(null); // null = loading
 
   // Initialize auth ONCE on mount — NOT when user changes
   useEffect(() => {
@@ -130,9 +133,12 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // User-dependent setup (notifications, sync) — runs when user changes
+  // User-dependent setup (notifications, sync, geolocation) — runs when user changes
   useEffect(() => {
     if (user) {
+      // Start background geolocation tracking for documentation stamping
+      startBackgroundTracking();
+
       // Dynamically import notification services to reduce initial bundle
       import('./services/notificationBackgroundService').then(({ notificationService }) => {
         notificationService.requestNotificationPermission();
@@ -150,7 +156,61 @@ function App() {
         });
       }
     }
+    return () => {
+      // Stop geolocation tracking when user logs out
+      stopBackgroundTracking();
+    };
   }, [user]);
+
+  // ─── Check HO responsibilities acknowledgment status ───
+  useEffect(() => {
+    if (!user) {
+      setHoAcknowledged(null);
+      return;
+    }
+    // Only gate House Officers
+    if (user.role !== 'house_officer') {
+      setHoAcknowledged(true);
+      return;
+    }
+    // Check server first, fall back to localStorage
+    const checkAck = async () => {
+      try {
+        const res = await fetch(`/api/users/ho-acknowledgment?userId=${encodeURIComponent(user.id)}`, {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token') || ''}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setHoAcknowledged(!!data.acknowledged);
+          if (data.acknowledged) {
+            localStorage.setItem(`ho_ack_${user.id}`, 'true');
+          }
+          return;
+        }
+      } catch { /* offline fallback */ }
+      // Offline fallback: check localStorage
+      setHoAcknowledged(localStorage.getItem(`ho_ack_${user.id}`) === 'true');
+    };
+    checkAck();
+  }, [user]);
+
+  const handleHOAcknowledge = async () => {
+    if (!user) return;
+    // Save to server
+    try {
+      await fetch('/api/users/ho-acknowledgment', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('auth_token') || ''}`
+        },
+        body: JSON.stringify({ userId: user.id }),
+      });
+    } catch { /* will be synced later */ }
+    // Always save locally
+    localStorage.setItem(`ho_ack_${user.id}`, 'true');
+    setHoAcknowledged(true);
+  };
 
   if (loading) {
     return (
@@ -198,6 +258,16 @@ function App() {
           clearMustChangePassword();
         }}
         onLogout={logout}
+      />
+    );
+  }
+
+  // Gate: House Officers must acknowledge responsibilities before first use
+  if (user.role === 'house_officer' && hoAcknowledged === false) {
+    return (
+      <HOResponsibilitiesGuide
+        mode="acknowledgment"
+        onAcknowledge={handleHOAcknowledge}
       />
     );
   }

@@ -3,10 +3,12 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vitejs.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
-    VitePWA({
+    // Only include PWA plugin in production — it causes crashes and
+    // service-worker caching issues during local development.
+    mode === 'production' && VitePWA({
       // Use injectManifest so we fully control the SW (src/sw.ts)
       strategies: 'injectManifest',
       srcDir: 'src',
@@ -97,13 +99,13 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
       },
 
-      // Development options
+      // Development options — disabled to prevent SW caching conflicts with HMR
       devOptions: {
-        enabled: true,
+        enabled: false,
         type: 'module',
       },
     })
-  ],
+  ].filter(Boolean),
   server: {
     proxy: {
       '/api': {
@@ -154,4 +156,4 @@ export default defineConfig({
       }
     }
   }
-})
+}))

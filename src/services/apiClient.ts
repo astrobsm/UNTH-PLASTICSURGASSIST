@@ -1,4 +1,11 @@
 import { db } from '../db/database';
+import { getCachedLocation, toStorageFormat } from './geolocationService';
+
+// Endpoints that should NOT receive automatic geolocation stamping
+const GEO_EXEMPT_ENDPOINTS = new Set([
+  '/auth', '/login', '/register', '/health', '/diagnostics',
+  '/students/register', '/students/login', '/change-password',
+]);
 
 // API Base URL - handles all environments
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL 
@@ -503,17 +510,36 @@ class ApiClient {
     return this.request<T>(endpoint, { method: 'GET' });
   }
 
+  /**
+   * Automatically attach geolocation to POST/PUT data for documentation stamping.
+   * Skips auth and other exempt endpoints.
+   */
+  private _attachGeoLocation(endpoint: string, data: any): any {
+    if (!data || typeof data !== 'object') return data;
+    // Skip if endpoint is exempt from geo stamping
+    if ([...GEO_EXEMPT_ENDPOINTS].some(ex => endpoint.startsWith(ex))) return data;
+    // Skip if data already has geolocation (manually set)
+    if (data.geolocation) return data;
+    const loc = getCachedLocation();
+    if (loc) {
+      return { ...data, geolocation: toStorageFormat(loc) };
+    }
+    return data;
+  }
+
   async post<T = any>(endpoint: string, data?: any): Promise<T> {
+    const stamped = data ? this._attachGeoLocation(endpoint, data) : data;
     return this.request<T>(endpoint, {
       method: 'POST',
-      body: data ? JSON.stringify(data) : undefined,
+      body: stamped ? JSON.stringify(stamped) : undefined,
     });
   }
 
   async put<T = any>(endpoint: string, data?: any): Promise<T> {
+    const stamped = data ? this._attachGeoLocation(endpoint, data) : data;
     return this.request<T>(endpoint, {
       method: 'PUT',
-      body: data ? JSON.stringify(data) : undefined,
+      body: stamped ? JSON.stringify(stamped) : undefined,
     });
   }
 

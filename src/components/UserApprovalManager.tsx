@@ -46,7 +46,7 @@ export function UserApprovalManager() {
     setLoading(true);
     try {
       const pending = await userManagementService.getPendingRequests();
-      const approved = await userManagementService.getAllApprovedUsers();
+      const approved = await userManagementService.getAllApprovedUsersIncludingInactive();
       setPendingUsers(pending);
       setApprovedUsers(approved);
     } catch (error) {

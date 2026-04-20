@@ -147,9 +147,9 @@ export default function Admin() {
   const loadAdminData = async () => {
     setLoading(true);
     try {
+      const loadedUsers = await loadUsers();
       await Promise.all([
-        loadUsers(),
-        loadSystemMetrics(),
+        loadSystemMetrics(loadedUsers),
         loadAuditLogs()
       ]);
     } catch (error) {
@@ -159,7 +159,7 @@ export default function Admin() {
     }
   };
 
-  const loadUsers = async () => {
+  const loadUsers = async (): Promise<User[]> => {
     try {
       // Fetch real users from API
       const apiUsers = await apiClient.getUsers();
@@ -178,13 +178,15 @@ export default function Admin() {
         updatedAt: u.updated_at ? new Date(u.updated_at) : new Date()
       }));
       setUsers(mappedUsers);
+      return mappedUsers;
     } catch (error) {
       console.error('Error loading users:', error);
       setUsers([]);
+      return [];
     }
   };
 
-  const loadSystemMetrics = async () => {
+  const loadSystemMetrics = async (currentUsers: User[]) => {
     try {
       const [patients, procedures, labResults] = await Promise.all([
         db.patients.count(),
@@ -193,8 +195,8 @@ export default function Admin() {
       ]);
 
       const mockMetrics: SystemMetrics = {
-        totalUsers: users.length,
-        activeUsers: users.filter(u => u.status === 'active').length,
+        totalUsers: currentUsers.length,
+        activeUsers: currentUsers.filter(u => u.status === 'active').length,
         totalPatients: patients,
         totalProcedures: procedures,
         totalLabResults: labResults,
@@ -780,8 +782,8 @@ export default function Admin() {
 
       {/* Deactivation Password Confirmation Modal */}
       {showDeactivateModal && deactivateTarget && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-0 sm:p-4 z-50">
+          <div className="bg-white rounded-none sm:rounded-lg shadow-xl w-full sm:max-w-md h-full sm:h-auto">
             <div className="px-3 sm:px-6 py-3 sm:py-4 border-b flex items-center gap-3">
               <div className={`p-2 rounded-full ${
                 deactivateTarget.currentStatus === 'active' ? 'bg-red-100' : 'bg-green-100'
@@ -2089,16 +2091,16 @@ function StudentManagementTab() {
         </div>
       ) : (
         /* Student List */
-        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto">
+          <table className="w-full text-sm min-w-[700px]">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Name</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600 hidden md:table-cell">University</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600 hidden md:table-cell">Posting</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">University</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Posting</th>
                 <th className="text-center px-4 py-3 font-medium text-gray-600">Patients</th>
                 <th className="text-center px-4 py-3 font-medium text-gray-600">Clerkings</th>
-                <th className="text-center px-4 py-3 font-medium text-gray-600 hidden md:table-cell">Avg Score</th>
+                <th className="text-center px-4 py-3 font-medium text-gray-600">Avg Score</th>
                 <th className="text-center px-4 py-3 font-medium text-gray-600">Status</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">Actions</th>
               </tr>
@@ -2113,14 +2115,14 @@ function StudentManagementTab() {
                       <p className="font-medium text-gray-900">{s.full_name}</p>
                       <p className="text-xs text-gray-400">{s.email}</p>
                     </td>
-                    <td className="px-4 py-3 text-gray-600 hidden md:table-cell">{s.university || '—'}</td>
-                    <td className="px-4 py-3 text-xs text-gray-500 hidden md:table-cell">
+                    <td className="px-4 py-3 text-gray-600">{s.university || '—'}</td>
+                    <td className="px-4 py-3 text-xs text-gray-500">
                       {new Date(s.posting_start).toLocaleDateString()} – {new Date(s.posting_end).toLocaleDateString()}
                       {expired && <span className="ml-1 text-red-500 font-medium">(Expired)</span>}
                     </td>
                     <td className="px-4 py-3 text-center">{s.assigned_patients || 0}/5</td>
                     <td className="px-4 py-3 text-center">{s.total_clerkings || 0}</td>
-                    <td className="px-4 py-3 text-center hidden md:table-cell">
+                    <td className="px-4 py-3 text-center">
                       {avgScore != null ? <span className={`font-medium ${avgScore >= 70 ? 'text-green-600' : avgScore >= 50 ? 'text-yellow-600' : 'text-red-600'}`}>{avgScore}%</span> : '—'}
                     </td>
                     <td className="px-4 py-3 text-center">

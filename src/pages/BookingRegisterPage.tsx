@@ -975,14 +975,14 @@ export default function BookingRegisterPage() {
    *  - 30 min turnover between cases
    *  - Weekdays only (Mon-Fri)
    *  - Must fit case duration before 4:00 PM
+   *  - Starts from today (if still valid theatre hours) or next weekday
    */
   const findNextAvailableSlot = useCallback((caseCategory: string): { date: string; startTime: string } | null => {
     const caseDuration = CASE_DURATIONS[caseCategory] || 150;
     const caseMins = caseDuration - TURNOVER_MINUTES; // actual surgery time (turnover is gap after)
 
-    // Start searching from tomorrow
+    // Start searching from today
     const searchDate = new Date();
-    searchDate.setDate(searchDate.getDate() + 1);
     const maxSearch = 90; // search up to 90 days ahead
 
     for (let i = 0; i < maxSearch; i++) {
@@ -995,6 +995,13 @@ export default function BookingRegisterPage() {
 
       const dateStr = searchDate.toISOString().split('T')[0];
       const dayCases = bookedCases.filter(c => c.date === dateStr && (c.status === 'scheduled' || c.status === 'confirmed'));
+
+      // Check if day is already at max capacity
+      const dayUsedSlots = dayCases.reduce((sum, c) => sum + (CASE_WEIGHTS[(c.case_category as CaseCategory)] || 2), 0);
+      if (dayUsedSlots >= MAX_DAILY_SLOTS) {
+        searchDate.setDate(searchDate.getDate() + 1);
+        continue;
+      }
 
       // Calculate end time of last case
       let dayEndMinutes = THEATRE_START_HOUR * 60; // 8:00 AM = 480 minutes

@@ -85,6 +85,21 @@ class UserManagementService {
         console.warn('getUsers did not return an array:', users);
         return [];
       }
+      return users.filter((user: ApprovedUser) => user.is_approved && user.is_active);
+    } catch (error) {
+      console.error('Error fetching approved users:', error);
+      throw error;
+    }
+  }
+
+  /** Returns all approved users including deactivated ones (for admin management) */
+  async getAllApprovedUsersIncludingInactive(): Promise<ApprovedUser[]> {
+    try {
+      const users = await apiClient.getUsers();
+      if (!Array.isArray(users)) {
+        console.warn('getUsers did not return an array:', users);
+        return [];
+      }
       return users.filter((user: ApprovedUser) => user.is_approved);
     } catch (error) {
       console.error('Error fetching approved users:', error);

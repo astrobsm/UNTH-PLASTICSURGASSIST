@@ -39,6 +39,7 @@ import { userManagementService, ApprovedUser } from '../services/userManagementS
 import { medicalTeamService } from '../services/medicalTeamService';
 import { getCurrentUserName } from '../utils/getCurrentUser';
 import { PS_UNITS, getCurrentAssignments, getTodaySchedule, UnitRosterConfig } from '../config/psUnits';
+import HOResponsibilitiesGuide, { HOResponsibilitiesCard } from '../components/HOResponsibilitiesGuide';
 
 interface DashboardPatient {
   id: number | string;
@@ -125,6 +126,7 @@ export default function Dashboard() {
   const [esDiabetic, setEsDiabetic] = useState(false);
   const [esSpecialReqs, setEsSpecialReqs] = useState('');
   const [esNotes, setEsNotes] = useState('');
+  const [showHOGuide, setShowHOGuide] = useState(false);
 
   // Treatment Plan Tracking
   const [treatmentPlanSummaries, setTreatmentPlanSummaries] = useState<Array<{
@@ -514,13 +516,13 @@ export default function Dashboard() {
   const loadStaffList = async () => {
     try {
       const all = await userManagementService.getAllApprovedUsers();
-      setStaffList(all.filter(u => u.is_active));
+      setStaffList(all);
     } catch {
       // Fallback: load from local IndexedDB
       try {
         const localUsers = await db.users?.toArray() || [];
         const mapped: ApprovedUser[] = localUsers
-          .filter((u: any) => u.is_approved && u.is_active !== false)
+          .filter((u: any) => u.is_approved && u.is_active === true)
           .map((u: any) => ({
             id: u.id,
             full_name: u.full_name || u.name || u.username || 'Unknown',
@@ -949,8 +951,11 @@ export default function Dashboard() {
         </p>
       </div>
 
+      {/* HO Responsibilities Quick Reference Card — visible to all */}
+      <HOResponsibilitiesCard onOpen={() => setShowHOGuide(true)} />
+
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-6">
         {statsDisplay.map((stat) => (
           <div key={stat.name} className="stat-card">
             <div className="flex items-center">
@@ -1624,8 +1629,8 @@ export default function Dashboard() {
 
       {/* Force Admit Modal */}
       {showForceAdmitModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-0 sm:p-4">
+          <div className="bg-white rounded-none sm:rounded-xl shadow-2xl w-full sm:max-w-lg h-full sm:h-auto sm:max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b bg-green-50 rounded-t-xl">
               <h3 className="text-lg font-bold text-green-800 flex items-center gap-2">
                 <Plus className="h-5 w-5" /> Force Admit Patient
@@ -1772,8 +1777,8 @@ export default function Dashboard() {
 
       {/* Emergency Surgery Booking Modal */}
       {showEmergencySurgeryModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-0 sm:p-4">
+          <div className="bg-white rounded-none sm:rounded-xl shadow-2xl w-full sm:max-w-2xl h-full sm:h-auto sm:max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b bg-orange-50 rounded-t-xl">
               <h3 className="text-lg font-bold text-orange-800 flex items-center gap-2">
                 <Siren className="h-5 w-5" /> Emergency Surgery Booking
@@ -2018,6 +2023,16 @@ export default function Dashboard() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* HO Responsibilities Reference Modal */}
+      {showHOGuide && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-0 sm:p-4">
+          <HOResponsibilitiesGuide
+            mode="reference"
+            onClose={() => setShowHOGuide(false)}
+          />
         </div>
       )}
     </div>

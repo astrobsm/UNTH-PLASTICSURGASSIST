@@ -547,15 +547,15 @@ const AdminTrainingPage: React.FC = () => {
         {!loading && filteredTrainees.length > 0 && (
           <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full">
+              <table className="w-full min-w-[700px]">
                 <thead className="bg-gray-50 border-b">
                   <tr className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     <th className="px-4 py-3">Trainee</th>
-                    <th className="px-4 py-3 hidden md:table-cell">Level</th>
+                    <th className="px-4 py-3">Level</th>
                     <th className="px-4 py-3 text-center">Overall</th>
-                    <th className="px-4 py-3 text-center hidden lg:table-cell">CBT</th>
-                    <th className="px-4 py-3 text-center hidden lg:table-cell">Patients</th>
-                    <th className="px-4 py-3 text-center hidden lg:table-cell">Duties</th>
+                    <th className="px-4 py-3 text-center">CBT</th>
+                    <th className="px-4 py-3 text-center">Patients</th>
+                    <th className="px-4 py-3 text-center">Duties</th>
                     <th className="px-4 py-3 text-center">Status</th>
                     <th className="px-4 py-3 text-center">Actions</th>
                   </tr>
@@ -571,14 +571,13 @@ const AdminTrainingPage: React.FC = () => {
                             </div>
                             <div className="min-w-0">
                               <p className="font-medium text-gray-900 truncate">{t.full_name}</p>
-                              <p className="text-xs text-gray-500 md:hidden">{LEVEL_LABELS[t.level]}</p>
                             </div>
                             {t.unreadWarnings > 0 && (
                               <span className="px-1.5 py-0.5 bg-red-500 text-white text-xs rounded-full">{t.unreadWarnings}</span>
                             )}
                           </div>
                         </td>
-                        <td className="px-4 py-3 hidden md:table-cell">
+                        <td className="px-4 py-3">
                           <span className={`px-2 py-0.5 rounded-full text-xs font-medium bg-${LEVEL_COLORS[t.level]}-100 text-${LEVEL_COLORS[t.level]}-700`}>
                             {LEVEL_LABELS[t.level]}
                           </span>
@@ -586,14 +585,14 @@ const AdminTrainingPage: React.FC = () => {
                         <td className="px-4 py-3 text-center">
                           <span className={`text-lg font-bold ${getScoreColor(t.metrics.overallScore)}`}>{t.metrics.overallScore}%</span>
                         </td>
-                        <td className="px-4 py-3 text-center hidden lg:table-cell">
+                        <td className="px-4 py-3 text-center">
                           <div className="text-sm">{t.metrics.cbtTestsCompleted}/{t.requirements.cbtTests}</div>
                           <div className="text-xs text-gray-400">{Number(t.metrics.cbtAvgScore).toFixed(0)}% avg</div>
                         </td>
-                        <td className="px-4 py-3 text-center hidden lg:table-cell">
+                        <td className="px-4 py-3 text-center">
                           <div className="text-sm">{t.metrics.patientEntries}/{t.requirements.patientEntries}</div>
                         </td>
-                        <td className="px-4 py-3 text-center hidden lg:table-cell">
+                        <td className="px-4 py-3 text-center">
                           <div className="text-sm">{t.metrics.dutiesCompleted}/{t.requirements.duties}</div>
                         </td>
                         <td className="px-4 py-3 text-center">{getStatusBadge(t)}</td>

@@ -13,42 +13,50 @@ import { pushNotificationService } from './pushNotificationService';
  * Handles: double-stringified JSON, PostgreSQL array literals like '{item1,item2}',
  * object items with condition/name/label fields, and filters meaningless values.
  */
+// Deeply unwrap a value that may be multiply-stringified JSON or nested PostgreSQL array literals
+function deepUnwrap(val: any): any {
+  if (val === null || val === undefined) return val;
+  // Unwrap stringified JSON up to 5 levels (handles multiply-serialized data)
+  let current = val;
+  for (let i = 0; i < 5; i++) {
+    if (typeof current !== 'string') break;
+    try { const next = JSON.parse(current); current = next; } catch { break; }
+  }
+  // Handle PostgreSQL array literal: '{item1,item2}' or '{}'
+  if (typeof current === 'string' && current.startsWith('{') && current.endsWith('}')) {
+    const inner = current.slice(1, -1).trim();
+    if (!inner) return [];
+    // Split, strip quotes, unescape backslash-escaped quotes, then recursively unwrap
+    return inner.split(',').map((s: string) => {
+      let cleaned = s.trim().replace(/^"|"$/g, '');
+      // Unescape \" → " and \\\\ → \\ to handle multiply-escaped values
+      cleaned = cleaned.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+      return deepUnwrap(cleaned);
+    });
+  }
+  return current;
+}
+
+const EMPTY_VALUES = new Set(['', '{}', '[]', 'null', 'undefined', 'NONE', 'None', 'none', 'nil', 'Nil', 'NIL', 'No', 'no', 'N/A', 'n/a']);
+
+function flattenToStrings(val: any): string[] {
+  if (val === null || val === undefined) return [];
+  if (Array.isArray(val)) return val.flatMap(flattenToStrings);
+  if (typeof val === 'object') {
+    if (Object.keys(val).length === 0) return [];
+    const text = val.condition || val.name || val.label;
+    if (text) return [String(text)];
+    return [];
+  }
+  const trimmed = String(val).trim();
+  if (EMPTY_VALUES.has(trimmed)) return [];
+  return [trimmed];
+}
+
 export function normalizeArrayField(value: any): string[] {
   if (!value) return [];
-
-  // Unwrap stringified JSON (handles double-stringified values too)
-  let parsed = value;
-  if (typeof parsed === 'string') {
-    // Try JSON.parse up to 2 levels (handles '["NONE"]' and '"[\\"NONE\\"]"')
-    for (let i = 0; i < 2; i++) {
-      if (typeof parsed !== 'string') break;
-      try { parsed = JSON.parse(parsed); } catch { break; }
-    }
-  }
-  // Handle PostgreSQL array literal: '{NONE}' or '{item1,item2}'
-  if (typeof parsed === 'string' && parsed.startsWith('{') && parsed.endsWith('}')) {
-    const inner = parsed.slice(1, -1).trim();
-    if (inner) {
-      parsed = inner.split(',').map((s: string) => s.trim().replace(/^"|"$/g, ''));
-    } else {
-      return [];
-    }
-  }
-
-  const arr = Array.isArray(parsed) ? parsed : [parsed];
-  return arr.map((item: any) => {
-    if (typeof item === 'string') {
-      // Filter out empty/null-like values
-      const trimmed = item.trim();
-      if (!trimmed || trimmed === '{}' || trimmed === '[]' || trimmed === 'null' || trimmed === 'NONE' || trimmed === 'None' || trimmed === 'none' || trimmed === 'nil') return '';
-      return trimmed;
-    }
-    if (typeof item === 'object' && item !== null) {
-      // Handle {condition: "...", currentlyManaged: true/false} objects
-      return item.condition || item.name || item.label || JSON.stringify(item);
-    }
-    return String(item);
-  }).filter(Boolean);
+  const unwrapped = deepUnwrap(value);
+  return flattenToStrings(unwrapped);
 }
 
 /**

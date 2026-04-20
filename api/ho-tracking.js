@@ -59,7 +59,7 @@ async function handleGet(req, res, currentUser) {
     }
 
     case 'ho-detail': {
-      const targetId = userId || currentUser.id;
+      const targetId = parseInt(userId || currentUser.id);
       // HOs can view their own; admins can view any
       if (String(targetId) !== String(currentUser.id) && !ADMIN_ROLES.includes(currentUser.role)) {
         return res.status(403).json({ error: 'Access denied' });
@@ -72,21 +72,23 @@ async function handleGet(req, res, currentUser) {
       const metrics = await getHOFullMetrics(ho.id, ho.full_name, ho.username);
 
       // Helper: safe query that returns empty rows on failure (missing tables, etc.)
-      const safeDetailQuery = async (sql, params) => {
-        try { return (await query(sql, params)).rows; } catch (e) { console.warn('ho-detail query failed:', e.message); return []; }
+      const safeDetailQuery = async (sql, params, label) => {
+        try {
+          const result = (await query(sql, params)).rows;
+          return result;
+        } catch (e) { console.warn(`ho-detail [${label || 'query'}] failed:`, e.message); return []; }
       };
 
       // Documentation logs — ward rounds by this HO
       const wardRounds = await safeDetailQuery(`
-        SELECT wr.id, wr.patient_id, wr.round_date, wr.round_type, wr.clinical_notes,
-               wr.progress_status, wr.treatment_plan_updated, wr.medications_changed,
-               wr.wound_assessment_done, wr.created_at,
+        SELECT wr.id, wr.patient_id, wr.round_date, wr.round_type,
+               wr.created_at,
                p.first_name, p.last_name, p.hospital_number
         FROM ward_rounds wr
         LEFT JOIN patients p ON wr.patient_id::text = p.id::text
         WHERE wr.user_id = $1
         ORDER BY wr.created_at DESC LIMIT 50
-      `, [targetId]);
+      `, [targetId], 'wardRounds');
 
       // Prescriptions written
       const prescriptions = await safeDetailQuery(`
@@ -100,13 +102,13 @@ async function handleGet(req, res, currentUser) {
 
       // Lab orders placed
       const labOrders = await safeDetailQuery(`
-        SELECT lo.id, lo.patient_id, lo.test_name, lo.urgency, lo.status, lo.created_at,
+        SELECT lo.id, lo.patient_id, lo.test_type, lo.test_name, lo.priority, lo.status, lo.created_at,
                p.first_name, p.last_name, p.hospital_number
         FROM lab_orders lo
         LEFT JOIN patients p ON lo.patient_id::text = p.id::text
         WHERE lo.ordered_by = $1
         ORDER BY lo.created_at DESC LIMIT 50
-      `, [targetId]);
+      `, [targetId], 'labOrders');
 
       // Progress notes / activity logs
       const activityLogs = await safeDetailQuery(`
@@ -129,16 +131,17 @@ async function handleGet(req, res, currentUser) {
         ORDER BY completed_at DESC
       `, [targetId]);
 
-      // Assigned patients
+      // Assigned patients — use both int and text forms (house_officer_id is VARCHAR)
+      const uid = String(targetId);
       const assignedPatients = await safeDetailQuery(`
         SELECT pa.*, p.first_name, p.last_name, p.hospital_number,
-               a.ward_location, a.bed_number, a.status as admission_status
+               a.ward, a.bed_number, a.status as admission_status
         FROM patient_assignments pa
-        LEFT JOIN patients p ON pa.patient_id = p.id
-        LEFT JOIN admissions a ON a.patient_id = pa.patient_id AND a.status = 'active'
-        WHERE pa.house_officer_id = $1 AND pa.is_active = true
+        LEFT JOIN patients p ON pa.patient_id::text = p.id::text
+        LEFT JOIN admissions a ON a.patient_id::text = pa.patient_id::text AND a.status = 'admitted'
+        WHERE (pa.house_officer_id = $1::text OR pa.house_officer_id = $2) AND pa.is_active = true
         ORDER BY pa.assigned_at DESC
-      `, [targetId]);
+      `, [targetId, uid], 'assignedPatients');
 
       // Rotation
       const rotationRows = await safeDetailQuery(`
@@ -146,6 +149,112 @@ async function handleGet(req, res, currentUser) {
         WHERE user_id = $1 AND status IN ('active', 'extended', 'pending_signout')
         ORDER BY created_at DESC LIMIT 1
       `, [targetId]);
+
+      // All patients this HO has documented on — query each table individually
+      // (resilient to missing tables, mirrors getHOFullMetrics approach)
+      const hoName = ho.full_name || '';
+      const hoUser = ho.username || '';
+
+      // Collect raw doc records: { pid, doc_type, created_at }
+      const allDocs = [];
+
+      // Tables with INTEGER author columns
+      const intAuthorTables = [
+        { table: 'ward_rounds', col: 'user_id', pidCol: 'patient_id', type: 'Ward Round' },
+        { table: 'prescriptions', col: 'prescribed_by', pidCol: 'patient_id', type: 'Prescription' },
+        { table: 'lab_orders', col: 'ordered_by', pidCol: 'patient_id', type: 'Lab Order' },
+        { table: 'treatment_plans', col: 'created_by', pidCol: 'patient_id', type: 'Treatment Plan' },
+        { table: 'admissions', col: 'created_by', pidCol: 'patient_id', type: 'Admission' },
+        { table: 'surgeries', col: 'created_by', pidCol: 'patient_id', type: 'Surgery' },
+        { table: 'discharge_summaries', col: 'prepared_by', pidCol: 'patient_id', type: 'Discharge Summary' },
+        { table: 'wound_care_records', col: 'recorded_by', pidCol: 'patient_id', type: 'Wound Care' },
+      ];
+      for (const { table, col, pidCol, type } of intAuthorTables) {
+        const rows = await safeDetailQuery(
+          `SELECT ${pidCol}::text as pid, '${type}' as doc_type, created_at FROM ${table} WHERE ${col} = $1`,
+          [targetId], type
+        );
+        allDocs.push(...rows);
+      }
+
+      // "Patient Created" — patients table where created_by = userId
+      {
+        const rows = await safeDetailQuery(
+          `SELECT id::text as pid, 'Patient Created' as doc_type, created_at FROM patients WHERE created_by = $1`,
+          [targetId], 'Patient Created'
+        );
+        allDocs.push(...rows);
+      }
+
+      // Tables with VARCHAR author columns — match by name/id
+      const nameMatchParams = [uid];
+      let nameWhere = `($COL = $1`;
+      let pIdx = 1;
+      if (hoName) { pIdx++; nameMatchParams.push(hoName); nameWhere += ` OR LOWER($COL) = LOWER($${pIdx})`; }
+      if (hoUser) { pIdx++; nameMatchParams.push(hoUser); nameWhere += ` OR LOWER($COL) = LOWER($${pIdx})`; }
+      nameWhere += `)`;
+
+      const varcharTables = [
+        { table: 'vital_signs', col: 'recorded_by', pidCol: 'patient_id', type: 'Vital Signs' },
+        { table: 'fluid_balance', col: 'recorded_by', pidCol: 'patient_id', type: 'Fluid Balance' },
+        { table: 'progress_notes', col: 'author', pidCol: 'patient_id', type: 'Progress Note' },
+        { table: 'dvt_assessments', col: 'assessed_by', pidCol: 'patient_id', type: 'DVT Assessment' },
+        { table: 'pressure_sore_assessments', col: 'assessed_by', pidCol: 'patient_id', type: 'Pressure Sore Assessment' },
+        { table: 'nutritional_assessments', col: 'assessed_by', pidCol: 'patient_id', type: 'Nutritional Assessment' },
+        { table: 'diabetic_foot_assessments', col: 'assessed_by', pidCol: 'patient_id', type: 'Diabetic Foot Assessment' },
+        { table: 'preoperative_assessments', col: 'assessed_by', pidCol: 'patient_id', type: 'Preoperative Assessment' },
+        { table: 'blood_transfusions', col: 'administered_by', pidCol: 'patient_id', type: 'Blood Transfusion' },
+      ];
+      for (const { table, col, pidCol, type } of varcharTables) {
+        const clause = nameWhere.replace(/\$COL/g, col);
+        const rows = await safeDetailQuery(
+          `SELECT ${pidCol}::text as pid, '${type}' as doc_type, created_at FROM ${table} WHERE ${clause}`,
+          nameMatchParams, type
+        );
+        allDocs.push(...rows);
+      }
+
+      // Aggregate docs by patient: group by pid → { documentation_types, total_docs, last/first documented }
+      const patientDocMap = {};
+      for (const doc of allDocs) {
+        if (!doc.pid) continue;
+        if (!patientDocMap[doc.pid]) {
+          patientDocMap[doc.pid] = { pid: doc.pid, types: new Set(), count: 0, first: doc.created_at, last: doc.created_at };
+        }
+        const entry = patientDocMap[doc.pid];
+        entry.types.add(doc.doc_type);
+        entry.count++;
+        if (doc.created_at < entry.first) entry.first = doc.created_at;
+        if (doc.created_at > entry.last) entry.last = doc.created_at;
+      }
+
+      // Fetch patient info for documented patients
+      const docPids = Object.keys(patientDocMap);
+      let documentedPatients = [];
+      if (docPids.length > 0) {
+        // Batch fetch patient details
+        const placeholders = docPids.map((_, i) => `$${i + 1}`).join(',');
+        const patientRows = await safeDetailQuery(
+          `SELECT p.id, p.first_name, p.last_name, p.hospital_number,
+                  a.ward, a.bed_number, a.status as admission_status
+           FROM patients p
+           LEFT JOIN admissions a ON a.patient_id::text = p.id::text AND a.status = 'admitted'
+           WHERE p.id::text IN (${placeholders})`,
+          docPids, 'documentedPatients-batch'
+        );
+        documentedPatients = patientRows.map(p => {
+          const entry = patientDocMap[String(p.id)];
+          return {
+            ...p,
+            documentation_types: entry ? Array.from(entry.types).sort().join(', ') : '',
+            total_docs: entry ? entry.count : 0,
+            last_documented: entry ? entry.last : null,
+            first_documented: entry ? entry.first : null,
+          };
+        });
+        // Sort by most recent documentation
+        documentedPatients.sort((a, b) => new Date(b.last_documented) - new Date(a.last_documented));
+      }
 
       return res.status(200).json({
         houseOfficer: { ...ho, ...metrics },
@@ -156,6 +265,7 @@ async function handleGet(req, res, currentUser) {
         cbtAttempts,
         cmeProgress,
         assignedPatients,
+        documentedPatients,
         rotation: rotationRows[0] || null,
       });
     }

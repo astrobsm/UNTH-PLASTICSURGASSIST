@@ -88,10 +88,9 @@ export default function UnitRosterWidget() {
   const loadAvailableStaff = async () => {
     try {
       const allUsers = await userManagementService.getAllApprovedUsers();
-      const activeUsers = allUsers.filter(u => u.is_active);
-      setAllActiveUsers(activeUsers);
-      setAvailableSeniorRegistrars(activeUsers.filter(u => u.role === 'senior_registrar' || u.role === 'junior_registrar'));
-      setAvailableHouseOfficers(activeUsers.filter(u => u.role === 'house_officer'));
+      setAllActiveUsers(allUsers);
+      setAvailableSeniorRegistrars(allUsers.filter(u => u.role === 'senior_registrar' || u.role === 'junior_registrar'));
+      setAvailableHouseOfficers(allUsers.filter(u => u.role === 'house_officer'));
     } catch (err) {
       console.error('Error loading available staff:', err);
     } finally {

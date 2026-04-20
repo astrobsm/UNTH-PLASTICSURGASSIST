@@ -27,6 +27,17 @@ export function onSWUpdate(listener: (available: boolean) => void) {
 export function getSWRegistration() { return swRegistration; }
 
 if ('serviceWorker' in navigator) {
+  // In dev mode, unregister any existing service workers so they don't
+  // intercept Vite's module requests and cause stale-cache errors.
+  if (import.meta.env.DEV) {
+    navigator.serviceWorker.getRegistrations().then(registrations => {
+      registrations.forEach(r => {
+        r.unregister();
+        console.log('🧹 Dev mode: unregistered service worker', r.scope);
+      });
+    });
+  }
+
   // Reload page when a new SW takes control (after user clicks "Update Now")
   let refreshing = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
@@ -35,11 +46,12 @@ if ('serviceWorker' in navigator) {
     window.location.reload();
   });
 
+  if (!import.meta.env.DEV) {
   window.addEventListener('load', async () => {
     try {
       const registration = await navigator.serviceWorker.register(
-        import.meta.env.DEV ? '/dev-sw.js?dev-sw' : '/sw.js',
-        { type: import.meta.env.DEV ? 'module' : 'classic', scope: '/' }
+        '/sw.js',
+        { type: 'classic', scope: '/' }
       );
       swRegistration = registration;
       console.log('✅ Service Worker registered:', registration.scope);
@@ -97,6 +109,7 @@ if ('serviceWorker' in navigator) {
       console.error('❌ Service Worker registration failed:', error);
     }
   });
+  } // end if (!import.meta.env.DEV)
 
   // ── Listen for messages from SW ──
   navigator.serviceWorker.addEventListener('message', (event) => {

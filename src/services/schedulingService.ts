@@ -377,6 +377,18 @@ class SchedulingService {
       preOpNotes: (booking as any).diagnosis || '',
       requiredEquipment: booking.equipment_needed || [],
       status: booking.status || 'scheduled',
+      // Extra booking fields
+      diagnosis: (booking as any).diagnosis || '',
+      primarySurgeon: booking.primary_surgeon || '',
+      startTime: booking.start_time || '',
+      caseCategory: (booking as any).case_category || '',
+      ward: (booking as any).proposed_ward || (booking as any).ward || '',
+      patientAgeAtBooking: (booking as any).patient_age_at_booking || null,
+      patientGender: (booking as any).patient_gender || '',
+      needsBloodTransfusion: (booking as any).needs_blood_transfusion || false,
+      bloodUnitsRequested: (booking as any).blood_units_requested || 0,
+      isEmergency: (booking as any).is_emergency || false,
+      isDiabetic: (booking as any).is_diabetic || false,
     };
 
     // Try to sync to server first
@@ -396,20 +408,40 @@ class SchedulingService {
 
   async getSurgeryBookings(date?: Date): Promise<SurgeryBooking[]> {
     // Map server row (snake_case from PostgreSQL) to frontend SurgeryBooking format
-    const mapServerToBooking = (s: any): any => ({
-      ...s,
-      // Map PostgreSQL column names to frontend field names
-      date: s.date || (s.scheduled_date ? new Date(s.scheduled_date).toISOString().split('T')[0] : ''),
-      procedure_name: s.procedure_name || '',
-      patient_name: s.patient_name || [s.first_name, s.last_name].filter(Boolean).join(' ') || '',
-      hospital_number: s.hospital_number || '',
-      primary_surgeon: s.primary_surgeon || '',
-      anaesthesia_type: s.anaesthesia_type || s.anesthesia_type || '',
-      theatre_number: s.theatre_number || s.operating_room || '',
-      estimated_duration: s.estimated_duration || 0,
-      diagnosis: s.diagnosis || s.pre_op_notes || s.pre_op_diagnosis || '',
-      status: s.status || 'scheduled',
-    });
+    const mapServerToBooking = (s: any): any => {
+      // Calculate age from date_of_birth if available
+      let age = s.patient_age_at_booking;
+      if (!age && s.date_of_birth) {
+        const dob = new Date(s.date_of_birth);
+        const now = new Date();
+        age = now.getFullYear() - dob.getFullYear();
+        const m = now.getMonth() - dob.getMonth();
+        if (m < 0 || (m === 0 && now.getDate() < dob.getDate())) age--;
+      }
+
+      return {
+        ...s,
+        date: s.date || (s.scheduled_date ? new Date(s.scheduled_date).toISOString().split('T')[0] : ''),
+        procedure_name: s.procedure_name || '',
+        patient_name: s.patient_name || [s.first_name, s.last_name].filter(Boolean).join(' ') || '',
+        hospital_number: s.hospital_number || '',
+        primary_surgeon: s.primary_surgeon || s.surgeon_name || '',
+        anaesthesia_type: s.anaesthesia_type || s.anesthesia_type || '',
+        theatre_number: s.theatre_number || s.operating_room || '',
+        estimated_duration: s.estimated_duration || 0,
+        diagnosis: s.diagnosis || s.pre_op_notes || s.pre_op_diagnosis || '',
+        status: s.status || 'scheduled',
+        start_time: s.start_time || '',
+        case_category: s.case_category || '',
+        patient_age_at_booking: age || null,
+        patient_gender: s.patient_gender || s.gender || '',
+        proposed_ward: s.ward || s.patient_ward || '',
+        needs_blood_transfusion: s.needs_blood_transfusion || false,
+        blood_units_requested: s.blood_units_requested || 0,
+        is_emergency: s.is_emergency || false,
+        is_diabetic: s.is_diabetic || false,
+      };
+    };
 
     // Try server first
     if (navigator.onLine) {

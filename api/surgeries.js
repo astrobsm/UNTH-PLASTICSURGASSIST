@@ -50,9 +50,12 @@ async function getAllSurgeries(searchParams, res) {
   const date = searchParams.get('date');
 
   let queryStr = `
-    SELECT s.*, p.first_name, p.last_name, p.hospital_number
+    SELECT s.*, p.first_name, p.last_name, p.hospital_number,
+           p.gender, p.date_of_birth, p.ward AS patient_ward,
+           u.full_name AS surgeon_name
     FROM surgeries s
     LEFT JOIN patients p ON s.patient_id = p.id
+    LEFT JOIN users u ON s.surgeon_id = u.id
     WHERE 1=1
   `;
   const params = [];
@@ -85,9 +88,12 @@ async function getAllSurgeries(searchParams, res) {
 
 async function getSurgery(id, res) {
   const result = await query(
-    `SELECT s.*, p.first_name, p.last_name, p.hospital_number
+    `SELECT s.*, p.first_name, p.last_name, p.hospital_number,
+            p.gender, p.date_of_birth, p.ward AS patient_ward,
+            u.full_name AS surgeon_name
      FROM surgeries s
      LEFT JOIN patients p ON s.patient_id = p.id
+     LEFT JOIN users u ON s.surgeon_id = u.id
      WHERE s.id = $1`,
     [id]
   );
@@ -103,7 +109,10 @@ async function createSurgery(data, user, res) {
   const {
     patientId, procedureName, procedureType, scheduledDate, estimatedDuration,
     surgeonId, anesthesiaType, operatingRoom, preOpNotes, requiredEquipment,
-    status = 'scheduled'
+    status = 'scheduled',
+    diagnosis, primarySurgeon, startTime, caseCategory, ward,
+    patientAgeAtBooking, patientGender,
+    needsBloodTransfusion, bloodUnitsRequested, isEmergency, isDiabetic
   } = data;
 
   if (!patientId || !procedureName || !scheduledDate) {
@@ -114,14 +123,23 @@ async function createSurgery(data, user, res) {
     `INSERT INTO surgeries (
       patient_id, procedure_name, procedure_type, scheduled_date, estimated_duration,
       surgeon_id, anesthesia_type, operating_room, pre_op_notes, required_equipment,
-      status, created_by
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      status, created_by,
+      diagnosis, primary_surgeon, start_time, case_category, ward,
+      patient_age_at_booking, patient_gender,
+      needs_blood_transfusion, blood_units_requested, is_emergency, is_diabetic
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+              $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
     RETURNING *`,
     [
       patientId, procedureName, procedureType, scheduledDate, estimatedDuration,
       surgeonId, anesthesiaType, operatingRoom, preOpNotes,
       JSON.stringify(requiredEquipment || []),
-      status, user.id
+      status, user.id,
+      diagnosis || null, primarySurgeon || null, startTime || null,
+      caseCategory || null, ward || null,
+      patientAgeAtBooking || null, patientGender || null,
+      needsBloodTransfusion || false, bloodUnitsRequested || 0,
+      isEmergency || false, isDiabetic || false
     ]
   );
 
@@ -146,7 +164,18 @@ async function updateSurgery(id, data, res) {
     requiredEquipment: 'required_equipment',
     status: 'status',
     actualStartTime: 'actual_start_time',
-    actualEndTime: 'actual_end_time'
+    actualEndTime: 'actual_end_time',
+    diagnosis: 'diagnosis',
+    primarySurgeon: 'primary_surgeon',
+    startTime: 'start_time',
+    caseCategory: 'case_category',
+    ward: 'ward',
+    patientAgeAtBooking: 'patient_age_at_booking',
+    patientGender: 'patient_gender',
+    needsBloodTransfusion: 'needs_blood_transfusion',
+    bloodUnitsRequested: 'blood_units_requested',
+    isEmergency: 'is_emergency',
+    isDiabetic: 'is_diabetic'
   };
 
   for (const [key, dbField] of Object.entries(fieldMap)) {

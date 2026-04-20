@@ -778,7 +778,7 @@ export const Patients: React.FC = () => {
                           {patient.phone}
                         </span>
                         
-                        <span className="hidden sm:flex items-center">
+                        <span className="flex items-center">
                           <svg className="mr-1 h-3.5 w-3.5 sm:h-4 sm:w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3a2 2 0 012-2h4a2 2 0 012 2v4m-6 4h6m-6 4h6m-6 4h6M3 7h18" />
                           </svg>

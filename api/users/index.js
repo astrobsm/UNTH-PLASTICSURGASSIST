@@ -167,7 +167,7 @@ export default async function handler(req, res) {
         if (userId) {
           return await getUser(userId, res);
         }
-        return await getAllUsers(auth.user, res);
+        return await getAllUsers(auth.user, res, req);
       case 'POST':
         if (userId === 'bulk-import') {
           return await bulkImportUsers(req.body, auth.user, res);
@@ -205,14 +205,21 @@ export default async function handler(req, res) {
   }
 }
 
-async function getAllUsers(currentUser, res) {
+async function getAllUsers(currentUser, res, req) {
   // All authenticated users can view the staff directory (read-only)
   // Write operations (create, update, delete) have their own admin checks
 
-  const result = await query(
-    `SELECT id, username, email, full_name, role, phone, is_approved, is_active, created_at, last_login
-     FROM users WHERE (app_id = 'psa' OR app_id IS NULL) ORDER BY created_at DESC`
-  );
+  // Support ?active_only=true to exclude deactivated users
+  const url = new URL(req.url || '', `http://${req.headers?.host || 'localhost'}`);
+  const activeOnly = url.searchParams.get('active_only') === 'true';
+
+  const sqlQuery = activeOnly
+    ? `SELECT id, username, email, full_name, role, phone, is_approved, is_active, created_at, last_login
+       FROM users WHERE (app_id = 'psa' OR app_id IS NULL) AND is_active = true AND is_approved = true ORDER BY created_at DESC`
+    : `SELECT id, username, email, full_name, role, phone, is_approved, is_active, created_at, last_login
+       FROM users WHERE (app_id = 'psa' OR app_id IS NULL) ORDER BY created_at DESC`;
+
+  const result = await query(sqlQuery);
 
   return res.status(200).json({ users: result.rows });
 }
