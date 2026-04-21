@@ -710,11 +710,11 @@ class MCQGenerationService {
    * Schedule test for next Tuesday 9 AM
    */
   async scheduleTest(topic: ClinicalTopic): Promise<MCQTestSchedule> {
-    const nextTuesday = this.getNextTuesday9AM();
+    const scheduledFor = this.getNextTuesday9AM();
     
     const schedule: MCQTestSchedule = {
       id: this.generateId(),
-      scheduledFor: nextTuesday,
+      scheduledFor,
       topicId: topic.id,
       testDuration: 600, // 10 minutes in seconds
       totalQuestions: 25,
@@ -729,6 +729,36 @@ class MCQGenerationService {
     await this.createNotificationSchedules(schedule);
     
     return schedule;
+  }
+
+  /**
+   * Schedule an immediately-available test for the given level.
+   * Used when auto-initializing to ensure HOs always have a test to take.
+   */
+  async scheduleImmediateTest(
+    userLevel: 'house_officer' | 'junior_resident' | 'senior_resident'
+  ): Promise<void> {
+    // Pick any topic available for this level
+    const topics = await db.clinical_topics
+      .filter(t => t.targetLevels.includes(userLevel) && t.status === 'active')
+      .toArray();
+    if (topics.length === 0) return;
+
+    const topic = topics[0];
+    const now = new Date(Date.now() - 1000); // 1 second in the past so it's always available
+
+    const schedule: MCQTestSchedule = {
+      id: this.generateId(),
+      scheduledFor: now,
+      topicId: topic.id,
+      testDuration: 600,
+      totalQuestions: 25,
+      targetLevels: [userLevel],
+      status: 'scheduled',
+      notificationSent: false
+    };
+
+    await db.mcq_test_schedules.add(schedule);
   }
 
   /**
@@ -782,20 +812,37 @@ class MCQGenerationService {
     const schedule = await db.mcq_test_schedules.get(scheduleId);
     if (!schedule) throw new Error('Test schedule not found');
     
-    // Get 25 questions for the user's level
-    const questions = await db.generated_mcqs
+    // Get questions for the user's level (from this topic or any topic)
+    let questions = await db.generated_mcqs
       .where('topicId')
       .equals(schedule.topicId)
       .and(q => q.targetLevel === userLevel)
-      .limit(25)
       .toArray();
 
-    if (questions.length < 25) {
-      throw new Error('Insufficient questions for test');
+    // Fallback: if no questions for this specific topic, use any available questions for the level
+    if (questions.length === 0) {
+      questions = await db.generated_mcqs
+        .where('targetLevel')
+        .equals(userLevel)
+        .toArray();
     }
 
-    // Shuffle questions
-    const shuffledQuestions = this.shuffleArray(questions);
+    if (questions.length === 0) {
+      throw new Error('No questions available. Please ask your administrator to upload clinical topics first.');
+    }
+
+    // If fewer than 25, repeat questions to fill up to 25
+    const targetCount = 25;
+    if (questions.length < targetCount) {
+      const originalQuestions = [...questions];
+      while (questions.length < targetCount) {
+        const remaining = targetCount - questions.length;
+        questions = questions.concat(originalQuestions.slice(0, remaining).map(q => ({ ...q, id: q.id + '_r' + questions.length })));
+      }
+    }
+
+    // Shuffle questions and take 25
+    const shuffledQuestions = this.shuffleArray(questions).slice(0, targetCount);
 
     const session: MCQTestSession = {
       id: this.generateId(),
@@ -879,6 +926,36 @@ class MCQGenerationService {
     session.weakAreas = [...new Set(weakAreas)];
 
     await db.mcq_test_sessions.put(session);
+
+    // Sync result to server for persistent cross-device storage
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (token) {
+        const baseUrl = (import.meta as any).env?.PROD ? '/api' : 'http://localhost:3005/api';
+        // Use completedAt timestamp as unique test number to avoid conflicts
+        const testNumber = session.completedAt ? new Date(session.completedAt).getTime() : Date.now();
+        await fetch(`${baseUrl}/cbt?action=submit`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            level: session.userLevel,
+            testNumber,
+            answers: session.answers,
+            score: session.rawScore,
+            percentage: session.percentageScore,
+            passed: session.passed,
+            startTime: session.startedAt,
+            endTime: session.completedAt
+          })
+        });
+      }
+    } catch (syncErr) {
+      // Don't fail — result is already saved locally in IndexedDB
+      console.warn('Could not sync CBT result to server (will retry on next sync):', syncErr);
+    }
 
     // Generate AI recommendations and study materials
     await this.generateAIRecommendations(session);
@@ -1354,24 +1431,76 @@ Apply these algorithms systematically in your clinical practice.`
   }
 
   /**
-   * Get user's test history
+   * Get user's test history — combines local IndexedDB + server records
    */
   async getUserTestHistory(userId: string): Promise<MCQTestSession[]> {
-    return await db.mcq_test_sessions
+    const localSessions = await db.mcq_test_sessions
       .where('userId')
       .equals(userId)
       .reverse()
       .toArray();
+
+    // Also fetch from server to recover records lost when browser cache is cleared
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (token) {
+        const baseUrl = (import.meta as any).env?.PROD ? '/api' : 'http://localhost:3005/api';
+        const res = await fetch(`${baseUrl}/cbt?action=attempts`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const serverAttempts: any[] = data.attempts || [];
+          for (const attempt of serverAttempts) {
+            if (!attempt.completed) continue;
+            // Check if this record is already in local history (within 60s window)
+            const alreadyLocal = localSessions.some(s =>
+              s.completedAt &&
+              Math.abs(new Date(s.completedAt).getTime() - new Date(attempt.end_time || attempt.created_at).getTime()) < 60000 &&
+              s.userLevel === attempt.level
+            );
+            if (!alreadyLocal) {
+              // Restore server record as a minimal MCQTestSession
+              localSessions.push({
+                id: String(attempt.id),
+                userId: String(attempt.user_id),
+                userLevel: attempt.level,
+                scheduleId: '',
+                topicId: '',
+                questions: [],
+                answers: attempt.answers || {},
+                startedAt: new Date(attempt.start_time || attempt.created_at),
+                completedAt: new Date(attempt.end_time || attempt.created_at),
+                timeRemaining: 0,
+                rawScore: attempt.score || 0,
+                percentageScore: attempt.percentage || 0,
+                passed: attempt.passed || false,
+                weakAreas: [],
+                studyMaterialGenerated: false
+              });
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Could not fetch server CBT history:', err);
+    }
+
+    return localSessions.sort((a, b) => {
+      const aTime = a.completedAt ? new Date(a.completedAt).getTime() : 0;
+      const bTime = b.completedAt ? new Date(b.completedAt).getTime() : 0;
+      return bTime - aTime;
+    });
   }
 
   /**
-   * Get upcoming test schedules
+   * Get upcoming test schedules — includes tests from past 30 days (in case user missed them)
    */
   async getUpcomingTests(userLevel: string): Promise<MCQTestSchedule[]> {
-    const now = new Date();
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     return await db.mcq_test_schedules
       .where('scheduledFor')
-      .above(now)
+      .above(thirtyDaysAgo)
       .and(schedule => schedule.targetLevels.includes(userLevel as any))
       .toArray();
   }

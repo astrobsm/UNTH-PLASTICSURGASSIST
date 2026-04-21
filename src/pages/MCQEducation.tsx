@@ -109,10 +109,30 @@ const MCQEducation: React.FC = () => {
         cmeWACSService.getAllArticles()
       ]);
 
-      setUpcomingTests(upcomingData || []);
-      // Filter out incomplete sessions that might cause errors
-      const validHistory = (historyData || []).filter(session => 
-        session && Array.isArray(session.questions) && session.answers
+      let tests = upcomingData || [];
+
+      // Auto-initialize WACS topics if no tests are scheduled yet
+      if (tests.length === 0) {
+        try {
+          await mcqGenerationService.initializeWACSTopics();
+          // After initialization, schedule tests starting NOW so they are immediately available
+          const newTests = await mcqGenerationService.getUpcomingTests(userLevel);
+          if (newTests.length === 0) {
+            // Force-schedule one available test right now
+            await mcqGenerationService.scheduleImmediateTest(userLevel as any);
+            tests = await mcqGenerationService.getUpcomingTests(userLevel);
+          } else {
+            tests = newTests;
+          }
+        } catch (initErr) {
+          console.warn('Auto-init failed:', initErr);
+        }
+      }
+
+      setUpcomingTests(tests);
+      // Accept all sessions including server-restored ones (may have empty questions array)
+      const validHistory = (historyData || []).filter(session =>
+        session && session.answers
       );
       setTestHistory(validHistory);
       setCmeArticles(articlesData || []);
@@ -473,11 +493,10 @@ const MCQEducation: React.FC = () => {
                   
                   <button
                     onClick={() => handleStartTest(schedule)}
-                    disabled={new Date() < new Date(schedule.scheduledFor)}
-                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md font-medium flex items-center gap-2"
                   >
                     <Play className="w-4 h-4" />
-                    {new Date() < new Date(schedule.scheduledFor) ? 'Not Available' : 'Start Test'}
+                    Start Test
                   </button>
                 </div>
               </div>
