@@ -52,6 +52,12 @@ const MCQEducation: React.FC = () => {
   const [showExplanation, setShowExplanation] = useState(false);
   const [testCompleted, setTestCompleted] = useState(false);
 
+  // CBT weekly window state (Tue 8am – Wed 8pm, one attempt/week)
+  const [cbtWindowOpen, setCbtWindowOpen] = useState(false);
+  const [cbtWindow, setCbtWindow] = useState<{ open: Date; close: Date } | null>(null);
+  const [takenThisWeek, setTakenThisWeek] = useState(false);
+  const [showTuesdayReminder, setShowTuesdayReminder] = useState(false);
+
   // Results and history
   const [testHistory, setTestHistory] = useState<MCQTestSession[]>([]);
   const [studyMaterials, setStudyMaterials] = useState<StudyMaterial | null>(null);
@@ -137,6 +143,24 @@ const MCQEducation: React.FC = () => {
       setTestHistory(validHistory);
       setCmeArticles(articlesData || []);
       setFilteredArticles(articlesData || []);
+
+      // ── Compute CBT weekly availability ──
+      const now = new Date();
+      const win = mcqGenerationService.getCBTWindow(now);
+      setCbtWindow(win);
+      setCbtWindowOpen(mcqGenerationService.isCBTWindowOpen(now));
+      const taken = await mcqGenerationService.hasUserTakenThisWeek(user?.id || 'anonymous', now);
+      setTakenThisWeek(taken);
+
+      // ── Tuesday-morning reminder (every Tuesday between 6 AM and 12 noon) ──
+      const isTuesday = now.getDay() === 2;
+      const isMorning = now.getHours() >= 6 && now.getHours() < 12;
+      if (isTuesday && isMorning && !taken) {
+        const dismissedKey = `cbt-tue-reminder-${now.toISOString().slice(0, 10)}`;
+        if (!localStorage.getItem(dismissedKey)) {
+          setShowTuesdayReminder(true);
+        }
+      }
     } catch (error) {
       console.error('Error loading data:', error);
     }
@@ -222,7 +246,7 @@ const MCQEducation: React.FC = () => {
       setActiveTab('active-test');
     } catch (error) {
       console.error('Error starting test:', error);
-      alert('Error starting test');
+      alert((error as Error)?.message || 'Error starting test');
     }
   };
 
@@ -441,8 +465,9 @@ const MCQEducation: React.FC = () => {
               </h4>
               <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
                 <li>System generates 25 clinical scenario MCQs for each selected level</li>
-                <li>Test automatically scheduled for next Tuesday at 9:00 AM</li>
-                <li>Push notifications sent to all users in target levels</li>
+                <li>Test window: every <strong>Tuesday 8:00 AM – Wednesday 8:00 PM</strong></li>
+                <li>One CBT attempt per trainee per week</li>
+                <li>Reminder notification sent every Tuesday morning</li>
                 <li>Each question worth 4 marks, wrong answer: -1 mark</li>
                 <li>Test duration: 10 minutes with countdown timer</li>
                 <li>Real-time scoring and recommendations</li>
@@ -455,7 +480,68 @@ const MCQEducation: React.FC = () => {
 
       <div className="bg-gradient-to-br from-green-50 to-blue-50 rounded-lg shadow-md p-6">
         <h3 className="text-xl font-bold text-gray-900 mb-4">Upcoming Assessments</h3>
-        
+
+        {/* Tuesday morning reminder banner */}
+        {showTuesdayReminder && (
+          <div className="mb-4 p-4 rounded-md bg-amber-50 border border-amber-300 flex items-start justify-between gap-3">
+            <div>
+              <p className="font-semibold text-amber-900">⏰ Weekly CBT Reminder</p>
+              <p className="text-sm text-amber-800 mt-1">
+                Your weekly CBT is open <strong>today (Tuesday) from 8:00 AM</strong> until <strong>Wednesday 8:00 PM</strong>.
+                You get one attempt only — please take it before the window closes.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                const today = new Date().toISOString().slice(0, 10);
+                localStorage.setItem(`cbt-tue-reminder-${today}`, '1');
+                setShowTuesdayReminder(false);
+              }}
+              className="text-amber-700 hover:text-amber-900 text-sm underline shrink-0"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
+        {/* Weekly window status */}
+        {cbtWindow && (
+          <div className={`mb-4 p-3 rounded-md text-sm border ${
+            takenThisWeek
+              ? 'bg-blue-50 border-blue-300 text-blue-900'
+              : cbtWindowOpen
+                ? 'bg-green-50 border-green-300 text-green-900'
+                : 'bg-gray-50 border-gray-300 text-gray-700'
+          }`}>
+            {takenThisWeek ? (
+              <>
+                ✅ You have completed this week's CBT. Next attempt available{' '}
+                <strong>{new Date(cbtWindow.open).toLocaleString(undefined, {
+                  weekday: 'long', month: 'short', day: 'numeric',
+                  hour: 'numeric', minute: '2-digit'
+                })}</strong>.
+              </>
+            ) : cbtWindowOpen ? (
+              <>
+                🟢 CBT window is <strong>OPEN</strong>. Closes{' '}
+                <strong>{new Date(cbtWindow.close).toLocaleString(undefined, {
+                  weekday: 'long', month: 'short', day: 'numeric',
+                  hour: 'numeric', minute: '2-digit'
+                })}</strong>. One attempt allowed this week.
+              </>
+            ) : (
+              <>
+                🔒 CBT is only available <strong>Tuesday 8:00 AM – Wednesday 8:00 PM</strong>.
+                Next window opens{' '}
+                <strong>{new Date(cbtWindow.open).toLocaleString(undefined, {
+                  weekday: 'long', month: 'short', day: 'numeric',
+                  hour: 'numeric', minute: '2-digit'
+                })}</strong>.
+              </>
+            )}
+          </div>
+        )}
+
         {upcomingTests.length === 0 ? (
           <p className="text-gray-600">No upcoming tests scheduled</p>
         ) : (
@@ -493,10 +579,22 @@ const MCQEducation: React.FC = () => {
                   
                   <button
                     onClick={() => handleStartTest(schedule)}
-                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md font-medium flex items-center gap-2"
+                    disabled={!cbtWindowOpen || takenThisWeek}
+                    title={
+                      takenThisWeek
+                        ? 'You have already taken this week\'s CBT'
+                        : !cbtWindowOpen
+                          ? 'CBT is only available Tue 8:00 AM – Wed 8:00 PM'
+                          : 'Start the test'
+                    }
+                    className={`px-4 py-2 rounded-md font-medium flex items-center gap-2 text-white ${
+                      (!cbtWindowOpen || takenThisWeek)
+                        ? 'bg-gray-400 cursor-not-allowed'
+                        : 'bg-green-600 hover:bg-green-700'
+                    }`}
                   >
                     <Play className="w-4 h-4" />
-                    Start Test
+                    {takenThisWeek ? 'Already Taken' : !cbtWindowOpen ? 'Window Closed' : 'Start Test'}
                   </button>
                 </div>
               </div>

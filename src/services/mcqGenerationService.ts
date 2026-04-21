@@ -732,8 +732,67 @@ class MCQGenerationService {
   }
 
   /**
-   * Schedule an immediately-available test for the given level.
-   * Used when auto-initializing to ensure HOs always have a test to take.
+   * Compute this week's CBT availability window.
+   * Window opens Tuesday 8:00 AM and closes Wednesday 8:00 PM (local time).
+   * If "now" is past this week's Wednesday 8 PM, returns NEXT week's window.
+   */
+  getCBTWindow(now: Date = new Date()): { open: Date; close: Date } {
+    const open = new Date(now);
+    // 0=Sun, 1=Mon, 2=Tue, 3=Wed, ...
+    const day = open.getDay();
+    // Days to roll back to this week's Tuesday (could be negative meaning forward)
+    let diff = 2 - day; // Tuesday
+    open.setDate(open.getDate() + diff);
+    open.setHours(8, 0, 0, 0);
+
+    const close = new Date(open);
+    close.setDate(close.getDate() + 1); // Wednesday
+    close.setHours(20, 0, 0, 0);        // 8:00 PM
+
+    // If we're already past this week's close, advance to next week's window.
+    if (now.getTime() > close.getTime()) {
+      open.setDate(open.getDate() + 7);
+      close.setDate(close.getDate() + 7);
+    }
+    return { open, close };
+  }
+
+  /**
+   * Is the CBT window currently open (Tue 8am – Wed 8pm)?
+   */
+  isCBTWindowOpen(now: Date = new Date()): boolean {
+    const { open, close } = this.getCBTWindow(now);
+    return now.getTime() >= open.getTime() && now.getTime() <= close.getTime();
+  }
+
+  /**
+   * Has this user already taken a CBT in the current weekly window?
+   * Counts any session started between this week's Tue 8am and the next Tue 8am.
+   */
+  async hasUserTakenThisWeek(userId: string, now: Date = new Date()): Promise<boolean> {
+    const { open } = this.getCBTWindow(now);
+    // Week boundary: from this Tue 8am to next Tue 8am
+    const weekStart = new Date(open);
+    // If we're BEFORE this week's open, the relevant week is the previous one
+    if (now.getTime() < open.getTime()) {
+      weekStart.setDate(weekStart.getDate() - 7);
+    }
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 7);
+
+    const sessions = await db.mcq_test_sessions
+      .where('userId').equals(userId)
+      .toArray();
+    return sessions.some(s => {
+      const t = s.startedAt ? new Date(s.startedAt).getTime() : 0;
+      return t >= weekStart.getTime() && t < weekEnd.getTime();
+    });
+  }
+
+  /**
+   * Ensure this week's CBT schedule exists for the given level.
+   * Schedules a single test for THIS week's Tuesday 8 AM (or the upcoming one).
+   * Idempotent: will not duplicate if a schedule already exists for this week.
    */
   async scheduleImmediateTest(
     userLevel: 'house_officer' | 'junior_resident' | 'senior_resident'
@@ -745,11 +804,21 @@ class MCQGenerationService {
     if (topics.length === 0) return;
 
     const topic = topics[0];
-    const now = new Date(Date.now() - 1000); // 1 second in the past so it's always available
+    const { open: windowOpen, close: windowClose } = this.getCBTWindow();
+
+    // De-dupe: if a schedule for this level already exists in [open-7d, close],
+    // don't create another one.
+    const oneWeekBefore = new Date(windowOpen);
+    oneWeekBefore.setDate(oneWeekBefore.getDate() - 7);
+    const existing = await db.mcq_test_schedules
+      .where('scheduledFor').above(oneWeekBefore)
+      .and(s => s.targetLevels.includes(userLevel) && new Date(s.scheduledFor).getTime() <= windowClose.getTime())
+      .toArray();
+    if (existing.length > 0) return;
 
     const schedule: MCQTestSchedule = {
       id: this.generateId(),
-      scheduledFor: now,
+      scheduledFor: windowOpen, // This week's Tuesday 8 AM
       topicId: topic.id,
       testDuration: 600,
       totalQuestions: 25,
@@ -793,7 +862,7 @@ class MCQGenerationService {
         scheduleId: schedule.id,
         scheduledFor: schedule.scheduledFor,
         sent: false,
-        message: `ðŸŽ¯ New CME Test Available! Topic: "${await this.getTopicTitle(schedule.topicId)}". Test opens Tuesday 9:00 AM. Duration: 10 minutes, 25 questions. Good luck!`,
+        message: `🎯 New CME Test Available! Topic: "${await this.getTopicTitle(schedule.topicId)}". Window: Tuesday 8:00 AM – Wednesday 8:00 PM (one attempt only). Duration: 10 minutes, 25 questions. Good luck!`,
         type: 'test_reminder'
       };
       
@@ -809,6 +878,27 @@ class MCQGenerationService {
     userLevel: 'house_officer' | 'junior_resident' | 'senior_resident',
     scheduleId: string
   ): Promise<MCQTestSession> {
+    // ── Enforce weekly availability window: Tue 8 AM – Wed 8 PM ──
+    if (!this.isCBTWindowOpen()) {
+      const { open, close } = this.getCBTWindow();
+      const fmt = (d: Date) => d.toLocaleString(undefined, {
+        weekday: 'long', month: 'short', day: 'numeric',
+        hour: 'numeric', minute: '2-digit'
+      });
+      throw new Error(
+        `CBT is only available between Tuesday 8:00 AM and Wednesday 8:00 PM. ` +
+        `The next window opens ${fmt(open)} and closes ${fmt(close)}.`
+      );
+    }
+
+    // ── Enforce one CBT per week per user ──
+    if (await this.hasUserTakenThisWeek(userId)) {
+      throw new Error(
+        'You have already taken this week\'s CBT. Only one attempt per week is allowed. ' +
+        'The next CBT window opens next Tuesday at 8:00 AM.'
+      );
+    }
+
     const schedule = await db.mcq_test_schedules.get(scheduleId);
     if (!schedule) throw new Error('Test schedule not found');
     
