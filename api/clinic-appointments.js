@@ -129,10 +129,10 @@ export default async function handler(req, res) {
   // Use req.query (Vercel pre-parsed) with URL fallback
   let action, searchParams;
   try {
-    const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-    const pathParts = url.pathname.replace('/api/clinic-appointments', '').split('/').filter(Boolean);
+    const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+    const pathParts = parsedUrl.pathname.replace('/api/clinic-appointments', '').split('/').filter(Boolean);
     action = pathParts[0] || req.query?.action;
-    searchParams = url.searchParams;
+    searchParams = parsedUrl.searchParams;
   } catch {
     action = req.query?.action;
     searchParams = { get: (k) => req.query?.[k] };
@@ -148,7 +148,7 @@ export default async function handler(req, res) {
 
     // PUBLIC endpoints (no auth required for patient booking)
     if (method === 'GET' && action === 'available-slots') {
-      return await getAvailableSlots(url.searchParams, res);
+      return await getAvailableSlots(searchParams, res);
     }
     if (method === 'POST' && action === 'book') {
       return await bookAppointment(req.body, res);
@@ -163,9 +163,9 @@ export default async function handler(req, res) {
     switch (method) {
       case 'GET':
         if (action === 'all') {
-          return await getAllAppointments(url.searchParams, auth.user, res);
+          return await getAllAppointments(searchParams, auth.user, res);
         }
-        return await getAllAppointments(url.searchParams, auth.user, res);
+        return await getAllAppointments(searchParams, auth.user, res);
       case 'PUT':
       case 'PATCH':
         if (!action) return res.status(400).json({ error: 'Appointment ID required' });
