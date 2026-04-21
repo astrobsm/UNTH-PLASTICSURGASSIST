@@ -51,7 +51,7 @@ if ('serviceWorker' in navigator) {
     try {
       const registration = await navigator.serviceWorker.register(
         '/sw.js',
-        { type: 'classic', scope: '/' }
+        { type: 'classic', scope: '/', updateViaCache: 'none' }
       );
       swRegistration = registration;
       console.log('✅ Service Worker registered:', registration.scope);
@@ -130,24 +130,48 @@ if ('serviceWorker' in navigator) {
   });
 
   // ── Aggressively pre-warm critical API caches when coming back online ──
-  window.addEventListener('online', () => {
-    if (navigator.serviceWorker.controller) {
-      navigator.serviceWorker.controller.postMessage({
-        type: 'CACHE_URLS',
-        payload: {
-          cacheName: `api-cache-v9`,
-          urls: [
-            '/api/patients',
-            '/api/admissions/active',
-            '/api/treatment-plans',
-            '/api/prescriptions',
-            '/api/users/approved',
-          ],
-        },
-      });
-      console.log('🔄 Re-warming critical API caches after reconnection');
-    }
+  window.addEventListener('online', async () => {
+    if (!navigator.serviceWorker.controller) return;
+    // Discover the live API cache name dynamically (SW bumps the version number)
+    let cacheName = 'api-cache-v9';
+    try {
+      const names = await caches.keys();
+      const apiCache = names.find(n => n.startsWith('api-cache-'));
+      if (apiCache) cacheName = apiCache;
+    } catch { /* ignore */ }
+
+    navigator.serviceWorker.controller.postMessage({
+      type: 'CACHE_URLS',
+      payload: {
+        cacheName,
+        urls: [
+          '/api/patients',
+          '/api/admissions/active',
+          '/api/treatment-plans',
+          '/api/prescriptions',
+          '/api/users/approved',
+        ],
+      },
+    });
+    console.log('🔄 Re-warming critical API caches after reconnection →', cacheName);
+    // Flush any queued offline mutations now that we're back online
+    offlineManager.forceSync().catch(() => {});
   });
+
+  // ── iOS / Safari foreground sync poller ─────────────────────────────
+  // Safari on iOS has NO Background Sync API and NO Periodic Sync API.
+  // To keep the offline queue draining, poll every 60s while the tab is
+  // visible AND we're online. This is cheap (only fires when queue isn't empty).
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+  const hasPeriodicSync = swRegistration && 'periodicSync' in swRegistration;
+  if (isIOS || !hasPeriodicSync) {
+    setInterval(() => {
+      if (document.visibilityState === 'visible' && navigator.onLine) {
+        offlineManager.forceSync().catch(() => {});
+      }
+    }, 60 * 1000); // every 60s
+    console.log('🍎 iOS/no-periodic-sync detected — foreground sync poller enabled (60s)');
+  }
 }
 
 // Allow SW to skip waiting (called from update banner)
@@ -181,11 +205,41 @@ export async function checkForUpdates(): Promise<boolean> {
 console.log('🔌 Offline Manager initialized');
 
 // ─── Request persistent storage ──────────────────────────────
-if (navigator.storage && navigator.storage.persist) {
-  navigator.storage.persist().then(persistent => {
-    console.log(persistent ? '💾 Storage: persistent (data will not be evicted)' : '⚠️ Storage: best-effort');
-  });
+// On iOS Safari this may be denied unless called after a user gesture.
+// We retry on the first pointerdown if the initial attempt is denied.
+async function requestPersistentStorage() {
+  if (!navigator.storage?.persist) return;
+  try {
+    const persistent = await navigator.storage.persist();
+    console.log(persistent
+      ? '💾 Storage: persistent (data will not be evicted)'
+      : '⚠️ Storage: best-effort (retry on user gesture)');
+    if (!persistent) {
+      // Retry once on first user interaction (iOS/Firefox requirement)
+      const retry = async () => {
+        document.removeEventListener('pointerdown', retry);
+        document.removeEventListener('keydown', retry);
+        try {
+          const p = await navigator.storage.persist();
+          if (p) console.log('💾 Storage: persistent granted after user gesture');
+        } catch { /* ignore */ }
+      };
+      document.addEventListener('pointerdown', retry, { once: true });
+      document.addEventListener('keydown', retry, { once: true });
+    }
+  } catch { /* ignore */ }
+
+  // Warn when storage is running low (>90% of quota used)
+  try {
+    if (navigator.storage.estimate) {
+      const { usage = 0, quota = 0 } = await navigator.storage.estimate();
+      if (quota > 0 && usage / quota > 0.9) {
+        console.warn(`⚠️ Storage usage high: ${(usage / 1024 / 1024).toFixed(1)} MB / ${(quota / 1024 / 1024).toFixed(1)} MB (${((usage / quota) * 100).toFixed(0)}%)`);
+      }
+    }
+  } catch { /* ignore */ }
 }
+requestPersistentStorage();
 
 // ─── React Query Client ──────────────────────────────────────
 const queryClient = new QueryClient({

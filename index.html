@@ -3,12 +3,25 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/favicon.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="Progressive Web App for plastic surgery clinical workflows - designed for interns and resident doctors" />
     <meta name="theme-color" content="#0E9F6E" />
     <meta name="app-version" content="5.0.0" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!-- iOS PWA Standalone Mode Support -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="PS Assistant" />
+    <meta name="format-detection" content="telephone=no" />
+    <!-- Prevent iOS from auto-zooming input fields on focus -->
+    <meta name="HandheldFriendly" content="true" />
+
+    <!-- iOS / Android home-screen icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="mask-icon" href="/logo.png" color="#0E9F6E" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+
     <!-- Google Fonts: Roboto (body) + Helvetica fallback via system -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
