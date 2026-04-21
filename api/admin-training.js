@@ -2,6 +2,9 @@
 // Provides admin oversight of all trainees, progress tracking, and warning notifications
 import { query } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
+// Reuse the unified metrics function so the admin table view shows the SAME
+// numbers as the HO Tracking card view (single source of truth).
+import { getHOFullMetrics } from './ho-tracking.js';
 
 const ADMIN_ROLES = ['consultant', 'super_admin', 'admin'];
 let tablesEnsured = false;
@@ -450,6 +453,63 @@ function getRequirements(level) {
 }
 
 async function getTraineeMetrics(userId, level, fullName, username) {
+  const lvl = level || 'house_officer';
+  const reqs = getRequirements(lvl);
+
+  // Delegate raw counts to the unified HO metrics function (same logic as the
+  // HO Tracking page, so both views stay perfectly in sync). It returns counts
+  // scored against house-officer thresholds; we re-score below using the
+  // requirements appropriate to this trainee's level (HO / JR / SR).
+  let hoResult;
+  try {
+    hoResult = await getHOFullMetrics(userId, fullName, username);
+  } catch (e) {
+    console.error('[admin-training] getHOFullMetrics failed:', e?.message || e);
+    return {
+      cbtTestsCompleted: 0,
+      cbtAvgScore: 0,
+      patientEntries: 0,
+      patientScore: 0,
+      dutiesCompleted: 0,
+      dutyScore: 0,
+      loginDays: 0,
+      attendanceScore: 0,
+      cmeTopicsCompleted: 0,
+      overallScore: 0,
+    };
+  }
+
+  const m = hoResult.metrics || {};
+  const cbtCompleted = m.cbtTestsCompleted || 0;
+  const cbtAvgScore = m.cbtAvgScore || 0;
+  const patientCount = m.patientEntries || 0;     // distinct patients served
+  const dutiesCount = m.dutiesCompleted || 0;
+  const loginDays = m.loginDays || 0;
+  const cmeCount = m.cmeTopicsCompleted || 0;
+
+  // Re-score using level-specific requirements
+  const patientScore = Math.min(100, (patientCount / reqs.patientEntries) * 100);
+  const dutyScore = Math.min(100, (dutiesCount / reqs.duties) * 100);
+  const attendanceScore = Math.min(100, (loginDays / reqs.loginDays) * 100);
+  const overallScore = (cbtAvgScore * 0.30) + (patientScore * 0.35) + (dutyScore * 0.25) + (attendanceScore * 0.10);
+
+  return {
+    cbtTestsCompleted: cbtCompleted,
+    cbtAvgScore: Math.round(cbtAvgScore * 10) / 10,
+    patientEntries: patientCount,
+    patientScore: Math.round(patientScore * 10) / 10,
+    dutiesCompleted: dutiesCount,
+    dutyScore: Math.round(dutyScore * 10) / 10,
+    loginDays,
+    attendanceScore: Math.round(attendanceScore * 10) / 10,
+    cmeTopicsCompleted: cmeCount,
+    overallScore: Math.round(overallScore * 10) / 10,
+  };
+}
+
+// Legacy local metrics implementation retained for reference (not used).
+// Replaced by delegation to getHOFullMetrics above.
+async function _legacyGetTraineeMetrics(userId, level, fullName, username) {
   const lvl = level || 'house_officer';
   const uid = String(userId);       // For VARCHAR user_id columns (audit_logs, cme_progress, cme_reading_progress)
   const uidInt = parseInt(userId);   // For INTEGER user_id columns (cbt_attempts, training_progress, activity_logs)

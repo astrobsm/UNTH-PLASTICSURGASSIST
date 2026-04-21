@@ -5,6 +5,10 @@ import { cors, authenticateRequest } from './_lib/auth.js';
 
 const ADMIN_ROLES = ['consultant', 'super_admin', 'admin', 'senior_registrar'];
 
+// Re-export the unified metrics function so other endpoints (e.g. admin-training)
+// can reuse the exact same calculation and produce harmonised numbers.
+export { getHOFullMetrics };
+
 export default async function handler(req, res) {
   if (cors(req, res)) return;
 
