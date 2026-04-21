@@ -742,7 +742,16 @@ const TreatmentPlanCreator: React.FC = () => {
                     </div>
                     <div>
                       <div className="font-medium">{selectedPatient.full_name || selectedPatient.name}</div>
-                      <div className="text-xs text-gray-600">HN: {selectedPatient.hospital_number} • Ward: {selectedPatient.ward || 'N/A'} • Age: {selectedPatient.age || 'N/A'}</div>
+                      <div className="text-xs text-gray-600">HN: {selectedPatient.hospital_number} • Ward: {selectedPatient.ward || 'N/A'} • Age: {(() => {
+                        const dob = selectedPatient.date_of_birth || selectedPatient.dob;
+                        if (selectedPatient.age) return `${selectedPatient.age}y`;
+                        if (!dob) return 'N/A';
+                        const d = new Date(dob);
+                        if (isNaN(d.getTime())) return 'N/A';
+                        const ageMs = Date.now() - d.getTime();
+                        const years = Math.floor(ageMs / (365.25 * 24 * 3600 * 1000));
+                        return years >= 0 ? `${years}y` : 'N/A';
+                      })()} • Sex: {(selectedPatient.gender || 'N/A').toString().charAt(0).toUpperCase()}</div>
                     </div>
                   </div>
                 </div>
