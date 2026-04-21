@@ -17,7 +17,10 @@ export interface CacheWarmProgress {
 
 type ProgressCallback = (progress: CacheWarmProgress) => void;
 
-// All GET endpoints to prefetch, grouped by module name
+// All GET endpoints to prefetch, grouped by module name.
+// IMPORTANT: Only list endpoints that actually exist in /api. Non-existent
+// endpoints return HTTP 404/405 which are now treated as "skipped" (not
+// failed), but pruning them here keeps the progress total honest.
 const CACHE_ENDPOINTS: { module: string; endpoints: string[] }[] = [
   {
     module: 'Patients',
@@ -44,8 +47,8 @@ const CACHE_ENDPOINTS: { module: string; endpoints: string[] }[] = [
     endpoints: ['/lab-orders', '/lab-results'],
   },
   {
-    module: 'Surgery Bookings',
-    endpoints: ['/surgery-bookings', '/surgeries'],
+    module: 'Surgeries',
+    endpoints: ['/surgeries'],
   },
   {
     module: 'Ward Rounds',
@@ -56,41 +59,16 @@ const CACHE_ENDPOINTS: { module: string; endpoints: string[] }[] = [
     endpoints: ['/wound-care'],
   },
   {
-    module: 'Blood Transfusions',
-    endpoints: ['/blood-transfusions'],
-  },
-  {
     module: 'Risk Assessments',
-    endpoints: [
-      '/risk-assessments',
-      '/dvt-assessments',
-      '/pressure-sore-assessments',
-      '/nutritional-assessments',
-    ],
+    endpoints: ['/risk-assessments'],
   },
   {
     module: 'Preoperative Assessments',
     endpoints: ['/preoperative-assessments'],
   },
   {
-    module: 'Burn Care',
-    endpoints: ['/burn-patients'],
-  },
-  {
     module: 'SJS/TEN Assessments',
     endpoints: ['/sjs-assessments'],
-  },
-  {
-    module: 'Diabetic Foot',
-    endpoints: ['/diabetic-foot'],
-  },
-  {
-    module: 'WHO Safety Checklists',
-    endpoints: ['/who-safety-checklists'],
-  },
-  {
-    module: 'Procedures',
-    endpoints: ['/procedures'],
   },
   {
     module: 'Progress Notes',
@@ -101,44 +79,20 @@ const CACHE_ENDPOINTS: { module: string; endpoints: string[] }[] = [
     endpoints: ['/mdt-patient-teams', '/mdt-meetings'],
   },
   {
-    module: 'Shopping Lists',
-    endpoints: ['/shopping-lists'],
-  },
-  {
-    module: 'Call Duty Roster',
-    endpoints: ['/call-duty-roster'],
-  },
-  {
     module: 'Clinic Duties',
     endpoints: ['/sync/clinic-duty-logs'],
   },
   {
     module: 'Clinic Appointments',
-    endpoints: ['/clinic-appointments', '/clinic-sessions'],
+    endpoints: ['/clinic-appointments'],
   },
   {
     module: 'Notice Board',
     endpoints: ['/notice-board'],
   },
   {
-    module: 'Chat Rooms',
-    endpoints: ['/chat-rooms'],
-  },
-  {
     module: 'Users & Roster',
     endpoints: ['/users'],
-  },
-  {
-    module: 'CBT Tests',
-    endpoints: ['/cbt-tests'],
-  },
-  {
-    module: 'CME Education',
-    endpoints: ['/cme-articles'],
-  },
-  {
-    module: 'Attendance',
-    endpoints: ['/attendance/summary'],
   },
   {
     module: 'Consults',
@@ -177,11 +131,22 @@ export async function warmCache(onProgress?: ProgressCallback): Promise<CacheWar
         await apiClient.get(endpoint);
         progress.cached++;
       } catch (err: any) {
-        // 404/403 are expected for modules the user may not have access to
+        // HTTP status-code based classification (apiClient attaches .status)
+        const status: number | undefined = err?.status;
         const msg = err?.message || String(err);
-        if (msg.includes('404') || msg.includes('403') || msg.includes('Not Found')) {
+
+        // "Expected" skip cases — endpoint unavailable or forbidden for this user.
+        // 401/403 = no access, 404/405 = endpoint doesn't exist, 501 = not implemented
+        const isExpectedSkip =
+          status === 401 || status === 403 ||
+          status === 404 || status === 405 ||
+          status === 501 ||
+          /404|403|401|405|501|Not Found|Forbidden|Unauthorized/i.test(msg);
+
+        if (isExpectedSkip) {
           progress.skipped++;
         } else {
+          // Real server error (5xx) or network failure — log but keep going
           progress.errors.push(`${group.module}: ${msg}`);
           progress.skipped++;
         }
@@ -191,7 +156,11 @@ export async function warmCache(onProgress?: ProgressCallback): Promise<CacheWar
     }
   }
 
-  progress.status = progress.errors.length > 5 ? 'error' : 'done';
+  // Only flag "error" if MORE THAN HALF of endpoints truly failed with real
+  // errors (not just missing/forbidden). This makes the UI honest: a few
+  // skipped modules shouldn't scare the user into thinking caching is broken.
+  const realFailureRate = progress.errors.length / Math.max(1, progress.total);
+  progress.status = realFailureRate > 0.5 ? 'error' : 'done';
   progress.currentModule = '';
   notify();
 

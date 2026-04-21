@@ -275,8 +275,13 @@ class ApiClient {
         if (errorData.debug) {
           console.error('API Error Debug:', errorData.debug);
         }
-        
-        throw new Error(errorMessage);
+
+        // Prefix the HTTP status code so callers (e.g. cacheWarmer) can
+        // distinguish expected 404/405/501 (endpoint not available) from
+        // real server errors.
+        const err = new Error(`[HTTP ${response.status}] ${errorMessage}`);
+        (err as any).status = response.status;
+        throw err;
       }
 
       // Update sync timestamp for successful mutations

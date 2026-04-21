@@ -1546,15 +1546,22 @@ export default function Dashboard() {
             )}
 
             {/* Done summary */}
-            {cacheProgress?.status === 'done' && cacheProgress.skipped > 0 && (
+            {cacheProgress?.status === 'done' && (
               <p className="text-xs text-gray-500 mt-1 text-center">
-                {cacheProgress.skipped} endpoint{cacheProgress.skipped !== 1 ? 's' : ''} skipped (not available)
+                ✓ {cacheProgress.cached} cached
+                {cacheProgress.skipped > 0 && `, ${cacheProgress.skipped} unavailable`}
+                {cacheProgress.errors.length > 0 && `, ${cacheProgress.errors.length} error${cacheProgress.errors.length !== 1 ? 's' : ''}`}
               </p>
             )}
             {cacheProgress?.status === 'error' && (
-              <p className="text-xs text-red-500 mt-1 text-center">
-                Some modules failed. Try again or check your connection.
-              </p>
+              <div className="mt-1 text-center">
+                <p className="text-xs text-red-600">
+                  Cache partially failed ({cacheProgress.cached} cached, {cacheProgress.errors.length} failed).
+                </p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Check your connection and try again.
+                </p>
+              </div>
             )}
           </div>
 
