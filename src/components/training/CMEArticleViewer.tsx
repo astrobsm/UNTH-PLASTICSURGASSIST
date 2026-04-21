@@ -246,13 +246,13 @@ const CMEArticleViewer: React.FC<CMEArticleViewerProps> = ({
     <div className="min-h-screen bg-gray-50">
       {/* Fraud Detection Alert */}
       {fraudDetected && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl max-w-md w-full shadow-2xl overflow-hidden">
-            <div className="bg-red-600 p-4 text-white flex items-center gap-3">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-start sm:items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-xl max-w-md w-full shadow-2xl my-4 sm:my-8 max-h-[calc(100vh-2rem)] flex flex-col">
+            <div className="bg-red-600 p-4 text-white flex items-center gap-3 rounded-t-xl flex-shrink-0">
               <Shield className="h-6 w-6" />
               <h3 className="font-bold text-lg">Reading Integrity Alert</h3>
             </div>
-            <div className="p-6">
+            <div className="p-6 overflow-y-auto flex-1">
               <p className="text-gray-700 mb-4">{fraudMessage}</p>
               <p className="text-sm text-gray-500 mb-4">
                 You must read each section for at least {MIN_SECTION_READ_TIME_SECONDS} seconds. 

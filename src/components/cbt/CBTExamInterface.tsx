@@ -425,8 +425,8 @@ const CBTExamInterface: React.FC<CBTExamInterfaceProps> = ({ test, attempt, onSu
       )}
       {/* Warning Modal */}
       {showWarning && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl p-6 max-w-md w-full shadow-2xl">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-start sm:items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full shadow-2xl my-4 sm:my-8 max-h-[calc(100vh-2rem)] overflow-y-auto">
             <div className="text-center">
               <div className="w-16 h-16 mx-auto mb-4 bg-amber-100 rounded-full flex items-center justify-center">
                 <svg className="w-8 h-8 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -447,8 +447,8 @@ const CBTExamInterface: React.FC<CBTExamInterfaceProps> = ({ test, attempt, onSu
       
       {/* Submit Confirmation Modal */}
       {showSubmitConfirm && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl p-6 max-w-md w-full shadow-2xl">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-start sm:items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full shadow-2xl my-4 sm:my-8 max-h-[calc(100vh-2rem)] overflow-y-auto">
             <h3 className="text-lg font-bold text-gray-800 mb-2">Submit Test?</h3>
             <p className="text-gray-600 mb-4">
               You have <strong>{test.questions.length - getAnsweredCount()}</strong> unanswered question(s).

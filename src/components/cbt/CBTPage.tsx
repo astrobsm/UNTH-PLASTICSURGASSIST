@@ -104,16 +104,16 @@ const CBTPage: React.FC<CBTPageProps> = ({ level, onBack }) => {
   // Pre-exam confirmation modal
   if (showPreExamModal && currentTest) {
     return (
-      <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden">
+      <div className="fixed inset-0 bg-black/50 z-50 flex items-start sm:items-center justify-center p-4 overflow-y-auto">
+        <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl my-4 sm:my-8 max-h-[calc(100vh-2rem)] flex flex-col">
           {/* Header */}
-          <div className="bg-gradient-to-r from-green-500 to-green-600 p-6 text-white">
+          <div className="bg-gradient-to-r from-green-500 to-green-600 p-6 text-white rounded-t-2xl flex-shrink-0">
             <h2 className="text-lg sm:text-2xl font-bold">Ready to Start?</h2>
             <p className="opacity-90 mt-1">{currentTest.title}</p>
           </div>
           
           {/* Content */}
-          <div className="p-6">
+          <div className="p-6 overflow-y-auto flex-1">
             <h3 className="font-semibold text-gray-800 mb-4">Before You Begin:</h3>
             
             <ul className="space-y-3 mb-6">

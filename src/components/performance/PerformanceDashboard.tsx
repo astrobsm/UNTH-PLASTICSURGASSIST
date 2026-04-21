@@ -682,13 +682,13 @@ const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({ level, onBa
       
       {/* Sign-Out Request Modal */}
       {showSignOutModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden">
-            <div className="bg-green-500 p-6 text-white">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-start sm:items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl my-4 sm:my-8 max-h-[calc(100vh-2rem)] flex flex-col">
+            <div className="bg-green-500 p-6 text-white rounded-t-2xl flex-shrink-0">
               <h2 className="text-xl font-bold">Request Sign-Out</h2>
               <p className="text-green-100 mt-1">Submit your rotation completion request</p>
             </div>
-            <div className="p-6">
+            <div className="p-6 overflow-y-auto flex-1">
               <div className="bg-green-50 rounded-lg p-4 mb-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                   <div>
