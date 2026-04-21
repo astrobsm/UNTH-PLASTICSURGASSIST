@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Calendar, Clock, User, Filter, RefreshCw, XCircle, CheckCircle, AlertTriangle, Copy, ExternalLink, Volume2, VolumeX, Bell, BellOff } from 'lucide-react';
 import { apiClient } from '../services/apiClient';
+import SurgeryScheduler from '../components/SurgeryScheduler';
 
 interface Appointment {
   id: number;
@@ -595,6 +596,9 @@ const ClinicAppointmentsPage: React.FC = () => {
             </table>
           </div>
         )}
+
+        {/* Surgery Scheduling Section */}
+        <SurgeryScheduler />
       </div>
     </div>
   );

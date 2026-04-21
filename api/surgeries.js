@@ -2,6 +2,84 @@
 import { query } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
 
+// ─── Theatre slate capacity rules ──────────────────────────────
+// Each day has 4 "case-points" of capacity:
+//   Major = 2 pts, Intermediate = 1 pt, Minor = 0.5 pt
+// Allowed combinations (all ≤ 4 pts):
+//   • 2 majors                    (4)
+//   • 1 major + 1 intermediate + 1 minor  (3.5)
+//   • 2 intermediate + 2 minor    (3)
+//   • 4 minor                     (2)
+// Elective surgeries: Wednesdays (3) and Thursdays (4) only.
+// Emergencies: any day, do not count against the slate.
+const CASE_POINTS = { major: 2, intermediate: 1, minor: 0.5 };
+const DAY_CAPACITY_POINTS = 4;
+const ELECTIVE_DAYS = [3, 4]; // Wed, Thu
+const MAX_PER_CATEGORY = { major: 2, intermediate: 2, minor: 4 };
+
+function isElectiveDayAllowed(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  return ELECTIVE_DAYS.includes(d.getDay());
+}
+
+async function getDayCapacity(dateStr) {
+  const result = await query(
+    `SELECT case_category, is_emergency
+     FROM surgeries
+     WHERE DATE(scheduled_date) = $1
+       AND status NOT IN ('cancelled', 'rescheduled')`,
+    [dateStr]
+  );
+  let usedPoints = 0;
+  const categoryCount = { major: 0, intermediate: 0, minor: 0 };
+  let emergencyCount = 0;
+  for (const row of result.rows) {
+    if (row.is_emergency) {
+      emergencyCount++;
+      continue; // Emergencies don't consume slate capacity
+    }
+    const cat = (row.case_category || '').toLowerCase();
+    if (cat in CASE_POINTS) {
+      usedPoints += CASE_POINTS[cat];
+      categoryCount[cat] = (categoryCount[cat] || 0) + 1;
+    }
+  }
+  return {
+    usedPoints,
+    remainingPoints: Math.max(0, DAY_CAPACITY_POINTS - usedPoints),
+    categoryCount,
+    emergencyCount,
+    capacity: DAY_CAPACITY_POINTS,
+  };
+}
+
+function validateBooking(scheduledDate, caseCategory, isEmergency, currentDayState) {
+  // Emergency: only require valid category, no date restriction
+  if (isEmergency) return { ok: true };
+
+  if (!isElectiveDayAllowed(scheduledDate)) {
+    return { ok: false, error: 'Elective surgeries are only allowed on Wednesdays and Thursdays. Mark as emergency to override.' };
+  }
+  const cat = (caseCategory || '').toLowerCase();
+  if (!(cat in CASE_POINTS)) {
+    return { ok: false, error: 'caseCategory must be one of: major, intermediate, minor' };
+  }
+  const newPoints = currentDayState.usedPoints + CASE_POINTS[cat];
+  if (newPoints > DAY_CAPACITY_POINTS) {
+    return {
+      ok: false,
+      error: `Day full (${currentDayState.usedPoints}/${DAY_CAPACITY_POINTS} pts used). Adding a ${cat} (${CASE_POINTS[cat]} pts) exceeds capacity.`,
+    };
+  }
+  if ((currentDayState.categoryCount[cat] || 0) + 1 > MAX_PER_CATEGORY[cat]) {
+    return {
+      ok: false,
+      error: `Maximum ${MAX_PER_CATEGORY[cat]} ${cat} cases per day already reached.`,
+    };
+  }
+  return { ok: true };
+}
+
 export default async function handler(req, res) {
   if (cors(req, res)) return;
 
@@ -14,8 +92,22 @@ export default async function handler(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const pathParts = url.pathname.replace('/api/surgeries', '').split('/').filter(Boolean);
   const surgeryId = pathParts[0];
+  const action = url.searchParams.get('action');
 
   try {
+    // Capacity probe — used by the UI before showing the form
+    if (method === 'GET' && action === 'day-capacity') {
+      const date = url.searchParams.get('date');
+      if (!date) return res.status(400).json({ error: 'date query param required (YYYY-MM-DD)' });
+      const cap = await getDayCapacity(date);
+      return res.status(200).json({
+        date,
+        ...cap,
+        rules: { CASE_POINTS, DAY_CAPACITY_POINTS, ELECTIVE_DAYS, MAX_PER_CATEGORY },
+        electiveAllowed: isElectiveDayAllowed(date),
+      });
+    }
+
     switch (method) {
       case 'GET':
         if (surgeryId) {
@@ -117,6 +209,14 @@ async function createSurgery(data, user, res) {
 
   if (!patientId || !procedureName || !scheduledDate) {
     return res.status(400).json({ error: 'Patient ID, procedure name, and scheduled date are required' });
+  }
+
+  // Theatre slate capacity validation
+  const dateOnly = String(scheduledDate).slice(0, 10);
+  const dayState = await getDayCapacity(dateOnly);
+  const valid = validateBooking(dateOnly, caseCategory, !!isEmergency, dayState);
+  if (!valid.ok) {
+    return res.status(409).json({ error: valid.error, capacity: dayState });
   }
 
   const result = await query(
