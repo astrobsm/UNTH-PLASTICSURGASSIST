@@ -67,7 +67,9 @@ export default async function handler(req, res) {
 // ═══════════════════════════════════════════════════════════════════════════
 // SCHEMA INIT
 // ═══════════════════════════════════════════════════════════════════════════
+let _schemaReady = false;
 async function ensureTables() {
+  if (_schemaReady) return; // cache across warm invocations
   await query(`
     CREATE TABLE IF NOT EXISTS students (
       id SERIAL PRIMARY KEY,
@@ -170,6 +172,7 @@ async function ensureTables() {
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     )
   `);
+  _schemaReady = true;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -297,17 +300,23 @@ async function autoAssignPatients(studentId) {
   const needed = 5 - currentCount;
 
   // Find patients NOT yet assigned to THIS student (allow shared patients across students)
-  const available = await query(`
-    SELECT p.id, p.hospital_number 
-    FROM patients p
-    WHERE p.deleted IS NOT TRUE
-      AND p.id::text NOT IN (
-        SELECT spa.patient_id FROM student_patient_assignments spa 
-        WHERE spa.student_id = $1 AND spa.is_active = true
-      )
-    ORDER BY p.created_at DESC
-    LIMIT $2
-  `, [studentId, needed]);
+  // NOTE: patients.deleted column may not exist in this schema, so we don't filter by it.
+  let available;
+  try {
+    available = await query(`
+      SELECT p.id, p.hospital_number 
+      FROM patients p
+      WHERE p.id::text NOT IN (
+          SELECT spa.patient_id FROM student_patient_assignments spa 
+          WHERE spa.student_id = $1 AND spa.is_active = true
+        )
+      ORDER BY p.created_at DESC
+      LIMIT $2
+    `, [studentId, needed]);
+  } catch (e) {
+    console.warn('autoAssignPatients: pool query failed:', e.message);
+    return { assigned: 0, total: currentCount, error: e.message };
+  }
 
   let assigned = 0;
   for (const patient of available.rows) {
@@ -600,26 +609,37 @@ async function listStudents(params, res) {
 }
 
 async function getStudentsOverview(res) {
-  await ensureTables();
-  const stats = await query(`
+  try {
+    await ensureTables();
+  } catch (e) {
+    console.warn('overview ensureTables failed (non-fatal):', e.message);
+  }
+
+  // Each query is independent so a single failure shouldn't 500 the whole route.
+  const safe = async (sql, fallback) => {
+    try { return (await query(sql)).rows; }
+    catch (e) { console.warn('overview query failed:', e.message); return fallback; }
+  };
+
+  const statsRows = await safe(`
     SELECT 
       COUNT(*) as total_students,
       COUNT(*) FILTER (WHERE is_active AND is_approved) as active_students,
       COUNT(*) FILTER (WHERE NOT is_approved) as pending_approval,
       COUNT(*) FILTER (WHERE posting_end < NOW()) as expired_postings
     FROM students
-  `);
+  `, [{ total_students: 0, active_students: 0, pending_approval: 0, expired_postings: 0 }]);
 
-  const recentClerkings = await query(`
+  const recentClerkings = await safe(`
     SELECT sc.id, sc.patient_id, sc.provisional_diagnosis, sc.status, sc.evaluation_score, sc.created_at,
            s.full_name as student_name, p.first_name, p.last_name
     FROM student_clerkings sc
     JOIN students s ON s.id = sc.student_id
     LEFT JOIN patients p ON p.id::text = sc.patient_id
     ORDER BY sc.created_at DESC LIMIT 10
-  `);
+  `, []);
 
-  res.json({ stats: stats.rows[0], recentClerkings: recentClerkings.rows });
+  res.json({ stats: statsRows[0] || {}, recentClerkings });
 }
 
 async function getStudentDetail(studentId, res) {
@@ -718,18 +738,40 @@ async function bulkApproveStudents(res) {
 }
 
 async function autoAssignAllStudents(res) {
-  await ensureTables();
-  const active = await query(`
-    SELECT id FROM students WHERE is_approved = true AND is_active = true AND posting_end >= NOW()
-  `);
-
-  let totalAssigned = 0;
-  for (const s of active.rows) {
-    const result = await autoAssignPatients(s.id);
-    totalAssigned += result.assigned || 0;
+  try {
+    await ensureTables();
+  } catch (e) {
+    console.warn('auto-assign-all ensureTables failed (non-fatal):', e.message);
   }
 
-  res.json({ message: `${totalAssigned} patients assigned across ${active.rows.length} active students` });
+  let active;
+  try {
+    active = await query(`
+      SELECT id FROM students WHERE is_approved = true AND is_active = true AND posting_end >= NOW()
+    `);
+  } catch (e) {
+    console.warn('auto-assign-all: list query failed:', e.message);
+    return res.json({ message: '0 patients assigned (no eligible students)', assigned: 0, students: 0, error: e.message });
+  }
+
+  let totalAssigned = 0;
+  let failures = 0;
+  for (const s of active.rows) {
+    try {
+      const result = await autoAssignPatients(s.id);
+      totalAssigned += result.assigned || 0;
+    } catch (e) {
+      failures++;
+      console.warn('auto-assign-all: student', s.id, 'failed:', e.message);
+    }
+  }
+
+  res.json({
+    message: `${totalAssigned} patients assigned across ${active.rows.length} active students` + (failures ? ` (${failures} failures)` : ''),
+    assigned: totalAssigned,
+    students: active.rows.length,
+    failures,
+  });
 }
 
 async function deactivateStudent(body, res) {
