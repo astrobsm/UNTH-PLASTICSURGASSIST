@@ -86,6 +86,10 @@ async function reverseGeocode(lat: number, lon: number): Promise<string | undefi
   if (now - lastGeocodeTime < CONFIG.GEOCODE_THROTTLE_MS) {
     return undefined; // rate-limited, skip
   }
+  // Skip when offline — saves a guaranteed 5s timeout + console error
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    return undefined;
+  }
   lastGeocodeTime = now;
 
   try {

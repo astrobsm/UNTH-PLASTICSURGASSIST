@@ -208,15 +208,17 @@ registerRoute(
       const response = await apiGetStrategy.handle(args);
       return response;
     } catch (_err) {
-      // Network failed and no cache hit — return rich offline metadata
-      // so the app can distinguish "no data" from "offline, no cache".
+      // Network failed and no cache hit — return 200 with rich offline metadata
+      // (200, not 503, to avoid noisy browser-level network error logs while offline).
+      // Apps detect offline mode via the X-Offline header and the _offline flag.
       return new Response(JSON.stringify({
         _offline: true,
         _cachedAt: null,
         _error: 'No cached data available for this endpoint',
         data: []
       }), {
-        status: 503,
+        status: 200,
+        statusText: 'OK (Offline)',
         headers: {
           'Content-Type': 'application/json',
           'X-Offline': 'true',
@@ -366,10 +368,11 @@ setCatchHandler(async ({ request }) => {
       { headers: { 'Content-Type': 'image/png' } }
     );
   }
-  // For API requests, return offline JSON
+  // For API requests, return offline JSON (200 to avoid noisy console errors)
   if (request.url.includes('/api/')) {
     return new Response(JSON.stringify({ _offline: true, data: [] }), {
-      status: 503,
+      status: 200,
+      statusText: 'OK (Offline)',
       headers: { 'Content-Type': 'application/json', 'X-Offline': 'true' },
     });
   }

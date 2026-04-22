@@ -13,6 +13,7 @@ import { apiClient } from '../services/apiClient';
 import { useAuthStore } from '../store/authStore';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { speechToTextService } from '../services/speechToTextService';
+import { ocrService } from '../services/ocrService';
 import { DocumentScannerModal } from '../components/DocumentScannerModal';
 import FluidBalanceChart from '../components/FluidBalanceChart';
 import { DocumenterLink, ConsultantCommentSection, RecommendationsPanel } from '../components/ClinicalInteractionComponents';
@@ -1184,35 +1185,32 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; patie
     }
   };
 
-  // ── Direct image → GPT-4o Vision OCR for vital signs chart ──
+  // ── Direct image → GPT-4o Vision OCR for vital signs chart, with Tesseract.js offline fallback ──
   const handleVitalsScan = async (file: File) => {
     setScanning(true);
     try {
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
+      // ocrService.processDocumentWithAI handles the full pipeline:
+      // 1. Try /api/ocr/scan (Cloud Vision + AI)
+      // 2. On 504/network failure, fall back to local Tesseract.js + rule-based extraction
+      // This means OCR works even fully offline once Tesseract worker is cached.
+      const result = await ocrService.processDocumentWithAI(
+        file,
+        'vital_signs_chart',
+        { hospitalNumber },
+        undefined,
+        { handwritingMode: true }
+      );
 
-      const res = await fetch('/api/ocr/scan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('auth_token') || ''}` },
-        body: JSON.stringify({
-          image: base64,
-          documentType: 'vital_signs_chart',
-          useVisionOCR: true,
-          aiPostProcess: true,
-          patientContext: { hospitalNumber },
-        }),
-      });
-
-      if (!res.ok) throw new Error(`OCR failed: ${res.status}`);
-      const data = await res.json();
-      handleVitalsOCRExtracted(data.structured || data);
+      const structured = (result as any)?.structured || (result as any)?.structuredData || result;
+      handleVitalsOCRExtracted(structured);
     } catch (err: any) {
       console.error('Vital signs scan error:', err);
-      alert('Failed to scan vital signs chart. Please try again or enter manually.');
+      const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+      alert(
+        offline
+          ? 'Cannot scan: device is offline and OCR engine is still loading. Try again in a moment, or enter values manually.'
+          : 'Failed to scan vital signs chart. Please try again or enter values manually.'
+      );
     } finally {
       setScanning(false);
     }

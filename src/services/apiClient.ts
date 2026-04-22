@@ -291,8 +291,25 @@ class ApiClient {
 
       const data = await response.json();
 
-      // Cache successful GET responses in IndexedDB
-      if (isGet && data) {
+      // Service-worker offline fallback: SW returns 200 + X-Offline header
+      // when network failed. Serve cached data if available; otherwise return
+      // the empty offline payload so callers don't crash.
+      const isOfflineSWResponse =
+        response.headers.get('X-Offline') === 'true' ||
+        (data && typeof data === 'object' && (data as any)._offline === true);
+
+      if (isOfflineSWResponse && isGet) {
+        const cached = await this.getCachedResponse<T>(endpoint, entityInfo);
+        if (cached !== null) {
+          console.log(`📦 SW offline: serving IndexedDB data for ${endpoint}`);
+          return cached;
+        }
+        // No cache — return what SW gave us so the app can keep going
+        return data as T;
+      }
+
+      // Cache successful GET responses in IndexedDB (skip offline fallbacks)
+      if (isGet && data && !isOfflineSWResponse) {
         this.cacheResponse(endpoint, entityInfo, data).catch(err =>
           console.warn('Cache write failed:', err)
         );

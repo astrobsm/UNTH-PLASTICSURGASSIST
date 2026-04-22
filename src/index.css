@@ -299,3 +299,52 @@
 .steps-scroll::-webkit-scrollbar {
   display: none;
 }
+
+/* ───────────────────────────────────────────────────────────────
+ * Global mobile-first responsive alignment
+ * Applied app-wide so every page stacks cleanly on small screens
+ * without needing per-page edits. Tablet+ retains designed layout.
+ * ─────────────────────────────────────────────────────────────── */
+@media (max-width: 639px) {
+  main, .page-wrapper {
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+  }
+  .mobile-stack {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  .mobile-stack > * {
+    width: 100% !important;
+  }
+  .table-mobile-scroll {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .responsive-grid {
+    grid-template-columns: 1fr !important;
+    gap: 0.75rem !important;
+  }
+  button, a.btn, [role="button"] {
+    min-height: 40px;
+  }
+  .modal-content {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    border-radius: 0 !important;
+  }
+  .page-header-sticky {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    background: white;
+  }
+}
+
+/* Larger tap targets on touch devices (WCAG 2.5.5) */
+@media (hover: none) and (pointer: coarse) {
+  button, a.btn, [role="button"], .touch-target {
+    min-height: 44px;
+  }
+}
