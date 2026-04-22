@@ -27,7 +27,7 @@ import {
   FileUp,
   Pencil
 } from 'lucide-react';
-import videoConferenceService, { Participant, ConferenceRoom } from '../services/videoConferenceService';
+import videoConferenceService, { Participant, ConferenceRoom, MediaConstraints } from '../services/videoConferenceService';
 import chatService, { ChatMessage } from '../services/chatService';
 import presentationService, { Slide, Annotation } from '../services/presentationService';
 import { useAuthStore } from '../store/authStore';
@@ -202,13 +202,26 @@ const VideoConference: React.FC = () => {
   }, [showChat]);
 
   // Room management
+  const rememberRecentRoom = (id: string, name: string) => {
+    try {
+      const list: Array<{ id: string; name: string; lastJoined: string }> =
+        JSON.parse(localStorage.getItem('vc_recent_rooms') || '[]');
+      const next = [{ id, name, lastJoined: new Date().toISOString() },
+        ...list.filter((r) => r.id !== id)].slice(0, 8);
+      localStorage.setItem('vc_recent_rooms', JSON.stringify(next));
+    } catch { /* ignore */ }
+  };
+
   const createRoom = async () => {
     if (!roomName.trim()) return;
     
     setIsCreatingRoom(true);
     try {
-      const stream = await videoConferenceService.requestMediaAccess({ video: true, audio: true });
-      if (stream) setLocalStream(stream);
+      // Reuse the preview stream if already started in the lobby
+      if (!localStream) {
+        const stream = await videoConferenceService.requestMediaAccess({ video: true, audio: true });
+        if (stream) setLocalStream(stream);
+      }
       
       const newRoom = await videoConferenceService.createRoom(roomName, 'general', {
         maxParticipants: 50,
@@ -222,6 +235,7 @@ const VideoConference: React.FC = () => {
         setRoom(newRoom);
         setShowJoinDialog(false);
         setIsConnected(true);
+        rememberRecentRoom(newRoom.id, newRoom.name);
         navigate(`/conference/${newRoom.id}`, { replace: true });
       }
     } catch (error) {
@@ -234,24 +248,28 @@ const VideoConference: React.FC = () => {
   const joinRoom = async (roomIdToJoin: string) => {
     setIsConnecting(true);
     try {
-      const stream = await videoConferenceService.requestMediaAccess({ video: true, audio: true });
-      if (stream) setLocalStream(stream);
+      // Reuse the preview stream if already started in the lobby
+      if (!localStream) {
+        const stream = await videoConferenceService.requestMediaAccess({ video: true, audio: true });
+        if (stream) setLocalStream(stream);
+      }
       
       const participant = {
         id: user?.id.toString() || 'guest',
         name: user?.name || 'Guest',
         role: user?.role || 'guest',
-        audioEnabled: true,
-        videoEnabled: true,
+        audioEnabled: isAudioEnabled,
+        videoEnabled: isVideoEnabled,
         isScreenSharing: false,
         isPresenting: false,
       };
       
       const success = await videoConferenceService.joinRoom(roomIdToJoin, participant);
       if (success) {
-        setRoom({ id: roomIdToJoin } as ConferenceRoom);
+        setRoom({ id: roomIdToJoin, name: roomIdToJoin } as ConferenceRoom);
         setShowJoinDialog(false);
         setIsConnected(true);
+        rememberRecentRoom(roomIdToJoin, roomIdToJoin);
       }
     } catch (error) {
       console.error('Failed to join room:', error);
@@ -448,98 +466,227 @@ const VideoConference: React.FC = () => {
     </div>
   );
 
-  // Join/Create Room Dialog
+  // ─── Zoom-style pre-join lobby ─────────────────────────────────
   if (showJoinDialog) {
+    const startCamera = async () => {
+      try {
+        const constraints: MediaConstraints = {
+          video: selectedCamera ? { deviceId: { exact: selectedCamera } } : true,
+          audio: selectedMic ? { deviceId: { exact: selectedMic } } : true,
+        };
+        const stream = await videoConferenceService.requestMediaAccess(constraints);
+        if (stream) {
+          setLocalStream(stream);
+          setIsVideoEnabled(true);
+          setIsAudioEnabled(true);
+        }
+      } catch (e) {
+        console.error('Camera start failed:', e);
+      }
+    };
+
+    const recentRooms: Array<{ id: string; name: string; lastJoined: string }> = (() => {
+      try { return JSON.parse(localStorage.getItem('vc_recent_rooms') || '[]').slice(0, 4); }
+      catch { return []; }
+    })();
+
+    const cameraDevices = availableDevices.filter(d => d.kind === 'videoinput');
+    const micDevices = availableDevices.filter(d => d.kind === 'audioinput');
+
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
-        <div className="bg-gray-800 rounded-2xl p-8 max-w-md w-full">
-          <h1 className="text-lg sm:text-2xl font-bold text-white mb-6 text-center">
-            Video Conference
-          </h1>
-
-          {/* Preview */}
-          <div className="relative mb-6 bg-gray-700 rounded-lg overflow-hidden aspect-video">
-            <video
-              ref={localVideoRef}
-              autoPlay
-              playsInline
-              muted
-              className="w-full h-full object-cover mirror"
-            />
-            {!localStream && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <Camera className="w-12 h-12 text-gray-500" />
-              </div>
-            )}
-          </div>
-
-          {/* Start Camera Button */}
-          {!localStream && (
-            <button
-              onClick={async () => {
-                const stream = await videoConferenceService.requestMediaAccess({ video: true, audio: true });
-                if (stream) setLocalStream(stream);
-              }}
-              className="w-full mb-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
-            >
-              <Video className="w-5 h-5" />
-              Start Camera
-            </button>
-          )}
-
-          {/* Create Room */}
-          <div className="mb-6">
-            <h3 className="text-white font-medium mb-2">Create New Room</h3>
-            <input
-              type="text"
-              value={roomName}
-              onChange={(e) => setRoomName(e.target.value)}
-              placeholder="Room name"
-              className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 mb-2"
-            />
-            <button
-              onClick={createRoom}
-              disabled={!roomName.trim() || isCreatingRoom}
-              className="w-full py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors"
-            >
-              {isCreatingRoom ? 'Creating...' : 'Create Room'}
-            </button>
-          </div>
-
-          <div className="relative mb-6">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-600"></div>
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-gray-900 to-slate-800 text-white">
+        {/* Top bar */}
+        <header className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-white/10 bg-black/20 backdrop-blur">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-green-500 to-emerald-700 flex items-center justify-center shadow-lg">
+              <Video className="w-5 h-5 text-white" />
             </div>
-            <div className="relative flex justify-center">
-              <span className="px-4 bg-gray-800 text-gray-400 text-sm">or</span>
+            <div>
+              <h1 className="text-base sm:text-lg font-semibold leading-tight">PSA Conference</h1>
+              <p className="text-xs text-gray-400 leading-tight">Secure clinical video meetings</p>
             </div>
           </div>
-
-          {/* Join Room */}
-          <div>
-            <h3 className="text-white font-medium mb-2">Join Existing Room</h3>
-            <input
-              type="text"
-              value={joinRoomId}
-              onChange={(e) => setJoinRoomId(e.target.value)}
-              placeholder="Enter room ID or link"
-              className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 mb-2"
-            />
-            <button
-              onClick={() => joinRoom(joinRoomId)}
-              disabled={!joinRoomId.trim() || isConnecting}
-              className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors"
-            >
-              {isConnecting ? 'Joining...' : 'Join Room'}
-            </button>
-          </div>
-
           <button
             onClick={() => navigate('/')}
-            className="w-full mt-6 py-2 text-gray-400 hover:text-white transition-colors"
+            className="text-sm text-gray-300 hover:text-white px-3 py-1.5 rounded-lg hover:bg-white/10 transition-colors inline-flex items-center gap-1"
           >
-            Back to Dashboard
+            <X className="w-4 h-4" /> Exit
           </button>
+        </header>
+
+        {/* Body — split layout */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-5 gap-6">
+          {/* LEFT: Video preview + device controls */}
+          <section className="lg:col-span-3">
+            <div className="relative rounded-2xl overflow-hidden bg-black aspect-video shadow-2xl ring-1 ring-white/10">
+              <video
+                ref={localVideoRef}
+                autoPlay
+                playsInline
+                muted
+                className={`w-full h-full object-cover scale-x-[-1] transition-opacity ${localStream && isVideoEnabled ? 'opacity-100' : 'opacity-0'}`}
+              />
+              {(!localStream || !isVideoEnabled) && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+                  <div className="w-24 h-24 rounded-full bg-gradient-to-br from-green-600 to-emerald-800 flex items-center justify-center text-3xl font-bold shadow-xl">
+                    {(user?.name || 'G').charAt(0).toUpperCase()}
+                  </div>
+                  <p className="text-sm text-gray-400">{!localStream ? 'Camera off — click Start Camera' : 'Your camera is off'}</p>
+                </div>
+              )}
+
+              {/* Name tag */}
+              <div className="absolute bottom-3 left-3 px-3 py-1.5 bg-black/60 backdrop-blur rounded-lg text-sm font-medium">
+                {user?.name || 'Guest'}
+                {!isAudioEnabled && <MicOff className="w-3.5 h-3.5 inline ml-2 text-red-400" />}
+              </div>
+
+              {/* Pre-join inline controls */}
+              {localStream && (
+                <div className="absolute bottom-3 right-3 flex items-center gap-2">
+                  <button
+                    onClick={toggleAudio}
+                    title={isAudioEnabled ? 'Mute' : 'Unmute'}
+                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${isAudioEnabled ? 'bg-white/20 hover:bg-white/30' : 'bg-red-600 hover:bg-red-700'}`}
+                  >
+                    {isAudioEnabled ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
+                  </button>
+                  <button
+                    onClick={toggleVideo}
+                    title={isVideoEnabled ? 'Stop video' : 'Start video'}
+                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${isVideoEnabled ? 'bg-white/20 hover:bg-white/30' : 'bg-red-600 hover:bg-red-700'}`}
+                  >
+                    {isVideoEnabled ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Start camera CTA + device pickers */}
+            {!localStream ? (
+              <button
+                onClick={startCamera}
+                className="mt-4 w-full py-3.5 bg-green-600 hover:bg-green-700 text-white rounded-xl font-semibold inline-flex items-center justify-center gap-2 shadow-lg transition-colors"
+              >
+                <Video className="w-5 h-5" /> Start Camera & Microphone
+              </button>
+            ) : (
+              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label className="text-xs text-gray-400 space-y-1">
+                  <span className="inline-flex items-center gap-1"><Camera className="w-3.5 h-3.5" /> Camera</span>
+                  <select
+                    aria-label="Camera"
+                    value={selectedCamera}
+                    onChange={async (e) => {
+                      setSelectedCamera(e.target.value);
+                      // Restart stream with new device
+                      localStream?.getTracks().forEach(t => t.stop());
+                      const stream = await videoConferenceService.requestMediaAccess({
+                        video: { deviceId: { exact: e.target.value } },
+                        audio: selectedMic ? { deviceId: { exact: selectedMic } } : true,
+                      });
+                      if (stream) setLocalStream(stream);
+                    }}
+                    className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white text-sm focus:ring-2 focus:ring-green-500 focus:outline-none"
+                  >
+                    <option value="">Default camera</option>
+                    {cameraDevices.map((d) => (
+                      <option key={d.deviceId} value={d.deviceId}>{d.label || `Camera ${d.deviceId.slice(0, 6)}`}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="text-xs text-gray-400 space-y-1">
+                  <span className="inline-flex items-center gap-1"><Mic className="w-3.5 h-3.5" /> Microphone</span>
+                  <select
+                    aria-label="Microphone"
+                    value={selectedMic}
+                    onChange={async (e) => {
+                      setSelectedMic(e.target.value);
+                      localStream?.getTracks().forEach(t => t.stop());
+                      const stream = await videoConferenceService.requestMediaAccess({
+                        video: selectedCamera ? { deviceId: { exact: selectedCamera } } : true,
+                        audio: { deviceId: { exact: e.target.value } },
+                      });
+                      if (stream) setLocalStream(stream);
+                    }}
+                    className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white text-sm focus:ring-2 focus:ring-green-500 focus:outline-none"
+                  >
+                    <option value="">Default microphone</option>
+                    {micDevices.map((d) => (
+                      <option key={d.deviceId} value={d.deviceId}>{d.label || `Mic ${d.deviceId.slice(0, 6)}`}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            )}
+          </section>
+
+          {/* RIGHT: Meeting actions card */}
+          <aside className="lg:col-span-2 space-y-4">
+            <div className="bg-white/5 backdrop-blur rounded-2xl p-5 ring-1 ring-white/10">
+              <h2 className="text-lg font-semibold mb-1">New Meeting</h2>
+              <p className="text-xs text-gray-400 mb-4">Start an instant meeting and invite others by sharing the room ID.</p>
+              <input
+                type="text"
+                value={roomName}
+                onChange={(e) => setRoomName(e.target.value)}
+                placeholder="Meeting topic (e.g. MDT Round - Plastics)"
+                className="w-full px-4 py-2.5 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 mb-3"
+              />
+              <button
+                onClick={createRoom}
+                disabled={!roomName.trim() || isCreatingRoom}
+                className="w-full py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white rounded-xl font-semibold inline-flex items-center justify-center gap-2 transition-colors shadow-lg shadow-green-900/30"
+              >
+                {isCreatingRoom ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Video className="w-5 h-5" />}
+                {isCreatingRoom ? 'Starting…' : 'Start New Meeting'}
+              </button>
+            </div>
+
+            <div className="bg-white/5 backdrop-blur rounded-2xl p-5 ring-1 ring-white/10">
+              <h2 className="text-lg font-semibold mb-1">Join a Meeting</h2>
+              <p className="text-xs text-gray-400 mb-4">Paste a meeting ID or invite link.</p>
+              <input
+                type="text"
+                value={joinRoomId}
+                onChange={(e) => setJoinRoomId(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && joinRoomId.trim() && !isConnecting) joinRoom(joinRoomId); }}
+                placeholder="Meeting ID or link"
+                className="w-full px-4 py-2.5 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3 font-mono"
+              />
+              <button
+                onClick={() => joinRoom(joinRoomId)}
+                disabled={!joinRoomId.trim() || isConnecting}
+                className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white rounded-xl font-semibold inline-flex items-center justify-center gap-2 transition-colors shadow-lg shadow-blue-900/30"
+              >
+                {isConnecting ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Phone className="w-5 h-5" />}
+                {isConnecting ? 'Joining…' : 'Join Meeting'}
+              </button>
+            </div>
+
+            {recentRooms.length > 0 && (
+              <div className="bg-white/5 backdrop-blur rounded-2xl p-5 ring-1 ring-white/10">
+                <h3 className="text-sm font-semibold mb-3 text-gray-200">Recent meetings</h3>
+                <ul className="space-y-1.5">
+                  {recentRooms.map((r) => (
+                    <li key={r.id}>
+                      <button
+                        onClick={() => joinRoom(r.id)}
+                        className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/10 transition-colors flex items-center justify-between gap-2"
+                      >
+                        <span className="truncate text-sm">{r.name}</span>
+                        <span className="text-xs text-gray-500 shrink-0">{new Date(r.lastJoined).toLocaleDateString()}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="text-[11px] text-gray-500 px-2 leading-relaxed">
+              By joining, you agree your audio/video may be recorded by the host where applicable. Conference data is end-to-end encrypted in transit.
+            </div>
+          </aside>
         </div>
       </div>
     );
