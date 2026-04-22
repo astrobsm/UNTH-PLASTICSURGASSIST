@@ -16,6 +16,7 @@ import { speechToTextService } from '../services/speechToTextService';
 import { ocrService } from '../services/ocrService';
 import { DocumentScannerModal } from '../components/DocumentScannerModal';
 import FluidBalanceChart from '../components/FluidBalanceChart';
+import BloodTransfusionTab from '../components/BloodTransfusionTab';
 import { DocumenterLink, ConsultantCommentSection, RecommendationsPanel } from '../components/ClinicalInteractionComponents';
 import { generateVitalSignRecommendations, generateLabRecommendations, type ClinicalRecommendation } from '../utils/clinicalUtils';
 import {
@@ -275,6 +276,7 @@ export const PatientProfile: React.FC = () => {
     { id: 'clinical-photos', name: 'Clinical Photos', icon: '📷' },
     { id: 'wound-assessment', name: 'Wound Assessment', icon: '🩹' },
     { id: 'fluid-io', name: 'Fluid I/O', icon: '💧' },
+    { id: 'blood-transfusion', name: 'Blood Transfusion', icon: '🩸' },
     { id: 'discharge', name: 'Discharge', icon: '🏠' }
   ];
 
@@ -298,6 +300,8 @@ export const PatientProfile: React.FC = () => {
         return <WoundAssessmentTab patientId={id!} patientName={patientName} hospitalNumber={hospitalNumber} navigate={navigate} />;
       case 'fluid-io':
         return <FluidBalanceChart patientId={id!} hospitalNumber={hospitalNumber} userName={user?.name || 'Unknown'} />;
+      case 'blood-transfusion':
+        return <BloodTransfusionTab patientId={id!} hospitalNumber={hospitalNumber} patientName={patientName} userName={user?.name || 'Unknown'} />;
       case 'discharge':
         return (
           <DischargePlanning
