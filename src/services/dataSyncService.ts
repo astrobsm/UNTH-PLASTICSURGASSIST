@@ -238,6 +238,68 @@ class DataSyncService {
         this.onlineDebounceTimer = setTimeout(() => this.performFullSync(), 2000);
       }
     });
+
+    // ─── BEST PRACTICE: visibilitychange — refresh when user returns to tab ───
+    // Critical for cross-device UX: user closes phone, opens laptop, edits;
+    // when phone wakes, we want fresh data. Pulls if last pull > 30s ago.
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && this.isOnline && apiClient.getToken()) {
+        const stale = !this.lastPullTime || (Date.now() - this.lastPullTime.getTime()) > 30_000;
+        if (stale && !this.isSyncing) {
+          logger.log('👁️ Tab visible — pulling fresh data');
+          this.pullAllFromCloud().catch(() => { /* swallow */ });
+        }
+      }
+    });
+
+    // ─── BEST PRACTICE: SW message bridge ───
+    // SW posts BACKGROUND_SYNC_COMPLETE / SYNC_COMPLETE after replaying queued
+    // mutations. We trigger a pull so the UI reflects the freshly-uploaded data
+    // (and any concurrent changes from other devices).
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', (event) => {
+        const msg = event.data;
+        if (!msg || typeof msg !== 'object') return;
+        if (msg.type === 'BACKGROUND_SYNC_COMPLETE' || msg.type === 'SYNC_COMPLETE') {
+          logger.log('📨 SW reports sync complete — pulling latest from cloud');
+          this.pullAllFromCloud().catch(() => { /* swallow */ });
+          this.broadcastChange({ kind: 'sw-replay-complete' });
+        }
+      });
+    }
+
+    // ─── BEST PRACTICE: BroadcastChannel for cross-tab data invalidation ───
+    // When one tab pushes a change, sibling tabs in the same browser hear it
+    // and pull the new data. Eliminates stale UI when user has app open in
+    // multiple tabs/windows.
+    try {
+      this.broadcastChannel = ('BroadcastChannel' in window) ? new BroadcastChannel('psa-data-sync') : null;
+      if (this.broadcastChannel) {
+        this.broadcastChannel.addEventListener('message', (event) => {
+          const msg = event.data;
+          if (!msg || msg.kind === undefined) return;
+          // Other tab pushed data — pull on this tab to stay in sync
+          if (msg.kind === 'push-complete' || msg.kind === 'sw-replay-complete') {
+            if (this.isOnline && !this.isSyncing && apiClient.getToken()) {
+              logger.log(`📡 Cross-tab signal (${msg.kind}) — pulling latest`);
+              this.pullAllFromCloud().catch(() => { /* swallow */ });
+            }
+          }
+        });
+      }
+    } catch (e) {
+      logger.warn('BroadcastChannel unavailable', e);
+    }
+  }
+
+  // BroadcastChannel for cross-tab data sync (best practice for PWAs)
+  private broadcastChannel: BroadcastChannel | null = null;
+
+  /** Notify other tabs/windows in the same browser that data changed */
+  private broadcastChange(payload: { kind: string; entity?: string; count?: number }): void {
+    try {
+      this.broadcastChannel?.postMessage(payload);
+    } catch { /* swallow */ }
   }
 
   /**
@@ -491,6 +553,9 @@ class DataSyncService {
           status.lastPushTime = now;
           status.status = 'success';
         });
+        this.saveSyncState();
+        // Notify sibling tabs so they pull our pushed changes
+        this.broadcastChange({ kind: 'push-complete', count: result.synced });
       }
 
     } catch (error) {
@@ -691,8 +756,13 @@ class DataSyncService {
 
       entityStatus.lastPullTime = new Date();
       entityStatus.status = 'success';
+      // Best practice: persist incremental sync cursor immediately so a page
+      // refresh in the middle of a multi-entity sync doesn't lose progress.
+      this.saveSyncState();
       if (mergedCount > 0) {
         console.log(`📥 Synced ${mergedCount} ${entity} from server`);
+        // Notify sibling tabs that this entity changed
+        this.broadcastChange({ kind: 'entity-pulled', entity, count: mergedCount });
       }
 
       return mergedCount;
