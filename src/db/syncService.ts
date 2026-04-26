@@ -20,12 +20,34 @@ interface SyncResult {
 const MAX_RETRIES = 5;
 // Maximum age (in ms) for a sync queue item before it's considered stale (30 days)
 const MAX_ITEM_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+// Per-request network timeout — critical on flaky hospital Wi-Fi where TCP
+// connections can hang indefinitely on the half-open state. Without this, one
+// stuck request can stall the entire sync queue forever.
+const SYNC_FETCH_TIMEOUT_MS = 15000;
+
+/** Generate a stable idempotency key for a queued mutation. Falls back to a
+ *  Math.random-based UUID v4 if crypto.randomUUID is unavailable (older Safari). */
+function generateIdempotencyKey(): string {
+  try {
+    const c: any = (globalThis as any).crypto;
+    if (c && typeof c.randomUUID === 'function') return c.randomUUID();
+  } catch { /* fall through */ }
+  // RFC 4122 v4 fallback
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
 
 class SyncService {
   private isOnline = navigator.onLine;
   private syncInProgress = false;
   private retryTimeouts: Map<number, NodeJS.Timeout> = new Map();
   private syncListeners: Set<(status: { isOnline: boolean; pendingCount: number }) => void> = new Set();
+  /** Idempotency key of the queue item currently being replayed. Read by apiCall
+   *  / replayRawRequest so they can stamp X-Idempotency-Key on the outbound request. */
+  private currentIdempotencyKey: string | null = null;
 
   constructor() {
     // Listen for online/offline events
@@ -81,7 +103,8 @@ class SyncService {
       local_id: localId,
       data,
       created_at: new Date(),
-      retries: 0
+      retries: 0,
+      idempotency_key: generateIdempotencyKey()
     };
 
     await db.sync_queue.add(queueItem);
@@ -118,6 +141,13 @@ class SyncService {
         .toArray();
 
       for (const item of pendingItems) {
+        // Backfill idempotency key for items queued before this field existed,
+        // so the server can still dedupe them if we have to retry.
+        if (!item.idempotency_key) {
+          item.idempotency_key = generateIdempotencyKey();
+          try { await db.sync_queue.update(item.id!, { idempotency_key: item.idempotency_key }); } catch { /* ignore */ }
+        }
+        this.currentIdempotencyKey = item.idempotency_key;
         try {
           await this.syncItem(item);
           await db.sync_queue.delete(item.id!);
@@ -166,6 +196,7 @@ class SyncService {
       result.errors.push(`Sync failed: ${error}`);
       toast.error('Sync failed - will retry later');
     } finally {
+      this.currentIdempotencyKey = null;
       this.syncInProgress = false;
       this.notifyListeners();
     }
@@ -813,6 +844,23 @@ class SyncService {
     console.log(`✅ ${table} synced to server:`, entityId);
   }
 
+  /** fetch() wrapped with an AbortController so a stalled connection can't hang
+   *  the entire sync queue. Throws a descriptive Error on timeout. */
+  private async fetchWithTimeout(input: RequestInfo, init: RequestInit = {}, timeoutMs = SYNC_FETCH_TIMEOUT_MS): Promise<Response> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(input, { ...init, signal: controller.signal });
+    } catch (err: any) {
+      if (err?.name === 'AbortError') {
+        throw new Error(`Sync request timed out after ${timeoutMs}ms`);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   // Replay a raw queued request from apiClient
   private async replayRawRequest(data: { url: string; method: string; body?: any; headers?: Record<string, string> }): Promise<void> {
     const token = apiClient.getToken();
@@ -823,6 +871,10 @@ class SyncService {
     // Always use fresh token (don't use stale token from the stored headers)
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
+    }
+    // Forward idempotency key so server can dedupe replayed mutations
+    if (this.currentIdempotencyKey) {
+      headers['X-Idempotency-Key'] = this.currentIdempotencyKey;
     }
 
     // Fix URL: ensure we use the correct base URL for the current environment
@@ -838,7 +890,7 @@ class SyncService {
       // If URL is already relative, leave it as-is
     }
 
-    const response = await fetch(url, {
+    const response = await this.fetchWithTimeout(url, {
       method: data.method,
       headers,
       body: data.body ? JSON.stringify(data.body) : undefined,
@@ -866,8 +918,12 @@ class SyncService {
       'Accept': 'application/json',
       'Authorization': `Bearer ${token}`
     };
+    // Forward idempotency key so server can dedupe replayed mutations
+    if (this.currentIdempotencyKey) {
+      headers['X-Idempotency-Key'] = this.currentIdempotencyKey;
+    }
 
-    const response = await fetch(`${baseUrl}${endpoint}`, {
+    const response = await this.fetchWithTimeout(`${baseUrl}${endpoint}`, {
       method,
       headers,
       credentials: 'include',

@@ -145,6 +145,9 @@ export interface SyncQueue {
   created_at: Date;
   retries: number;
   last_error?: string;
+  /** Stable UUID stamped at queue insert; sent as X-Idempotency-Key on every replay attempt
+   *  so the server can dedupe replayed mutations on flaky networks. */
+  idempotency_key?: string;
 }
 
 // Define the database
