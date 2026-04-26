@@ -138,7 +138,7 @@ const BloodTransfusionTab: React.FC<Props> = ({ patientId, hospitalNumber, patie
       const result = await ocrService.processDocumentWithAI(
         file,
         documentType,
-        { hospitalNumber, patientName },
+        { hospitalNumber, name: patientName },
         undefined,
         { handwritingMode: true }
       );

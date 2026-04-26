@@ -56,6 +56,7 @@ interface Surgery {
   date_of_birth?: string;
   patient_age_at_booking?: number;
   patient_gender?: string;
+  phone_number?: string;
 }
 
 interface DayCapacity {

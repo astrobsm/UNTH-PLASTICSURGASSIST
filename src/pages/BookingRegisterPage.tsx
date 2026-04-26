@@ -1357,19 +1357,14 @@ export default function BookingRegisterPage() {
     const doc = createPDF();
     let y = addPDFHeader(doc, 'INVESTIGATION REQUEST FORM');
     y += 2;
-    addLabeledField(doc, 'Patient Name', selectedPatient.full_name || `${selectedPatient.first_name} ${selectedPatient.last_name}`, PDF_MARGINS.left, y);
-    y += PDF_LINE_HEIGHT;
-    addTwoColumnText(doc, 'Hospital No: ' + (selectedPatient.hospital_number || '-'), 'Date: ' + formatDateForPDF(new Date().toISOString()), y);
-    y += PDF_LINE_HEIGHT;
-    addTwoColumnText(doc, 'Gender: ' + (selectedPatient.gender || '-'), 'Age: ' + (patientAge ?? '-') + ' years', y);
-    y += PDF_LINE_HEIGHT;
+    y = addLabeledField(doc, 'Patient Name', selectedPatient.full_name || `${selectedPatient.first_name} ${selectedPatient.last_name}`, y);
+    y = addTwoColumnText(doc, 'Hospital No:', selectedPatient.hospital_number || '-', 'Date:', formatDateForPDF(new Date().toISOString()), y);
+    y = addTwoColumnText(doc, 'Gender:', selectedPatient.gender || '-', 'Age:', (patientAge ?? '-') + ' years', y);
     if (planData.diagnosis) {
-      addLabeledField(doc, 'Diagnosis', sanitizeTextForPDF(planData.diagnosis), PDF_MARGINS.left, y);
-      y += PDF_LINE_HEIGHT;
+      y = addLabeledField(doc, 'Diagnosis', sanitizeTextForPDF(planData.diagnosis), y);
     }
     if (planData.procedure_name) {
-      addLabeledField(doc, 'Proposed Procedure', sanitizeTextForPDF(planData.procedure_name), PDF_MARGINS.left, y);
-      y += PDF_LINE_HEIGHT;
+      y = addLabeledField(doc, 'Proposed Procedure', sanitizeTextForPDF(planData.procedure_name), y);
     }
     y += 2;
     addSeparator(doc, y); y += 4;
@@ -1414,17 +1409,13 @@ export default function BookingRegisterPage() {
     const doc = createPDF();
     let y = addPDFHeader(doc, 'SURGICAL SHOPPING LIST');
     y += 2;
-    addLabeledField(doc, 'Patient Name', selectedPatient.full_name || `${selectedPatient.first_name} ${selectedPatient.last_name}`, PDF_MARGINS.left, y);
-    y += PDF_LINE_HEIGHT;
-    addTwoColumnText(doc, 'Hospital No: ' + (selectedPatient.hospital_number || '-'), 'Date: ' + formatDateForPDF(new Date().toISOString()), y);
-    y += PDF_LINE_HEIGHT;
+    y = addLabeledField(doc, 'Patient Name', selectedPatient.full_name || `${selectedPatient.first_name} ${selectedPatient.last_name}`, y);
+    y = addTwoColumnText(doc, 'Hospital No:', selectedPatient.hospital_number || '-', 'Date:', formatDateForPDF(new Date().toISOString()), y);
     if (planData.procedure_name) {
-      addLabeledField(doc, 'Proposed Procedure', sanitizeTextForPDF(planData.procedure_name), PDF_MARGINS.left, y);
-      y += PDF_LINE_HEIGHT;
+      y = addLabeledField(doc, 'Proposed Procedure', sanitizeTextForPDF(planData.procedure_name), y);
     }
     if (planData.anaesthesia_type) {
-      addLabeledField(doc, 'Anaesthesia Type', planData.anaesthesia_type, PDF_MARGINS.left, y);
-      y += PDF_LINE_HEIGHT;
+      y = addLabeledField(doc, 'Anaesthesia Type', planData.anaesthesia_type, y);
     }
     y += 2;
     addSeparator(doc, y); y += 4;

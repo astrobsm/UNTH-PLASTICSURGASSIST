@@ -89,7 +89,7 @@ const ABBREVIATIONS: Record<string, string> = {
   'S': 'Subjective', 'O': 'Objective', 'A': 'Assessment', 'P': 'Plan',
   // Routes
   'PO': 'per oral', 'IV': 'intravenous', 'IM': 'intramuscular',
-  'SC': 'subcutaneous', 'SL': 'sublingual', 'PR': 'per rectum',
+  'SC': 'subcutaneous', 'SL': 'sublingual', 'p.r.': 'per rectum',
   'TOP': 'topical', 'INH': 'inhaled',
   // Frequency
   'OD': 'once daily', 'BD': 'twice daily', 'TDS': 'three times daily',

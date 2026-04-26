@@ -804,8 +804,6 @@ export default function Dashboard() {
         admitting_consultant: faConsultant || undefined,
         status: 'active',
         created_by: getCurrentUserName(),
-        created_at: now,
-        updated_at: now,
       };
 
       await admissionDischargeService.createAdmission(admissionData);
@@ -850,14 +848,14 @@ export default function Dashboard() {
     try {
       const now = new Date();
       const booking: Omit<SurgeryBooking, 'id' | 'created_at' | 'updated_at'> = {
-        date: now.toISOString().split('T')[0],
+        date: now,
         theatre_number: esTheatre.trim() || 'Emergency Theatre',
         start_time: now.toTimeString().slice(0, 5),
         estimated_end_time: new Date(now.getTime() + parseInt(esDuration || '60') * 60000).toTimeString().slice(0, 5),
         primary_surgeon: esSurgeon.trim(),
         assistant_surgeon: esAssistant.trim() || undefined,
         anaesthetist: esAnaesthetist.trim() || undefined,
-        patient_id: esSelectedPatient.id!,
+        patient_id: String(esSelectedPatient.id!),
         patient_name: esSelectedPatient.name || `${esSelectedPatient.first_name || ''} ${esSelectedPatient.last_name || ''}`.trim(),
         hospital_number: esSelectedPatient.hospital_number || '',
         procedure_name: esProcedure.trim(),
@@ -868,7 +866,7 @@ export default function Dashboard() {
         is_infected: esInfected,
         is_hiv_positive: esHivPositive,
         is_diabetic: esDiabetic,
-        case_category: 'emergency',
+        case_category: 'major',
         special_requirements: esSpecialReqs.trim() ? [esSpecialReqs.trim()] : [],
         notes: [esNotes.trim(), esIndication.trim() ? `Indication: ${esIndication.trim()}` : ''].filter(Boolean).join('\n') || undefined,
         medical_conditions: esDiagnosis.trim() ? [esDiagnosis.trim()] : [],
@@ -1757,7 +1755,7 @@ export default function Dashboard() {
                   {staffList
                     .filter(s => s.role === 'consultant')
                     .map(s => (
-                      <option key={s.id} value={s.name}>{s.name}</option>
+                      <option key={s.id} value={s.full_name}>{s.full_name}</option>
                     ))}
                 </select>
               </div>
@@ -1889,7 +1887,7 @@ export default function Dashboard() {
                     {staffList
                       .filter(s => ['consultant', 'senior_registrar'].includes(s.role))
                       .map(s => (
-                        <option key={s.id} value={s.name}>{s.name} ({s.role})</option>
+                        <option key={s.id} value={s.full_name}>{s.full_name} ({s.role})</option>
                       ))}
                   </select>
                 </div>
@@ -1904,7 +1902,7 @@ export default function Dashboard() {
                     {staffList
                       .filter(s => ['senior_registrar', 'junior_registrar'].includes(s.role))
                       .map(s => (
-                        <option key={s.id} value={s.name}>{s.name}</option>
+                        <option key={s.id} value={s.full_name}>{s.full_name}</option>
                       ))}
                   </select>
                 </div>
