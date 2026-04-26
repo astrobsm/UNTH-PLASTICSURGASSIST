@@ -6,7 +6,7 @@
 import { apiClient } from './apiClient';
 import { db } from '../db/database';
 import { syncService } from '../db/syncService';
-import { pushNotificationService } from './pushNotificationService';
+// pushNotificationService is loaded dynamically below to avoid bloating the main bundle.
 
 /**
  * Safely convert an array field to an array of strings.
@@ -357,11 +357,14 @@ class PatientService {
       if (savedPatient) {
         await db.patients.put({ ...savedPatient, synced: true });
         
-        // Send notification to all users with voice announcement
-        await pushNotificationService.notifyPatientRegistered(
-          `${savedPatient.first_name} ${savedPatient.last_name}`,
-          savedPatient.hospital_number
-        );
+        // Send notification to all users with voice announcement (lazy-loaded)
+        try {
+          const { pushNotificationService } = await import('./pushNotificationService');
+          await pushNotificationService.notifyPatientRegistered(
+            `${savedPatient.first_name} ${savedPatient.last_name}`,
+            savedPatient.hospital_number
+          );
+        } catch (e) { console.warn('Push notification failed (non-fatal):', e); }
       }
       
       return savedPatient;
@@ -379,11 +382,14 @@ class PatientService {
       // Queue for sync when online
       await syncService.queueAction('create', 'patients', localId as number, patientData);
       
-      // Send notification even for local-only save
-      await pushNotificationService.notifyPatientRegistered(
-        `${patientData.first_name} ${patientData.last_name}`,
-        patientData.hospital_number
-      );
+      // Send notification even for local-only save (lazy-loaded)
+      try {
+        const { pushNotificationService } = await import('./pushNotificationService');
+        await pushNotificationService.notifyPatientRegistered(
+          `${patientData.first_name} ${patientData.last_name}`,
+          patientData.hospital_number
+        );
+      } catch (e) { console.warn('Push notification failed (non-fatal):', e); }
       
       return { ...patientData, id: localId, synced: false };
     }

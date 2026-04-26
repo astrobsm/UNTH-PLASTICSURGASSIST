@@ -1,7 +1,8 @@
 ﻿import { db } from '../db/database';
 import { apiClient } from './apiClient';
 import { syncService } from '../db/syncService';
-import { pushNotificationService } from './pushNotificationService';
+// pushNotificationService is loaded dynamically (see notifyAdmission helper below)
+// to avoid pulling web-push dependencies into the main bundle.
 import { logger } from '../utils/logger';
 import { format } from 'date-fns';
 import {
@@ -284,12 +285,15 @@ class AdmissionDischargeService {
         } as any);
         logger.log('âœ… Admission synced to server:', savedAdmission.id);
         
-        // Send notification to all users with voice announcement
-        await pushNotificationService.notifyPatientAdmitted(
-          admissionData.patient_name,
-          admissionData.hospital_number,
-          admissionData.ward_location
-        );
+        // Send notification to all users with voice announcement (lazy-loaded)
+        try {
+          const { pushNotificationService } = await import('./pushNotificationService');
+          await pushNotificationService.notifyPatientAdmitted(
+            admissionData.patient_name,
+            admissionData.hospital_number,
+            admissionData.ward_location
+          );
+        } catch (e) { logger.warn('Push notification failed (non-fatal):', e); }
         
         return savedAdmission.id;
       }
@@ -304,12 +308,15 @@ class AdmissionDischargeService {
     // Queue for sync
     await syncService.queueAction('create', 'admissions', localId as number, admission);
     
-    // Send notification even for local-only save
-    await pushNotificationService.notifyPatientAdmitted(
-      admissionData.patient_name,
-      admissionData.hospital_number,
-      admissionData.ward_location
-    );
+    // Send notification even for local-only save (lazy-loaded)
+    try {
+      const { pushNotificationService } = await import('./pushNotificationService');
+      await pushNotificationService.notifyPatientAdmitted(
+        admissionData.patient_name,
+        admissionData.hospital_number,
+        admissionData.ward_location
+      );
+    } catch (e) { logger.warn('Push notification failed (non-fatal):', e); }
     
     return localId as number;
   }
