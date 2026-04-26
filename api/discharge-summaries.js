@@ -1,6 +1,7 @@
 // Discharge Summaries API endpoints
 import { query } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
+import { idempotent, rememberResponse } from './_lib/idempotency.js';
 
 async function ensureTable() {
   await query(`
@@ -65,7 +66,8 @@ export default async function handler(req, res) {
       case 'GET':
         return await handleGet(req, res, userId, userRole);
       case 'POST':
-        return await handlePost(req, res, userId, userRole);
+        if (await idempotent(req, res, authResult.user)) return;
+        return await handlePost(req, res, userId, userRole, authResult.user);
       case 'PUT':
         return await handlePut(req, res, userId, userRole);
       case 'DELETE':
@@ -211,7 +213,7 @@ async function handleGet(req, res, userId, userRole) {
   }
 }
 
-async function handlePost(req, res, userId, userRole) {
+async function handlePost(req, res, userId, userRole, authUser) {
   const { action } = req.query;
   const body = req.body;
 
@@ -316,7 +318,11 @@ async function handlePost(req, res, userId, userRole) {
         summaryId: newSummary.rows[0].id 
       });
       
-      return res.status(201).json({ discharge: newSummary.rows[0], id: newSummary.rows[0].id });
+      {
+        const responseBody = { discharge: newSummary.rows[0], id: newSummary.rows[0].id };
+        await rememberResponse(req, authUser || { id: userId }, 201, responseBody);
+        return res.status(201).json(responseBody);
+      }
 
     case 'submit-for-approval':
       const { summaryId } = body;

@@ -1,6 +1,7 @@
 // Progress Notes API endpoint for Vercel serverless
 import { query } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
+import { idempotent, rememberResponse } from './_lib/idempotency.js';
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
@@ -26,7 +27,8 @@ export default async function handler(req, res) {
         }
         return await getAllProgressNotes(url.searchParams, res);
       case 'POST':
-        return await createProgressNote(req.body, auth.user, res);
+        if (await idempotent(req, res, auth.user)) return;
+        return await createProgressNote(req.body, auth.user, req, res);
       case 'PUT':
       case 'PATCH':
         if (!noteId) {
@@ -121,7 +123,7 @@ async function getProgressNote(id, res) {
   res.status(200).json({ note: result.rows[0] });
 }
 
-async function createProgressNote(body, user, res) {
+async function createProgressNote(body, user, req, res) {
   const {
     patient_id, patient_name, author, author_role,
     date, vital_signs, lmp, soap, clinical_images, geolocation,
@@ -163,7 +165,9 @@ async function createProgressNote(body, user, res) {
   );
 
   console.log(`Progress note created for patient ${patient_id} by ${authorName}`);
-  res.status(201).json({ note: result.rows[0] });
+  const responseBody = { note: result.rows[0] };
+  await rememberResponse(req, user, 201, responseBody);
+  res.status(201).json(responseBody);
 }
 
 async function updateProgressNote(id, body, res) {

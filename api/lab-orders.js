@@ -1,6 +1,7 @@
 // Lab Orders API endpoint for Vercel serverless
 import { query } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
+import { idempotent, rememberResponse } from './_lib/idempotency.js';
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
@@ -23,7 +24,8 @@ export default async function handler(req, res) {
         }
         return await getAllLabOrders(url.searchParams, res);
       case 'POST':
-        return await createLabOrder(req.body, auth.user, res);
+        if (await idempotent(req, res, auth.user)) return;
+        return await createLabOrder(req.body, auth.user, req, res);
       case 'PUT':
       case 'PATCH':
         if (!orderId) {
@@ -104,7 +106,7 @@ async function getLabOrder(id, res) {
   res.status(200).json({ labOrder: row });
 }
 
-async function createLabOrder(data, user, res) {
+async function createLabOrder(data, user, req, res) {
   // Accept both camelCase and snake_case field names
   const patientId = data.patientId || data.patient_id;
   const testType = data.testType || data.test_type || (data.tests && data.tests[0]?.category) || 'general';
@@ -131,7 +133,9 @@ async function createLabOrder(data, user, res) {
     [patientId, testType, testName, priority, clinicalNotes, status, user.id]
   );
 
-  res.status(201).json({ labOrder: result.rows[0] });
+  const responseBody = { labOrder: result.rows[0] };
+  await rememberResponse(req, user, 201, responseBody);
+  res.status(201).json(responseBody);
 }
 
 async function updateLabOrder(id, data, res) {

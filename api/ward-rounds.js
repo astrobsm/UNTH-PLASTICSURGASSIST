@@ -1,6 +1,7 @@
 // Ward Rounds API endpoints
 import { query } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
+import { idempotent, rememberResponse } from './_lib/idempotency.js';
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
@@ -22,7 +23,8 @@ export default async function handler(req, res) {
       case 'GET':
         return await handleGet(req, res, userId, userRole);
       case 'POST':
-        return await handlePost(req, res, userId, userRole);
+        if (await idempotent(req, res, authResult.user)) return;
+        return await handlePost(req, res, userId, userRole, authResult.user);
       case 'PUT':
         return await handlePut(req, res, userId, userRole);
       case 'DELETE':
@@ -173,7 +175,7 @@ async function handleGet(req, res, userId, userRole) {
   }
 }
 
-async function handlePost(req, res, userId, userRole) {
+async function handlePost(req, res, userId, userRole, authUser) {
   const { action } = req.query;
   const body = req.body;
 
@@ -222,7 +224,11 @@ async function handlePost(req, res, userId, userRole) {
       // Log activity
       await logActivity(userId, 'ward_round', `Documented ward round for patient`, { patientId, roundId: newRound.rows[0].id });
       
-      return res.status(201).json({ wardRound: newRound.rows[0] });
+      {
+        const responseBody = { wardRound: newRound.rows[0] };
+        await rememberResponse(req, authUser || { id: userId }, 201, responseBody);
+        return res.status(201).json(responseBody);
+      }
 
     case 'bulk-create':
       // Create multiple ward rounds at once
@@ -254,7 +260,11 @@ async function handlePost(req, res, userId, userRole) {
       // Log activity
       await logActivity(userId, 'ward_round', `Documented ${createdRounds.length} ward rounds`);
       
-      return res.status(201).json({ wardRounds: createdRounds, count: createdRounds.length });
+      {
+        const responseBody = { wardRounds: createdRounds, count: createdRounds.length };
+        await rememberResponse(req, authUser || { id: userId }, 201, responseBody);
+        return res.status(201).json(responseBody);
+      }
 
     default:
       return res.status(400).json({ error: 'Invalid action' });

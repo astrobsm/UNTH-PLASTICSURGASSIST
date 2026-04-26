@@ -1,6 +1,7 @@
 // Surgeries/Booking API endpoint for Vercel serverless
 import { query } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
+import { idempotent, rememberResponse } from './_lib/idempotency.js';
 
 // ─── Theatre slate capacity rules ──────────────────────────────
 // Each day has 4 "case-points" of capacity:
@@ -115,7 +116,8 @@ export default async function handler(req, res) {
         }
         return await getAllSurgeries(url.searchParams, res);
       case 'POST':
-        return await createSurgery(req.body, auth.user, res);
+        if (await idempotent(req, res, auth.user)) return;
+        return await createSurgery(req.body, auth.user, req, res);
       case 'PUT':
       case 'PATCH':
         if (!surgeryId) {
@@ -197,7 +199,7 @@ async function getSurgery(id, res) {
   res.status(200).json({ surgery: result.rows[0] });
 }
 
-async function createSurgery(data, user, res) {
+async function createSurgery(data, user, req, res) {
   const {
     patientId, procedureName, procedureType, scheduledDate, estimatedDuration,
     surgeonId, anesthesiaType, operatingRoom, preOpNotes, requiredEquipment,
@@ -243,7 +245,9 @@ async function createSurgery(data, user, res) {
     ]
   );
 
-  res.status(201).json({ surgery: result.rows[0] });
+  const responseBody = { surgery: result.rows[0] };
+  await rememberResponse(req, user, 201, responseBody);
+  res.status(201).json(responseBody);
 }
 
 async function updateSurgery(id, data, res) {
