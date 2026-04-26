@@ -1422,7 +1422,7 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; patie
         });
       });
     }
-    // Fallback: parse fromaw fields if flat
+    // Fallback: parse from raw fields if flat
     if (entries.length === 0 && (fields.temperature || fields.pulse || fields.bp_systolic)) {
       entries.push({
         id: `vs_ocr_${Date.now()}`,

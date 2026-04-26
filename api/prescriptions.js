@@ -1,6 +1,7 @@
 // Prescriptions API endpoint for Vercel serverless
 import { query } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
+import { idempotent, rememberResponse } from './_lib/idempotency.js';
 
 async function ensureTable() {
   await query(`
@@ -45,7 +46,8 @@ export default async function handler(req, res) {
         }
         return await getAllPrescriptions(url.searchParams, res);
       case 'POST':
-        return await createPrescription(req.body, auth.user, res);
+        if (await idempotent(req, res, auth.user)) return;
+        return await createPrescription(req.body, auth.user, req, res);
       case 'PUT':
       case 'PATCH':
         if (!prescriptionId) {
@@ -113,7 +115,7 @@ async function getPrescription(id, res) {
   res.status(200).json({ prescription: result.rows[0] });
 }
 
-async function createPrescription(data, user, res) {
+async function createPrescription(data, user, req, res) {
   // Support both formats:
   // 1. New format: { patient_id, prescriptions: [{medication, dosage, ...}] }
   // 2. Legacy format: { patientId, medicationName, dosage, ... }
@@ -164,11 +166,13 @@ async function createPrescription(data, user, res) {
       results.push(result.rows[0]);
     }
     
-    return res.status(201).json({ 
-      prescription: results[0], 
+    const responseBody = {
+      prescription: results[0],
       prescriptions: results,
-      id: results[0]?.id 
-    });
+      id: results[0]?.id
+    };
+    await rememberResponse(req, user, 201, responseBody);
+    return res.status(201).json(responseBody);
   }
   
   // Legacy single prescription format
@@ -190,7 +194,9 @@ async function createPrescription(data, user, res) {
     [patientId, medicationName, dosage, frequency, duration, route, instructions, status, user.id]
   );
 
-  res.status(201).json({ prescription: result.rows[0], id: result.rows[0].id });
+  const responseBody = { prescription: result.rows[0], id: result.rows[0].id };
+  await rememberResponse(req, user, 201, responseBody);
+  res.status(201).json(responseBody);
 }
 
 async function updatePrescription(id, data, res) {

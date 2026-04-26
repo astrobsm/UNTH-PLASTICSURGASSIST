@@ -1,6 +1,7 @@
 // Patients API endpoint for Vercel serverless
 import { query } from '../_lib/db.js';
 import { cors, authenticateRequest } from '../_lib/auth.js';
+import { idempotent, rememberResponse } from '../_lib/idempotency.js';
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
@@ -23,7 +24,8 @@ export default async function handler(req, res) {
         }
         return await getAllPatients(url.searchParams, res);
       case 'POST':
-        return await createPatient(req.body, auth.user, res);
+        if (await idempotent(req, res, auth.user)) return;
+        return await createPatient(req.body, auth.user, req, res);
       case 'PUT':
       case 'PATCH':
         if (!patientId) {
@@ -125,7 +127,7 @@ async function getPatient(id, res) {
   res.status(200).json({ patient: result.rows[0] });
 }
 
-async function createPatient(data, user, res) {
+async function createPatient(data, user, req, res) {
   const {
     hospitalNumber, hospital_number,
     firstName, first_name,
@@ -289,7 +291,9 @@ async function createPatient(data, user, res) {
   for (const strategy of insertStrategies) {
     try {
       const result = await query(strategy.sql, strategy.params);
-      return res.status(201).json({ patient: result.rows[0] });
+      const responseBody = { patient: result.rows[0] };
+      await rememberResponse(req, user, 201, responseBody);
+      return res.status(201).json(responseBody);
     } catch (err) {
       lastError = err;
       console.log(`Insert strategy failed: ${err.message}`);

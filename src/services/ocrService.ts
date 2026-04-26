@@ -7,7 +7,7 @@
  * Optimized for laboratory reports, imaging reports, and medical documents
  */
 
-import { createWorker, Worker, PSM, OEM } from 'tesseract.js';
+import type { Worker } from 'tesseract.js';
 import { apiClient } from './apiClient';
 import { validateVitals, validateLabValue, assessImageQuality, type ValidatedVitalReading, type VitalAlert } from './medicalValidation';
 import { extractClinicalNotes, type ClinicalNotesExtractionResult } from './clinicalNotesExtraction';
@@ -135,7 +135,11 @@ class OCRService {
   private async initializeWorker(onProgress?: (progress: OCRProgress) => void): Promise<void> {
     try {
       console.log('🔄 Initializing OCR worker...');
-      
+
+      // Lazy-load tesseract.js (~1.5MB + wasm) only when an OCR scan is actually requested.
+      // Cloud Vision is the primary path — most users never trigger this fallback.
+      const { createWorker, OEM, PSM } = await import('tesseract.js');
+
       this.worker = await createWorker('eng', OEM.LSTM_ONLY, {
         logger: (m: any) => {
           if (onProgress && m.progress !== undefined) {

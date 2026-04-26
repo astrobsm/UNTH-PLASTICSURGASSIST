@@ -1,6 +1,7 @@
 // Admissions API endpoint for Vercel serverless
 import { query } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
+import { idempotent, rememberResponse } from './_lib/idempotency.js';
 
 // Transform database row to frontend format
 function transformAdmission(row) {
@@ -72,6 +73,8 @@ export default async function handler(req, res) {
         }
         return await getAllAdmissions(url.searchParams, res);
       case 'POST':
+        // Dedupe replayed mutations on flaky networks (X-Idempotency-Key)
+        if (await idempotent(req, res, auth.user)) return;
         // Check for bulk force discharge actions
         if (req.body && req.body.action === 'force-discharge-all') {
           return await forceDischargeAll(auth.user, res);
@@ -79,7 +82,7 @@ export default async function handler(req, res) {
         if (req.body && req.body.action === 'force-discharge-selected') {
           return await forceDischargeSelected(req.body.patient_ids, auth.user, res);
         }
-        return await createAdmission(req.body, auth.user, res);
+        return await createAdmission(req.body, auth.user, req, res);
       case 'PUT':
       case 'PATCH':
         if (!admissionId) {
@@ -161,7 +164,7 @@ async function getAdmission(id, res) {
   res.status(200).json({ admission: transformedAdmission });
 }
 
-async function createAdmission(data, user, res) {
+async function createAdmission(data, user, req, res) {
   const {
     patientId, admissionDate, ward, bedNumber,
     admittingDiagnosis, notes, status = 'active',
@@ -261,7 +264,9 @@ async function createAdmission(data, user, res) {
   };
 
   const transformedAdmission = transformAdmission(admissionWithPatient);
-  res.status(201).json({ admission: transformedAdmission });
+  const responseBody = { admission: transformedAdmission };
+  await rememberResponse(req, user, 201, responseBody);
+  res.status(201).json(responseBody);
 }
 
 async function updateAdmission(id, data, res) {
