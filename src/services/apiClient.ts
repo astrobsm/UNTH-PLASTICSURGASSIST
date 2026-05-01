@@ -191,9 +191,25 @@ class ApiClient {
       (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
     }
 
+    // ─── Per-request fetch timeout (poor-network safety) ─────────────────
+    // Without this, hospital Wi-Fi half-open TCP states cause fetch() to hang
+    // for 30-90s before the browser gives up — users see a frozen UI.
+    // Login/auth gets a tighter 8s budget so the offline fallback kicks in fast.
+    const isAuthEndpoint = endpoint.startsWith('/auth') || endpoint.startsWith('/health') || endpoint.startsWith('/students/login');
+    const requestTimeoutMs = (options as any).timeout
+      ?? (isAuthEndpoint ? 8000 : (isGet ? 12000 : 20000));
+    const abortController = new AbortController();
+    const externalSignal = (options as any).signal as AbortSignal | undefined;
+    if (externalSignal) {
+      if (externalSignal.aborted) abortController.abort();
+      else externalSignal.addEventListener('abort', () => abortController.abort(), { once: true });
+    }
+    const timeoutHandle = setTimeout(() => abortController.abort(), requestTimeoutMs);
+
     const fetchOptions: RequestInit = {
       ...options,
       headers,
+      signal: abortController.signal,
     };
 
     // Parse entity info from endpoint for caching
@@ -230,6 +246,7 @@ class ApiClient {
 
     try {
       const response = await fetch(`${this.baseURL}${endpoint}`, fetchOptions);
+      clearTimeout(timeoutHandle);
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Request failed' }));
@@ -317,18 +334,37 @@ class ApiClient {
 
       return data;
     } catch (error) {
+      clearTimeout(timeoutHandle);
+
+      // Classify the failure: AbortError = our timeout fired, TypeError = fetch
+      // failed (DNS/CORS/connection refused/network down). Both mean the network
+      // is unusable RIGHT NOW even if navigator.onLine is still true.
+      const isAbort = (error as any)?.name === 'AbortError';
+      const isNetworkFail = error instanceof TypeError;
+      const isPoorNetworkFailure = isAbort || isNetworkFail;
+
       // Network error — try to serve from cache for GETs
       if (isGet) {
         const cached = await this.getCachedResponse<T>(endpoint, entityInfo);
         if (cached !== null) {
-          console.log(`📦 Network error: serving cached data for ${endpoint}`);
+          console.log(`📦 ${isAbort ? 'Timeout' : 'Network error'}: serving cached data for ${endpoint}`);
           return cached;
         }
       }
 
-      // Network error on mutation — queue for sync
-      if (!isGet && error instanceof TypeError) {
+      // Mutation failed because of poor network → queue for sync instead of erroring
+      // (User on hospital Wi-Fi clicks Save → request hangs → before this fix the
+      //  call would just throw and the entry would be lost.)
+      if (!isGet && isPoorNetworkFailure) {
+        console.log(`📥 ${isAbort ? 'Timeout' : 'Network error'}: queueing ${method} ${endpoint} for background sync`);
         return this.queueOfflineMutation<T>(endpoint, method, options, token, entityInfo);
+      }
+
+      // Translate AbortError into a clearer message for callers (login flow uses this)
+      if (isAbort) {
+        const timeoutErr = new Error(`Request timed out after ${requestTimeoutMs}ms`);
+        (timeoutErr as any).code = 'TIMEOUT';
+        throw timeoutErr;
       }
       throw error;
     }

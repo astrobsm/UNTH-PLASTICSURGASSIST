@@ -27,14 +27,28 @@ interface AuthState {
   useBackend: boolean;
 }
 
-// Check if backend is available
-async function checkBackend(): Promise<boolean> {
-  try {
-    await apiClient.healthCheck();
-    return true;
-  } catch {
-    return false;
-  }
+// Build a User from an offline credential record and finalise the login state.
+// Used by the offline fallback path inside login().
+async function applyOfflineLogin(
+  email: string,
+  password: string,
+  set: (s: Partial<AuthState>) => void
+): Promise<boolean> {
+  const offlineUser = await verifyOfflineCredential(email, password);
+  if (!offlineUser) return false;
+  const user: User = {
+    id: offlineUser.id,
+    name: offlineUser.name,
+    email: offlineUser.email,
+    role: offlineUser.role as any,
+    privileges: [],
+  };
+  await initializeEncryption(password);
+  // Keep any existing token from a previous online session so queued mutations
+  // can still authenticate when connectivity returns. Do NOT clear it.
+  set({ user, loading: false, useBackend: false });
+  console.log('✅ Offline login succeeded for', email);
+  return true;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -46,73 +60,84 @@ export const useAuthStore = create<AuthState>()(
       useBackend: true, // Will be determined on init
 
       login: async (email: string, password: string) => {
-        try {
-          // Try backend first
-          const backendAvailable = await checkBackend();
-          set({ useBackend: backendAvailable });
+        // ── Step 1: try ONLINE login if the browser thinks we're online ──
+        // We do NOT pre-flight with a /health check — that wastes precious
+        // seconds on a poor network. Instead we attempt the real login with
+        // a tight timeout (apiClient.request enforces 8s for /auth) and fall
+        // through to the offline credential cache on ANY failure.
+        let onlineError: any = null;
 
-          if (!backendAvailable) {
-            // ─── Offline login: verify password against stored PBKDF2 hash ───
-            console.log('📴 Offline login: verifying credentials for', email);
-            const offlineUser = await verifyOfflineCredential(email, password);
-            if (offlineUser) {
-              const user: User = {
-                id: offlineUser.id,
-                name: offlineUser.name,
-                email: offlineUser.email,
-                role: offlineUser.role as any,
-                privileges: [],
-              };
-              await initializeEncryption(password);
-              set({ user, loading: false });
-              console.log('✅ Offline login succeeded for', email);
-              return;
-            }
-            throw new Error('Offline login failed. Either you have never logged in online on this device, or the password is incorrect.');
-          }
-
-          // Use backend API
-          const response = await apiClient.login(email, password);
-          
-          if (!response || !response.user || !response.user.id) {
-            console.error('Login response missing user data:', JSON.stringify(response));
-            throw new Error('Login failed — server returned an unexpected response. Please try again.');
-          }
-
-          const user: User = {
-            id: response.user.id,
-            name: response.user.fullName,
-            email: response.user.email,
-            role: response.user.role as any,
-            privileges: [], // Will be populated from role
-            mustChangePassword: response.user.mustChangePassword || false
-          };
-
-          // Store userId in localStorage for services that need it
-          localStorage.setItem('userId', String(response.user.id));
-
-          // Initialize encryption with password and encrypt user data
-          await initializeEncryption(password);
-          const encryptedUser = await encrypt(JSON.stringify(user));
-          
-          // ─── Store hashed credential for future offline logins ───
+        if (navigator.onLine) {
           try {
-            await storeOfflineCredential(email, password, {
-              id: user.id,
-              name: user.name,
-              role: user.role,
-            });
-            console.log('🔐 Offline credential stored for', email);
-          } catch (credErr) {
-            console.warn('Failed to store offline credential (non-fatal):', credErr);
-          }
+            const response = await apiClient.login(email, password);
 
-          set({ user, token: response.token });
-          set({ loading: false });
-        } catch (error) {
-          set({ loading: false });
-          throw error;
+            if (!response || !response.user || !response.user.id) {
+              console.error('Login response missing user data:', JSON.stringify(response));
+              throw new Error('Login failed — server returned an unexpected response. Please try again.');
+            }
+
+            const user: User = {
+              id: response.user.id,
+              name: response.user.fullName,
+              email: response.user.email,
+              role: response.user.role as any,
+              privileges: [],
+              mustChangePassword: response.user.mustChangePassword || false,
+            };
+
+            localStorage.setItem('userId', String(response.user.id));
+            await initializeEncryption(password);
+            await encrypt(JSON.stringify(user)); // warm up encryption (result unused)
+
+            // Store hashed credential so the user can log in next time without network
+            try {
+              await storeOfflineCredential(email, password, {
+                id: user.id,
+                name: user.name,
+                role: user.role,
+              });
+              console.log('🔐 Offline credential stored for', email);
+            } catch (credErr) {
+              console.warn('Failed to store offline credential (non-fatal):', credErr);
+            }
+
+            set({ user, token: response.token, loading: false, useBackend: true });
+            return;
+          } catch (err: any) {
+            onlineError = err;
+            const code = err?.code;
+            const msg = (err?.message || '').toLowerCase();
+            // Auth-rejection messages from the server (401/403) — DO NOT fall back
+            // to offline, the user really did type the wrong password / is locked out.
+            const isHardAuthFail =
+              msg.includes('invalid credentials') ||
+              msg.includes('account is disabled') ||
+              msg.includes('pending approval') ||
+              msg.includes('password not set');
+            if (isHardAuthFail) {
+              set({ loading: false });
+              throw err;
+            }
+            // Network/timeout/server-down — fall through to offline cache below
+            console.log('⚠️ Online login failed, attempting offline fallback:', code || msg || err);
+          }
         }
+
+        // ── Step 2: offline fallback (works whether navigator.onLine is true or false) ──
+        try {
+          const ok = await applyOfflineLogin(email, password, set);
+          if (ok) return;
+        } catch (offlineErr) {
+          console.error('Offline login attempt errored:', offlineErr);
+        }
+
+        set({ loading: false });
+        if (onlineError) throw onlineError;
+        throw new Error(
+          navigator.onLine
+            ? 'Login failed and no offline credential found for this account.'
+            : 'You are offline and have not previously logged in on this device.'
+        );
       },
 
       logout: () => {

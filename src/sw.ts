@@ -254,13 +254,22 @@ mutationMethods.forEach(method => {
       request.method === method &&
       isRealtimeEndpoint(url.pathname),
     async (args) => {
+      // Aggressively bound network time on poor connections — the SW would
+      // otherwise hang for the browser default (30-90s) on a half-open TCP
+      // socket, freezing the login button. The app layer enforces its own
+      // 8s budget; we add 2s headroom here.
+      const REALTIME_TIMEOUT_MS = 10000;
       try {
-        return await realtimeStrategy.handle(args);
+        const networkPromise = realtimeStrategy.handle(args);
+        const timeoutPromise = new Promise<Response>((_, reject) =>
+          setTimeout(() => reject(new Error('SW_REALTIME_TIMEOUT')), REALTIME_TIMEOUT_MS)
+        );
+        return await Promise.race([networkPromise, timeoutPromise]);
       } catch (_err) {
-        // Network failed — return error without queuing for background sync
-        return new Response(JSON.stringify({ error: 'Network unavailable' }), {
+        // Network failed or timed out — return error without queuing for background sync
+        return new Response(JSON.stringify({ error: 'Network unavailable', _offline: true }), {
           status: 503,
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'X-Offline': 'true' },
         });
       }
     },
