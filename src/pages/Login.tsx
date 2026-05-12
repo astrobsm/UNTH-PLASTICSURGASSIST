@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useAuthStore } from '../store/authStore';
-import { Stethoscope, UserPlus, LogIn, X, Eye, EyeOff } from 'lucide-react';
+import { Stethoscope, UserPlus, LogIn, X, Eye, EyeOff, Phone, Key } from 'lucide-react';
 import { userManagementService } from '../services/userManagementService';
 import { loginRateLimiter } from '../utils/rateLimiter';
 import { validateEmail, validatePassword } from '../utils/validation';
@@ -223,67 +223,73 @@ export default function Login() {
         </form>
       </div>
 
-      {/* Registration Modal */}
+      {/* Registration Modal — styled to mirror admin's "Add New User" form */}
       {showRegistration && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start sm:items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl my-4 sm:my-8">
-            <div className="sticky top-0 bg-white border-b px-4 sm:px-6 py-4 flex items-center justify-between rounded-t-lg z-10">
-              <h3 className="text-lg sm:text-xl font-bold text-clinical-dark">Create New Profile</h3>
-              <button
-                onClick={() => setShowRegistration(false)}
-                className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100"
-                aria-label="Close registration form"
-              >
-                <X className="h-6 w-6" />
-              </button>
-            </div>
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md my-4 sm:my-8">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-medium text-gray-900">Create New Profile</h3>
+                <button
+                  onClick={() => setShowRegistration(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                  aria-label="Close registration form"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
 
-            <form onSubmit={handleRegistration} className="p-4 sm:p-6 space-y-4">
-              {/* Success Message */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                <p className="text-sm text-blue-800">
+                  <Key className="h-4 w-4 inline mr-1" />
+                  Your registration request will be reviewed by the administrator. You will be notified once your account is approved.
+                </p>
+              </div>
+
               {successMessage && (
-                <div className="bg-green-50 border border-green-200 rounded p-3 text-sm text-green-800">
-                  <strong>Success!</strong> {successMessage}
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
+                  <p className="text-sm text-green-800"><strong>Success!</strong> {successMessage}</p>
                 </div>
               )}
 
-              {/* Error Message */}
               {error && (
-                <div className="bg-red-50 border border-red-200 rounded p-3 text-sm text-red-800">
-                  <strong>Error:</strong> {error}
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
+                  <p className="text-sm text-red-800">{error}</p>
                 </div>
               )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="col-span-2">
-                  <label className="block text-sm font-medium text-clinical-dark mb-1">
+              <form onSubmit={handleRegistration} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Full Name *
                   </label>
                   <input
                     type="text"
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-                    placeholder="Dr. John Doe"
                     value={regData.name}
                     onChange={(e) => setRegData({ ...regData, name: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    placeholder="Enter full name"
                   />
                 </div>
 
-                <div className="col-span-2">
-                  <label className="block text-sm font-medium text-clinical-dark mb-1">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Email Address *
                   </label>
                   <input
                     type="email"
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-                    placeholder="john.doe@hospital.com"
                     value={regData.email}
                     onChange={(e) => setRegData({ ...regData, email: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    placeholder="user@hospital.com"
                   />
+                  <p className="text-xs text-gray-500 mt-1">Username will be generated from email</p>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-clinical-dark mb-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Password *
                   </label>
                   <div className="relative">
@@ -291,16 +297,17 @@ export default function Login() {
                       type={showRegPassword ? 'text' : 'password'}
                       required
                       minLength={6}
-                      className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-                      placeholder="Min. 6 characters"
                       value={regData.password}
                       onChange={(e) => setRegData({ ...regData, password: e.target.value })}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 pr-10 focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      placeholder="Min. 6 characters"
                     />
                     <button
                       type="button"
                       className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-gray-700"
                       onClick={() => setShowRegPassword(!showRegPassword)}
                       tabIndex={-1}
+                      aria-label={showRegPassword ? 'Hide password' : 'Show password'}
                     >
                       {showRegPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
@@ -308,7 +315,7 @@ export default function Login() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-clinical-dark mb-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Confirm Password *
                   </label>
                   <div className="relative">
@@ -316,16 +323,17 @@ export default function Login() {
                       type={showRegConfirmPassword ? 'text' : 'password'}
                       required
                       minLength={6}
-                      className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-                      placeholder="Re-enter password"
                       value={regData.confirmPassword}
                       onChange={(e) => setRegData({ ...regData, confirmPassword: e.target.value })}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 pr-10 focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      placeholder="Re-enter password"
                     />
                     <button
                       type="button"
                       className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-gray-700"
                       onClick={() => setShowRegConfirmPassword(!showRegConfirmPassword)}
                       tabIndex={-1}
+                      aria-label={showRegConfirmPassword ? 'Hide password' : 'Show password'}
                     >
                       {showRegConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
@@ -333,15 +341,14 @@ export default function Login() {
                 </div>
 
                 <div>
-                  <label htmlFor="role" className="block text-sm font-medium text-clinical-dark mb-1">
+                  <label htmlFor="role" className="block text-sm font-medium text-gray-700 mb-1">
                     Role *
                   </label>
                   <select
                     id="role"
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                     value={regData.role}
                     onChange={(e) => setRegData({ ...regData, role: e.target.value as any })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent"
                   >
                     <option value="house_officer">House Officer</option>
                     <option value="medical_officer">Medical Officer</option>
@@ -352,68 +359,66 @@ export default function Login() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-clinical-dark mb-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Phone Number
                   </label>
-                  <input
-                    type="tel"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-                    placeholder="+234 800 000 0000"
-                    value={regData.phone}
-                    onChange={(e) => setRegData({ ...regData, phone: e.target.value })}
-                  />
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <input
+                      type="tel"
+                      value={regData.phone}
+                      onChange={(e) => setRegData({ ...regData, phone: e.target.value })}
+                      className="w-full border border-gray-300 rounded-lg pl-10 pr-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      placeholder="e.g., +234 801 234 5678"
+                    />
+                  </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-clinical-dark mb-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Department
                   </label>
                   <input
                     type="text"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-                    placeholder="Surgery, Plastic Surgery"
                     value={regData.department}
                     onChange={(e) => setRegData({ ...regData, department: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    placeholder="e.g., Plastic Surgery"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-clinical-dark mb-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Registration Number
                   </label>
                   <input
                     type="text"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-                    placeholder="MDCN/HO/12345"
                     value={regData.registration_number}
                     onChange={(e) => setRegData({ ...regData, registration_number: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    placeholder="e.g., MDCN/HO/12345"
                   />
                 </div>
-              </div>
 
-              <div className="bg-blue-50 border border-blue-200 rounded p-3 text-sm text-blue-800">
-                <strong>Note:</strong> Your registration request will be reviewed by the administrator. 
-                You will be notified once your account is approved.
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowRegistration(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-                  disabled={loading}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 btn-primary py-2"
-                  disabled={loading}
-                >
-                  {loading ? 'Submitting...' : 'Submit Registration'}
-                </button>
-              </div>
-            </form>
+                <div className="flex space-x-3 pt-4">
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="flex-1 bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center space-x-2 disabled:opacity-50"
+                  >
+                    {loading ? <span>Submitting...</span> : <span>Submit Registration</span>}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowRegistration(false)}
+                    disabled={loading}
+                    className="flex-1 bg-gray-500 text-white py-2 px-4 rounded-lg hover:bg-gray-600 transition-colors disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       )}
