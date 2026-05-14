@@ -177,9 +177,9 @@ class OCRService {
 
     // Try Google Cloud Vision via backend first
     try {
-      onProgress?.({ status: 'Sending to Cloud Vision...', progress: 0.1 });
-      const base64 = await this.imageToBase64(imageSource);
-      onProgress?.({ status: 'Processing with Cloud Vision...', progress: 0.3 });
+      onProgress?.({ status: 'Optimizing image...', progress: 0.05 });
+      const base64 = await this.prepareUploadImage(imageSource);
+      onProgress?.({ status: 'Sending to Cloud Vision...', progress: 0.15 });
 
       const response = await apiClient.post('/ocr/scan', {
         image: base64,
@@ -286,6 +286,86 @@ class OCRService {
       reader.onerror = () => reject(new Error('Failed to read image file'));
       reader.readAsDataURL(imageSource);
     });
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // Smart upload preparation: compress oversized images before
+  // sending to /ocr/scan. Modern phones produce 8-12 MP / 5-10 MB
+  // photos; Cloud Vision works best at 1600-2400px on the long
+  // edge. Downscaling cuts payload 5-20x and slashes upload time
+  // on poor hospital Wi-Fi without harming OCR accuracy.
+  // ──────────────────────────────────────────────────────────
+  private async prepareUploadImage(
+    imageSource: File | Blob | string | HTMLImageElement | HTMLCanvasElement,
+    maxDim: number = 2400,
+    quality: number = 0.85
+  ): Promise<string> {
+    // Pass-through for already-encoded strings
+    if (typeof imageSource === 'string') return imageSource;
+
+    // Cheap path: tiny files (< 350 KB) almost certainly don't need recompression
+    if ((imageSource instanceof File || imageSource instanceof Blob) && imageSource.size < 350 * 1024) {
+      return this.imageToBase64(imageSource);
+    }
+
+    try {
+      // Resolve to an HTMLImageElement so we can measure + draw
+      let img: HTMLImageElement;
+      let cleanupUrl: string | null = null;
+      if (imageSource instanceof HTMLImageElement) {
+        img = imageSource;
+      } else if (imageSource instanceof HTMLCanvasElement) {
+        const long = Math.max(imageSource.width, imageSource.height);
+        if (long <= maxDim) return imageSource.toDataURL('image/jpeg', quality);
+        const scale = maxDim / long;
+        const c = document.createElement('canvas');
+        c.width = Math.round(imageSource.width * scale);
+        c.height = Math.round(imageSource.height * scale);
+        const ctx = c.getContext('2d');
+        if (!ctx) return this.imageToBase64(imageSource);
+        ctx.drawImage(imageSource, 0, 0, c.width, c.height);
+        return c.toDataURL('image/jpeg', quality);
+      } else {
+        // File or Blob — decode via object URL (avoids reading whole file as base64 string in memory)
+        cleanupUrl = URL.createObjectURL(imageSource);
+        img = await new Promise<HTMLImageElement>((resolve, reject) => {
+          const i = new Image();
+          i.onload = () => resolve(i);
+          i.onerror = () => reject(new Error('Failed to decode image for compression'));
+          i.src = cleanupUrl!;
+        });
+      }
+
+      try {
+        const w = img.naturalWidth || img.width;
+        const h = img.naturalHeight || img.height;
+        const longEdge = Math.max(w, h);
+        if (!longEdge) return this.imageToBase64(imageSource);
+        if (longEdge <= maxDim) {
+          // Already small enough — but re-encode as JPEG if it's likely a huge PNG screenshot
+          if (imageSource instanceof File && /png/i.test(imageSource.type) && imageSource.size > 1024 * 1024) {
+            const c = document.createElement('canvas');
+            c.width = w; c.height = h;
+            const ctx = c.getContext('2d');
+            if (ctx) { ctx.drawImage(img, 0, 0); return c.toDataURL('image/jpeg', quality); }
+          }
+          return this.imageToBase64(imageSource);
+        }
+        const scale = maxDim / longEdge;
+        const c = document.createElement('canvas');
+        c.width = Math.round(w * scale);
+        c.height = Math.round(h * scale);
+        const ctx = c.getContext('2d');
+        if (!ctx) return this.imageToBase64(imageSource);
+        ctx.drawImage(img, 0, 0, c.width, c.height);
+        return c.toDataURL('image/jpeg', quality);
+      } finally {
+        if (cleanupUrl) URL.revokeObjectURL(cleanupUrl);
+      }
+    } catch (err) {
+      console.warn('Image compression failed, sending original:', err);
+      return this.imageToBase64(imageSource);
+    }
   }
 
   // ──────────────────────────────────────────────────────────
@@ -780,8 +860,10 @@ class OCRService {
     // If handwritingMode, use GPT-4o Vision for direct image-to-text+structured
     const useVisionOCR = options?.handwritingMode ?? (documentType === 'handwritten_note' || documentType === 'fluid_chart' || documentType === 'vital_signs_chart');
     try {
-      onProgress?.({ status: useVisionOCR ? 'Sending to AI Vision (handwriting)...' : 'Sending to Cloud Vision AI...', progress: 0.1 });
-      const base64 = await this.imageToBase64(imageSource);
+      onProgress?.({ status: 'Optimizing image...', progress: 0.05 });
+      // Handwriting Vision benefits from a slightly larger long-edge for legibility
+      const base64 = await this.prepareUploadImage(imageSource, useVisionOCR ? 2800 : 2400, useVisionOCR ? 0.9 : 0.85);
+      onProgress?.({ status: useVisionOCR ? 'Sending to AI Vision (handwriting)...' : 'Sending to Cloud Vision AI...', progress: 0.15 });
 
       onProgress?.({ status: useVisionOCR ? 'AI reading handwriting...' : 'Cloud Vision processing...', progress: 0.3 });
       const backendResult = await apiClient.post('/ocr/scan', {

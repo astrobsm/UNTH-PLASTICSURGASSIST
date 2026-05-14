@@ -1094,7 +1094,29 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; patie
     setShowOCRReview(false);
     loadVitals();
   }, [patientId]);
-  useEffect(() => { if (vitals.length > 1) drawChart(); }, [vitals]);
+  // Re-draw on data change AND on container resize (rotate phone, sidebar open, etc.)
+  useEffect(() => {
+    if (vitals.length < 2) return;
+    let rafId = 0;
+    const schedule = () => {
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => drawChart());
+    };
+    schedule();
+    const canvas = canvasRef.current;
+    let ro: ResizeObserver | null = null;
+    if (canvas?.parentElement && typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(schedule);
+      ro.observe(canvas.parentElement);
+    } else {
+      window.addEventListener('resize', schedule);
+    }
+    return () => {
+      cancelAnimationFrame(rafId);
+      if (ro) ro.disconnect();
+      else window.removeEventListener('resize', schedule);
+    };
+  }, [vitals]);
 
   const loadVitals = async () => {
     setLoading(true);
@@ -1232,12 +1254,22 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; patie
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const W = canvas.width = canvas.offsetWidth * 2;
-    const H = canvas.height = 300;
-    ctx.clearRect(0, 0, W, H);
-    ctx.scale(1, 1);
+    // Hi-DPI sharpening: render at devicePixelRatio for crisp lines/text on retina + phone screens.
+    // CSS size stays at parent width × 150px; backing store is scaled, then context units are CSS pixels.
+    const dpr = Math.min(window.devicePixelRatio || 1, 3); // cap at 3x to avoid huge canvases on Android
+    const cssW = Math.max(canvas.parentElement?.clientWidth || canvas.clientWidth || 600, 320);
+    const cssH = 150;
+    canvas.style.width = '100%';
+    canvas.style.height = `${cssH}px`;
+    canvas.width = Math.round(cssW * dpr);
+    canvas.height = Math.round(cssH * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // map CSS px → device px
+    ctx.clearRect(0, 0, cssW, cssH);
 
-    const padding = { top: 30, right: 30, bottom: 40, left: 50 };
+    const W = cssW;
+    const H = cssH;
+
+    const padding = { top: 22, right: 16, bottom: 22, left: 32 };
     const chartW = W - padding.left - padding.right;
     const chartH = H - padding.top - padding.bottom;
 
@@ -1249,7 +1281,7 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; patie
       { key: 'spo2', label: 'SpO2', color: '#059669', min: 80, max: 100 },
     ];
 
-    // Draw axes
+    // Axes
     ctx.strokeStyle = '#E5E7EB';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -1258,19 +1290,19 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; patie
     ctx.lineTo(W - padding.right, H - padding.bottom);
     ctx.stroke();
 
-    // Date labels
+    // Date labels (CSS px sizes now match the visual)
     ctx.fillStyle = '#6B7280';
-    ctx.font = '18px sans-serif';
+    ctx.font = '10px sans-serif';
     ctx.textAlign = 'center';
-    const maxLabels = Math.min(vitals.length, 8);
+    const maxLabels = Math.min(vitals.length, Math.max(3, Math.floor(chartW / 60)));
     const step = Math.max(1, Math.floor(vitals.length / maxLabels));
     for (let i = 0; i < vitals.length; i += step) {
       const x = padding.left + (i / (vitals.length - 1)) * chartW;
       const d = new Date(vitals[i].date);
-      ctx.fillText(`${d.getDate()}/${d.getMonth() + 1}`, x, H - padding.bottom + 25);
+      ctx.fillText(`${d.getDate()}/${d.getMonth() + 1}`, x, H - padding.bottom + 14);
     }
 
-    // Draw each dataset
+    // Datasets
     datasets.forEach(ds => {
       const points = vitals.map((v, i) => ({
         x: padding.left + (i / (vitals.length - 1)) * chartW,
@@ -1281,7 +1313,7 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; patie
       if (points.length < 2) return;
 
       ctx.strokeStyle = ds.color;
-      ctx.lineWidth = 2.5;
+      ctx.lineWidth = 1.75;
       ctx.beginPath();
       points.forEach((p, i) => {
         if (i === 0) ctx.moveTo(p.x, p.y);
@@ -1289,25 +1321,25 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; patie
       });
       ctx.stroke();
 
-      // Dots
       points.forEach(p => {
         ctx.beginPath();
-        ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
         ctx.fillStyle = ds.color;
         ctx.fill();
       });
     });
 
     // Legend
-    ctx.font = '16px sans-serif';
+    ctx.font = '10px sans-serif';
     let legendX = padding.left;
+    const legendY = 6;
     datasets.forEach(ds => {
       ctx.fillStyle = ds.color;
-      ctx.fillRect(legendX, 8, 14, 14);
+      ctx.fillRect(legendX, legendY, 8, 8);
       ctx.fillStyle = '#374151';
       ctx.textAlign = 'left';
-      ctx.fillText(ds.label, legendX + 18, 20);
-      legendX += ctx.measureText(ds.label).width + 40;
+      ctx.fillText(ds.label, legendX + 11, legendY + 8);
+      legendX += ctx.measureText(ds.label).width + 26;
     });
   };
 

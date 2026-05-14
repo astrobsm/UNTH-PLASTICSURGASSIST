@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, Suspense, lazy } from 'react';
 import {
   Activity,
   Camera,
@@ -37,7 +37,8 @@ import { sanitizeTextForPDF } from '../utils/pdfUtils';
 import { getCurrentUserName } from '../utils/getCurrentUser';
 import { aiWoundMeasurement } from '../services/aiWoundMeasurement';
 import type { WoundMeasurementResult, WoundProgressEntry } from '../services/aiWoundMeasurement';
-import WoundProgressChart from '../components/WoundProgressChart';
+// Lazy-load chart.js (~200 KB) only when the wound-progress panel actually renders
+const WoundProgressChart = lazy(() => import('../components/WoundProgressChart'));
 
 // ============================================
 // TYPES & INTERFACES
@@ -1881,7 +1882,9 @@ const WoundCarePage: React.FC = () => {
                 <TrendingUp className="w-4 h-4 mr-2 text-green-600" />
                 Healing Progress
               </h4>
-              <WoundProgressChart measurements={progressData} report={report} />
+              <Suspense fallback={<div className="bg-gray-50 rounded-lg p-4 text-center text-xs text-gray-400">Loading chart…</div>}>
+                <WoundProgressChart measurements={progressData} report={report} />
+              </Suspense>
             </div>
           );
         })()}
