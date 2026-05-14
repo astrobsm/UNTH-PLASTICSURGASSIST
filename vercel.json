@@ -16,6 +16,10 @@
       "destination": "/api/consults"
     },
     {
+      "source": "/api/consults-module/:path*",
+      "destination": "/api/consults-module"
+    },
+    {
       "source": "/api/clinic-appointments/:path*",
       "destination": "/api/clinic-appointments"
     },

@@ -90,6 +90,8 @@ const ScribeDashboard = lazyWithRetry(() => import('./pages/ScribeDashboard'));
 const PatientActionRecords = lazyWithRetry(() => import('./pages/PatientActionRecords'));
 const ClinicAppointmentsPage = lazyWithRetry(() => import('./pages/ClinicAppointmentsPage'));
 const ConsultsPage = lazyWithRetry(() => import('./pages/ConsultsPage'));
+const ConsultsModulePage = lazyWithRetry(() => import('./pages/ConsultsModulePage'));
+const PublicConsultSubmitPage = lazyWithRetry(() => import('./pages/PublicConsultSubmitPage'));
 const AdminTrainingPage = lazyWithRetry(() => import('./pages/AdminTrainingPage'));
 const SJSManagementPage = lazyWithRetry(() => import('./pages/SJSManagementPage'));
 const SubstanceDetoxPage = lazyWithRetry(() => import('./pages/SubstanceDetoxPage'));
@@ -229,6 +231,7 @@ function App() {
         <Routes>
           <Route path="/student-register" element={<StudentRegister />} />
           <Route path="/student-login" element={<StudentLogin />} />
+          <Route path="/submit-consult/:token" element={<PublicConsultSubmitPage />} />
           <Route path="*" element={<Login />} />
         </Routes>
       </Suspense>
@@ -331,7 +334,9 @@ function App() {
               <Route path="/notice-board" element={<NoticeBoardPage />} />
               <Route path="/ai-scribe" element={<ScribeDashboard />} />
               <Route path="/clinic-appointments" element={<ClinicAppointmentsPage />} />
-              <Route path="/consults" element={<ConsultsPage />} />
+              <Route path="/consults" element={<ConsultsModulePage />} />
+              <Route path="/consults-external" element={<ConsultsPage />} />
+              <Route path="/submit-consult/:token" element={<PublicConsultSubmitPage />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/admin-training" element={<ProtectedRoute allowedRoles={['admin', 'consultant']}><AdminTrainingPage /></ProtectedRoute>} />
               <Route path="/ho-tracking" element={<ProtectedRoute allowedRoles={['admin', 'consultant', 'senior_registrar']}><HOTrackingPage /></ProtectedRoute>} />
