@@ -23,6 +23,7 @@ import {
   getCurrentAssignments,
 } from '../config/psUnits';
 import { logClinicalAction } from './clinicalAuditService';
+import { medicalTeamService } from './medicalTeamService';
 import { logger } from '../utils/logger';
 
 export interface HoReassignmentResult {
@@ -119,6 +120,32 @@ export async function checkAndReassignHouseOfficers(
   const today = new Date();
   const assignments = getCurrentAssignments(roster, today);
 
+  // Resolve which HO names from the roster correspond to ACTIVE registered users.
+  // Only active users (is_active !== false, role = house_officer) are eligible
+  // to be assigned new patients. Names on the roster that don't match any
+  // active user are dropped from the candidate pool.
+  let activeHoUsers: Array<{ id: string | number; full_name: string }> = [];
+  try {
+    activeHoUsers = await medicalTeamService.getStaffByRole('house_officer');
+  } catch {
+    activeHoUsers = [];
+  }
+  const activeHoSet = new Set(
+    activeHoUsers
+      .map((u) => (u.full_name || '').trim().toLowerCase())
+      .filter(Boolean),
+  );
+  const eligibleHos = (roster.houseOfficers || []).filter((name) =>
+    activeHoSet.has((name || '').trim().toLowerCase()),
+  );
+
+  if (eligibleHos.length === 0) {
+    logger.log(
+      'HO-reassignment: no active house-officer users match the roster; skipping',
+    );
+    return result;
+  }
+
   // Build a current count per HO for round-robin balancing
   const existingCounts: Record<string, number> = {};
   for (const a of admissions) {
@@ -150,14 +177,17 @@ export async function checkAndReassignHouseOfficers(
 
     if (!needsReassign) continue;
 
-    // Pick the least-loaded HO currently on a unit (any unit)
+    // Pick the least-loaded HO who is BOTH on the active roster AND a registered
+    // active user. Currently-on-unit HOs are preferred when also active.
+    const onUnitNames = [
+      assignments['PS-UNIT-1']?.houseOfficer,
+      assignments['PS-UNIT-2']?.houseOfficer,
+    ].filter(Boolean) as string[];
     const activeHoNames = Array.from(
       new Set(
-        [
-          assignments['PS-UNIT-1']?.houseOfficer,
-          assignments['PS-UNIT-2']?.houseOfficer,
-          ...roster.houseOfficers,
-        ].filter(Boolean) as string[],
+        [...onUnitNames, ...eligibleHos].filter((n) =>
+          activeHoSet.has(n.trim().toLowerCase()),
+        ),
       ),
     );
 
