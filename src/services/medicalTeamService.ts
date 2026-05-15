@@ -518,8 +518,13 @@ class MedicalTeamService {
       const patientMap = new Map<number, any>();
       for (const p of patients) { if (p.id) patientMap.set(p.id, p); }
 
-      // Get active house officers sorted by least loaded
-      const houseOfficers = await this.getLocalStaffByRole('house_officer');
+      // Get active house officers — try server first (source of truth across
+      // devices), then fall back to local IndexedDB (which may be empty on a
+      // freshly-installed device that hasn't synced users yet).
+      let houseOfficers = await this.getStaffByRole('house_officer');
+      if (houseOfficers.length === 0) {
+        houseOfficers = await this.getLocalStaffByRole('house_officer');
+      }
       if (houseOfficers.length === 0) {
         // Fallback: use roster HO names directly so admitted patients still
         // get a named house officer even before the HOs register as users.
