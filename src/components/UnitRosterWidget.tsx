@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Users, Clock, Shield, UserCheck, Settings, Plus, RotateCcw, Wand2, Phone, MessageCircle } from 'lucide-react';
+import { Calendar, Users, Clock, Shield, UserCheck, Settings, Plus, RotateCcw, Wand2, Phone, MessageCircle, Stethoscope, Briefcase } from 'lucide-react';
 import { db } from '../db/database';
 import { PS_UNITS, getCurrentAssignments, getTodaySchedule, UnitRosterConfig } from '../config/psUnits';
 import { useAuthStore } from '../store/authStore';
@@ -12,15 +12,19 @@ export default function UnitRosterWidget() {
   const [showSetup, setShowSetup] = useState(false);
   const [loading, setLoading] = useState(true);
   const [staffLoading, setStaffLoading] = useState(true);
+  // Three distinct staff pools by exact role:
   const [availableSeniorRegistrars, setAvailableSeniorRegistrars] = useState<ApprovedUser[]>([]);
+  const [availableJuniorRegistrars, setAvailableJuniorRegistrars] = useState<ApprovedUser[]>([]);
   const [availableHouseOfficers, setAvailableHouseOfficers] = useState<ApprovedUser[]>([]);
   const [allActiveUsers, setAllActiveUsers] = useState<ApprovedUser[]>([]);
 
-  // Setup form state
+  // Setup form state — SR fixed per unit; JR rotates 6w; HO rotates 2w.
   const [setupForm, setSetupForm] = useState({
     startDate: new Date().toISOString().split('T')[0],
-    seniorRegistrar1: '',
-    seniorRegistrar2: '',
+    seniorRegistrarUnit1: '',
+    seniorRegistrarUnit2: '',
+    juniorRegistrar1: '',
+    juniorRegistrar2: '',
     houseOfficer1: '',
     houseOfficer2: '',
   });
@@ -37,7 +41,7 @@ export default function UnitRosterWidget() {
     if (!autoSetupDone && !loading && !staffLoading && !rosterConfig) {
       autoSetupRoster();
     }
-  }, [autoSetupDone, loading, staffLoading, rosterConfig, availableSeniorRegistrars, availableHouseOfficers]);
+  }, [autoSetupDone, loading, staffLoading, rosterConfig, availableSeniorRegistrars, availableJuniorRegistrars, availableHouseOfficers]);
 
   const loadRosterConfig = async () => {
     try {
@@ -50,7 +54,10 @@ export default function UnitRosterWidget() {
             const config: UnitRosterConfig = {
               startDate: active.start_date,
               rotationWeeks: active.rotation_weeks || 2,
+              houseOfficerRotationWeeks: active.house_officer_rotation_weeks || active.rotation_weeks || 2,
+              juniorRegistrarRotationWeeks: active.junior_registrar_rotation_weeks || 6,
               seniorRegistrars: active.senior_registrars || [],
+              juniorRegistrars: active.junior_registrars || [],
               houseOfficers: active.house_officers || [],
               isActive: active.is_active,
               createdAt: active.created_at,
@@ -89,7 +96,8 @@ export default function UnitRosterWidget() {
     try {
       const allUsers = await userManagementService.getAllApprovedUsers();
       setAllActiveUsers(allUsers);
-      setAvailableSeniorRegistrars(allUsers.filter(u => u.role === 'senior_registrar' || u.role === 'junior_registrar'));
+      setAvailableSeniorRegistrars(allUsers.filter(u => u.role === 'senior_registrar'));
+      setAvailableJuniorRegistrars(allUsers.filter(u => u.role === 'junior_registrar'));
       setAvailableHouseOfficers(allUsers.filter(u => u.role === 'house_officer'));
     } catch (err) {
       console.error('Error loading available staff:', err);
@@ -139,8 +147,11 @@ export default function UnitRosterWidget() {
             action: 'upsert',
             payload: {
               start_date: config.startDate,
-              rotation_weeks: config.rotationWeeks,
+              rotation_weeks: config.houseOfficerRotationWeeks ?? config.rotationWeeks ?? 2,
+              house_officer_rotation_weeks: config.houseOfficerRotationWeeks ?? 2,
+              junior_registrar_rotation_weeks: config.juniorRegistrarRotationWeeks ?? 6,
               senior_registrars: config.seniorRegistrars,
+              junior_registrars: config.juniorRegistrars || [],
               house_officers: config.houseOfficers,
               is_active: config.isActive,
             }
@@ -154,13 +165,19 @@ export default function UnitRosterWidget() {
 
   const handleAutoAssign = () => {
     const srs = availableSeniorRegistrars;
+    const jrs = availableJuniorRegistrars;
     const hos = availableHouseOfficers;
     setSetupForm(prev => ({
       ...prev,
-      seniorRegistrar1: srs.length > 0 ? srs[0].full_name : prev.seniorRegistrar1,
-      seniorRegistrar2: srs.length > 1 ? srs[1].full_name : prev.seniorRegistrar2,
-      houseOfficer1: hos.length > 0 ? hos[0].full_name : prev.houseOfficer1,
-      houseOfficer2: hos.length > 1 ? hos[1].full_name : prev.houseOfficer2,
+      // Senior Registrars are FIXED per unit
+      seniorRegistrarUnit1: srs[0]?.full_name || prev.seniorRegistrarUnit1,
+      seniorRegistrarUnit2: srs[1]?.full_name || prev.seniorRegistrarUnit2,
+      // Junior Registrars rotate every 6 weeks. If only 1, both units share him.
+      juniorRegistrar1: jrs[0]?.full_name || prev.juniorRegistrar1,
+      juniorRegistrar2: jrs[1]?.full_name || prev.juniorRegistrar2,
+      // House Officers rotate every 2 weeks.
+      houseOfficer1: hos[0]?.full_name || prev.houseOfficer1,
+      houseOfficer2: hos[1]?.full_name || prev.houseOfficer2,
     }));
   };
 
@@ -174,22 +191,22 @@ export default function UnitRosterWidget() {
       }
 
       const srs = availableSeniorRegistrars;
+      const jrs = availableJuniorRegistrars;
       const hos = availableHouseOfficers;
 
       // Only auto-setup if we have real staff — never create TBD entries
-      if (srs.length === 0 && hos.length === 0) {
-        return; // Don't create a roster with TBD values
+      if (srs.length === 0 && jrs.length === 0 && hos.length === 0) {
+        return;
       }
 
       const newConfig: UnitRosterConfig = {
         startDate: new Date().toISOString().split('T')[0],
         rotationWeeks: 2,
-        seniorRegistrars: srs.length > 0 
-          ? srs.slice(0, 2).map(u => u.full_name)
-          : [],
-        houseOfficers: hos.length > 0
-          ? hos.slice(0, 2).map(u => u.full_name)
-          : [],
+        houseOfficerRotationWeeks: 2,
+        juniorRegistrarRotationWeeks: 6,
+        seniorRegistrars: srs.slice(0, 2).map(u => u.full_name),
+        juniorRegistrars: jrs.slice(0, 2).map(u => u.full_name),
+        houseOfficers: hos.slice(0, 2).map(u => u.full_name),
         isActive: true,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -204,13 +221,17 @@ export default function UnitRosterWidget() {
   };
 
   const handleSaveRoster = async () => {
-    if (!setupForm.seniorRegistrar1 || !setupForm.houseOfficer1) {
-      alert('Please fill in at least one Senior Registrar and one House Officer.');
+    // Require at least one rotating staff member to save a roster
+    if (
+      !setupForm.seniorRegistrarUnit1 &&
+      !setupForm.juniorRegistrar1 &&
+      !setupForm.houseOfficer1
+    ) {
+      alert('Please assign at least one Senior Registrar, Junior Registrar, or House Officer.');
       return;
     }
 
     try {
-      // Deactivate existing configs
       const existing = await db.ps_unit_rosters.toArray();
       for (const config of existing) {
         await db.ps_unit_rosters.update(config.id!, { isActive: false, updatedAt: new Date().toISOString() });
@@ -219,7 +240,10 @@ export default function UnitRosterWidget() {
       const newConfig: UnitRosterConfig = {
         startDate: setupForm.startDate,
         rotationWeeks: 2,
-        seniorRegistrars: [setupForm.seniorRegistrar1, setupForm.seniorRegistrar2].filter(Boolean),
+        houseOfficerRotationWeeks: 2,
+        juniorRegistrarRotationWeeks: 6,
+        seniorRegistrars: [setupForm.seniorRegistrarUnit1, setupForm.seniorRegistrarUnit2].filter(Boolean),
+        juniorRegistrars: [setupForm.juniorRegistrar1, setupForm.juniorRegistrar2].filter(Boolean),
         houseOfficers: [setupForm.houseOfficer1, setupForm.houseOfficer2].filter(Boolean),
         isActive: true,
         createdAt: new Date().toISOString(),
@@ -256,6 +280,8 @@ export default function UnitRosterWidget() {
       ...rawAssignments.unit1,
       seniorRegistrar: availableSeniorRegistrars.some(u => u.full_name === rawAssignments.unit1.seniorRegistrar)
         ? rawAssignments.unit1.seniorRegistrar : '',
+      juniorRegistrar: availableJuniorRegistrars.some(u => u.full_name === rawAssignments.unit1.juniorRegistrar)
+        ? rawAssignments.unit1.juniorRegistrar : '',
       houseOfficer: availableHouseOfficers.some(u => u.full_name === rawAssignments.unit1.houseOfficer)
         ? rawAssignments.unit1.houseOfficer : '',
     },
@@ -263,6 +289,8 @@ export default function UnitRosterWidget() {
       ...rawAssignments.unit2,
       seniorRegistrar: availableSeniorRegistrars.some(u => u.full_name === rawAssignments.unit2.seniorRegistrar)
         ? rawAssignments.unit2.seniorRegistrar : '',
+      juniorRegistrar: availableJuniorRegistrars.some(u => u.full_name === rawAssignments.unit2.juniorRegistrar)
+        ? rawAssignments.unit2.juniorRegistrar : '',
       houseOfficer: availableHouseOfficers.some(u => u.full_name === rawAssignments.unit2.houseOfficer)
         ? rawAssignments.unit2.houseOfficer : '',
     },
@@ -319,44 +347,80 @@ export default function UnitRosterWidget() {
               <button
                 onClick={handleAutoAssign}
                 className="px-3 py-1.5 text-sm bg-indigo-100 text-indigo-700 rounded-md hover:bg-indigo-200 flex items-center gap-1"
-                title="Auto-assign available registrars and house officers to units"
+                title="Auto-assign available staff to units by role"
               >
                 <Wand2 className="h-3.5 w-3.5" />
                 Auto-Assign Staff
               </button>
             </div>
+
+            {/* Senior Registrars — FIXED per unit */}
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Senior Registrar (Group A)</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Senior Registrar — PS-UNIT 1 (fixed)</label>
               <select
-                value={setupForm.seniorRegistrar1}
-                onChange={(e) => setSetupForm({ ...setupForm, seniorRegistrar1: e.target.value })}
+                value={setupForm.seniorRegistrarUnit1}
+                onChange={(e) => setSetupForm({ ...setupForm, seniorRegistrarUnit1: e.target.value })}
                 className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
               >
                 <option value="">-- Select --</option>
                 {availableSeniorRegistrars.map(u => (
-                  <option key={u.id} value={u.full_name} disabled={u.full_name === setupForm.seniorRegistrar2}>
-                    {u.full_name} ({u.role === 'senior_registrar' ? 'SR' : 'JR'}){u.phone ? ` — ${u.phone}` : ''}
+                  <option key={u.id} value={u.full_name}>
+                    {u.full_name}{u.phone ? ` — ${u.phone}` : ''}
                   </option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Senior Registrar (Group B)</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Senior Registrar — PS-UNIT 2 (fixed)</label>
               <select
-                value={setupForm.seniorRegistrar2}
-                onChange={(e) => setSetupForm({ ...setupForm, seniorRegistrar2: e.target.value })}
+                value={setupForm.seniorRegistrarUnit2}
+                onChange={(e) => setSetupForm({ ...setupForm, seniorRegistrarUnit2: e.target.value })}
                 className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
               >
                 <option value="">-- Select --</option>
                 {availableSeniorRegistrars.map(u => (
-                  <option key={u.id} value={u.full_name} disabled={u.full_name === setupForm.seniorRegistrar1}>
-                    {u.full_name} ({u.role === 'senior_registrar' ? 'SR' : 'JR'}){u.phone ? ` — ${u.phone}` : ''}
+                  <option key={u.id} value={u.full_name}>
+                    {u.full_name}{u.phone ? ` — ${u.phone}` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Junior Registrars — 6-week rotation */}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Junior Registrar A (6-wk rotation)</label>
+              <select
+                value={setupForm.juniorRegistrar1}
+                onChange={(e) => setSetupForm({ ...setupForm, juniorRegistrar1: e.target.value })}
+                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
+              >
+                <option value="">-- Select --</option>
+                {availableJuniorRegistrars.map(u => (
+                  <option key={u.id} value={u.full_name} disabled={u.full_name === setupForm.juniorRegistrar2}>
+                    {u.full_name}{u.phone ? ` — ${u.phone}` : ''}
                   </option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">House Officer (Group A)</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Junior Registrar B (6-wk rotation)</label>
+              <select
+                value={setupForm.juniorRegistrar2}
+                onChange={(e) => setSetupForm({ ...setupForm, juniorRegistrar2: e.target.value })}
+                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
+              >
+                <option value="">-- Select (leave empty if only 1 registrar) --</option>
+                {availableJuniorRegistrars.map(u => (
+                  <option key={u.id} value={u.full_name} disabled={u.full_name === setupForm.juniorRegistrar1}>
+                    {u.full_name}{u.phone ? ` — ${u.phone}` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* House Officers — 2-week rotation */}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">House Officer A (2-wk rotation)</label>
               <select
                 value={setupForm.houseOfficer1}
                 onChange={(e) => setSetupForm({ ...setupForm, houseOfficer1: e.target.value })}
@@ -371,13 +435,13 @@ export default function UnitRosterWidget() {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">House Officer (Group B)</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">House Officer B (2-wk rotation)</label>
               <select
                 value={setupForm.houseOfficer2}
                 onChange={(e) => setSetupForm({ ...setupForm, houseOfficer2: e.target.value })}
                 className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
               >
-                <option value="">-- Select --</option>
+                <option value="">-- Select (leave empty if only 1 HO) --</option>
                 {availableHouseOfficers.map(u => (
                   <option key={u.id} value={u.full_name} disabled={u.full_name === setupForm.houseOfficer1}>
                     {u.full_name}{u.phone ? ` — ${u.phone}` : ''}
@@ -387,7 +451,7 @@ export default function UnitRosterWidget() {
             </div>
           </div>
           <p className="text-xs text-gray-500">
-            Group A starts in PS-UNIT 1 and Group B in PS-UNIT 2. They swap every 2 weeks. Click "Auto-Assign Staff" to automatically populate from registered users.
+            <b>Senior Registrar</b> is fixed per unit (no rotation). <b>Junior Registrar</b> rotates between units every 6 weeks; if only one is registered, he covers BOTH units. <b>House Officer</b> rotates every 2 weeks (so a single HO completes both units in ~4 weeks). Click <b>Auto-Assign Staff</b> to populate from registered users by role.
           </p>
           <div className="flex gap-2">
             <button
@@ -449,11 +513,17 @@ export default function UnitRosterWidget() {
                 <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Consultants</p>
                 {unit.consultants.map((c, i) => {
                   const consultantUser = allActiveUsers.find(u => u.full_name === c);
+                  const isManaging = i === 0;
                   return (
                     <div key={i}>
                       <div className="flex items-center gap-1.5 text-sm text-gray-800">
                         <UserCheck className="h-3.5 w-3.5 text-primary-500" />
                         {c}
+                        {isManaging && (
+                          <span className="ml-1 text-[10px] uppercase font-semibold tracking-wider text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded" title="Managing Consultant — approves treatment plans">
+                            Managing
+                          </span>
+                        )}
                       </div>
                       {consultantUser?.phone && (
                         <div className="ml-5">
@@ -468,10 +538,10 @@ export default function UnitRosterWidget() {
               {/* Rotating Staff */}
               <div className="mb-2 space-y-1">
                 <div>
-                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Senior Registrar</p>
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Senior Registrar <span className="normal-case font-normal text-gray-400">— fixed</span></p>
                   <p className="text-sm text-gray-800 flex items-center gap-1.5">
-                    <Users className="h-3.5 w-3.5 text-orange-500" />
-                    {assignment?.seniorRegistrar || 'Not assigned'}
+                    <Stethoscope className="h-3.5 w-3.5 text-purple-500" />
+                    {assignment?.seniorRegistrar || <span className="text-gray-400 italic">Not assigned</span>}
                   </p>
                   {assignment?.seniorRegistrar && (() => {
                     const sr = availableSeniorRegistrars.find(u => u.full_name === assignment.seniorRegistrar);
@@ -479,22 +549,50 @@ export default function UnitRosterWidget() {
                   })()}
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">House Officer</p>
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Junior Registrar <span className="normal-case font-normal text-gray-400">— 6-wk rotation</span></p>
                   <p className="text-sm text-gray-800 flex items-center gap-1.5">
-                    <Users className="h-3.5 w-3.5 text-purple-500" />
-                    {assignment?.houseOfficer || 'Not assigned'}
+                    <Briefcase className="h-3.5 w-3.5 text-orange-500" />
+                    {assignment?.juniorRegistrar || <span className="text-gray-400 italic">Not assigned</span>}
+                  </p>
+                  {assignment?.juniorRegistrar && (() => {
+                    const jr = availableJuniorRegistrars.find(u => u.full_name === assignment.juniorRegistrar);
+                    return jr?.phone ? <div className="ml-5"><PhoneLinks phone={jr.phone} /></div> : null;
+                  })()}
+                  {assignment?.juniorRegistrar && (
+                    <p className="ml-5 text-[11px] text-gray-500">
+                      Window: {assignment.juniorRegistrarStart} → {assignment.juniorRegistrarEnd}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">House Officer <span className="normal-case font-normal text-gray-400">— 2-wk rotation</span></p>
+                  <p className="text-sm text-gray-800 flex items-center gap-1.5">
+                    <Users className="h-3.5 w-3.5 text-emerald-500" />
+                    {assignment?.houseOfficer || <span className="text-gray-400 italic">Not assigned</span>}
                   </p>
                   {assignment?.houseOfficer && (() => {
                     const ho = availableHouseOfficers.find(u => u.full_name === assignment.houseOfficer);
                     return ho?.phone ? <div className="ml-5"><PhoneLinks phone={ho.phone} /></div> : null;
                   })()}
+                  {assignment?.houseOfficer && (
+                    <p className="ml-5 text-[11px] text-gray-500">
+                      Window: {assignment.houseOfficerStart} → {assignment.houseOfficerEnd}
+                    </p>
+                  )}
                 </div>
               </div>
+
+              {/* Empty-state nudge for admins */}
+              {isAdmin && assignment && !assignment.juniorRegistrar && !assignment.houseOfficer && availableJuniorRegistrars.length === 0 && availableHouseOfficers.length === 0 && (
+                <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 mb-1">
+                  No Junior Registrars or House Officers approved yet. Approve users in <b>Admin → Users</b>, then re-open this widget.
+                </p>
+              )}
 
               {/* Rotation Period */}
               {assignment && (
                 <p className="text-xs text-gray-500 border-t pt-1 mt-1">
-                  Rotation: {assignment.rotationStartDate} to {assignment.rotationEndDate}
+                  Roster start: {rosterConfig?.startDate} · HO rotates every {rosterConfig?.houseOfficerRotationWeeks ?? 2}w · JR every {rosterConfig?.juniorRegistrarRotationWeeks ?? 6}w
                 </p>
               )}
 

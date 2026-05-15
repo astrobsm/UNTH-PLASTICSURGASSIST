@@ -1474,12 +1474,19 @@ async function createTables() {
       id SERIAL PRIMARY KEY,
       start_date VARCHAR(50) NOT NULL,
       rotation_weeks INTEGER DEFAULT 2,
+      house_officer_rotation_weeks INTEGER DEFAULT 2,
+      junior_registrar_rotation_weeks INTEGER DEFAULT 6,
       senior_registrars JSONB DEFAULT '[]',
+      junior_registrars JSONB DEFAULT '[]',
       house_officers JSONB DEFAULT '[]',
       is_active BOOLEAN DEFAULT TRUE,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
+    -- Idempotent ALTERs for upgrades from older schemas:
+    ALTER TABLE ps_unit_rosters ADD COLUMN IF NOT EXISTS house_officer_rotation_weeks INTEGER DEFAULT 2;
+    ALTER TABLE ps_unit_rosters ADD COLUMN IF NOT EXISTS junior_registrar_rotation_weeks INTEGER DEFAULT 6;
+    ALTER TABLE ps_unit_rosters ADD COLUMN IF NOT EXISTS junior_registrars JSONB DEFAULT '[]';
     CREATE INDEX IF NOT EXISTS idx_ps_rosters_active ON ps_unit_rosters(is_active);
 
     -- Shopping Lists table
