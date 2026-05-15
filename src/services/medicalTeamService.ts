@@ -521,8 +521,48 @@ class MedicalTeamService {
       // Get active house officers sorted by least loaded
       const houseOfficers = await this.getLocalStaffByRole('house_officer');
       if (houseOfficers.length === 0) {
-        console.warn('No active house officers available for auto-assignment');
-        return { assigned: 0, total: admissions.length };
+        // Fallback: use roster HO names directly so admitted patients still
+        // get a named house officer even before the HOs register as users.
+        try {
+          const rosters = await db.ps_unit_rosters.toArray();
+          const activeRoster = rosters.find((r: any) => r.isActive);
+          const rosterHoNames: string[] = activeRoster?.houseOfficers || [];
+          if (rosterHoNames.length === 0) {
+            console.warn('No active house officers and no roster HOs available');
+            return { assigned: 0, total: admissions.length };
+          }
+
+          // Distribute admissions evenly across roster HO names
+          const counts: Record<string, number> = {};
+          for (const a of admissions) {
+            const name = (a as any).assigned_house_officer;
+            if (name) counts[name] = (counts[name] || 0) + 1;
+          }
+          let assignedCount = 0;
+          for (const adm of admissions) {
+            if ((adm as any).assigned_house_officer) continue;
+            // Pick least-loaded roster HO
+            let chosen = rosterHoNames[0];
+            let lowest = counts[chosen] ?? 0;
+            for (const n of rosterHoNames) {
+              const c = counts[n] ?? 0;
+              if (c < lowest) { lowest = c; chosen = n; }
+            }
+            try {
+              await db.admissions.update(adm.id, {
+                assigned_house_officer: chosen,
+                updated_at: new Date(),
+              } as any);
+              counts[chosen] = (counts[chosen] || 0) + 1;
+              assignedCount++;
+            } catch { /* ignore single-row failure */ }
+          }
+          console.log(`✅ Auto-assigned ${assignedCount} patients to roster HO names (no user records)`);
+          return { assigned: assignedCount, total: admissions.length };
+        } catch (e) {
+          console.warn('Roster fallback failed:', e);
+          return { assigned: 0, total: admissions.length };
+        }
       }
 
       // Get existing assignments

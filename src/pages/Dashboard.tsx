@@ -341,6 +341,72 @@ export default function Dashboard() {
         }
       }
 
+      // Backfill: include any active admissions whose patient record is missing
+      // from the patients table (cross-device sync gap, deleted patient row, etc.)
+      // This guarantees every admitted patient appears on the dashboard.
+      const includedIds = new Set(dPatients.map(d => String(d.id)));
+      const includedHns = new Set(
+        dPatients.map(d => (d.hospital_number || '').trim().toLowerCase()).filter(Boolean)
+      );
+      for (const adm of activeAdmissions) {
+        const admPid = String(adm.patient_id || '');
+        const admHn = (adm.hospital_number || '').trim().toLowerCase();
+        if (admPid && includedIds.has(admPid)) continue;
+        if (admHn && includedHns.has(admHn)) continue;
+
+        const numPid = Number(adm.patient_id);
+        const assignment = assignmentByPid.get(numPid);
+        const assignedConsultant = assignment?.consultant_id
+          ? userById.get(assignment.consultant_id) : null;
+        const consultant = assignedConsultant
+          ? (assignedConsultant.full_name || assignedConsultant.name || '')
+          : (adm.admitting_consultant || '');
+        const srUser = assignment?.senior_registrar_id
+          ? userById.get(assignment.senior_registrar_id) : null;
+        const regUser = assignment?.registrar_id
+          ? userById.get(assignment.registrar_id) : null;
+        const resident = srUser
+          ? (srUser.full_name || srUser.name || '')
+          : regUser ? (regUser.full_name || regUser.name || '') : '';
+        const hoUser = assignment?.house_officer_id
+          ? userById.get(assignment.house_officer_id) : null;
+        const houseOfficer = hoUser
+          ? (hoUser.full_name || hoUser.name || '')
+          : ((adm as any).assigned_house_officer || '');
+
+        // Honour role-based visibility for non-admin users
+        const myUserId = Number(user?.id || '');
+        const isAssigned = isAdmin ||
+          consultant.toLowerCase().includes(userName.toLowerCase()) ||
+          resident.toLowerCase().includes(userName.toLowerCase()) ||
+          (adm.admitting_doctor || '').toLowerCase().includes(userName.toLowerCase()) ||
+          (adm.admitting_consultant || '').toLowerCase().includes(userName.toLowerCase()) ||
+          adm.created_by === user?.id ||
+          (assignment && (
+            assignment.consultant_id === myUserId ||
+            assignment.senior_registrar_id === myUserId ||
+            assignment.registrar_id === myUserId ||
+            assignment.house_officer_id === myUserId
+          ));
+        if (!isAdmin && !isAssigned) continue;
+
+        dPatients.push({
+          id: adm.patient_id || adm.id || '',
+          name: adm.patient_name || `Hosp ${adm.hospital_number || ''}` || 'Unknown',
+          hospital_number: adm.hospital_number || '',
+          ward: adm.ward_location || '',
+          bed: adm.bed_number || '',
+          consultant,
+          resident,
+          house_officer: houseOfficer,
+          admission_status: 'active' as const,
+          admission_date: adm.admission_date
+            ? new Date(adm.admission_date).toLocaleDateString() : undefined
+        });
+        if (admPid) includedIds.add(admPid);
+        if (admHn) includedHns.add(admHn);
+      }
+
       setDashboardPatients(dPatients);
 
       // Collect unique wards
