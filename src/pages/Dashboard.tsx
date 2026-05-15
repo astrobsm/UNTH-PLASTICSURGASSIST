@@ -37,6 +37,7 @@ import toast from 'react-hot-toast';
 import UnitRosterWidget from '../components/UnitRosterWidget';
 import { userManagementService, ApprovedUser } from '../services/userManagementService';
 import { medicalTeamService } from '../services/medicalTeamService';
+import { checkAndReassignHouseOfficers } from '../services/houseOfficerReassignmentService';
 import { getCurrentUserName } from '../utils/getCurrentUser';
 import { PS_UNITS, getCurrentAssignments, getTodaySchedule, UnitRosterConfig } from '../config/psUnits';
 import HOResponsibilitiesGuide, { HOResponsibilitiesCard } from '../components/HOResponsibilitiesGuide';
@@ -224,6 +225,21 @@ export default function Dashboard() {
         }
       } catch {
         // Silently ignore — assignment is best-effort on load
+      }
+      // HO rotation cron: reassign HOs whose tour has ended (throttled to 1/hr)
+      try {
+        const role = useAuthStore.getState().user?.role;
+        if (role && ['admin', 'consultant', 'senior_registrar'].includes(role)) {
+          const reassign = await checkAndReassignHouseOfficers();
+          if (reassign.reassigned > 0) {
+            toast.success(
+              `${reassign.reassigned} patient${reassign.reassigned === 1 ? '' : 's'} reassigned to new house officers (rotation complete)`
+            );
+            await loadDashboardData();
+          }
+        }
+      } catch {
+        // best-effort
       }
     };
     init();

@@ -96,6 +96,7 @@ const AdminTrainingPage = lazyWithRetry(() => import('./pages/AdminTrainingPage'
 const SJSManagementPage = lazyWithRetry(() => import('./pages/SJSManagementPage'));
 const SubstanceDetoxPage = lazyWithRetry(() => import('./pages/SubstanceDetoxPage'));
 const HOTrackingPage = lazyWithRetry(() => import('./pages/HOTrackingPage'));
+const AuditLogViewerPage = lazyWithRetry(() => import('./pages/AuditLogViewerPage'));
 const StudentRegister = lazyWithRetry(() => import('./pages/StudentRegister'));
 const StudentLogin = lazyWithRetry(() => import('./pages/StudentLogin'));
 const StudentDashboard = lazyWithRetry(() => import('./pages/StudentDashboard'));
@@ -342,6 +343,7 @@ function App() {
               <Route path="/ho-tracking" element={<ProtectedRoute allowedRoles={['admin', 'consultant', 'senior_registrar']}><HOTrackingPage /></ProtectedRoute>} />
               <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><Admin /></ProtectedRoute>} />
               <Route path="/topic-management" element={<ProtectedRoute allowedRoles={['admin', 'consultant']}><TopicManagement /></ProtectedRoute>} />
+              <Route path="/audit-logs" element={<ProtectedRoute allowedRoles={['admin', 'consultant', 'senior_registrar']}><AuditLogViewerPage /></ProtectedRoute>} />
             </Routes>
             
             {deferredPrompt && (

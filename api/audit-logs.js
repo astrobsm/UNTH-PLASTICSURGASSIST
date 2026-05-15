@@ -31,8 +31,8 @@ export default async function handler(req, res) {
 
 // GET /api/audit-logs?limit=50&patient_id=xxx
 async function getAuditLogs(req, res, user) {
-  // Only admin, super_admin, and consultant can view all audit logs
-  if (!['admin', 'super_admin', 'consultant'].includes(user.role)) {
+  // Admin, consultant and senior registrar can view audit logs.
+  if (!['admin', 'super_admin', 'consultant', 'senior_registrar'].includes(user.role)) {
     return res.status(403).json({ error: 'Access denied' });
   }
 
