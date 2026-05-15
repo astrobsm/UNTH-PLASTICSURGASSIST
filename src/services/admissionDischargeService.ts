@@ -65,6 +65,16 @@ export interface Admission {
   initial_management_plan?: string;
   status: 'active' | 'discharged' | 'transferred' | 'deceased';
   discharge_date?: string;
+  // Persistent house officer assignment (set on admission, kept until discharge or HO finishes both rotations)
+  assigned_house_officer?: string;
+  assigned_house_officer_id?: string | number;
+  assigned_unit?: string;
+  // Geo-stamp captured at admission for accountability / location verification
+  admission_lat?: number | null;
+  admission_lng?: number | null;
+  admission_accuracy_m?: number | null;
+  admission_address?: string | null;
+  admission_geofence?: string | null;
   created_by: string;
   created_at: Date;
   updated_at: Date;

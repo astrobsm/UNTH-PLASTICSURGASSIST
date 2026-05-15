@@ -35,6 +35,8 @@ import {
   PDF_FONT_SIZES
 } from '../utils/pdfUtils';
 import { getCurrentUserName } from '../utils/getCurrentUser';
+import { captureLocation } from '../services/geolocationService';
+import { logClinicalAction } from '../services/clinicalAuditService';
 
 // ============= CONSTANTS =============
 
@@ -984,8 +986,20 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
 
     setLoading(true);
     try {
-      // Create admission
-      await admissionDischargeService.createAdmission({
+      // Capture geo-stamp for accountability (non-blocking on failure)
+      let geo: Awaited<ReturnType<typeof captureLocation>> | null = null;
+      try {
+        geo = await captureLocation({ skipReverseGeocode: false });
+      } catch (geoErr) {
+        console.warn('Geo capture failed during admission (continuing without coords):', geoErr);
+      }
+
+      // Resolve assigned house officer name from selection
+      const hoStaff = houseOfficers.find(h => h.id === selectedHouseOfficer);
+      const assignedHoName = hoStaff?.full_name || hoStaff?.name || undefined;
+
+      // Create admission with persistent HO assignment + geo-stamp
+      const admissionId = await admissionDischargeService.createAdmission({
         patient_id: selectedPatient.id,
         patient_name: `${selectedPatient.first_name} ${selectedPatient.last_name}`,
         hospital_number: selectedPatient.hospital_number,
@@ -1018,6 +1032,14 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
         examination_findings: examinationFindings,
         initial_management_plan: initialManagementPlan,
         status: 'active',
+        assigned_house_officer: assignedHoName,
+        assigned_house_officer_id: selectedHouseOfficer ?? undefined,
+        assigned_unit: admittingUnit,
+        admission_lat: geo?.latitude ?? null,
+        admission_lng: geo?.longitude ?? null,
+        admission_accuracy_m: geo?.accuracy != null ? Math.round(geo.accuracy) : null,
+        admission_address: geo?.address ?? null,
+        admission_geofence: geo?.geofenceName ?? null,
         created_by: getCurrentUserName()
       });
 
@@ -1032,7 +1054,32 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
         }
       );
 
-      alert('Patient admitted successfully with medical team assigned!');
+      // Geo-stamped audit trail (non-blocking on failure — queues offline)
+      try {
+        await logClinicalAction({
+          action: 'ADMISSION_CREATED',
+          resourceType: 'admission',
+          resourceId: admissionId ?? selectedPatient.id,
+          resourceIdentifier: `${selectedPatient.first_name} ${selectedPatient.last_name} (${selectedPatient.hospital_number})`,
+          details: {
+            ward_location: wardLocation,
+            bed_number: bedNumber,
+            route: routeOfAdmission,
+            unit: admittingUnit,
+            consultant: admittingConsultant,
+            assigned_house_officer: assignedHoName,
+            provisional_diagnosis: provisionalDiagnosis,
+          },
+          geo,
+        });
+      } catch (auditErr) {
+        console.warn('Audit log failed (queued):', auditErr);
+      }
+
+      const insideMsg = geo?.isInsideGeofence === false
+        ? '\n\n⚠ Geo-stamp recorded outside hospital geofence — please verify location.'
+        : '';
+      alert(`Patient admitted successfully with medical team assigned!${insideMsg}`);
       onSuccess();
     } catch (error) {
       console.error('Error admitting patient:', error);

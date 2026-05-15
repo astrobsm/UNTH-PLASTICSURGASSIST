@@ -258,6 +258,15 @@ async function createTables() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
+    -- Persistent HO assignment + admission geo-stamp (idempotent for existing DBs)
+    ALTER TABLE admissions ADD COLUMN IF NOT EXISTS assigned_house_officer VARCHAR(255);
+    ALTER TABLE admissions ADD COLUMN IF NOT EXISTS assigned_house_officer_id VARCHAR(100);
+    ALTER TABLE admissions ADD COLUMN IF NOT EXISTS assigned_unit VARCHAR(50);
+    ALTER TABLE admissions ADD COLUMN IF NOT EXISTS admission_lat DECIMAL(10,7);
+    ALTER TABLE admissions ADD COLUMN IF NOT EXISTS admission_lng DECIMAL(10,7);
+    ALTER TABLE admissions ADD COLUMN IF NOT EXISTS admission_accuracy_m INTEGER;
+    ALTER TABLE admissions ADD COLUMN IF NOT EXISTS admission_address TEXT;
+    ALTER TABLE admissions ADD COLUMN IF NOT EXISTS admission_geofence VARCHAR(255);
 
     -- Lab Orders table
     CREATE TABLE IF NOT EXISTS lab_orders (
@@ -530,7 +539,7 @@ async function createTables() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
-    -- Audit Logs table (HIPAA compliance - PHI access tracking)
+    -- Audit Logs table (HIPAA compliance - PHI access tracking + geo-stamped clinical actions)
     CREATE TABLE IF NOT EXISTS audit_logs (
       id SERIAL PRIMARY KEY,
       user_id VARCHAR(100),
@@ -542,11 +551,24 @@ async function createTables() {
       resource_identifier VARCHAR(255),
       details TEXT,
       ip_address VARCHAR(100),
-      timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      latitude DECIMAL(10,7),
+      longitude DECIMAL(10,7),
+      accuracy_meters INTEGER,
+      geofence_name VARCHAR(255),
+      is_inside_geofence BOOLEAN,
+      address TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_audit_logs_user ON audit_logs(user_id);
     CREATE INDEX IF NOT EXISTS idx_audit_logs_resource ON audit_logs(resource_type, resource_id);
     CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs(timestamp DESC);
+    -- Idempotent geo column upgrades for existing databases
+    ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS latitude DECIMAL(10,7);
+    ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS longitude DECIMAL(10,7);
+    ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS accuracy_meters INTEGER;
+    ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS geofence_name VARCHAR(255);
+    ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS is_inside_geofence BOOLEAN;
+    ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS address TEXT;
 
     -- Sync Queue table (for offline sync)
     CREATE TABLE IF NOT EXISTS sync_queue (
@@ -1890,6 +1912,13 @@ async function createTables() {
         ALTER TABLE patient_assignments ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
       END IF;
     END $$;
+    -- Track which unit assigned the team and where the action was taken (idempotent)
+    ALTER TABLE patient_assignments ADD COLUMN IF NOT EXISTS unit VARCHAR(50);
+    ALTER TABLE patient_assignments ADD COLUMN IF NOT EXISTS house_officer_name VARCHAR(255);
+    ALTER TABLE patient_assignments ADD COLUMN IF NOT EXISTS assigned_lat DECIMAL(10,7);
+    ALTER TABLE patient_assignments ADD COLUMN IF NOT EXISTS assigned_lng DECIMAL(10,7);
+    ALTER TABLE patient_assignments ADD COLUMN IF NOT EXISTS reassigned_at TIMESTAMP;
+    ALTER TABLE patient_assignments ADD COLUMN IF NOT EXISTS reassigned_reason VARCHAR(100);
 
     -- =====================================================
     -- KELOID CARE PROGRAM

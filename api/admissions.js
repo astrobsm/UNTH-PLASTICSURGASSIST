@@ -46,6 +46,14 @@ function transformAdmission(row) {
     initial_management_plan: row.initial_management_plan,
     status: row.status,
     discharge_date: row.discharge_date,
+    assigned_house_officer: row.assigned_house_officer || null,
+    assigned_house_officer_id: row.assigned_house_officer_id || null,
+    assigned_unit: row.assigned_unit || null,
+    admission_lat: row.admission_lat != null ? Number(row.admission_lat) : null,
+    admission_lng: row.admission_lng != null ? Number(row.admission_lng) : null,
+    admission_accuracy_m: row.admission_accuracy_m ?? null,
+    admission_address: row.admission_address || null,
+    admission_geofence: row.admission_geofence || null,
     created_by: row.created_by,
     created_at: row.created_at,
     updated_at: row.updated_at
@@ -176,6 +184,9 @@ async function createAdmission(data, user, req, res) {
     vitalSigns, allergies, currentMedications,
     pastMedicalHistory, pastSurgicalHistory, socialHistory, familyHistory,
     comorbidities, examinationFindings, initialManagementPlan,
+    // Persistent HO assignment + geo-stamp
+    assignedHouseOfficer, assignedHouseOfficerId, assignedUnit,
+    admissionLat, admissionLng, admissionAccuracyM, admissionAddress, admissionGeofence,
     // Also accept snake_case from frontend direct mapping
     patient_id, admission_date, ward_location, bed_number,
     admission_time, patient_name, hospital_number,
@@ -184,7 +195,9 @@ async function createAdmission(data, user, req, res) {
     admitting_doctor, admitting_consultant,
     vital_signs, current_medications, past_medical_history,
     past_surgical_history, social_history, family_history,
-    examination_findings, initial_management_plan
+    examination_findings, initial_management_plan,
+    assigned_house_officer, assigned_house_officer_id, assigned_unit,
+    admission_lat, admission_lng, admission_accuracy_m, admission_address, admission_geofence
   } = data;
 
   // Resolve values: prefer camelCase, fall back to snake_case
@@ -201,6 +214,26 @@ async function createAdmission(data, user, req, res) {
   // Resolve each field, preferring camelCase payload, falling back to snake_case
   const resolvedVitalSigns = vitalSigns || vital_signs;
   const resolvedComorbidities = comorbidities;
+  const resolvedAssignedHo = assignedHouseOfficer || assigned_house_officer || null;
+  const resolvedAssignedHoId = assignedHouseOfficerId || assigned_house_officer_id || null;
+  const resolvedAssignedUnit = assignedUnit || assigned_unit || null;
+  const resolvedAdmLat = admissionLat ?? admission_lat ?? null;
+  const resolvedAdmLng = admissionLng ?? admission_lng ?? null;
+  const resolvedAdmAccuracy = admissionAccuracyM ?? admission_accuracy_m ?? null;
+  const resolvedAdmAddress = admissionAddress || admission_address || null;
+  const resolvedAdmGeofence = admissionGeofence || admission_geofence || null;
+
+  // Idempotent column upgrades for older databases (cheap; safe if already added)
+  try {
+    await query(`ALTER TABLE admissions ADD COLUMN IF NOT EXISTS assigned_house_officer VARCHAR(255)`);
+    await query(`ALTER TABLE admissions ADD COLUMN IF NOT EXISTS assigned_house_officer_id VARCHAR(100)`);
+    await query(`ALTER TABLE admissions ADD COLUMN IF NOT EXISTS assigned_unit VARCHAR(50)`);
+    await query(`ALTER TABLE admissions ADD COLUMN IF NOT EXISTS admission_lat DECIMAL(10,7)`);
+    await query(`ALTER TABLE admissions ADD COLUMN IF NOT EXISTS admission_lng DECIMAL(10,7)`);
+    await query(`ALTER TABLE admissions ADD COLUMN IF NOT EXISTS admission_accuracy_m INTEGER`);
+    await query(`ALTER TABLE admissions ADD COLUMN IF NOT EXISTS admission_address TEXT`);
+    await query(`ALTER TABLE admissions ADD COLUMN IF NOT EXISTS admission_geofence VARCHAR(255)`);
+  } catch { /* columns may already exist */ }
 
   const result = await query(
     `INSERT INTO admissions (
@@ -212,8 +245,10 @@ async function createAdmission(data, user, req, res) {
       admitting_doctor, admitting_consultant,
       vital_signs, allergies, current_medications,
       past_medical_history, past_surgical_history, social_history, family_history,
-      comorbidities, examination_findings, initial_management_plan
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31)
+      comorbidities, examination_findings, initial_management_plan,
+      assigned_house_officer, assigned_house_officer_id, assigned_unit,
+      admission_lat, admission_lng, admission_accuracy_m, admission_address, admission_geofence
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39)
     RETURNING *`,
     [
       resolvedPatientId,
@@ -246,7 +281,15 @@ async function createAdmission(data, user, req, res) {
       familyHistory || family_history || null,
       resolvedComorbidities ? JSON.stringify(resolvedComorbidities) : null,
       examinationFindings || examination_findings || null,
-      initialManagementPlan || initial_management_plan || null
+      initialManagementPlan || initial_management_plan || null,
+      resolvedAssignedHo,
+      resolvedAssignedHoId,
+      resolvedAssignedUnit,
+      resolvedAdmLat,
+      resolvedAdmLng,
+      resolvedAdmAccuracy,
+      resolvedAdmAddress,
+      resolvedAdmGeofence
     ]
   );
 

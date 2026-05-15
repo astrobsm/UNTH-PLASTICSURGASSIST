@@ -50,9 +50,22 @@ async function getAuditLogs(req, res, user) {
         resource_identifier VARCHAR(255),
         details TEXT,
         ip_address VARCHAR(100),
-        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        latitude DECIMAL(10,7),
+        longitude DECIMAL(10,7),
+        accuracy_meters INTEGER,
+        geofence_name VARCHAR(255),
+        is_inside_geofence BOOLEAN,
+        address TEXT
       )
     `);
+    // Idempotent ALTERs for older databases
+    await query(`ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS latitude DECIMAL(10,7)`);
+    await query(`ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS longitude DECIMAL(10,7)`);
+    await query(`ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS accuracy_meters INTEGER`);
+    await query(`ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS geofence_name VARCHAR(255)`);
+    await query(`ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS is_inside_geofence BOOLEAN`);
+    await query(`ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS address TEXT`);
   } catch (e) {
     // Table may already exist
   }
@@ -101,7 +114,13 @@ async function createAuditLog(req, res, user) {
     resource_identifier,
     details,
     ip_address,
-    timestamp
+    timestamp,
+    latitude,
+    longitude,
+    accuracy_meters,
+    geofence_name,
+    is_inside_geofence,
+    address
   } = req.body;
 
   // Validate required fields
@@ -109,9 +128,27 @@ async function createAuditLog(req, res, user) {
     return res.status(400).json({ error: 'Missing required fields: action, resource_type, resource_id' });
   }
 
+  // Idempotent geo column upgrades (cheap, safe even if already added)
+  try {
+    await query(`ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS latitude DECIMAL(10,7)`);
+    await query(`ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS longitude DECIMAL(10,7)`);
+    await query(`ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS accuracy_meters INTEGER`);
+    await query(`ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS geofence_name VARCHAR(255)`);
+    await query(`ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS is_inside_geofence BOOLEAN`);
+    await query(`ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS address TEXT`);
+  } catch { /* columns may already exist */ }
+
+  const detailsStr = typeof details === 'string'
+    ? details
+    : (details ? JSON.stringify(details) : null);
+
   const result = await query(
-    `INSERT INTO audit_logs (user_id, user_name, user_role, action, resource_type, resource_id, resource_identifier, details, ip_address, timestamp)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    `INSERT INTO audit_logs (
+       user_id, user_name, user_role, action, resource_type, resource_id,
+       resource_identifier, details, ip_address, timestamp,
+       latitude, longitude, accuracy_meters, geofence_name, is_inside_geofence, address
+     )
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
      RETURNING *`,
     [
       user_id || user.id?.toString(),
@@ -121,9 +158,15 @@ async function createAuditLog(req, res, user) {
       resource_type,
       resource_id,
       resource_identifier || null,
-      details || null,
+      detailsStr,
       ip_address || req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || 'unknown',
-      timestamp || new Date().toISOString()
+      timestamp || new Date().toISOString(),
+      latitude ?? null,
+      longitude ?? null,
+      accuracy_meters ?? null,
+      geofence_name || null,
+      typeof is_inside_geofence === 'boolean' ? is_inside_geofence : null,
+      address || null
     ]
   );
 
