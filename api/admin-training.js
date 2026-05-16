@@ -127,7 +127,7 @@ async function handleGet(req, res, adminUser) {
         SELECT u.id, u.username, u.full_name, u.role, u.email, u.phone,
                u.created_at as registered_at
         FROM users u
-        WHERE u.role IN ('intern', 'registrar', 'senior_registrar', 'house_officer', 'junior_resident', 'senior_resident')
+        WHERE u.role IN ('intern', 'registrar', 'junior_registrar', 'senior_registrar', 'house_officer', 'junior_resident', 'senior_resident')
           AND u.is_active = true
         ORDER BY u.role, u.full_name
       `);
@@ -240,7 +240,7 @@ async function handleGet(req, res, adminUser) {
       // Debug endpoint to diagnose training metrics issues
       const trainees = await query(`
         SELECT id, username, full_name, role FROM users
-        WHERE role IN ('intern', 'registrar', 'senior_registrar', 'house_officer', 'junior_resident', 'senior_resident')
+        WHERE role IN ('intern', 'registrar', 'junior_registrar', 'senior_registrar', 'house_officer', 'junior_resident', 'senior_resident')
           AND is_active = true
       `);
       
@@ -436,6 +436,7 @@ function roleToLevel(role) {
     intern: 'house_officer',
     house_officer: 'house_officer',
     registrar: 'junior_resident',
+    junior_registrar: 'junior_resident',
     junior_resident: 'junior_resident',
     senior_registrar: 'senior_resident',
     senior_resident: 'senior_resident',
