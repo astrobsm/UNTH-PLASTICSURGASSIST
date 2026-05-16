@@ -144,7 +144,7 @@ export default function PublicConsultSubmitPage() {
             <h1 className="text-xl font-bold text-gray-900">Plastic Surgery Consult Request</h1>
           </div>
           <p className="text-sm text-gray-600">
-            Submitting from <span className="font-medium text-gray-900">{linkInfo?.unit_label}</span>
+            Submit a consult to the <span className="font-medium text-gray-900">Plastic Surgery Unit</span>. Please complete every required field below — your unit and phone number are how we route the consult and send SMS feedback.
           </p>
           {linkInfo?.description && <p className="text-xs text-gray-500 mt-1">{linkInfo.description}</p>}
           <div className="mt-3 flex items-start gap-2 bg-blue-50 border border-blue-200 rounded p-3 text-xs text-blue-900">
@@ -164,7 +164,7 @@ export default function PublicConsultSubmitPage() {
             <Field label="Patient name *"      value={form.patient_name}     onChange={v => update('patient_name', v)} />
             <Field label="Hospital number"     value={form.hospital_number}  onChange={v => update('hospital_number', v)} />
             <Field label="Age"                 value={form.age}              onChange={v => update('age', v)} type="number" />
-            <Select label="Sex"                value={form.sex}              onChange={v => update('sex', v)} options={['', 'Male', 'Female', 'Other']} />
+            <Select label="Sex"                value={form.sex}              onChange={v => update('sex', v)} options={['', 'Male', 'Female']} />
             <Field label="Ward"                value={form.ward}             onChange={v => update('ward', v)} />
             <Field label="Bed number"          value={form.bed_number}       onChange={v => update('bed_number', v)} />
           </Section>

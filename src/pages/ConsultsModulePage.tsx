@@ -10,7 +10,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Inbox, Send, Link as LinkIcon, Plus, Copy, Check, Loader2, AlertTriangle,
-  Search, Camera, X, ToggleLeft, ToggleRight,
+  Search, Camera, X,
 } from 'lucide-react';
 import {
   listLinks, createLink, setLinkActive,
@@ -385,108 +385,94 @@ function DeliveredConsultCreator({ onClose, onCreated }: { onClose: () => void; 
 }
 
 // ── Links tab ──────────────────────────────────────────────────────────
+// Single universal submission link: any external unit/subspecialty can use it
+// to send a consult. The submitter identifies their unit in the public form.
+const UNIVERSAL_LINK_LABEL = 'All units';
+
 function LinksTab() {
-  const [links, setLinks] = useState<SubmissionLink[]>([]);
+  const [link, setLink] = useState<SubmissionLink | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showCreate, setShowCreate] = useState(false);
-  const [unitLabel, setUnitLabel] = useState('');
-  const [description, setDescription] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [copiedId, setCopiedId] = useState<number | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [reactivating, setReactivating] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
-    try { setLinks(await listLinks()); }
-    catch (e: any) { setError(e.message || 'Failed to load links'); }
-    finally { setLoading(false); }
+    try {
+      const all = await listLinks();
+      // Prefer the first active link; otherwise reuse any existing one;
+      // if none at all, auto-create the universal link.
+      let chosen = all.find(l => l.is_active) || all[0] || null;
+      if (!chosen) {
+        chosen = await createLink(UNIVERSAL_LINK_LABEL, 'Universal submission link for any external unit or subspecialty.');
+      }
+      setLink(chosen);
+    } catch (e: any) {
+      setError(e.message || 'Failed to load link');
+    } finally { setLoading(false); }
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  async function create() {
-    if (!unitLabel.trim()) return;
-    setSaving(true);
+  async function copyUrl() {
+    if (!link) return;
     try {
-      await createLink(unitLabel.trim(), description.trim() || undefined);
-      setUnitLabel(''); setDescription(''); setShowCreate(false);
-      load();
-    } finally { setSaving(false); }
+      await navigator.clipboard.writeText(buildShareableUrl(link.token));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch { /* ignore */ }
   }
 
-  async function copy(token: string, id: number) {
-    const url = buildShareableUrl(token);
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopiedId(id);
-      setTimeout(() => setCopiedId(c => c === id ? null : c), 1800);
-    } catch { /* ignore */ }
+  async function reactivate() {
+    if (!link || link.is_active) return;
+    setReactivating(true);
+    try { await setLinkActive(link.id, true); await load(); }
+    finally { setReactivating(false); }
   }
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-600">Generate a unique URL per requesting unit. They submit consults via this link without needing a login.</p>
-        <button onClick={() => setShowCreate(true)} className="px-3 py-2 bg-green-600 text-white rounded text-sm hover:bg-green-700 flex items-center gap-1">
-          <Plus className="w-4 h-4" /> New link
-        </button>
-      </div>
+      <p className="text-sm text-gray-600">
+        One universal submission link covers <span className="font-medium">all external units and subspecialties</span>.
+        Share this URL — submitters identify their own unit on the consult form. No login required for them.
+      </p>
 
       {error && <Banner kind="error" message={error} />}
 
       {loading ? (
         <div className="py-10 text-center text-gray-500"><Loader2 className="w-6 h-6 animate-spin mx-auto" /></div>
-      ) : links.length === 0 ? (
-        <Empty title="No links yet" hint="Click ‘New link’ to generate the first shareable submission URL." />
+      ) : !link ? (
+        <Empty title="No submission link yet" hint="A universal link will be created automatically when this tab loads. Please refresh." />
       ) : (
-        <ul className="space-y-2">
-          {links.map(l => {
-            const url = buildShareableUrl(l.token);
-            return (
-              <li key={l.id} className="bg-white border border-gray-200 rounded-lg p-3">
-                <div className="flex items-start gap-2 flex-wrap">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-gray-900">{l.unit_label}</span>
-                      <span className={`px-1.5 py-0.5 rounded text-[10px] ${l.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-600'}`}>
-                        {l.is_active ? 'Active' : 'Disabled'}
-                      </span>
-                      <span className="text-xs text-gray-400 ml-auto">
-                        {l.submission_count} submissions{l.last_used_at ? ` · last ${new Date(l.last_used_at).toLocaleDateString()}` : ''}
-                      </span>
-                    </div>
-                    {l.description && <p className="text-xs text-gray-500 mt-0.5">{l.description}</p>}
-                    <div className="mt-2 flex items-center gap-2 bg-gray-50 border border-gray-200 rounded px-2 py-1">
-                      <code className="text-[11px] text-gray-700 truncate flex-1">{url}</code>
-                      <button onClick={() => copy(l.token, l.id)}
-                        className="p-1 text-gray-500 hover:text-green-700" title="Copy">
-                        {copiedId === l.id ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  </div>
-                  <button onClick={async () => { await setLinkActive(l.id, !l.is_active); load(); }}
-                    className="text-gray-500 hover:text-gray-800" title={l.is_active ? 'Disable' : 'Enable'}>
-                    {l.is_active ? <ToggleRight className="w-6 h-6 text-green-600" /> : <ToggleLeft className="w-6 h-6" />}
-                  </button>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-
-      {showCreate && (
-        <ModalShell title="New shareable link" onClose={() => setShowCreate(false)}>
-          <div className="space-y-2">
-            <Inp label="Unit label *"  value={unitLabel}   onChange={setUnitLabel} placeholder="e.g. General Surgery" />
-            <Inp label="Description"   value={description} onChange={setDescription} placeholder="Optional notes for internal use" />
+        <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <div className="flex items-center gap-2 flex-wrap mb-2">
+            <LinkIcon className="w-4 h-4 text-green-600" />
+            <span className="font-semibold text-gray-900">Universal consult submission link</span>
+            <span className={`px-1.5 py-0.5 rounded text-[10px] ${link.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-600'}`}>
+              {link.is_active ? 'Active' : 'Disabled'}
+            </span>
+            <span className="text-xs text-gray-400 ml-auto">
+              {link.submission_count} submissions{link.last_used_at ? ` · last ${new Date(link.last_used_at).toLocaleDateString()}` : ''}
+            </span>
           </div>
-          <ModalFooter>
-            <button onClick={() => setShowCreate(false)} className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded">Cancel</button>
-            <button onClick={create} disabled={saving || !unitLabel.trim()} className="px-4 py-1.5 bg-green-600 text-white rounded text-sm hover:bg-green-700 disabled:bg-gray-300">
-              {saving ? 'Creating…' : 'Create link'}
+          <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded px-2 py-2">
+            <code className="text-xs text-gray-700 truncate flex-1">{buildShareableUrl(link.token)}</code>
+            <button onClick={copyUrl} className="px-2 py-1 text-xs text-green-700 hover:bg-green-50 rounded flex items-center gap-1" title="Copy link">
+              {copied ? <><Check className="w-4 h-4" /> Copied</> : <><Copy className="w-4 h-4" /> Copy</>}
             </button>
-          </ModalFooter>
-        </ModalShell>
+          </div>
+          {!link.is_active && (
+            <div className="mt-3 flex items-center justify-between bg-amber-50 border border-amber-200 rounded p-2 text-xs text-amber-800">
+              <span className="flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" /> This link is currently disabled — submitters can't use it.</span>
+              <button onClick={reactivate} disabled={reactivating}
+                className="px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-300">
+                {reactivating ? 'Reactivating…' : 'Reactivate'}
+              </button>
+            </div>
+          )}
+          <p className="mt-3 text-xs text-gray-500">
+            Tip: print or pin this URL/QR in referring wards. Each submission records the referring unit, doctor name and phone for SMS feedback.
+          </p>
+        </div>
       )}
     </div>
   );
