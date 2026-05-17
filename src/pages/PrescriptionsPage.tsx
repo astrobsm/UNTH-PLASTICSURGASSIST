@@ -38,6 +38,12 @@ interface PatientContext {
   pregnant?: boolean;
   lactating?: boolean;
   gfr?: number;
+  /** Serum creatinine value as entered by the user (numeric, in `creatinineUnit`). */
+  creatinine?: number;
+  /** Unit for `creatinine`. Cockcroft-Gault expects mg/dL; µmol/L is auto-converted (÷ 88.4). */
+  creatinineUnit?: 'mg/dL' | 'µmol/L';
+  /** True when `gfr` was computed from creatinine+weight+age+sex (clinician can still override). */
+  gfrAutoCalculated?: boolean;
   hepaticImpairment?: boolean;
   cardiacDisease?: boolean;
   allergies: string[];
@@ -67,11 +73,52 @@ export default function PrescriptionsPage() {
   const [patientContext, setPatientContext] = useState<PatientContext>({
     name: '',
     hospitalNumber: '',
+    creatinineUnit: 'mg/dL',
     allergies: [],
     comorbidities: [],
     currentMedications: [],
   });
   const [showPatientForm, setShowPatientForm] = useState(true);
+
+  // Auto-calculate eGFR via Cockcroft-Gault whenever the underlying inputs
+  // change (age, weight, sex, serum creatinine, unit). The clinician can
+  // still manually override the eGFR field — doing so flips
+  // gfrAutoCalculated to false and we stop recomputing until they clear it.
+  useEffect(() => {
+    setPatientContext(p => {
+      const { age, weight, sex, creatinine, creatinineUnit, gfrAutoCalculated, gfr } = p;
+      const canCompute =
+        typeof age === 'number' && age > 0 &&
+        typeof weight === 'number' && weight > 0 &&
+        typeof creatinine === 'number' && creatinine > 0;
+
+      // If the field is empty OR was previously auto-calculated, we own it.
+      const weOwnTheField = gfr === undefined || gfrAutoCalculated === true;
+      if (!weOwnTheField) return p;
+
+      if (!canCompute) {
+        // Clear stale auto value if inputs were removed
+        if (gfrAutoCalculated && gfr !== undefined) {
+          return { ...p, gfr: undefined };
+        }
+        return p;
+      }
+
+      // Cockcroft-Gault expects creatinine in mg/dL
+      const creatMgDl = creatinineUnit === 'µmol/L' ? (creatinine as number) / 88.4 : (creatinine as number);
+      const sexFactor = sex === 'female' ? 0.85 : 1;
+      const computed = ((140 - (age as number)) * (weight as number) * sexFactor) / (72 * creatMgDl);
+      const rounded = Math.max(0, Math.round(computed * 10) / 10);
+      if (p.gfr === rounded && p.gfrAutoCalculated === true) return p;
+      return { ...p, gfr: rounded, gfrAutoCalculated: true };
+    });
+  }, [
+    patientContext.age,
+    patientContext.weight,
+    patientContext.sex,
+    patientContext.creatinine,
+    patientContext.creatinineUnit,
+  ]);
 
   // Drug search
   const [searchQuery, setSearchQuery] = useState('');
@@ -762,13 +809,69 @@ export default function PrescriptionsPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">eGFR (mL/min)</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Serum Creatinine</label>
+                    <div className="flex gap-1">
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={patientContext.creatinine ?? ''}
+                        onChange={e => setPatientContext(p => ({
+                          ...p,
+                          creatinine: e.target.value === '' ? undefined : parseFloat(e.target.value),
+                        }))}
+                        className="flex-1 min-w-0 border border-gray-300 rounded-l-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                        placeholder={patientContext.creatinineUnit === 'µmol/L' ? 'e.g., 88' : 'e.g., 1.0'}
+                      />
+                      <select
+                        value={patientContext.creatinineUnit || 'mg/dL'}
+                        onChange={e => setPatientContext(p => ({ ...p, creatinineUnit: e.target.value as 'mg/dL' | 'µmol/L' }))}
+                        className="border border-l-0 border-gray-300 rounded-r-lg px-2 py-2 text-xs bg-gray-50 focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                        title="Serum creatinine unit"
+                      >
+                        <option value="mg/dL">mg/dL</option>
+                        <option value="µmol/L">µmol/L</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="flex items-center justify-between text-xs font-medium text-gray-600 mb-1">
+                      <span>
+                        eGFR (mL/min)
+                        {patientContext.gfrAutoCalculated && (
+                          <span className="ml-1 text-[10px] font-normal text-green-700 bg-green-100 px-1.5 py-0.5 rounded">
+                            auto (C-G)
+                          </span>
+                        )}
+                      </span>
+                      {patientContext.gfr !== undefined && !patientContext.gfrAutoCalculated && (
+                        <button
+                          type="button"
+                          onClick={() => setPatientContext(p => ({ ...p, gfr: undefined, gfrAutoCalculated: false }))}
+                          className="text-[10px] text-blue-600 hover:underline"
+                          title="Clear override and recompute from creatinine"
+                        >
+                          reset
+                        </button>
+                      )}
+                    </label>
                     <input
                       type="number"
-                      value={patientContext.gfr || ''}
-                      onChange={e => setPatientContext(p => ({ ...p, gfr: parseFloat(e.target.value) || undefined }))}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                      placeholder="eGFR"
+                      value={patientContext.gfr ?? ''}
+                      onChange={e => setPatientContext(p => ({
+                        ...p,
+                        gfr: e.target.value === '' ? undefined : parseFloat(e.target.value),
+                        gfrAutoCalculated: false, // manual override
+                      }))}
+                      className={`w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500 ${
+                        patientContext.gfrAutoCalculated
+                          ? 'border-green-300 bg-green-50 text-green-900'
+                          : 'border-gray-300'
+                      }`}
+                      placeholder={
+                        patientContext.age && patientContext.weight && patientContext.creatinine
+                          ? 'Auto-calculating...'
+                          : 'Enter creatinine + weight + age'
+                      }
                     />
                   </div>
                   <div className="flex items-end gap-4">

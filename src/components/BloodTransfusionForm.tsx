@@ -798,14 +798,14 @@ export default function BloodTransfusionForm({
       <div className="bg-white rounded-none sm:rounded-lg shadow-xl sm:max-w-7xl w-full h-full sm:h-auto sm:max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="px-3 sm:px-6 py-3 sm:py-4 border-b border-gray-200 bg-red-50">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg sm:text-2xl font-bold text-gray-900 flex items-center space-x-2">
-                <Droplet className="h-6 w-6 text-red-600" />
-                <span>Blood Transfusion Record</span>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <h2 className="text-lg sm:text-2xl font-bold text-gray-900 flex items-center gap-2 flex-wrap">
+                <Droplet className="h-6 w-6 text-red-600 flex-shrink-0" />
+                <span className="truncate">Blood Transfusion Record</span>
               </h2>
               {selectedPatient && (
-                <p className="text-sm text-gray-600 mt-1">
+                <p className="text-sm text-gray-600 mt-1 break-words">
                   {selectedPatient.first_name} {selectedPatient.last_name} ({selectedPatient.hospital_number})
                   {selectedPatient.blood_group && <span className="ml-2 font-semibold">Blood Group: {selectedPatient.blood_group}</span>}
                 </p>
@@ -825,7 +825,8 @@ export default function BloodTransfusionForm({
             </div>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
+              className="text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0"
+              aria-label="Close"
             >
               <X className="h-6 w-6" />
             </button>
@@ -834,8 +835,8 @@ export default function BloodTransfusionForm({
 
         {/* Action Buttons */}
         {transfusionId && (
-          <div className="px-6 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
-            <div className="flex items-center space-x-2">
+          <div className="px-6 py-3 bg-gray-50 border-b border-gray-200 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2">
               {formData.status === 'planned' && (
                 <button
                   onClick={startTransfusion}
@@ -875,8 +876,8 @@ export default function BloodTransfusionForm({
         )}
 
         {/* Tabs */}
-        <div className="border-b border-gray-200 bg-white px-6 overflow-x-auto">
-          <div className="flex space-x-1 min-w-max">
+        <div className="border-b border-gray-200 bg-white px-3 sm:px-6 overflow-x-auto">
+          <div className="flex gap-1 min-w-max">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const bagCount = tab.id === 'bags' ? (formData.blood_bags?.length || 0) : null;

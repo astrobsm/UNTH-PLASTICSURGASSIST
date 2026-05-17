@@ -2369,9 +2369,47 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
 
       // Register the patient first
       const patientId = await unthPatientService.registerPatient(updatedFormData as PatientRegistration);
-      
+
+      // Auto-admit inpatients: create an admission record immediately
+      if (patientId && formData.patient_type === 'inpatient') {
+        try {
+          const wardObj = availableWards.find(w => w.id === formData.ward_id);
+          const wardLabel = wardObj?.name || formData.ward_id || 'Ward';
+          const admissionRes = await fetch('/api/admissions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+            },
+            body: JSON.stringify({
+              patientId,
+              admissionDate: new Date().toISOString(),
+              ward: wardLabel,
+              bedNumber: formData.bed_number || null,
+              routeOfAdmission: formData.admission_type || 'clinic',
+              patientName: `${formData.first_name || ''} ${formData.last_name || ''}`.trim(),
+              hospitalNumber: formData.hospital_number || null,
+              gender: formData.sex === 'male' ? 'Male' : (formData.sex === 'female' ? 'Female' : null),
+              status: 'active',
+              notes: 'Auto-admission created from patient registration form.'
+            })
+          });
+          if (!admissionRes.ok) {
+            console.warn('Auto-admission API returned non-OK:', admissionRes.status);
+          }
+        } catch (admitErr) {
+          console.warn('Auto-admission failed (patient still registered):', admitErr);
+        }
+      }
+
+      // Skip the legacy multi-step risk-assessment + treatment-plan path \u2014
+      // the simplified registration form no longer collects that data.
+      // Set to true if the full risk-assessment workflow is re-enabled here.
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const _runLegacyRiskAssessmentFlow = false;
+
       // Save risk assessments with AI recommendations
-      if (patientId) {
+      if (_runLegacyRiskAssessmentFlow && patientId) {
         // Calculate and save DVT risk assessment
         const { score: dvtScore, riskLevel: dvtRiskLevel } = calculateDVTScore(riskAssessmentData.dvt);
 
@@ -2694,6 +2732,79 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
             placeholder="+234 80X XXX XXXX"
           />
         </div>
+
+        {/* Patient Type — drives auto-admission */}
+        <div className="md:col-span-2">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Patient Type *
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => handleInputChange('patient_type', 'outpatient')}
+              className={`p-3 rounded-md border-2 text-sm font-medium transition-colors ${
+                (formData.patient_type || 'outpatient') === 'outpatient'
+                  ? 'border-green-600 bg-green-50 text-green-700'
+                  : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
+              }`}
+            >
+              Out-Patient
+              <div className="text-xs font-normal text-gray-500 mt-1">Clinic / OPD review</div>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleInputChange('patient_type', 'inpatient')}
+              className={`p-3 rounded-md border-2 text-sm font-medium transition-colors ${
+                formData.patient_type === 'inpatient'
+                  ? 'border-green-600 bg-green-50 text-green-700'
+                  : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
+              }`}
+            >
+              In-Patient (Auto-admit)
+              <div className="text-xs font-normal text-gray-500 mt-1">Ward + bed required</div>
+            </button>
+          </div>
+        </div>
+
+        {/* Ward + Bed — only when inpatient */}
+        {formData.patient_type === 'inpatient' && (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Ward *
+              </label>
+              <select
+                required={formData.patient_type === 'inpatient'}
+                value={formData.ward_id || ''}
+                onChange={(e) => handleInputChange('ward_id', e.target.value)}
+                className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              >
+                <option value="">Select ward...</option>
+                {availableWards.map(ward => (
+                  <option key={ward.id} value={ward.id}>
+                    {ward.name} ({ward.currentOccupancy}/{ward.capacity} beds occupied)
+                  </option>
+                ))}
+              </select>
+              {availableWards.length === 0 && (
+                <p className="mt-1 text-xs text-amber-600">No wards with available beds.</p>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Bed Number *
+              </label>
+              <input
+                type="text"
+                required={formData.patient_type === 'inpatient'}
+                value={formData.bed_number || ''}
+                onChange={(e) => handleInputChange('bed_number', e.target.value)}
+                className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                placeholder="e.g., 12 or A-3"
+              />
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -4245,82 +4356,34 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
         <div className="px-4 sm:px-6 py-4 border-b border-gray-200">
           <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Patient Registration - UNTH</h2>
-          <div className="mt-4 flex items-center justify-between">
-            {/* Step indicators - scrollable on mobile */}
-            <div className="flex space-x-2 sm:space-x-4 overflow-x-auto">
-              {[1, 2].map(step => (
-                <div
-                  key={step}
-                  className={`flex-shrink-0 flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium transition-colors ${
-                    step === currentStep
-                      ? 'bg-green-600 text-white'
-                      : step < currentStep
-                      ? 'bg-green-100 text-green-600'
-                      : 'bg-gray-100 text-gray-400'
-                  }`}
-                >
-                  {step}
-                </div>
-              ))}
-            </div>
-            <span className="text-xs sm:text-sm text-gray-500 whitespace-nowrap ml-2">
-              Step {currentStep} of 2
-            </span>
-          </div>
+          <p className="mt-1 text-xs sm:text-sm text-gray-500">
+            In-patients are auto-admitted to the selected ward/bed.
+          </p>
         </div>
 
         <form onSubmit={handleSubmit} className="p-4 sm:p-6">
-          {currentStep === 1 && renderStep1()}
-          {currentStep === 2 && renderStep4()}
+          {renderStep1()}
 
           {/* Mobile-friendly button layout */}
-          <div className="flex flex-col-reverse sm:flex-row sm:justify-between gap-3 mt-6 sm:mt-8 pt-4 sm:pt-6 border-t border-gray-200">
-            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
-              {currentStep > 1 && (
-                <button
-                  type="button"
-                  onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
-                    e.preventDefault();
-                    setCurrentStep(currentStep - 1);
-                  }}
-                  className="btn-secondary w-full sm:w-auto"
-                >
-                  Previous
-                </button>
-              )}
-              {onCancel && (
-                <button
-                  type="button"
-                  onClick={onCancel}
-                  className="btn-secondary w-full sm:w-auto"
-                >
-                  Cancel
-                </button>
-              )}
-            </div>
-
-            <div className="w-full sm:w-auto">
-              {currentStep < 2 ? (
-                <button
-                  type="button"
-                  onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
-                    e.preventDefault();
-                    setCurrentStep(currentStep + 1);
-                  }}
-                  className="btn-primary w-full sm:w-auto"
-                >
-                  Next
-                </button>
-              ) : (
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="btn-primary w-full sm:w-auto"
-                >
-                  {isSubmitting ? 'Registering...' : 'Register Patient'}
-                </button>
-              )}
-            </div>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 mt-6 sm:mt-8 pt-4 sm:pt-6 border-t border-gray-200">
+            {onCancel && (
+              <button
+                type="button"
+                onClick={onCancel}
+                className="btn-secondary w-full sm:w-auto"
+              >
+                Cancel
+              </button>
+            )}
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="btn-primary w-full sm:w-auto"
+            >
+              {isSubmitting
+                ? (formData.patient_type === 'inpatient' ? 'Registering & admitting...' : 'Registering...')
+                : (formData.patient_type === 'inpatient' ? 'Register & Admit' : 'Register Patient')}
+            </button>
           </div>
         </form>
       </div>

@@ -301,10 +301,19 @@ const BloodTransfusionTab: React.FC<Props> = ({ patientId, hospitalNumber, patie
   };
 
   // ─── Sub-renderers ───────────────────────────────────────────
-  const VitalsRow = ({ label, value, onChange }: { label: string; value: ReturnType<typeof emptyVitals>; onChange: (v: ReturnType<typeof emptyVitals>) => void }) => (
+  const VitalsRow = ({ label, value, onChange, onRemove }: { label: string; value: ReturnType<typeof emptyVitals>; onChange: (v: ReturnType<typeof emptyVitals>) => void; onRemove?: () => void }) => (
     <div className="border rounded-lg p-3 bg-gray-50">
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between gap-2 mb-2">
         <span className="font-medium text-sm text-gray-700">{label}</span>
+        {onRemove && (
+          <button
+            type="button"
+            onClick={onRemove}
+            className="text-xs text-red-500 hover:text-red-700 px-2 py-0.5 rounded hover:bg-red-50 flex-shrink-0"
+          >
+            Remove
+          </button>
+        )}
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
         <label className="text-xs text-gray-600">Temp °C
@@ -448,12 +457,12 @@ const BloodTransfusionTab: React.FC<Props> = ({ patientId, hospitalNumber, patie
                         value={new Date(b.expiry_date).toISOString().slice(0, 10)}
                         onChange={(e) => { const n = [...bags]; n[i] = { ...b, expiry_date: new Date(e.target.value) }; setBags(n); }} />
                     </label>
-                    <label className="text-xs text-gray-600 flex items-center gap-1 mt-4">
+                    <label className="text-xs text-gray-600 flex items-center gap-1 self-end pb-1">
                       <input type="checkbox" checked={b.crossmatch_compatible}
                         onChange={(e) => { const n = [...bags]; n[i] = { ...b, crossmatch_compatible: e.target.checked }; setBags(n); }} />
                       Crossmatch OK
                     </label>
-                    <label className="text-xs text-gray-600 flex items-center gap-1 mt-4">
+                    <label className="text-xs text-gray-600 flex items-center gap-1 self-end pb-1">
                       <input type="checkbox" checked={b.screening_done}
                         onChange={(e) => { const n = [...bags]; n[i] = { ...b, screening_done: e.target.checked }; setBags(n); }} />
                       Screened
@@ -470,11 +479,12 @@ const BloodTransfusionTab: React.FC<Props> = ({ patientId, hospitalNumber, patie
             <VitalsRow label="Pre-transfusion" value={preVitals} onChange={setPreVitals} />
             {duringVitals.map((dv, i) => (
               <div key={i} className="relative">
-                <VitalsRow label={`During (reading ${i + 1})`} value={dv} onChange={(v) => { const n = [...duringVitals]; n[i] = v; setDuringVitals(n); }} />
-                {duringVitals.length > 1 && (
-                  <button type="button" onClick={() => setDuringVitals(duringVitals.filter((_, idx) => idx !== i))}
-                    className="absolute top-2 right-2 text-xs text-red-500 hover:text-red-700">Remove</button>
-                )}
+                <VitalsRow
+                  label={`During (reading ${i + 1})`}
+                  value={dv}
+                  onChange={(v) => { const n = [...duringVitals]; n[i] = v; setDuringVitals(n); }}
+                  onRemove={duringVitals.length > 1 ? () => setDuringVitals(duringVitals.filter((_, idx) => idx !== i)) : undefined}
+                />
               </div>
             ))}
             <button type="button" onClick={() => setDuringVitals([...duringVitals, emptyVitals('during')])}

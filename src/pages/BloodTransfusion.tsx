@@ -69,10 +69,10 @@ export default function BloodTransfusionPage() {
     <div className="p-6">
       {/* Header */}
       <div className="mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 flex items-center space-x-3">
-              <Droplet className="h-8 w-8 text-red-600" />
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 flex items-center gap-3 flex-wrap">
+              <Droplet className="h-8 w-8 text-red-600 flex-shrink-0" />
               <span>Blood Transfusion Module</span>
             </h1>
             <p className="text-gray-600 mt-1">
@@ -81,7 +81,7 @@ export default function BloodTransfusionPage() {
           </div>
           <button
             onClick={handleNewTransfusion}
-            className="bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 transition-colors flex items-center space-x-2"
+            className="bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center space-x-2 flex-shrink-0 self-start sm:self-auto"
           >
             <Plus className="h-5 w-5" />
             <span>New Transfusion</span>
