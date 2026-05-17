@@ -23,7 +23,7 @@ import {
   Activity, Camera, Calendar, Clock, FileText, Plus, TrendingUp,
   Scissors, ClipboardCheck, Pill, Heart, Image, AlertCircle,
   ChevronRight, X, Save, Loader2, Thermometer, Droplet,
-  Eye, Trash2, Upload, Mic, MicOff, ScanLine, Printer, RefreshCw
+  Eye, Trash2, Upload, Mic, MicOff, ScanLine, Printer, RefreshCw, Download
 } from 'lucide-react';
 
 export const PatientProfile: React.FC = () => {
@@ -1248,99 +1248,172 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; patie
     e.target.value = '';
   };
 
+  // Clinical observation chart: two stacked strips with a true time-based x-axis.
+  // Top strip: BP (systolic/diastolic) + Pulse — all share roughly the same range.
+  // Bottom strip: Temperature + SpO2 + Respiratory Rate — overlaid with per-series scaling.
+  // Day boundaries are drawn as vertical separators with the date labelled.
   const drawChart = () => {
     const canvas = canvasRef.current;
     if (!canvas || vitals.length < 2) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Hi-DPI sharpening: render at devicePixelRatio for crisp lines/text on retina + phone screens.
-    // CSS size stays at parent width × 150px; backing store is scaled, then context units are CSS pixels.
-    const dpr = Math.min(window.devicePixelRatio || 1, 3); // cap at 3x to avoid huge canvases on Android
+    const dpr = Math.min(window.devicePixelRatio || 1, 3);
     const cssW = Math.max(canvas.parentElement?.clientWidth || canvas.clientWidth || 600, 320);
-    const cssH = 150;
+    const cssH = 340; // taller for clinical legibility
     canvas.style.width = '100%';
     canvas.style.height = `${cssH}px`;
     canvas.width = Math.round(cssW * dpr);
     canvas.height = Math.round(cssH * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // map CSS px → device px
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, cssW, cssH);
 
-    const W = cssW;
-    const H = cssH;
+    // Sort by time and compute the time-based x-axis range.
+    const sorted = [...vitals]
+      .map(v => ({ ...v, _t: new Date(v.date).getTime() }))
+      .filter(v => !isNaN(v._t))
+      .sort((a, b) => a._t - b._t);
+    if (sorted.length < 2) return;
+    const tMin = sorted[0]._t;
+    const tMax = sorted[sorted.length - 1]._t;
+    const tSpan = Math.max(tMax - tMin, 1);
 
-    const padding = { top: 22, right: 16, bottom: 22, left: 32 };
-    const chartW = W - padding.left - padding.right;
-    const chartH = H - padding.top - padding.bottom;
+    const padding = { top: 28, right: 16, bottom: 28, left: 38 };
+    const gap = 22; // gap between the two strips
+    const stripH = (cssH - padding.top - padding.bottom - gap) / 2;
+    const chartW = cssW - padding.left - padding.right;
+    const topY = padding.top;
+    const botY = padding.top + stripH + gap;
 
-    const datasets = [
-      { key: 'pulse', label: 'Pulse', color: '#DC2626', min: 40, max: 160 },
-      { key: 'bp_systolic', label: 'Systolic', color: '#2563EB', min: 60, max: 220 },
-      { key: 'bp_diastolic', label: 'Diastolic', color: '#7C3AED', min: 30, max: 140 },
-      { key: 'temperature', label: 'Temp', color: '#EA580C', min: 34, max: 42 },
-      { key: 'spo2', label: 'SpO2', color: '#059669', min: 80, max: 100 },
-    ];
+    const xFor = (t: number) => padding.left + ((t - tMin) / tSpan) * chartW;
 
-    // Axes
+    // ── Day boundary separators ──────────────────────────────────────────────
+    const startDay = new Date(tMin); startDay.setHours(0, 0, 0, 0);
+    const endDay = new Date(tMax); endDay.setHours(0, 0, 0, 0);
     ctx.strokeStyle = '#E5E7EB';
     ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(padding.left, padding.top);
-    ctx.lineTo(padding.left, H - padding.bottom);
-    ctx.lineTo(W - padding.right, H - padding.bottom);
-    ctx.stroke();
-
-    // Date labels (CSS px sizes now match the visual)
     ctx.fillStyle = '#6B7280';
     ctx.font = '10px sans-serif';
     ctx.textAlign = 'center';
-    const maxLabels = Math.min(vitals.length, Math.max(3, Math.floor(chartW / 60)));
-    const step = Math.max(1, Math.floor(vitals.length / maxLabels));
-    for (let i = 0; i < vitals.length; i += step) {
-      const x = padding.left + (i / (vitals.length - 1)) * chartW;
-      const d = new Date(vitals[i].date);
-      ctx.fillText(`${d.getDate()}/${d.getMonth() + 1}`, x, H - padding.bottom + 14);
+    for (let d = new Date(startDay); d.getTime() <= endDay.getTime() + 86400000; d = new Date(d.getTime() + 86400000)) {
+      const t = d.getTime();
+      if (t < tMin || t > tMax) continue;
+      const x = xFor(t);
+      ctx.setLineDash([2, 3]);
+      ctx.beginPath();
+      ctx.moveTo(x, topY);
+      ctx.lineTo(x, botY + stripH);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillText(`${d.getDate()}/${d.getMonth() + 1}`, x, cssH - padding.bottom + 14);
     }
 
-    // Datasets
-    datasets.forEach(ds => {
-      const points = vitals.map((v, i) => ({
-        x: padding.left + (i / (vitals.length - 1)) * chartW,
-        y: padding.top + chartH - ((((v as any)[ds.key] || 0) - ds.min) / (ds.max - ds.min)) * chartH,
-        val: (v as any)[ds.key],
-      })).filter(p => p.val);
-
-      if (points.length < 2) return;
-
-      ctx.strokeStyle = ds.color;
-      ctx.lineWidth = 1.75;
+    // ── Strip axes (left baseline + bottom baseline per strip) ───────────────
+    const drawStripAxes = (y: number) => {
+      ctx.strokeStyle = '#D1D5DB';
       ctx.beginPath();
-      points.forEach((p, i) => {
-        if (i === 0) ctx.moveTo(p.x, p.y);
-        else ctx.lineTo(p.x, p.y);
-      });
+      ctx.moveTo(padding.left, y);
+      ctx.lineTo(padding.left, y + stripH);
+      ctx.lineTo(cssW - padding.right, y + stripH);
       ctx.stroke();
+    };
+    drawStripAxes(topY);
+    drawStripAxes(botY);
 
+    // Strip labels
+    ctx.fillStyle = '#374151';
+    ctx.font = '600 10px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('BP & Pulse', padding.left, topY - 10);
+    ctx.fillText('Temp / SpO2 / RR', padding.left, botY - 10);
+
+    // ── Series ───────────────────────────────────────────────────────────────
+    type Series = { key: string; label: string; color: string; min: number; max: number; y: number };
+    const topSeries: Series[] = [
+      { key: 'bp_systolic',  label: 'Systolic',  color: '#2563EB', min: 60, max: 220, y: topY },
+      { key: 'bp_diastolic', label: 'Diastolic', color: '#7C3AED', min: 30, max: 140, y: topY },
+      { key: 'pulse',        label: 'Pulse',     color: '#DC2626', min: 40, max: 180, y: topY },
+    ];
+    const botSeries: Series[] = [
+      { key: 'temperature',      label: 'Temp (°C)', color: '#EA580C', min: 34, max: 42,  y: botY },
+      { key: 'spo2',             label: 'SpO2 (%)',  color: '#059669', min: 80, max: 100, y: botY },
+      { key: 'respiratory_rate', label: 'RR',        color: '#0EA5E9', min: 8,  max: 40,  y: botY },
+    ];
+
+    const drawSeries = (ds: Series) => {
+      const points = sorted.map(v => {
+        const val = (v as any)[ds.key];
+        if (val == null || val === '' || isNaN(Number(val))) return null;
+        const n = Number(val);
+        return {
+          x: xFor(v._t),
+          y: ds.y + stripH - ((n - ds.min) / (ds.max - ds.min)) * stripH,
+          val: n,
+        };
+      }).filter(Boolean) as { x: number; y: number; val: number }[];
+      if (points.length < 1) return;
+
+      // Line
+      if (points.length >= 2) {
+        ctx.strokeStyle = ds.color;
+        ctx.lineWidth = 1.75;
+        ctx.beginPath();
+        points.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+        ctx.stroke();
+      }
+      // Dots
       points.forEach(p => {
         ctx.beginPath();
         ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
         ctx.fillStyle = ds.color;
         ctx.fill();
       });
+    };
+
+    topSeries.forEach(drawSeries);
+    botSeries.forEach(drawSeries);
+
+    // ── Y-axis ticks (top strip only — shared range gives meaningful numbers) ─
+    ctx.fillStyle = '#9CA3AF';
+    ctx.font = '9px sans-serif';
+    ctx.textAlign = 'right';
+    [60, 100, 140, 180].forEach(v => {
+      const y = topY + stripH - ((v - 40) / (180 - 40)) * stripH;
+      ctx.fillText(String(v), padding.left - 4, y + 3);
+    });
+    // Temp left-axis ticks
+    [36, 38, 40].forEach(v => {
+      const y = botY + stripH - ((v - 34) / (42 - 34)) * stripH;
+      ctx.fillText(String(v), padding.left - 4, y + 3);
     });
 
-    // Legend
+    // ── Compact legend at the top ────────────────────────────────────────────
     ctx.font = '10px sans-serif';
-    let legendX = padding.left;
-    const legendY = 6;
-    datasets.forEach(ds => {
+    ctx.textAlign = 'left';
+    let lx = padding.left;
+    const ly = 10;
+    [...topSeries, ...botSeries].forEach(ds => {
       ctx.fillStyle = ds.color;
-      ctx.fillRect(legendX, legendY, 8, 8);
+      ctx.fillRect(lx, ly, 8, 8);
       ctx.fillStyle = '#374151';
-      ctx.textAlign = 'left';
-      ctx.fillText(ds.label, legendX + 11, legendY + 8);
-      legendX += ctx.measureText(ds.label).width + 26;
+      ctx.fillText(ds.label, lx + 11, ly + 8);
+      lx += ctx.measureText(ds.label).width + 26;
+      if (lx > cssW - 80) { lx = padding.left; /* wrap is rare on real widths */ }
     });
+  };
+
+  // Export the rendered chart as a PNG for printing / attaching to the chart file.
+  const exportChartPng = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const url = canvas.toDataURL('image/png');
+    const a = document.createElement('a');
+    a.href = url;
+    const safeName = (patientName || 'patient').replace(/[^a-z0-9]+/gi, '_');
+    a.download = `vitals_${safeName}_${hospitalNumber}_${new Date().toISOString().slice(0, 10)}.png`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   const handleVitalsOCRExtracted = (fields: Record<string, any>) => {
@@ -1590,13 +1663,33 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; patie
           </div>
         )}
 
-        {/* Trend Chart */}
-        {vitals.length > 1 && (
-          <div className="p-4 border-b border-gray-200">
-            <h4 className="text-sm font-semibold text-gray-700 mb-2">Trends</h4>
-            <canvas ref={canvasRef} className="w-full" style={{ height: '150px' }} />
-          </div>
-        )}
+        {/* Trend Chart — clinical observation chart style */}
+        {vitals.length > 1 && (() => {
+          const sorted = [...vitals].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+          const first = new Date(sorted[0].date);
+          const last = new Date(sorted[sorted.length - 1].date);
+          const fmt = (d: Date) => `${d.getDate()}/${d.getMonth() + 1}/${String(d.getFullYear()).slice(-2)}`;
+          return (
+            <div className="p-4 border-b border-gray-200">
+              <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-700">Observation Chart</h4>
+                  <p className="text-xs text-gray-500">
+                    {vitals.length} reading{vitals.length === 1 ? '' : 's'} · {fmt(first)} → {fmt(last)}
+                  </p>
+                </div>
+                <button
+                  onClick={exportChartPng}
+                  className="flex items-center gap-1 px-2.5 py-1 text-xs border border-gray-300 text-gray-700 rounded hover:bg-gray-50"
+                  title="Download chart as PNG"
+                >
+                  <Download className="w-3.5 h-3.5" /> Export PNG
+                </button>
+              </div>
+              <canvas ref={canvasRef} className="w-full" style={{ height: '340px' }} />
+            </div>
+          );
+        })()}
 
         {/* Records Table */}
         <div className="p-4 overflow-x-auto">
