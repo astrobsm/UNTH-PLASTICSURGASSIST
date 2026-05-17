@@ -881,14 +881,20 @@ const WoundCarePage: React.FC = () => {
       doc.text('Print at 100% scale (no scaling) � Cut along dashed lines � 0.5mm grid for precision', pageWidth / 2, 25, { align: 'center' });
 
       // Draw multiple ruler strips on the page
+      // 6 rulers per page, evenly spaced to avoid overlap.
+      // Each ruler footprint = rulerHeight (25mm) + ~6mm for cm-number labels (top+bottom) + 6mm dashed cut-line margin (3mm each side)
+      // → effective slot ≈ 37mm. We use 42mm spacing for comfortable whitespace between strips.
       const startX = (pageWidth - rulerLength) / 2;
-      const rulersPerPage = 8;
-      const rulerSpacing = 30;
-      
+      const rulersPerPage = 6;
+      const topOffset = 38;                 // first ruler starts below title/subtitle
+      const bottomReserve = 18;             // reserve for footer
+      const usableHeight = pageHeight - topOffset - bottomReserve;
+      const rulerSpacing = Math.floor(usableHeight / rulersPerPage); // ≈ 40mm
+
       for (let r = 0; r < rulersPerPage; r++) {
-        const startY = 35 + (r * rulerSpacing);
-        if (startY + rulerHeight > pageHeight - 20) break;
-        
+        const startY = topOffset + (r * rulerSpacing);
+        if (startY + rulerHeight + 6 > pageHeight - bottomReserve) break;
+
         drawSingleRuler(startX, startY, rulerLength, rulerHeight, r + 1);
       }
 
