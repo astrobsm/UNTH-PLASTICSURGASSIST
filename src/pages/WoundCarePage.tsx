@@ -36,7 +36,7 @@ import { syncService } from '../db/syncService';
 import { sanitizeTextForPDF } from '../utils/pdfUtils';
 import { getCurrentUserName } from '../utils/getCurrentUser';
 import { aiWoundMeasurement } from '../services/aiWoundMeasurement';
-import type { WoundMeasurementResult, WoundProgressEntry } from '../services/aiWoundMeasurement';
+import type { WoundMeasurementResult, WoundProgressEntry, CalibrationReference } from '../services/aiWoundMeasurement';
 // Lazy-load chart.js (~200 KB) only when the wound-progress panel actually renders
 const WoundProgressChart = lazy(() => import('../components/WoundProgressChart'));
 
@@ -280,6 +280,23 @@ const WoundCarePage: React.FC = () => {
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const [lastMeasurementResult, setLastMeasurementResult] = useState<WoundMeasurementResult | null>(null);
 
+  // ----- Reference-marker & calibration state -----
+  const [calibrationMethod, setCalibrationMethod] = useState<'auto' | 'coin' | 'card' | 'manual'>('auto');
+  const [calibrationOverride, setCalibrationOverride] = useState<CalibrationReference | null>(null);
+  const [showManualCalibration, setShowManualCalibration] = useState(false);
+  const [manualCalibPhoto, setManualCalibPhoto] = useState<string | null>(null);
+  const [manualCalibPoints, setManualCalibPoints] = useState<Array<{ x: number; y: number }>>([]);
+  const [manualKnownCm, setManualKnownCm] = useState<number>(1);
+  const manualCalibImgRef = useRef<HTMLImageElement>(null);
+
+  // Build a CalibrationReference from a non-manual quick-pick (coin / card)
+  const buildQuickCalibration = (method: 'coin' | 'card'): CalibrationReference | null => {
+    // Without an in-image detection we can only suggest the known size; pixel scale comes from manual calibration.
+    // For coin/card we leave override null — detector still runs auto, but knownSizeCm is recorded for audit.
+    const knownSizes = { coin: 2.4, card: 8.56 };
+    return { type: method, knownSizeCm: knownSizes[method], pixelSize: 0, detectionMethod: 'manual_selection', confidence: 0.6 };
+  };
+
   // Load patients and assessments
   useEffect(() => {
     loadPatients();
@@ -399,7 +416,7 @@ const WoundCarePage: React.FC = () => {
 
     setIsAnalyzing(true);
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const result = await aiWoundMeasurement.measureWound(imageData);
+    const result = await aiWoundMeasurement.measureWound(imageData, calibrationOverride || undefined);
     setLastMeasurementResult(result);
     // Draw the overlay on the captured image
     if (overlayCanvasRef.current) {
@@ -463,7 +480,7 @@ const WoundCarePage: React.FC = () => {
           const cctx = cvs.getContext('2d')!;
           cctx.drawImage(img, 0, 0);
           const imgData = cctx.getImageData(0, 0, cvs.width, cvs.height);
-          const result = await aiWoundMeasurement.measureWound(imgData);
+          const result = await aiWoundMeasurement.measureWound(imgData, calibrationOverride || undefined);
           setLastMeasurementResult(result);
           // Draw overlay
           aiWoundMeasurement.renderOverlay(cctx, result, cvs.width, cvs.height);
@@ -496,14 +513,46 @@ const WoundCarePage: React.FC = () => {
     setTimeout(() => setIsAnalyzing(false), 2000);
   };
 
-  // Build progress data for selected patient's wound location
+  // Build progress data for selected patient's particular wound (patient + location + wound_type)
   const getProgressData = useCallback((): WoundProgressEntry[] => {
     if (!selectedAssessment) return [];
     return assessments
-      .filter(a => a.patient_id === selectedAssessment.patient_id && a.location === selectedAssessment.location)
+      .filter(a =>
+        a.patient_id === selectedAssessment.patient_id &&
+        a.location === selectedAssessment.location &&
+        (a.wound_type || '') === (selectedAssessment.wound_type || '')
+      )
       .sort((a, b) => new Date(a.assessment_date).getTime() - new Date(b.assessment_date).getTime())
-      .map(a => ({ date: new Date(a.assessment_date).toISOString(), length: a.length, width: a.width, area: a.area }));
+      .map(a => ({
+        date: new Date(a.assessment_date).toISOString(),
+        length: a.length,
+        width: a.width,
+        area: a.area,
+        granulation_percentage: a.granulation_percentage,
+        healing_phase: a.healing_phase
+      }));
   }, [assessments, selectedAssessment]);
+
+  // Inline trend preview while creating a new assessment — finds prior assessments of the SAME wound
+  const getInlineProgressData = useCallback((): WoundProgressEntry[] => {
+    if (!selectedPatient || !formData.location || !formData.wound_type) return [];
+    const pid = String(selectedPatient.id);
+    return assessments
+      .filter(a =>
+        a.patient_id === pid &&
+        a.location.toLowerCase().trim() === formData.location.toLowerCase().trim() &&
+        (a.wound_type || '').toLowerCase().trim() === (formData.wound_type || '').toLowerCase().trim()
+      )
+      .sort((a, b) => new Date(a.assessment_date).getTime() - new Date(b.assessment_date).getTime())
+      .map(a => ({
+        date: new Date(a.assessment_date).toISOString(),
+        length: a.length,
+        width: a.width,
+        area: a.area,
+        granulation_percentage: a.granulation_percentage,
+        healing_phase: a.healing_phase
+      }));
+  }, [assessments, selectedPatient, formData.location, formData.wound_type]);
 
   // Save new assessment
   const handleSaveAssessment = async () => {
@@ -1393,10 +1442,94 @@ const WoundCarePage: React.FC = () => {
           </div>
           {formData.length > 0 && formData.width > 0 && (
             <p className="text-sm text-gray-500 mt-2">
-              Area: {calculateArea(formData.length, formData.width)} cm�
+              Area: {calculateArea(formData.length, formData.width)} cm²
             </p>
           )}
         </div>
+
+        {/* Reference Marker & Calibration */}
+        <div className="bg-gradient-to-br from-primary-50 to-white border-2 border-primary-200 rounded-xl p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="font-semibold text-primary-800 flex items-center">
+              <Ruler className="w-4 h-4 mr-2" />
+              Reference Marker (for AI calibration)
+            </h4>
+            {calibrationOverride && (
+              <span className="text-xs px-2 py-1 rounded-full bg-primary-600 text-white">
+                {calibrationOverride.type} · {calibrationOverride.knownSizeCm} cm
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-gray-600 mb-3">
+            Place a reference object next to the wound before taking the photo so the AI can convert pixels to centimetres accurately.
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+            {([
+              { key: 'auto', label: 'Auto-detect', sub: 'green marker / ruler / grid' },
+              { key: 'coin', label: 'Coin', sub: '₦100 ≈ 2.4 cm' },
+              { key: 'card', label: 'Credit card', sub: '8.56 cm wide' },
+              { key: 'manual', label: 'Manual scale', sub: 'tap two points' },
+            ] as const).map(opt => (
+              <button
+                key={opt.key}
+                type="button"
+                onClick={() => {
+                  setCalibrationMethod(opt.key);
+                  if (opt.key === 'auto') {
+                    setCalibrationOverride(null);
+                  } else if (opt.key === 'coin' || opt.key === 'card') {
+                    setCalibrationOverride(buildQuickCalibration(opt.key));
+                  } else if (opt.key === 'manual') {
+                    // Open modal with most recent photo (if any)
+                    const recent = capturedPhotos[capturedPhotos.length - 1]?.dataUrl || null;
+                    setManualCalibPhoto(recent);
+                    setManualCalibPoints([]);
+                    setShowManualCalibration(true);
+                  }
+                }}
+                className={`text-left px-3 py-2 rounded-lg border-2 transition ${
+                  calibrationMethod === opt.key
+                    ? 'border-primary-600 bg-primary-100 text-primary-800'
+                    : 'border-gray-200 bg-white text-gray-700 hover:border-primary-300'
+                }`}
+              >
+                <div className="text-sm font-medium">{opt.label}</div>
+                <div className="text-[10px] text-gray-500">{opt.sub}</div>
+              </button>
+            ))}
+          </div>
+          {calibrationOverride && calibrationOverride.type === 'manual' && calibrationOverride.pixelSize > 0 && (
+            <p className="text-xs text-green-700 bg-green-50 border border-green-200 rounded p-2">
+              ✓ Manual calibration set: {calibrationOverride.pixelSize.toFixed(1)} px / cm ({calibrationOverride.knownSizeCm} cm reference)
+            </p>
+          )}
+          {calibrationMethod === 'auto' && (
+            <p className="text-xs text-gray-500 italic">
+              AI will look for our printed green markers, a visible ruler, or a 1cm grid. Confidence is shown after measurement.
+            </p>
+          )}
+        </div>
+
+        {/* Inline trend preview for THIS wound */}
+        {(() => {
+          const inlineData = getInlineProgressData();
+          if (inlineData.length < 2) return null;
+          const report = aiWoundMeasurement.generateProgressReport(inlineData);
+          return (
+            <div className="bg-white border-2 border-blue-200 rounded-xl p-4">
+              <h4 className="font-semibold mb-2 flex items-center text-blue-800">
+                <TrendingUp className="w-4 h-4 mr-2" />
+                Trend for this wound ({inlineData.length} prior assessments)
+              </h4>
+              <p className="text-xs text-gray-500 mb-2">
+                {selectedPatient?.full_name} · {formData.location} · {formData.wound_type}
+              </p>
+              <Suspense fallback={<div className="bg-gray-50 rounded-lg p-3 text-center text-xs text-gray-400">Loading chart…</div>}>
+                <WoundProgressChart measurements={inlineData} report={report} />
+              </Suspense>
+            </div>
+          );
+        })()}
 
         {/* Tissue Types */}
         <div>
@@ -1591,6 +1724,70 @@ const WoundCarePage: React.FC = () => {
               ))}
             </div>
           )}
+
+          {/* Automated measurement result */}
+          {lastMeasurementResult && (
+            <div className="mt-3 bg-white border-2 border-green-300 rounded-xl p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-semibold text-green-800 flex items-center">
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  AI Measurement Result
+                </h4>
+                <span className={`text-xs px-2 py-1 rounded-full ${
+                  lastMeasurementResult.confidence > 0.7 ? 'bg-green-100 text-green-700'
+                    : lastMeasurementResult.confidence > 0.4 ? 'bg-yellow-100 text-yellow-700'
+                    : 'bg-red-100 text-red-700'
+                }`}>
+                  {(lastMeasurementResult.confidence * 100).toFixed(0)}% confidence · {lastMeasurementResult.calibrationMethod}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                <div className="bg-gray-50 p-2 rounded-lg">
+                  <p className="text-lg font-bold">{lastMeasurementResult.length.toFixed(2)}</p>
+                  <p className="text-[10px] text-gray-500">Length (cm)</p>
+                </div>
+                <div className="bg-gray-50 p-2 rounded-lg">
+                  <p className="text-lg font-bold">{lastMeasurementResult.width.toFixed(2)}</p>
+                  <p className="text-[10px] text-gray-500">Width (cm)</p>
+                </div>
+                <div className="bg-gray-50 p-2 rounded-lg">
+                  <p className="text-lg font-bold">{lastMeasurementResult.area.toFixed(2)}</p>
+                  <p className="text-[10px] text-gray-500">Area (cm²)</p>
+                </div>
+                <div className="bg-gray-50 p-2 rounded-lg">
+                  <p className="text-lg font-bold">{lastMeasurementResult.perimeter.toFixed(2)}</p>
+                  <p className="text-[10px] text-gray-500">Perimeter (cm)</p>
+                </div>
+              </div>
+              <div className="flex gap-2 mt-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFormData(prev => ({
+                      ...prev,
+                      length: lastMeasurementResult.length,
+                      width: lastMeasurementResult.width,
+                    }));
+                  }}
+                  className="flex-1 px-3 py-2 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700"
+                >
+                  Apply to form
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLastMeasurementResult(null)}
+                  className="px-3 py-2 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200"
+                >
+                  Dismiss
+                </button>
+              </div>
+              {lastMeasurementResult.confidence < 0.4 && (
+                <p className="text-xs text-yellow-700 bg-yellow-50 border border-yellow-200 rounded p-2 mt-2">
+                  ⚠ Low confidence — consider using a clearer reference marker (manual scale or printed green ruler) and re-taking the photo.
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Exudate & Pain */}
@@ -1696,6 +1893,119 @@ const WoundCarePage: React.FC = () => {
           Save Assessment
         </button>
       </div>
+
+      {/* ===== Manual Calibration Modal ===== */}
+      {showManualCalibration && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-4 border-b flex items-center justify-between">
+              <h3 className="font-semibold text-lg flex items-center">
+                <Ruler className="w-5 h-5 mr-2 text-primary-600" />
+                Manual Calibration
+              </h3>
+              <button
+                type="button"
+                onClick={() => { setShowManualCalibration(false); setManualCalibPoints([]); }}
+                className="p-1 hover:bg-gray-100 rounded"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-3">
+              <p className="text-sm text-gray-600">
+                Click <strong>two points</strong> on the photo that span a known distance (e.g. across a coin or a ruler mark), then enter the real-world distance in centimetres.
+              </p>
+              {!manualCalibPhoto && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded p-3 text-sm text-yellow-800">
+                  Capture or upload a photo first, then re-open this dialog.
+                </div>
+              )}
+              {manualCalibPhoto && (
+                <div className="relative inline-block max-w-full border-2 border-primary-300 rounded-lg overflow-hidden">
+                  <img
+                    ref={manualCalibImgRef}
+                    src={manualCalibPhoto}
+                    alt="Calibration"
+                    className="block max-w-full max-h-[50vh] cursor-crosshair"
+                    onClick={(e) => {
+                      if (manualCalibPoints.length >= 2) return;
+                      const img = e.currentTarget;
+                      const rect = img.getBoundingClientRect();
+                      const x = ((e.clientX - rect.left) / rect.width) * img.naturalWidth;
+                      const y = ((e.clientY - rect.top) / rect.height) * img.naturalHeight;
+                      setManualCalibPoints(prev => [...prev, { x, y }]);
+                    }}
+                  />
+                  {/* Render markers */}
+                  {manualCalibImgRef.current && manualCalibPoints.map((p, i) => {
+                    const img = manualCalibImgRef.current!;
+                    const rect = img.getBoundingClientRect();
+                    const containerRect = img.parentElement!.getBoundingClientRect();
+                    const left = (p.x / img.naturalWidth) * rect.width + (rect.left - containerRect.left);
+                    const top = (p.y / img.naturalHeight) * rect.height + (rect.top - containerRect.top);
+                    return (
+                      <div
+                        key={i}
+                        className="absolute w-5 h-5 -ml-2.5 -mt-2.5 rounded-full bg-red-500 border-2 border-white shadow-lg pointer-events-none flex items-center justify-center text-white text-[10px] font-bold"
+                        style={{ left, top }}
+                      >
+                        {i + 1}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <div className="flex items-center gap-3">
+                <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Known distance (cm):</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0.1"
+                  value={manualKnownCm}
+                  onChange={(e) => setManualKnownCm(parseFloat(e.target.value) || 1)}
+                  className="w-24 px-2 py-1 border rounded"
+                  title="Real-world distance between the two points"
+                />
+                <button
+                  type="button"
+                  onClick={() => setManualCalibPoints([])}
+                  className="text-xs px-2 py-1 bg-gray-100 rounded hover:bg-gray-200"
+                >
+                  Reset points
+                </button>
+                <span className="text-xs text-gray-500 ml-auto">
+                  {manualCalibPoints.length}/2 points
+                </span>
+              </div>
+            </div>
+            <div className="p-4 border-t flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => { setShowManualCalibration(false); setManualCalibPoints([]); }}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={manualCalibPoints.length !== 2 || manualKnownCm <= 0}
+                onClick={() => {
+                  const [p1, p2] = manualCalibPoints;
+                  const pixelLen = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+                  const ref = aiWoundMeasurement.createManualCalibration(pixelLen, manualKnownCm);
+                  setCalibrationOverride(ref);
+                  setShowManualCalibration(false);
+                  setManualCalibPoints([]);
+                }}
+                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
+              >
+                Apply calibration
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 
