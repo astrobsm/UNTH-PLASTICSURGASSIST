@@ -77,29 +77,15 @@ self.addEventListener('activate', (event) => {
           })
       );
 
-      // Pre-warm critical API endpoints into cache on activation
-      // so they're available immediately for offline access.
-      const apiCache = await caches.open(API_CACHE);
-      const criticalEndpoints = [
-        '/api/patients',
-        '/api/admissions/active',
-        '/api/treatment-plans',
-        '/api/prescriptions',
-        '/api/users/approved',
-      ];
-      for (const url of criticalEndpoints) {
-        try {
-          const resp = await fetch(url, { credentials: 'same-origin' });
-          if (resp.ok) {
-            await apiCache.put(url, resp);
-          }
-        } catch {
-          // Offline during activation — skip, will be cached on first GET
-        }
-      }
+      // NOTE: We intentionally do NOT pre-warm authenticated /api/* endpoints
+      // here. The service worker has no access to the JWT (kept in
+      // localStorage on the page), so a bare fetch would always return 401 —
+      // polluting server logs and storing useless responses. The runtime
+      // NetworkFirst route below will cache real responses on the first
+      // authenticated request the app makes.
 
       await self.clients.claim();
-      console.log('[SW] Activated, claimed clients, and warmed API caches');
+      console.log('[SW] Activated and claimed clients');
     })()
   );
 });

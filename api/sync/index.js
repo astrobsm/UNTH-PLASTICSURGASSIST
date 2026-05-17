@@ -103,7 +103,7 @@ export default async function handler(req, res) {
         };
 
         if (action && actionToTable[action]) {
-          return await getSyncEntity(actionToTable[action], res, url.searchParams);
+          return await getSyncEntity(actionToTable[action], res, url.searchParams, auth.user);
         }
 
         return await getSyncStatus(auth.user, res);
@@ -168,7 +168,7 @@ async function getSyncPatientById(id, res) {
   res.status(200).json({ patient: result.rows[0] });
 }
 
-async function getSyncEntity(tableName, res, searchParams) {
+async function getSyncEntity(tableName, res, searchParams, user) {
   const since = searchParams?.get('since');
   const patientId = searchParams?.get('patientId');
   let queryStr;
@@ -182,6 +182,13 @@ async function getSyncEntity(tableName, res, searchParams) {
     'shopping_lists', 'call_duty_roster', 'clinic_duty_logs', 'cbt_attempts', 'notice_board',
     'rotation_configs', 'assigned_responsibilities'
   ];
+
+  // Tables that are normally patient-scoped, but when no patientId is provided
+  // we safely fall back to "documents created by the current user" (no data leakage).
+  // Useful for things like the paperwork recents list that span patients but belong to one user.
+  const userScopedFallbackTables = {
+    paperwork_documents: 'created_by',
+  };
 
   const isPatientScoped = !nonPatientTables.includes(tableName);
 
@@ -197,6 +204,17 @@ async function getSyncEntity(tableName, res, searchParams) {
     } else {
       queryStr = `SELECT * FROM ${tableName} WHERE patient_id = $1 ORDER BY updated_at DESC LIMIT 1000`;
       params = [parsedPatientId];
+    }
+  } else if (isPatientScoped && !patientId && userScopedFallbackTables[tableName] && user?.id) {
+    // No patientId — fall back to current-user-owned rows for whitelisted tables
+    const ownerCol = userScopedFallbackTables[tableName];
+    const userId = String(user.id);
+    if (since) {
+      queryStr = `SELECT * FROM ${tableName} WHERE ${ownerCol} = $1 AND updated_at > $2 ORDER BY updated_at DESC LIMIT 1000`;
+      params = [userId, since];
+    } else {
+      queryStr = `SELECT * FROM ${tableName} WHERE ${ownerCol} = $1 ORDER BY updated_at DESC LIMIT 1000`;
+      params = [userId];
     }
   } else if (isPatientScoped && !patientId) {
     // Patient-scoped table but no patientId provided: return empty to prevent data leakage
