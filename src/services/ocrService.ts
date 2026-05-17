@@ -909,20 +909,35 @@ class OCRService {
         // yields MORE readings. Also synthesize a series entry from a lone `vitals`
         // object so the review modal never falls back to "1 reading" by accident.
         if (documentType === 'vital_signs_chart' || detectedType === 'vital_signs_chart') {
-          const existingSeries: any[] = Array.isArray(structuredData?.vital_signs_series)
+          // A row is "usable" only if it has at least one numeric measurement
+          const hasAnyVital = (r: any) => !!(r && (
+            r.temperature || r.temp || r.pulse || r.heart_rate ||
+            r.bp_systolic || r.bp_diastolic || r.blood_pressure || r.bloodPressure ||
+            r.respiratory_rate || r.resp_rate || r.spo2 || r.oxygen_saturation ||
+            r.weight || r.urine_output || r.pain_score
+          ));
+          const rawAi: any[] = Array.isArray(structuredData?.vital_signs_series)
             ? structuredData.vital_signs_series
             : [];
-          const ruleSeries = this.parseVitalSignsSeries(processedText) || [];
+          const existingSeries = rawAi.filter(hasAnyVital);
+          const ruleSeries = (this.parseVitalSignsSeries(processedText) || []).filter(hasAnyVital);
           let bestSeries = existingSeries;
           if (ruleSeries.length > bestSeries.length) bestSeries = ruleSeries;
-          // If AI returned a single `vitals` object but no series, lift it into the series
-          if (bestSeries.length === 0 && structuredData?.vitals && typeof structuredData.vitals === 'object') {
+          // If both passes yielded nothing usable but AI returned a single `vitals`
+          // object with real values, lift it into the series
+          if (bestSeries.length === 0 && structuredData?.vitals && hasAnyVital(structuredData.vitals)) {
             bestSeries = [{ ...structuredData.vitals }];
           }
+          // Only attach the series if we actually have non-empty rows; otherwise
+          // remove any empty placeholder the AI may have included so the UI can
+          // surface a proper "could not extract" message instead of a blank modal.
           if (bestSeries.length > 0) {
             structuredData = { ...(structuredData || {}), vital_signs_series: bestSeries };
+          } else if (structuredData && 'vital_signs_series' in structuredData) {
+            const { vital_signs_series: _drop, ...rest } = structuredData;
+            structuredData = rest;
           }
-          console.log(`📊 Vitals chart: AI=${existingSeries.length} rule=${ruleSeries.length} kept=${bestSeries.length}`);
+          console.log(`📊 Vitals chart: AI(raw)=${rawAi.length} AI(usable)=${existingSeries.length} rule=${ruleSeries.length} kept=${bestSeries.length}`);
         }
 
         const result: AIEnhancedOCRResult = {

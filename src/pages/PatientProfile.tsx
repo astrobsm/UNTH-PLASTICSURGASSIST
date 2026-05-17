@@ -1497,10 +1497,22 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; patie
         entries.push(reading);
       }
     }
-    // Handle array of vitals (series from chart)
+    // Handle array of vitals (series from chart) — skip any row with no values
     if (fields.vital_signs_series && Array.isArray(fields.vital_signs_series)) {
       const total = fields.vital_signs_series.length;
       fields.vital_signs_series.forEach((v: any, i: number) => {
+        if (!v || typeof v !== 'object') return;
+        const temperature = v.temperature ?? v.temp ?? undefined;
+        const pulse = v.pulse ?? v.heart_rate ?? undefined;
+        const bp_systolic = v.bp_systolic ?? undefined;
+        const bp_diastolic = v.bp_diastolic ?? undefined;
+        const respiratory_rate = v.respiratory_rate ?? v.resp_rate ?? undefined;
+        const spo2 = v.spo2 ?? v.oxygen_saturation ?? undefined;
+        const weight = v.weight ?? undefined;
+        // Drop rows where the AI extracted nothing measurable
+        if (!temperature && !pulse && !bp_systolic && !bp_diastolic && !respiratory_rate && !spo2 && !weight) {
+          return;
+        }
         // Build the best date+time string:
         // 1. Prefer datetime (full ISO) if available
         // 2. Otherwise combine date + time fields
@@ -1516,13 +1528,13 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; patie
         entries.push({
           id: `vs_ocr_${Date.now()}_${i}`,
           date: parseChartDateTime(dtInput, i, total),
-          temperature: v.temperature || v.temp || undefined,
-          pulse: v.pulse || v.heart_rate || undefined,
-          bp_systolic: v.bp_systolic || undefined,
-          bp_diastolic: v.bp_diastolic || undefined,
-          respiratory_rate: v.respiratory_rate || v.resp_rate || undefined,
-          spo2: v.spo2 || v.oxygen_saturation || undefined,
-          weight: v.weight || undefined,
+          temperature,
+          pulse,
+          bp_systolic,
+          bp_diastolic,
+          respiratory_rate,
+          spo2,
+          weight,
           recorded_by: `${userName} (OCR)`,
         });
       });
