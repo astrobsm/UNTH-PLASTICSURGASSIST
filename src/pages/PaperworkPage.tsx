@@ -24,6 +24,7 @@ import {
   addFooter
 } from '../utils/pdfUtils';
 import { useAuthStore } from '../store/authStore';
+import SpeechToTextInput from '../components/SpeechToTextInput';
 
 const PaperworkPage: React.FC = () => {
   const { user } = useAuthStore();
@@ -292,73 +293,85 @@ const PaperworkPage: React.FC = () => {
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Reason for Consult</label>
-          <textarea
-            required
+          <SpeechToTextInput
             value={formData.reason_for_consult}
-            onChange={(e) => setFormData({ ...formData, reason_for_consult: e.target.value })}
+            onChange={(v) => setFormData({ ...formData, reason_for_consult: v })}
             rows={3}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+            required
             placeholder="Brief description of why consult is needed..."
+            context="clinical_note"
+            enableScan
+            scanDocumentType="clinical_note"
           />
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Relevant Clinical History</label>
-          <textarea
-            required
+          <SpeechToTextInput
             value={formData.relevant_history}
-            onChange={(e) => setFormData({ ...formData, relevant_history: e.target.value })}
+            onChange={(v) => setFormData({ ...formData, relevant_history: v })}
             rows={3}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+            required
             placeholder="Relevant past medical/surgical history..."
+            context="clinical_note"
+            enableScan
+            scanDocumentType="clinical_note"
           />
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Current Medications</label>
-          <textarea
-            required
+          <SpeechToTextInput
             value={formData.current_medications}
-            onChange={(e) => setFormData({ ...formData, current_medications: e.target.value })}
+            onChange={(v) => setFormData({ ...formData, current_medications: v })}
             rows={2}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+            required
             placeholder="List current medications..."
+            context="prescription"
+            enableScan
+            scanDocumentType="prescription"
           />
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Examination Findings</label>
-          <textarea
-            required
+          <SpeechToTextInput
             value={formData.examination_findings}
-            onChange={(e) => setFormData({ ...formData, examination_findings: e.target.value })}
+            onChange={(v) => setFormData({ ...formData, examination_findings: v })}
             rows={3}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+            required
             placeholder="Relevant examination findings..."
+            context="clinical_note"
+            enableScan
+            scanDocumentType="clinical_note"
           />
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Investigations</label>
-          <textarea
-            required
+          <SpeechToTextInput
             value={formData.investigations}
-            onChange={(e) => setFormData({ ...formData, investigations: e.target.value })}
+            onChange={(v) => setFormData({ ...formData, investigations: v })}
             rows={2}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+            required
             placeholder="Recent lab/imaging results..."
+            context="clinical_note"
+            enableScan
+            scanDocumentType="lab_report"
           />
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Specific Question(s)</label>
-          <textarea
-            required
+          <SpeechToTextInput
             value={formData.specific_question}
-            onChange={(e) => setFormData({ ...formData, specific_question: e.target.value })}
+            onChange={(v) => setFormData({ ...formData, specific_question: v })}
             rows={2}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+            required
             placeholder="What specific questions do you have for the consulting team?"
+            context="clinical_note"
+            enableScan
+            scanDocumentType="clinical_note"
           />
         </div>
 
@@ -572,25 +585,29 @@ const PaperworkPage: React.FC = () => {
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Admission Diagnosis</label>
-          <textarea
-            required
+          <SpeechToTextInput
             value={formData.admission_diagnosis}
-            onChange={(e) => setFormData({ ...formData, admission_diagnosis: e.target.value })}
+            onChange={(v) => setFormData({ ...formData, admission_diagnosis: v })}
             rows={2}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-            title="Admission diagnosis"
+            required
+            placeholder="Admission diagnosis"
+            context="clinical_note"
+            enableScan
+            scanDocumentType="clinical_note"
           />
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Final Diagnosis</label>
-          <textarea
-            required
+          <SpeechToTextInput
             value={formData.final_diagnosis}
-            onChange={(e) => setFormData({ ...formData, final_diagnosis: e.target.value })}
+            onChange={(v) => setFormData({ ...formData, final_diagnosis: v })}
             rows={2}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-            title="Final diagnosis"
+            required
+            placeholder="Final diagnosis"
+            context="clinical_note"
+            enableScan
+            scanDocumentType="clinical_note"
           />
         </div>
 
@@ -637,37 +654,43 @@ const PaperworkPage: React.FC = () => {
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Hospital Course</label>
-          <textarea
-            required
+          <SpeechToTextInput
             value={formData.hospital_course}
-            onChange={(e) => setFormData({ ...formData, hospital_course: e.target.value })}
+            onChange={(v) => setFormData({ ...formData, hospital_course: v })}
             rows={4}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+            required
             placeholder="Describe the patient's hospital course..."
+            context="clinical_note"
+            enableScan
+            scanDocumentType="clinical_note"
           />
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Discharge Medications</label>
-          <textarea
-            required
+          <SpeechToTextInput
             value={formData.discharge_medications}
-            onChange={(e) => setFormData({ ...formData, discharge_medications: e.target.value })}
+            onChange={(v) => setFormData({ ...formData, discharge_medications: v })}
             rows={3}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+            required
             placeholder="List medications with dosages..."
+            context="prescription"
+            enableScan
+            scanDocumentType="prescription"
           />
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Follow-up Plan</label>
-          <textarea
-            required
+          <SpeechToTextInput
             value={formData.follow_up_plan}
-            onChange={(e) => setFormData({ ...formData, follow_up_plan: e.target.value })}
+            onChange={(v) => setFormData({ ...formData, follow_up_plan: v })}
             rows={2}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+            required
             placeholder="Follow-up appointments and care..."
+            context="clinical_note"
+            enableScan
+            scanDocumentType="clinical_note"
           />
         </div>
 
@@ -889,84 +912,98 @@ const PaperworkPage: React.FC = () => {
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Recipient Address</label>
-          <textarea
-            required
+          <SpeechToTextInput
             value={formData.recipient_address}
-            onChange={(e) => setFormData({ ...formData, recipient_address: e.target.value })}
+            onChange={(v) => setFormData({ ...formData, recipient_address: v })}
             rows={2}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+            required
             placeholder="Full address..."
+            context="general"
+            enableScan
+            scanDocumentType="general"
           />
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Diagnosis</label>
-          <textarea
-            required
+          <SpeechToTextInput
             value={formData.diagnosis}
-            onChange={(e) => setFormData({ ...formData, diagnosis: e.target.value })}
+            onChange={(v) => setFormData({ ...formData, diagnosis: v })}
             rows={2}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-            title="Diagnosis"
+            required
+            placeholder="Diagnosis"
+            context="clinical_note"
+            enableScan
+            scanDocumentType="clinical_note"
           />
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Treatment Given</label>
-          <textarea
-            required
+          <SpeechToTextInput
             value={formData.treatment_given}
-            onChange={(e) => setFormData({ ...formData, treatment_given: e.target.value })}
+            onChange={(v) => setFormData({ ...formData, treatment_given: v })}
             rows={3}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-            title="Treatment given"
+            required
+            placeholder="Treatment given"
+            context="clinical_note"
+            enableScan
+            scanDocumentType="clinical_note"
           />
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Current Status</label>
-          <textarea
-            required
+          <SpeechToTextInput
             value={formData.current_status}
-            onChange={(e) => setFormData({ ...formData, current_status: e.target.value })}
+            onChange={(v) => setFormData({ ...formData, current_status: v })}
             rows={2}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-            title="Current status"
+            required
+            placeholder="Current status"
+            context="clinical_note"
+            enableScan
+            scanDocumentType="clinical_note"
           />
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Prognosis</label>
-          <textarea
-            required
+          <SpeechToTextInput
             value={formData.prognosis}
-            onChange={(e) => setFormData({ ...formData, prognosis: e.target.value })}
+            onChange={(v) => setFormData({ ...formData, prognosis: v })}
             rows={2}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-            title="Prognosis"
+            required
+            placeholder="Prognosis"
+            context="clinical_note"
+            enableScan
+            scanDocumentType="clinical_note"
           />
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Restrictions/Limitations</label>
-          <textarea
-            required
+          <SpeechToTextInput
             value={formData.restrictions}
-            onChange={(e) => setFormData({ ...formData, restrictions: e.target.value })}
+            onChange={(v) => setFormData({ ...formData, restrictions: v })}
             rows={2}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+            required
             placeholder="Any activity restrictions or work limitations..."
+            context="clinical_note"
+            enableScan
+            scanDocumentType="clinical_note"
           />
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Additional Notes</label>
-          <textarea
+          <SpeechToTextInput
             value={formData.additional_notes}
-            onChange={(e) => setFormData({ ...formData, additional_notes: e.target.value })}
+            onChange={(v) => setFormData({ ...formData, additional_notes: v })}
             rows={2}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
             placeholder="Optional additional information..."
+            context="general"
+            enableScan
+            scanDocumentType="general"
           />
         </div>
 

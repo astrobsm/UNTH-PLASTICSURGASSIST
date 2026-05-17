@@ -4,9 +4,10 @@
  */
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { Mic, MicOff, Loader2, Wand2, RotateCcw, Volume2, Check, X, AlertCircle } from 'lucide-react';
+import { Mic, MicOff, Loader2, Wand2, RotateCcw, Volume2, Check, X, AlertCircle, Camera, Upload, ScanLine } from 'lucide-react';
 import { speechToTextService, SpeechRecognitionResult } from '../services/speechToTextService';
 import { aiTextEnhancementService, TextContext } from '../services/aiTextEnhancementService';
+import { ocrService } from '../services/ocrService';
 
 interface SpeechToTextInputProps {
   value: string;
@@ -25,6 +26,12 @@ interface SpeechToTextInputProps {
   maxLength?: number;
   helperText?: string;
   error?: string;
+  /** When true, shows a Scan button that captures/uploads an image and appends OCR text. */
+  enableScan?: boolean;
+  /** Hint for the OCR pipeline. Common values: 'general' | 'clinical_note' | 'lab_report' | 'prescription' */
+  scanDocumentType?: string;
+  /** Custom scan button tooltip. */
+  scanLabel?: string;
 }
 
 export const SpeechToTextInput: React.FC<SpeechToTextInputProps> = ({
@@ -43,7 +50,10 @@ export const SpeechToTextInput: React.FC<SpeechToTextInputProps> = ({
   name,
   maxLength,
   helperText,
-  error
+  error,
+  enableScan = false,
+  scanDocumentType = 'general',
+  scanLabel = 'Scan / upload document'
 }) => {
   const [isListening, setIsListening] = useState(false);
   const [isEnhancing, setIsEnhancing] = useState(false);
@@ -51,9 +61,13 @@ export const SpeechToTextInput: React.FC<SpeechToTextInputProps> = ({
   const [speechError, setSpeechError] = useState<string | null>(null);
   const [showEnhanceSuccess, setShowEnhanceSuccess] = useState(false);
   const [isSpeechSupported, setIsSpeechSupported] = useState(true);
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanProgress, setScanProgress] = useState<string>('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const originalValueRef = useRef<string>('');
   const currentValueRef = useRef<string>(value);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Keep currentValueRef in sync with value prop
   useEffect(() => {
@@ -172,6 +186,42 @@ export const SpeechToTextInput: React.FC<SpeechToTextInputProps> = ({
     }
   }, [onChange]);
 
+  // Scan / upload document via OCR
+  const handleScanFile = useCallback(async (file: File | null) => {
+    if (!file) return;
+    setIsScanning(true);
+    setSpeechError(null);
+    setScanProgress('Preparing image...');
+    originalValueRef.current = value;
+    try {
+      const result = await ocrService.extractText(file, scanDocumentType as any, (p: any) => {
+        if (p?.status) setScanProgress(p.status);
+      });
+      const extracted = (result?.text || '').trim();
+      if (!extracted) {
+        setSpeechError('No readable text found in the scan. Try a clearer photo with better lighting.');
+        return;
+      }
+      const currentVal = currentValueRef.current.trim();
+      const separator = currentVal ? '\n\n' : '';
+      const newValue = currentVal + separator + extracted;
+      currentValueRef.current = newValue;
+      onChange(newValue);
+      setShowEnhanceSuccess(true);
+      setTimeout(() => setShowEnhanceSuccess(false), 3000);
+    } catch (err: any) {
+      console.error('OCR scan failed:', err);
+      setSpeechError(err?.message || 'Failed to scan document. Please try again.');
+      setTimeout(() => setSpeechError(null), 5000);
+    } finally {
+      setIsScanning(false);
+      setScanProgress('');
+      // Reset inputs so picking the same file again still fires onChange
+      if (cameraInputRef.current) cameraInputRef.current.value = '';
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }, [onChange, scanDocumentType, value]);
+
   // Calculate word count
   const wordCount = value.trim() ? value.trim().split(/\s+/).length : 0;
 
@@ -205,7 +255,7 @@ export const SpeechToTextInput: React.FC<SpeechToTextInputProps> = ({
           required={required}
           maxLength={maxLength}
           className={`
-            w-full px-3 py-2 pr-24 
+            w-full px-3 py-2 pr-14
             border rounded-lg
             focus:ring-2 focus:ring-green-500 focus:border-green-500
             disabled:bg-gray-100 disabled:cursor-not-allowed
@@ -283,6 +333,60 @@ export const SpeechToTextInput: React.FC<SpeechToTextInputProps> = ({
               <RotateCcw className="w-5 h-5" />
             </button>
           )}
+
+          {/* Scan / upload buttons */}
+          {enableScan && (
+            <>
+              <button
+                type="button"
+                onClick={() => cameraInputRef.current?.click()}
+                disabled={disabled || isScanning}
+                className={`
+                  p-2 rounded-lg transition-all duration-200
+                  ${isScanning
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-blue-100 hover:text-blue-600'
+                  }
+                  ${disabled || isScanning ? 'opacity-50 cursor-not-allowed' : ''}
+                `}
+                title="Scan with camera"
+              >
+                {isScanning ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <Camera className="w-5 h-5" />
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={disabled || isScanning}
+                className={`
+                  p-2 rounded-lg transition-all duration-200
+                  bg-gray-100 text-gray-600 hover:bg-blue-100 hover:text-blue-600
+                  ${disabled || isScanning ? 'opacity-50 cursor-not-allowed' : ''}
+                `}
+                title={scanLabel || 'Upload image / PDF for OCR'}
+              >
+                <Upload className="w-5 h-5" />
+              </button>
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={(e) => handleScanFile(e.target.files?.[0] || null)}
+              />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,application/pdf"
+                className="hidden"
+                onChange={(e) => handleScanFile(e.target.files?.[0] || null)}
+              />
+            </>
+          )}
         </div>
 
         {/* Listening indicator */}
@@ -295,6 +399,14 @@ export const SpeechToTextInput: React.FC<SpeechToTextInputProps> = ({
               <span className="w-1 h-3 bg-green-500 rounded animate-bounce" style={{ animationDelay: '150ms' }} />
               <span className="w-1 h-3 bg-green-500 rounded animate-bounce" style={{ animationDelay: '300ms' }} />
             </div>
+          </div>
+        )}
+
+        {/* Scanning indicator */}
+        {isScanning && (
+          <div className="absolute bottom-2 left-2 flex items-center gap-2 text-blue-600 text-sm bg-white/90 px-2 py-1 rounded">
+            <ScanLine className="w-4 h-4 animate-pulse" />
+            <span>{scanProgress || 'Scanning document...'}</span>
           </div>
         )}
       </div>

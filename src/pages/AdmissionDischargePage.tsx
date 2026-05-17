@@ -18,6 +18,7 @@ import WHODischargeAssessment from '../components/WHODischargeAssessment';
 import MDTDischargeMedications from '../components/MDTDischargeMedications';
 import DischargeSummaryForm from '../components/DischargeSummaryForm';
 import DischargeDocumentsPreview from '../components/DischargeDocumentsPreview';
+import SpeechToTextInput from '../components/SpeechToTextInput';
 import {
   createPDF,
   addPDFHeader,
@@ -1290,12 +1291,14 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
         {/* Additional Notes */}
         <div className="mt-4">
           <label className="block text-sm font-medium text-gray-700 mb-1">Additional Notes</label>
-          <textarea
+          <SpeechToTextInput
             value={additionalNotes}
-            onChange={(e) => setAdditionalNotes(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-purple-500 focus:border-purple-500"
+            onChange={(v) => setAdditionalNotes(v)}
             rows={2}
             placeholder="Any additional notes about team assignment..."
+            context="general"
+            enableScan
+            scanDocumentType="general"
           />
         </div>
       </div>
@@ -1362,34 +1365,40 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Reasons for Admission <span className="text-red-500">*</span>
             </label>
-            <textarea
+            <SpeechToTextInput
               value={reasonsForAdmission}
-              onChange={(e) => setReasonsForAdmission(e.target.value)}
+              onChange={(v) => setReasonsForAdmission(v)}
               rows={2}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
               required
+              context="clinical_note"
+              enableScan
+              scanDocumentType="clinical_note"
             />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Presenting Complaint</label>
-              <textarea
+              <SpeechToTextInput
                 value={presentingComplaint}
-                onChange={(e) => setPresentingComplaint(e.target.value)}
+                onChange={(v) => setPresentingComplaint(v)}
                 rows={2}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                context="clinical_note"
+                enableScan
+                scanDocumentType="clinical_note"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Provisional Diagnosis <span className="text-red-500">*</span>
               </label>
-              <textarea
+              <SpeechToTextInput
                 value={provisionalDiagnosis}
-                onChange={(e) => setProvisionalDiagnosis(e.target.value)}
+                onChange={(v) => setProvisionalDiagnosis(v)}
                 rows={2}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
                 required
+                context="clinical_note"
+                enableScan
+                scanDocumentType="clinical_note"
               />
             </div>
           </div>

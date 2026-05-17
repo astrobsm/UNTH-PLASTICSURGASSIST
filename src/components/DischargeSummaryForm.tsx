@@ -10,6 +10,7 @@ import {
   admissionDischargeService 
 } from '../services/admissionDischargeService';
 import { getCurrentUserName } from '../utils/getCurrentUser';
+import SpeechToTextInput from './SpeechToTextInput';
 
 interface DischargeSummaryFormProps {
   admission: Admission;
@@ -316,12 +317,14 @@ export default function DischargeSummaryForm({
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Final Diagnosis *</label>
-            <textarea
+            <SpeechToTextInput
               value={finalDiagnosis}
-              onChange={(e) => setFinalDiagnosis(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              onChange={(v) => setFinalDiagnosis(v)}
               rows={2}
               required
+              context="clinical_note"
+              enableScan
+              scanDocumentType="clinical_note"
             />
           </div>
           <div>
@@ -382,13 +385,15 @@ export default function DischargeSummaryForm({
             ✨ Auto-Generate
           </button>
         </div>
-        <textarea
+        <SpeechToTextInput
           value={hospitalCourseSummary}
-          onChange={(e) => setHospitalCourseSummary(e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+          onChange={(v) => setHospitalCourseSummary(v)}
           rows={6}
-          placeholder="Summarize the patient's hospital stay..."
           required
+          placeholder="Summarize the patient's hospital stay..."
+          context="clinical_note"
+          enableScan
+          scanDocumentType="clinical_note"
         />
       </div>
 
@@ -441,11 +446,14 @@ export default function DischargeSummaryForm({
             ✨ Auto-Generate
           </button>
         </div>
-        <textarea
+        <SpeechToTextInput
           value={woundCareInstructions}
-          onChange={(e) => setWoundCareInstructions(e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+          onChange={(v) => setWoundCareInstructions(v)}
           rows={6}
+          placeholder="Wound care instructions for the patient..."
+          context="clinical_note"
+          enableScan
+          scanDocumentType="clinical_note"
         />
       </div>
 
