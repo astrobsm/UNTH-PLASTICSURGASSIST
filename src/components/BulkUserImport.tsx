@@ -36,7 +36,7 @@ export default function BulkUserImport() {
 
   const roles = [
     { value: 'house_officer', label: 'House Officer' },
-    { value: 'junior_registrar', label: 'Junior Registrar' },
+    { value: 'junior_registrar', label: 'Registrar' },
     { value: 'senior_registrar', label: 'Senior Registrar' },
     { value: 'consultant', label: 'Consultant' },
     { value: 'admin', label: 'Admin' }

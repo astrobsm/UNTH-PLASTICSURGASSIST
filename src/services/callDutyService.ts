@@ -16,7 +16,7 @@ export interface CallDutyShift {
   /** User ID of the senior registrar on call */
   senior_registrar_id: string;
   senior_registrar_name: string;
-  /** User ID of the registrar (junior registrar) on call */
+  /** User ID of the registrar on call */
   registrar_id: string;
   registrar_name: string;
 

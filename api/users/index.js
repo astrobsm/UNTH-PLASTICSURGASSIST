@@ -36,7 +36,7 @@ function generatePassword(length = 12) {
 async function assignPatientsToNewUser(userId, userRole, userName) {
   try {
     // Only assign patients to medical staff roles
-    const medicalRoles = ['consultant', 'senior_registrar', 'registrar', 'house_officer'];
+    const medicalRoles = ['consultant', 'senior_registrar', 'registrar', 'junior_registrar', 'house_officer'];
     if (!medicalRoles.includes(userRole)) {
       console.log(`User role ${userRole} does not require patient assignment`);
       return { assigned: 0, message: 'Not a medical staff role' };
@@ -78,6 +78,7 @@ async function assignPatientsToNewUser(userId, userRole, userName) {
       'consultant': 'consultant_id',
       'senior_registrar': 'senior_registrar_id',
       'registrar': 'registrar_id',
+      'junior_registrar': 'registrar_id',
       'house_officer': 'house_officer_id'
     };
 

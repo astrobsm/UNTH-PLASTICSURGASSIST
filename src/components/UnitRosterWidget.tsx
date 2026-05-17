@@ -172,7 +172,7 @@ export default function UnitRosterWidget() {
       // Senior Registrars are FIXED per unit
       seniorRegistrarUnit1: srs[0]?.full_name || prev.seniorRegistrarUnit1,
       seniorRegistrarUnit2: srs[1]?.full_name || prev.seniorRegistrarUnit2,
-      // Junior Registrars rotate every 6 weeks. If only 1, both units share him.
+      // Registrars rotate every 6 weeks. If only 1, both units share him.
       juniorRegistrar1: jrs[0]?.full_name || prev.juniorRegistrar1,
       juniorRegistrar2: jrs[1]?.full_name || prev.juniorRegistrar2,
       // House Officers rotate every 2 weeks.
@@ -227,7 +227,7 @@ export default function UnitRosterWidget() {
       !setupForm.juniorRegistrar1 &&
       !setupForm.houseOfficer1
     ) {
-      alert('Please assign at least one Senior Registrar, Junior Registrar, or House Officer.');
+      alert('Please assign at least one Senior Registrar, Registrar, or House Officer.');
       return;
     }
 
@@ -386,9 +386,9 @@ export default function UnitRosterWidget() {
               </select>
             </div>
 
-            {/* Junior Registrars — 6-week rotation */}
+            {/* Registrars — 6-week rotation */}
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Junior Registrar A (6-wk rotation)</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Registrar A (6-wk rotation)</label>
               <select
                 value={setupForm.juniorRegistrar1}
                 onChange={(e) => setSetupForm({ ...setupForm, juniorRegistrar1: e.target.value })}
@@ -403,7 +403,7 @@ export default function UnitRosterWidget() {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Junior Registrar B (6-wk rotation)</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Registrar B (6-wk rotation)</label>
               <select
                 value={setupForm.juniorRegistrar2}
                 onChange={(e) => setSetupForm({ ...setupForm, juniorRegistrar2: e.target.value })}
@@ -451,7 +451,7 @@ export default function UnitRosterWidget() {
             </div>
           </div>
           <p className="text-xs text-gray-500">
-            <b>Senior Registrar</b> is fixed per unit (no rotation). <b>Junior Registrar</b> rotates between units every 6 weeks; if only one is registered, he covers BOTH units. <b>House Officer</b> rotates every 2 weeks (so a single HO completes both units in ~4 weeks). Click <b>Auto-Assign Staff</b> to populate from registered users by role.
+            <b>Senior Registrar</b> is fixed per unit (no rotation). <b>Registrar</b> rotates between units every 6 weeks; if only one is registered, he covers BOTH units. <b>House Officer</b> rotates every 2 weeks (so a single HO completes both units in ~4 weeks). Click <b>Auto-Assign Staff</b> to populate from registered users by role.
           </p>
           <div className="flex gap-2">
             <button
@@ -549,7 +549,7 @@ export default function UnitRosterWidget() {
                   })()}
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Junior Registrar <span className="normal-case font-normal text-gray-400">— 6-wk rotation</span></p>
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Registrar <span className="normal-case font-normal text-gray-400">— 6-wk rotation</span></p>
                   <p className="text-sm text-gray-800 flex items-center gap-1.5">
                     <Briefcase className="h-3.5 w-3.5 text-orange-500" />
                     {assignment?.juniorRegistrar || <span className="text-gray-400 italic">Not assigned</span>}
@@ -585,7 +585,7 @@ export default function UnitRosterWidget() {
               {/* Empty-state nudge for admins */}
               {isAdmin && assignment && !assignment.juniorRegistrar && !assignment.houseOfficer && availableJuniorRegistrars.length === 0 && availableHouseOfficers.length === 0 && (
                 <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 mb-1">
-                  No Junior Registrars or House Officers approved yet. Approve users in <b>Admin → Users</b>, then re-open this widget.
+                  No Registrars or House Officers approved yet. Approve users in <b>Admin → Users</b>, then re-open this widget.
                 </p>
               )}
 

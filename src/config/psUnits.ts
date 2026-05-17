@@ -7,7 +7,7 @@
 //                              (approves treatment plans).
 //   • Senior Registrar       — fixed per unit (does NOT rotate). Authors treatment
 //                              plans; gets them approved by the managing consultant.
-//   • Junior Registrar (Reg) — rotates between units every 6 weeks. Supervises and
+//   • Registrar (Reg) — rotates between units every 6 weeks. Supervises and
 //                              approves all House Officer tasks. If only ONE junior
 //                              registrar is on staff, he covers BOTH units.
 //   • House Officer          — rotates between units every 2 weeks (so a single HO
@@ -133,7 +133,7 @@ const fmtDate = (d: Date) => d.toISOString().split('T')[0];
 /**
  * Compute current unit assignments. Senior Registrars are FIXED per unit
  * (index 0 → PS-UNIT-1, index 1 → PS-UNIT-2; if only one SR, he covers both).
- * Junior Registrars rotate every `juniorRegistrarRotationWeeks` (default 6).
+ * Registrars rotate every `juniorRegistrarRotationWeeks` (default 6).
  * House Officers rotate every `houseOfficerRotationWeeks` (default 2).
  */
 export function getCurrentAssignments(

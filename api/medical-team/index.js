@@ -61,7 +61,7 @@ async function getAllMedicalStaff(res) {
   const result = await query(
     `SELECT id, username, email, full_name, role, is_active, created_at
      FROM users 
-     WHERE role IN ('consultant', 'senior_registrar', 'registrar', 'house_officer')
+     WHERE role IN ('consultant', 'senior_registrar', 'registrar', 'junior_registrar', 'house_officer')
        AND is_approved = TRUE 
        AND is_active = TRUE
      ORDER BY role, full_name`
@@ -102,6 +102,7 @@ async function getStaffByRole(req, res) {
     'consultant': 'consultant_id',
     'senior_registrar': 'senior_registrar_id',
     'registrar': 'registrar_id',
+    'junior_registrar': 'registrar_id',
     'house_officer': 'house_officer_id'
   };
 
@@ -109,6 +110,12 @@ async function getStaffByRole(req, res) {
   if (!roleColumn) {
     return res.status(400).json({ error: 'Invalid role' });
   }
+
+  // The DB user-role enum stores 'junior_registrar' but the assignment column
+  // and most UI code calls it 'registrar' — accept both as the same pool.
+  const acceptedRoles = (role === 'registrar' || role === 'junior_registrar')
+    ? ['registrar', 'junior_registrar']
+    : [role];
 
   try {
     // Ensure patient_assignments table exists
@@ -125,11 +132,11 @@ async function getStaffByRole(req, res) {
          WHERE is_active = TRUE AND ${roleColumn} IS NOT NULL
          GROUP BY ${roleColumn}
        ) pa ON u.id::text = pa.user_id
-       WHERE u.role = $1 
+       WHERE u.role = ANY($1::text[])
          AND u.is_approved = TRUE 
          AND u.is_active = TRUE
        ORDER BY COALESCE(pa.patient_count, 0) ASC, u.full_name`,
-      [role]
+      [acceptedRoles]
     );
 
     return res.status(200).json({ 
@@ -143,9 +150,9 @@ async function getStaffByRole(req, res) {
       const fallbackResult = await query(
         `SELECT id, full_name, email, role, 0 as current_patients
          FROM users
-         WHERE role = $1 AND is_approved = TRUE AND is_active = TRUE
+         WHERE role = ANY($1::text[]) AND is_approved = TRUE AND is_active = TRUE
          ORDER BY full_name`,
-        [role]
+        [acceptedRoles]
       );
       return res.status(200).json({ 
         staff: fallbackResult.rows,
@@ -170,7 +177,7 @@ async function getTeamWorkload(res) {
   const staffResult = await query(`
     SELECT id, full_name, email, role
     FROM users
-    WHERE role IN ('consultant', 'senior_registrar', 'registrar', 'house_officer')
+    WHERE role IN ('consultant', 'senior_registrar', 'registrar', 'junior_registrar', 'house_officer')
       AND is_approved = TRUE AND is_active = TRUE
     ORDER BY role, full_name
   `);
@@ -283,6 +290,7 @@ async function suggestTeamAssignment(res) {
       'house_officer': 'house_officer_id'
     };
     const roleColumn = roleColumnMap[role];
+    const acceptedRoles = role === 'registrar' ? ['registrar', 'junior_registrar'] : [role];
 
     // Get staff with lowest patient count
     const staffResult = await query(
@@ -295,12 +303,12 @@ async function suggestTeamAssignment(res) {
          WHERE is_active = TRUE AND ${roleColumn} IS NOT NULL
          GROUP BY ${roleColumn}
        ) pa ON u.id::text = pa.user_id
-       WHERE u.role = $1 
+       WHERE u.role = ANY($1::text[]) 
          AND u.is_approved = TRUE 
          AND u.is_active = TRUE
        ORDER BY COALESCE(pa.patient_count, 0) ASC, RANDOM()
        LIMIT 1`,
-      [role]
+      [acceptedRoles]
     );
 
     if (staffResult.rows.length > 0) {
@@ -428,7 +436,7 @@ async function getTeamAnalytics(req, res) {
   let staffQuery = `
     SELECT id, full_name, role
     FROM users
-    WHERE role IN ('consultant', 'senior_registrar', 'registrar', 'house_officer')
+    WHERE role IN ('consultant', 'senior_registrar', 'registrar', 'junior_registrar', 'house_officer')
       AND is_approved = TRUE AND is_active = TRUE
   `;
   const staffParams = [];

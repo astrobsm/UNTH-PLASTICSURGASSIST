@@ -80,7 +80,7 @@ type FilterLevel = 'all' | 'house_officer' | 'junior_resident' | 'senior_residen
 
 const LEVEL_LABELS: Record<string, string> = {
   house_officer: 'House Officer',
-  junior_resident: 'Junior Registrar',
+  junior_resident: 'Registrar',
   senior_resident: 'Senior Registrar',
 };
 

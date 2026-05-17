@@ -1559,7 +1559,7 @@ const UserModal = ({
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent"
               >
                 <option value="house_officer">House Officer</option>
-                <option value="junior_registrar">Junior Registrar</option>
+                <option value="junior_registrar">Registrar</option>
                 <option value="senior_registrar">Senior Registrar</option>
                 <option value="consultant">Consultant</option>
                 <option value="admin">Admin</option>

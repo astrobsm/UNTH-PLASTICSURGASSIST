@@ -67,10 +67,13 @@ class MedicalTeamService {
       const users = await db.users.toArray();
       const activeUsers = users.filter(u => u.is_active !== false);
       
-      // Get one of each role for balanced distribution (only active users)
+      // Get one of each role for balanced distribution (only active users).
+      // NOTE: DB enum is 'junior_registrar' but assignment column is 'registrar_id';
+      // accept either string so legacy data still maps cleanly.
+      const isRegistrar = (r: string) => r === 'junior_registrar' || r === 'registrar';
       const consultant = activeUsers.find(u => u.role === 'consultant');
       const seniorRegistrar = activeUsers.find(u => u.role === 'senior_registrar');
-      const registrar = activeUsers.find(u => u.role === 'registrar');
+      const registrar = activeUsers.find(u => isRegistrar(u.role));
       const houseOfficer = activeUsers.find(u => u.role === 'house_officer');
       const nurses = activeUsers.filter(u => u.role === 'nurse').slice(0, 2); // Assign 2 nurses
 
@@ -127,7 +130,8 @@ class MedicalTeamService {
       const activeUsers = users.filter(u => u.is_active !== false);
       const consultants = activeUsers.filter(u => u.role === 'consultant');
       const seniorRegistrars = activeUsers.filter(u => u.role === 'senior_registrar');
-      const registrars = activeUsers.filter(u => u.role === 'registrar');
+      // Registrar pool: includes both legacy 'registrar' and canonical 'junior_registrar'
+      const registrars = activeUsers.filter(u => u.role === 'registrar' || u.role === 'junior_registrar');
       const houseOfficers = activeUsers.filter(u => u.role === 'house_officer');
       const nurses = activeUsers.filter(u => u.role === 'nurse');
 
@@ -347,11 +351,22 @@ class MedicalTeamService {
   }
 
   /**
+   * Map the assignment-column role name to the actual DB user-role enum values
+   * that should match. The DB role enum uses 'junior_registrar' but the
+   * patient_assignments column and most UI code calls it 'registrar' — accept both.
+   */
+  private matchingUserRoles(role: string): string[] {
+    if (role === 'registrar' || role === 'junior_registrar') return ['registrar', 'junior_registrar'];
+    return [role];
+  }
+
+  /**
    * Get local staff by role (fallback)
    */
   private async getLocalStaffByRole(role: string): Promise<StaffByRole[]> {
     const users = await db.users.toArray();
-    const roleUsers = users.filter(u => u.role === role && u.is_active !== false);
+    const accepted = this.matchingUserRoles(role);
+    const roleUsers = users.filter(u => accepted.includes(u.role) && u.is_active !== false);
     
     // Get patient counts from local assignments
     const assignments = await db.patient_assignments.toArray();

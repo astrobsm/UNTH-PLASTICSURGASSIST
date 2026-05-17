@@ -231,7 +231,7 @@ export function UserApprovalManager() {
             <option value="all">All Roles</option>
             <option value="consultant">Consultant</option>
             <option value="senior_registrar">Senior Registrar</option>
-            <option value="junior_registrar">Junior Registrar</option>
+            <option value="junior_registrar">Registrar</option>
             <option value="medical_officer">Medical Officer</option>
             <option value="house_officer">House Officer</option>
           </select>

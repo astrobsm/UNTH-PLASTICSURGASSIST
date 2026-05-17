@@ -455,7 +455,7 @@ export default function TopicManagement() {
                         onChange={() => toggleTargetLevel('junior_registrar')}
                         className="rounded text-green-600 focus:ring-green-500"
                       />
-                      <span className="text-sm">Junior Registrars</span>
+                      <span className="text-sm">Registrars</span>
                     </label>
                     <label className="flex items-center space-x-2 cursor-pointer">
                       <input
