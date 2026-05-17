@@ -866,9 +866,16 @@ class OCRService {
       onProgress?.({ status: useVisionOCR ? 'Sending to AI Vision (handwriting)...' : 'Sending to Cloud Vision AI...', progress: 0.15 });
 
       onProgress?.({ status: useVisionOCR ? 'AI reading handwriting...' : 'Cloud Vision processing...', progress: 0.3 });
+      // CRITICAL: send the REAL documentType to the backend (not a generic 'handwritten_note').
+      // The backend picks specialized prompts based on documentType:
+      //   - 'vital_signs_chart' → VITAL_SIGNS_CHART_PROMPT (extracts the full vital_signs_series array)
+      //   - 'fluid_chart'       → FLUID_CHART_PROMPT (extracts fluid entries)
+      //   - anything else       → VISION_OCR_SYSTEM_PROMPT (single-record extraction)
+      // Previously we forced 'handwritten_note' whenever useVisionOCR was true, which caused
+      // multi-row charts (e.g. UNTH post-op chart with 20+ readings) to return only ONE reading.
       const backendResult = await apiClient.post('/ocr/scan', {
         image: base64,
-        documentType: useVisionOCR ? 'handwritten_note' : documentType,
+        documentType,
         aiPostProcess: true,
         patientContext,
         useVisionOCR,
@@ -893,6 +900,29 @@ class OCRService {
         if (!structuredData) {
           structuredData = this.ruleBasedExtraction(processedText, detectedType as DocumentType);
           aiConfidence = 0.5;
+        }
+
+        // ── Safety net for vitals charts ────────────────────────────────────
+        // The AI sometimes returns only a single `vitals` object even when the chart
+        // clearly has many rows (or returns a short series). Always run the local
+        // rule-based series parser on the transcribed raw_text and keep whichever
+        // yields MORE readings. Also synthesize a series entry from a lone `vitals`
+        // object so the review modal never falls back to "1 reading" by accident.
+        if (documentType === 'vital_signs_chart' || detectedType === 'vital_signs_chart') {
+          const existingSeries: any[] = Array.isArray(structuredData?.vital_signs_series)
+            ? structuredData.vital_signs_series
+            : [];
+          const ruleSeries = this.parseVitalSignsSeries(processedText) || [];
+          let bestSeries = existingSeries;
+          if (ruleSeries.length > bestSeries.length) bestSeries = ruleSeries;
+          // If AI returned a single `vitals` object but no series, lift it into the series
+          if (bestSeries.length === 0 && structuredData?.vitals && typeof structuredData.vitals === 'object') {
+            bestSeries = [{ ...structuredData.vitals }];
+          }
+          if (bestSeries.length > 0) {
+            structuredData = { ...(structuredData || {}), vital_signs_series: bestSeries };
+          }
+          console.log(`📊 Vitals chart: AI=${existingSeries.length} rule=${ruleSeries.length} kept=${bestSeries.length}`);
         }
 
         const result: AIEnhancedOCRResult = {
