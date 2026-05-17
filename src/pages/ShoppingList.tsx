@@ -241,12 +241,18 @@ export default function ShoppingList() {
     { id: 'gauze-packs', name: 'Sterile Gauze Packs', category: 'Dressings', defaultUnit: 'pack' },
     { id: 'dressing-packs', name: 'Dressing Packs (Sterile)', category: 'Dressings', defaultUnit: 'pack' },
     { id: 'plastic-set', name: 'Plastic Set (Sterile Plastic Surgery Dressing Set)', category: 'Dressings', defaultUnit: 'set' },
-    
+    { id: 'donor-site-pack', name: 'Donor Site Pack', category: 'Dressings', defaultUnit: 'pack' },
+    { id: 'graft-site-pack', name: 'Graft-Site Pack', category: 'Dressings', defaultUnit: 'pack' },
+    { id: 'non-stick-pads', name: 'Non-Stick Pads', category: 'Dressings', defaultUnit: 'piece' },
+    { id: 'stopain-spray', name: 'Stopain Spray', category: 'Dressings', defaultUnit: 'bottle' },
+
     // Bandages
     { id: 'crepe-6in', name: 'Crepe Bandage 6 inch', category: 'Bandages', defaultUnit: 'roll' },
     { id: 'crepe-4in', name: 'Crepe Bandage 4 inch', category: 'Bandages', defaultUnit: 'roll' },
     { id: 'veil-band', name: 'Veil Band', category: 'Bandages', defaultUnit: 'roll' },
     { id: 'pop-bandage', name: 'POP Bandage', category: 'Bandages', defaultUnit: 'roll' },
+    { id: 'coban-6in', name: 'Coban Bandage 6 inch', category: 'Bandages', defaultUnit: 'roll' },
+    { id: 'coban-4in', name: 'Coban Bandage 4 inch', category: 'Bandages', defaultUnit: 'roll' },
     
     // Catheters
     { id: 'cath-16', name: 'Urethral Catheter Size 16', category: 'Catheters', defaultUnit: 'piece' },
