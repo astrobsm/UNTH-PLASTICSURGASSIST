@@ -58,7 +58,8 @@ async function ensureTable() {
         notes TEXT,
         recorded_by VARCHAR(255),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT blood_glucose_at_least_one_reading CHECK (fbg_mmol IS NOT NULL OR rbg_mmol IS NOT NULL)
       )
     `);
     await query(`CREATE INDEX IF NOT EXISTS idx_blood_glucose_patient ON blood_glucose(patient_id)`);
@@ -106,7 +107,7 @@ async function createEntry(body, user, res) {
     return res.status(400).json({ error: 'At least one of fbg_mmol or rbg_mmol is required' });
   }
 
-  const authorName = recorded_by || (user && user.full_name) || 'Unknown';
+  const authorName = recorded_by || (user && (user.fullName || user.full_name)) || 'Unknown';
   const result = await query(
     `INSERT INTO blood_glucose
        (patient_id, hospital_number, reading_date, reading_time, fbg_mmol, rbg_mmol, unit, notes, recorded_by)

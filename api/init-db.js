@@ -1735,6 +1735,25 @@ async function createTables() {
     CREATE INDEX IF NOT EXISTS idx_fluid_balance_patient ON fluid_balance(patient_id);
     CREATE INDEX IF NOT EXISTS idx_fluid_balance_date ON fluid_balance(chart_date);
 
+    -- Blood glucose monitoring (FBG / RBG capillary readings)
+    CREATE TABLE IF NOT EXISTS blood_glucose (
+      id SERIAL PRIMARY KEY,
+      patient_id INTEGER NOT NULL,
+      hospital_number VARCHAR(50),
+      reading_date DATE NOT NULL DEFAULT CURRENT_DATE,
+      reading_time TIME NOT NULL DEFAULT CURRENT_TIME,
+      fbg_mmol DECIMAL(5,2),
+      rbg_mmol DECIMAL(5,2),
+      unit VARCHAR(10) DEFAULT 'mmol/L',
+      notes TEXT,
+      recorded_by VARCHAR(255),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT blood_glucose_at_least_one_reading CHECK (fbg_mmol IS NOT NULL OR rbg_mmol IS NOT NULL)
+    );
+    CREATE INDEX IF NOT EXISTS idx_blood_glucose_patient ON blood_glucose(patient_id);
+    CREATE INDEX IF NOT EXISTS idx_blood_glucose_patient_date ON blood_glucose(patient_id, reading_date DESC, reading_time DESC);
+
     -- =====================================================
     -- NOTICE BOARD & APPOINTMENTS
     -- =====================================================
