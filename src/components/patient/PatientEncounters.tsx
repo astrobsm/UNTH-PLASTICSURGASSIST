@@ -4,6 +4,7 @@ import { apiClient } from '../../services/apiClient';
 import { useAuthStore } from '../../store/authStore';
 import { RefreshCw } from 'lucide-react';
 import { DocumenterLink, ConsultantCommentSection } from '../ClinicalInteractionComponents';
+import { MultiPageScanUploader, ScannedPage } from '../MultiPageScanUploader';
 
 interface Encounter {
   id: number | string;
@@ -28,6 +29,7 @@ export const PatientEncounters: React.FC<PatientEncountersProps> = ({ patientId,
   const [refreshing, setRefreshing] = useState(false);
   const [showNewEncounter, setShowNewEncounter] = useState(false);
   const [newEncounter, setNewEncounter] = useState({ type: 'progress_note', title: '', content: '' });
+  const [encounterPages, setEncounterPages] = useState<ScannedPage[]>([]);
   const [saving, setSaving] = useState(false);
   const mountedRef = useRef(true);
 
@@ -304,7 +306,15 @@ export const PatientEncounters: React.FC<PatientEncountersProps> = ({ patientId,
     if (!newEncounter.content.trim()) return;
     setSaving(true);
     try {
-      const note = {
+      const attachments = encounterPages.map((p, i) => ({
+        id: p.id,
+        index: i + 1,
+        caption: p.caption || p.name || `Page ${i + 1}`,
+        dataUrl: p.dataUrl,
+        ocrText: p.ocrText || ''
+      }));
+
+      const note: any = {
         patient_id: Number(patientId),
         hospital_number: hospitalNumber,
         title: newEncounter.title || newEncounter.type.replace('_', ' '),
@@ -317,7 +327,9 @@ export const PatientEncounters: React.FC<PatientEncountersProps> = ({ patientId,
         created_by_name: user?.name || 'Unknown',
         created_by_role: user?.role || 'house_officer',
         created_at: new Date().toISOString(),
-        date: new Date().toISOString()
+        date: new Date().toISOString(),
+        attachments,
+        page_count: attachments.length
       };
 
       // Try API first
@@ -330,6 +342,7 @@ export const PatientEncounters: React.FC<PatientEncountersProps> = ({ patientId,
 
       setShowNewEncounter(false);
       setNewEncounter({ type: 'progress_note', title: '', content: '' });
+      setEncounterPages([]);
       loadEncounters();
     } catch (err) {
       console.error('Error saving encounter:', err);
@@ -438,17 +451,38 @@ export const PatientEncounters: React.FC<PatientEncountersProps> = ({ patientId,
                 value={newEncounter.content}
                 onChange={(e) => setNewEncounter({ ...newEncounter, content: e.target.value })}
                 rows={6}
-                placeholder="Enter clinical documentation..."
+                placeholder="Enter clinical documentation, or scan handwritten pages below and tap 'OCR' to auto-fill..."
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
               />
             </div>
+
+            {/* Multi-page scanner / uploader */}
+            <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+              <MultiPageScanUploader
+                pages={encounterPages}
+                onChange={setEncounterPages}
+                enableOCR
+                documentType="medical_form"
+                label="Attach scanned pages (optional)"
+                helper="Capture or upload handwritten notes, charts or referral letters. Tap OCR to auto-append the extracted text."
+                onOCRComplete={(text) => {
+                  setNewEncounter((prev) => ({
+                    ...prev,
+                    content: prev.content
+                      ? `${prev.content}\n\n[Scanned pages OCR]\n${text}`
+                      : `[Scanned pages OCR]\n${text}`
+                  }));
+                }}
+              />
+            </div>
+
             <div className="flex items-center gap-2 text-xs text-gray-500">
               <span>Documenting as: <strong>{user?.name || 'Unknown'}</strong> ({user?.role || 'N/A'})</span>
               <span>|</span>
               <span>{new Date().toLocaleString()}</span>
             </div>
             <div className="flex justify-end gap-3">
-              <button onClick={() => setShowNewEncounter(false)} className="px-4 py-2 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50">Cancel</button>
+              <button onClick={() => { setShowNewEncounter(false); setEncounterPages([]); }} className="px-4 py-2 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50">Cancel</button>
               <button onClick={handleSaveEncounter} disabled={saving || !newEncounter.content.trim()} className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50">
                 {saving ? 'Saving...' : 'Save Encounter'}
               </button>

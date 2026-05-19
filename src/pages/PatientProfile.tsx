@@ -15,6 +15,7 @@ import { ErrorBoundary } from '../components/ErrorBoundary';
 import { speechToTextService } from '../services/speechToTextService';
 import { ocrService } from '../services/ocrService';
 import { DocumentScannerModal } from '../components/DocumentScannerModal';
+import { MultiPageScanUploader, ScannedPage } from '../components/MultiPageScanUploader';
 import FluidBalanceChart from '../components/FluidBalanceChart';
 import BloodTransfusionTab from '../components/BloodTransfusionTab';
 import BloodGlucoseTab from '../components/BloodGlucoseTab';
@@ -1246,10 +1247,15 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; patie
     }
   };
 
-  const onFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) handleVitalsScan(file);
+  const onFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files ? Array.from(e.target.files) : [];
     e.target.value = '';
+    for (const file of files) {
+      // Process pages sequentially so the OCR review modal accumulates entries
+      // from every page rather than racing.
+      // eslint-disable-next-line no-await-in-loop
+      await handleVitalsScan(file);
+    }
   };
 
   // Clinical observation chart: two stacked strips with a true time-based x-axis.
@@ -1599,8 +1605,8 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; patie
   return (
     <div className="space-y-4">
       {/* Hidden file inputs for scan */}
-      <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={onFileSelected} aria-label="Upload vitals chart" />
-      <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onFileSelected} aria-label="Capture vitals chart" />
+      <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={onFileSelected} aria-label="Upload vitals chart pages" />
+      <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" multiple className="hidden" onChange={onFileSelected} aria-label="Capture vitals chart pages" />
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
         <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between flex-wrap gap-2">
@@ -1612,12 +1618,13 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; patie
               className="flex items-center gap-1 px-3 py-1.5 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 disabled:opacity-50"
             >
               {scanning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
-              {scanning ? 'Scanning...' : 'Scan Chart'}
+              {scanning ? 'Scanning...' : 'Scan Pages'}
             </button>
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={scanning}
               className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+              title="Upload one or more chart pages"
             >
               <Upload className="w-4 h-4" /> Upload
             </button>
@@ -3200,6 +3207,31 @@ const CHRONIC_PHASE_INFO: Record<string, { description: string; granulation: str
   Repair: { description: 'Active granulation and epithelialization, minimal to no exudate', granulation: '>40%', frequency: 'Alternate Day', color: 'bg-green-100 text-green-800' },
 };
 
+interface WoundPhotoEntry {
+  id: string;
+  dataUrl: string;
+  caption?: string;
+  /** Did the user place a known-size reference marker in the frame? */
+  hasReferenceMarker?: boolean;
+  /** The marker's real-world size in cm (e.g. coin, ruler) for AI calibration */
+  referenceMarkerSizeCm?: number;
+  referenceMarkerType?: string;
+}
+
+interface WoundEntry {
+  id: string;
+  label?: string; // e.g. "Wound A", "Lateral malleolus"
+  location: string;
+  wound_type?: string;
+  length: number;
+  width: number;
+  depth: number;
+  tissue_types?: string[];
+  exudate_amount?: string;
+  notes?: string;
+  photos: WoundPhotoEntry[];
+}
+
 interface WoundRecord {
   id: string;
   wound_nature: 'Acute' | 'Chronic';
@@ -3218,12 +3250,35 @@ interface WoundRecord {
   protocol: string[];
   assessed_by: string;
   assessed_at: string;
+  /** Additional wounds documented in the same assessment encounter. The top-level
+   *  fields above describe the PRIMARY wound; this array holds any extras. */
+  wounds?: WoundEntry[];
+  /** Photos of the primary wound (with optional reference markers for AI sizing). */
+  primary_photos?: WoundPhotoEntry[];
 }
 
 const WoundAssessmentTab: React.FC<{ patientId: string; patientName: string; hospitalNumber: string; navigate: any }> = ({ patientId, patientName, hospitalNumber, navigate }) => {
   const [assessments, setAssessments] = useState<WoundRecord[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<Partial<WoundRecord>>({ wound_nature: 'Acute', tissue_types: [], pain_level: 0, granulation_percentage: 0 });
+  // Primary wound photos (with optional reference markers for AI-calibrated sizing)
+  const [primaryPhotoPages, setPrimaryPhotoPages] = useState<ScannedPage[]>([]);
+  const [primaryRefMarker, setPrimaryRefMarker] = useState<{ enabled: boolean; type: string; sizeCm: string }>({ enabled: false, type: 'Ruler', sizeCm: '' });
+  // Additional wounds documented in the same assessment encounter
+  const [extraWounds, setExtraWounds] = useState<Array<{
+    id: string;
+    label: string;
+    location: string;
+    wound_type: string;
+    length: string;
+    width: string;
+    depth: string;
+    tissue_types: string[];
+    exudate_amount: string;
+    notes: string;
+    photoPages: ScannedPage[];
+    refMarker: { enabled: boolean; type: string; sizeCm: string };
+  }>>([]);
   const { user } = useAuthStore();
 
   const healingPhases = form.wound_nature === 'Chronic' ? CHRONIC_PHASES : ACUTE_PHASES;
@@ -3431,6 +3486,36 @@ const WoundAssessmentTab: React.FC<{ patientId: string; patientName: string; hos
     if (!form.wound_type || !form.location) { alert('Wound type and location are required'); return; }
     const recs = generateRecommendations(form);
     const protocol = generateProtocol(form);
+
+    const mapPagesToPhotos = (
+      pages: ScannedPage[],
+      marker: { enabled: boolean; type: string; sizeCm: string }
+    ): WoundPhotoEntry[] =>
+      pages.map((p) => ({
+        id: p.id,
+        dataUrl: p.dataUrl,
+        caption: p.caption,
+        hasReferenceMarker: marker.enabled,
+        referenceMarkerType: marker.enabled ? marker.type : undefined,
+        referenceMarkerSizeCm: marker.enabled && marker.sizeCm ? parseFloat(marker.sizeCm) : undefined,
+      }));
+
+    const additional: WoundEntry[] = extraWounds
+      .filter((w) => w.location || w.wound_type || w.photoPages.length)
+      .map((w) => ({
+        id: w.id,
+        label: w.label || undefined,
+        location: w.location,
+        wound_type: w.wound_type || undefined,
+        length: parseFloat(w.length) || 0,
+        width: parseFloat(w.width) || 0,
+        depth: parseFloat(w.depth) || 0,
+        tissue_types: w.tissue_types,
+        exudate_amount: w.exudate_amount || undefined,
+        notes: w.notes || undefined,
+        photos: mapPagesToPhotos(w.photoPages, w.refMarker),
+      }));
+
     const record: WoundRecord = {
       id: `wa_${Date.now()}`,
       wound_nature: form.wound_nature || 'Acute',
@@ -3449,11 +3534,16 @@ const WoundAssessmentTab: React.FC<{ patientId: string; patientName: string; hos
       protocol,
       assessed_by: user?.name || 'Unknown',
       assessed_at: new Date().toISOString(),
+      primary_photos: mapPagesToPhotos(primaryPhotoPages, primaryRefMarker),
+      wounds: additional.length ? additional : undefined,
     };
     const updated = [record, ...assessments];
     localStorage.setItem(`wound_assessments_${patientId}`, JSON.stringify(updated));
     setAssessments(updated);
     setForm({ wound_nature: 'Acute', tissue_types: [], pain_level: 0, granulation_percentage: 0 });
+    setPrimaryPhotoPages([]);
+    setPrimaryRefMarker({ enabled: false, type: 'Ruler', sizeCm: '' });
+    setExtraWounds([]);
     setShowForm(false);
   };
 
@@ -3550,9 +3640,193 @@ const WoundAssessmentTab: React.FC<{ patientId: string; patientName: string; hos
             </div>
             <div><label className="block text-xs font-medium text-gray-700 mb-1">Notes</label>
               <textarea value={form.notes || ''} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" aria-label="Wound notes" /></div>
+
+            {/* ── Primary wound photos + reference marker ───────────────── */}
+            <div className="border border-gray-200 rounded-lg p-3 bg-white space-y-2">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <h5 className="text-sm font-semibold text-gray-800">Primary Wound Photos</h5>
+                <label className="inline-flex items-center gap-2 text-xs text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={primaryRefMarker.enabled}
+                    onChange={(e) => setPrimaryRefMarker({ ...primaryRefMarker, enabled: e.target.checked })}
+                    className="rounded border-gray-300"
+                  />
+                  Reference marker in photo (for AI calibration)
+                </label>
+              </div>
+              {primaryRefMarker.enabled && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Marker Type</label>
+                    <select
+                      value={primaryRefMarker.type}
+                      onChange={(e) => setPrimaryRefMarker({ ...primaryRefMarker, type: e.target.value })}
+                      className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
+                      aria-label="Reference marker type"
+                    >
+                      <option>Ruler</option>
+                      <option>Coin</option>
+                      <option>ID card</option>
+                      <option>Adhesive sticker</option>
+                      <option>Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Marker size (cm)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={primaryRefMarker.sizeCm}
+                      onChange={(e) => setPrimaryRefMarker({ ...primaryRefMarker, sizeCm: e.target.value })}
+                      placeholder="e.g. 2.5"
+                      className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
+                      aria-label="Marker size in centimetres"
+                    />
+                  </div>
+                </div>
+              )}
+              <p className="text-[11px] text-gray-500">Tip: place a ruler, coin or ID card next to the wound before taking the photo so the AI can convert pixels to centimetres accurately.</p>
+              <MultiPageScanUploader
+                pages={primaryPhotoPages}
+                onChange={setPrimaryPhotoPages}
+                label=""
+                allowCaption
+              />
+            </div>
+
+            {/* ── Additional wounds in the same assessment ──────────────── */}
+            {extraWounds.map((w, idx) => (
+              <div key={w.id} className="border-2 border-dashed border-purple-200 rounded-lg p-3 bg-white space-y-2">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <h5 className="text-sm font-semibold text-purple-800">Additional Wound #{idx + 2}</h5>
+                  <button
+                    type="button"
+                    onClick={() => setExtraWounds(extraWounds.filter((_, i) => i !== idx))}
+                    className="text-xs text-red-600 hover:text-red-800 font-medium"
+                  >
+                    Remove
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Label</label>
+                    <input
+                      value={w.label}
+                      onChange={(e) => {
+                        const next = [...extraWounds]; next[idx] = { ...w, label: e.target.value }; setExtraWounds(next);
+                      }}
+                      placeholder={`Wound ${String.fromCharCode(66 + idx)}`}
+                      className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Type</label>
+                    <select
+                      value={w.wound_type}
+                      onChange={(e) => { const next = [...extraWounds]; next[idx] = { ...w, wound_type: e.target.value }; setExtraWounds(next); }}
+                      className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
+                      aria-label="Additional wound type"
+                    >
+                      <option value="">Select…</option>
+                      {WOUND_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Location</label>
+                    <input
+                      value={w.location}
+                      onChange={(e) => { const next = [...extraWounds]; next[idx] = { ...w, location: e.target.value }; setExtraWounds(next); }}
+                      placeholder="e.g. Right heel"
+                      className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-[11px] font-medium text-gray-600 mb-0.5">L (cm)</label>
+                    <input type="number" step="0.1" value={w.length} onChange={(e) => { const next = [...extraWounds]; next[idx] = { ...w, length: e.target.value }; setExtraWounds(next); }} className="w-full px-2 py-1 border border-gray-300 rounded text-xs" aria-label="Additional wound length" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-medium text-gray-600 mb-0.5">W (cm)</label>
+                    <input type="number" step="0.1" value={w.width} onChange={(e) => { const next = [...extraWounds]; next[idx] = { ...w, width: e.target.value }; setExtraWounds(next); }} className="w-full px-2 py-1 border border-gray-300 rounded text-xs" aria-label="Additional wound width" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-medium text-gray-600 mb-0.5">D (cm)</label>
+                    <input type="number" step="0.1" value={w.depth} onChange={(e) => { const next = [...extraWounds]; next[idx] = { ...w, depth: e.target.value }; setExtraWounds(next); }} className="w-full px-2 py-1 border border-gray-300 rounded text-xs" aria-label="Additional wound depth" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Notes</label>
+                  <textarea
+                    value={w.notes}
+                    onChange={(e) => { const next = [...extraWounds]; next[idx] = { ...w, notes: e.target.value }; setExtraWounds(next); }}
+                    rows={2}
+                    className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
+                    aria-label="Additional wound notes"
+                  />
+                </div>
+                <label className="inline-flex items-center gap-2 text-xs text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={w.refMarker.enabled}
+                    onChange={(e) => { const next = [...extraWounds]; next[idx] = { ...w, refMarker: { ...w.refMarker, enabled: e.target.checked } }; setExtraWounds(next); }}
+                    className="rounded border-gray-300"
+                  />
+                  Reference marker in photo
+                </label>
+                {w.refMarker.enabled && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <select
+                      value={w.refMarker.type}
+                      onChange={(e) => { const next = [...extraWounds]; next[idx] = { ...w, refMarker: { ...w.refMarker, type: e.target.value } }; setExtraWounds(next); }}
+                      className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
+                      aria-label="Marker type"
+                    >
+                      <option>Ruler</option>
+                      <option>Coin</option>
+                      <option>ID card</option>
+                      <option>Adhesive sticker</option>
+                      <option>Other</option>
+                    </select>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={w.refMarker.sizeCm}
+                      onChange={(e) => { const next = [...extraWounds]; next[idx] = { ...w, refMarker: { ...w.refMarker, sizeCm: e.target.value } }; setExtraWounds(next); }}
+                      placeholder="Size (cm)"
+                      className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
+                      aria-label="Marker size cm"
+                    />
+                  </div>
+                )}
+                <MultiPageScanUploader
+                  pages={w.photoPages}
+                  onChange={(pages) => { const next = [...extraWounds]; next[idx] = { ...w, photoPages: pages }; setExtraWounds(next); }}
+                  label=""
+                  allowCaption
+                />
+              </div>
+            ))}
+
+            <button
+              type="button"
+              onClick={() => setExtraWounds([...extraWounds, {
+                id: `xw_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+                label: '', location: '', wound_type: '',
+                length: '', width: '', depth: '',
+                tissue_types: [], exudate_amount: '', notes: '',
+                photoPages: [],
+                refMarker: { enabled: false, type: 'Ruler', sizeCm: '' }
+              }])}
+              className="w-full px-3 py-2 border-2 border-dashed border-purple-300 text-purple-700 text-sm rounded-lg hover:bg-purple-50"
+            >
+              + Add another wound to this assessment
+            </button>
+
             <div className="flex gap-2">
               <button onClick={saveAssessment} className="flex items-center gap-1 px-4 py-2 bg-green-600 text-white text-sm rounded-md hover:bg-green-700"><Save className="w-4 h-4" /> Save & Generate Protocol</button>
-              <button onClick={() => setShowForm(false)} className="px-4 py-2 text-gray-600 text-sm hover:bg-gray-100 rounded-md">Cancel</button>
+              <button onClick={() => { setShowForm(false); setPrimaryPhotoPages([]); setExtraWounds([]); setPrimaryRefMarker({ enabled: false, type: 'Ruler', sizeCm: '' }); }} className="px-4 py-2 text-gray-600 text-sm hover:bg-gray-100 rounded-md">Cancel</button>
             </div>
           </div>
         )}
@@ -3592,6 +3866,52 @@ const WoundAssessmentTab: React.FC<{ patientId: string; patientName: string; hos
                       <span key={t} className="inline-block bg-gray-100 text-gray-700 text-xs px-2 py-0.5 rounded-full mr-1">{t}</span>
                     ))}</div>
                   )}
+                  {/* Primary wound photos */}
+                  {wa.primary_photos && wa.primary_photos.length > 0 && (
+                    <div className="mb-3">
+                      <p className="text-xs text-gray-500 mb-1">Photos ({wa.primary_photos.length}){wa.primary_photos.some(p => p.hasReferenceMarker) && <span className="ml-2 px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 text-[10px] font-semibold">📏 Calibrated</span>}</p>
+                      <div className="flex flex-wrap gap-2">
+                        {wa.primary_photos.map((ph) => (
+                          <a key={ph.id} href={ph.dataUrl} target="_blank" rel="noopener noreferrer" className="block w-20 h-20 rounded border border-gray-200 overflow-hidden" title={ph.caption || 'Wound photo'}>
+                            <img src={ph.dataUrl} alt={ph.caption || 'Wound photo'} className="w-full h-full object-cover" />
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Additional wounds */}
+                  {wa.wounds && wa.wounds.length > 0 && (
+                    <div className="mb-3 border-t border-gray-200 pt-3">
+                      <p className="text-xs font-semibold text-purple-800 mb-2">+ {wa.wounds.length} additional wound{wa.wounds.length > 1 ? 's' : ''} in this assessment</p>
+                      <div className="space-y-2">
+                        {wa.wounds.map((ew, i) => (
+                          <div key={ew.id} className="bg-purple-50 border border-purple-200 rounded p-2">
+                            <div className="text-xs font-medium text-gray-800">
+                              {ew.label || `Wound ${String.fromCharCode(66 + i)}`} — {ew.wound_type || 'Wound'} @ {ew.location || 'N/A'}
+                            </div>
+                            <div className="text-xs text-gray-600 mt-0.5">
+                              Size: {ew.length}×{ew.width}×{ew.depth} cm
+                              {ew.notes && <> • {ew.notes}</>}
+                            </div>
+                            {ew.photos && ew.photos.length > 0 && (
+                              <div className="flex flex-wrap gap-1.5 mt-1.5">
+                                {ew.photos.map((ph) => (
+                                  <a key={ph.id} href={ph.dataUrl} target="_blank" rel="noopener noreferrer" className="block w-14 h-14 rounded border border-purple-300 overflow-hidden" title={ph.caption || 'Wound photo'}>
+                                    <img src={ph.dataUrl} alt={ph.caption || 'Wound photo'} className="w-full h-full object-cover" />
+                                  </a>
+                                ))}
+                                {ew.photos.some(p => p.hasReferenceMarker) && (
+                                  <span className="self-center px-1.5 py-0.5 rounded bg-purple-200 text-purple-800 text-[10px] font-semibold">📏 Calibrated</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Auto-generated Recommendations */}
                   <div className={`mt-3 p-3 rounded-lg ${wa.wound_nature === 'Chronic' ? 'bg-orange-50' : 'bg-blue-50'}`}>
                     <h5 className={`text-sm font-semibold mb-1 ${wa.wound_nature === 'Chronic' ? 'text-orange-800' : 'text-blue-800'}`}>
