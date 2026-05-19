@@ -8,21 +8,41 @@
   * {
     @apply border-gray-200;
   }
+  html, body {
+    /* Safety net: never allow page-level horizontal scroll on mobile */
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
   body {
     @apply bg-sky-100 text-clinical-dark font-sans;
     font-feature-settings: "rlig" 1, "calt" 1;
     -webkit-tap-highlight-color: transparent;
   }
-  
+
   /* Better touch targets for mobile */
   button, a, input, select, textarea {
     @apply touch-manipulation;
   }
-  
+
   /* Prevent zoom on input focus on iOS */
   @media screen and (max-width: 768px) {
     input, select, textarea {
       font-size: 16px !important;
+    }
+  }
+
+  /* Mobile-first guardrails — applied automatically on small screens */
+  @media (max-width: 639px) {
+    /* Prevent very long words / IDs / URLs from blowing out a card */
+    h1, h2, h3, h4, p, span, a, li, td {
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+    /* Any container that explicitly says it's a row with justify-between
+       should wrap on mobile rather than overflow horizontally */
+    .row-responsive {
+      flex-wrap: wrap;
+      gap: 0.5rem;
     }
   }
 }

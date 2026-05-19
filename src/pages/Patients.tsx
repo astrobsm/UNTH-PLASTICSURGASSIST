@@ -742,81 +742,84 @@ export const Patients: React.FC = () => {
             {filteredPatients.map((patient) => (
               <div key={patient.id} className="transition-colors">
                 <div className="p-3 sm:p-4">
-                  <div className="flex items-start sm:items-center gap-3">
-                    {/* Patient Avatar - links to profile */}
-                    <Link to={`/patients/${patient.id}`} className="flex-shrink-0">
-                      <div className="w-10 h-10 sm:w-12 sm:h-12 bg-navy-900 rounded-full flex items-center justify-center text-white font-semibold text-sm sm:text-base hover:bg-navy-700 transition-colors shadow-md">
-                        {patient.first_name?.[0]}{patient.last_name?.[0]}
-                      </div>
-                    </Link>
-                    
-                    {/* Patient Info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Link to={`/patients/${patient.id}`} className="hover:underline">
-                          <h3 className="text-base sm:text-lg font-semibold text-gray-900 truncate">
-                            {patient.first_name} {patient.last_name}
-                          </h3>
-                        </Link>
-                        <span className="px-2 py-0.5 bg-green-100 text-green-800 text-xs font-medium rounded-full">
-                          Active
-                        </span>
-                      </div>
-                      
-                      <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs sm:text-sm text-gray-500">
-                        <span className="flex items-center">
-                          <svg className="mr-1 h-3.5 w-3.5 sm:h-4 sm:w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-                          </svg>
-                          {patient.hospital_number}
-                        </span>
-                        
-                        <span className="flex items-center">
-                          <svg className="mr-1 h-3.5 w-3.5 sm:h-4 sm:w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                          </svg>
-                          {patient.phone}
-                        </span>
-                        
-                        <span className="flex items-center">
-                          <svg className="mr-1 h-3.5 w-3.5 sm:h-4 sm:w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3a2 2 0 012-2h4a2 2 0 012 2v4m-6 4h6m-6 4h6m-6 4h6M3 7h18" />
-                          </svg>
-                          DOB: {patient.dob || patient.date_of_birth || 'N/A'}
-                        </span>
-                        
-                        <span className="flex items-center capitalize">
-                          <svg className="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                          </svg>
-                          {patient.sex}
-                        </span>
-                      </div>
-
-                      {/* Allergies and Comorbidities */}
-                      {(patient.allergies?.length || patient.comorbidities?.length) && (
-                        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
-                          {patient.allergies && Array.isArray(patient.allergies) && patient.allergies.length > 0 && (
-                            <div className="flex items-center space-x-1">
-                              <span className="text-xs text-red-600 font-medium">Allergies:</span>
-                              <div className="flex flex-wrap gap-1">
-                                {normalizeArrayField(patient.allergies).slice(0, 2).map((allergy: string, index: number) => (
-                                  <span key={index} className="inline-block bg-red-100 text-red-800 text-xs px-2 py-0.5 rounded-full">
-                                    {allergy}
-                                  </span>
-                                ))}
-                                {normalizeArrayField(patient.allergies).length > 2 && (
-                                  <span className="text-xs text-red-600">+{normalizeArrayField(patient.allergies).length - 2}</span>
-                                )}
-                              </div>
-                            </div>
-                          )}
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                    {/* Avatar + Info group (always sits side-by-side) */}
+                    <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
+                      {/* Patient Avatar - links to profile */}
+                      <Link to={`/patients/${patient.id}`} className="flex-shrink-0">
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-navy-900 rounded-full flex items-center justify-center text-white font-semibold text-sm sm:text-base hover:bg-navy-700 transition-colors shadow-md">
+                          {patient.first_name?.[0]}{patient.last_name?.[0]}
                         </div>
-                      )}
+                      </Link>
+
+                      {/* Patient Info */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Link to={`/patients/${patient.id}`} className="hover:underline min-w-0">
+                            <h3 className="text-base sm:text-lg font-semibold text-gray-900 truncate">
+                              {patient.first_name} {patient.last_name}
+                            </h3>
+                          </Link>
+                          <span className="px-2 py-0.5 bg-green-100 text-green-800 text-xs font-medium rounded-full flex-shrink-0">
+                            Active
+                          </span>
+                        </div>
+
+                        <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs sm:text-sm text-gray-500">
+                          <span className="flex items-center min-w-0">
+                            <svg className="mr-1 h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                            </svg>
+                            <span className="truncate">{patient.hospital_number}</span>
+                          </span>
+
+                          <span className="flex items-center min-w-0">
+                            <svg className="mr-1 h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                            </svg>
+                            <span className="truncate">{patient.phone}</span>
+                          </span>
+
+                          <span className="flex items-center min-w-0">
+                            <svg className="mr-1 h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3a2 2 0 012-2h4a2 2 0 012 2v4m-6 4h6m-6 4h6m-6 4h6M3 7h18" />
+                            </svg>
+                            <span className="truncate">DOB: {patient.dob || patient.date_of_birth || 'N/A'}</span>
+                          </span>
+
+                          <span className="flex items-center capitalize">
+                            <svg className="mr-1 h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                            </svg>
+                            {patient.sex}
+                          </span>
+                        </div>
+
+                        {/* Allergies and Comorbidities */}
+                        {(patient.allergies?.length || patient.comorbidities?.length) && (
+                          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+                            {patient.allergies && Array.isArray(patient.allergies) && patient.allergies.length > 0 && (
+                              <div className="flex items-center space-x-1">
+                                <span className="text-xs text-red-600 font-medium">Allergies:</span>
+                                <div className="flex flex-wrap gap-1">
+                                  {normalizeArrayField(patient.allergies).slice(0, 2).map((allergy: string, index: number) => (
+                                    <span key={index} className="inline-block bg-red-100 text-red-800 text-xs px-2 py-0.5 rounded-full">
+                                      {allergy}
+                                    </span>
+                                  ))}
+                                  {normalizeArrayField(patient.allergies).length > 2 && (
+                                    <span className="text-xs text-red-600">+{normalizeArrayField(patient.allergies).length - 2}</span>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    
-                    {/* Action Buttons */}
-                    <div className="flex items-center gap-1.5 flex-shrink-0 relative" ref={actionDropdownPatientId === patient.id ? actionDropdownRef : undefined}>
+
+                    {/* Action Buttons — wraps to its own row on mobile, sits inline on sm+ */}
+                    <div className="flex items-center flex-wrap gap-1.5 sm:flex-nowrap sm:flex-shrink-0 relative pt-1 sm:pt-0 -mx-1 sm:mx-0 px-1 sm:px-0 w-full sm:w-auto justify-end" ref={actionDropdownPatientId === patient.id ? actionDropdownRef : undefined}>
                       {/* Patient Actions Dropdown */}
                       <button
                         onClick={() => setActionDropdownPatientId(actionDropdownPatientId === patient.id ? null : patient.id!)}
