@@ -179,8 +179,8 @@ const LimbSalvagePage: React.FC = () => {
               <Footprints className="w-8 h-8 text-primary-600" />
             </div>
             <div>
-              <h1 className="text-lg sm:text-2xl font-bold text-gray-900">Diabetic Foot - Limb Salvage Module</h1>
-              <p className="text-gray-500">Comprehensive assessment for limb salvage decision-making</p>
+              <h1 className="text-lg sm:text-2xl font-bold text-gray-900">Limb Salvage Module</h1>
+              <p className="text-gray-500">Comprehensive assessment for diabetic and non-diabetic limb salvage decision-making</p>
             </div>
           </div>
           {view === 'list' && activeTab === 'assessments' && (

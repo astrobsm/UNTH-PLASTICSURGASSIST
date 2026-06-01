@@ -134,6 +134,7 @@ export const DiabeticFootAssessmentForm: React.FC<Props> = ({
     age: 0,
     gender: 'male' as 'male' | 'female',
     weight: 70, // Weight in kg for eGFR calculation
+    hasDiabetes: true,
     diabetesType: 'type2' as 'type1' | 'type2',
     diabetesDuration: 0,
     smokingStatus: 'never' as 'current' | 'former' | 'never',
@@ -285,9 +286,14 @@ export const DiabeticFootAssessmentForm: React.FC<Props> = ({
       {/* Header */}
       <div className="border-b border-gray-200 px-6 py-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-gray-900">
-            Diabetic Foot Assessment
-          </h2>
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900">
+              Limb Salvage Assessment
+            </h2>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {formData.hasDiabetes ? 'Diabetic foot pathway' : 'Non-diabetic limb pathway'}
+            </p>
+          </div>
           <button
             onClick={onCancel}
             className="text-gray-400 hover:text-gray-600"
@@ -381,7 +387,7 @@ export const DiabeticFootAssessmentForm: React.FC<Props> = ({
                 <div>
                   <h2 className="text-xl font-bold mb-1">Select Patient</h2>
                   <p className="text-primary-100 text-sm">
-                    Choose a patient for the diabetic foot assessment
+                    Choose a patient for the limb salvage assessment
                   </p>
                 </div>
                 <button
@@ -459,7 +465,7 @@ export const DiabeticFootAssessmentForm: React.FC<Props> = ({
             {/* Footer */}
             <div className="p-4 bg-gray-50 border-t border-gray-200">
               <p className="text-xs text-gray-600 text-center">
-                Select a patient to begin the diabetic foot assessment
+                Select a patient to begin the limb salvage assessment
               </p>
             </div>
           </div>
@@ -532,28 +538,56 @@ const Step1Demographics: React.FC<Step1Props> = ({ formData, setFormData, select
             <option value="female">Female</option>
           </select>
         </div>
-        
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Diabetes Type</label>
-          <select
-            value={formData.diabetesType}
-            onChange={(e) => setFormData({ ...formData, diabetesType: e.target.value })}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500"
-          >
-            <option value="type1">Type 1</option>
-            <option value="type2">Type 2</option>
-          </select>
+
+        {/* Diabetes status — drives which downstream fields are shown */}
+        <div className="md:col-span-2">
+          <label className="block text-sm font-medium text-gray-700 mb-1">Does the patient have diabetes?</label>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setFormData({ ...formData, hasDiabetes: true })}
+              className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg border-2 transition-colors ${formData.hasDiabetes ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'}`}
+            >
+              Yes — Diabetic
+            </button>
+            <button
+              type="button"
+              onClick={() => setFormData({ ...formData, hasDiabetes: false, diabetesDuration: 0, hba1c: 5.5, bloodSugarControl: 'good' })}
+              className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg border-2 transition-colors ${!formData.hasDiabetes ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'}`}
+            >
+              No — Non-diabetic
+            </button>
+          </div>
+          {!formData.hasDiabetes && (
+            <p className="text-[11px] text-blue-700 mt-1">Diabetes-specific fields (type, duration, HbA1c, glycaemic control) will be hidden. Wound grading, vascular, sepsis and osteomyelitis assessment still apply.</p>
+          )}
         </div>
-        
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Diabetes Duration (years)</label>
-          <input
-            type="number"
-            value={formData.diabetesDuration}
-            onChange={(e) => setFormData({ ...formData, diabetesDuration: parseInt(e.target.value) || 0 })}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500"
-          />
-        </div>
+
+        {formData.hasDiabetes && (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Diabetes Type</label>
+              <select
+                value={formData.diabetesType}
+                onChange={(e) => setFormData({ ...formData, diabetesType: e.target.value })}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="type1">Type 1</option>
+                <option value="type2">Type 2</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Diabetes Duration (years)</label>
+              <input
+                type="number"
+                value={formData.diabetesDuration}
+                onChange={(e) => setFormData({ ...formData, diabetesDuration: parseInt(e.target.value) || 0 })}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+          </>
+        )}
         
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Smoking Status</label>
@@ -837,7 +871,8 @@ const Step3Comorbidities: React.FC<{ formData: any; setFormData: any }> = ({ for
         </div>
       </div>
 
-      {/* Glycemic Control */}
+      {/* Glycemic Control — only relevant for diabetic patients */}
+      {formData.hasDiabetes && (
       <div className="bg-yellow-50 p-4 rounded-lg">
         <h4 className="font-medium text-yellow-900 mb-3">Glycemic Control</h4>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -868,6 +903,7 @@ const Step3Comorbidities: React.FC<{ formData: any; setFormData: any }> = ({ for
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 };
