@@ -82,11 +82,18 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
   }, []);
   
   // Basic Information (must be declared before the useEffect that depends on it)
-  const [basicInfo, setBasicInfo] = useState({
+  const [basicInfo, setBasicInfo] = useState<{
+    patient_id: string;
+    diagnosis: string;
+    admission_date: string;
+    notes: string;
+    care_setting: 'inpatient' | 'outpatient';
+  }>({
     patient_id: '',
     diagnosis: '',
     admission_date: format(new Date(), 'yyyy-MM-dd'),
-    notes: ''
+    notes: '',
+    care_setting: 'inpatient',
   });
 
   // Auto-fetch existing treatment plan when patient changes
@@ -720,12 +727,22 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
         completed_reviews: [],
         missed_reviews: []
       })),
-      discharge_plan: {
-        ...dischargePlan,
-        id: `discharge_${Date.now()}`,
-        criteria_met: [],
-        criteria_pending: dischargePlan.discharge_criteria || []
-      },
+      // Outpatient plans skip the discharge-planning step entirely; for them
+      // we persist a minimal discharge_plan stub so downstream readers don't NPE.
+      discharge_plan: isOutpatient
+        ? {
+            id: `discharge_${Date.now()}`,
+            criteria_met: [],
+            criteria_pending: [],
+            discharge_criteria: [],
+            notes: 'N/A \u2014 outpatient plan',
+          }
+        : {
+            ...dischargePlan,
+            id: `discharge_${Date.now()}`,
+            criteria_met: [],
+            criteria_pending: dischargePlan.discharge_criteria || []
+          },
       // Legacy fields for compatibility - populate from form data for display
       reviews: reviews.map((r, i) => ({
         id: `review_${Date.now()}_${i}`,
@@ -788,14 +805,21 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
     await onSubmit(planData);
   };
 
+  const isOutpatient = basicInfo.care_setting === 'outpatient';
   const steps = [
     { number: 1, name: 'Basic Info & Team' },
     { number: 2, name: 'Medications' },
     { number: 3, name: 'Investigations' },
     { number: 4, name: 'Procedures' },
     { number: 5, name: 'Reviews' },
-    { number: 6, name: 'Discharge Plan' }
+    ...(isOutpatient ? [] : [{ number: 6, name: 'Discharge Plan' }]),
   ];
+  const lastStep = steps[steps.length - 1].number;
+
+  // If the clinician switches to Outpatient while on step 6, drop back to 5
+  useEffect(() => {
+    if (isOutpatient && currentStep > 5) setCurrentStep(5);
+  }, [isOutpatient, currentStep]);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0 sm:p-4">
@@ -842,7 +866,41 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
           {currentStep === 1 && (
             <div className="space-y-6">
               <h3 className="text-lg font-semibold text-gray-900">Basic Information</h3>
-              
+
+              {/* Care setting toggle */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Care Setting *</label>
+                <div className="grid grid-cols-2 gap-2 max-w-md">
+                  <button
+                    type="button"
+                    onClick={() => setBasicInfo({ ...basicInfo, care_setting: 'inpatient' })}
+                    className={`px-4 py-2.5 rounded-lg border-2 text-sm font-medium transition-colors ${
+                      basicInfo.care_setting === 'inpatient'
+                        ? 'border-green-600 bg-green-50 text-green-800'
+                        : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                    }`}
+                  >
+                    🏥 Inpatient
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBasicInfo({ ...basicInfo, care_setting: 'outpatient' })}
+                    className={`px-4 py-2.5 rounded-lg border-2 text-sm font-medium transition-colors ${
+                      basicInfo.care_setting === 'outpatient'
+                        ? 'border-green-600 bg-green-50 text-green-800'
+                        : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                    }`}
+                  >
+                    🚶 Outpatient
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  {isOutpatient
+                    ? 'Outpatient plan — discharge planning step is skipped.'
+                    : 'Inpatient plan — includes admission and discharge planning.'}
+                </p>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Patient *</label>
@@ -862,7 +920,9 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Admission Date *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {isOutpatient ? 'Initial Visit Date *' : 'Admission Date *'}
+                  </label>
                   <input
                     type="date"
                     required
@@ -1956,7 +2016,7 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
               Previous
             </button>
 
-            {currentStep < 6 ? (
+            {currentStep < lastStep ? (
               <button
                 type="button"
                 onClick={() => setCurrentStep(currentStep + 1)}

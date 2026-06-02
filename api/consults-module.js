@@ -137,7 +137,20 @@ function generateRef(prefix) {
   return `${prefix}-${yr}-${rand}`;
 }
 function generateToken() {
-  return crypto.randomBytes(24).toString('hex'); // 48 chars
+  // Short, URL-friendly base62 token (10 chars ≈ 8.4×10^17 keyspace).
+  // Cryptographically random — rejection-sampled so each char is uniformly
+  // distributed over the 62-char alphabet (no modulo bias).
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const TOKEN_LEN = 10;
+  const out = [];
+  while (out.length < TOKEN_LEN) {
+    const buf = crypto.randomBytes(TOKEN_LEN * 2);
+    for (let i = 0; i < buf.length && out.length < TOKEN_LEN; i++) {
+      const b = buf[i];
+      if (b < 248) out.push(alphabet[b % 62]); // 248 = 62*4, uniform sampling
+    }
+  }
+  return out.join('');
 }
 function bad(res, msg, code = 400) {
   return res.status(code).json({ error: msg });
@@ -210,12 +223,25 @@ export default async function handler(req, res) {
       if (parts.length === 1 && method === 'POST') {
         const { unit_label, description } = req.body || {};
         if (!unit_label) return bad(res, 'unit_label required');
-        const token = generateToken();
-        const r = await query(
-          `INSERT INTO consult_submission_links (token, unit_label, description, created_by)
-           VALUES ($1,$2,$3,$4) RETURNING *`,
-          [token, unit_label, description || null, user.id || null]
-        );
+        // Retry on the (vanishingly rare) chance of a token collision against
+        // the UNIQUE index — PG error code 23505.
+        let r, lastErr;
+        for (let attempt = 0; attempt < 5; attempt++) {
+          const token = generateToken();
+          try {
+            r = await query(
+              `INSERT INTO consult_submission_links (token, unit_label, description, created_by)
+               VALUES ($1,$2,$3,$4) RETURNING *`,
+              [token, unit_label, description || null, user.id || null]
+            );
+            break;
+          } catch (e) {
+            lastErr = e;
+            if (e && e.code === '23505') continue; // unique-violation → retry
+            throw e;
+          }
+        }
+        if (!r) throw lastErr || new Error('Failed to allocate a unique token');
         return res.status(201).json(r.rows[0]);
       }
       if (parts.length === 2 && method === 'PATCH') {
