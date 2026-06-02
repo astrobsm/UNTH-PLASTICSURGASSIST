@@ -2,8 +2,10 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   Search, Plus, X, AlertTriangle, AlertCircle, Info, ChevronDown, ChevronUp,
   Pill, FileText, Check, Printer, Trash2, Clock, User, ShieldAlert,
-  Baby, Heart, Droplet as KidneyIcon, Activity, ChevronRight, Download
+  Baby, Heart, Droplet as KidneyIcon, Activity, ChevronRight, Download, Sparkles
 } from 'lucide-react';
+import PrescriptionRecommendationModal from '../components/PrescriptionRecommendationModal';
+import type { RecommendedDraft } from '../services/prescriptionRecommendationEngine';
 import {
   BNF_DRUG_DATABASE,
   searchDrugs,
@@ -119,6 +121,9 @@ export default function PrescriptionsPage() {
     patientContext.creatinine,
     patientContext.creatinineUnit,
   ]);
+
+  // Recommendation engine modal
+  const [showRecommendModal, setShowRecommendModal] = useState(false);
 
   // Drug search
   const [searchQuery, setSearchQuery] = useState('');
@@ -346,6 +351,24 @@ export default function PrescriptionsPage() {
   // Remove prescription
   function handleRemovePrescription(id: string) {
     setPrescriptions(prev => prev.filter(p => p.id !== id));
+  }
+
+  // Accept items from the recommendation engine modal — converts each
+  // RecommendedDraft into a PrescriptionItem and merges into the chart.
+  function handleAcceptRecommendations(drafts: RecommendedDraft[]) {
+    const items: PrescriptionItem[] = drafts.map((d, i) => ({
+      id: `rx-rec-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,
+      drug: d.drug,
+      dose: d.dose,
+      route: d.route,
+      frequency: d.frequency,
+      duration: d.duration,
+      instructions: d.instructions,
+      prescribedBy: user?.full_name || user?.username || 'Unknown',
+      prescribedAt: new Date().toISOString(),
+      warnings: d.warnings,
+    }));
+    setPrescriptions(prev => [...prev, ...items]);
   }
 
   // Save all prescriptions
@@ -989,10 +1012,20 @@ export default function PrescriptionsPage() {
 
           {/* Drug Search Section */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 space-y-4">
-            <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-              <Search className="h-5 w-5 text-green-600" />
-              Search Drug Database
-            </h3>
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                <Search className="h-5 w-5 text-green-600" />
+                Search Drug Database
+              </h3>
+              <button
+                onClick={() => setShowRecommendModal(true)}
+                className="px-3 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg text-sm hover:from-purple-700 hover:to-indigo-700 flex items-center gap-1.5 shadow-sm"
+                title="Generate evidence-based recommendations from diagnoses & comorbidities"
+              >
+                <Sparkles className="h-4 w-4" />
+                AI Recommend
+              </button>
+            </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3" ref={searchRef}>
               <div className="sm:col-span-2 relative">
@@ -1467,6 +1500,28 @@ export default function PrescriptionsPage() {
           )}
         </div>
       )}
+
+      {/* Intelligent Prescription Recommendation modal */}
+      <PrescriptionRecommendationModal
+        open={showRecommendModal}
+        onClose={() => setShowRecommendModal(false)}
+        seed={{
+          name: patientContext.name,
+          hospitalNumber: patientContext.hospitalNumber,
+          age: patientContext.age,
+          weight: patientContext.weight,
+          sex: patientContext.sex as 'male' | 'female' | undefined,
+          pregnant: patientContext.pregnant,
+          lactating: patientContext.lactating,
+          gfr: patientContext.gfr,
+          hepaticImpairment: patientContext.hepaticImpairment,
+          cardiacDisease: patientContext.cardiacDisease,
+          allergies: patientContext.allergies,
+          comorbidities: patientContext.comorbidities,
+          currentMedications: patientContext.currentMedications,
+        }}
+        onAccept={handleAcceptRecommendations}
+      />
     </div>
   );
 }
