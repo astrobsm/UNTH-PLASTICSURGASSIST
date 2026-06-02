@@ -847,7 +847,32 @@ export const Patients: React.FC = () => {
                                 key={action.name}
                                 onClick={() => {
                                   setActionDropdownPatientId(null);
-                                  navigate(`/patient-action?action=${encodeURIComponent(action.href.replace('/', ''))}&patient=${patient.id}&name=${encodeURIComponent(action.name)}`);
+                                  // Persist the full selected-patient context so any destination
+                                  // page can hydrate without a second search/select step.
+                                  // Pages already wired for `?patientId=` get it via the query
+                                  // string; legacy pages can read `selectedPatient` from
+                                  // localStorage as a fallback.
+                                  try {
+                                    const ctx = {
+                                      id: patient.id,
+                                      first_name: patient.first_name,
+                                      last_name: patient.last_name,
+                                      full_name: `${patient.first_name ?? ''} ${patient.last_name ?? ''}`.trim(),
+                                      hospital_number: patient.hospital_number,
+                                      date_of_birth: patient.date_of_birth,
+                                      gender: patient.gender,
+                                      phone: patient.phone,
+                                      selectedAt: new Date().toISOString(),
+                                    };
+                                    localStorage.setItem('selectedPatient', JSON.stringify(ctx));
+                                  } catch { /* localStorage unavailable — non-fatal */ }
+                                  const sep = action.href.includes('?') ? '&' : '?';
+                                  navigate(
+                                    `${action.href}${sep}patientId=${patient.id}` +
+                                    `&patient=${patient.id}` +
+                                    `&hospitalNumber=${encodeURIComponent(patient.hospital_number || '')}` +
+                                    `&patientName=${encodeURIComponent(`${patient.first_name ?? ''} ${patient.last_name ?? ''}`.trim())}`
+                                  );
                                 }}
                                 className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-gray-700 hover:bg-sky-50 hover:text-navy-900 rounded-lg transition-colors"
                               >
