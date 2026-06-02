@@ -26,6 +26,7 @@ import { db } from '../db/database';
 import { syncService } from '../db/syncService';
 import { patientService } from '../services/patientService';
 import { apiClient } from '../services/apiClient';
+import { useOnSelectedPatient } from '../hooks/useSelectedPatient';
 import jsPDF from 'jspdf';
 
 // ─── TYPES ──────────────────────────────────────────────────────────────────
@@ -81,6 +82,28 @@ export default function PrescriptionsPage() {
     currentMedications: [],
   });
   const [showPatientForm, setShowPatientForm] = useState(true);
+
+  // Pre-fill from the patient selected in /patients action menu (if any).
+  useOnSelectedPatient((p) => {
+    const dob = (p as any).date_of_birth || (p as any).dob;
+    let age: number | undefined;
+    if (dob) {
+      const d = new Date(dob);
+      if (!isNaN(d.getTime())) {
+        const diff = Date.now() - d.getTime();
+        age = Math.floor(diff / (365.25 * 24 * 3600 * 1000));
+      }
+    }
+    setPatientContext(prev => ({
+      ...prev,
+      patient_id: String(p.id),
+      name: (p as any).full_name || `${(p as any).first_name || ''} ${(p as any).last_name || ''}`.trim(),
+      hospitalNumber: (p as any).hospital_number || '',
+      sex: ((p as any).gender || prev.sex || '').toString().toLowerCase() || undefined,
+      age: age ?? prev.age,
+    }));
+    setShowPatientForm(false);
+  });
 
   // Auto-calculate eGFR via Cockcroft-Gault whenever the underlying inputs
   // change (age, weight, sex, serum creatinine, unit). The clinician can

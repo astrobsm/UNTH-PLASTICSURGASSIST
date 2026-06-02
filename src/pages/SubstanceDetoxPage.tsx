@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { db } from '../db/database';
 import { normalizeArrayField } from '../services/patientService';
+import { useOnSelectedPatient } from '../hooks/useSelectedPatient';
 import {
   substanceDefinitions,
   calculatePhysicalDependenceScore,
@@ -364,6 +365,14 @@ const WIZARD_STEPS = ['Patient Info', 'Substances', 'Scoring', 'Risk Factors', '
 function NewAssessmentWizard({ user, onComplete }: { user: any; onComplete: () => void }) {
   const [w, setW] = useState<WizardState>({ ...initialWizard });
   const [saving, setSaving] = useState(false);
+  useOnSelectedPatient((p) => {
+    setW(prev => ({
+      ...prev,
+      patientId: String(p.id),
+      patientName: ((p as any).full_name || `${(p as any).first_name || ''} ${(p as any).last_name || ''}`).trim(),
+      hospitalNumber: (p as any).hospital_number || '',
+    }));
+  });
   const [computed, setComputed] = useState<{
     severity: AddictionSeverityScore | null;
     withdrawal: WithdrawalRiskPrediction | null;

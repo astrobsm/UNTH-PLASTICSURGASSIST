@@ -21,6 +21,7 @@ import BurnAdmissionForm from '../components/burnCare/BurnAdmissionForm';
 import BurnMonitoringDashboard from '../components/burnCare/BurnMonitoringDashboard';
 import { db } from '../db/database';
 import { syncService } from '../db/syncService';
+import { useOnSelectedPatient } from '../hooks/useSelectedPatient';
 
 interface BurnStats {
   activePatients: number;
@@ -45,6 +46,17 @@ const BurnCarePage: React.FC = () => {
     criticalAlerts: 0,
     pendingAssessments: 0,
     avgTBSA: 0,
+  });
+
+  useOnSelectedPatient((p) => {
+    const existing = patients.find(bp => String(bp.patientId || (bp as any).patient_id) === String(p.id));
+    if (existing) {
+      setSelectedPatient(existing);
+      setView('monitoring');
+    } else {
+      setSelectedPatient(null);
+      setView('admission');
+    }
   });
 
   // Load burn patients from database (empty initially - patients added via admission form)

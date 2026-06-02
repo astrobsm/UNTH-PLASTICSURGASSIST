@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { db } from '../db/database';
 import { patientService } from '../services/patientService';
+import { useOnSelectedPatient } from '../hooks/useSelectedPatient';
 import { safeFormatDate, calculateAge } from '../utils/dateUtils';
 import {
   createPDF,
@@ -85,6 +86,7 @@ function getTypeIcon(type: string): React.ReactNode {
 const PatientSummariesPage: React.FC = () => {
   const [patients, setPatients] = useState<any[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<string>('');
+  useOnSelectedPatient((p) => setSelectedPatient(String(p.id)));
   const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set());
@@ -154,7 +156,7 @@ const PatientSummariesPage: React.FC = () => {
         const all = await db.ward_rounds.toArray();
         for (const wr of all.filter((r: any) => matchPid(r.patient_id))) {
           const r = wr as any;
-          const vitalsStr = r.temperature ? 'T: ' + r.temperature + '°C, PR: ' + r.pulse + '/min, BP: ' + r.bp_systolic + '/' + r.bp_diastolic + ' mmHg, RR: ' + r.respiratory_rate + '/min, SpO2: ' + r.spo2 + '%' : null;
+          const vitalsStr = r.temperature ? 'T: ' + r.temperature + 'ï¿½C, PR: ' + r.pulse + '/min, BP: ' + r.bp_systolic + '/' + r.bp_diastolic + ' mmHg, RR: ' + r.respiratory_rate + '/min, SpO2: ' + r.spo2 + '%' : null;
           entries.push({ id: 'wr_' + r.id, date: safeDate(r.round_date), type: 'ward_round',
             title: (r.round_type || 'Ward Round').replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
             summary: 'Reviewed by ' + (r.reviewing_doctor || 'Attending physician') + '. Clinical status: ' + (r.progress_status || 'Not documented') + (r.chief_complaint ? '. Presenting complaint: ' + r.chief_complaint : ''),
@@ -315,7 +317,7 @@ const PatientSummariesPage: React.FC = () => {
         const all = await db.discharges.toArray();
         for (const d of all.filter(d => matchPid(d.patient_id))) {
           entries.push({ id: 'dc_' + d.id, date: safeDate(d.discharge_date), type: 'discharge',
-            title: 'Discharge — ' + ((d as any).discharge_status || 'Status not documented'),
+            title: 'Discharge ï¿½ ' + ((d as any).discharge_status || 'Status not documented'),
             summary: 'Discharge type: ' + ((d as any).discharge_type || 'Not specified') + '. Follow-up plan: ' + ((d as any).follow_up_plan || 'Not documented'),
             details: { 'Discharge Status': (d as any).discharge_status, 'Discharge Type': (d as any).discharge_type, 'Discharge Summary': (d as any).discharge_summary, 'Follow-up Plan': (d as any).follow_up_plan, 'Condition at Discharge': (d as any).condition_at_discharge },
           });

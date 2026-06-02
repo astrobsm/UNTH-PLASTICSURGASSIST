@@ -4,6 +4,7 @@ import WardRoundForm from '../components/WardRoundForm';
 import { wardRoundsService, WardRound, ROUND_TYPES } from '../services/wardRoundsService';
 import { db } from '../db/database';
 import { patientService } from '../services/patientService';
+import { useOnSelectedPatient } from '../hooks/useSelectedPatient';
 import { format, isWithinInterval, parseISO, startOfDay, endOfDay } from 'date-fns';
 import { safeFormatDate } from '../utils/dateUtils';
 
@@ -25,6 +26,7 @@ export default function WardRounds() {
 
   // Patient-focused documentation preview
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
+  useOnSelectedPatient((p) => setSelectedPatientId(String(p.id)));
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [expandedRoundIds, setExpandedRoundIds] = useState<Set<string>>(new Set());

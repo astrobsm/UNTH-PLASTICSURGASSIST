@@ -10,6 +10,7 @@ import {
 import { patientService } from '../services/patientService';
 import { useAuthStore } from '../store/authStore';
 import { apiClient } from '../services/apiClient';
+import { useOnSelectedPatient } from '../hooks/useSelectedPatient';
 import {
   PRESSURE_INJURY_STAGES, BRADEN_SCALE, BRADEN_INTERPRETATION,
   TIME_FRAMEWORK, PS_LAB_PANELS, PS_TREATMENT_PROTOCOLS,
@@ -39,6 +40,7 @@ const PressureSorePage: React.FC = () => {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [patientSearch, setPatientSearch] = useState('');
+  useOnSelectedPatient((p) => setSelectedPatient(p as unknown as Patient));
   const [wounds, setWounds] = useState<any[]>([]);
   const [selectedWound, setSelectedWound] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);

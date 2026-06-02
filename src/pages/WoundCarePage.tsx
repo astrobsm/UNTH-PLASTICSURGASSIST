@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, Suspense, lazy } from 'react';
+import { useOnSelectedPatient } from '../hooks/useSelectedPatient';
 import {
   Activity,
   Camera,
@@ -243,6 +244,7 @@ const WoundCarePage: React.FC = () => {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [patientSearch, setPatientSearch] = useState('');
+  useOnSelectedPatient((p) => setSelectedPatient(p as unknown as Patient));
   const [assessments, setAssessments] = useState<WoundAssessment[]>([]);
   const [selectedAssessment, setSelectedAssessment] = useState<WoundAssessment | null>(null);
   const [isLoading, setIsLoading] = useState(false);

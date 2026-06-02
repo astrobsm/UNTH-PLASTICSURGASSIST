@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useOnSelectedPatient } from '../hooks/useSelectedPatient';
 import {
   Activity,
   AlertCircle,
@@ -81,6 +82,12 @@ const KeloidCarePage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [initialPatientId, setInitialPatientId] = useState<number | null>(null);
+  useOnSelectedPatient((p) => {
+    const idNum = Number(p.id);
+    if (!Number.isNaN(idNum)) setInitialPatientId(idNum);
+    setShowCreateModal(true);
+  });
   const [showRecordInjectionModal, setShowRecordInjectionModal] = useState(false);
   const [selectedInjection, setSelectedInjection] = useState<KeloidInjection | null>(null);
   const [showEducationSection, setShowEducationSection] = useState<string | null>(null);
@@ -423,9 +430,11 @@ const KeloidCarePage: React.FC = () => {
       {showCreateModal && (
         <CreatePlanModal
           patients={patients}
-          onClose={() => setShowCreateModal(false)}
+          initialPatientId={initialPatientId}
+          onClose={() => { setShowCreateModal(false); setInitialPatientId(null); }}
           onSuccess={() => {
             setShowCreateModal(false);
+            setInitialPatientId(null);
             loadData();
           }}
         />
@@ -1693,17 +1702,18 @@ const PatientEducationContent: React.FC<PatientEducationProps> = ({
 
 interface CreatePlanModalProps {
   patients: Patient[];
+  initialPatientId?: number | null;
   onClose: () => void;
   onSuccess: () => void;
 }
 
-const CreatePlanModal: React.FC<CreatePlanModalProps> = ({ patients, onClose, onSuccess }) => {
+const CreatePlanModal: React.FC<CreatePlanModalProps> = ({ patients, initialPatientId, onClose, onSuccess }) => {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [patientSearch, setPatientSearch] = useState('');
   
   const [formData, setFormData] = useState({
-    patient_id: 0,
+    patient_id: initialPatientId ?? 0,
     clinical_summary: '',
     keloid_locations: [] as string[],
     problems_concerns: [] as string[],

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Droplet, Plus, Eye, FileText, AlertCircle, Activity, Calendar } from 'lucide-react';
 import BloodTransfusionForm from '../components/BloodTransfusionForm';
 import { bloodTransfusionService, BloodTransfusion } from '../services/bloodTransfusionService';
+import { useOnSelectedPatient } from '../hooks/useSelectedPatient';
 import { format } from 'date-fns';
 
 export default function BloodTransfusionPage() {
@@ -9,8 +10,15 @@ export default function BloodTransfusionPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [selectedTransfusionId, setSelectedTransfusionId] = useState<string | undefined>();
+  const [prefilledPatientId, setPrefilledPatientId] = useState<string | undefined>();
   const [filterStatus, setFilterStatus] = useState<'all' | 'planned' | 'in-progress' | 'completed' | 'stopped'>('all');
   const [searchTerm, setSearchTerm] = useState('');
+
+  useOnSelectedPatient((p) => {
+    setPrefilledPatientId(String(p.id));
+    setSelectedTransfusionId(undefined);
+    setShowForm(true);
+  });
 
   useEffect(() => {
     loadTransfusions();
@@ -283,7 +291,8 @@ export default function BloodTransfusionPage() {
       {showForm && (
         <BloodTransfusionForm
           transfusionId={selectedTransfusionId}
-          onClose={handleCloseForm}
+          patientId={prefilledPatientId}
+          onClose={() => { handleCloseForm(); setPrefilledPatientId(undefined); }}
           onSave={handleSaveForm}
         />
       )}

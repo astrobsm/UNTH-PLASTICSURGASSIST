@@ -13,6 +13,7 @@ import {
   ConferenceData, 
   ConferencePatient 
 } from '../services/preSurgicalConferenceService';
+import { useOnSelectedPatient } from '../hooks/useSelectedPatient';
 
 // Import slide components
 import SlideWrapper from '../components/preSurgicalConference/SlideWrapper';
@@ -46,6 +47,11 @@ export default function PreSurgicalConferencePage() {
   const [patientsLoading, setPatientsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  useOnSelectedPatient((p) => {
+    const match = patients.find((cp: any) => String(cp.patient_id || cp.id) === String(p.id));
+    if (match) setSelectedPatient(match);
+    else setSearchTerm(((p as any).hospital_number || '').toString());
+  });
   
   // Presentation state
   const [isPresentationActive, setIsPresentationActive] = useState(false);

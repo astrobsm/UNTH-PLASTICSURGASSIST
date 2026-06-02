@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { patientService, displayArrayField } from '../services/patientService';
+import { useOnSelectedPatient } from '../hooks/useSelectedPatient';
 import { MedicalTextInput } from '../components/MedicalTextInput';
 import MedicalAutocompleteTextarea from '../components/MedicalAutocompleteTextarea';
 import { 
@@ -889,6 +890,11 @@ interface NewAdmissionTabProps {
 function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
   const [selectedPatient, setSelectedPatient] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  useOnSelectedPatient((hydrated) => {
+    // Prefer the record from the supplied patients list (richer fields); fall back to hook value.
+    const match = patients.find((p) => String(p.id) === String((hydrated as any).id)) || hydrated;
+    setSelectedPatient(match);
+  });
   
   // Form state
   const [wardLocation, setWardLocation] = useState('');

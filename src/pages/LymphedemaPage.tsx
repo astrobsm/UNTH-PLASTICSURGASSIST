@@ -9,6 +9,7 @@ import { db } from '../db/database';
 import { syncService } from '../db/syncService';
 import { patientService } from '../services/patientService';
 import { getCurrentUserName } from '../utils/getCurrentUser';
+import { useOnSelectedPatient } from '../hooks/useSelectedPatient';
 
 // ============================================
 // TYPES & INTERFACES
@@ -768,6 +769,7 @@ const LymphedemaPage: React.FC = () => {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [patientSearch, setPatientSearch] = useState('');
+  useOnSelectedPatient((p) => setSelectedPatient(p as unknown as Patient));
   const [assessments, setAssessments] = useState<LymphedemaAssessment[]>([]);
   const [selectedAssessment, setSelectedAssessment] = useState<LymphedemaAssessment | null>(null);
   const [isLoading, setIsLoading] = useState(false);

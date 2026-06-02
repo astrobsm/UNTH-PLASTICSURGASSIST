@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { patientService } from '../services/patientService';
+import { useOnSelectedPatient } from '../hooks/useSelectedPatient';
 import {
   medicalScribeService,
   ScribeSession,
@@ -58,6 +59,11 @@ const ScribeDashboard: React.FC = () => {
   const [showNewSession, setShowNewSession] = useState(false);
   const [selectedPatientId, setSelectedPatientId] = useState('');
   const [selectedPatient, setSelectedPatient] = useState<any>(null);
+  useOnSelectedPatient((p) => {
+    setSelectedPatientId(String(p.id));
+    setSelectedPatient(p);
+    setShowNewSession(true);
+  });
   const [sessionContext, setSessionContext] = useState<ScribeContext>('ward_round');
   const [sessionRoundType, setSessionRoundType] = useState('house_officers_round');
   const [patientSearch, setPatientSearch] = useState('');

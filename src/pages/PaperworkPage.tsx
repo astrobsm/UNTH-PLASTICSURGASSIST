@@ -4,6 +4,7 @@ import { db } from '../db/database';
 import { patientService } from '../services/patientService';
 import { admissionService } from '../services/admissionService';
 import { calculateAge } from '../utils/dateUtils';
+import { useOnSelectedPatient } from '../hooks/useSelectedPatient';
 import { treatmentPlanningService } from '../services/treatmentPlanningService';
 import { labService } from '../services/labService';
 import {
@@ -35,6 +36,12 @@ const PaperworkPage: React.FC = () => {
   const [showModal, setShowModal] = useState(false);
   const [documentType, setDocumentType] = useState<PaperworkType>('consult_request');
   const [filter, setFilter] = useState<PaperworkType | 'all'>('all');
+
+  useOnSelectedPatient(() => {
+    // Default to consult request modal; each form will auto-select the patient.
+    setDocumentType('consult_request');
+    setShowModal(true);
+  });
 
   useEffect(() => {
     loadData();
@@ -227,6 +234,8 @@ const PaperworkPage: React.FC = () => {
         }
       }
     };
+
+    useOnSelectedPatient((p) => { handlePatientSelect(String(p.id)); });
 
     return (
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -520,6 +529,8 @@ const PaperworkPage: React.FC = () => {
         setProcedureInput('');
       }
     };
+
+    useOnSelectedPatient((p) => { handlePatientSelect(String(p.id)); });
 
     return (
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -844,6 +855,8 @@ const PaperworkPage: React.FC = () => {
         }
       }
     };
+
+    useOnSelectedPatient((p) => { handlePatientSelect(String(p.id)); });
 
     return (
       <form onSubmit={handleSubmit} className="space-y-4">

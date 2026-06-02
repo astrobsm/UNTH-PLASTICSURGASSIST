@@ -12,6 +12,7 @@ import {
 } from '../utils/pdfUtils';
 import { patientService } from '../services/patientService';
 import { calculateAge } from '../utils/dateUtils';
+import { useOnSelectedPatient } from '../hooks/useSelectedPatient';
 
 interface EducationTopic {
   id: string;
@@ -50,6 +51,9 @@ export default function PatientEducation() {
   const [pendingTopicForPDF, setPendingTopicForPDF] = useState<EducationTopic | null>(null);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [patientSearchTerm, setPatientSearchTerm] = useState('');
+  useOnSelectedPatient((p) => {
+    setPatientSearchTerm(((p as any).hospital_number || '').toString());
+  });
   const [loadingPatients, setLoadingPatients] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
   const [shareAction, setShareAction] = useState<'download' | 'whatsapp' | 'thermal'>('download');
@@ -306,7 +310,7 @@ export default function PatientEducation() {
               'Inability to urinate after 8 hours',
               'Severe nausea or vomiting',
               'Loss of bowel or bladder control',
-              'Fever above 38°C (100.4°F)'
+              'Fever above 38ï¿½C (100.4ï¿½F)'
             ]
           }
         ],
@@ -513,7 +517,7 @@ export default function PatientEducation() {
             points: [
               'Foul-smelling drainage from graft or donor site',
               'Increasing redness, warmth, or swelling',
-              'Fever above 38°C (100.4°F)',
+              'Fever above 38ï¿½C (100.4ï¿½F)',
               'Graft appears dark, black, or blue',
               'Separation of graft from wound bed',
               'Severe or worsening pain not controlled by medication',
@@ -623,7 +627,7 @@ export default function PatientEducation() {
           {
             title: 'Warning Signs - Seek Medical Attention:',
             points: [
-              'Fever above 38°C (100.4°F)',
+              'Fever above 38ï¿½C (100.4ï¿½F)',
               'Increasing redness, warmth, or swelling at incision',
               'Pus or foul-smelling drainage from wound',
               'Wound edges separating or opening',
@@ -1151,7 +1155,7 @@ export default function PatientEducation() {
             points: [
               'Increasing pain, redness, or swelling around wound',
               'Yellow, green, or foul-smelling discharge',
-              'Fever above 38°C (100.4°F)',
+              'Fever above 38ï¿½C (100.4ï¿½F)',
               'Wound edges separating or opening',
               'Black or dark tissue appearing in wound',
               'Excessive bleeding that does not stop',
@@ -1919,7 +1923,7 @@ export default function PatientEducation() {
               'Increased redness or warmth around wound',
               'Swelling that is worsening',
               'Yellow, green, or foul-smelling drainage',
-              'Fever above 38°C (100.4°F)',
+              'Fever above 38ï¿½C (100.4ï¿½F)',
               'Red streaks spreading from wound',
               'Feeling generally unwell or weak'
             ]
@@ -2035,7 +2039,7 @@ export default function PatientEducation() {
           {
             title: 'Emergency Warning Signs - Return to Hospital If:',
             points: [
-              'Fever above 38°C (100.4°F) that does not resolve',
+              'Fever above 38ï¿½C (100.4ï¿½F) that does not resolve',
               'Increasing pain not controlled by medication',
               'Signs of wound infection (redness, swelling, discharge)',
               'Graft or flap appears dark, blue, or black',

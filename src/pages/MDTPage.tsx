@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { db } from '../db/database';
 import { patientService } from '../services/patientService';
+import { useOnSelectedPatient } from '../hooks/useSelectedPatient';
 import { 
   mdtService, 
   MDTPatientTeam, 
@@ -59,6 +60,15 @@ const MDTPage: React.FC = () => {
   const [showAddReview, setShowAddReview] = useState(false);
   const [showHarmonizationResult, setShowHarmonizationResult] = useState<string | null>(null);
   const [harmonizing, setHarmonizing] = useState(false);
+
+  useOnSelectedPatient((p) => {
+    const existing = mdtPatients.find(m => String(m.patient_id) === String(p.id));
+    if (existing) {
+      setSelectedPatient(existing);
+    } else {
+      setShowAddPatient(true);
+    }
+  });
 
   useEffect(() => {
     loadData();

@@ -35,6 +35,7 @@ import {
 } from '../services/labService';
 import { db } from '../db/database';
 import { patientService } from '../services/patientService';
+import { useOnSelectedPatient } from '../hooks/useSelectedPatient';
 import { logDataExport } from '../services/auditLoggingService';
 import { useAuthStore } from '../store/authStore';
 import { dataSyncService } from '../services/dataSyncService';
@@ -54,6 +55,7 @@ export default function Labs() {
   const [gfrCalculations, setGfrCalculations] = useState<GFRCalculation[]>([]);
   const [gfrTrend, setGfrTrend] = useState<GFRTrend | null>(null);
   const [selectedPatient, setSelectedPatient] = useState<string>('');
+  useOnSelectedPatient((p) => setSelectedPatient(String(p.id)));
   const [searchQuery, setSearchQuery] = useState('');
   const [labStats, setLabStats] = useState<any>(null);
   const [patients, setPatients] = useState<any[]>([]);

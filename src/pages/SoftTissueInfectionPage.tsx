@@ -10,6 +10,7 @@ import {
 import { patientService } from '../services/patientService';
 import { useAuthStore } from '../store/authStore';
 import { apiClient } from '../services/apiClient';
+import { useOnSelectedPatient } from '../hooks/useSelectedPatient';
 import {
   STI_CLASSIFICATIONS, LRINEC_SCORE, LRINEC_INTERPRETATION, QSOFA_CRITERIA,
   LAB_PANELS, TREATMENT_PROTOCOLS, LOCATION_CONSIDERATIONS, NURSING_PROTOCOLS,
@@ -80,6 +81,7 @@ const SoftTissueInfectionPage: React.FC = () => {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [patientSearch, setPatientSearch] = useState('');
+  useOnSelectedPatient((p) => setSelectedPatient(p as unknown as Patient));
   const [assessments, setAssessments] = useState<any[]>([]);
   const [selectedAssessment, setSelectedAssessment] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);

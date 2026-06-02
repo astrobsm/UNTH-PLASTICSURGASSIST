@@ -12,7 +12,7 @@
  * plus a `clear()` helper for pages that want to release the context after
  * the user navigates away.
  */
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { db, type Patient } from '../db/database';
 import patientService from '../services/patientService';
@@ -95,4 +95,23 @@ export function useSelectedPatient(): {
   }, []);
 
   return { patient, patientId: queryId, loading, clear };
+}
+
+/**
+ * useOnSelectedPatient — fires `handler` exactly once with the resolved
+ * selected patient, then clears the localStorage cache so subsequent visits
+ * don't auto-hydrate. Use inside any action destination page that wants to
+ * pre-populate its own state from the patient the user clicked from /patients.
+ */
+export function useOnSelectedPatient(handler: (patient: Patient) => void): void {
+  const { patient } = useSelectedPatient();
+  const fired = useRef(false);
+  useEffect(() => {
+    if (patient && !fired.current) {
+      fired.current = true;
+      try { handler(patient); } catch { /* ignore */ }
+      // Don't clear localStorage — user may navigate to another action for the same patient
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [patient]);
 }

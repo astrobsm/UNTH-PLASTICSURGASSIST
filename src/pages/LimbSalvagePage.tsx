@@ -20,6 +20,7 @@ import { DiabeticFootAssessmentForm } from '../components/limbSalvage/DiabeticFo
 import { ConservativeProgressMonitor } from '../components/limbSalvage/ConservativeProgressMonitor';
 import { diabeticFootService, DiabeticFootAssessment, RiskCategory } from '../services/diabeticFootService';
 import { patientService } from '../services/patientService';
+import { useOnSelectedPatient } from '../hooks/useSelectedPatient';
 
 interface AssessmentSummary {
   id: string;
@@ -43,6 +44,7 @@ const LimbSalvagePage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRisk, setFilterRisk] = useState<RiskCategory | 'all'>('all');
   const [selectedPatientId, setSelectedPatientId] = useState<string>('');
+  useOnSelectedPatient((p) => { setSelectedPatientId(String(p.id)); setView('new'); });
   const [isLoading, setIsLoading] = useState(true);
   const [patients, setPatients] = useState<any[]>([]);
 
