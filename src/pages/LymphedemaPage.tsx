@@ -769,7 +769,7 @@ const LymphedemaPage: React.FC = () => {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [patientSearch, setPatientSearch] = useState('');
-  useOnSelectedPatient((p) => setSelectedPatient(p as unknown as Patient));
+  useOnSelectedPatient((p) => { setSelectedPatient(p as unknown as Patient); setActiveTab('new'); });
   const [assessments, setAssessments] = useState<LymphedemaAssessment[]>([]);
   const [selectedAssessment, setSelectedAssessment] = useState<LymphedemaAssessment | null>(null);
   const [isLoading, setIsLoading] = useState(false);

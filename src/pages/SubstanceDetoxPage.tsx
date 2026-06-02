@@ -117,6 +117,7 @@ function SliderInput({ label, value, onChange, min = 0, max = 4 }: { label: stri
 export default function SubstanceDetoxPage() {
   const { user } = useAuthStore();
   const [activeTab, setActiveTab] = useState<'list' | 'new' | 'view'>('list');
+  useOnSelectedPatient(() => setActiveTab('new'));
   const [assessments, setAssessments] = useState<SubstanceUseAssessment[]>([]);
   const [selectedAssessment, setSelectedAssessment] = useState<SubstanceUseAssessment | null>(null);
   const [loading, setLoading] = useState(false);

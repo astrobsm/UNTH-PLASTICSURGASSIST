@@ -60,12 +60,14 @@ const MDTPage: React.FC = () => {
   const [showAddReview, setShowAddReview] = useState(false);
   const [showHarmonizationResult, setShowHarmonizationResult] = useState<string | null>(null);
   const [harmonizing, setHarmonizing] = useState(false);
+  const [prefillAddPatientId, setPrefillAddPatientId] = useState<string>('');
 
   useOnSelectedPatient((p) => {
     const existing = mdtPatients.find(m => String(m.patient_id) === String(p.id));
     if (existing) {
       setSelectedPatient(existing);
     } else {
+      setPrefillAddPatientId(String(p.id));
       setShowAddPatient(true);
     }
   });
@@ -151,7 +153,7 @@ const MDTPage: React.FC = () => {
   };
 
   const AddPatientModal = () => {
-    const [selectedPatientId, setSelectedPatientId] = useState('');
+    const [selectedPatientId, setSelectedPatientId] = useState(prefillAddPatientId);
 
     const handleSubmit = async (e: React.FormEvent) => {
       e.preventDefault();

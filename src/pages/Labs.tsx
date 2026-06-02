@@ -55,7 +55,7 @@ export default function Labs() {
   const [gfrCalculations, setGfrCalculations] = useState<GFRCalculation[]>([]);
   const [gfrTrend, setGfrTrend] = useState<GFRTrend | null>(null);
   const [selectedPatient, setSelectedPatient] = useState<string>('');
-  useOnSelectedPatient((p) => setSelectedPatient(String(p.id)));
+  useOnSelectedPatient((p) => { setSelectedPatient(String(p.id)); setActiveTab('requests'); });
   const [searchQuery, setSearchQuery] = useState('');
   const [labStats, setLabStats] = useState<any>(null);
   const [patients, setPatients] = useState<any[]>([]);

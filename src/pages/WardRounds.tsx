@@ -26,7 +26,7 @@ export default function WardRounds() {
 
   // Patient-focused documentation preview
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
-  useOnSelectedPatient((p) => setSelectedPatientId(String(p.id)));
+  useOnSelectedPatient((p) => { setSelectedPatientId(String(p.id)); setShowForm(true); });
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [expandedRoundIds, setExpandedRoundIds] = useState<Set<string>>(new Set());

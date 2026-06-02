@@ -40,7 +40,7 @@ const PressureSorePage: React.FC = () => {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [patientSearch, setPatientSearch] = useState('');
-  useOnSelectedPatient((p) => setSelectedPatient(p as unknown as Patient));
+  useOnSelectedPatient((p) => { setSelectedPatient(p as unknown as Patient); setActiveTab('braden'); });
   const [wounds, setWounds] = useState<any[]>([]);
   const [selectedWound, setSelectedWound] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);

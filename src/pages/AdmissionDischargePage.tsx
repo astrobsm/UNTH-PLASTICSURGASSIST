@@ -103,6 +103,7 @@ function calculateAge(dob: string | null | undefined): number | null {
 export default function AdmissionDischargePage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'active' | 'admit' | 'discharge' | 'history' | 'stats'>('active');
+  useOnSelectedPatient(() => setActiveTab('admit'));
   const [patients, setPatients] = useState<any[]>([]);
   const [activeAdmissions, setActiveAdmissions] = useState<Admission[]>([]);
   const [discharges, setDischarges] = useState<Discharge[]>([]);
