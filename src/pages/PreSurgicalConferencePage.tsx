@@ -49,8 +49,24 @@ export default function PreSurgicalConferencePage() {
   const [searchTerm, setSearchTerm] = useState('');
   useOnSelectedPatient((p) => {
     const match = patients.find((cp: any) => String(cp.patient_id || cp.id) === String(p.id));
-    if (match) setSelectedPatient(match);
-    else setSearchTerm(((p as any).hospital_number || '').toString());
+    if (match) {
+      setSelectedPatient(match);
+      loadConferenceData(match.id);
+      return;
+    }
+    // Patient not on scheduled-conference list — synthesize an entry so the
+    // page can still load and present their data.
+    const synth: ConferencePatient = {
+      id: String(p.id),
+      patient_id: String(p.id),
+      first_name: (p as any).first_name || '',
+      last_name: (p as any).last_name || '',
+      full_name: (p as any).full_name || `${(p as any).first_name || ''} ${(p as any).last_name || ''}`.trim(),
+      hospital_number: (p as any).hospital_number || '',
+    } as any;
+    setPatients(prev => (prev.some(cp => String(cp.id) === String(synth.id)) ? prev : [synth, ...prev]));
+    setSelectedPatient(synth);
+    loadConferenceData(String(p.id));
   });
   
   // Presentation state
