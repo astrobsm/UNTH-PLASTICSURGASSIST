@@ -112,6 +112,7 @@ export default function BloodTransfusionForm({
 
   // Vitals form
   const [vitalsType, setVitalsType] = useState<'pre' | 'during' | 'post'>('pre');
+  const [vitalsTime, setVitalsTime] = useState<string>(() => format(new Date(), "yyyy-MM-dd'T'HH:mm"));
   const [newVitals, setNewVitals] = useState<Partial<TransfusionVitals>>({
     temperature: 36.5,
     pulse: 80,
@@ -284,13 +285,14 @@ export default function BloodTransfusionForm({
         bp_diastolic: newVitals.bp_diastolic!,
         respiratory_rate: newVitals.respiratory_rate!,
         spo2: newVitals.spo2!,
-        recorded_at: new Date(),
+        recorded_at: vitalsTime ? new Date(vitalsTime) : new Date(),
         recorded_by: getCurrentUserName()
       };
 
       await bloodTransfusionService.recordVitals(vitals);
       alert('Vitals recorded successfully!');
-      
+      // Advance the time picker so the next reading defaults to now
+      setVitalsTime(format(new Date(), "yyyy-MM-dd'T'HH:mm"));
       // Reload transfusion to get updated vitals
       await loadTransfusion();
     } catch (error) {
@@ -794,8 +796,8 @@ export default function BloodTransfusionForm({
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0 sm:p-4 overflow-y-auto">
-      <div className="bg-white rounded-none sm:rounded-lg shadow-xl sm:max-w-7xl w-full h-full sm:h-auto sm:max-h-[90vh] overflow-hidden flex flex-col">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-0 sm:p-4 overflow-y-auto">
+      <div className="bg-white rounded-none sm:rounded-lg shadow-xl sm:max-w-7xl w-full h-full sm:h-auto sm:max-h-[95vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="px-3 sm:px-6 py-3 sm:py-4 border-b border-gray-200 bg-red-50">
           <div className="flex items-start justify-between gap-3">
@@ -1356,6 +1358,16 @@ export default function BloodTransfusionForm({
                     </label>
                   </div>
                 </div>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Time of Reading</label>
+                  <input
+                    type="datetime-local"
+                    value={vitalsTime}
+                    onChange={(e) => setVitalsTime(e.target.value)}
+                    className="w-full md:w-72 border border-gray-300 rounded-lg px-3 py-2"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Defaults to the current time. Adjust when back-entering observations.</p>
+                </div>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Temperature (°C)</label>
@@ -1413,13 +1425,33 @@ export default function BloodTransfusionForm({
                     />
                   </div>
                 </div>
-                <button
-                  onClick={recordVitals}
-                  className="mt-4 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
-                >
-                  <Activity className="h-4 w-4" />
-                  <span>Record Vitals</span>
-                </button>
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={recordVitals}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
+                  >
+                    <Activity className="h-4 w-4" />
+                    <span>Record Vitals</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => transfusionPdfService.generateBlankMonitoringChart()}
+                    className="bg-gray-700 text-white px-4 py-2 rounded-lg hover:bg-gray-800 transition-colors flex items-center space-x-2"
+                    title="Download a printable empty monitoring chart"
+                  >
+                    <Download className="h-4 w-4" />
+                    <span>Blank Chart PDF</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowOCRScanner(true)}
+                    className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2"
+                    title="Scan a completed paper chart to extract vitals"
+                  >
+                    <Scan className="h-4 w-4" />
+                    <span>Scan / Upload Chart</span>
+                  </button>
+                </div>
               </div>
 
               {/* Display Recorded Vitals */}
@@ -1447,14 +1479,12 @@ export default function BloodTransfusionForm({
                 </div>
               )}
               
-              {/* Vitals Trend Chart */}
-              {(formData.pre_transfusion_vitals || (formData.during_transfusion_vitals && formData.during_transfusion_vitals.length > 0) || formData.post_transfusion_vitals) && (
-                <TransfusionVitalsChart
-                  preVitals={formData.pre_transfusion_vitals}
-                  duringVitals={formData.during_transfusion_vitals}
-                  postVitals={formData.post_transfusion_vitals}
-                />
-              )}
+              {/* Vitals Trend Chart (always visible; shows empty state when no readings) */}
+              <TransfusionVitalsChart
+                preVitals={formData.pre_transfusion_vitals}
+                duringVitals={formData.during_transfusion_vitals}
+                postVitals={formData.post_transfusion_vitals}
+              />
             </div>
           )}
 
@@ -2100,7 +2130,7 @@ export default function BloodTransfusionForm({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex items-center justify-between">
+        <div className="px-4 sm:px-6 py-4 pr-28 sm:pr-32 border-t border-gray-200 bg-gray-50 flex items-center justify-between flex-shrink-0">
           <button
             onClick={onClose}
             className="text-gray-700 hover:text-gray-900 transition-colors"
