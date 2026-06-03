@@ -55,7 +55,12 @@ const TreatmentPlanManager: React.FC = () => {
   useEffect(() => {
     if (preselectedPatientId && plans.length > 0) {
       const patientPlan = plans.find(p => String(p.patient_id) === preselectedPatientId);
-      if (patientPlan) setSelectedPlan(patientPlan);
+      if (patientPlan) {
+        setSelectedPlan(patientPlan);
+      } else {
+        // No existing plan for this patient — jump straight to the Creator
+        navigate(`/treatment-plan-creator?patientId=${preselectedPatientId}`, { replace: true });
+      }
     }
   }, [preselectedPatientId, plans]);
 
@@ -323,7 +328,7 @@ ${meds.map((m: any, i: number) => `<p>${i + 1}. ${m.name || m.medication_name} $
         <div className="bg-white border-b px-4 py-3 sticky top-0 z-30">
           <div className="flex items-center justify-between max-w-5xl mx-auto">
             <h1 className="text-lg font-bold text-gray-900">Treatment Plan Manager</h1>
-            <button onClick={() => navigate('/treatment-plan-creator')} className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700">
+            <button onClick={() => navigate(preselectedPatientId ? `/treatment-plan-creator?patientId=${preselectedPatientId}` : '/treatment-plan-creator')} className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700">
               <Plus className="w-4 h-4" /> New Plan
             </button>
           </div>
@@ -341,7 +346,7 @@ ${meds.map((m: any, i: number) => `<p>${i + 1}. ${m.name || m.medication_name} $
             <div className="text-center py-12 bg-white rounded-xl border">
               <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
               <p className="text-gray-500">No treatment plans found</p>
-              <button onClick={() => navigate('/treatment-plan-creator')} className="mt-3 px-4 py-2 bg-green-600 text-white rounded-lg text-sm">Create First Plan</button>
+              <button onClick={() => navigate(preselectedPatientId ? `/treatment-plan-creator?patientId=${preselectedPatientId}` : '/treatment-plan-creator')} className="mt-3 px-4 py-2 bg-green-600 text-white rounded-lg text-sm">Create First Plan</button>
             </div>
           ) : (
             <div className="space-y-3">

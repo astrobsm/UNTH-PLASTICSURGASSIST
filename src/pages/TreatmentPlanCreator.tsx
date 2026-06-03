@@ -168,7 +168,8 @@ const TreatmentPlanCreator: React.FC = () => {
   const { user } = useAuthStore();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const preselectedPatientId = searchParams.get('patientId');
+  const preselectedPatientId = searchParams.get('patientId')
+    || (() => { try { const c = JSON.parse(localStorage.getItem('selectedPatient') || 'null'); return c?.id ? String(c.id) : null; } catch { return null; } })();
 
   // ── STATE ──────────────────────────────────────────────────────────────────
   const [step, setStep] = useState(1);
