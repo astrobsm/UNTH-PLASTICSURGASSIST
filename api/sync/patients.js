@@ -46,45 +46,30 @@ export default async function handler(req, res) {
 }
 
 async function getPatients(res) {
-  // Try with all columns first, fallback to basic columns if any are missing
+  // Use SELECT * so missing/renamed columns never break the response.
+  // The client tolerates whatever subset of fields the row contains.
   try {
     const result = await query(
-      `SELECT id, hospital_number, first_name, last_name, full_name, date_of_birth, gender, 
-              phone, email, address, blood_group, allergies, 
-              medical_history, primary_diagnosis, secondary_diagnoses,
-              ward, bed_number,
-              emergency_contact_name, emergency_contact_phone,
-              created_at, updated_at
-       FROM patients 
-       ORDER BY updated_at DESC 
-       LIMIT 500`
+      `SELECT * FROM patients ORDER BY updated_at DESC NULLS LAST LIMIT 500`
     );
-    
-    return res.status(200).json({ 
+    return res.status(200).json({
       patients: result.rows,
       serverTime: new Date().toISOString()
     });
   } catch (err) {
-    // If column doesn't exist, try with minimal columns
-    if (err.message && err.message.includes('does not exist')) {
-      console.log('Some columns missing, using basic query');
-      const result = await query(
-        `SELECT id, hospital_number, first_name, last_name, date_of_birth, gender, 
-                phone, email, address, blood_group, allergies,
-                medical_history,
-                emergency_contact_name, emergency_contact_phone,
-                created_at, updated_at
-         FROM patients 
-         ORDER BY updated_at DESC 
-         LIMIT 500`
-      );
-      
-      return res.status(200).json({ 
-        patients: result.rows,
-        serverTime: new Date().toISOString()
-      });
-    }
-    throw err;
+    // Fallback: minimal columns guaranteed to exist on any patients table.
+    console.error('getPatients SELECT * failed, falling back to minimal columns:', err.message);
+    const result = await query(
+      `SELECT id, hospital_number, first_name, last_name, date_of_birth, gender, phone, created_at, updated_at
+       FROM patients
+       ORDER BY id DESC
+       LIMIT 500`
+    );
+    return res.status(200).json({
+      patients: result.rows,
+      serverTime: new Date().toISOString(),
+      degraded: true
+    });
   }
 }
 

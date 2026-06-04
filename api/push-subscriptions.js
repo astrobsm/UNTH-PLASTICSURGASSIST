@@ -28,40 +28,59 @@ export default async function handler(req, res) {
 }
 
 async function saveSubscription(data, user, res) {
-  const { endpoint, keys } = data;
+  const { endpoint, keys } = data || {};
 
   if (!endpoint || !keys) {
     return res.status(400).json({ error: 'Endpoint and keys are required' });
   }
 
-  // Ensure table exists
+  // Ensure table exists (idempotent)
   await ensurePushSubscriptionsTable();
 
-  // Check if subscription already exists
-  const existingResult = await query(
-    'SELECT id FROM push_subscriptions WHERE user_id = $1 AND endpoint = $2',
-    [user.id, endpoint]
-  );
+  // Coerce user.id to string so it matches the TEXT column even if the JWT
+  // payload stores it as a number.
+  const userId = user?.id != null ? String(user.id) : null;
+  if (!userId) {
+    return res.status(401).json({ error: 'Invalid auth payload: missing user id' });
+  }
 
-  if (existingResult.rows.length > 0) {
-    // Update existing subscription
-    const result = await query(
-      `UPDATE push_subscriptions 
-       SET keys = $1, updated_at = NOW()
-       WHERE user_id = $2 AND endpoint = $3
-       RETURNING *`,
-      [JSON.stringify(keys), user.id, endpoint]
+  try {
+    // Check if subscription already exists
+    const existingResult = await query(
+      'SELECT id FROM push_subscriptions WHERE user_id = $1 AND endpoint = $2',
+      [userId, endpoint]
     );
-    return res.status(200).json({ subscription: result.rows[0] });
-  } else {
-    // Create new subscription
+
+    if (existingResult.rows.length > 0) {
+      const result = await query(
+        `UPDATE push_subscriptions 
+         SET keys = $1, updated_at = NOW()
+         WHERE user_id = $2 AND endpoint = $3
+         RETURNING *`,
+        [JSON.stringify(keys), userId, endpoint]
+      );
+      return res.status(200).json({ subscription: result.rows[0] });
+    }
+
     const result = await query(
       `INSERT INTO push_subscriptions (user_id, endpoint, keys, created_at, updated_at)
        VALUES ($1, $2, $3, NOW(), NOW())
        RETURNING *`,
-      [user.id, endpoint, JSON.stringify(keys)]
+      [userId, endpoint, JSON.stringify(keys)]
     );
     return res.status(201).json({ subscription: result.rows[0] });
+  } catch (err) {
+    // Most common production failure: an older push_subscriptions table whose
+    // user_id column is INTEGER. Log the detail and surface a clear error
+    // instead of a generic 500.
+    console.error('saveSubscription failed:', err.message, err.code);
+    return res.status(500).json({
+      error: 'Failed to save push subscription',
+      message: err.message,
+      hint: err.code === '22P02' || /invalid input syntax/i.test(err.message)
+        ? 'push_subscriptions.user_id column type may be incompatible (expected TEXT). Drop or migrate the table.'
+        : undefined
+    });
   }
 }
 
