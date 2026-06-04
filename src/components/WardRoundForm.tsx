@@ -633,7 +633,7 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[100] p-0 sm:p-4">
-      <div className="bg-white rounded-none sm:rounded-lg shadow-xl w-full sm:max-w-6xl h-full sm:h-auto sm:max-h-[95vh] overflow-y-auto sm:overflow-hidden flex flex-col">
+      <div className="bg-white rounded-none sm:rounded-lg shadow-xl w-full sm:max-w-6xl h-full sm:h-[95vh] sm:max-h-[95vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="bg-gradient-to-r from-green-600 to-green-700 text-white px-3 sm:px-6 py-3 sm:py-4 flex justify-between items-start sm:items-center flex-shrink-0">
           <div className="min-w-0 flex-1">
