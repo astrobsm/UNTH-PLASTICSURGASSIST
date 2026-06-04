@@ -31,6 +31,7 @@ import {
   LUND_BROWDER_CHART
 } from '../../services/burnCareService';
 import { patientService } from '../../services/patientService';
+import { readSelectedPatientFromStorage } from '../../hooks/useSelectedPatient';
 import AIBurnExpert from './AIBurnExpert';
 import { getCurrentUserName } from '../../utils/getCurrentUser';
 
@@ -106,21 +107,25 @@ const BODY_REGIONS: { id: AnatomicalRegion; label: string; side: 'anterior' | 'p
 ];
 
 const BurnAdmissionForm: React.FC<BurnAdmissionFormProps> = ({ onComplete, onCancel, initialPatient }) => {
+  // Fall back to the cached selected patient in localStorage when no prop was supplied —
+  // covers the case where the action was clicked from /patients but this component mounted
+  // before the parent's useOnSelectedPatient effect propagated the prop.
+  const seedPatient: Patient | null = initialPatient || (readSelectedPatientFromStorage() as unknown as Patient | null);
   const [currentStep, setCurrentStep] = useState(1);
   
   // Patient selection state
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loadingPatients, setLoadingPatients] = useState(false);
   const [patientSearchTerm, setPatientSearchTerm] = useState('');
-  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(initialPatient || null);
-  const [showPatientSelector, setShowPatientSelector] = useState(!initialPatient);
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(seedPatient || null);
+  const [showPatientSelector, setShowPatientSelector] = useState(!seedPatient);
   
   // Step 1: Patient Info
-  const [patientId, setPatientId] = useState(initialPatient?.hospital_number || '');
+  const [patientId, setPatientId] = useState(seedPatient?.hospital_number || '');
   const [age, setAge] = useState<number>(30);
   const [weight, setWeight] = useState<number>(70);
   const [gender, setGender] = useState<'male' | 'female'>(
-    initialPatient?.gender?.toLowerCase() === 'female' ? 'female' : 'male'
+    seedPatient?.gender?.toLowerCase() === 'female' ? 'female' : 'male'
   );
   const [admissionDate, setAdmissionDate] = useState(new Date().toISOString().slice(0, 16));
   const [timeOfBurn, setTimeOfBurn] = useState(new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString().slice(0, 16));
@@ -129,8 +134,8 @@ const BurnAdmissionForm: React.FC<BurnAdmissionFormProps> = ({ onComplete, onCan
   // Load patients on mount
   useEffect(() => {
     loadPatients();
-    if (initialPatient?.date_of_birth) {
-      const birthDate = new Date(initialPatient.date_of_birth);
+    if (seedPatient?.date_of_birth) {
+      const birthDate = new Date(seedPatient.date_of_birth);
       const today = new Date();
       let calculatedAge = today.getFullYear() - birthDate.getFullYear();
       const monthDiff = today.getMonth() - birthDate.getMonth();
@@ -140,6 +145,27 @@ const BurnAdmissionForm: React.FC<BurnAdmissionFormProps> = ({ onComplete, onCan
       if (calculatedAge >= 0) setAge(calculatedAge);
     }
   }, []);
+
+  // If the parent hydrates initialPatient AFTER this component mounted, sync into local state.
+  useEffect(() => {
+    if (!initialPatient) return;
+    setSelectedPatient(initialPatient);
+    setShowPatientSelector(false);
+    setPatientId(initialPatient.hospital_number || '');
+    if (initialPatient.gender) {
+      setGender(initialPatient.gender.toLowerCase() === 'female' ? 'female' : 'male');
+    }
+    if (initialPatient.date_of_birth) {
+      const birthDate = new Date(initialPatient.date_of_birth);
+      const today = new Date();
+      let calculatedAge = today.getFullYear() - birthDate.getFullYear();
+      const monthDiff = today.getMonth() - birthDate.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        calculatedAge--;
+      }
+      if (calculatedAge >= 0) setAge(calculatedAge);
+    }
+  }, [initialPatient]);
 
   const loadPatients = async () => {
     try {

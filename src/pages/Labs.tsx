@@ -1291,6 +1291,83 @@ const UploadSection = ({ investigations, onRefresh }: any) => {
   );
 };
 
+// Inline mini-trend sparklines for the lab request panel.
+// Aggregates the patient's prior numeric results, picks the 4 parameters with the most data
+// points, and renders a compact SVG sparkline for each so clinicians get an at-a-glance
+// trajectory without leaving the request flow.
+const InlineLabTrends = ({ history }: { history: Array<{ id: string; date: Date; results?: Array<{ name: string; value: string; unit?: string; flag?: string; date: Date }> }> }) => {
+  const series = React.useMemo(() => {
+    const byName = new Map<string, Array<{ value: number; date: Date; flag?: string; unit?: string }>>();
+    for (const item of history || []) {
+      for (const r of item.results || []) {
+        const num = parseFloat(r.value);
+        if (!isFinite(num)) continue;
+        const key = r.name.trim();
+        if (!key) continue;
+        if (!byName.has(key)) byName.set(key, []);
+        byName.get(key)!.push({ value: num, date: r.date, flag: r.flag, unit: r.unit });
+      }
+    }
+    return Array.from(byName.entries())
+      .map(([name, points]) => ({
+        name,
+        unit: points[0]?.unit,
+        points: points.sort((a, b) => a.date.getTime() - b.date.getTime())
+      }))
+      .filter(s => s.points.length >= 2)
+      .sort((a, b) => b.points.length - a.points.length)
+      .slice(0, 4);
+  }, [history]);
+
+  if (series.length === 0) return null;
+
+  return (
+    <div className="px-4 py-3 border-b border-gray-200 bg-white">
+      <p className="text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">Trends ({series.length} parameter{series.length === 1 ? '' : 's'})</p>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {series.map(s => {
+          const vals = s.points.map(p => p.value);
+          const min = Math.min(...vals);
+          const max = Math.max(...vals);
+          const range = max - min || 1;
+          const W = 120;
+          const H = 36;
+          const step = vals.length > 1 ? W / (vals.length - 1) : 0;
+          const path = vals.map((v, i) => `${i === 0 ? 'M' : 'L'} ${(i * step).toFixed(1)} ${(H - ((v - min) / range) * H).toFixed(1)}`).join(' ');
+          const latest = s.points[s.points.length - 1];
+          const prev = s.points[s.points.length - 2];
+          const delta = latest.value - prev.value;
+          const trendUp = delta > 0;
+          const trendFlat = Math.abs(delta) < 0.0001;
+          const abnormal = latest.flag && latest.flag !== 'normal';
+          return (
+            <div key={s.name} className={`border rounded-md p-2 ${abnormal ? 'border-orange-300 bg-orange-50' : 'border-gray-200 bg-gray-50'}`}>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[11px] font-medium text-gray-800 truncate" title={s.name}>{s.name}</span>
+                <span className="text-[10px] text-gray-500">{s.points.length} pts</span>
+              </div>
+              <svg width={W} height={H} className="block">
+                <path d={path} fill="none" stroke={abnormal ? '#ea580c' : '#16a34a'} strokeWidth={1.5} />
+                {vals.map((v, i) => (
+                  <circle key={i} cx={i * step} cy={H - ((v - min) / range) * H} r={1.8} fill={abnormal ? '#ea580c' : '#16a34a'} />
+                ))}
+              </svg>
+              <div className="flex items-baseline justify-between mt-1">
+                <span className="text-sm font-semibold text-gray-900">{latest.value}{s.unit ? <span className="text-[10px] text-gray-500 ml-0.5">{s.unit}</span> : null}</span>
+                {!trendFlat && (
+                  <span className={`text-[10px] font-medium ${trendUp ? 'text-red-600' : 'text-green-700'}`}>
+                    {trendUp ? '▲' : '▼'} {Math.abs(delta).toFixed(delta % 1 === 0 ? 0 : 1)}
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 // Trends Section Component
 const TrendsSection = ({ selectedPatient }: any) => {
   const { user } = useAuthStore();
@@ -1686,6 +1763,7 @@ const RequestSection = ({ onRefresh, prefill, defaultRequestedBy }: { onRefresh:
             </h3>
             <span className="text-xs text-gray-500">{history.length} record{history.length === 1 ? '' : 's'}</span>
           </div>
+          <InlineLabTrends history={history} />
           <div className="max-h-72 overflow-y-auto divide-y divide-gray-200">
             {history.length === 0 ? (
               <p className="px-4 py-6 text-sm text-gray-500 text-center">No previous lab investigations recorded for this patient.</p>
