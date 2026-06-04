@@ -36,6 +36,7 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
   const [currentUser, setCurrentUser] = useState<any>(null);
   const { user: authUser } = useAuthStore();
   const [patientTreatmentPlan, setPatientTreatmentPlan] = useState<any>(null);
+  const [previousRound, setPreviousRound] = useState<any>(null);
   const [showTreatmentPlanModification, setShowTreatmentPlanModification] = useState(false);
   
   // Investigation and Medication Ordering Modals
@@ -203,6 +204,7 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
             return db_ - da;
           });
           const last = sorted[0] as any;
+          setPreviousRound(last);
           setFormData(prev => ({
             ...prev,
             treatment_plan_changes: prev.treatment_plan_changes || last.treatment_plan_changes || '',
@@ -211,9 +213,12 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
             nursing_instructions: prev.nursing_instructions || last.nursing_instructions || '',
             follow_up_plan: prev.follow_up_plan || last.follow_up_plan || ''
           }));
+        } else {
+          setPreviousRound(null);
         }
       } catch (err) {
         console.warn('Could not load previous ward round for prefill:', err);
+        setPreviousRound(null);
       }
     }
     
@@ -627,7 +632,7 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
   ].filter(tab => tab.show !== false);
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-0 sm:p-4">
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[100] p-0 sm:p-4">
       <div className="bg-white rounded-none sm:rounded-lg shadow-xl w-full sm:max-w-6xl h-full sm:h-auto sm:max-h-[95vh] overflow-y-auto sm:overflow-hidden flex flex-col">
         {/* Header */}
         <div className="bg-gradient-to-r from-green-600 to-green-700 text-white px-3 sm:px-6 py-3 sm:py-4 flex justify-between items-start sm:items-center flex-shrink-0">
@@ -1325,10 +1330,81 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
             {/* Management Plan Tab */}
             {activeTab === 'plan' && (
               <div className="space-y-4">
-                {!wardRoundId && (formData.treatment_plan_changes || formData.dietary_modifications || formData.activity_orders || formData.nursing_instructions) && (
-                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-900 flex items-start gap-2">
+                {!wardRoundId && previousRound && (
+                  <div className="bg-amber-50 border border-amber-300 rounded-lg p-4">
+                    <div className="flex items-start justify-between gap-2 mb-3">
+                      <div className="flex items-start gap-2">
+                        <Edit3 className="w-4 h-4 mt-0.5 text-amber-700 flex-shrink-0" />
+                        <div>
+                          <p className="text-sm font-semibold text-amber-900">Previous Ward Round Plan</p>
+                          <p className="text-xs text-amber-700">
+                            {previousRound.round_date ? new Date(previousRound.round_date).toLocaleString() : 'Last round'} &middot; {previousRound.round_type || 'round'}
+                            {previousRound.reviewing_doctor ? ` &middot; ${previousRound.reviewing_doctor}` : ''}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setFormData(prev => ({
+                          ...prev,
+                          treatment_plan_changes: previousRound.treatment_plan_changes || prev.treatment_plan_changes,
+                          dietary_modifications: previousRound.dietary_modifications || prev.dietary_modifications,
+                          activity_orders: previousRound.activity_orders || prev.activity_orders,
+                          nursing_instructions: previousRound.nursing_instructions || prev.nursing_instructions,
+                          follow_up_plan: previousRound.follow_up_plan || prev.follow_up_plan,
+                        }))}
+                        className="text-xs px-3 py-1.5 bg-amber-600 text-white rounded hover:bg-amber-700 flex-shrink-0"
+                      >
+                        Continue All
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                      {(['treatment_plan_changes', 'dietary_modifications', 'activity_orders', 'nursing_instructions', 'follow_up_plan'] as const).map(field => {
+                        const labels: Record<string, string> = {
+                          treatment_plan_changes: 'Treatment Plan',
+                          dietary_modifications: 'Dietary',
+                          activity_orders: 'Activity',
+                          nursing_instructions: 'Nursing',
+                          follow_up_plan: 'Follow-up'
+                        };
+                        const val: string = (previousRound as any)[field] || '';
+                        if (!val.trim()) return null;
+                        return (
+                          <div key={field} className="bg-white border border-amber-200 rounded p-2">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="font-medium text-gray-700">{labels[field]}</span>
+                              <div className="flex gap-1">
+                                <button
+                                  type="button"
+                                  title="Replace current field with this"
+                                  onClick={() => setFormData(prev => ({ ...prev, [field]: val }))}
+                                  className="text-[10px] px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded hover:bg-amber-200"
+                                >Copy</button>
+                                <button
+                                  type="button"
+                                  title="Append to current field"
+                                  onClick={() => setFormData(prev => ({
+                                    ...prev,
+                                    [field]: ((prev as any)[field] ? `${(prev as any)[field]}\n` : '') + val
+                                  }))}
+                                  className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded hover:bg-blue-200"
+                                >Append</button>
+                              </div>
+                            </div>
+                            <p className="text-gray-700 whitespace-pre-wrap line-clamp-3">{val}</p>
+                          </div>
+                        );
+                      })}
+                      {!(previousRound.treatment_plan_changes || previousRound.dietary_modifications || previousRound.activity_orders || previousRound.nursing_instructions || previousRound.follow_up_plan) && (
+                        <div className="sm:col-span-2 text-amber-700 italic">Previous round had no management-plan entries.</div>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {!wardRoundId && !previousRound && selectedPatient && (
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs text-gray-600 flex items-start gap-2">
                     <Edit3 className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                    <span>Pre-filled from the patient's most recent ward round. Edit, append, or clear any field before saving this round.</span>
+                    <span>No previous ward round on file for this patient &mdash; entries below will become the first.</span>
                   </div>
                 )}
                 <MedicalTextInput
