@@ -310,7 +310,18 @@ export default function Labs() {
       {activeTab === 'requests' && (
         <RequestSection 
           onRefresh={loadLabData}
-          prefill={prefill}
+          prefill={(() => {
+            if (prefill) return prefill;
+            const sp = patients.find((pp: any) => String(pp.id) === String(selectedPatient));
+            if (!sp) return undefined;
+            return {
+              patientId: String(sp.id),
+              patientName: `${sp.first_name} ${sp.last_name}`,
+              hospitalNumber: sp.hospital_number || '',
+              missingLabs: []
+            };
+          })()}
+          defaultRequestedBy={user?.name || ''}
         />
       )}
     </div>
@@ -1472,12 +1483,12 @@ const TrendsSection = ({ selectedPatient }: any) => {
 };
 
 // Request Section Component
-const RequestSection = ({ onRefresh, prefill }: { onRefresh: () => void; prefill?: { patientId: string; patientName: string; hospitalNumber: string; missingLabs: string[] } }) => {
+const RequestSection = ({ onRefresh, prefill, defaultRequestedBy }: { onRefresh: () => void; prefill?: { patientId: string; patientName: string; hospitalNumber: string; missingLabs: string[] }; defaultRequestedBy?: string }) => {
   const [formData, setFormData] = useState({
     patient_id: prefill?.patientId || '',
     patient_name: prefill?.patientName || '',
     hospital_number: prefill?.hospitalNumber || '',
-    requested_by: '',
+    requested_by: defaultRequestedBy || '',
     urgency: 'routine',
     clinical_indication: prefill ? 'Pre-operative mandatory labs' : '',
     special_instructions: ''
@@ -1604,12 +1615,129 @@ const RequestSection = ({ onRefresh, prefill }: { onRefresh: () => void; prefill
   const labCategories = labService.getLabCategories();
   const availableTests = labService.getCommonTests(selectedCategory);
 
+  // Patient lab history (prior investigations + result snapshots) for the currently selected patient
+  const [history, setHistory] = useState<Array<{ id: string; date: Date; tests: string[]; status: string; urgency: string; clinical_indication?: string; results?: Array<{ name: string; value: string; unit?: string; flag?: string; date: Date }> }>>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadHistory = async () => {
+      if (!formData.patient_id) {
+        setHistory([]);
+        return;
+      }
+      try {
+        setHistoryLoading(true);
+        const [priorInvs, priorResults] = await Promise.all([
+          labService.getLabInvestigations(formData.patient_id),
+          labService.getLabResults(formData.patient_id)
+        ]);
+        if (cancelled) return;
+        const resultsByInv = new Map<string, any[]>();
+        (priorResults || []).forEach((r: any) => {
+          const key = String(r.investigation_id || r.lab_investigation_id || '');
+          if (!key) return;
+          if (!resultsByInv.has(key)) resultsByInv.set(key, []);
+          resultsByInv.get(key)!.push(r);
+        });
+        const items = (priorInvs || [])
+          .map((inv: any) => ({
+            id: String(inv.id),
+            date: new Date(inv.request_date || inv.created_at || Date.now()),
+            tests: (inv.tests || []).map((t: any) => t.test_name || t.name || t).filter(Boolean),
+            status: inv.status || 'pending',
+            urgency: inv.urgency || 'routine',
+            clinical_indication: inv.clinical_indication,
+            results: (resultsByInv.get(String(inv.id)) || []).flatMap((r: any) => (r.results || r.values || []).map((v: any) => ({
+              name: v.test_name || v.name || '',
+              value: String(v.value ?? v.result ?? ''),
+              unit: v.unit,
+              flag: v.flag,
+              date: new Date(r.result_date || r.created_at || inv.request_date || Date.now())
+            })))
+          }))
+          .sort((a, b) => b.date.getTime() - a.date.getTime());
+        setHistory(items);
+      } catch (err) {
+        console.warn('Failed to load lab history:', err);
+      } finally {
+        if (!cancelled) setHistoryLoading(false);
+      }
+    };
+    loadHistory();
+    return () => { cancelled = true; };
+  }, [formData.patient_id]);
+
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
       <div className="flex items-center space-x-3 mb-6">
         <Plus className="h-6 w-6 text-green-600" />
         <h2 className="text-xl font-semibold text-gray-900">Request Lab Investigation</h2>
       </div>
+
+      {/* Patient lab history (chronological) */}
+      {formData.patient_id && (
+        <div className="mb-6 border border-gray-200 rounded-lg bg-gray-50">
+          <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+              <BarChart3 className="h-4 w-4 text-green-600" />
+              Previous Lab Work for {formData.patient_name || 'this patient'}
+              {historyLoading && <span className="text-xs text-gray-500 font-normal">loading…</span>}
+            </h3>
+            <span className="text-xs text-gray-500">{history.length} record{history.length === 1 ? '' : 's'}</span>
+          </div>
+          <div className="max-h-72 overflow-y-auto divide-y divide-gray-200">
+            {history.length === 0 ? (
+              <p className="px-4 py-6 text-sm text-gray-500 text-center">No previous lab investigations recorded for this patient.</p>
+            ) : (
+              history.map(item => (
+                <div key={item.id} className="px-4 py-3">
+                  <div className="flex items-start justify-between flex-wrap gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-medium text-gray-900">{format(item.date, 'dd MMM yyyy HH:mm')}</span>
+                        <span className={`text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded ${
+                          item.status === 'completed' ? 'bg-green-100 text-green-700' :
+                          item.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
+                          'bg-yellow-100 text-yellow-700'
+                        }`}>{item.status}</span>
+                        <span className={`text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded ${
+                          item.urgency === 'stat' ? 'bg-red-100 text-red-700' :
+                          item.urgency === 'urgent' ? 'bg-orange-100 text-orange-700' :
+                          'bg-gray-200 text-gray-700'
+                        }`}>{item.urgency}</span>
+                      </div>
+                      {item.tests.length > 0 && (
+                        <p className="text-xs text-gray-700 mt-1">{item.tests.join(', ')}</p>
+                      )}
+                      {item.clinical_indication && (
+                        <p className="text-xs text-gray-500 italic mt-1">{item.clinical_indication}</p>
+                      )}
+                      {item.results && item.results.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {item.results.slice(0, 8).map((r, i) => (
+                            <span key={i} className={`text-[11px] px-1.5 py-0.5 rounded border ${
+                              r.flag && r.flag !== 'normal' ? 'border-orange-300 bg-orange-50 text-orange-800' : 'border-gray-300 bg-white text-gray-700'
+                            }`}>
+                              {r.name}: {r.value}{r.unit ? ` ${r.unit}` : ''}
+                            </span>
+                          ))}
+                          {item.results.length > 8 && (
+                            <span className="text-[11px] text-gray-500">+{item.results.length - 8} more</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+          <div className="px-4 py-2 border-t border-gray-200 text-xs text-gray-600">
+            Tip: switch to the <strong>Trends</strong> tab for charted parameter trajectories.
+          </div>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

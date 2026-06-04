@@ -48,6 +48,7 @@ interface Patient {
 interface BurnAdmissionFormProps {
   onComplete: (patient: BurnPatient) => void;
   onCancel: () => void;
+  initialPatient?: Patient | null;
 }
 
 const STEPS = [
@@ -104,21 +105,23 @@ const BODY_REGIONS: { id: AnatomicalRegion; label: string; side: 'anterior' | 'p
   { id: 'left_foot', label: 'L Foot', side: 'both' },
 ];
 
-const BurnAdmissionForm: React.FC<BurnAdmissionFormProps> = ({ onComplete, onCancel }) => {
+const BurnAdmissionForm: React.FC<BurnAdmissionFormProps> = ({ onComplete, onCancel, initialPatient }) => {
   const [currentStep, setCurrentStep] = useState(1);
   
   // Patient selection state
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loadingPatients, setLoadingPatients] = useState(false);
   const [patientSearchTerm, setPatientSearchTerm] = useState('');
-  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
-  const [showPatientSelector, setShowPatientSelector] = useState(true);
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(initialPatient || null);
+  const [showPatientSelector, setShowPatientSelector] = useState(!initialPatient);
   
   // Step 1: Patient Info
-  const [patientId, setPatientId] = useState('');
+  const [patientId, setPatientId] = useState(initialPatient?.hospital_number || '');
   const [age, setAge] = useState<number>(30);
   const [weight, setWeight] = useState<number>(70);
-  const [gender, setGender] = useState<'male' | 'female'>('male');
+  const [gender, setGender] = useState<'male' | 'female'>(
+    initialPatient?.gender?.toLowerCase() === 'female' ? 'female' : 'male'
+  );
   const [admissionDate, setAdmissionDate] = useState(new Date().toISOString().slice(0, 16));
   const [timeOfBurn, setTimeOfBurn] = useState(new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString().slice(0, 16));
   const [tetanusStatus, setTetanusStatus] = useState<'current' | 'needs_update' | 'unknown'>('unknown');
@@ -126,6 +129,16 @@ const BurnAdmissionForm: React.FC<BurnAdmissionFormProps> = ({ onComplete, onCan
   // Load patients on mount
   useEffect(() => {
     loadPatients();
+    if (initialPatient?.date_of_birth) {
+      const birthDate = new Date(initialPatient.date_of_birth);
+      const today = new Date();
+      let calculatedAge = today.getFullYear() - birthDate.getFullYear();
+      const monthDiff = today.getMonth() - birthDate.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        calculatedAge--;
+      }
+      if (calculatedAge >= 0) setAge(calculatedAge);
+    }
   }, []);
 
   const loadPatients = async () => {

@@ -87,12 +87,11 @@ export const DiabeticFootAssessmentForm: React.FC<Props> = ({
       const fetchedPatients = await patientService.getAllPatients();
       setPatients(fetchedPatients);
       
-      // If patientId is provided, find and select the patient
+      // If patientId is provided, find and select the patient (auto-prefill age/gender too)
       if (patientId) {
-        const patient = fetchedPatients.find((p: Patient) => p.id === patientId);
+        const patient = fetchedPatients.find((p: Patient) => String(p.id) === String(patientId));
         if (patient) {
-          setSelectedPatient(patient);
-          setShowPatientSelector(false);
+          handlePatientSelect(patient);
         }
       }
     } catch (error) {

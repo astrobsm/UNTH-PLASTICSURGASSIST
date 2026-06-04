@@ -36,6 +36,7 @@ const BurnCarePage: React.FC = () => {
   const [view, setView] = useState<'list' | 'admission' | 'monitoring'>('list');
   const [patients, setPatients] = useState<BurnPatient[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<BurnPatient | null>(null);
+  const [pendingAdmissionPatient, setPendingAdmissionPatient] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'icu' | 'critical'>('all');
   const [loading, setLoading] = useState(true);
@@ -52,9 +53,11 @@ const BurnCarePage: React.FC = () => {
     const existing = patients.find(bp => String(bp.patientId || (bp as any).patient_id) === String(p.id));
     if (existing) {
       setSelectedPatient(existing);
+      setPendingAdmissionPatient(null);
       setView('monitoring');
     } else {
       setSelectedPatient(null);
+      setPendingAdmissionPatient(p);
       setView('admission');
     }
   });
@@ -185,7 +188,8 @@ const BurnCarePage: React.FC = () => {
     return (
       <BurnAdmissionForm 
         onComplete={handleAdmissionComplete}
-        onCancel={() => setView('list')}
+        onCancel={() => { setPendingAdmissionPatient(null); setView('list'); }}
+        initialPatient={pendingAdmissionPatient}
       />
     );
   }

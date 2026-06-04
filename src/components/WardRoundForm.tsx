@@ -191,6 +191,31 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
     const patient = await db.patients.get(patientId);
     setSelectedPatient(patient);
     setFormData(prev => ({ ...prev, patient_id: patientId }));
+
+    // Pre-fill management-plan fields from the most recent ward round (editable carry-over)
+    if (!wardRoundId) {
+      try {
+        const previousRounds = await wardRoundsService.getPatientWardRounds(patientId);
+        if (previousRounds && previousRounds.length > 0) {
+          const sorted = [...previousRounds].sort((a: any, b: any) => {
+            const da = new Date(a.round_date || a.created_at || 0).getTime();
+            const db_ = new Date(b.round_date || b.created_at || 0).getTime();
+            return db_ - da;
+          });
+          const last = sorted[0] as any;
+          setFormData(prev => ({
+            ...prev,
+            treatment_plan_changes: prev.treatment_plan_changes || last.treatment_plan_changes || '',
+            dietary_modifications: prev.dietary_modifications || last.dietary_modifications || '',
+            activity_orders: prev.activity_orders || last.activity_orders || '',
+            nursing_instructions: prev.nursing_instructions || last.nursing_instructions || '',
+            follow_up_plan: prev.follow_up_plan || last.follow_up_plan || ''
+          }));
+        }
+      } catch (err) {
+        console.warn('Could not load previous ward round for prefill:', err);
+      }
+    }
     
     // Load patient's treatment plan - only if authenticated
     try {
@@ -602,8 +627,8 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
   ].filter(tab => tab.show !== false);
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0 sm:p-4">
-      <div className="bg-white rounded-none sm:rounded-lg shadow-xl w-full sm:max-w-6xl h-full sm:h-auto sm:max-h-[90vh] overflow-y-auto sm:overflow-hidden flex flex-col">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-0 sm:p-4">
+      <div className="bg-white rounded-none sm:rounded-lg shadow-xl w-full sm:max-w-6xl h-full sm:h-auto sm:max-h-[95vh] overflow-y-auto sm:overflow-hidden flex flex-col">
         {/* Header */}
         <div className="bg-gradient-to-r from-green-600 to-green-700 text-white px-3 sm:px-6 py-3 sm:py-4 flex justify-between items-start sm:items-center flex-shrink-0">
           <div className="min-w-0 flex-1">
@@ -1300,6 +1325,12 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
             {/* Management Plan Tab */}
             {activeTab === 'plan' && (
               <div className="space-y-4">
+                {!wardRoundId && (formData.treatment_plan_changes || formData.dietary_modifications || formData.activity_orders || formData.nursing_instructions) && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-900 flex items-start gap-2">
+                    <Edit3 className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                    <span>Pre-filled from the patient's most recent ward round. Edit, append, or clear any field before saving this round.</span>
+                  </div>
+                )}
                 <MedicalTextInput
                   value={formData.treatment_plan_changes}
                   onChange={(value) => setFormData({ ...formData, treatment_plan_changes: value })}

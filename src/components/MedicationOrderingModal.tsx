@@ -1,7 +1,8 @@
 // Medication Ordering Modal with Drug Database and Interaction Checking
-import React, { useState } from 'react';
-import { X, Plus, Pill, AlertTriangle, Search, Trash2, Info } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Plus, Pill, AlertTriangle, Search, Trash2, Info, Ban, RotateCcw } from 'lucide-react';
 import { format } from 'date-fns';
+import { db } from '../db/database';
 import {
   MEDICATIONS,
   MEDICATION_CATEGORIES,
@@ -382,6 +383,52 @@ export const MedicationOrderingModal: React.FC<MedicationOrderingModalProps> = (
   onClose
 }) => {
   const [medications, setMedications] = useState<Medication[]>(existingMedications);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
+  // On mount, pull the patient's prior prescriptions and merge into the working list.
+  // This lets the prescriber review, edit, discontinue or extend existing therapy in the same workflow.
+  useEffect(() => {
+    let cancelled = false;
+    const loadHistory = async () => {
+      if (!patientId) return;
+      try {
+        setLoadingHistory(true);
+        const prior = await db.prescriptions.where('patient_id').equals(patientId).toArray();
+        if (cancelled || !prior || prior.length === 0) return;
+        setMedications(prev => {
+          const seen = new Set(prev.map(m => `${(m.medication_name || '').toLowerCase()}|${(m.dosage || '').toLowerCase()}|${(m.frequency || '').toLowerCase()}`));
+          const carried: Medication[] = prior
+            .filter((p: any) => {
+              const key = `${(p.medication_name || '').toLowerCase()}|${(p.dosage || '').toLowerCase()}|${(p.frequency || '').toLowerCase()}`;
+              if (seen.has(key)) return false;
+              seen.add(key);
+              return true;
+            })
+            .map((p: any): Medication => ({
+              id: `existing_${p.id ?? `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`}`,
+              medication_name: p.medication_name || '',
+              generic_name: p.generic_name || undefined,
+              dosage: p.dosage || '',
+              route: (p.route as Medication['route']) || 'oral',
+              frequency: p.frequency || '',
+              duration: p.duration || '',
+              start_date: p.prescribed_date ? new Date(p.prescribed_date) : (p.start_date ? new Date(p.start_date) : new Date()),
+              indication: p.indication || '',
+              special_instructions: p.special_instructions || undefined,
+              status: (p.status as Medication['status']) || 'active',
+              prescriber: p.prescribed_by || p.prescriber || 'Previous prescriber'
+            }));
+          return [...prev, ...carried];
+        });
+      } catch (err) {
+        console.warn('Could not load prior prescriptions for patient:', err);
+      } finally {
+        if (!cancelled) setLoadingHistory(false);
+      }
+    };
+    loadHistory();
+    return () => { cancelled = true; };
+  }, [patientId]);
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [selectedDrug, setSelectedDrug] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -473,6 +520,14 @@ export const MedicationOrderingModal: React.FC<MedicationOrderingModalProps> = (
     setMedications(medications.filter(med => med.id !== id));
   };
 
+  // Toggle discontinue / reactivate on an existing order
+  const toggleDiscontinue = (id: string) => {
+    setMedications(medications.map(med => med.id === id
+      ? { ...med, status: med.status === 'discontinued' ? 'active' : 'discontinued' }
+      : med
+    ));
+  };
+
   // Check for drug interactions
   const checkInteractions = (): string[] => {
     const interactions: string[] = [];
@@ -503,8 +558,8 @@ export const MedicationOrderingModal: React.FC<MedicationOrderingModalProps> = (
   const interactions = checkInteractions();
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0 sm:p-4">
-      <div className="bg-white rounded-none sm:rounded-lg shadow-xl sm:max-w-6xl w-full h-full sm:h-auto sm:max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-0 sm:p-4">
+      <div className="bg-white rounded-none sm:rounded-lg shadow-xl sm:max-w-6xl w-full h-full sm:h-auto sm:max-h-[95vh] flex flex-col">
         {/* Header */}
         <div className="border-b border-gray-200 px-3 sm:px-6 py-3 sm:py-4 flex items-center justify-between flex-shrink-0">
           <div className="min-w-0 flex-1">
@@ -732,8 +787,11 @@ export const MedicationOrderingModal: React.FC<MedicationOrderingModalProps> = (
 
             {/* Right: Current Medications */}
             <div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                Current Medications ({medications.length})
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center justify-between">
+                <span>Current Medications ({medications.length})</span>
+                {loadingHistory && (
+                  <span className="text-xs font-normal text-gray-500">Loading history…</span>
+                )}
               </h3>
               <div className="space-y-3">
                 {medications.length === 0 ? (
@@ -742,21 +800,45 @@ export const MedicationOrderingModal: React.FC<MedicationOrderingModalProps> = (
                     <p>No medications ordered yet</p>
                   </div>
                 ) : (
-                  medications.map((med) => (
-                    <div key={med.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                  medications.map((med) => {
+                    const isDiscontinued = med.status === 'discontinued';
+                    return (
+                    <div
+                      key={med.id}
+                      className={`border rounded-lg p-4 transition-shadow hover:shadow-md ${
+                        isDiscontinued ? 'border-gray-200 bg-gray-50 opacity-70' : 'border-gray-200 bg-white'
+                      }`}
+                    >
                       <div className="flex items-start justify-between mb-2">
-                        <div className="flex-1">
-                          <h4 className="font-semibold text-gray-900">{med.medication_name}</h4>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className={`font-semibold ${isDiscontinued ? 'text-gray-500 line-through' : 'text-gray-900'}`}>{med.medication_name}</h4>
+                            <span className={`text-[10px] uppercase font-semibold px-2 py-0.5 rounded-full ${
+                              isDiscontinued ? 'bg-red-100 text-red-700' :
+                              med.status === 'completed' ? 'bg-gray-200 text-gray-700' :
+                              'bg-green-100 text-green-700'
+                            }`}>{med.status}</span>
+                          </div>
                           {med.generic_name && (
                             <p className="text-xs text-gray-600">({med.generic_name})</p>
                           )}
                         </div>
-                        <button
-                          onClick={() => removeMedication(med.id)}
-                          className="text-red-600 hover:text-red-800 p-1"
-                        >
-                          <Trash2 className="w-5 h-5" />
-                        </button>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          <button
+                            onClick={() => toggleDiscontinue(med.id)}
+                            className={`p-1 rounded ${isDiscontinued ? 'text-green-700 hover:bg-green-50' : 'text-orange-600 hover:bg-orange-50'}`}
+                            title={isDiscontinued ? 'Reactivate medication' : 'Discontinue medication'}
+                          >
+                            {isDiscontinued ? <RotateCcw className="w-5 h-5" /> : <Ban className="w-5 h-5" />}
+                          </button>
+                          <button
+                            onClick={() => removeMedication(med.id)}
+                            className="text-red-600 hover:bg-red-50 p-1 rounded"
+                            title="Remove from this order set"
+                          >
+                            <Trash2 className="w-5 h-5" />
+                          </button>
+                        </div>
                       </div>
                       <div className="space-y-1 text-sm">
                         <p>
@@ -776,7 +858,8 @@ export const MedicationOrderingModal: React.FC<MedicationOrderingModalProps> = (
                         </p>
                       </div>
                     </div>
-                  ))
+                  );
+                  })
                 )}
               </div>
             </div>
