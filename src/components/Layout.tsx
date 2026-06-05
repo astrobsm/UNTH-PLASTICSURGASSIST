@@ -358,7 +358,7 @@ export default function Layout({ children }: LayoutProps) {
         <main className="flex-1 min-w-0 overflow-x-hidden relative">
           {/* UNTH Logo Watermark */}
           <div 
-            className="fixed pointer-events-none z-0"
+            className="fixed pointer-events-none -z-10"
             style={{
               top: '50%',
               left: '50%',
@@ -372,7 +372,7 @@ export default function Layout({ children }: LayoutProps) {
               backgroundPosition: 'center',
             }}
           />
-          <div className="relative z-10 p-3 sm:p-4 lg:p-6">
+          <div className="relative p-3 sm:p-4 lg:p-6">
             {children}
           </div>
         </main>

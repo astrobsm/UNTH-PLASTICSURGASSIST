@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Save, User, Calendar, FileText, Activity, AlertCircle, TrendingUp, Pill, Stethoscope, ClipboardList, Users, Edit3, Camera, Image, Upload, Trash2, FileSearch, Loader2, TestTube, Brain, Mic } from 'lucide-react';
 import { wardRoundsService, WardRound, ROUND_TYPES, RoundType, ClinicalImage } from '../services/wardRoundsService';
 import { db } from '../db/database';
@@ -631,7 +632,7 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
     { id: 'followup', label: 'Follow-up', icon: TrendingUp }
   ].filter(tab => tab.show !== false);
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[100] p-0 sm:p-4">
       <div className="bg-white rounded-none sm:rounded-lg shadow-xl w-full sm:max-w-6xl h-full sm:h-[95vh] sm:max-h-[95vh] overflow-hidden flex flex-col">
         {/* Header */}
@@ -2156,7 +2157,8 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
         } : undefined}
         targetForm="ward_round"
       />
-    </div>
+    </div>,
+    document.body
   );
 };
 
