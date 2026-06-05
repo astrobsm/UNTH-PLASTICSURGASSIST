@@ -190,8 +190,35 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
   };
 
   const loadPatientDetails = async (patientId: string) => {
-    const patient = await db.patients.get(patientId);
-    setSelectedPatient(patient);
+    if (!patientId) {
+      setSelectedPatient(null);
+      setPreviousRound(null);
+      return;
+    }
+    // Dexie schema is '++id' (numeric auto-increment) but <select> values are strings.
+    // Try numeric first, then string, then fall back to a scan by serverId / hospital_number.
+    const numeric = Number(patientId);
+    let patient: any =
+      (!Number.isNaN(numeric) ? await db.patients.get(numeric) : undefined) ||
+      (await db.patients.get(patientId as any));
+    if (!patient) {
+      patient = await db.patients
+        .filter((p: any) =>
+          String(p.id) === String(patientId) ||
+          String(p.serverId ?? '') === String(patientId) ||
+          String(p.hospital_number ?? '') === String(patientId)
+        )
+        .first();
+    }
+    if (!patient) {
+      // Last-resort fallback to the in-memory list already fetched by loadPatients()
+      patient = patients.find((p: any) =>
+        String(p.id) === String(patientId) ||
+        String(p.serverId ?? '') === String(patientId) ||
+        String(p.hospital_number ?? '') === String(patientId)
+      );
+    }
+    setSelectedPatient(patient || null);
     setFormData(prev => ({ ...prev, patient_id: patientId }));
 
     // Pre-fill management-plan fields from the most recent ward round (editable carry-over)
