@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Calendar, Clock, User, Filter, RefreshCw, XCircle, CheckCircle, AlertTriangle, Copy, ExternalLink, Volume2, VolumeX, Bell, BellOff } from 'lucide-react';
+import { Calendar, Clock, User, Filter, RefreshCw, XCircle, CheckCircle, AlertTriangle, Copy, ExternalLink, Volume2, VolumeX, Bell, BellOff, Users, Timer } from 'lucide-react';
 import { apiClient } from '../services/apiClient';
 import SurgeryScheduler from '../components/SurgeryScheduler';
+import { clinicConfigService, QueueStats, ClinicCategory } from '../services/clinicConfigService';
 
 interface Appointment {
   id: number;
@@ -12,6 +13,9 @@ interface Appointment {
   time_slot: string;
   doctor_assigned: string;
   status: string;
+  station_number?: number;
+  category?: string;
+  priority?: number;
   created_at: string;
 }
 
@@ -258,6 +262,28 @@ const ClinicAppointmentsPage: React.FC = () => {
 
   useEffect(() => { fetchAppointments(); }, [fetchAppointments]);
 
+  // Patient categories (for colour-coded badges)
+  const [categories, setCategories] = useState<ClinicCategory[]>([]);
+  useEffect(() => {
+    clinicConfigService.getCategories().then(setCategories).catch(() => {});
+  }, []);
+  const categoryColor = useCallback(
+    (name?: string) => categories.find(c => c.name === name)?.color || '#6B7280',
+    [categories]
+  );
+
+  // Queue analytics for the selected date
+  const [queueStats, setQueueStats] = useState<QueueStats | null>(null);
+  const fetchQueueStats = useCallback(async () => {
+    if (!filterDate) { setQueueStats(null); return; }
+    try {
+      setQueueStats(await clinicConfigService.getQueueStats(filterDate));
+    } catch {
+      setQueueStats(null);
+    }
+  }, [filterDate]);
+  useEffect(() => { fetchQueueStats(); }, [fetchQueueStats, appointments]);
+
   const updateStatus = async (id: number, status: string) => {
     setUpdating(id);
     try {
@@ -461,6 +487,53 @@ const ClinicAppointmentsPage: React.FC = () => {
         ))}
       </div>
 
+      {/* Queue Analytics (per-station) */}
+      {queueStats && queueStats.stations.length > 0 && (
+        <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4">
+          <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <Users className="w-4 h-4 text-green-600" />
+              <span className="text-sm font-semibold text-gray-700">
+                Station Queues &middot; {queueStats.dayName}
+              </span>
+            </div>
+            {queueStats.avgWaitMinutes != null && (
+              <div className="flex items-center gap-1.5 text-sm text-gray-600">
+                <Timer className="w-4 h-4 text-amber-500" />
+                Avg wait: <span className="font-semibold text-gray-900">{queueStats.avgWaitMinutes} min</span>
+              </div>
+            )}
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {queueStats.stations.map(st => (
+              <div key={st.station} className="rounded-lg border border-gray-200 p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-semibold text-gray-800">Station {st.station}</span>
+                  <span className="text-xs text-gray-500">{st.doctor}</span>
+                </div>
+                <div className="grid grid-cols-4 gap-1 text-center">
+                  <div><p className="text-lg font-bold text-yellow-700">{st.waiting}</p><p className="text-[10px] text-gray-500">Waiting</p></div>
+                  <div><p className="text-lg font-bold text-purple-700">{st.inProgress}</p><p className="text-[10px] text-gray-500">In Prog.</p></div>
+                  <div><p className="text-lg font-bold text-green-700">{st.completed}</p><p className="text-[10px] text-gray-500">Done</p></div>
+                  <div><p className="text-lg font-bold text-gray-500">{st.noShow}</p><p className="text-[10px] text-gray-500">No-show</p></div>
+                </div>
+              </div>
+            ))}
+          </div>
+          {Object.keys(queueStats.byCategory).length > 0 && (
+            <div className="mt-3 pt-3 border-t border-gray-100 flex flex-wrap gap-2">
+              {Object.entries(queueStats.byCategory).map(([name, count]) => (
+                <span key={name} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
+                  style={{ backgroundColor: `${categoryColor(name)}1A`, color: categoryColor(name) }}>
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: categoryColor(name) }} />
+                  {name}: {count}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Filters */}
       <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4">
         <div className="flex items-center gap-2 mb-3">
@@ -516,6 +589,8 @@ const ClinicAppointmentsPage: React.FC = () => {
                 <tr>
                   <th className="text-left px-4 py-3 font-semibold text-gray-700">Time</th>
                   <th className="text-left px-4 py-3 font-semibold text-gray-700">Patient</th>
+                  <th className="text-left px-4 py-3 font-semibold text-gray-700">Category</th>
+                  <th className="text-left px-4 py-3 font-semibold text-gray-700">Station</th>
                   <th className="text-left px-4 py-3 font-semibold text-gray-700">Doctor</th>
                   <th className="text-left px-4 py-3 font-semibold text-gray-700">Status</th>
                   <th className="text-left px-4 py-3 font-semibold text-gray-700">Actions</th>
@@ -544,6 +619,24 @@ const ClinicAppointmentsPage: React.FC = () => {
                           )}
                         </div>
                       </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      {a.category ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
+                          style={{ backgroundColor: `${categoryColor(a.category)}1A`, color: categoryColor(a.category) }}>
+                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: categoryColor(a.category) }} />
+                          {a.category}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-400">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {a.station_number ? (
+                        <span className="inline-block px-2 py-0.5 rounded bg-gray-100 text-gray-700 text-xs font-semibold">#{a.station_number}</span>
+                      ) : (
+                        <span className="text-xs text-gray-400">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 font-medium text-gray-700">{a.doctor_assigned}</td>
                     <td className="px-4 py-3">

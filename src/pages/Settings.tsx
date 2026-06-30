@@ -34,6 +34,7 @@ import { db } from '../db/database';
 import { useAuthStore } from '../store/authStore';
 import toast from 'react-hot-toast';
 import { SyncConflictsViewer } from '../components/SyncConflictsViewer';
+import ClinicConfigPanel from '../components/ClinicConfigPanel';
 
 interface LocalDataSummary {
   entity: string;
@@ -721,6 +722,11 @@ export default function Settings() {
 
       {/* ──────────────────────── SYNC CONFLICTS LOG ──────────────────────── */}
       <SyncConflictsViewer />
+
+      {/* ──────────────────────── CLINIC CONFIGURATION (admin) ──────────────────────── */}
+      {['admin', 'consultant', 'senior_registrar'].includes(user?.role || '') && (
+        <ClinicConfigPanel />
+      )}
 
       {/* ──────────────────────── ACCOUNT SECTION ──────────────────────── */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
