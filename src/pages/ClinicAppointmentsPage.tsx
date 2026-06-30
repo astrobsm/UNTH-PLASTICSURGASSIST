@@ -3,6 +3,7 @@ import { Calendar, Clock, User, Filter, RefreshCw, XCircle, CheckCircle, AlertTr
 import { apiClient } from '../services/apiClient';
 import SurgeryScheduler from '../components/SurgeryScheduler';
 import SurgeryQueuePanel from '../components/SurgeryQueuePanel';
+import { broadcastChange, useCrossTabRefresh } from '../utils/crossTabSync';
 import { clinicConfigService, QueueStats, ClinicCategory } from '../services/clinicConfigService';
 
 interface Appointment {
@@ -279,6 +280,9 @@ const ClinicAppointmentsPage: React.FC = () => {
     };
   }, [fetchAppointments]);
 
+  // Cross-tab sync: refresh when another tab/device mutates appointments
+  useCrossTabRefresh('appointments', fetchAppointments);
+
   // Patient categories (for colour-coded badges)
   const [categories, setCategories] = useState<ClinicCategory[]>([]);
   useEffect(() => {
@@ -309,6 +313,7 @@ const ClinicAppointmentsPage: React.FC = () => {
         body: JSON.stringify({ status }),
       });
       await fetchAppointments();
+      broadcastChange('appointments');
     } catch (err) {
       console.error('Failed to update status:', err);
       alert('Failed to update appointment status');
@@ -328,6 +333,7 @@ const ClinicAppointmentsPage: React.FC = () => {
     try {
       await clinicConfigService.createSurgeryQueueEntry(id);
       setSurgeryRefresh(k => k + 1);
+      broadcastChange('appointments');
     } catch (err) {
       console.error('Failed to add to surgery queue:', err);
       alert('Failed to add patient to surgery queue');

@@ -25,6 +25,7 @@ const HOTrackingPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<Tab>('summary');
+  const [sortBy, setSortBy] = useState<'overall' | 'cbt' | 'patients' | 'name'>('overall');
   const [signOutLoading, setSignOutLoading] = useState(false);
   const [signOutMsg, setSignOutMsg] = useState<string | null>(null);
 
@@ -113,6 +114,32 @@ const HOTrackingPage: React.FC = () => {
     (ho.email || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const sortedHOs = [...filteredHOs].sort((a, b) => {
+    switch (sortBy) {
+      case 'cbt': return b.metrics.cbtAvgScore - a.metrics.cbtAvgScore;
+      case 'patients': return b.metrics.patientEntries - a.metrics.patientEntries;
+      case 'name': return a.full_name.localeCompare(b.full_name);
+      case 'overall':
+      default: return b.metrics.overallScore - a.metrics.overallScore;
+    }
+  });
+
+  // Cohort-level analytics across all (unfiltered) house officers
+  const cohort = (() => {
+    const n = houseOfficers.length;
+    if (n === 0) return null;
+    const sum = (sel: (h: HOProfile) => number) => houseOfficers.reduce((t, h) => t + sel(h), 0);
+    const top = [...houseOfficers].sort((a, b) => b.metrics.overallScore - a.metrics.overallScore)[0];
+    return {
+      total: n,
+      eligible: houseOfficers.filter(h => h.eligibility.eligible).length,
+      avgOverall: Math.round(sum(h => h.metrics.overallScore) / n),
+      avgCbt: Math.round(sum(h => h.metrics.cbtAvgScore) / n),
+      totalPatients: sum(h => h.metrics.patientEntries),
+      topPerformer: top,
+    };
+  })();
+
   const scoreColor = (score: number, max: number = 100) => {
     const pct = (score / max) * 100;
     if (pct >= 75) return 'text-green-600';
@@ -146,11 +173,44 @@ const HOTrackingPage: React.FC = () => {
 
         {error && <div className="bg-red-50 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>}
 
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <input type="text" placeholder="Search house officers..." value={searchQuery}
-                 onChange={e => setSearchQuery(e.target.value)}
-                 className="w-full sm:w-80 pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500" />
+        {/* Cohort analytics band */}
+        {!loading && cohort && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {[
+              { label: 'House Officers', value: String(cohort.total), icon: Users, color: 'text-primary-600' },
+              { label: 'Eligible', value: `${cohort.eligible}/${cohort.total}`, icon: CheckCircle, color: 'text-green-600' },
+              { label: 'Avg Overall', value: `${cohort.avgOverall}%`, icon: Target, color: scoreColor(cohort.avgOverall) },
+              { label: 'Avg CBT', value: `${cohort.avgCbt}%`, icon: ClipboardCheck, color: scoreColor(cohort.avgCbt) },
+              { label: 'Patients Served', value: String(cohort.totalPatients), icon: Activity, color: 'text-cyan-600' },
+              { label: 'Top Performer', value: cohort.topPerformer.full_name.split(' ')[0], icon: Award, color: 'text-amber-600' },
+            ].map(stat => (
+              <div key={stat.label} className="card p-3 text-center">
+                <stat.icon className={`h-5 w-5 mx-auto mb-1 ${stat.color}`} />
+                <p className={`text-base font-bold truncate ${stat.color}`} title={stat.value}>{stat.value}</p>
+                <p className="text-[10px] text-gray-500">{stat.label}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input type="text" placeholder="Search house officers..." value={searchQuery}
+                   onChange={e => setSearchQuery(e.target.value)}
+                   className="w-full sm:w-80 pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500" />
+          </div>
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-4 w-4 text-gray-400" />
+            <label className="text-xs text-gray-500">Rank by</label>
+            <select value={sortBy} onChange={e => setSortBy(e.target.value as typeof sortBy)}
+                    className="text-sm border border-gray-300 rounded-lg px-2 py-2 focus:ring-primary-500 focus:border-primary-500">
+              <option value="overall">Overall Score</option>
+              <option value="cbt">CBT Average</option>
+              <option value="patients">Patients Served</option>
+              <option value="name">Name (A–Z)</option>
+            </select>
+          </div>
         </div>
 
         {loading ? (
@@ -162,11 +222,21 @@ const HOTrackingPage: React.FC = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {filteredHOs.map(ho => (
+            {sortedHOs.map((ho, idx) => {
+              const ranked = sortBy !== 'name';
+              const medal = ranked && idx < 3;
+              return (
               <div key={ho.id}
                    onClick={() => handleSelectHO(ho)}
-                   className="card p-4 hover:shadow-md cursor-pointer transition-shadow border-l-4"
+                   className="card p-4 hover:shadow-md cursor-pointer transition-shadow border-l-4 relative"
                    style={{ borderLeftColor: ho.eligibility.eligible ? '#10b981' : ho.metrics.overallScore >= 50 ? '#f59e0b' : '#ef4444' }}>
+                {medal && (
+                  <span className={`absolute -top-2 -left-2 h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold text-white shadow ${
+                    idx === 0 ? 'bg-amber-500' : idx === 1 ? 'bg-gray-400' : 'bg-orange-700'
+                  }`} title={`Rank #${idx + 1}`}>
+                    {idx + 1}
+                  </span>
+                )}
                 <div className="flex items-start justify-between mb-3">
                   <div>
                     <h3 className="font-semibold text-clinical-dark">{ho.full_name}</h3>
@@ -212,7 +282,8 @@ const HOTrackingPage: React.FC = () => {
                   View Details <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
