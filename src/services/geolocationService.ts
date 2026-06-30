@@ -81,6 +81,9 @@ function haversineDistance(
 // ── Throttled reverse geocoding ─────────────────────────────────────────
 let lastGeocodeTime = 0;
 
+// Emit the "geolocation unavailable" warning only once per session.
+let geoUnavailableWarned = false;
+
 async function reverseGeocode(lat: number, lon: number): Promise<string | undefined> {
   const now = Date.now();
   if (now - lastGeocodeTime < CONFIG.GEOCODE_THROTTLE_MS) {
@@ -237,7 +240,12 @@ export async function captureLocation(options?: {
       // Fallback: single fix
       pos = await getSinglePosition(CONFIG.SINGLE_FIX_TIMEOUT_MS);
     } catch {
-      console.warn('⚠️ Geolocation unavailable — user denied or device has no GPS');
+      // Log this only once per session — pollers call this repeatedly and
+      // would otherwise flood the console with identical warnings.
+      if (!geoUnavailableWarned) {
+        geoUnavailableWarned = true;
+        console.warn('⚠️ Geolocation unavailable — user denied or device has no GPS (further warnings suppressed)');
+      }
       return null;
     }
   }

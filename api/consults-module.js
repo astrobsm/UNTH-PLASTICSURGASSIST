@@ -114,7 +114,12 @@ async function ensureTables() {
        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, sent_at TIMESTAMPTZ
      )`,
   ];
-  for (const s of stmts) await query(s);
+  for (const s of stmts) {
+    // Best-effort per statement: a pre-existing table with drifted schema
+    // must not 500 the whole module. CREATE TABLE IF NOT EXISTS is a no-op
+    // when the table already exists, so swallowing here is safe.
+    try { await query(s); } catch (e) { console.warn('consults ensureTables stmt skipped:', e.message); }
+  }
   // Indices (best-effort)
   const idx = [
     `CREATE INDEX IF NOT EXISTS idx_consult_links_token ON consult_submission_links(token) WHERE is_active = TRUE`,

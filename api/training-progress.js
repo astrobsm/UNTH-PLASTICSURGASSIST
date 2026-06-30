@@ -42,17 +42,24 @@ async function getProgress(req, res, userId) {
   
   const completedTopics = result.rows.map(r => r.topic_id);
   
-  // Get CBT progress as well
-  const cbtResult = await query(
-    `SELECT level, COUNT(*) as completed_tests, AVG(percentage) as average_score
-     FROM cbt_attempts WHERE user_id = $1 AND completed = true GROUP BY level`,
-    [userId]
-  );
+  // Get CBT progress as well — tolerate schema drift (older deployments may
+  // lack the `completed`/`percentage` columns); never let this 500 the GET.
+  let cbtRows = [];
+  try {
+    const cbtResult = await query(
+      `SELECT level, COUNT(*) as completed_tests, AVG(percentage) as average_score
+       FROM cbt_attempts WHERE user_id = $1 AND completed = true GROUP BY level`,
+      [userId]
+    );
+    cbtRows = cbtResult.rows;
+  } catch (e) {
+    console.warn('training-progress: cbt_attempts aggregate skipped:', e.message);
+  }
   
   return res.status(200).json({
     completedTopics,
     progress: result.rows,
-    cbtProgress: cbtResult.rows
+    cbtProgress: cbtRows
   });
 }
 
