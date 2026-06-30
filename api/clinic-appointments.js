@@ -48,6 +48,21 @@ const DEFAULT_CATEGORIES = [
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
+// Default pre-operative planning checklist created when a "Surgery Scheduling"
+// appointment is booked or promoted into the surgical queue.
+const SURGERY_CHECKLIST_ITEMS = ['preop_checklist', 'consent', 'investigations', 'anaesthetic_review', 'theatre_booking', 'admission'];
+function defaultSurgeryChecklist() {
+  const c = {};
+  SURGERY_CHECKLIST_ITEMS.forEach(k => { c[k] = false; });
+  return c;
+}
+function deriveQueueStatus(checklist) {
+  const vals = SURGERY_CHECKLIST_ITEMS.map(k => !!checklist[k]);
+  if (vals.every(Boolean)) return 'ready';
+  if (vals.some(Boolean)) return 'in_progress';
+  return 'pending';
+}
+
 async function ensureTable() {
   if (tableEnsured) return;
   // Base appointments table
@@ -111,6 +126,21 @@ async function ensureTable() {
         UNIQUE(doctor_name, unavailable_date)
      )`,
     `CREATE INDEX IF NOT EXISTS idx_doctor_unavail_date ON doctor_unavailability(unavailable_date)`,
+    `CREATE TABLE IF NOT EXISTS surgery_scheduling_queue (
+        id SERIAL PRIMARY KEY,
+        appointment_id INTEGER UNIQUE,
+        patient_number VARCHAR(100),
+        patient_name VARCHAR(255),
+        phone_number VARCHAR(20),
+        appointment_date DATE,
+        checklist JSONB NOT NULL DEFAULT '{}',
+        status VARCHAR(30) DEFAULT 'pending',
+        notes TEXT,
+        created_by VARCHAR(180),
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+     )`,
+    `CREATE INDEX IF NOT EXISTS idx_surgery_queue_status ON surgery_scheduling_queue(status)`,
   ];
   for (const s of stmts) { try { await query(s); } catch (e) { console.warn('ensureTable stmt skipped:', e.message); } }
 
@@ -297,6 +327,12 @@ export default async function handler(req, res) {
     }
     if (action === 'queue-stats' && method === 'GET') {
       return await getQueueStats(searchParams, config, res);
+    }
+    if (action === 'surgery-queue') {
+      if (method === 'GET') return await getSurgeryQueue(searchParams, res);
+      if (method === 'POST') return await createSurgeryQueueEntry(req.body, auth.user, res);
+      if (method === 'PATCH' || method === 'PUT') return await updateSurgeryQueueEntry(req.body, res);
+      if (method === 'DELETE') return await deleteSurgeryQueueEntry(searchParams.get('id'), res);
     }
 
     switch (method) {
@@ -602,6 +638,19 @@ async function bookAppointment(body, config, res) {
     [sanitizedPatientNumber, sanitizedName, sanitizedPhone, date, time_slot, doctor, station, cat ? cat.name : (category || null), priority]
   );
 
+  // Surgery Scheduling appointments auto-create a pre-op planning checklist
+  if (cat && /surgery scheduling/i.test(cat.name)) {
+    try {
+      await query(
+        `INSERT INTO surgery_scheduling_queue
+           (appointment_id, patient_number, patient_name, phone_number, appointment_date, checklist, status)
+         VALUES ($1,$2,$3,$4,$5,$6,'pending')
+         ON CONFLICT (appointment_id) DO NOTHING`,
+        [result.rows[0].id, sanitizedPatientNumber, sanitizedName, sanitizedPhone, date, JSON.stringify(defaultSurgeryChecklist())]
+      );
+    } catch (e) { console.warn('surgery queue auto-create skipped:', e.message); }
+  }
+
   res.status(201).json({ appointment: result.rows[0] });
 }
 
@@ -736,4 +785,74 @@ async function cancelAppointment(id, user, res) {
   );
   if (result.rows.length === 0) return res.status(404).json({ error: 'Appointment not found' });
   res.status(200).json({ appointment: result.rows[0], message: 'Appointment cancelled' });
+}
+
+// ── PROTECTED: surgery scheduling queue (Phase 2 integration) ───────────────
+function parseChecklist(raw) {
+  let c = raw;
+  if (typeof c === 'string') { try { c = JSON.parse(c); } catch { c = {}; } }
+  return { ...defaultSurgeryChecklist(), ...(c || {}) };
+}
+
+async function getSurgeryQueue(params, res) {
+  const status = params.get('status');
+  let sql = `SELECT * FROM surgery_scheduling_queue WHERE 1=1`;
+  const args = [];
+  if (status) { args.push(status); sql += ` AND status = $${args.length}`; }
+  else { sql += ` AND status != 'cancelled'`; }
+  sql += ` ORDER BY (status = 'ready') DESC, appointment_date ASC, created_at ASC`;
+  try {
+    const r = await query(sql, args);
+    const entries = r.rows.map(row => ({ ...row, checklist: parseChecklist(row.checklist) }));
+    res.status(200).json({ entries, items: SURGERY_CHECKLIST_ITEMS });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+}
+
+async function createSurgeryQueueEntry(body, user, res) {
+  const { appointment_id } = body || {};
+  if (!appointment_id) return res.status(400).json({ error: 'appointment_id is required' });
+  try {
+    const appt = await query(`SELECT * FROM clinic_appointments WHERE id = $1`, [parseInt(appointment_id, 10)]);
+    if (!appt.rows.length) return res.status(404).json({ error: 'Appointment not found' });
+    const a = appt.rows[0];
+    const r = await query(
+      `INSERT INTO surgery_scheduling_queue
+         (appointment_id, patient_number, patient_name, phone_number, appointment_date, checklist, status, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,'pending',$7)
+       ON CONFLICT (appointment_id) DO UPDATE SET updated_at = CURRENT_TIMESTAMP
+       RETURNING *`,
+      [a.id, a.patient_number, a.patient_name, a.phone_number, a.appointment_date,
+       JSON.stringify(defaultSurgeryChecklist()), user?.fullName || user?.email || 'staff']
+    );
+    res.status(201).json({ entry: { ...r.rows[0], checklist: parseChecklist(r.rows[0].checklist) } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+}
+
+async function updateSurgeryQueueEntry(body, res) {
+  const { id, checklist, status, notes } = body || {};
+  if (!id) return res.status(400).json({ error: 'id is required' });
+  try {
+    const existing = await query(`SELECT * FROM surgery_scheduling_queue WHERE id = $1`, [parseInt(id, 10)]);
+    if (!existing.rows.length) return res.status(404).json({ error: 'Queue entry not found' });
+
+    const newChecklist = checklist ? { ...parseChecklist(existing.rows[0].checklist), ...checklist } : parseChecklist(existing.rows[0].checklist);
+    // Explicit status wins; otherwise derive from checklist completeness
+    const newStatus = status || deriveQueueStatus(newChecklist);
+
+    const r = await query(
+      `UPDATE surgery_scheduling_queue
+         SET checklist = $2, status = $3, notes = COALESCE($4, notes), updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1 RETURNING *`,
+      [parseInt(id, 10), JSON.stringify(newChecklist), newStatus, notes ?? null]
+    );
+    res.status(200).json({ entry: { ...r.rows[0], checklist: parseChecklist(r.rows[0].checklist) } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+}
+
+async function deleteSurgeryQueueEntry(id, res) {
+  if (!id) return res.status(400).json({ error: 'id is required' });
+  try {
+    await query(`UPDATE surgery_scheduling_queue SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [parseInt(id, 10)]);
+    res.status(200).json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 }

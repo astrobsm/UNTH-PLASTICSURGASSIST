@@ -54,6 +54,29 @@ export interface QueueStats {
   stations: StationQueue[];
 }
 
+export interface SurgeryQueueEntry {
+  id: number;
+  appointment_id: number;
+  patient_number: string;
+  patient_name: string;
+  phone_number?: string;
+  appointment_date: string;
+  checklist: Record<string, boolean>;
+  status: 'pending' | 'in_progress' | 'ready' | 'scheduled' | 'cancelled';
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export const SURGERY_CHECKLIST_LABELS: Record<string, string> = {
+  preop_checklist: 'Pre-op checklist',
+  consent: 'Consent',
+  investigations: 'Investigations',
+  anaesthetic_review: 'Anaesthetic review',
+  theatre_booking: 'Theatre booking',
+  admission: 'Admission',
+};
+
 export const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 class ClinicConfigService {
@@ -112,6 +135,36 @@ class ClinicConfigService {
   async getQueueStats(date: string): Promise<QueueStats> {
     const data = await apiClient.request(`/clinic-appointments/queue-stats?date=${date}`);
     return data;
+  }
+
+  // ── Surgery scheduling queue (Phase 2) ──
+  async getSurgeryQueue(status?: string): Promise<SurgeryQueueEntry[]> {
+    const qs = status ? `?status=${status}` : '';
+    const data = await apiClient.request(`/clinic-appointments/surgery-queue${qs}`);
+    return data.entries || [];
+  }
+
+  async createSurgeryQueueEntry(appointment_id: number): Promise<SurgeryQueueEntry> {
+    const data = await apiClient.request('/clinic-appointments/surgery-queue', {
+      method: 'POST',
+      body: JSON.stringify({ appointment_id }),
+    });
+    return data.entry;
+  }
+
+  async updateSurgeryQueueEntry(
+    id: number,
+    patch: { checklist?: Record<string, boolean>; status?: string; notes?: string }
+  ): Promise<SurgeryQueueEntry> {
+    const data = await apiClient.request('/clinic-appointments/surgery-queue', {
+      method: 'PATCH',
+      body: JSON.stringify({ id, ...patch }),
+    });
+    return data.entry;
+  }
+
+  async removeSurgeryQueueEntry(id: number): Promise<void> {
+    await apiClient.request(`/clinic-appointments/surgery-queue?id=${id}`, { method: 'DELETE' });
   }
 }
 

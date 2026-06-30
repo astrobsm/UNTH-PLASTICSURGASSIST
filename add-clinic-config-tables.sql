@@ -82,3 +82,25 @@ SELECT 1, '{
   }
 }'::jsonb
 WHERE NOT EXISTS (SELECT 1 FROM clinic_config WHERE id = 1);
+
+-- ============================================================================
+-- Phase 2 — Surgery Scheduling Integration
+-- When a patient is booked under the "Surgery Scheduling" category (or promoted
+-- from an appointment), a queue entry is created with a pre-op planning
+-- checklist. Status is derived from checklist completeness.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS surgery_scheduling_queue (
+  id                SERIAL PRIMARY KEY,
+  appointment_id    INTEGER UNIQUE,
+  patient_number    VARCHAR(100),
+  patient_name      VARCHAR(255),
+  phone_number      VARCHAR(20),
+  appointment_date  DATE,
+  checklist         JSONB NOT NULL DEFAULT '{}',  -- preop_checklist, consent, investigations, anaesthetic_review, theatre_booking, admission
+  status            VARCHAR(30) DEFAULT 'pending', -- pending | in_progress | ready | scheduled | cancelled
+  notes             TEXT,
+  created_by        VARCHAR(180),
+  created_at        TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  updated_at        TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_surgery_queue_status ON surgery_scheduling_queue(status, appointment_date);

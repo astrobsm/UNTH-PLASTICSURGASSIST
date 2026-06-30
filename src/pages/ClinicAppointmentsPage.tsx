@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Calendar, Clock, User, Filter, RefreshCw, XCircle, CheckCircle, AlertTriangle, Copy, ExternalLink, Volume2, VolumeX, Bell, BellOff, Users, Timer } from 'lucide-react';
+import { Calendar, Clock, User, Filter, RefreshCw, XCircle, CheckCircle, AlertTriangle, Copy, ExternalLink, Volume2, VolumeX, Bell, BellOff, Users, Timer, Scissors } from 'lucide-react';
 import { apiClient } from '../services/apiClient';
 import SurgeryScheduler from '../components/SurgeryScheduler';
+import SurgeryQueuePanel from '../components/SurgeryQueuePanel';
 import { clinicConfigService, QueueStats, ClinicCategory } from '../services/clinicConfigService';
 
 interface Appointment {
@@ -262,6 +263,22 @@ const ClinicAppointmentsPage: React.FC = () => {
 
   useEffect(() => { fetchAppointments(); }, [fetchAppointments]);
 
+  // Realtime-lite: refresh when the tab regains focus and on a gentle poll,
+  // so multiple staff devices stay roughly in sync without heavy infra.
+  useEffect(() => {
+    const onFocus = () => { if (document.visibilityState === 'visible') fetchAppointments(); };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+    const poll = setInterval(() => {
+      if (document.visibilityState === 'visible') fetchAppointments();
+    }, 60000);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
+      clearInterval(poll);
+    };
+  }, [fetchAppointments]);
+
   // Patient categories (for colour-coded badges)
   const [categories, setCategories] = useState<ClinicCategory[]>([]);
   useEffect(() => {
@@ -303,6 +320,18 @@ const ClinicAppointmentsPage: React.FC = () => {
   const cancelAppointment = async (id: number) => {
     if (!confirm('Are you sure you want to cancel this appointment?')) return;
     await updateStatus(id, 'cancelled');
+  };
+
+  // Promote an appointment into the surgery scheduling queue
+  const [surgeryRefresh, setSurgeryRefresh] = useState(0);
+  const promoteToSurgery = async (id: number) => {
+    try {
+      await clinicConfigService.createSurgeryQueueEntry(id);
+      setSurgeryRefresh(k => k + 1);
+    } catch (err) {
+      console.error('Failed to add to surgery queue:', err);
+      alert('Failed to add patient to surgery queue');
+    }
   };
 
   const copyLink = () => {
@@ -487,9 +516,12 @@ const ClinicAppointmentsPage: React.FC = () => {
         ))}
       </div>
 
+      {/* Surgery Scheduling Queue (Phase 2) */}
+      <SurgeryQueuePanel refreshKey={surgeryRefresh} />
+
       {/* Queue Analytics (per-station) */}
       {queueStats && queueStats.stations.length > 0 && (
-        <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4">
+          <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4">
           <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
             <div className="flex items-center gap-2">
               <Users className="w-4 h-4 text-green-600" />
@@ -675,6 +707,12 @@ const ClinicAppointmentsPage: React.FC = () => {
                               <AlertTriangle className="w-3 h-3 inline mr-0.5" />No Show
                             </button>
                           )}
+                          <button onClick={() => promoteToSurgery(a.id)}
+                            disabled={updating === a.id}
+                            title="Add to surgery scheduling queue"
+                            className="px-2 py-1 bg-orange-100 text-orange-700 rounded text-xs font-medium hover:bg-orange-200 disabled:opacity-50">
+                            <Scissors className="w-3 h-3 inline mr-0.5" />Surgery
+                          </button>
                           <button onClick={() => cancelAppointment(a.id)}
                             disabled={updating === a.id}
                             className="px-2 py-1 bg-red-100 text-red-700 rounded text-xs font-medium hover:bg-red-200 disabled:opacity-50">
