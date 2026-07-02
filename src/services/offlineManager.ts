@@ -8,6 +8,18 @@ import { apiClient } from './apiClient';
 import { logger } from '../utils/logger';
 import toast from 'react-hot-toast';
 
+// Tables that have NO dedicated REST endpoint and must sync through the generic
+// /sync/push endpoint (mirrors syncService.syncGenericEntity). Without this,
+// offlineManager builds e.g. /api/call-duty-roster which 404s.
+const GENERIC_SYNC_TABLES = new Set<string>([
+  'shopping_lists', 'call_duty_roster', 'clinic_duty_logs', 'cbt_attempts',
+  'blood_transfusions', 'burn_patients', 'diabetic_foot_assessments', 'procedures',
+  'who_safety_checklists', 'ward_rounds_clinical', 'mdt_patient_teams', 'mdt_meetings',
+  'mdt_contact_logs', 'sjs_assessments', 'substance_use_assessments',
+  'detox_monitoring_records', 'detox_follow_ups', 'substance_use_clinical_summaries',
+  'investigation_uploads', 'notice_board', 'audit_logs', 'patient_assignments',
+]);
+
 // Sync queue item interface
 export interface QueuedRequest {
   id?: number;
@@ -403,6 +415,36 @@ class OfflineManager {
     const baseUrl = (import.meta as any).env?.VITE_API_BASE_URL 
       || ((import.meta as any).env?.PROD ? '/api' : 'http://localhost:3005/api');
     const tableName = table.replace(/_/g, '-');
+
+    // Entities without a dedicated REST endpoint sync via the generic /sync/push
+    // endpoint. Building /api/<table> for these returns 404 (the original bug).
+    if (GENERIC_SYNC_TABLES.has(table)) {
+      const entityId = (data && (data.id ?? local_id)) ?? local_id;
+      const payload = { ...(data || {}) };
+      delete (payload as any).synced;
+      const response = await fetch(`${baseUrl}/sync/push`, {
+        method: 'POST',
+        headers,
+        credentials: 'include',
+        body: JSON.stringify({
+          changes: [{
+            entityType: table,
+            entityId: String(entityId),
+            action: action === 'delete' ? 'delete' : 'upsert',
+            payload,
+          }],
+        }),
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP ${response.status}`);
+      }
+      const tableRef = (db as any)[table];
+      if (tableRef && local_id) {
+        try { await tableRef.update(local_id, { synced: true }); } catch { /* string-key table */ }
+      }
+      return;
+    }
 
     let endpoint: string;
     let method: string;
