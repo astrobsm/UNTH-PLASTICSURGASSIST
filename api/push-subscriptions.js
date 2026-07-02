@@ -34,9 +34,6 @@ async function saveSubscription(data, user, res) {
     return res.status(400).json({ error: 'Endpoint and keys are required' });
   }
 
-  // Ensure table exists (idempotent)
-  await ensurePushSubscriptionsTable();
-
   // Coerce user.id to string so it matches the TEXT column even if the JWT
   // payload stores it as a number.
   const userId = user?.id != null ? String(user.id) : null;
@@ -45,9 +42,13 @@ async function saveSubscription(data, user, res) {
   }
 
   try {
-    // Check if subscription already exists
+    // Ensure table exists and self-heal any schema drift (idempotent, never throws)
+    await ensurePushSubscriptionsTable();
+
+    // Compare with an explicit ::text cast so this works whether the existing
+    // user_id column is TEXT or a legacy INTEGER.
     const existingResult = await query(
-      'SELECT id FROM push_subscriptions WHERE user_id = $1 AND endpoint = $2',
+      'SELECT id FROM push_subscriptions WHERE user_id::text = $1 AND endpoint = $2',
       [userId, endpoint]
     );
 
@@ -55,7 +56,7 @@ async function saveSubscription(data, user, res) {
       const result = await query(
         `UPDATE push_subscriptions 
          SET keys = $1, updated_at = NOW()
-         WHERE user_id = $2 AND endpoint = $3
+         WHERE user_id::text = $2 AND endpoint = $3
          RETURNING *`,
         [JSON.stringify(keys), userId, endpoint]
       );
@@ -70,9 +71,8 @@ async function saveSubscription(data, user, res) {
     );
     return res.status(201).json({ subscription: result.rows[0] });
   } catch (err) {
-    // Most common production failure: an older push_subscriptions table whose
-    // user_id column is INTEGER. Log the detail and surface a clear error
-    // instead of a generic 500.
+    // Surface a clear error instead of a generic 500. Push-subscription failure
+    // is non-fatal to the app, but we still report it accurately.
     console.error('saveSubscription failed:', err.message, err.code);
     return res.status(500).json({
       error: 'Failed to save push subscription',
@@ -85,18 +85,30 @@ async function saveSubscription(data, user, res) {
 }
 
 async function ensurePushSubscriptionsTable() {
-  await query(`
-    CREATE TABLE IF NOT EXISTS push_subscriptions (
+  // Self-healing: create if missing, and best-effort migrate legacy schemas
+  // (e.g. an older push_subscriptions with user_id INTEGER, or a missing
+  // keys / is_active column). Each statement is isolated so a single failure
+  // never aborts the whole request.
+  const stmts = [
+    `CREATE TABLE IF NOT EXISTS push_subscriptions (
       id SERIAL PRIMARY KEY,
       user_id TEXT NOT NULL,
       endpoint TEXT NOT NULL,
-      keys JSONB NOT NULL,
+      keys JSONB,
       is_active BOOLEAN DEFAULT TRUE,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(user_id, endpoint)
-    )
-  `);
+    )`,
+    `ALTER TABLE push_subscriptions ALTER COLUMN user_id TYPE TEXT USING user_id::text`,
+    `ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS keys JSONB`,
+    `ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE`,
+    `ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,
+    `ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,
+  ];
+  for (const s of stmts) {
+    try { await query(s); } catch (e) { console.warn('ensurePushSubscriptionsTable:', e.message); }
+  }
 }
 
 async function getAllSubscriptions(res) {
