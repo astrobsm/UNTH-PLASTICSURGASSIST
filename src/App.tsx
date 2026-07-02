@@ -284,6 +284,11 @@ function App() {
         {/* Video Conference - Full screen without Layout */}
         <Route path="/conference" element={<VideoConference />} />
         <Route path="/conference/:roomId" element={<VideoConference />} />
+
+        {/* Public student pages — reachable even when a staff user is logged in
+            (e.g. an admin previewing the shared /student-register link) */}
+        <Route path="/student-register" element={<StudentRegister />} />
+        <Route path="/student-login" element={<StudentLogin />} />
         
         {/* All other routes with Layout */}
         <Route path="/*" element={
