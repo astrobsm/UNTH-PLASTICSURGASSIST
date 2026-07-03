@@ -143,6 +143,88 @@ async function assignPatientsToNewUser(userId, userRole, userName) {
   }
 }
 
+// Map a user role to a rotation level + expected duration (days).
+// Only trainee roles get a rotation; non-trainees (admin/consultant) return null.
+function rotationPlanForRole(role) {
+  switch (role) {
+    case 'house_officer':
+    case 'intern':
+      return { level: 'house_officer', durationDays: 30 };
+    case 'junior_registrar':
+    case 'registrar':
+      return { level: 'junior_resident', durationDays: 90 };
+    case 'senior_registrar':
+      return { level: 'senior_resident', durationDays: 180 };
+    default:
+      return null; // consultant, admin, super_admin, student — no auto rotation
+  }
+}
+
+// Ensure the trainee_rotations table exists (self-healing, idempotent).
+async function ensureTraineeRotationsTable() {
+  try {
+    await query(`
+      CREATE TABLE IF NOT EXISTS trainee_rotations (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        level VARCHAR(50) NOT NULL,
+        department VARCHAR(255) DEFAULT 'Plastic Surgery',
+        start_date DATE NOT NULL,
+        expected_end_date DATE NOT NULL,
+        actual_end_date DATE,
+        status VARCHAR(50) DEFAULT 'active',
+        extension_count INTEGER DEFAULT 0,
+        extension_reasons JSONB DEFAULT '[]',
+        sign_out_approved BOOLEAN DEFAULT FALSE,
+        sign_out_approved_by INTEGER,
+        sign_out_approved_at TIMESTAMP,
+        sign_out_comments TEXT,
+        self_assessment JSONB,
+        supervisor_feedback JSONB,
+        final_score DECIMAL(5,2),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+  } catch (e) {
+    console.warn('ensureTraineeRotationsTable:', e.message);
+  }
+}
+
+/**
+ * Auto-start a rotation for a newly created/approved trainee so their CBT,
+ * duties, CME and patient-care metrics are captured from day one. Idempotent:
+ * skips if the user is not a trainee role or already has an active rotation.
+ */
+async function ensureTraineeRotation(userId, role) {
+  try {
+    const plan = rotationPlanForRole(role);
+    if (!plan) return { started: false, reason: 'Not a trainee role' };
+
+    await ensureTraineeRotationsTable();
+
+    const existing = await query(
+      `SELECT id FROM trainee_rotations
+       WHERE user_id = $1 AND status IN ('active', 'extended', 'pending_signout')`,
+      [userId]
+    );
+    if (existing.rows.length > 0) {
+      return { started: false, reason: 'Active rotation already exists' };
+    }
+
+    const inserted = await query(
+      `INSERT INTO trainee_rotations (user_id, level, start_date, expected_end_date, status)
+       VALUES ($1, $2, CURRENT_DATE, CURRENT_DATE + ($3::int * INTERVAL '1 day'), 'active')
+       RETURNING id, level, start_date, expected_end_date, status`,
+      [userId, plan.level, plan.durationDays]
+    );
+    return { started: true, rotation: inserted.rows[0] };
+  } catch (error) {
+    console.error('ensureTraineeRotation error:', error.message);
+    return { started: false, error: error.message };
+  }
+}
+
 export default async function handler(req, res) {
   try {
     if (cors(req, res)) return;
@@ -286,6 +368,9 @@ async function createUser(data, currentUser, res) {
     createdUser.full_name
   );
 
+  // Auto-start a rotation so trainee performance is tracked from day one
+  const rotationResult = await ensureTraineeRotation(createdUser.id, createdUser.role);
+
   return res.status(201).json({ 
     user: createdUser,
     credentials: {
@@ -297,8 +382,9 @@ async function createUser(data, currentUser, res) {
       mustChangePassword: mustChangePassword
     },
     patientAssignment: assignmentResult,
+    rotation: rotationResult,
     message: mustChangePassword 
-      ? `User created successfully. ${assignmentResult.assigned} patients assigned. Share the temporary password with the user. They must change it on first login.`
+      ? `User created successfully. ${assignmentResult.assigned} patients assigned.${rotationResult.started ? ' Rotation started.' : ''} Share the temporary password with the user. They must change it on first login.`
       : `Admin user created successfully. ${assignmentResult.assigned} patients assigned.`
   });
 }
@@ -377,10 +463,14 @@ async function approveUser(id, currentUser, res) {
     approvedUser.full_name
   );
 
+  // Auto-start a rotation so trainee performance is tracked from approval
+  const rotationResult = await ensureTraineeRotation(approvedUser.id, approvedUser.role);
+
   return res.status(200).json({ 
     user: approvedUser, 
     patientAssignment: assignmentResult,
-    message: `User approved successfully. ${assignmentResult.assigned} patients assigned.`
+    rotation: rotationResult,
+    message: `User approved successfully. ${assignmentResult.assigned} patients assigned.${rotationResult.started ? ' Rotation started.' : ''}`
   });
 }
 
@@ -494,6 +584,9 @@ async function bulkImportUsers(data, currentUser, res) {
         createdUser.role,
         createdUser.full_name
       );
+
+      // Auto-start a rotation so trainee performance is tracked from day one
+      const rotationResult = await ensureTraineeRotation(createdUser.id, createdUser.role);
       
       results.success.push({
         id: createdUser.id,
@@ -501,7 +594,8 @@ async function bulkImportUsers(data, currentUser, res) {
         email: createdUser.email,
         fullName: createdUser.full_name,
         role: createdUser.role,
-        patientsAssigned: assignmentResult.assigned
+        patientsAssigned: assignmentResult.assigned,
+        rotationStarted: !!rotationResult.started
       });
 
       results.credentials.push({

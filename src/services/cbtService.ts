@@ -390,6 +390,14 @@ const syncToServer = async (action: string, data: any): Promise<any> => {
     
     const result = await apiClient.post(`/cbt?action=${action}`, data);
     console.log(`✅ CBT ${action} synced to server`);
+    // Notify monitoring views (admin training / HO tracking) that a trainee's
+    // performance changed, so they refresh promptly.
+    if (/submit|complete/i.test(action)) {
+      try {
+        const { broadcastChange } = await import('../utils/crossTabSync');
+        broadcastChange('training');
+      } catch { /* non-fatal */ }
+    }
     return result;
   } catch (error) {
     console.warn('⚠️ CBT sync failed (offline?):', error);

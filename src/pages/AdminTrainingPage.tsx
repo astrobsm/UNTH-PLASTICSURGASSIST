@@ -6,6 +6,7 @@ import {
   Bell, ArrowLeft, Filter, RefreshCw, Award, Target, MessageCircle, Phone,
 } from 'lucide-react';
 import { apiClient } from '../services/apiClient';
+import { useCrossTabRefresh } from '../utils/crossTabSync';
 
 // ── Types ──
 interface TraineeMetrics {
@@ -110,20 +111,38 @@ const AdminTrainingPage: React.FC = () => {
   const [whatsAppMessage, setWhatsAppMessage] = useState('');
   const [savingPhone, setSavingPhone] = useState(false);
 
-  const fetchTrainees = useCallback(async () => {
-    setLoading(true);
+  const fetchTrainees = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
     setError(null);
     try {
       const data = await apiClient.request<{ trainees: Trainee[] }>('/admin-training?action=all-trainees');
       setTrainees(data.trainees);
     } catch (err: any) {
-      setError(err.message || 'Failed to load trainees');
+      if (!opts?.silent) setError(err.message || 'Failed to load trainees');
     } finally {
-      setLoading(false);
+      if (!opts?.silent) setLoading(false);
     }
   }, []);
 
   useEffect(() => { fetchTrainees(); }, [fetchTrainees]);
+
+  // Real-time-lite monitoring: refresh trainee metrics on tab focus, on a gentle
+  // poll, and when another tab/device signals a training change. Silent refreshes
+  // don't flash the page loader.
+  useCrossTabRefresh('training', () => fetchTrainees({ silent: true }));
+  useEffect(() => {
+    const onFocus = () => { if (document.visibilityState === 'visible') fetchTrainees({ silent: true }); };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+    const poll = setInterval(() => {
+      if (document.visibilityState === 'visible') fetchTrainees({ silent: true });
+    }, 45000);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
+      clearInterval(poll);
+    };
+  }, [fetchTrainees]);
 
   const fetchTraineeDetail = async (trainee: Trainee) => {
     try {

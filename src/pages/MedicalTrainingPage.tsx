@@ -203,6 +203,11 @@ const MedicalTrainingPage: React.FC = () => {
       if (token) {
         await apiClient.post('/training-progress', { topicId, level: activeTab, completedAt: new Date().toISOString() });
         console.log('✅ Training progress synced to server');
+        // Notify monitoring views that this trainee's CME progress changed
+        try {
+          const { broadcastChange } = await import('../utils/crossTabSync');
+          broadcastChange('training');
+        } catch { /* non-fatal */ }
       }
     } catch (error) {
       console.warn('⚠️ Failed to sync training progress (will retry later):', error);

@@ -136,7 +136,13 @@ async function handleGet(req, res, adminUser) {
       for (const t of trainees.rows) {
         const traineeLevel = roleToLevel(t.role);
         const metrics = await getTraineeMetrics(t.id, traineeLevel, t.full_name, t.username);
-        const rotation = await getActiveRotation(t.id);
+        let rotation = await getActiveRotation(t.id);
+        // Backfill: ensure every active trainee has a rotation so their metrics
+        // are always tracked. Start from their onboarding date so no historical
+        // activity is lost when the rotation is created retroactively.
+        if (!rotation) {
+          rotation = await backfillRotation(t.id, traineeLevel, t.registered_at);
+        }
         const reqs = getRequirements(traineeLevel);
         const eligibility = computeEligibility(metrics, reqs);
         const warningCount = await query(
@@ -725,6 +731,27 @@ async function getActiveRotation(userId) {
      ORDER BY created_at DESC LIMIT 1`, [userId]
   );
   return result.rows[0] || null;
+}
+
+// Create a rotation for an existing trainee who has none. Starts from the given
+// onboarding date (falls back to today) so historical activity is captured.
+async function backfillRotation(userId, level, startDate) {
+  try {
+    const durations = { house_officer: 30, junior_resident: 90, senior_resident: 180 };
+    const days = durations[level] || 30;
+    const start = startDate ? new Date(startDate).toISOString().slice(0, 10) : null;
+    const r = await query(
+      `INSERT INTO trainee_rotations (user_id, level, start_date, expected_end_date, status)
+       VALUES ($1, $2, COALESCE($3::date, CURRENT_DATE),
+               COALESCE($3::date, CURRENT_DATE) + ($4::int * INTERVAL '1 day'), 'active')
+       RETURNING *`,
+      [userId, level, start, days]
+    );
+    return r.rows[0] || null;
+  } catch (e) {
+    console.warn('backfillRotation:', e.message);
+    return null;
+  }
 }
 
 function computeEligibility(metrics, reqs) {

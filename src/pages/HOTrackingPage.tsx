@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { hoTrackingService, HOProfile, HODetail } from '../services/hoTrackingService';
+import { useCrossTabRefresh } from '../utils/crossTabSync';
 
 type ViewMode = 'overview' | 'detail';
 type Tab = 'summary' | 'documentation' | 'cbt' | 'cme' | 'patients' | 'eligibility';
@@ -29,16 +30,16 @@ const HOTrackingPage: React.FC = () => {
   const [signOutLoading, setSignOutLoading] = useState(false);
   const [signOutMsg, setSignOutMsg] = useState<string | null>(null);
 
-  const loadAllHOs = useCallback(async () => {
-    setLoading(true);
+  const loadAllHOs = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
     setError(null);
     try {
       const hos = await hoTrackingService.getAllHouseOfficers();
       setHouseOfficers(hos);
     } catch (err: any) {
-      setError(err.message || 'Failed to load house officers');
+      if (!opts?.silent) setError(err.message || 'Failed to load house officers');
     } finally {
-      setLoading(false);
+      if (!opts?.silent) setLoading(false);
     }
   }, []);
 
@@ -68,6 +69,27 @@ const HOTrackingPage: React.FC = () => {
       loadHODetail(user.id);
     }
   }, [isAdmin, isHO, user, loadAllHOs, loadHODetail]);
+
+  // Real-time-lite monitoring: refresh on tab focus, a gentle poll, and cross-tab
+  // training signals so metrics stay current without a manual refresh.
+  useCrossTabRefresh('training', () => {
+    if (isAdmin) loadAllHOs({ silent: true });
+    else if (isHO && user) loadHODetail(user.id);
+  });
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (isAdmin && viewMode === 'overview') loadAllHOs({ silent: true });
+    };
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    const poll = setInterval(refresh, 45000);
+    return () => {
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+      clearInterval(poll);
+    };
+  }, [isAdmin, viewMode, loadAllHOs]);
 
   const handleSelectHO = (ho: HOProfile) => {
     loadHODetail(ho.id);
