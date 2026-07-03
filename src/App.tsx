@@ -93,6 +93,7 @@ const ConsultsPage = lazyWithRetry(() => import('./pages/ConsultsPage'));
 const ConsultsModulePage = lazyWithRetry(() => import('./pages/ConsultsModulePage'));
 const PublicConsultSubmitPage = lazyWithRetry(() => import('./pages/PublicConsultSubmitPage'));
 const AdminTrainingPage = lazyWithRetry(() => import('./pages/AdminTrainingPage'));
+const BulkAdmitPage = lazyWithRetry(() => import('./pages/BulkAdmitPage'));
 const SJSManagementPage = lazyWithRetry(() => import('./pages/SJSManagementPage'));
 const SubstanceDetoxPage = lazyWithRetry(() => import('./pages/SubstanceDetoxPage'));
 const HOTrackingPage = lazyWithRetry(() => import('./pages/HOTrackingPage'));
@@ -345,6 +346,7 @@ function App() {
               <Route path="/submit-consult/:token" element={<PublicConsultSubmitPage />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/admin-training" element={<ProtectedRoute allowedRoles={['admin', 'consultant']}><AdminTrainingPage /></ProtectedRoute>} />
+              <Route path="/bulk-admit" element={<ProtectedRoute allowedRoles={['admin', 'consultant', 'senior_registrar', 'junior_registrar', 'registrar', 'house_officer']}><BulkAdmitPage /></ProtectedRoute>} />
               <Route path="/ho-tracking" element={<ProtectedRoute allowedRoles={['admin', 'consultant', 'senior_registrar']}><HOTrackingPage /></ProtectedRoute>} />
               <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><Admin /></ProtectedRoute>} />
               <Route path="/topic-management" element={<ProtectedRoute allowedRoles={['admin', 'consultant']}><TopicManagement /></ProtectedRoute>} />

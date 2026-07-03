@@ -17,6 +17,7 @@ import {
   FolderOpen,
   UserCog,
   BedDouble,
+  UserPlus,
   Home,
   Droplet,
   BookOpenCheck,
@@ -59,6 +60,7 @@ interface LayoutProps {
 const navigation = [
   { name: 'Dashboard', href: '/', icon: ClipboardList },
   { name: 'Patients', href: '/patients', icon: Users },
+  { name: 'Bulk Register/Admit', href: '/bulk-admit', icon: UserPlus },
   { name: 'Dept. Meetings', href: '/departmental-meetings', icon: Presentation },
   { name: 'Medical Training', href: '/medical-training', icon: BookOpen },
   { name: 'Call Duty Roster', href: '/call-duty', icon: PhoneCall },
