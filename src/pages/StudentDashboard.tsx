@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { apiClient } from '../services/apiClient';
 import { useAuthStore } from '../store/authStore';
+import { broadcastChange } from '../utils/crossTabSync';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 interface Patient {
@@ -79,6 +80,20 @@ interface DashboardStats {
   averageScore: number | null;
 }
 
+interface StudentMetrics {
+  posting: { start: string | null; end: string | null; totalDays: number | null; elapsedDays: number | null; remainingDays: number | null; percentComplete: number | null; status: string };
+  clerkings: { total: number; draft: number; submitted: number; evaluated: number; avgScore: number | null };
+  plans: { total: number; draft: number; submitted: number; evaluated: number; avgScore: number | null };
+  patients: { assigned: number; distinctClerked: number };
+  attendance: { activeDays: number; expectedDays: number; attendancePct: number | null };
+  engagement: { totalActivities: number; lastActive: string | null };
+  combinedAvg: number | null;
+  overallScore: number;
+  requirements: { clerkings: number; plans: number; avgScore: number; attendancePct: number };
+  eligibility: { eligible: boolean; met: string[]; notMet: string[] };
+  weekly: { week: number; clerkings: number; plans: number }[];
+}
+
 // ─── Component ──────────────────────────────────────────────────────────────
 export default function StudentDashboard() {
   const navigate = useNavigate();
@@ -86,6 +101,7 @@ export default function StudentDashboard() {
   const [tab, setTab] = useState<'dashboard' | 'patients' | 'clerking' | 'plans'>('dashboard');
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [metrics, setMetrics] = useState<StudentMetrics | null>(null);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [clerkings, setClerkings] = useState<Clerking[]>([]);
   const [plans, setPlans] = useState<TreatmentPlan[]>([]);
@@ -124,6 +140,7 @@ export default function StudentDashboard() {
     try {
       const data = await apiClient.get('/students/dashboard');
       setStats(data.stats);
+      setMetrics(data.metrics || null);
       setPatients(data.patients);
       setClerkings(data.clerkings);
       setPlans(data.treatmentPlans);
@@ -169,6 +186,20 @@ export default function StudentDashboard() {
     loadDashboard();
   }, [user, navigate, loadDashboard]);
 
+  // Real-time-lite: keep the performance record current on tab focus + a gentle poll
+  useEffect(() => {
+    if (!user || (user.role as string) !== 'student') return;
+    const onFocus = () => { if (document.visibilityState === 'visible') loadDashboard(); };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+    const poll = setInterval(() => { if (document.visibilityState === 'visible') loadDashboard(); }, 60000);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
+      clearInterval(poll);
+    };
+  }, [user, loadDashboard]);
+
   // ─── Clerking submission ──────────────────────────────────────────────────
   const submitClerking = async (status: 'draft' | 'submitted') => {
     if (!clerkingPatient) return;
@@ -186,6 +217,7 @@ export default function StudentDashboard() {
       resetClerkingForm();
       await loadClerkings();
       await loadDashboard();
+      broadcastChange('training');
     } catch (err: any) {
       alert(err.message || 'Failed to save clerking');
     } finally {
@@ -223,6 +255,7 @@ export default function StudentDashboard() {
       resetPlanForm();
       await loadPlans();
       await loadDashboard();
+      broadcastChange('training');
     } catch (err: any) {
       alert(err.message || 'Failed to save plan');
     } finally {
@@ -325,6 +358,74 @@ export default function StudentDashboard() {
                 </div>
               ))}
             </div>
+
+            {/* Performance Record */}
+            {metrics && (
+              <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                    <Star className="w-4 h-4 text-yellow-500" /> Performance Record
+                  </h3>
+                  <span className={`text-sm font-bold px-2.5 py-1 rounded-full ${
+                    metrics.overallScore >= 75 ? 'bg-green-100 text-green-700'
+                      : metrics.overallScore >= 50 ? 'bg-amber-100 text-amber-700'
+                      : 'bg-red-100 text-red-700'
+                  }`}>
+                    Overall {metrics.overallScore}%
+                  </span>
+                </div>
+
+                {/* Posting progress */}
+                {metrics.posting.percentComplete != null && (
+                  <div>
+                    <div className="flex justify-between text-xs text-gray-500 mb-1">
+                      <span>Posting progress</span>
+                      <span>{metrics.posting.elapsedDays ?? 0}/{metrics.posting.totalDays ?? '?'} days &middot; {metrics.posting.remainingDays ?? 0} left</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div className="h-2 rounded-full bg-green-500" style={{ width: `${metrics.posting.percentComplete}%` }} />
+                    </div>
+                  </div>
+                )}
+
+                {/* Metric tiles */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                  <div>
+                    <p className="text-lg font-bold text-blue-600">{metrics.clerkings.avgScore ?? '—'}{metrics.clerkings.avgScore != null ? '%' : ''}</p>
+                    <p className="text-[10px] text-gray-500">Clerking avg ({metrics.clerkings.evaluated}/{metrics.clerkings.total})</p>
+                  </div>
+                  <div>
+                    <p className="text-lg font-bold text-purple-600">{metrics.plans.avgScore ?? '—'}{metrics.plans.avgScore != null ? '%' : ''}</p>
+                    <p className="text-[10px] text-gray-500">Plan avg ({metrics.plans.evaluated}/{metrics.plans.total})</p>
+                  </div>
+                  <div>
+                    <p className="text-lg font-bold text-cyan-600">{metrics.attendance.attendancePct ?? '—'}{metrics.attendance.attendancePct != null ? '%' : ''}</p>
+                    <p className="text-[10px] text-gray-500">Attendance ({metrics.attendance.activeDays}/{metrics.attendance.expectedDays} days)</p>
+                  </div>
+                  <div>
+                    <p className="text-lg font-bold text-green-600">{metrics.patients.distinctClerked}</p>
+                    <p className="text-[10px] text-gray-500">Patients clerked</p>
+                  </div>
+                </div>
+
+                {/* Requirements checklist */}
+                <div className="border-t border-gray-100 pt-3">
+                  <p className="text-xs font-semibold text-gray-600 mb-1.5">
+                    Posting requirements {metrics.eligibility.eligible
+                      ? <span className="text-green-600">&middot; All met ✓</span>
+                      : <span className="text-amber-600">&middot; {metrics.eligibility.notMet.length} outstanding</span>}
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {metrics.eligibility.met.map((m, i) => (
+                      <span key={`m${i}`} className="text-[11px] px-2 py-0.5 rounded-full bg-green-50 text-green-700">✓ {m}</span>
+                    ))}
+                    {metrics.eligibility.notMet.map((m, i) => (
+                      <span key={`n${i}`} className="text-[11px] px-2 py-0.5 rounded-full bg-red-50 text-red-600">✗ {m}</span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Days Left Banner */}
             <div className={`rounded-xl p-4 flex items-center gap-3 ${stats.daysLeft <= 7 ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200'}`}>

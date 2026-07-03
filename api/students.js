@@ -175,6 +175,150 @@ async function ensureTables() {
   _schemaReady = true;
 }
 
+// Activity log for accurate, timestamped record of everything a student does
+// during their posting (logins, clerkings, treatment plans, evaluations).
+async function ensureStudentActivityTable() {
+  try {
+    await query(`
+      CREATE TABLE IF NOT EXISTS student_activity_logs (
+        id SERIAL PRIMARY KEY,
+        student_id INTEGER NOT NULL,
+        activity_type VARCHAR(60) NOT NULL,
+        description TEXT,
+        metadata JSONB DEFAULT '{}',
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await query(`CREATE INDEX IF NOT EXISTS idx_student_activity_student ON student_activity_logs(student_id, created_at)`);
+  } catch (e) {
+    console.warn('ensureStudentActivityTable:', e.message);
+  }
+}
+
+// Record a student activity (best-effort — never throws into the request path).
+async function logStudentActivity(studentId, activityType, description = '', metadata = {}) {
+  try {
+    await ensureStudentActivityTable();
+    await query(
+      `INSERT INTO student_activity_logs (student_id, activity_type, description, metadata)
+       VALUES ($1, $2, $3, $4)`,
+      [studentId, activityType, description, JSON.stringify(metadata || {})]
+    );
+  } catch (e) {
+    console.warn('logStudentActivity:', e.message);
+  }
+}
+
+// Compute a comprehensive, rotation-scoped performance record for a student.
+async function computeStudentMetrics(studentId, studentRow) {
+  await ensureStudentActivityTable();
+  const safe = async (sql, params, fallback) => {
+    try { return (await query(sql, params)).rows; } catch (e) { console.warn('computeStudentMetrics:', e.message); return fallback; }
+  };
+
+  const start = studentRow?.posting_start ? new Date(studentRow.posting_start) : null;
+  const end = studentRow?.posting_end ? new Date(studentRow.posting_end) : null;
+  const now = new Date();
+  const DAY = 1000 * 60 * 60 * 24;
+  const totalDays = start && end ? Math.max(1, Math.round((end - start) / DAY)) : null;
+  const elapsedDays = start ? Math.max(0, Math.min(totalDays ?? Infinity, Math.round((now - start) / DAY))) : null;
+  const remainingDays = end ? Math.max(0, Math.ceil((end - now) / DAY)) : null;
+  const percentComplete = totalDays ? Math.min(100, Math.round(((elapsedDays ?? 0) / totalDays) * 100)) : null;
+  const postingStatus = !start ? 'unknown' : now < start ? 'not_started' : (end && now > end) ? 'ended' : 'active';
+
+  // Clerkings breakdown
+  const cRows = await safe(
+    `SELECT status, evaluation_score FROM student_clerkings WHERE student_id = $1`, [studentId], []);
+  const clerkTotal = cRows.length;
+  const clerkSubmitted = cRows.filter(r => r.status && r.status !== 'draft').length;
+  const clerkDraft = cRows.filter(r => r.status === 'draft').length;
+  const clerkScored = cRows.filter(r => r.evaluation_score != null);
+  const clerkAvg = clerkScored.length ? Math.round(clerkScored.reduce((s, r) => s + Number(r.evaluation_score), 0) / clerkScored.length) : null;
+
+  // Treatment plans breakdown
+  const pRows = await safe(
+    `SELECT status, evaluation_score FROM student_treatment_plans WHERE student_id = $1`, [studentId], []);
+  const planTotal = pRows.length;
+  const planSubmitted = pRows.filter(r => r.status && r.status !== 'draft').length;
+  const planDraft = pRows.filter(r => r.status === 'draft').length;
+  const planScored = pRows.filter(r => r.evaluation_score != null);
+  const planAvg = planScored.length ? Math.round(planScored.reduce((s, r) => s + Number(r.evaluation_score), 0) / planScored.length) : null;
+
+  // Patients
+  const patRows = await safe(
+    `SELECT COUNT(*) FILTER (WHERE is_active) AS assigned FROM student_patient_assignments WHERE student_id = $1`, [studentId], [{ assigned: 0 }]);
+  const assignedPatients = parseInt(patRows[0]?.assigned || 0, 10);
+  const distinctClerkedRows = await safe(
+    `SELECT COUNT(DISTINCT patient_id) AS c FROM student_clerkings WHERE student_id = $1`, [studentId], [{ c: 0 }]);
+  const distinctClerked = parseInt(distinctClerkedRows[0]?.c || 0, 10);
+
+  // Attendance / engagement from activity log (distinct active days)
+  const actRows = await safe(
+    `SELECT COUNT(DISTINCT DATE(created_at)) AS active_days, COUNT(*) AS total_activities, MAX(created_at) AS last_active
+     FROM student_activity_logs WHERE student_id = $1`, [studentId], [{ active_days: 0, total_activities: 0, last_active: null }]);
+  const activeDays = parseInt(actRows[0]?.active_days || 0, 10);
+  const totalActivities = parseInt(actRows[0]?.total_activities || 0, 10);
+  const lastActive = actRows[0]?.last_active || null;
+  // Expected attendance = weekdays elapsed so far (Mon–Fri), capped to posting end
+  let expectedDays = 0;
+  if (start) {
+    const cur = new Date(start);
+    const cap = end && now > end ? end : now;
+    while (cur <= cap) {
+      const d = cur.getDay();
+      if (d !== 0 && d !== 6) expectedDays++;
+      cur.setDate(cur.getDate() + 1);
+    }
+  }
+  const attendancePct = expectedDays > 0 ? Math.min(100, Math.round((activeDays / expectedDays) * 100)) : null;
+
+  // Requirements & eligibility (posting completion criteria)
+  const requirements = { clerkings: 10, plans: 5, avgScore: 50, attendancePct: 70 };
+  const eligMet = [];
+  const eligNotMet = [];
+  (clerkTotal >= requirements.clerkings ? eligMet : eligNotMet).push(`Clerkings: ${clerkTotal}/${requirements.clerkings}`);
+  (planTotal >= requirements.plans ? eligMet : eligNotMet).push(`Plans: ${planTotal}/${requirements.plans}`);
+  const combinedScored = [...clerkScored, ...planScored];
+  const combinedAvg = combinedScored.length ? Math.round(combinedScored.reduce((s, r) => s + Number(r.evaluation_score), 0) / combinedScored.length) : null;
+  ((combinedAvg ?? 0) >= requirements.avgScore ? eligMet : eligNotMet).push(`Avg score: ${combinedAvg ?? 0}/${requirements.avgScore}`);
+  ((attendancePct ?? 0) >= requirements.attendancePct ? eligMet : eligNotMet).push(`Attendance: ${attendancePct ?? 0}%/${requirements.attendancePct}%`);
+
+  // Overall score: clinical quality 60% + volume 20% + attendance 20%
+  const qualityScore = combinedAvg ?? 0;
+  const volumeScore = Math.min(100, Math.round(((clerkTotal / requirements.clerkings) * 0.5 + (planTotal / requirements.plans) * 0.5) * 100));
+  const overallScore = Math.round(qualityScore * 0.6 + volumeScore * 0.2 + (attendancePct ?? 0) * 0.2);
+
+  // Weekly activity breakdown across the posting
+  let weekly = [];
+  if (start) {
+    const weeks = Math.min(24, Math.max(1, Math.ceil((totalDays ?? 7) / 7)));
+    const buckets = Array.from({ length: weeks }, () => ({ clerkings: 0, plans: 0 }));
+    const bucketOf = (dateStr) => {
+      const idx = Math.floor((new Date(dateStr) - start) / (7 * DAY));
+      return idx >= 0 && idx < weeks ? idx : null;
+    };
+    const cDates = await safe(`SELECT created_at FROM student_clerkings WHERE student_id = $1`, [studentId], []);
+    const pDates = await safe(`SELECT created_at FROM student_treatment_plans WHERE student_id = $1`, [studentId], []);
+    cDates.forEach(r => { const b = bucketOf(r.created_at); if (b != null) buckets[b].clerkings++; });
+    pDates.forEach(r => { const b = bucketOf(r.created_at); if (b != null) buckets[b].plans++; });
+    weekly = buckets.map((b, i) => ({ week: i + 1, ...b }));
+  }
+
+  return {
+    posting: { start: studentRow?.posting_start || null, end: studentRow?.posting_end || null, totalDays, elapsedDays, remainingDays, percentComplete, status: postingStatus },
+    clerkings: { total: clerkTotal, draft: clerkDraft, submitted: clerkSubmitted, evaluated: clerkScored.length, avgScore: clerkAvg },
+    plans: { total: planTotal, draft: planDraft, submitted: planSubmitted, evaluated: planScored.length, avgScore: planAvg },
+    patients: { assigned: assignedPatients, distinctClerked },
+    attendance: { activeDays, expectedDays, attendancePct },
+    engagement: { totalActivities, lastActive },
+    combinedAvg,
+    overallScore,
+    requirements,
+    eligibility: { eligible: eligNotMet.length === 0, met: eligMet, notMet: eligNotMet },
+    weekly,
+  };
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // PUBLIC: REGISTRATION & LOGIN
 // ═══════════════════════════════════════════════════════════════════════════
@@ -270,6 +414,9 @@ async function loginStudent(body, res) {
 
   // Auto-assign patients if none yet
   await autoAssignPatients(student.id);
+
+  // Record attendance/engagement for this login day
+  await logStudentActivity(student.id, 'login', 'Student logged in');
 
   res.json({
     token,
@@ -368,11 +515,14 @@ async function getStudentDashboard(studentId, res) {
 
   const daysLeft = Math.max(0, Math.ceil((new Date(student.rows[0].posting_end) - new Date()) / (1000 * 60 * 60 * 24)));
 
+  const metrics = await computeStudentMetrics(studentId, student.rows[0]);
+
   res.json({
     student: student.rows[0],
     patients: patients.rows,
     clerkings: clerkings.rows,
     treatmentPlans: plans.rows,
+    metrics,
     stats: {
       assignedPatients: patients.rows.length,
       totalClerkings: clerkings.rows.length,
@@ -449,6 +599,10 @@ async function createClerking(studentId, body, res) {
     JSON.stringify(body.investigations_requested || []), body.plan, body.status || 'submitted'
   ]);
 
+  await logStudentActivity(studentId, (body.status === 'draft' ? 'clerking_draft' : 'clerking_submitted'),
+    `Clerking ${body.status === 'draft' ? 'saved as draft' : 'submitted'}`,
+    { clerkingId: result.rows[0].id, patient_id: body.patient_id });
+
   res.status(201).json(result.rows[0]);
 }
 
@@ -489,6 +643,9 @@ async function updateClerking(studentId, clerkingId, body, res) {
   ]);
 
   if (result.rows.length === 0) return res.status(404).json({ error: 'Clerking not found' });
+  if (body.status && body.status !== 'draft') {
+    await logStudentActivity(studentId, 'clerking_submitted', 'Clerking submitted', { clerkingId });
+  }
   res.json(result.rows[0]);
 }
 
@@ -530,6 +687,10 @@ async function createStudentTreatmentPlan(studentId, body, res) {
     body.status || 'submitted'
   ]);
 
+  await logStudentActivity(studentId, (body.status === 'draft' ? 'plan_draft' : 'plan_submitted'),
+    `Treatment plan ${body.status === 'draft' ? 'saved as draft' : 'submitted'}`,
+    { planId: result.rows[0].id, patient_id: body.patient_id });
+
   res.status(201).json(result.rows[0]);
 }
 
@@ -561,6 +722,9 @@ async function updateStudentTreatmentPlan(studentId, planId, body, res) {
   ]);
 
   if (result.rows.length === 0) return res.status(404).json({ error: 'Plan not found' });
+  if (body.status && body.status !== 'draft') {
+    await logStudentActivity(studentId, 'plan_submitted', 'Treatment plan submitted', { planId });
+  }
   res.json(result.rows[0]);
 }
 
@@ -605,7 +769,15 @@ async function listStudents(params, res) {
     FROM students s
     ORDER BY s.created_at DESC
   `);
-  res.json(result.rows);
+
+  // Attach a comprehensive, rotation-scoped performance record to each student
+  const withMetrics = [];
+  for (const s of result.rows) {
+    let metrics = null;
+    try { metrics = await computeStudentMetrics(s.id, s); } catch (e) { console.warn('listStudents metrics:', e.message); }
+    withMetrics.push({ ...s, metrics });
+  }
+  res.json(withMetrics);
 }
 
 async function getStudentsOverview(res) {
@@ -680,11 +852,22 @@ async function getStudentDetail(studentId, res) {
     ORDER BY stp.created_at DESC
   `, [studentId]);
 
+  const activities = await safeRows(`
+    SELECT activity_type, description, metadata, created_at
+    FROM student_activity_logs
+    WHERE student_id = $1
+    ORDER BY created_at DESC LIMIT 100
+  `, [studentId]);
+
+  const metrics = await computeStudentMetrics(studentId, student.rows[0]);
+
   res.json({
     student: student.rows[0],
     patients,
     clerkings,
-    treatmentPlans: plans
+    treatmentPlans: plans,
+    activities,
+    metrics
   });
 }
 
