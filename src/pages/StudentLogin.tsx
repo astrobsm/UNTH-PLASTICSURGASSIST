@@ -20,6 +20,9 @@ export default function StudentLogin() {
       const response = await apiClient.post('/students/login', { email, password });
       // Store token and user in auth store
       const store = useAuthStore.getState();
+      // Sync the token into apiClient so subsequent authenticated requests
+      // (dashboard, patients, clerkings, plans) include the Authorization header.
+      apiClient.setToken(response.token);
       useAuthStore.setState({
         user: {
           id: String(response.user.id),

@@ -168,6 +168,10 @@ export const useAuthStore = create<AuthState>()(
           // Check if we have stored auth data
           const state = get();
           if (state.token && state.user) {
+            // Ensure apiClient has the token in memory + localStorage. Staff
+            // logins set this via apiClient.login(), but the student login path
+            // only persists to the store, so hydrate it here for both on reload.
+            apiClient.setToken(state.token);
             // If offline, trust the cached token/user — don't attempt validation
             if (!navigator.onLine) {
               console.log('📴 Offline: trusting cached auth session');
