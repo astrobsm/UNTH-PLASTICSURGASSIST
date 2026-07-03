@@ -1,7 +1,7 @@
 // Bulk patient registration + admission page, plus an admin-only patient-data
 // reset "danger zone". Reachable at /bulk-admit.
 import { useState } from 'react';
-import { UserPlus, Trash2, Plus, Loader2, CheckCircle, XCircle, AlertTriangle, ShieldAlert, Send } from 'lucide-react';
+import { UserPlus, Trash2, Plus, Loader2, CheckCircle, XCircle, AlertTriangle, ShieldAlert, Send, Download, Upload } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { apiClient } from '../services/apiClient';
 import { useAuthStore } from '../store/authStore';
@@ -25,6 +25,49 @@ const emptyRow = (): Row => ({
   phone: '', ward: '', bed_number: '', admitting_diagnosis: '', consultant: '', admit: true,
 });
 
+// CSV column order for template download + import mapping.
+const CSV_COLUMNS: { key: keyof Row; label: string }[] = [
+  { key: 'first_name', label: 'first_name' },
+  { key: 'last_name', label: 'last_name' },
+  { key: 'hospital_number', label: 'hospital_number' },
+  { key: 'date_of_birth', label: 'date_of_birth' },
+  { key: 'gender', label: 'gender' },
+  { key: 'phone', label: 'phone' },
+  { key: 'ward', label: 'ward' },
+  { key: 'bed_number', label: 'bed_number' },
+  { key: 'admitting_diagnosis', label: 'admitting_diagnosis' },
+  { key: 'consultant', label: 'consultant' },
+  { key: 'admit', label: 'admit' },
+];
+
+// Minimal CSV parser handling quoted fields, escaped quotes ("") and commas/newlines within quotes.
+function parseCsv(text: string): string[][] {
+  const rows: string[][] = [];
+  let field = '';
+  let row: string[] = [];
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; }
+        else inQuotes = false;
+      } else field += c;
+    } else if (c === '"') {
+      inQuotes = true;
+    } else if (c === ',') {
+      row.push(field); field = '';
+    } else if (c === '\n' || c === '\r') {
+      if (c === '\r' && text[i + 1] === '\n') i++;
+      row.push(field); field = '';
+      if (row.some(v => v.trim() !== '')) rows.push(row);
+      row = [];
+    } else field += c;
+  }
+  if (field !== '' || row.length) { row.push(field); if (row.some(v => v.trim() !== '')) rows.push(row); }
+  return rows;
+}
+
 const CONFIRM_PHRASE = 'DELETE ALL PATIENTS';
 const SUPER_ADMIN_ROLES = ['admin', 'super_admin'];
 
@@ -45,6 +88,70 @@ export default function BulkAdmitPage() {
     setRows(rs => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
   const addRow = () => setRows(rs => [...rs, emptyRow()]);
   const removeRow = (i: number) => setRows(rs => rs.filter((_, idx) => idx !== i));
+
+  const downloadTemplate = () => {
+    const header = CSV_COLUMNS.map(c => c.label).join(',');
+    const example = 'John,Doe,,1990-05-12,Male,08030000000,Male Ward,12,Post-burn contracture,Dr. Okwesili,true';
+    const csv = `${header}\n${example}\n`;
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'bulk-patient-template.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-importing the same file
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const parsed = parseCsv(text);
+      if (parsed.length === 0) { toast.error('CSV is empty.'); return; }
+
+      // Map header row to Row keys (case-insensitive, tolerant of order/aliases)
+      const header = parsed[0].map(h => h.trim().toLowerCase());
+      const looksLikeHeader = header.some(h => ['first_name', 'firstname', 'last_name', 'lastname', 'surname'].includes(h));
+      const dataRows = looksLikeHeader ? parsed.slice(1) : parsed;
+
+      const aliasToKey: Record<string, keyof Row> = {
+        first_name: 'first_name', firstname: 'first_name', 'first name': 'first_name',
+        last_name: 'last_name', lastname: 'last_name', surname: 'last_name', 'last name': 'last_name',
+        hospital_number: 'hospital_number', hospitalnumber: 'hospital_number', 'hospital number': 'hospital_number', hosp_no: 'hospital_number',
+        date_of_birth: 'date_of_birth', dob: 'date_of_birth', 'date of birth': 'date_of_birth',
+        gender: 'gender', sex: 'gender',
+        phone: 'phone', 'phone number': 'phone',
+        ward: 'ward',
+        bed_number: 'bed_number', bed: 'bed_number', 'bed number': 'bed_number',
+        admitting_diagnosis: 'admitting_diagnosis', diagnosis: 'admitting_diagnosis', 'admitting diagnosis': 'admitting_diagnosis',
+        consultant: 'consultant',
+        admit: 'admit',
+      };
+      // If no header, fall back to positional CSV_COLUMNS order
+      const colKeys: (keyof Row | null)[] = looksLikeHeader
+        ? header.map(h => aliasToKey[h] ?? null)
+        : CSV_COLUMNS.map(c => c.key);
+
+      const imported: Row[] = dataRows.map(cells => {
+        const r = emptyRow();
+        colKeys.forEach((key, idx) => {
+          if (!key) return;
+          const val = (cells[idx] ?? '').trim();
+          if (key === 'admit') r.admit = !/^(false|no|0|n)$/i.test(val);
+          else (r as any)[key] = val;
+        });
+        return r;
+      }).filter(r => r.first_name.trim() && r.last_name.trim());
+
+      if (imported.length === 0) { toast.error('No valid rows (need first & last name).'); return; }
+      setRows(imported);
+      toast.success(`Imported ${imported.length} patient row(s). Review then submit.`);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to read CSV');
+    }
+  };
 
   const submit = async () => {
     const filled = rows.filter(r => r.first_name.trim() && r.last_name.trim());
@@ -120,8 +227,18 @@ export default function BulkAdmitPage() {
           Bulk Patient Registration &amp; Admission
         </h1>
         <p className="text-sm text-gray-500 mt-1">
-          Add a row per patient. On submit, each patient is registered and (if ticked) admitted in one step.
+          Add a row per patient, or import a CSV. On submit, each patient is registered and (if ticked) admitted in one step.
         </p>
+        <div className="flex flex-wrap items-center gap-2 mt-3">
+          <button onClick={downloadTemplate}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+            <Download className="h-4 w-4" /> Download CSV template
+          </button>
+          <label className="flex items-center gap-1.5 px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 cursor-pointer">
+            <Upload className="h-4 w-4" /> Import CSV
+            <input type="file" accept=".csv,text/csv" onChange={handleImport} className="hidden" />
+          </label>
+        </div>
       </div>
 
       {/* Danger zone — super admins only */}
