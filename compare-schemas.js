@@ -7,7 +7,8 @@ import pg from 'pg';
 
 const { Pool } = pg;
 
-const DATABASE_URL = 'postgresql://postgres.mgblgewvpzcaimqaeqcp:VMBaD8okNXl2K9pV@aws-1-eu-central-1.pooler.supabase.com:5432/postgres';
+import { requireDatabaseUrl } from './db-env.mjs';
+const DATABASE_URL = requireDatabaseUrl();
 
 const pool = new Pool({
   connectionString: DATABASE_URL,

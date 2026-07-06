@@ -3,9 +3,10 @@
 // Do NOT run this file on production. Kept for historical reference only.
 
 import pg from 'pg';
+import { requireDatabaseUrl } from './db-env.mjs';
 
 const pool = new pg.Pool({
-  connectionString: 'postgresql://postgres.mgblgewvpzcaimqaeqcp:VMBaD8okNXl2K9pV@aws-1-eu-central-1.pooler.supabase.com:5432/postgres',
+  connectionString: requireDatabaseUrl(),
   ssl: { rejectUnauthorized: false }
 });
 
