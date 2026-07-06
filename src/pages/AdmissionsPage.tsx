@@ -38,6 +38,9 @@ const WARDS: Ward[] = [
   { name: 'Labour Ward', beds: Array.from({ length: 15 }, (_, i) => `LW-${i + 1}`) },
   { name: 'PICU', beds: Array.from({ length: 10 }, (_, i) => `PICU-${i + 1}`) },
   { name: 'ICU', beds: Array.from({ length: 12 }, (_, i) => `ICU-${i + 1}`) },
+  { name: 'Postnatal Ward', beds: Array.from({ length: 20 }, (_, i) => `PNW-${i + 1}`) },
+  { name: 'A&E', beds: Array.from({ length: 20 }, (_, i) => `AE-${i + 1}`) },
+  { name: 'Special Care Ward', beds: Array.from({ length: 15 }, (_, i) => `SCW-${i + 1}`) },
 ];
 
 const SPECIALTIES = [
