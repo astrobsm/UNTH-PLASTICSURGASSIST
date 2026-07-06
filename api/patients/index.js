@@ -15,10 +15,14 @@ export default async function handler(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const pathParts = url.pathname.replace('/api/patients', '').split('/').filter(Boolean);
   const patientId = pathParts[0];
+  const subResource = pathParts[1];
 
   try {
     switch (method) {
       case 'GET':
+        if (patientId && subResource === 'name-history') {
+          return await getPatientNameHistory(patientId, res);
+        }
         if (patientId) {
           return await getPatient(patientId, res);
         }
@@ -31,7 +35,7 @@ export default async function handler(req, res) {
         if (!patientId) {
           return res.status(400).json({ error: 'Patient ID required' });
         }
-        return await updatePatient(patientId, req.body, res);
+        return await updatePatient(patientId, req.body, auth.user, res);
       case 'DELETE':
         if (!patientId) {
           return res.status(400).json({ error: 'Patient ID required' });
@@ -313,7 +317,7 @@ async function createPatient(data, user, req, res) {
   throw lastError || new Error('All insert strategies failed');
 }
 
-async function updatePatient(id, data, res) {
+async function updatePatient(id, data, user, res) {
   const fields = [];
   const values = [];
   let paramCount = 1;
@@ -356,6 +360,17 @@ async function updatePatient(id, data, res) {
     return res.status(400).json({ error: 'No fields to update' });
   }
 
+  // Detect a name change so we can record an audit trail
+  const newFirst = data.firstName ?? data.first_name;
+  const newLast = data.lastName ?? data.last_name;
+  let prior = null;
+  if (newFirst !== undefined || newLast !== undefined) {
+    try {
+      const cur = await query('SELECT first_name, last_name FROM patients WHERE id = $1', [id]);
+      if (cur.rows.length) prior = cur.rows[0];
+    } catch { /* non-fatal */ }
+  }
+
   fields.push(`updated_at = NOW()`);
   values.push(id);
 
@@ -368,7 +383,67 @@ async function updatePatient(id, data, res) {
     return res.status(404).json({ error: 'Patient not found' });
   }
 
+  // Record name-change history (best-effort, never blocks the update)
+  if (prior) {
+    const after = result.rows[0];
+    const nameChanged = (prior.first_name || '') !== (after.first_name || '') ||
+                        (prior.last_name || '') !== (after.last_name || '');
+    if (nameChanged) {
+      await recordNameChange(id, prior, after, user, data.editReason || data.reason || null);
+    }
+  }
+
   res.status(200).json({ patient: result.rows[0] });
+}
+
+async function ensurePatientNameHistoryTable() {
+  try {
+    await query(`
+      CREATE TABLE IF NOT EXISTS patient_name_history (
+        id SERIAL PRIMARY KEY,
+        patient_id VARCHAR(255) NOT NULL,
+        old_first_name VARCHAR(255),
+        old_last_name VARCHAR(255),
+        new_first_name VARCHAR(255),
+        new_last_name VARCHAR(255),
+        changed_by VARCHAR(180),
+        changed_by_name VARCHAR(255),
+        reason TEXT,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await query(`CREATE INDEX IF NOT EXISTS idx_patient_name_history_pid ON patient_name_history(patient_id, created_at)`);
+  } catch (e) {
+    console.warn('ensurePatientNameHistoryTable:', e.message);
+  }
+}
+
+async function recordNameChange(patientId, prior, after, user, reason) {
+  try {
+    await ensurePatientNameHistoryTable();
+    await query(
+      `INSERT INTO patient_name_history
+         (patient_id, old_first_name, old_last_name, new_first_name, new_last_name, changed_by, changed_by_name, reason)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [String(patientId), prior.first_name, prior.last_name, after.first_name, after.last_name,
+       user?.id != null ? String(user.id) : null, user?.fullName || user?.email || null, reason]
+    );
+  } catch (e) {
+    console.warn('recordNameChange:', e.message);
+  }
+}
+
+async function getPatientNameHistory(patientId, res) {
+  await ensurePatientNameHistoryTable();
+  try {
+    const r = await query(
+      `SELECT * FROM patient_name_history WHERE patient_id = $1 ORDER BY created_at DESC`,
+      [String(patientId)]
+    );
+    res.status(200).json({ history: r.rows });
+  } catch (e) {
+    res.status(200).json({ history: [], error: e.message });
+  }
 }
 
 async function deletePatient(id, res) {

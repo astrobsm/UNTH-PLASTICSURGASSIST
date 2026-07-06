@@ -255,6 +255,9 @@ export default async function handler(req, res) {
         if (userId === 'bulk-import') {
           return await bulkImportUsers(req.body, auth.user, res);
         }
+        if (userId === 'distribute-patients') {
+          return await distributePatientsToHOs(req.body, auth.user, res);
+        }
         return await createUser(req.body, auth.user, res);
       case 'PUT':
       case 'PATCH':
@@ -286,6 +289,86 @@ export default async function handler(req, res) {
       message: error.message
     });
   }
+}
+
+/**
+ * Distribute currently-admitted patients evenly across the active house officers
+ * (round-robin), setting patient_assignments.house_officer_id. Optionally include
+ * all patients (not just admitted) via body.scope === 'all'. Admin only.
+ */
+async function distributePatientsToHOs(body, currentUser, res) {
+  if (!['admin', 'super_admin', 'consultant'].includes(currentUser.role)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+  const scope = (body && body.scope) || 'admitted'; // 'admitted' | 'all'
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS patient_assignments (
+      id SERIAL PRIMARY KEY,
+      patient_id VARCHAR(255) NOT NULL,
+      hospital_number VARCHAR(100),
+      consultant_id VARCHAR(50),
+      senior_registrar_id VARCHAR(50),
+      registrar_id VARCHAR(50),
+      house_officer_id VARCHAR(50),
+      admission_type VARCHAR(50),
+      assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      is_active BOOLEAN DEFAULT TRUE,
+      UNIQUE(patient_id)
+    )
+  `);
+
+  const hos = await query(
+    `SELECT id, full_name FROM users
+     WHERE role IN ('house_officer', 'intern') AND is_active = TRUE AND is_approved = TRUE
+     ORDER BY full_name`
+  );
+  if (hos.rows.length === 0) {
+    return res.status(400).json({ error: 'No active house officers to assign to.' });
+  }
+
+  let patients;
+  if (scope === 'all') {
+    patients = await query(`SELECT id, hospital_number FROM patients ORDER BY created_at DESC`);
+  } else {
+    patients = await query(
+      `SELECT DISTINCT p.id, p.hospital_number
+       FROM admissions a JOIN patients p ON p.id::text = a.patient_id::text
+       WHERE a.status IN ('active', 'admitted')
+       ORDER BY p.id`
+    );
+  }
+  if (patients.rows.length === 0) {
+    return res.status(200).json({ assigned: 0, message: 'No matching patients to distribute.' });
+  }
+
+  let assigned = 0;
+  const perHO = {};
+  for (let i = 0; i < patients.rows.length; i++) {
+    const p = patients.rows[i];
+    const ho = hos.rows[i % hos.rows.length];
+    try {
+      await query(
+        `INSERT INTO patient_assignments (patient_id, hospital_number, house_officer_id, is_active)
+         VALUES ($1, $2, $3, TRUE)
+         ON CONFLICT (patient_id) DO UPDATE
+           SET house_officer_id = EXCLUDED.house_officer_id, is_active = TRUE, assigned_at = CURRENT_TIMESTAMP`,
+        [String(p.id), p.hospital_number, String(ho.id)]
+      );
+      assigned++;
+      perHO[ho.full_name] = (perHO[ho.full_name] || 0) + 1;
+    } catch (e) {
+      console.warn('distribute assign skip:', e.message);
+    }
+  }
+
+  return res.status(200).json({
+    assigned,
+    scope,
+    houseOfficers: hos.rows.length,
+    breakdown: perHO,
+    message: `Distributed ${assigned} ${scope} patient(s) across ${hos.rows.length} active house officer(s).`,
+  });
 }
 
 async function getAllUsers(currentUser, res, req) {

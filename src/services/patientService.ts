@@ -438,13 +438,26 @@ class PatientService {
   }
 
   /**
+   * Fetch the name-change history for a patient (audit trail).
+   */
+  async getNameHistory(id: string | number) {
+    try {
+      const data = await apiClient.request(`/patients/${id}/name-history`);
+      return data?.history || [];
+    } catch (error) {
+      console.error('Error fetching name history:', error);
+      return [];
+    }
+  }
+
+  /**
    * Delete a patient (soft delete)
    */
   async deletePatient(id: string | number) {
     try {
       // Delete via API
       await apiClient.deletePatient(String(id));
-      
+
       // Update local cache (soft delete)
       const localId = typeof id === 'string' ? id : Number(id);
       await db.patients.update(localId, { 

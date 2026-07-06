@@ -167,6 +167,42 @@ class OCRService {
     }
   }
 
+  // Tune Tesseract page-segmentation + character whitelist for the document type.
+  // Handwriting recognises better WITHOUT a whitelist; structured printed docs
+  // (labs/prescriptions) do better with a constrained set and single-block mode;
+  // charts benefit from sparse-text mode for scattered numbers.
+  private async tuneForDocType(documentType: DocumentType): Promise<void> {
+    if (!this.worker) return;
+    const PRINT_WHITELIST = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,;:/-+()%<>=[]\'"#@!?&_°~ \n';
+    // PSM: 3=AUTO, 4=SINGLE_COLUMN, 6=SINGLE_BLOCK, 11=SPARSE_TEXT
+    let psm = '3';
+    let whitelist = PRINT_WHITELIST;
+    switch (documentType) {
+      case 'handwritten_note':
+        psm = '3';
+        whitelist = ''; // no whitelist — constraining hurts handwriting
+        break;
+      case 'prescription':
+      case 'lab_report':
+        psm = '6'; // uniform block of text
+        break;
+      case 'vital_signs_chart':
+      case 'fluid_chart':
+        psm = '11'; // sparse scattered numbers
+        break;
+      default:
+        psm = '3';
+    }
+    try {
+      await this.worker.setParameters({
+        tessedit_pageseg_mode: psm as any,
+        tessedit_char_whitelist: whitelist,
+      });
+    } catch (e) {
+      console.warn('tuneForDocType failed (non-fatal):', e);
+    }
+  }
+
   // Process image and extract text — tries Cloud Vision first, falls back to Tesseract
   async extractText(
     imageSource: File | Blob | string | HTMLImageElement | HTMLCanvasElement,
@@ -231,6 +267,9 @@ class OCRService {
       }
       
       onProgress?.({ status: 'recognizing', progress: 0.5 });
+
+      // Apply document-type-specific segmentation + whitelist for best accuracy
+      await this.tuneForDocType(documentType);
 
       // Perform OCR
       const { data } = await this.worker.recognize(recognizeInput);

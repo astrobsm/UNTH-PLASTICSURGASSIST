@@ -59,7 +59,10 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
     setError(null);
     setSelectedFields(new Set());
     setShowRawText(false);
-    setHandwritingMode(false);
+    // Keep handwriting mode ON by default — most clinical scans in this app are
+    // handwritten notes/charts, and this routes them to the GPT-4o Vision engine
+    // which is far more accurate for handwriting than printed-text OCR.
+    setHandwritingMode(true);
     stopCamera();
   }, []);
 

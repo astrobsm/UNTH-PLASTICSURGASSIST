@@ -36,6 +36,9 @@ export const PatientProfile: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editFormData, setEditFormData] = useState<Partial<Patient>>({});
+  const [editReason, setEditReason] = useState('');
+  const [nameHistory, setNameHistory] = useState<any[]>([]);
+  const [showNameHistory, setShowNameHistory] = useState(false);
   const [activeTab, setActiveTab] = useState('encounters');
   const [admissionStatus, setAdmissionStatus] = useState<{ isAdmitted: boolean; ward?: string; bed?: string; admissionDate?: string; daysAdmitted?: number; lastSurgery?: { procedure_name: string; date: string; daysPostOp: number }; surgeryCount?: number } | null>(null);
   const [showPrescriptionModal, setShowPrescriptionModal] = useState(false);
@@ -599,6 +602,46 @@ export const PatientProfile: React.FC = () => {
                   />
                 </div>
               </div>
+
+              {/* Name change reason + audit trail */}
+              <div className="rounded-md bg-amber-50 border border-amber-200 p-3">
+                <label className="block text-xs font-medium text-amber-800 mb-1">Reason for name change (optional — recorded in the audit trail)</label>
+                <input
+                  type="text"
+                  value={editReason}
+                  onChange={(e) => setEditReason(e.target.value)}
+                  placeholder="e.g. Correcting spelling from admission note"
+                  className="w-full px-3 py-2 border border-amber-300 rounded-md text-sm focus:ring-amber-500 focus:border-amber-500"
+                />
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const next = !showNameHistory;
+                    setShowNameHistory(next);
+                    if (next) setNameHistory(await patientService.getNameHistory(id!));
+                  }}
+                  className="mt-2 text-xs text-amber-700 hover:underline font-medium"
+                >
+                  {showNameHistory ? 'Hide' : 'View'} name edit history
+                </button>
+                {showNameHistory && (
+                  <div className="mt-2 space-y-1 max-h-40 overflow-y-auto">
+                    {nameHistory.length === 0 ? (
+                      <p className="text-xs text-gray-500">No name changes recorded.</p>
+                    ) : nameHistory.map((h: any) => (
+                      <div key={h.id} className="text-xs text-gray-600 border-l-2 border-amber-300 pl-2">
+                        <span className="line-through text-gray-400">{[h.old_first_name, h.old_last_name].filter(Boolean).join(' ') || '—'}</span>
+                        {' → '}
+                        <span className="font-medium text-gray-800">{[h.new_first_name, h.new_last_name].filter(Boolean).join(' ') || '—'}</span>
+                        <div className="text-[10px] text-gray-400">
+                          {h.changed_by_name || 'Unknown'} · {h.created_at ? new Date(h.created_at).toLocaleString() : ''}
+                          {h.reason ? ` · ${h.reason}` : ''}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Date of Birth</label>
                 <input
@@ -657,8 +700,10 @@ export const PatientProfile: React.FC = () => {
               <button
                 onClick={async () => {
                   try {
-                    await patientService.updatePatient(id!, editFormData);
+                    await patientService.updatePatient(id!, { ...editFormData, editReason: editReason || undefined });
                     setShowEditModal(false);
+                    setEditReason('');
+                    setShowNameHistory(false);
                     loadPatientData();
                   } catch (error) {
                     console.error('Error updating patient:', error);

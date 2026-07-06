@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { hoTrackingService, HOProfile, HODetail } from '../services/hoTrackingService';
+import { apiClient } from '../services/apiClient';
 import { useCrossTabRefresh } from '../utils/crossTabSync';
 import { useNavigate } from 'react-router-dom';
 
@@ -43,6 +44,24 @@ const HOTrackingPage: React.FC = () => {
       if (!opts?.silent) setLoading(false);
     }
   }, []);
+
+  const [distributing, setDistributing] = useState(false);
+  const distributeAdmittedPatients = async () => {
+    if (!confirm('Distribute all currently-admitted patients evenly across the active house officers? Existing assignments for those patients will be updated.')) return;
+    setDistributing(true);
+    try {
+      const data = await apiClient.request('/users/distribute-patients', {
+        method: 'POST',
+        body: JSON.stringify({ scope: 'admitted' }),
+      });
+      alert(data.message || `Distributed ${data.assigned} patients.`);
+      await loadAllHOs({ silent: true });
+    } catch (err: any) {
+      alert(err.message || 'Distribution failed');
+    } finally {
+      setDistributing(false);
+    }
+  };
 
   const loadHODetail = useCallback(async (hoId: number | string) => {
     setLoading(true);
@@ -191,9 +210,15 @@ const HOTrackingPage: React.FC = () => {
             <Shield className="h-6 w-6 text-primary-600" />
             House Officer Tracking
           </h1>
-          <button onClick={() => loadAllHOs()} disabled={loading} className="flex items-center gap-1 px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg">
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={distributeAdmittedPatients} disabled={distributing}
+              className="flex items-center gap-1 px-3 py-1.5 text-sm bg-primary-600 text-white hover:bg-primary-700 rounded-lg disabled:opacity-50">
+              <Users className={`h-4 w-4 ${distributing ? 'animate-pulse' : ''}`} /> Distribute admitted patients
+            </button>
+            <button onClick={() => loadAllHOs()} disabled={loading} className="flex items-center gap-1 px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg">
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
+            </button>
+          </div>
         </div>
 
         {error && <div className="bg-red-50 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>}
