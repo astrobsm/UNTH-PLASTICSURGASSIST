@@ -231,6 +231,82 @@ const TreatmentPlanCreator: React.FC = () => {
   // OCR Scanner
   const [ocrModal, setOcrModal] = useState<'clinical' | 'investigation' | 'prescription' | null>(null);
 
+  // ── DRAFT AUTO-SAVE (persist each step; editable on return) ────────────────
+  const DRAFT_KEY = 'tp_wizard_draft';
+  const [draftSavedAt, setDraftSavedAt] = useState<number | null>(null);
+  const [pendingDraft, setPendingDraft] = useState<any | null>(null);
+  const draftLoadedRef = useRef(false);
+
+  // On mount, detect a previously-saved draft and offer to restore it.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (raw) {
+        const d = JSON.parse(raw);
+        if (d && (d.diagnosis || d.selectedPatient)) setPendingDraft(d);
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  // Continuously persist the whole wizard so each step survives reloads/crashes.
+  // Guarded so we don't overwrite a saved draft with an empty form before restore.
+  useEffect(() => {
+    if (!selectedPatient) return;
+    const draft = {
+      step, selectedPatient, medicalTeam, diagnosis, clinicalSummary, admissionDate,
+      dvtFactors, bradenScores, mustScores, comorbidities,
+      procedures, investigations, medications, woundDressing, woundDebridement,
+      reviewFrequency, reviewDays, reviewAssignee, plannedDischargeDate, dischargeCriteriaMet,
+      savedAt: Date.now(),
+    };
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+      setDraftSavedAt(draft.savedAt);
+    } catch { /* storage full — non-fatal */ }
+  }, [step, selectedPatient, medicalTeam, diagnosis, clinicalSummary, admissionDate,
+      dvtFactors, bradenScores, mustScores, comorbidities, procedures, investigations,
+      medications, woundDressing, woundDebridement, reviewFrequency, reviewDays,
+      reviewAssignee, plannedDischargeDate, dischargeCriteriaMet]);
+
+  const restoreDraft = () => {
+    if (!pendingDraft) return;
+    const d = pendingDraft;
+    draftLoadedRef.current = true;
+    if (d.selectedPatient) {
+      setSelectedPatient(d.selectedPatient);
+      setPatientSearch(d.selectedPatient.full_name || d.selectedPatient.name ||
+        `${d.selectedPatient.first_name || ''} ${d.selectedPatient.last_name || ''}`.trim());
+    }
+    if (d.medicalTeam) setMedicalTeam(d.medicalTeam);
+    if (d.diagnosis !== undefined) setDiagnosis(d.diagnosis);
+    if (d.clinicalSummary !== undefined) setClinicalSummary(d.clinicalSummary);
+    if (d.admissionDate) setAdmissionDate(d.admissionDate);
+    if (Array.isArray(d.dvtFactors)) setDvtFactors(d.dvtFactors);
+    if (d.bradenScores) setBradenScores(d.bradenScores);
+    if (d.mustScores) setMustScores(d.mustScores);
+    if (Array.isArray(d.comorbidities)) setComorbidities(d.comorbidities);
+    if (Array.isArray(d.procedures)) setProcedures(d.procedures);
+    if (Array.isArray(d.investigations)) setInvestigations(d.investigations);
+    if (Array.isArray(d.medications)) setMedications(d.medications);
+    if (Array.isArray(d.woundDressing)) setWoundDressing(d.woundDressing);
+    if (Array.isArray(d.woundDebridement)) setWoundDebridement(d.woundDebridement);
+    if (d.reviewFrequency) setReviewFrequency(d.reviewFrequency);
+    if (d.reviewDays) setReviewDays(d.reviewDays);
+    if (d.reviewAssignee) setReviewAssignee(d.reviewAssignee);
+    if (d.plannedDischargeDate) setPlannedDischargeDate(d.plannedDischargeDate);
+    if (Array.isArray(d.dischargeCriteriaMet)) setDischargeCriteriaMet(d.dischargeCriteriaMet);
+    if (d.step) setStep(d.step);
+    setPendingDraft(null);
+    toast.success('Draft restored — you can edit any step.');
+  };
+
+  const discardDraft = () => {
+    localStorage.removeItem(DRAFT_KEY);
+    setPendingDraft(null);
+    setDraftSavedAt(null);
+  };
+
+
   // ── COMPUTED VALUES ────────────────────────────────────────────────────────
   const dvtScore = useMemo(() => {
     let score = 0;
@@ -584,6 +660,7 @@ const TreatmentPlanCreator: React.FC = () => {
       } catch { /* notifications optional */ }
 
       toast.success('Treatment plan created successfully!');
+      localStorage.removeItem(DRAFT_KEY);
       navigate('/treatment-plan-manager');
     } catch (err: any) {
       console.error('Save error:', err);
@@ -684,10 +761,33 @@ const TreatmentPlanCreator: React.FC = () => {
       {/* Header */}
       <div className="bg-white border-b px-4 py-3 sticky top-0 z-30">
         <div className="flex items-center justify-between max-w-5xl mx-auto">
-          <h1 className="text-lg font-bold text-gray-900">Create Treatment Plan</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-lg font-bold text-gray-900">Create Treatment Plan</h1>
+            {draftSavedAt && (
+              <span className="hidden sm:inline-flex items-center gap-1 text-[11px] text-green-600">
+                <CheckCircle className="w-3.5 h-3.5" /> Draft auto-saved {new Date(draftSavedAt).toLocaleTimeString()}
+              </span>
+            )}
+          </div>
           <button onClick={() => navigate(-1)} className="text-gray-500 hover:text-gray-700"><X className="w-5 h-5" /></button>
         </div>
       </div>
+
+      {/* Restore unsaved draft banner */}
+      {pendingDraft && (
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-2">
+          <div className="max-w-5xl mx-auto flex items-center justify-between gap-3 flex-wrap">
+            <p className="text-sm text-amber-800">
+              You have an unsaved treatment-plan draft{pendingDraft.savedAt ? ` from ${new Date(pendingDraft.savedAt).toLocaleString()}` : ''}
+              {pendingDraft.diagnosis ? ` (${pendingDraft.diagnosis})` : ''}.
+            </p>
+            <div className="flex gap-2">
+              <button onClick={restoreDraft} className="px-3 py-1.5 bg-amber-600 text-white text-xs rounded-lg hover:bg-amber-700 font-medium">Restore draft</button>
+              <button onClick={discardDraft} className="px-3 py-1.5 bg-white border border-amber-300 text-amber-700 text-xs rounded-lg hover:bg-amber-100">Discard</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Step Progress */}
       <div className="bg-white border-b px-4 py-2 overflow-x-auto">

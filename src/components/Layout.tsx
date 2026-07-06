@@ -97,6 +97,7 @@ export const patientActions = [
   { name: 'Burn Care', href: '/burn-care', icon: Flame },
   { name: 'Wound Care', href: '/wound-care', icon: HeartPulse },
   { name: 'Keloid Care', href: '/keloid-care', icon: Syringe },
+  { name: 'Sickle Cell Ulcer', href: '/sickle-cell-ulcer', icon: HeartPulse },
   { name: 'Soft Tissue Infection', href: '/soft-tissue-infection', icon: Bug },
   { name: 'Pressure Sore', href: '/pressure-sore', icon: Armchair },
   { name: 'Lymphedema', href: '/lymphedema', icon: Waves },
