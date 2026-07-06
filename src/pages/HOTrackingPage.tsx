@@ -8,6 +8,7 @@ import {
 import { useAuthStore } from '../store/authStore';
 import { hoTrackingService, HOProfile, HODetail } from '../services/hoTrackingService';
 import { useCrossTabRefresh } from '../utils/crossTabSync';
+import { useNavigate } from 'react-router-dom';
 
 type ViewMode = 'overview' | 'detail';
 type Tab = 'summary' | 'documentation' | 'cbt' | 'cme' | 'patients' | 'eligibility';
@@ -132,8 +133,10 @@ const HOTrackingPage: React.FC = () => {
   };
 
   const filteredHOs = houseOfficers.filter(ho =>
-    ho.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (ho.email || '').toLowerCase().includes(searchQuery.toLowerCase())
+    // Never show deactivated staff, even if a stale/cached list includes them
+    (ho as any).is_active !== false &&
+    (ho.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (ho.email || '').toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   const sortedHOs = [...filteredHOs].sort((a, b) => {
@@ -188,7 +191,7 @@ const HOTrackingPage: React.FC = () => {
             <Shield className="h-6 w-6 text-primary-600" />
             House Officer Tracking
           </h1>
-          <button onClick={loadAllHOs} disabled={loading} className="flex items-center gap-1 px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg">
+          <button onClick={() => loadAllHOs()} disabled={loading} className="flex items-center gap-1 px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg">
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
           </button>
         </div>
@@ -752,6 +755,7 @@ function CMETab({ detail }: { detail: HODetail }) {
 
 // ── Patients Tab ──
 function PatientsTab({ detail }: { detail: HODetail }) {
+  const navigate = useNavigate();
   const assigned = detail.assignedPatients || [];
   const documented = detail.documentedPatients || [];
 
@@ -790,8 +794,11 @@ function PatientsTab({ detail }: { detail: HODetail }) {
           <div className="space-y-2">
             {documented.map((p: any, i: number) => {
               const docTypes = (p.documentation_types || '').split(', ').filter(Boolean);
+              const isAdmitted = p.admission_status === 'active' || p.admission_status === 'admitted';
               return (
-                <div key={p.id || i} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-sm transition-shadow">
+                <div key={p.id || i}
+                     onClick={() => p.id && navigate(`/patients/${p.id}`)}
+                     className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-sm transition-shadow cursor-pointer">
                   <div className="flex items-start justify-between mb-2">
                     <div>
                       <p className="font-semibold text-clinical-dark">
@@ -805,11 +812,18 @@ function PatientsTab({ detail }: { detail: HODetail }) {
                     </div>
                     <div className="text-right flex-shrink-0">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                        (p.admission_status === 'active' || p.admission_status === 'admitted') ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
+                        isAdmitted ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
                       }`}>
-                        {(p.admission_status === 'active' || p.admission_status === 'admitted') ? 'Admitted' : p.admission_status || 'Outpatient'}
+                        {isAdmitted ? 'Admitted' : p.admission_status || 'Outpatient'}
                       </span>
                       <p className="text-xs text-gray-400 mt-1">{p.total_docs} doc{p.total_docs !== 1 ? 's' : ''}</p>
+                      {p.id && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); navigate(`/patients/${p.id}`); }}
+                          className="mt-1 text-[11px] text-primary-600 hover:underline font-medium">
+                          {isAdmitted ? 'Edit admission' : 'Admit / edit'}
+                        </button>
+                      )}
                     </div>
                   </div>
                   {/* Documentation Types */}
@@ -850,8 +864,12 @@ function PatientsTab({ detail }: { detail: HODetail }) {
             Assigned — Not Yet Documented ({assignedOnly.length})
           </h4>
           <div className="space-y-2">
-            {assignedOnly.map((p: any, i: number) => (
-              <div key={i} className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center justify-between">
+            {assignedOnly.map((p: any, i: number) => {
+              const isAdmitted = p.admission_status === 'active' || p.admission_status === 'admitted';
+              return (
+              <div key={i}
+                   onClick={() => p.patient_id && navigate(`/patients/${p.patient_id}`)}
+                   className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center justify-between cursor-pointer hover:shadow-sm transition-shadow">
                 <div>
                   <p className="font-medium text-clinical-dark">
                     {[p.first_name, p.last_name].filter(Boolean).join(' ') || 'Unknown'}
@@ -862,9 +880,23 @@ function PatientsTab({ detail }: { detail: HODetail }) {
                     {p.bed_number ? ` · Bed ${p.bed_number}` : ''}
                   </p>
                 </div>
-                <span className="text-xs text-amber-600 font-medium">Needs Documentation</span>
+                <div className="text-right flex-shrink-0">
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                    isAdmitted ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
+                  }`}>
+                    {isAdmitted ? 'Admitted' : 'Outpatient'}
+                  </span>
+                  {p.patient_id && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); navigate(`/patients/${p.patient_id}`); }}
+                      className="block mt-1 text-[11px] text-primary-600 hover:underline font-medium">
+                      {isAdmitted ? 'Edit admission' : 'Admit / edit'}
+                    </button>
+                  )}
+                </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
