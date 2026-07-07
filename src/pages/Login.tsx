@@ -17,6 +17,33 @@ export default function Login() {
   const [successMessage, setSuccessMessage] = useState('');
   const { login } = useAuthStore();
 
+  // Forgot-password (self-service reset request) state
+  const [showForgot, setShowForgot] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotMessage, setForgotMessage] = useState('');
+
+  const submitResetRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotLoading(true);
+    setForgotMessage('');
+    try {
+      const base = (import.meta as any).env?.VITE_API_BASE_URL
+        || ((import.meta as any).env?.PROD ? '/api' : 'http://localhost:3005/api');
+      const resp = await fetch(`${base}/users/reset-request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: forgotEmail }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      setForgotMessage(data.message || 'If that account exists, a reset request has been sent to the administrators.');
+    } catch {
+      setForgotMessage('Request sent. If you remain locked out, contact your administrator.');
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
   // Registration form state
   const [regData, setRegData] = useState({
     name: '',
@@ -220,8 +247,49 @@ export default function Login() {
             <UserPlus className="h-5 w-5" />
             Create New Profile
           </button>
+
+          <button
+            type="button"
+            onClick={() => { setShowForgot(true); setForgotEmail(email); setForgotMessage(''); }}
+            className="w-full text-sm text-green-700 hover:underline pt-1"
+          >
+            Forgot password?
+          </button>
         </form>
       </div>
+
+      {/* Forgot-password modal */}
+      {showForgot && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+            <div className="flex items-center justify-between p-4 border-b">
+              <h3 className="text-lg font-medium text-gray-900 flex items-center gap-2"><Key className="h-5 w-5 text-green-600" /> Reset password</h3>
+              <button type="button" onClick={() => setShowForgot(false)} className="text-gray-400 hover:text-gray-600"><X className="h-5 w-5" /></button>
+            </div>
+            <form onSubmit={submitResetRequest} className="p-5 space-y-3">
+              <p className="text-sm text-gray-500">
+                Enter your account email. An administrator will reset your password and give you a
+                temporary one to sign in with (you'll set a new password on first login).
+              </p>
+              <input
+                type="email"
+                required
+                value={forgotEmail}
+                onChange={(e) => setForgotEmail(e.target.value)}
+                placeholder="you@example.com"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500"
+              />
+              {forgotMessage && <p className="text-sm text-green-700 bg-green-50 rounded-md p-2">{forgotMessage}</p>}
+              <div className="flex justify-end gap-2 pt-1">
+                <button type="button" onClick={() => setShowForgot(false)} className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Close</button>
+                <button type="submit" disabled={forgotLoading} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50">
+                  {forgotLoading ? 'Sending…' : 'Send request'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Registration Modal — styled to mirror admin's "Add New User" form */}
       {showRegistration && (

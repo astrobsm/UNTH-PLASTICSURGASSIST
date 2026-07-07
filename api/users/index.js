@@ -229,6 +229,14 @@ export default async function handler(req, res) {
   try {
     if (cors(req, res)) return;
 
+    // ── PUBLIC: self-service password reset request (no auth — user is locked out) ──
+    {
+      const p = (req.url || '').split('?')[0].replace('/api/users', '').split('/').filter(Boolean);
+      if (req.method === 'POST' && p[0] === 'reset-request') {
+        return await createResetRequest(req.body, res);
+      }
+    }
+
     const auth = authenticateRequest(req);
     if (!auth.authenticated) {
       return res.status(401).json({ error: auth.error });
@@ -247,6 +255,9 @@ export default async function handler(req, res) {
 
     switch (method) {
       case 'GET':
+        if (userId === 'reset-requests') {
+          return await getResetRequests(auth.user, res);
+        }
         if (userId) {
           return await getUser(userId, res);
         }
@@ -257,6 +268,9 @@ export default async function handler(req, res) {
         }
         if (userId === 'distribute-patients') {
           return await distributePatientsToHOs(req.body, auth.user, res);
+        }
+        if (action === 'reset-password') {
+          return await adminResetPassword(userId, auth.user, res);
         }
         return await createUser(req.body, auth.user, res);
       case 'PUT':
@@ -368,6 +382,102 @@ async function distributePatientsToHOs(body, currentUser, res) {
     houseOfficers: hos.rows.length,
     breakdown: perHO,
     message: `Distributed ${assigned} ${scope} patient(s) across ${hos.rows.length} active house officer(s).`,
+  });
+}
+
+// ── Password reset ──────────────────────────────────────────────────────────
+async function ensureResetRequestsTable() {
+  try {
+    await query(`
+      CREATE TABLE IF NOT EXISTS password_reset_requests (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(255) NOT NULL,
+        user_id INTEGER,
+        status VARCHAR(20) DEFAULT 'pending',
+        requested_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        resolved_at TIMESTAMPTZ,
+        resolved_by VARCHAR(180)
+      )
+    `);
+  } catch (e) { console.warn('ensureResetRequestsTable:', e.message); }
+}
+
+// PUBLIC: a locked-out user requests a password reset. Always returns a generic
+// success so we never reveal whether an email is registered.
+async function createResetRequest(body, res) {
+  const email = (body?.email || '').trim().toLowerCase();
+  const generic = { message: 'If that account exists, a reset request has been sent to the administrators.' };
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(200).json(generic);
+  }
+  try {
+    await ensureResetRequestsTable();
+    const u = await query(
+      "SELECT id FROM users WHERE LOWER(email) = $1 AND (app_id = 'psa' OR app_id IS NULL)", [email]
+    );
+    const userId = u.rows[0]?.id || null;
+    const existing = await query(
+      "SELECT id FROM password_reset_requests WHERE LOWER(email) = $1 AND status = 'pending'", [email]
+    );
+    if (existing.rows.length === 0) {
+      await query(
+        "INSERT INTO password_reset_requests (email, user_id, status) VALUES ($1, $2, 'pending')",
+        [email, userId]
+      );
+    }
+  } catch (e) { console.warn('createResetRequest:', e.message); }
+  return res.status(200).json(generic);
+}
+
+// ADMIN: list pending reset requests (enriched with the user's name/role).
+async function getResetRequests(currentUser, res) {
+  if (!['admin', 'super_admin', 'consultant'].includes(currentUser.role)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+  await ensureResetRequestsTable();
+  const r = await query(`
+    SELECT prr.id, prr.email, prr.user_id, prr.status, prr.requested_at,
+           u.full_name, u.username, u.role
+    FROM password_reset_requests prr
+    LEFT JOIN users u ON u.id = prr.user_id
+    WHERE prr.status = 'pending'
+    ORDER BY prr.requested_at DESC
+  `);
+  return res.status(200).json({ requests: r.rows });
+}
+
+// ADMIN: reset a user's password to a fresh temporary one (forces change on next
+// login) and resolve any pending reset requests for them.
+async function adminResetPassword(id, currentUser, res) {
+  if (!['admin', 'super_admin', 'consultant'].includes(currentUser.role)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+  const userRes = await query(
+    "SELECT id, username, email, full_name, role FROM users WHERE id = $1 AND (app_id = 'psa' OR app_id IS NULL)",
+    [id]
+  );
+  if (userRes.rows.length === 0) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+  const target = userRes.rows[0];
+  const tempPassword = generatePassword(12);
+  const passwordHash = await bcrypt.hash(tempPassword, 10);
+  await query(
+    'UPDATE users SET password_hash = $1, must_change_password = TRUE, is_active = TRUE WHERE id = $2',
+    [passwordHash, id]
+  );
+  try {
+    await ensureResetRequestsTable();
+    await query(
+      "UPDATE password_reset_requests SET status = 'resolved', resolved_at = CURRENT_TIMESTAMP, resolved_by = $2 WHERE (user_id = $1 OR LOWER(email) = LOWER($3)) AND status = 'pending'",
+      [id, currentUser.fullName || currentUser.email || 'admin', target.email]
+    );
+  } catch { /* non-fatal */ }
+
+  return res.status(200).json({
+    message: `Password reset for ${target.full_name}. Share the temporary password; they must change it on first login.`,
+    user: { id: target.id, username: target.username, email: target.email, fullName: target.full_name, role: target.role },
+    temporaryPassword: tempPassword,
   });
 }
 

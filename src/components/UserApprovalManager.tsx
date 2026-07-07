@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { userManagementService, PendingUser, ApprovedUser } from '../services/userManagementService';
+import { apiClient } from '../services/apiClient';
 import { 
   CheckCircle, 
   XCircle, 
@@ -17,7 +18,8 @@ import {
   Users,
   Lock,
   Eye,
-  EyeOff
+  EyeOff,
+  Key
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -37,6 +39,21 @@ export function UserApprovalManager() {
   const [showPassword, setShowPassword] = useState(false);
   const [toggleTargetUser, setToggleTargetUser] = useState<{ id: string; currentStatus: boolean; name: string } | null>(null);
   const [togglingUser, setTogglingUser] = useState(false);
+  const [resettingId, setResettingId] = useState<string | null>(null);
+  const [resetInfo, setResetInfo] = useState<{ name: string; tempPassword: string } | null>(null);
+
+  const handleResetPassword = async (userId: string, userName: string) => {
+    if (!confirm(`Reset the password for ${userName}? A new temporary password will be generated and they must change it on next login.`)) return;
+    setResettingId(userId);
+    try {
+      const data = await apiClient.request(`/users/${userId}/reset-password`, { method: 'POST' });
+      setResetInfo({ name: userName, tempPassword: data.temporaryPassword });
+    } catch (e: any) {
+      alert(e.message || 'Failed to reset password');
+    } finally {
+      setResettingId(null);
+    }
+  };
 
   useEffect(() => {
     loadUsers();
@@ -404,6 +421,15 @@ export function UserApprovalManager() {
                           {user.is_active ? 'Deactivate' : 'Activate'}
                         </button>
                         <button
+                          onClick={() => handleResetPassword(user.id!, user.full_name)}
+                          disabled={resettingId === user.id}
+                          className="px-3 py-1.5 rounded-md transition text-xs font-medium flex items-center gap-1 bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 disabled:opacity-50"
+                          title="Reset password (issue a temporary one)"
+                        >
+                          <Key className="h-3.5 w-3.5" />
+                          {resettingId === user.id ? 'Resetting…' : 'Reset password'}
+                        </button>
+                        <button
                           onClick={() => {
                             setSelectedUser(user);
                             setShowDetailsModal(true);
@@ -420,6 +446,34 @@ export function UserApprovalManager() {
               )}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Reset password result modal — shows the temporary password to share */}
+      {resetInfo && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div className="px-6 py-4 border-b flex items-center gap-3">
+              <div className="p-2 rounded-full bg-amber-100"><Key className="h-5 w-5 text-amber-600" /></div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">Temporary password</h3>
+                <p className="text-sm text-gray-500">{resetInfo.name}</p>
+              </div>
+            </div>
+            <div className="p-6 space-y-3">
+              <p className="text-sm text-gray-600">Share this temporary password securely with the user. They must change it on first login.</p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 px-3 py-2 bg-gray-100 rounded-md font-mono text-sm break-all">{resetInfo.tempPassword}</code>
+                <button
+                  onClick={() => { navigator.clipboard?.writeText(resetInfo.tempPassword); }}
+                  className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-md text-sm"
+                >Copy</button>
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t flex justify-end">
+              <button onClick={() => setResetInfo(null)} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">Done</button>
+            </div>
+          </div>
         </div>
       )}
 
