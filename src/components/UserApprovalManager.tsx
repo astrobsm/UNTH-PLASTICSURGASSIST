@@ -46,7 +46,10 @@ export function UserApprovalManager() {
     if (!confirm(`Reset the password for ${userName}? A new temporary password will be generated and they must change it on next login.`)) return;
     setResettingId(userId);
     try {
-      const data = await apiClient.request(`/users/${userId}/reset-password`, { method: 'POST' });
+      const data = await apiClient.request('/users/reset-password', {
+        method: 'POST',
+        body: JSON.stringify({ userId }),
+      });
       setResetInfo({ name: userName, tempPassword: data.temporaryPassword });
     } catch (e: any) {
       alert(e.message || 'Failed to reset password');
