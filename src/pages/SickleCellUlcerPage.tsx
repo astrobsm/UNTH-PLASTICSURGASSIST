@@ -36,12 +36,17 @@ function hbBand(hb: number): Band {
   if (hb >= 6) return { label: `Moderate anaemia (${hb} g/dL)`, points: 2 };
   return { label: `Severe anaemia (${hb} g/dL)`, points: 3 };
 }
-const HYDRATION_OPTS = [
-  { value: 'well', label: 'Well hydrated', points: 0 },
-  { value: 'mild', label: 'Mild dehydration', points: 1 },
-  { value: 'moderate', label: 'Moderate dehydration', points: 2 },
-  { value: 'severe', label: 'Severe dehydration', points: 3 },
-];
+// Hydration scored from actual daily oral water intake vs the patient's fluid
+// target (≈40 mL/kg, min 3 L). Higher points = greater dehydration.
+function hydrationFromIntake(mlPerDay: number, targetMl: number): Band {
+  if (!mlPerDay) return { label: 'Enter oral intake', points: 0 };
+  const ref = targetMl || 3000;
+  const pct = (mlPerDay / ref) * 100;
+  if (pct >= 100) return { label: `Well hydrated (${mlPerDay} mL/day)`, points: 0 };
+  if (pct >= 70) return { label: `Mild dehydration (${mlPerDay} mL/day)`, points: 1 };
+  if (pct >= 50) return { label: `Moderate dehydration (${mlPerDay} mL/day)`, points: 2 };
+  return { label: `Severe dehydration (${mlPerDay} mL/day)`, points: 3 };
+}
 const WEIGHTLOSS_OPTS = [
   { value: 'none', label: 'No recent weight loss', points: 0 },
   { value: 'mild', label: '<5% in 3–6 months', points: 1 },
@@ -78,7 +83,7 @@ export default function SickleCellUlcerPage() {
   const [crises, setCrises] = useState('');
   const [pain, setPain] = useState(0);
   const [hb, setHb] = useState('');
-  const [hydration, setHydration] = useState('well');
+  const [oralWater, setOralWater] = useState('');
   const [weightLoss, setWeightLoss] = useState('none');
   const [albumin, setAlbumin] = useState('');
   const [woundBed, setWoundBed] = useState(1);
@@ -94,6 +99,7 @@ export default function SickleCellUlcerPage() {
   const h = parseFloat(height) || 0;
   const bmi = w && h ? +(w / Math.pow(h / 100, 2)).toFixed(1) : 0;
   const bmiInfo = bmiClass(bmi);
+  const fluidTarget = w ? Math.max(3000, Math.round(w * 40)) : 3000;
 
   // ── Composite severity score ──
   const bands = useMemo(() => {
@@ -106,10 +112,10 @@ export default function SickleCellUlcerPage() {
       crisis: crisisBand(parseFloat(crises) || 0),
       pain: painBand(pain),
       hb: hbBand(parseFloat(hb) || 0),
-      hydration: { label: HYDRATION_OPTS.find(o => o.value === hydration)?.label || '', points: HYDRATION_OPTS.find(o => o.value === hydration)?.points || 0 },
+      hydration: hydrationFromIntake(parseFloat(oralWater) || 0, fluidTarget),
       nutrition: { label: bmi ? `${bmiInfo.label} (BMI ${bmi})` : 'Enter weight & height', points: nStatus },
     };
-  }, [crises, pain, hb, hydration, weightLoss, albumin, bmi, bmiInfo.label, bmiInfo.points]);
+  }, [crises, pain, hb, oralWater, fluidTarget, weightLoss, albumin, bmi, bmiInfo.label, bmiInfo.points]);
 
   const totalSeverity = bands.crisis.points + bands.pain.points + bands.hb.points + bands.hydration.points + bands.nutrition.points;
   const maxSeverity = 3 + 2 + 3 + 3 + 3; // 14
@@ -128,10 +134,13 @@ export default function SickleCellUlcerPage() {
       kcal, protein, proteinPerKg, fluid,
       micronutrients: [
         'Vitamin C 500–1000 mg/day (collagen synthesis)',
-        'Zinc 15–30 mg/day (epithelialization)',
-        'Arginine-rich protein (fish, beans, groundnut)',
+        'Zinc (elemental) 15–30 mg/day (epithelialization)',
+        'Copper 2 mg/day (collagen cross-linking; balances high-dose zinc)',
+        'Magnesium 300–400 mg/day (enzyme cofactor; muscle & vascular tone)',
+        'Vitamin A 5,000–10,000 IU/day, short course (epithelialization)',
+        'Vitamin B-complex daily (thiamine, riboflavin, niacin, B6, B12)',
         'Folic acid 5 mg/day (erythropoiesis in SCD)',
-        'Vitamin A & B-complex (from vegetables/liver)',
+        'Arginine-rich protein (fish, beans, groundnut)',
         'Avoid routine iron unless proven deficiency (SCD overload risk)',
       ],
     };
@@ -205,7 +214,8 @@ export default function SickleCellUlcerPage() {
         recommendations: [...protocols.nutrition, ...protocols.hydration, ...protocols.lifestyle],
         clinical: {
           weight_kg: w, height_cm: h, bmi, crises_per_year: parseFloat(crises) || 0,
-          pain_vas: pain, hb, hydration, weight_loss: weightLoss, albumin,
+          pain_vas: pain, hb, oral_water_ml: parseFloat(oralWater) || 0, hydration_target_ml: fluidTarget,
+          hydration_status: bands.hydration.label, weight_loss: weightLoss, albumin,
           wound_bed: WOUND_BEDS[woundBed], infection, large_wound: largeWound,
         },
         nutrition_needs: needs || {},
@@ -278,10 +288,9 @@ export default function SickleCellUlcerPage() {
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Hydration status</label>
-            <select value={hydration} onChange={e => setHydration(e.target.value)} className={numInput}>
-              {HYDRATION_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
+            <label className="block text-xs text-gray-500 mb-1">Oral water intake (mL/day)</label>
+            <input type="number" value={oralWater} onChange={e => setOralWater(e.target.value)} className={numInput} placeholder="e.g. 2500" />
+            <p className="text-[10px] text-gray-400 mt-0.5">Target ≈ {fluidTarget} mL/day{oralWater ? ` · ${bands.hydration.label}` : ''}</p>
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">Recent weight loss</label>
