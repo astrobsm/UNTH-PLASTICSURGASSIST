@@ -15,6 +15,11 @@ export interface SickleCellUlcerAssessment {
   notes?: string;
   assessed_by_name?: string;
   created_at?: string;
+  severity?: string;
+  clinical?: Record<string, any>;
+  nutrition_needs?: Record<string, any>;
+  protocols?: Record<string, any>;
+  meal_plan?: any[];
 }
 
 class SickleCellUlcerService {

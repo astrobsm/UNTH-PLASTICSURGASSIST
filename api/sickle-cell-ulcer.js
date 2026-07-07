@@ -28,6 +28,15 @@ async function ensureTable() {
       )
     `);
     await query(`CREATE INDEX IF NOT EXISTS idx_scu_patient ON sickle_cell_ulcer_assessments(patient_id, created_at DESC)`);
+    // Extended clinical + nutrition fields (self-healing)
+    const alters = [
+      `ALTER TABLE sickle_cell_ulcer_assessments ADD COLUMN IF NOT EXISTS clinical JSONB DEFAULT '{}'`,
+      `ALTER TABLE sickle_cell_ulcer_assessments ADD COLUMN IF NOT EXISTS nutrition_needs JSONB DEFAULT '{}'`,
+      `ALTER TABLE sickle_cell_ulcer_assessments ADD COLUMN IF NOT EXISTS protocols JSONB DEFAULT '{}'`,
+      `ALTER TABLE sickle_cell_ulcer_assessments ADD COLUMN IF NOT EXISTS meal_plan JSONB DEFAULT '[]'`,
+      `ALTER TABLE sickle_cell_ulcer_assessments ADD COLUMN IF NOT EXISTS severity VARCHAR(30)`,
+    ];
+    for (const a of alters) { try { await query(a); } catch (e) { console.warn('scu alter:', e.message); } }
   } catch (e) { console.warn('ensureTable scu:', e.message); }
   tableEnsured = true;
 }
@@ -57,8 +66,9 @@ export default async function handler(req, res) {
       const r = await query(
         `INSERT INTO sickle_cell_ulcer_assessments
            (patient_id, patient_name, hospital_number, scores, total_score, max_score,
-            readiness, wound_bed, wound_agents, recommendations, notes, assessed_by, assessed_by_name)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+            readiness, wound_bed, wound_agents, recommendations, notes, assessed_by, assessed_by_name,
+            clinical, nutrition_needs, protocols, meal_plan, severity)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
          RETURNING *`,
         [
           String(b.patient_id), b.patient_name || null, b.hospital_number || null,
@@ -68,6 +78,9 @@ export default async function handler(req, res) {
           b.notes || null,
           auth.user?.id != null ? String(auth.user.id) : null,
           auth.user?.fullName || auth.user?.email || null,
+          JSON.stringify(b.clinical || {}), JSON.stringify(b.nutrition_needs || {}),
+          JSON.stringify(b.protocols || {}), JSON.stringify(b.meal_plan || []),
+          b.severity || null,
         ]
       );
       return res.status(201).json({ assessment: r.rows[0] });
