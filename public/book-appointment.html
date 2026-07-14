@@ -213,7 +213,23 @@
       if (raw.startsWith('0')) raw = raw.substring(1);
       state.phoneNumber = raw;
       el.value = raw;
-      render();
+      updateBookingButtonState();
+    }
+
+    function handlePatientNameInput(el) {
+      state.patientName = el.value;
+      updateBookingButtonState();
+    }
+
+    function handleAgreementChange(el) {
+      state.agreedTerms = el.checked;
+      updateBookingButtonState();
+    }
+
+    function updateBookingButtonState() {
+      var button = document.getElementById('confirmBookingBtn');
+      if (!button) return;
+      button.disabled = !state.patientName.trim() || !isValidPhone() || !state.agreedTerms || state.loading;
     }
 
     function getFullPhone() {
@@ -339,7 +355,7 @@
           <button onclick="goBack('select-slot')" style="font-size:0.8rem;color:#0e9f6e;background:none;border:none;cursor:pointer;margin-bottom:1rem">&larr; Change time slot</button>
           <div class="form-group">
             <label for="patientName">Full Name *</label>
-            <input type="text" id="patientName" placeholder="Enter your full name" value="${esc(state.patientName)}" oninput="state.patientName=this.value;render()" maxlength="100" />
+            <input type="text" id="patientName" placeholder="Enter your full name" value="${esc(state.patientName)}" oninput="handlePatientNameInput(this)" maxlength="100" />
           </div>
           <div class="form-group">
             <label for="phoneNum">Phone Number (WhatsApp) *</label>
@@ -364,11 +380,11 @@
             <li>In case of emergency, contact the unit directly.</li>
           </ul>
           <div class="checkbox-row">
-            <input type="checkbox" id="agreeTerms" ${state.agreedTerms ? 'checked' : ''} onchange="state.agreedTerms=this.checked;render()" />
+            <input type="checkbox" id="agreeTerms" ${state.agreedTerms ? 'checked' : ''} onchange="handleAgreementChange(this)" />
             <label for="agreeTerms">I agree to the Clinic Appointment Terms and Conditions</label>
           </div>
         </div>
-        <button class="btn-book" onclick="submitBooking()" ${(!state.patientName.trim() || !isValidPhone() || !state.agreedTerms || state.loading) ? 'disabled' : ''}>
+        <button id="confirmBookingBtn" class="btn-book" onclick="submitBooking()" ${(!state.patientName.trim() || !isValidPhone() || !state.agreedTerms || state.loading) ? 'disabled' : ''}>
           ${state.loading ? '<span class="spinner" style="width:18px;height:18px;border-width:2px;vertical-align:middle"></span> Booking...' : '✅ Confirm Appointment'}
         </button>`;
       }
