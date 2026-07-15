@@ -59,6 +59,7 @@ export const SpeechToTextInput: React.FC<SpeechToTextInputProps> = ({
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [interimTranscript, setInterimTranscript] = useState('');
   const [speechError, setSpeechError] = useState<string | null>(null);
+  const [uncertainText, setUncertainText] = useState<string | null>(null);
   const [showEnhanceSuccess, setShowEnhanceSuccess] = useState(false);
   const [isSpeechSupported, setIsSpeechSupported] = useState(true);
   const [isScanning, setIsScanning] = useState(false);
@@ -91,6 +92,7 @@ export const SpeechToTextInput: React.FC<SpeechToTextInputProps> = ({
 
       // Process punctuation commands
       const processed = speechToTextService.processPunctuationCommands(newSegment);
+      setUncertainText(result.confidence < 0.65 ? processed : null);
 
       // Use ref to get the LATEST value (avoids stale closure)
       const currentVal = currentValueRef.current.trim();
@@ -132,9 +134,9 @@ export const SpeechToTextInput: React.FC<SpeechToTextInputProps> = ({
       
       try {
         speechToTextService.startListening({
-          continuous: true,
+          continuous: speechToTextService.getSettings().continuous,
           interimResults: true,
-          language: 'en-US',
+          language: speechToTextService.getSettings().language,
           onResult: handleSpeechResult,
           onError: handleSpeechError,
           onEnd: () => {
@@ -423,6 +425,11 @@ export const SpeechToTextInput: React.FC<SpeechToTextInputProps> = ({
             <p className="text-orange-500 flex items-center gap-1">
               <AlertCircle className="w-4 h-4" />
               {speechError}
+            </p>
+          ) : uncertainText ? (
+            <p className="text-amber-600 flex items-center gap-1">
+              <AlertCircle className="w-4 h-4" />
+              Review uncertain dictation: "{uncertainText}"
             </p>
           ) : helperText ? (
             <p className="text-gray-500">{helperText}</p>

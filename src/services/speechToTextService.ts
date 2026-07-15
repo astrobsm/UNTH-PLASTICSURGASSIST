@@ -30,6 +30,22 @@ export interface SpeechToTextOptions {
   onEnd?: () => void;
 }
 
+export interface DictationSettings {
+  language: string;
+  autoPunctuation: boolean;
+  automaticCapitalization: boolean;
+  continuous: boolean;
+  pushToTalk: boolean;
+}
+
+const DEFAULT_DICTATION_SETTINGS: DictationSettings = {
+  language: 'en-US',
+  autoPunctuation: true,
+  automaticCapitalization: true,
+  continuous: true,
+  pushToTalk: false,
+};
+
 // Medical terminology corrections for common misrecognitions
 const MEDICAL_CORRECTIONS: Record<string, string> = {
   // Surgical terms
@@ -178,6 +194,21 @@ class SpeechToTextService {
     return this.recognition !== null;
   }
 
+  getSettings(): DictationSettings {
+    try {
+      const saved = localStorage.getItem('psa_dictation_settings');
+      return saved ? { ...DEFAULT_DICTATION_SETTINGS, ...JSON.parse(saved) } : DEFAULT_DICTATION_SETTINGS;
+    } catch {
+      return DEFAULT_DICTATION_SETTINGS;
+    }
+  }
+
+  saveSettings(settings: Partial<DictationSettings>): DictationSettings {
+    const next = { ...this.getSettings(), ...settings };
+    localStorage.setItem('psa_dictation_settings', JSON.stringify(next));
+    return next;
+  }
+
   /**
    * Start listening. The service accumulates all finalized text internally.
    * onResult receives ONLY new segments (isFinal=true) or current interim (isFinal=false).
@@ -234,8 +265,9 @@ class SpeechToTextService {
 
   private setupRecognition(): void {
     const rec = this.recognition;
-    rec.lang = this.options.language || 'en-US';
-    rec.continuous = true;           // Always continuous internally
+    const settings = this.getSettings();
+    rec.lang = this.options.language || settings.language;
+    rec.continuous = this.options.continuous ?? settings.continuous;
     rec.interimResults = this.options.interimResults ?? true;
     rec.maxAlternatives = 1;
 
@@ -443,6 +475,7 @@ class SpeechToTextService {
 
   // Process punctuation commands
   processPunctuationCommands(text: string): string {
+    if (!this.getSettings().autoPunctuation) return text;
     return text
       .replace(/\bperiod\b/gi, '.')
       .replace(/\bfull stop\b/gi, '.')

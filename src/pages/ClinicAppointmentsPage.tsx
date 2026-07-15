@@ -1,10 +1,14 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Calendar, Clock, User, Filter, RefreshCw, XCircle, CheckCircle, AlertTriangle, Copy, ExternalLink, Volume2, VolumeX, Bell, BellOff, Users, Timer, Scissors } from 'lucide-react';
+import { Calendar, Clock, User, Filter, RefreshCw, XCircle, CheckCircle, AlertTriangle, Copy, ExternalLink, Volume2, VolumeX, Bell, BellOff, Users, Timer, Scissors, Download } from 'lucide-react';
 import { apiClient } from '../services/apiClient';
 import SurgeryScheduler from '../components/SurgeryScheduler';
 import SurgeryQueuePanel from '../components/SurgeryQueuePanel';
 import { broadcastChange, useCrossTabRefresh } from '../utils/crossTabSync';
 import { clinicConfigService, QueueStats, ClinicCategory } from '../services/clinicConfigService';
+import { patientService } from '../services/patientService';
+import { exportAppointmentSchedulePdf } from '../services/appointmentPdfService';
+import { logDataExport } from '../services/auditLoggingService';
+import { useAuthStore } from '../store/authStore';
 
 interface Appointment {
   id: number;
@@ -112,8 +116,11 @@ function playAlertTone(frequency = 880, duration = 300) {
 }
 
 const ClinicAppointmentsPage: React.FC = () => {
+  const { user } = useAuthStore();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [pdfOrientation, setPdfOrientation] = useState<'portrait' | 'landscape'>('landscape');
   const [filterDate, setFilterDate] = useState(getNextClinicDate());
   const [filterDoctor, setFilterDoctor] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
@@ -327,6 +334,34 @@ const ClinicAppointmentsPage: React.FC = () => {
     await updateStatus(id, 'cancelled');
   };
 
+  const exportPdf = async () => {
+    if (!appointments.length) {
+      alert('No appointments to export for the current filters.');
+      return;
+    }
+    setExportingPdf(true);
+    try {
+      const patients = await patientService.getAllPatients();
+      exportAppointmentSchedulePdf({
+        appointments,
+        patients,
+        selectedDate: filterDate,
+        generatedBy: user?.name || user?.email || 'Unknown user',
+        orientation: pdfOrientation,
+        consultantFilter: filterDoctor,
+        statusFilter: filterStatus,
+      });
+      if (user?.id) {
+        logDataExport(String(user.id), user.name || user.email || 'Unknown user', user.role || 'user', 'PATIENT', filterDate, 'PDF').catch(() => {});
+      }
+    } catch (err) {
+      console.error('Failed to export appointment PDF:', err);
+      alert('Failed to export appointment PDF. Please try again.');
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
   // Promote an appointment into the surgery scheduling queue
   const [surgeryRefresh, setSurgeryRefresh] = useState(0);
   const promoteToSurgery = async (id: number) => {
@@ -365,6 +400,18 @@ const ClinicAppointmentsPage: React.FC = () => {
           <p className="text-sm text-gray-500 mt-1">Manage patient clinic bookings &middot; Tuesdays &amp; Wednesdays</p>
         </div>
         <div className="flex items-center gap-2">
+          <select
+            value={pdfOrientation}
+            onChange={e => setPdfOrientation(e.target.value as 'portrait' | 'landscape')}
+            className="px-2 py-2 bg-white border border-gray-300 rounded-lg text-sm"
+            aria-label="PDF orientation"
+          >
+            <option value="landscape">Landscape PDF</option>
+            <option value="portrait">Portrait PDF</option>
+          </select>
+          <button onClick={exportPdf} disabled={exportingPdf || loading || appointments.length === 0} className="flex items-center gap-1.5 px-3 py-2 bg-white border border-green-600 text-green-700 rounded-lg text-sm hover:bg-green-50 disabled:opacity-50 disabled:cursor-not-allowed">
+            <Download className="w-4 h-4" /> {exportingPdf ? 'Exporting...' : 'Export PDF'}
+          </button>
           <button onClick={fetchAppointments} className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm hover:bg-gray-50">
             <RefreshCw className="w-4 h-4" /> Refresh
           </button>

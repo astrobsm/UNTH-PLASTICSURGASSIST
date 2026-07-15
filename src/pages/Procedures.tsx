@@ -1844,35 +1844,38 @@ const IntraoperativeFindingsModal: React.FC<{ procedure: any; onClose: () => voi
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Incision Details</label>
-              <textarea
+              <MedicalTextInput
+                label="Incision Details"
                 value={formData.incision_details}
-                onChange={(e) => setFormData({ ...formData, incision_details: e.target.value })}
+                onChange={(value) => setFormData({ ...formData, incision_details: value })}
                 rows={2}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
                 placeholder="Location, size, and type of incision..."
+                context="operative_note"
+                documentType="clinical_note"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Anatomical Findings</label>
-              <textarea
+              <MedicalTextInput
+                label="Anatomical Findings"
                 value={formData.anatomical_findings}
-                onChange={(e) => setFormData({ ...formData, anatomical_findings: e.target.value })}
+                onChange={(value) => setFormData({ ...formData, anatomical_findings: value })}
                 rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
                 placeholder="Normal and abnormal anatomical structures encountered..."
+                context="operative_note"
+                documentType="clinical_note"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Pathological Findings</label>
-              <textarea
+              <MedicalTextInput
+                label="Pathological Findings"
                 value={formData.pathological_findings}
-                onChange={(e) => setFormData({ ...formData, pathological_findings: e.target.value })}
+                onChange={(value) => setFormData({ ...formData, pathological_findings: value })}
                 rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
                 placeholder="Describe any pathological findings..."
+                context="operative_note"
+                documentType="clinical_note"
               />
             </div>
 
@@ -1925,13 +1928,14 @@ const IntraoperativeFindingsModal: React.FC<{ procedure: any; onClose: () => voi
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Complications</label>
-              <textarea
+              <MedicalTextInput
+                label="Complications"
                 value={formData.complications}
-                onChange={(e) => setFormData({ ...formData, complications: e.target.value })}
+                onChange={(value) => setFormData({ ...formData, complications: value })}
                 rows={2}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
                 placeholder="Any intraoperative complications..."
+                context="operative_note"
+                documentType="clinical_note"
               />
             </div>
 
@@ -1971,25 +1975,27 @@ const IntraoperativeFindingsModal: React.FC<{ procedure: any; onClose: () => voi
 
             {formData.specimen_sent && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Specimen Details</label>
-                <textarea
+                <MedicalTextInput
+                  label="Specimen Details"
                   value={formData.specimen_details}
-                  onChange={(e) => setFormData({ ...formData, specimen_details: e.target.value })}
+                  onChange={(value) => setFormData({ ...formData, specimen_details: value })}
                   rows={2}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
                   placeholder="Description of specimen sent..."
+                  context="operative_note"
+                  documentType="clinical_note"
                 />
               </div>
             )}
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Additional Notes</label>
-              <textarea
+              <MedicalTextInput
+                label="Additional Notes"
                 value={formData.additional_notes}
-                onChange={(e) => setFormData({ ...formData, additional_notes: e.target.value })}
+                onChange={(value) => setFormData({ ...formData, additional_notes: value })}
                 rows={2}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
                 placeholder="Any additional relevant information..."
+                context="operative_note"
+                documentType="clinical_note"
               />
             </div>
 
@@ -2837,14 +2843,15 @@ const PostoperativeNoteModal: React.FC<{ procedure: any; onClose: () => void }> 
             {/* Surgical Details */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Indication for Surgery *</label>
-                <textarea
+                <MedicalTextInput
+                  label="Indication for Surgery"
                   required
                   value={formData.indication}
-                  onChange={(e) => setFormData({ ...formData, indication: e.target.value })}
+                  onChange={(value) => setFormData({ ...formData, indication: value })}
                   rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
                   placeholder="Primary diagnosis and reason for surgery..."
+                  context="operative_note"
+                  documentType="clinical_note"
                 />
               </div>
 
@@ -2870,38 +2877,41 @@ const PostoperativeNoteModal: React.FC<{ procedure: any; onClose: () => void }> 
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Intraoperative Findings *</label>
-              <textarea
+              <MedicalTextInput
+                label="Intraoperative Findings"
                 required
                 value={formData.intraop_findings}
-                onChange={(e) => setFormData({ ...formData, intraop_findings: e.target.value })}
+                onChange={(value) => setFormData({ ...formData, intraop_findings: value })}
                 rows={4}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
                 placeholder="Key surgical findings, procedures performed..."
+                context="operative_note"
+                documentType="clinical_note"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Postoperative Treatment Plan *</label>
-              <textarea
+              <MedicalTextInput
+                label="Postoperative Treatment Plan"
                 required
                 value={formData.postop_plan}
-                onChange={(e) => setFormData({ ...formData, postop_plan: e.target.value })}
+                onChange={(value) => setFormData({ ...formData, postop_plan: value })}
                 rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
                 placeholder="Overall care plan, monitoring, wound care..."
+                context="operative_note"
+                documentType="clinical_note"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Medications Plan *</label>
-              <textarea
+              <MedicalTextInput
+                label="Medications Plan"
                 required
                 value={formData.medications}
-                onChange={(e) => setFormData({ ...formData, medications: e.target.value })}
+                onChange={(value) => setFormData({ ...formData, medications: value })}
                 rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
                 placeholder="Pain meds, antibiotics, other medications..."
+                context="prescription"
+                documentType="prescription"
               />
             </div>
 
@@ -2935,14 +2945,15 @@ const PostoperativeNoteModal: React.FC<{ procedure: any; onClose: () => void }> 
               </div>
 
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Treatment Goals *</label>
-                <textarea
+                <MedicalTextInput
+                  label="Treatment Goals"
                   required
                   value={formData.treatment_goals}
-                  onChange={(e) => setFormData({ ...formData, treatment_goals: e.target.value })}
+                  onChange={(value) => setFormData({ ...formData, treatment_goals: value })}
                   rows={2}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
                   placeholder="e.g., Wound healing, pain control, early mobilization..."
+                  context="clinical_note"
+                  documentType="clinical_note"
                 />
               </div>
 
@@ -3026,39 +3037,42 @@ const PostoperativeNoteModal: React.FC<{ procedure: any; onClose: () => void }> 
             {/* Ambulation & DVT Prophylaxis */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Ambulation Plan *</label>
-                <textarea
+                <MedicalTextInput
+                  label="Ambulation Plan"
                   required
                   value={formData.ambulation_plan}
-                  onChange={(e) => setFormData({ ...formData, ambulation_plan: e.target.value })}
+                  onChange={(value) => setFormData({ ...formData, ambulation_plan: value })}
                   rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
                   placeholder="Day 1: Bed rest with leg exercises, Day 2: Sit on edge of bed..."
+                  context="clinical_note"
+                  documentType="clinical_note"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Physiotherapy Needs *</label>
-                <textarea
+                <MedicalTextInput
+                  label="Physiotherapy Needs"
                   required
                   value={formData.physiotherapy_needs}
-                  onChange={(e) => setFormData({ ...formData, physiotherapy_needs: e.target.value })}
+                  onChange={(value) => setFormData({ ...formData, physiotherapy_needs: value })}
                   rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
                   placeholder="Chest physio, active/passive limb exercises, breathing exercises..."
+                  context="clinical_note"
+                  documentType="clinical_note"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">DVT Prophylaxis *</label>
-              <textarea
+              <MedicalTextInput
+                label="DVT Prophylaxis"
                 required
                 value={formData.dvt_prophylaxis}
-                onChange={(e) => setFormData({ ...formData, dvt_prophylaxis: e.target.value })}
+                onChange={(value) => setFormData({ ...formData, dvt_prophylaxis: value })}
                 rows={2}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
                 placeholder="e.g., Enoxaparin 40mg SC daily, TED stockings, early mobilization, adequate hydration"
+                context="clinical_note"
+                documentType="clinical_note"
               />
             </div>
 

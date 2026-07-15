@@ -36,6 +36,7 @@ import { format } from 'date-fns';
 import { safeFormatDate } from '../utils/dateUtils';
 import { useAuthStore } from '../store/authStore';
 import { DocumentScannerModal } from '../components/DocumentScannerModal';
+import SpeechToTextInput from '../components/SpeechToTextInput';
 
 const MDTPage: React.FC = () => {
   const { user } = useAuthStore();
@@ -61,6 +62,7 @@ const MDTPage: React.FC = () => {
   const [showHarmonizationResult, setShowHarmonizationResult] = useState<string | null>(null);
   const [harmonizing, setHarmonizing] = useState(false);
   const [prefillAddPatientId, setPrefillAddPatientId] = useState<string>('');
+  const [manualReviewDraft, setManualReviewDraft] = useState({ review_text: '', plan_text: '' });
 
   useOnSelectedPatient((p) => {
     const existing = mdtPatients.find(m => String(m.patient_id) === String(p.id));
@@ -591,14 +593,15 @@ const MDTPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Agenda</label>
-                <textarea
+                <SpeechToTextInput
+                  label="Agenda"
                   required
                   value={formData.agenda}
-                  onChange={(e) => setFormData({ ...formData, agenda: e.target.value })}
+                  onChange={(value) => setFormData({ ...formData, agenda: value })}
                   rows={4}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
                   placeholder="Meeting objectives and discussion points..."
+                  context="clinical_note"
+                  showWordCount
                 />
               </div>
 
@@ -765,26 +768,28 @@ const MDTPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Discussion Summary</label>
-                <textarea
+                <SpeechToTextInput
+                  label="Discussion Summary"
                   required
                   value={formData.discussion_summary}
-                  onChange={(e) => setFormData({ ...formData, discussion_summary: e.target.value })}
+                  onChange={(value) => setFormData({ ...formData, discussion_summary: value })}
                   rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
                   placeholder="What was discussed..."
+                  context="clinical_note"
+                  showWordCount
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Outcome/Decision</label>
-                <textarea
+                <SpeechToTextInput
+                  label="Outcome/Decision"
                   required
                   value={formData.outcome}
-                  onChange={(e) => setFormData({ ...formData, outcome: e.target.value })}
+                  onChange={(value) => setFormData({ ...formData, outcome: value })}
                   rows={2}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
                   placeholder="What was decided or recommended..."
+                  context="clinical_note"
+                  showWordCount
                 />
               </div>
 
@@ -1481,6 +1486,7 @@ const MDTPage: React.FC = () => {
                   if (updatedTeam) {
                     setSelectedPatient(updatedTeam);
                   }
+                  setManualReviewDraft({ review_text: '', plan_text: '' });
                   setShowAddReview(false);
                 } catch (error) {
                   console.error('Error adding review:', error);
@@ -1502,12 +1508,29 @@ const MDTPage: React.FC = () => {
                 <input name="review_date" type="date" required className="w-full px-3 py-2 border rounded-md" defaultValue={new Date().toISOString().split('T')[0]} />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Findings / Review</label>
-                <textarea name="review_text" required rows={4} className="w-full px-3 py-2 border rounded-md" placeholder="Clinical findings and assessment..." />
+                <SpeechToTextInput
+                  name="review_text"
+                  label="Findings / Review"
+                  required
+                  rows={4}
+                  value={manualReviewDraft.review_text}
+                  onChange={(value) => setManualReviewDraft(prev => ({ ...prev, review_text: value }))}
+                  placeholder="Clinical findings and assessment..."
+                  context="clinical_note"
+                  showWordCount
+                />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Plan</label>
-                <textarea name="plan_text" rows={3} className="w-full px-3 py-2 border rounded-md" placeholder="Recommended management plan..." />
+                <SpeechToTextInput
+                  name="plan_text"
+                  label="Plan"
+                  rows={3}
+                  value={manualReviewDraft.plan_text}
+                  onChange={(value) => setManualReviewDraft(prev => ({ ...prev, plan_text: value }))}
+                  placeholder="Recommended management plan..."
+                  context="clinical_note"
+                  showWordCount
+                />
               </div>
               <div className="flex justify-end gap-3 pt-2">
                 <button type="button" onClick={() => setShowAddReview(false)} className="px-4 py-2 border rounded-md text-gray-700 hover:bg-gray-50">Cancel</button>

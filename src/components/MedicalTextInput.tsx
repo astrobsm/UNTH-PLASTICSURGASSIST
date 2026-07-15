@@ -88,6 +88,7 @@ export const MedicalTextInput: React.FC<MedicalTextInputProps> = ({
   
   // Common state
   const [inputError, setInputError] = useState<string | null>(null);
+  const [uncertainText, setUncertainText] = useState<string | null>(null);
   const [originalValue, setOriginalValue] = useState<string>('');
   const [showToolbar, setShowToolbar] = useState(false);
   
@@ -127,6 +128,7 @@ export const MedicalTextInput: React.FC<MedicalTextInputProps> = ({
 
       // Process punctuation commands in the new segment
       const processed = speechToTextService.processPunctuationCommands(newSegment);
+      setUncertainText(result.confidence < 0.65 ? processed : null);
 
       // Use ref to get the LATEST value (avoids stale closure)
       const currentVal = currentValueRef.current.trim();
@@ -166,9 +168,9 @@ export const MedicalTextInput: React.FC<MedicalTextInputProps> = ({
       
       try {
         speechToTextService.startListening({
-          continuous: true,
+          continuous: speechToTextService.getSettings().continuous,
           interimResults: true,
-          language: 'en-US',
+          language: speechToTextService.getSettings().language,
           onResult: handleSpeechResult,
           onError: handleSpeechError,
           onEnd: () => {
@@ -590,6 +592,11 @@ export const MedicalTextInput: React.FC<MedicalTextInputProps> = ({
             <p className="text-orange-500 flex items-center gap-1">
               <AlertCircle className="w-4 h-4" />
               {inputError}
+            </p>
+          ) : uncertainText ? (
+            <p className="text-amber-600 flex items-center gap-1">
+              <AlertCircle className="w-4 h-4" />
+              Review uncertain dictation: "{uncertainText}"
             </p>
           ) : helperText ? (
             <p className="text-gray-500">{helperText}</p>
