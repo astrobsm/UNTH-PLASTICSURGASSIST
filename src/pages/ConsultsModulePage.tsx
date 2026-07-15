@@ -16,9 +16,10 @@ import {
   listLinks, createLink, setLinkActive,
   listReceived, createReceivedByStaff,
   listDelivered, createDelivered, addAttachment,
+  listStaff, REFERRING_DEPARTMENTS, REFERRING_UNITS,
   STATUS_META, URGENCY_META, buildShareableUrl,
   type ReceivedConsult, type DeliveredConsult, type SubmissionLink,
-  type ReceivedConsultStatus, type Urgency,
+  type ReceivedConsultStatus, type Urgency, type StaffOption,
 } from '../services/consultsModuleService';
 import { ocrService } from '../services/ocrService';
 import ConsultDetailDrawer from '../components/ConsultDetailDrawer';
@@ -158,25 +159,62 @@ function ReceivedTab({ refreshKey, onOpen }: { refreshKey: number; onOpen: (id: 
   );
 }
 
+const MANUAL_EMPTY = {
+  patient_name: '', hospital_number: '', age: '', sex: '', ward: '', bed_number: '',
+  referring_hospital: '', referring_department: '', referring_unit: '',
+  referring_consultant: '', referring_consultant_id: '' as string | number | '', referring_consultant_phone: '',
+  referring_senior_registrar_name: '', referring_senior_registrar_phone: '',
+  referring_registrar_name: '', referring_registrar_phone: '',
+  referring_house_officer_name: '', referring_house_officer_phone: '',
+  referring_medical_officer_name: '', referring_medical_officer_phone: '',
+  referring_doctor_name: '', referring_doctor_role: '', referring_phone: '',
+  indication: '', urgency: 'routine' as Urgency,
+};
+
 function ManualReceivedConsultModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
-  const [form, setForm] = useState({
-    patient_name: '', hospital_number: '', age: '', sex: '', ward: '', bed_number: '',
-    referring_unit: '', referring_consultant: '', referring_doctor_name: '', referring_doctor_role: '',
-    referring_phone: '', indication: '', urgency: 'routine' as Urgency,
-  });
+  const [form, setForm] = useState({ ...MANUAL_EMPTY });
+  const [staff, setStaff] = useState<StaffOption[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => { listStaff().then(setStaff).catch(() => setStaff([])); }, []);
+
   function up<K extends keyof typeof form>(k: K, v: (typeof form)[K]) { setForm(p => ({ ...p, [k]: v })); }
+
+  // Selecting a staff member from the consultant list auto-fills phone + id.
+  function onConsultantChange(v: string) {
+    const match = staff.find(s => s.full_name === v);
+    setForm(p => ({
+      ...p,
+      referring_consultant: v,
+      referring_consultant_id: match ? match.id : '',
+      referring_consultant_phone: match?.phone ? match.phone : p.referring_consultant_phone,
+    }));
+  }
 
   async function save() {
     setError(null);
-    if (!form.patient_name || !form.referring_unit || !form.referring_doctor_name || !form.referring_phone || !form.indication) {
-      setError('Please fill all required fields'); return;
-    }
+    const missing: string[] = [];
+    if (!form.patient_name) missing.push('Patient name');
+    if (!form.referring_hospital) missing.push('Referring hospital');
+    if (!form.referring_department) missing.push('Referring department');
+    if (!form.referring_unit) missing.push('Referring unit');
+    if (!form.referring_consultant) missing.push('Referring consultant');
+    if (!form.ward) missing.push('Ward');
+    if (!form.referring_doctor_name) missing.push('Contact name');
+    if (!form.referring_phone) missing.push('Contact phone');
+    if (!form.indication) missing.push('Reason for referral');
+    if (missing.length) { setError(`Please complete: ${missing.join(', ')}`); return; }
     setSaving(true);
     try {
-      await createReceivedByStaff({ ...form, age: form.age ? parseInt(form.age, 10) : undefined } as any);
+      await createReceivedByStaff({
+        ...form,
+        age: form.age ? parseInt(form.age, 10) : undefined,
+        referring_consultant_id: form.referring_consultant_id || undefined,
+        referral_priority: form.urgency,
+        reason_for_referral: form.indication,
+        referral_datetime: new Date().toISOString(),
+      } as any);
       onCreated();
     } catch (e: any) { setError(e.message || 'Failed to create'); }
     finally { setSaving(false); }
@@ -184,19 +222,22 @@ function ManualReceivedConsultModal({ onClose, onCreated }: { onClose: () => voi
 
   return (
     <ModalShell title="Manual received consult" onClose={onClose}>
+      <SectionLabel>Patient</SectionLabel>
       <div className="grid grid-cols-2 gap-2 text-sm">
         <Inp label="Patient name *"            value={form.patient_name}            onChange={(v) => up('patient_name', v)} />
         <Inp label="Hospital number"           value={form.hospital_number}         onChange={(v) => up('hospital_number', v)} />
         <Inp label="Age"                       value={form.age}                     onChange={(v) => up('age', v)} type="number" />
         <Inp label="Sex"                       value={form.sex}                     onChange={(v) => up('sex', v)} />
-        <Inp label="Ward"                      value={form.ward}                    onChange={(v) => up('ward', v)} />
+        <Inp label="Ward *"                    value={form.ward}                    onChange={(v) => up('ward', v)} />
         <Inp label="Bed"                       value={form.bed_number}              onChange={(v) => up('bed_number', v)} />
-        <Inp label="Referring unit *"          value={form.referring_unit}          onChange={(v) => up('referring_unit', v)} />
-        <Inp label="Referring consultant"      value={form.referring_consultant}    onChange={(v) => up('referring_consultant', v)} />
-        <Inp label="Doctor name *"             value={form.referring_doctor_name}   onChange={(v) => up('referring_doctor_name', v)} />
-        <Inp label="Doctor role"               value={form.referring_doctor_role}   onChange={(v) => up('referring_doctor_role', v)} />
-        <Inp label="Phone *"                   value={form.referring_phone}         onChange={(v) => up('referring_phone', v)} />
-        <label className="text-xs text-gray-600">Urgency
+      </div>
+
+      <SectionLabel>Referring unit / inviting team</SectionLabel>
+      <div className="grid grid-cols-2 gap-2 text-sm">
+        <Inp label="Referring hospital *"      value={form.referring_hospital}      onChange={(v) => up('referring_hospital', v)} />
+        <Inp label="Referring department *"    value={form.referring_department}    onChange={(v) => up('referring_department', v)} list="mref-departments" options={REFERRING_DEPARTMENTS} />
+        <Inp label="Referring unit *"          value={form.referring_unit}          onChange={(v) => up('referring_unit', v)} list="mref-units" options={REFERRING_UNITS} />
+        <label className="text-xs text-gray-600">Referral priority *
           <select value={form.urgency} onChange={(e) => up('urgency', e.target.value as Urgency)}
             className="mt-1 w-full px-2 py-1.5 border border-gray-300 rounded text-sm bg-white">
             <option value="routine">Routine</option>
@@ -204,11 +245,29 @@ function ManualReceivedConsultModal({ onClose, onCreated }: { onClose: () => voi
             <option value="emergency">Emergency</option>
           </select>
         </label>
-        <label className="text-xs text-gray-600 col-span-2">Indication *
-          <textarea value={form.indication} onChange={(e) => up('indication', e.target.value)} rows={3}
-            className="mt-1 w-full px-2 py-1.5 border border-gray-300 rounded text-sm" />
-        </label>
+        <Inp label="Referring consultant *"    value={form.referring_consultant}    onChange={onConsultantChange} list="mref-staff" options={staff.map(s => s.full_name)} placeholder="Search staff or type name" />
+        <Inp label="Consultant phone"          value={form.referring_consultant_phone}    onChange={(v) => up('referring_consultant_phone', v)} type="tel" />
+        <Inp label="Senior registrar"          value={form.referring_senior_registrar_name}  onChange={(v) => up('referring_senior_registrar_name', v)} />
+        <Inp label="Senior registrar phone"    value={form.referring_senior_registrar_phone} onChange={(v) => up('referring_senior_registrar_phone', v)} type="tel" />
+        <Inp label="Registrar"                 value={form.referring_registrar_name}      onChange={(v) => up('referring_registrar_name', v)} />
+        <Inp label="Registrar phone"           value={form.referring_registrar_phone}     onChange={(v) => up('referring_registrar_phone', v)} type="tel" />
+        <Inp label="House officer"             value={form.referring_house_officer_name}  onChange={(v) => up('referring_house_officer_name', v)} />
+        <Inp label="House officer phone"       value={form.referring_house_officer_phone} onChange={(v) => up('referring_house_officer_phone', v)} type="tel" />
+        <Inp label="Medical officer"           value={form.referring_medical_officer_name}  onChange={(v) => up('referring_medical_officer_name', v)} />
+        <Inp label="Medical officer phone"     value={form.referring_medical_officer_phone} onChange={(v) => up('referring_medical_officer_phone', v)} type="tel" />
       </div>
+
+      <SectionLabel>Contact for feedback</SectionLabel>
+      <div className="grid grid-cols-2 gap-2 text-sm">
+        <Inp label="Contact name *"            value={form.referring_doctor_name}   onChange={(v) => up('referring_doctor_name', v)} />
+        <Inp label="Contact role"              value={form.referring_doctor_role}   onChange={(v) => up('referring_doctor_role', v)} />
+        <Inp label="Contact phone *"           value={form.referring_phone}         onChange={(v) => up('referring_phone', v)} type="tel" />
+      </div>
+
+      <label className="text-xs text-gray-600 block mt-2">Reason for referral *
+        <textarea value={form.indication} onChange={(e) => up('indication', e.target.value)} rows={3}
+          className="mt-1 w-full px-2 py-1.5 border border-gray-300 rounded text-sm" />
+      </label>
       {error && <Banner kind="error" message={error} />}
       <ModalFooter>
         <button onClick={onClose} className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded">Cancel</button>
@@ -218,6 +277,10 @@ function ManualReceivedConsultModal({ onClose, onCreated }: { onClose: () => voi
       </ModalFooter>
     </ModalShell>
   );
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mt-3 mb-1 first:mt-0">{children}</div>;
 }
 
 // ── Delivered tab ──────────────────────────────────────────────────────
@@ -524,11 +587,14 @@ function ModalShell({ title, onClose, children }: { title: string; onClose: () =
 function ModalFooter({ children }: { children: React.ReactNode }) {
   return <div className="flex justify-end gap-2 mt-3 pt-3 border-t">{children}</div>;
 }
-function Inp({ label, value, onChange, type = 'text', placeholder }: { label: string; value: string; onChange: (v: string) => void; type?: string; placeholder?: string }) {
+function Inp({ label, value, onChange, type = 'text', placeholder, list, options }: { label: string; value: string; onChange: (v: string) => void; type?: string; placeholder?: string; list?: string; options?: string[] }) {
   return (
     <label className="text-xs text-gray-600 block">{label}
-      <input type={type} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)}
+      <input type={type} value={value} placeholder={placeholder} list={list} onChange={(e) => onChange(e.target.value)}
         className="mt-1 w-full px-2 py-1.5 border border-gray-300 rounded text-sm" />
+      {list && options && (
+        <datalist id={list}>{options.map(o => <option key={o} value={o} />)}</datalist>
+      )}
     </label>
   );
 }

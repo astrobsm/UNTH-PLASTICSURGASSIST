@@ -607,18 +607,23 @@ async function createTables() {
       specialties JSONB DEFAULT '[]',
       team_reviews JSONB DEFAULT '[]',
       weekly_harmonizations JSONB DEFAULT '[]',
+      referral JSONB DEFAULT '{}'::jsonb,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
     -- Add team_reviews and weekly_harmonizations columns if they don't exist (for existing databases)
-    DO $$ 
-    BEGIN 
+    DO $$
+    BEGIN
       IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'mdt_patient_teams' AND column_name = 'team_reviews') THEN
         ALTER TABLE mdt_patient_teams ADD COLUMN team_reviews JSONB DEFAULT '[]';
       END IF;
       IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'mdt_patient_teams' AND column_name = 'weekly_harmonizations') THEN
         ALTER TABLE mdt_patient_teams ADD COLUMN weekly_harmonizations JSONB DEFAULT '[]';
+      END IF;
+      -- Addendum v2.1: carry referring-team details into the MDT
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'mdt_patient_teams' AND column_name = 'referral') THEN
+        ALTER TABLE mdt_patient_teams ADD COLUMN referral JSONB DEFAULT '{}'::jsonb;
       END IF;
     END $$;
 

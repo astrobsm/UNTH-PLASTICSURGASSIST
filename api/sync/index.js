@@ -265,7 +265,7 @@ async function handlePush(data, user, res) {
     try {
       // Handle MDT entities directly for immediate sync
       if (entityType === 'mdt_patient_teams' && payload) {
-        const { patient_id, patient_name, hospital_number, primary_specialty, specialties, team_reviews, weekly_harmonizations } = payload;
+        const { patient_id, patient_name, hospital_number, primary_specialty, specialties, team_reviews, weekly_harmonizations, referral } = payload;
         console.log(`[MDT PUSH] patient_id=${patient_id}, name=${patient_name}, hospital=${hospital_number}`);
         
         if (patient_id) {
@@ -298,23 +298,23 @@ async function handlePush(data, user, res) {
           const existing = await query('SELECT id FROM mdt_patient_teams WHERE patient_id = $1', [patientIdInt]);
           if (existing.rows.length > 0) {
             await query(
-              `UPDATE mdt_patient_teams SET patient_name = $1, hospital_number = $2, 
-               primary_specialty = $3, specialties = $4, team_reviews = $5, 
-               weekly_harmonizations = $6, updated_at = CURRENT_TIMESTAMP 
-               WHERE patient_id = $7`,
-              [patient_name, hospital_number, primary_specialty || 'Plastic Surgery', 
+              `UPDATE mdt_patient_teams SET patient_name = $1, hospital_number = $2,
+               primary_specialty = $3, specialties = $4, team_reviews = $5,
+               weekly_harmonizations = $6, referral = $7, updated_at = CURRENT_TIMESTAMP
+               WHERE patient_id = $8`,
+              [patient_name, hospital_number, primary_specialty || 'Plastic Surgery',
                JSON.stringify(specialties || []), JSON.stringify(team_reviews || []),
-               JSON.stringify(weekly_harmonizations || []), patientIdInt]
+               JSON.stringify(weekly_harmonizations || []), JSON.stringify(referral || {}), patientIdInt]
             );
             console.log(`✅ Updated MDT team for patient ${patientIdInt}`);
           } else {
             await query(
-              `INSERT INTO mdt_patient_teams (patient_id, patient_name, hospital_number, 
-               primary_specialty, specialties, team_reviews, weekly_harmonizations, is_active) 
-               VALUES ($1, $2, $3, $4, $5, $6, $7, true)`,
-              [patientIdInt, patient_name, hospital_number, primary_specialty || 'Plastic Surgery', 
+              `INSERT INTO mdt_patient_teams (patient_id, patient_name, hospital_number,
+               primary_specialty, specialties, team_reviews, weekly_harmonizations, referral, is_active)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true)`,
+              [patientIdInt, patient_name, hospital_number, primary_specialty || 'Plastic Surgery',
                JSON.stringify(specialties || []), JSON.stringify(team_reviews || []),
-               JSON.stringify(weekly_harmonizations || [])]
+               JSON.stringify(weekly_harmonizations || []), JSON.stringify(referral || {})]
             );
             console.log(`✅ Inserted MDT team for patient ${patientIdInt}`);
           }

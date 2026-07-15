@@ -45,7 +45,8 @@ import {
   Stethoscope,
   Wine,
   Waves,
-  Search
+  Search,
+  BarChart3
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import SyncStatusIndicator from './SyncStatusIndicator';
@@ -88,6 +89,7 @@ export const patientActions = [
   { name: 'Patient Summaries', href: '/patient-summaries', icon: FileText },
   { name: 'Paperwork', href: '/paperwork', icon: FolderOpen },
   { name: 'MDT', href: '/mdt', icon: UserCog },
+  { name: 'Referral Reports', href: '/reports/referrals', icon: BarChart3 },
   { name: 'Booking Register', href: '/booking-register', icon: ClipboardCheck },
   { name: 'Pre-Surgical Conference', href: '/pre-surgical-conference', icon: Presentation },
   { name: 'Blood Transfusion', href: '/blood-transfusion', icon: Droplet },

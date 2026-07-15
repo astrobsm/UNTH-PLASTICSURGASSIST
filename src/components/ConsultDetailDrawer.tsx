@@ -8,16 +8,18 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  X, Phone, Send, Camera, FileText, Activity, Image as ImageIcon, Loader2, ChevronRight,
-  CheckCircle2, AlertCircle, Trash2, MessageSquare, History,
+  X, Send, Camera, FileText, Activity, Image as ImageIcon, Loader2, ChevronRight,
+  CheckCircle2, AlertCircle, Trash2, MessageSquare, History, Users, ClipboardList, UserPlus,
 } from 'lucide-react';
 import {
   getReceivedDetail, updateReceivedStatus, addAttachment, deleteAttachment, sendConsultFeedback,
   STATUS_META, URGENCY_META, nextStatus,
   type ReceivedConsultDetail, type ReceivedConsultStatus, type AttachmentKind, type ConsultAttachment,
 } from '../services/consultsModuleService';
+import { mdtService } from '../services/mdtService';
 import { ocrService } from '../services/ocrService';
 import ConsultChartRecreator from './ConsultChartRecreator';
+import PhoneActions from './PhoneActions';
 
 interface Props {
   consultId: number;
@@ -31,6 +33,19 @@ export const ConsultDetailDrawer: React.FC<Props> = ({ consultId, onClose, onCha
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [chartFromAttachment, setChartFromAttachment] = useState<ConsultAttachment | null>(null);
+  const [enrolling, setEnrolling] = useState(false);
+  const [enrolMsg, setEnrolMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const enrolToMdt = useCallback(async () => {
+    if (!detail) return;
+    setEnrolling(true); setEnrolMsg(null);
+    try {
+      const r = await mdtService.enrolFromConsult(detail.consult);
+      setEnrolMsg({ ok: r.ok, text: r.message });
+    } catch (e: any) {
+      setEnrolMsg({ ok: false, text: e?.message || 'Failed to enrol into MDT' });
+    } finally { setEnrolling(false); }
+  }, [detail]);
 
   const reload = useCallback(async () => {
     setLoading(true); setError(null);
@@ -75,22 +90,53 @@ export const ConsultDetailDrawer: React.FC<Props> = ({ consultId, onClose, onCha
             <p className="text-xs text-gray-500">
               {c.hospital_number ? `${c.hospital_number} · ` : ''}{c.age || '?'}{c.sex ? `${c.sex.charAt(0)}` : ''} · {c.ward || '—'} {c.bed_number ? `Bed ${c.bed_number}` : ''}
             </p>
+            <div className="mt-2 flex items-center gap-2 flex-wrap">
+              <button
+                onClick={enrolToMdt}
+                disabled={enrolling}
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-gray-300"
+              >
+                <UserPlus className="w-3.5 h-3.5" /> {enrolling ? 'Enrolling…' : 'Enrol to MDT'}
+              </button>
+              {enrolMsg && (
+                <span className={`text-xs ${enrolMsg.ok ? 'text-green-700' : 'text-red-600'}`}>{enrolMsg.text}</span>
+              )}
+            </div>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1"><X className="w-5 h-5" /></button>
         </div>
       </div>
 
       <div className="px-5 py-4 space-y-5">
-        {/* Referring contact */}
-        <Block icon={<Phone className="w-4 h-4 text-blue-600" />} title="Referring unit">
+        {/* Referring team */}
+        <Block icon={<Users className="w-4 h-4 text-blue-600" />} title="Referring team">
           <div className="text-sm space-y-1">
+            {c.referring_hospital && <div><span className="text-gray-500">Hospital:</span> <span className="font-medium">{c.referring_hospital}</span></div>}
+            {c.referring_department && <div><span className="text-gray-500">Department:</span> {c.referring_department}</div>}
             <div><span className="text-gray-500">Unit:</span> <span className="font-medium">{c.referring_unit}</span></div>
-            {c.referring_consultant && <div><span className="text-gray-500">Consultant:</span> {c.referring_consultant}</div>}
-            <div><span className="text-gray-500">Doctor:</span> {c.referring_doctor_name} {c.referring_doctor_role ? `(${c.referring_doctor_role})` : ''}</div>
-            <div><span className="text-gray-500">Phone:</span> <a href={`tel:${c.referring_phone}`} className="text-blue-700 hover:underline">{c.referring_phone}</a>
-              {c.referring_alt_phone && <> · <a href={`tel:${c.referring_alt_phone}`} className="text-blue-700 hover:underline">{c.referring_alt_phone}</a></>}
-            </div>
           </div>
+          <div className="mt-2 divide-y divide-gray-100 border-t border-gray-100">
+            <TeamRow role="Consultant"       name={c.referring_consultant} phone={c.referring_consultant_phone} />
+            <TeamRow role="Senior Registrar" name={c.referring_senior_registrar_name} phone={c.referring_senior_registrar_phone} />
+            <TeamRow role="Registrar"        name={c.referring_registrar_name} phone={c.referring_registrar_phone} />
+            <TeamRow role="House Officer"    name={c.referring_house_officer_name} phone={c.referring_house_officer_phone} />
+            <TeamRow role="Medical Officer"  name={c.referring_medical_officer_name} phone={c.referring_medical_officer_phone} />
+            <TeamRow role="Contact"          name={`${c.referring_doctor_name}${c.referring_doctor_role ? ` (${c.referring_doctor_role})` : ''}`} phone={c.referring_phone} altPhone={c.referring_alt_phone} />
+          </div>
+        </Block>
+
+        {/* Referral information */}
+        <Block icon={<ClipboardList className="w-4 h-4 text-orange-600" />} title="Referral information">
+          <div className="text-sm space-y-1">
+            <div>
+              <span className="text-gray-500">Priority:</span>{' '}
+              <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium border ${urgencyMeta.color}`}>{urgencyMeta.label}</span>
+            </div>
+            {(c.referral_datetime || c.created_at) && (
+              <div><span className="text-gray-500">Date &amp; time:</span> {new Date(c.referral_datetime || c.created_at).toLocaleString()}</div>
+            )}
+          </div>
+          <Field label="Reason for referral" value={c.reason_for_referral || c.indication} />
         </Block>
 
         {/* Clinical summary */}
@@ -218,6 +264,22 @@ function Field({ label, value }: { label: string; value?: string | null }) {
     <div className="text-sm">
       <div className="text-xs uppercase tracking-wide text-gray-500">{label}</div>
       <div className="text-gray-900 whitespace-pre-wrap">{value}</div>
+    </div>
+  );
+}
+function TeamRow({ role, name, phone, altPhone }: { role: string; name?: string | null; phone?: string | null; altPhone?: string | null }) {
+  const hasName = !!(name && name.trim() && name.trim() !== '()');
+  if (!hasName && !phone) return null;
+  return (
+    <div className="py-1.5 flex items-start justify-between gap-2 flex-wrap">
+      <div className="text-sm min-w-0">
+        <span className="text-gray-500">{role}:</span>{' '}
+        <span className="text-gray-900">{hasName ? name : '—'}</span>
+      </div>
+      <div className="flex flex-col items-end gap-1">
+        {phone && <PhoneActions phone={phone} compact />}
+        {altPhone && <PhoneActions phone={altPhone} compact />}
+      </div>
     </div>
   );
 }

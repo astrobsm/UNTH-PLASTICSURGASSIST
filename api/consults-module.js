@@ -132,7 +132,64 @@ async function ensureTables() {
     `CREATE INDEX IF NOT EXISTS idx_consult_feedback  ON consult_feedback_log(consult_kind, consult_id, created_at DESC)`,
   ];
   for (const s of idx) { try { await query(s); } catch {} }
+
+  // Addendum v2.1 — referring clinical-team + referral-metadata columns.
+  // ADD COLUMN IF NOT EXISTS is a no-op when the column already exists, so
+  // this self-migrates existing deployments on the first request.
+  const alters = [
+    `ALTER TABLE received_consults ADD COLUMN IF NOT EXISTS referring_hospital                VARCHAR(200)`,
+    `ALTER TABLE received_consults ADD COLUMN IF NOT EXISTS referring_department              VARCHAR(180)`,
+    `ALTER TABLE received_consults ADD COLUMN IF NOT EXISTS referring_consultant_id           INTEGER`,
+    `ALTER TABLE received_consults ADD COLUMN IF NOT EXISTS referring_consultant_phone        VARCHAR(60)`,
+    `ALTER TABLE received_consults ADD COLUMN IF NOT EXISTS referring_senior_registrar_name   VARCHAR(180)`,
+    `ALTER TABLE received_consults ADD COLUMN IF NOT EXISTS referring_senior_registrar_phone  VARCHAR(60)`,
+    `ALTER TABLE received_consults ADD COLUMN IF NOT EXISTS referring_registrar_name          VARCHAR(180)`,
+    `ALTER TABLE received_consults ADD COLUMN IF NOT EXISTS referring_registrar_phone         VARCHAR(60)`,
+    `ALTER TABLE received_consults ADD COLUMN IF NOT EXISTS referring_house_officer_name      VARCHAR(180)`,
+    `ALTER TABLE received_consults ADD COLUMN IF NOT EXISTS referring_house_officer_phone     VARCHAR(60)`,
+    `ALTER TABLE received_consults ADD COLUMN IF NOT EXISTS referring_medical_officer_name    VARCHAR(180)`,
+    `ALTER TABLE received_consults ADD COLUMN IF NOT EXISTS referring_medical_officer_phone   VARCHAR(60)`,
+    `ALTER TABLE received_consults ADD COLUMN IF NOT EXISTS referral_priority                 VARCHAR(20)`,
+    `ALTER TABLE received_consults ADD COLUMN IF NOT EXISTS reason_for_referral               TEXT`,
+    `ALTER TABLE received_consults ADD COLUMN IF NOT EXISTS referral_datetime                 TIMESTAMPTZ`,
+    `CREATE INDEX IF NOT EXISTS idx_received_consults_department ON received_consults(referring_department)`,
+    `CREATE INDEX IF NOT EXISTS idx_received_consults_ref_unit   ON received_consults(referring_unit)`,
+    `CREATE INDEX IF NOT EXISTS idx_received_consults_priority   ON received_consults(referral_priority)`,
+  ];
+  for (const s of alters) { try { await query(s); } catch (e) { console.warn('consults ensureTables alter skipped:', e.message); } }
+
   tablesEnsured = true;
+}
+
+// Shared column list + value builder for the referring clinical-team fields.
+// Used by both the public-submit and staff-entry INSERTs so they stay in sync.
+const REFERRING_TEAM_COLUMNS = [
+  'referring_hospital', 'referring_department', 'referring_consultant_id', 'referring_consultant_phone',
+  'referring_senior_registrar_name', 'referring_senior_registrar_phone',
+  'referring_registrar_name', 'referring_registrar_phone',
+  'referring_house_officer_name', 'referring_house_officer_phone',
+  'referring_medical_officer_name', 'referring_medical_officer_phone',
+  'referral_priority', 'reason_for_referral', 'referral_datetime',
+];
+function referringTeamValues(body, urgency) {
+  const dt = body.referral_datetime ? new Date(body.referral_datetime) : new Date();
+  return [
+    body.referring_hospital || null,
+    body.referring_department || null,
+    body.referring_consultant_id ? parseInt(body.referring_consultant_id, 10) : null,
+    body.referring_consultant_phone || null,
+    body.referring_senior_registrar_name || null,
+    body.referring_senior_registrar_phone || null,
+    body.referring_registrar_name || null,
+    body.referring_registrar_phone || null,
+    body.referring_house_officer_name || null,
+    body.referring_house_officer_phone || null,
+    body.referring_medical_officer_name || null,
+    body.referring_medical_officer_phone || null,
+    body.referral_priority || urgency,       // priority mirrors urgency when unset
+    body.reason_for_referral || body.indication || null,
+    dt,
+  ];
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
@@ -272,6 +329,8 @@ export default async function handler(req, res) {
       // /received
       if (parts.length === 1 && method === 'GET')  return listReceived(req, res);
       if (parts.length === 1 && method === 'POST') return createReceivedByStaff(req.body || {}, user, res);
+      // /received/analytics — referral reporting aggregates (must precede the :id parse)
+      if (parts.length === 2 && parts[1] === 'analytics' && method === 'GET') return receivedAnalytics(req, res);
       // /received/:id
       const id = parseInt(parts[1], 10);
       if (!id) return notFound(res);
@@ -324,30 +383,30 @@ async function submitPublicConsult(token, body, res) {
 
   const urgency = URGENCIES.includes(body.urgency) ? body.urgency : 'routine';
   const ref = generateRef('RC');
+  const baseCols = [
+    'consult_ref', 'submission_token', 'source',
+    'patient_name', 'hospital_number', 'age', 'sex', 'ward', 'bed_number',
+    'referring_unit', 'referring_consultant', 'referring_doctor_name', 'referring_doctor_role',
+    'referring_phone', 'referring_alt_phone',
+    'primary_diagnosis', 'presenting_complaint', 'history_summary', 'examination_summary', 'investigations_summary',
+    'indication', 'urgency', 'requested_input',
+  ];
+  const baseVals = [
+    ref, token, 'public_form',
+    body.patient_name, body.hospital_number || null, body.age || null, body.sex || null, body.ward || null, body.bed_number || null,
+    body.referring_unit, body.referring_consultant || null, body.referring_doctor_name, body.referring_doctor_role || null,
+    body.referring_phone, body.referring_alt_phone || null,
+    body.primary_diagnosis || null, body.presenting_complaint || null, body.history_summary || null,
+    body.examination_summary || null, body.investigations_summary || null,
+    body.indication, urgency, body.requested_input || null,
+  ];
+  const cols = [...baseCols, ...REFERRING_TEAM_COLUMNS];
+  const vals = [...baseVals, ...referringTeamValues(body, urgency)];
+  const placeholders = vals.map((_, i) => `$${i + 1}`).join(',');
   const r = await query(
-    `INSERT INTO received_consults
-       (consult_ref, submission_token, source,
-        patient_name, hospital_number, age, sex, ward, bed_number,
-        referring_unit, referring_consultant, referring_doctor_name, referring_doctor_role,
-        referring_phone, referring_alt_phone,
-        primary_diagnosis, presenting_complaint, history_summary, examination_summary, investigations_summary,
-        indication, urgency, requested_input)
-     VALUES ($1,$2,'public_form',
-        $3,$4,$5,$6,$7,$8,
-        $9,$10,$11,$12,
-        $13,$14,
-        $15,$16,$17,$18,$19,
-        $20,$21,$22)
+    `INSERT INTO received_consults (${cols.join(',')}) VALUES (${placeholders})
      RETURNING id, consult_ref, created_at`,
-    [
-      ref, token,
-      body.patient_name, body.hospital_number || null, body.age || null, body.sex || null, body.ward || null, body.bed_number || null,
-      body.referring_unit, body.referring_consultant || null, body.referring_doctor_name, body.referring_doctor_role || null,
-      body.referring_phone, body.referring_alt_phone || null,
-      body.primary_diagnosis || null, body.presenting_complaint || null, body.history_summary || null,
-      body.examination_summary || null, body.investigations_summary || null,
-      body.indication, urgency, body.requested_input || null,
-    ]
+    vals
   );
   await query(`UPDATE consult_submission_links SET submission_count = submission_count + 1, last_used_at = CURRENT_TIMESTAMP WHERE id=$1`, [link.id]);
   await recordHistory('received', r.rows[0].id, null, 'received', `Submitted via public link (${link.unit_label})`, null);
@@ -361,10 +420,20 @@ async function submitPublicConsult(token, body, res) {
 
 // ── Received: list/create/detail/status ──────────────────────────────────
 async function listReceived(req, res) {
-  const { status, urgency, search, page = '1', per_page = '20' } = req.query;
+  const {
+    status, urgency, search, page = '1', per_page = '20',
+    referring_department, referring_unit, referring_consultant, ward, priority, date_from, date_to,
+  } = req.query;
   const where = []; const args = [];
   if (status)   { args.push(status);   where.push(`status=$${args.length}`); }
   if (urgency)  { args.push(urgency);  where.push(`urgency=$${args.length}`); }
+  if (priority) { args.push(priority); where.push(`COALESCE(referral_priority, urgency)=$${args.length}`); }
+  if (referring_department) { args.push(referring_department); where.push(`referring_department=$${args.length}`); }
+  if (referring_unit)       { args.push(referring_unit);       where.push(`referring_unit=$${args.length}`); }
+  if (referring_consultant) { args.push(referring_consultant); where.push(`referring_consultant=$${args.length}`); }
+  if (ward)                 { args.push(ward);                 where.push(`ward=$${args.length}`); }
+  if (date_from) { args.push(date_from); where.push(`COALESCE(referral_datetime, created_at) >= $${args.length}`); }
+  if (date_to)   { args.push(date_to);   where.push(`COALESCE(referral_datetime, created_at) <= $${args.length}`); }
   if (search) {
     args.push(`%${search.toLowerCase()}%`);
     where.push(`(LOWER(patient_name) LIKE $${args.length} OR LOWER(hospital_number) LIKE $${args.length} OR LOWER(referring_unit) LIKE $${args.length} OR LOWER(consult_ref) LIKE $${args.length})`);
@@ -384,28 +453,100 @@ async function listReceived(req, res) {
   return res.status(200).json({ total, page: parseInt(page, 10) || 1, per_page: limit, consults: rows });
 }
 
+// ── Referral analytics (Addendum v2.1 §8) ─────────────────────────────────
+// Aggregates for the referral reporting dashboard. Optional date_from/date_to
+// window (applied to referral_datetime, falling back to created_at).
+async function receivedAnalytics(req, res) {
+  const { date_from, date_to } = req.query;
+  const where = []; const args = [];
+  if (date_from) { args.push(date_from); where.push(`COALESCE(referral_datetime, created_at) >= $${args.length}`); }
+  if (date_to)   { args.push(date_to);   where.push(`COALESCE(referral_datetime, created_at) <= $${args.length}`); }
+  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+
+  const groupCount = async (col) => (await query(
+    `SELECT COALESCE(NULLIF(TRIM(${col}), ''), 'Unspecified') AS label, COUNT(*)::int AS count
+       FROM received_consults ${whereSql}
+       GROUP BY 1 ORDER BY count DESC, label ASC`, args
+  )).rows;
+
+  const [byDepartment, byUnit, byConsultant, byWard, byPriority] = await Promise.all([
+    groupCount('referring_department'),
+    groupCount('referring_unit'),
+    groupCount('referring_consultant'),
+    groupCount('ward'),
+    query(
+      `SELECT COALESCE(NULLIF(TRIM(referral_priority), ''), urgency, 'routine') AS label, COUNT(*)::int AS count
+         FROM received_consults ${whereSql} GROUP BY 1 ORDER BY count DESC`, args
+    ).then(r => r.rows),
+  ]);
+
+  // Avg response time (first acknowledgement) in hours, overall and per unit.
+  const respArgs = args.slice();
+  const respWhere = where.slice();
+  respWhere.push('acknowledged_at IS NOT NULL');
+  const respWhereSql = `WHERE ${respWhere.join(' AND ')}`;
+  const avgResponseByUnit = (await query(
+    `SELECT COALESCE(NULLIF(TRIM(referring_unit), ''), 'Unspecified') AS label,
+            ROUND(AVG(EXTRACT(EPOCH FROM (acknowledged_at - created_at)) / 3600.0)::numeric, 1)::float AS avg_hours,
+            COUNT(*)::int AS count
+       FROM received_consults ${respWhereSql}
+       GROUP BY 1 ORDER BY avg_hours ASC NULLS LAST`, respArgs
+  )).rows;
+  const overall = (await query(
+    `SELECT COUNT(*)::int AS total,
+            ROUND(AVG(EXTRACT(EPOCH FROM (acknowledged_at - created_at)) / 3600.0)::numeric, 1)::float AS avg_response_hours
+       FROM received_consults ${respWhereSql}`, respArgs
+  )).rows[0];
+  const totalAll = (await query(`SELECT COUNT(*)::int AS c FROM received_consults ${whereSql}`, args)).rows[0].c;
+
+  // Trend over time — daily referral counts.
+  const trend = (await query(
+    `SELECT TO_CHAR(DATE_TRUNC('day', COALESCE(referral_datetime, created_at)), 'YYYY-MM-DD') AS day,
+            COUNT(*)::int AS count
+       FROM received_consults ${whereSql}
+       GROUP BY 1 ORDER BY 1 ASC`, args
+  )).rows;
+
+  return res.status(200).json({
+    total: totalAll,
+    acknowledged: overall.total,
+    avg_response_hours: overall.avg_response_hours,
+    by_department: byDepartment,
+    by_unit: byUnit,
+    by_consultant: byConsultant,
+    by_ward: byWard,
+    by_priority: byPriority,
+    avg_response_by_unit: avgResponseByUnit,
+    trend,
+  });
+}
+
 async function createReceivedByStaff(body, user, res) {
   const required = ['patient_name', 'referring_unit', 'referring_doctor_name', 'referring_phone', 'indication'];
   for (const f of required) if (!body[f]) return bad(res, `${f} is required`);
   const ref = generateRef('RC');
   const urgency = URGENCIES.includes(body.urgency) ? body.urgency : 'routine';
+  const baseCols = [
+    'consult_ref', 'source', 'patient_name', 'hospital_number', 'age', 'sex', 'ward', 'bed_number',
+    'referring_unit', 'referring_consultant', 'referring_doctor_name', 'referring_doctor_role',
+    'referring_phone', 'referring_alt_phone',
+    'primary_diagnosis', 'presenting_complaint', 'history_summary', 'examination_summary', 'investigations_summary',
+    'indication', 'urgency', 'requested_input',
+  ];
+  const baseVals = [
+    ref, 'staff_entry', body.patient_name, body.hospital_number || null, body.age || null, body.sex || null, body.ward || null, body.bed_number || null,
+    body.referring_unit, body.referring_consultant || null, body.referring_doctor_name, body.referring_doctor_role || null,
+    body.referring_phone, body.referring_alt_phone || null,
+    body.primary_diagnosis || null, body.presenting_complaint || null, body.history_summary || null,
+    body.examination_summary || null, body.investigations_summary || null,
+    body.indication, urgency, body.requested_input || null,
+  ];
+  const cols = [...baseCols, ...REFERRING_TEAM_COLUMNS];
+  const vals = [...baseVals, ...referringTeamValues(body, urgency)];
+  const placeholders = vals.map((_, i) => `$${i + 1}`).join(',');
   const r = await query(
-    `INSERT INTO received_consults
-       (consult_ref, source, patient_name, hospital_number, age, sex, ward, bed_number,
-        referring_unit, referring_consultant, referring_doctor_name, referring_doctor_role,
-        referring_phone, referring_alt_phone,
-        primary_diagnosis, presenting_complaint, history_summary, examination_summary, investigations_summary,
-        indication, urgency, requested_input)
-     VALUES ($1,'staff_entry',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
-     RETURNING *`,
-    [
-      ref, body.patient_name, body.hospital_number || null, body.age || null, body.sex || null, body.ward || null, body.bed_number || null,
-      body.referring_unit, body.referring_consultant || null, body.referring_doctor_name, body.referring_doctor_role || null,
-      body.referring_phone, body.referring_alt_phone || null,
-      body.primary_diagnosis || null, body.presenting_complaint || null, body.history_summary || null,
-      body.examination_summary || null, body.investigations_summary || null,
-      body.indication, urgency, body.requested_input || null,
-    ]
+    `INSERT INTO received_consults (${cols.join(',')}) VALUES (${placeholders}) RETURNING *`,
+    vals
   );
   await recordHistory('received', r.rows[0].id, null, 'received', body.notes || 'Created by staff', user);
   return res.status(201).json(r.rows[0]);

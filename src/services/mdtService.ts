@@ -1,6 +1,7 @@
 import { db } from '../db/database';
 import { format } from 'date-fns';
 import { apiClient } from './apiClient';
+import type { Referral, ReceivedConsult } from './consultsModuleService';
 
 // Helper to sync MDT data to server
 async function syncToServer(endpoint: string, method: string, data?: any): Promise<any> {
@@ -63,6 +64,10 @@ export interface MDTPatientTeam {
   specialties: MDTSpecialty[];
   team_reviews?: MDTTeamReview[];
   weekly_harmonizations?: MDTWeeklyHarmonization[];
+  // Addendum v2.1 — referring-team snapshot copied from the originating consult
+  referral?: Referral;
+  diagnosis?: string;
+  priority?: string;
   created_at: Date;
   updated_at: Date;
 }
@@ -127,7 +132,12 @@ class MDTService {
   private static readonly SYNC_COOLDOWN = 60_000; // 60 seconds
 
   // Create or update MDT team for a patient
-  async createPatientTeam(patientId: string, patientName: string, hospitalNumber: string): Promise<MDTPatientTeam> {
+  async createPatientTeam(
+    patientId: string,
+    patientName: string,
+    hospitalNumber: string,
+    extra?: { referral?: Referral; diagnosis?: string; priority?: string }
+  ): Promise<MDTPatientTeam> {
     const team: MDTPatientTeam = {
       id: `mdt_team_${Date.now()}`,
       patient_id: patientId,
@@ -136,6 +146,9 @@ class MDTService {
       primary_specialty: 'Plastic Surgery',
       is_active: true,
       specialties: [],
+      referral: extra?.referral,
+      diagnosis: extra?.diagnosis,
+      priority: extra?.priority,
       created_at: new Date(),
       updated_at: new Date()
     };
@@ -153,8 +166,103 @@ class MDTService {
         console.warn('MDT immediate sync failed, will retry on periodic sync:', error);
       }
     }, 500);
-    
+
     return team;
+  }
+
+  /**
+   * Enrol a received consult into the MDT, copying the full referring-team
+   * snapshot. Finds an existing patient by hospital number (or creates a
+   * lightweight stub, since the MDT server table has a patient FK), then
+   * upserts the MDT team record with the referral details.
+   */
+  async enrolFromConsult(consult: ReceivedConsult): Promise<{ ok: boolean; message: string; patientId?: string }> {
+    const referral: Referral = {
+      referring_hospital: consult.referring_hospital ?? null,
+      referring_department: consult.referring_department ?? null,
+      referring_unit: consult.referring_unit ?? null,
+      referring_consultant: consult.referring_consultant ?? consult.referring_doctor_name ?? null,
+      referring_consultant_id: consult.referring_consultant_id ?? null,
+      referring_consultant_phone: consult.referring_consultant_phone ?? consult.referring_phone ?? null,
+      referring_senior_registrar_name: consult.referring_senior_registrar_name ?? null,
+      referring_senior_registrar_phone: consult.referring_senior_registrar_phone ?? null,
+      referring_registrar_name: consult.referring_registrar_name ?? null,
+      referring_registrar_phone: consult.referring_registrar_phone ?? null,
+      referring_house_officer_name: consult.referring_house_officer_name ?? null,
+      referring_house_officer_phone: consult.referring_house_officer_phone ?? null,
+      referring_medical_officer_name: consult.referring_medical_officer_name ?? null,
+      referring_medical_officer_phone: consult.referring_medical_officer_phone ?? null,
+      ward: consult.ward ?? null,
+      bed_number: consult.bed_number ?? null,
+      referral_priority: consult.referral_priority ?? consult.urgency ?? null,
+      reason_for_referral: consult.reason_for_referral ?? consult.indication ?? null,
+      referral_datetime: consult.referral_datetime ?? consult.created_at ?? null,
+      consult_ref: consult.consult_ref,
+      consult_id: consult.id,
+    };
+    const diagnosis = consult.primary_diagnosis || consult.indication || undefined;
+    const priority = (consult.referral_priority as string) || consult.urgency || undefined;
+
+    // Resolve a patient record (MDT server table references patients(id)).
+    let patientId: string | null = null;
+    let patientName = consult.patient_name;
+    const hn = (consult.hospital_number || '').trim();
+    if (hn) {
+      const existing = await db.patients.where('hospital_number').equals(hn).first();
+      if (existing?.id != null) {
+        patientId = String((existing as any).serverId ?? existing.id);
+        const full = `${existing.first_name || ''} ${existing.last_name || ''}`.trim();
+        if (full) patientName = full;
+      }
+    }
+    if (!patientId) {
+      const [first, ...rest] = (consult.patient_name || 'Unknown Patient').trim().split(/\s+/);
+      const last = rest.join(' ') || first;
+      try {
+        const { patientService } = await import('./patientService');
+        const created: any = await patientService.createPatient({
+          first_name: first || 'Unknown',
+          last_name: last || 'Patient',
+          hospital_number: hn || `CONSULT-${consult.consult_ref}`,
+          dob: '1900-01-01',
+          date_of_birth: '1900-01-01',
+          sex: consult.sex || 'Unknown',
+          gender: consult.sex || 'Unknown',
+          ward: consult.ward || undefined,
+          bed_number: consult.bed_number || undefined,
+        });
+        patientId = created ? String(created.serverId ?? created.id) : null;
+      } catch (e) {
+        console.error('enrolFromConsult: failed to create patient stub', e);
+        return { ok: false, message: 'Could not create a patient record for this consult.' };
+      }
+    }
+
+    if (!patientId || patientId === 'undefined' || patientId === 'null') {
+      return { ok: false, message: 'Could not resolve a patient record for this consult.' };
+    }
+
+    // Upsert the MDT team: update referral in place if already enrolled.
+    const existingTeams = await db.mdt_patient_teams.toArray();
+    const team = existingTeams.find(t => String(t.patient_id) === String(patientId) && t.is_active !== false);
+    let created = false;
+    if (team) {
+      await db.mdt_patient_teams.update(team.id, {
+        referral, diagnosis, priority, updated_at: new Date(), synced: false,
+      } as any);
+    } else {
+      await this.createPatientTeam(String(patientId), patientName, hn, { referral, diagnosis, priority });
+      created = true;
+    }
+
+    if (navigator.onLine) {
+      try { await this.pushToServer(); } catch { /* retry on periodic sync */ }
+    }
+    return {
+      ok: true,
+      message: created ? 'Patient enrolled into MDT with referral details.' : 'Referral details updated on the existing MDT entry.',
+      patientId: String(patientId),
+    };
   }
 
   // Add specialty to patient's MDT team

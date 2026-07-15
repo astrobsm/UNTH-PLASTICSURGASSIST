@@ -49,6 +49,22 @@ export interface ReceivedConsult {
   referring_doctor_role?: string | null;
   referring_phone: string;
   referring_alt_phone?: string | null;
+  // Addendum v2.1 — full referring clinical team + referral metadata
+  referring_hospital?: string | null;
+  referring_department?: string | null;
+  referring_consultant_id?: number | null;
+  referring_consultant_phone?: string | null;
+  referring_senior_registrar_name?: string | null;
+  referring_senior_registrar_phone?: string | null;
+  referring_registrar_name?: string | null;
+  referring_registrar_phone?: string | null;
+  referring_house_officer_name?: string | null;
+  referring_house_officer_phone?: string | null;
+  referring_medical_officer_name?: string | null;
+  referring_medical_officer_phone?: string | null;
+  referral_priority?: Urgency | string | null;
+  reason_for_referral?: string | null;
+  referral_datetime?: string | null;
   primary_diagnosis?: string | null;
   presenting_complaint?: string | null;
   history_summary?: string | null;
@@ -171,7 +187,79 @@ export interface DeliveredConsultDetail {
 
 interface ListResponse<T> { total: number; page: number; per_page: number; consults: T[] }
 
+/** Snapshot of the referring clinical team copied onto an MDT enrolment. */
+export interface Referral {
+  referring_hospital?: string | null;
+  referring_department?: string | null;
+  referring_unit?: string | null;
+  referring_consultant?: string | null;   // name
+  referring_consultant_id?: number | null;
+  referring_consultant_phone?: string | null;
+  referring_senior_registrar_name?: string | null;
+  referring_senior_registrar_phone?: string | null;
+  referring_registrar_name?: string | null;
+  referring_registrar_phone?: string | null;
+  referring_house_officer_name?: string | null;
+  referring_house_officer_phone?: string | null;
+  referring_medical_officer_name?: string | null;
+  referring_medical_officer_phone?: string | null;
+  ward?: string | null;
+  bed_number?: string | null;
+  referral_priority?: string | null;
+  reason_for_referral?: string | null;
+  referral_datetime?: string | null;
+  consult_ref?: string | null;
+  consult_id?: number | null;
+}
+
+/** A staff member usable in the searchable referring-consultant dropdown. */
+export interface StaffOption {
+  id: number;
+  full_name: string;
+  role: string;
+  phone?: string | null;
+  email?: string | null;
+}
+
+export interface ReferralAnalytics {
+  total: number;
+  acknowledged: number;
+  avg_response_hours: number | null;
+  by_department: { label: string; count: number }[];
+  by_unit: { label: string; count: number }[];
+  by_consultant: { label: string; count: number }[];
+  by_ward: { label: string; count: number }[];
+  by_priority: { label: string; count: number }[];
+  avg_response_by_unit: { label: string; avg_hours: number | null; count: number }[];
+  trend: { day: string; count: number }[];
+}
+
 const BASE = '/consults-module';
+
+// Suggested values for the referring-team datalists (Addendum v2.1 §1).
+export const REFERRING_DEPARTMENTS = [
+  'General Surgery', 'Orthopaedics', 'Neurosurgery', 'Paediatrics',
+  'Obstetrics & Gynaecology', 'Internal Medicine', 'ENT', 'Urology',
+];
+export const REFERRING_UNITS = [
+  'Trauma Unit', 'Burns Unit', 'Spine Unit', 'ICU',
+  'Accident & Emergency', 'Surgical Ward', 'Medical Ward',
+];
+
+// ── Staff directory (for searchable referring-consultant dropdown) ─────────
+export async function listStaff(): Promise<StaffOption[]> {
+  const r = await apiClient.get<{ staff: StaffOption[] }>('/medical-team');
+  return r.staff || [];
+}
+
+// ── Referral analytics ─────────────────────────────────────────────────────
+export function getReferralAnalytics(opts: { date_from?: string; date_to?: string } = {}) {
+  const p = new URLSearchParams();
+  if (opts.date_from) p.set('date_from', opts.date_from);
+  if (opts.date_to) p.set('date_to', opts.date_to);
+  const qs = p.toString();
+  return apiClient.request<ReferralAnalytics>(`${BASE}/received/analytics${qs ? `?${qs}` : ''}`);
+}
 
 // ── Submission links ────────────────────────────────────────────────────
 export async function listLinks(): Promise<SubmissionLink[]> {
@@ -190,6 +278,8 @@ export function setLinkActive(id: number, is_active: boolean) {
 // ── Received ────────────────────────────────────────────────────────────
 export async function listReceived(opts: {
   status?: ReceivedConsultStatus | ''; urgency?: Urgency | ''; search?: string; page?: number; per_page?: number;
+  referring_department?: string; referring_unit?: string; referring_consultant?: string;
+  ward?: string; priority?: string; date_from?: string; date_to?: string;
 } = {}) {
   const p = new URLSearchParams();
   if (opts.status) p.set('status', opts.status);
@@ -197,6 +287,13 @@ export async function listReceived(opts: {
   if (opts.search) p.set('search', opts.search);
   if (opts.page) p.set('page', String(opts.page));
   if (opts.per_page) p.set('per_page', String(opts.per_page));
+  if (opts.referring_department) p.set('referring_department', opts.referring_department);
+  if (opts.referring_unit) p.set('referring_unit', opts.referring_unit);
+  if (opts.referring_consultant) p.set('referring_consultant', opts.referring_consultant);
+  if (opts.ward) p.set('ward', opts.ward);
+  if (opts.priority) p.set('priority', opts.priority);
+  if (opts.date_from) p.set('date_from', opts.date_from);
+  if (opts.date_to) p.set('date_to', opts.date_to);
   return apiClient.request<ListResponse<ReceivedConsult>>(`${BASE}/received?${p.toString()}`);
 }
 export function getReceivedDetail(id: number) {

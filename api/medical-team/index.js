@@ -59,8 +59,8 @@ export default async function handler(req, res) {
  */
 async function getAllMedicalStaff(res) {
   const result = await query(
-    `SELECT id, username, email, full_name, role, is_active, created_at
-     FROM users 
+    `SELECT id, username, email, full_name, role, phone, is_active, created_at
+     FROM users
      WHERE role IN ('consultant', 'senior_registrar', 'registrar', 'junior_registrar', 'house_officer')
        AND is_approved = TRUE 
        AND is_active = TRUE

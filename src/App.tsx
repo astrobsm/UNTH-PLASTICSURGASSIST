@@ -93,6 +93,7 @@ const ClinicAppointmentsPage = lazyWithRetry(() => import('./pages/ClinicAppoint
 const ConsultsPage = lazyWithRetry(() => import('./pages/ConsultsPage'));
 const ConsultsModulePage = lazyWithRetry(() => import('./pages/ConsultsModulePage'));
 const PublicConsultSubmitPage = lazyWithRetry(() => import('./pages/PublicConsultSubmitPage'));
+const ReferralAnalyticsPage = lazyWithRetry(() => import('./pages/ReferralAnalyticsPage'));
 const AdminTrainingPage = lazyWithRetry(() => import('./pages/AdminTrainingPage'));
 const BulkAdmitPage = lazyWithRetry(() => import('./pages/BulkAdmitPage'));
 const SJSManagementPage = lazyWithRetry(() => import('./pages/SJSManagementPage'));
@@ -345,6 +346,7 @@ function App() {
               <Route path="/clinic-appointments" element={<ClinicAppointmentsPage />} />
               <Route path="/consults" element={<ConsultsModulePage />} />
               <Route path="/consults-external" element={<ConsultsPage />} />
+              <Route path="/reports/referrals" element={<ReferralAnalyticsPage />} />
               <Route path="/submit-consult/:token" element={<PublicConsultSubmitPage />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/admin-training" element={<ProtectedRoute allowedRoles={['admin', 'consultant']}><AdminTrainingPage /></ProtectedRoute>} />

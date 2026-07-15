@@ -10,7 +10,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { ClipboardCheck, AlertTriangle, CheckCircle2, Phone, Loader2 } from 'lucide-react';
-import { publicVerifyLink, publicSubmitConsult, type Urgency } from '../services/consultsModuleService';
+import { publicVerifyLink, publicSubmitConsult, REFERRING_DEPARTMENTS, REFERRING_UNITS, type Urgency } from '../services/consultsModuleService';
 
 interface FormState {
   patient_name: string;
@@ -19,8 +19,20 @@ interface FormState {
   sex: string;
   ward: string;
   bed_number: string;
+  // Referring unit / inviting team
+  referring_hospital: string;
+  referring_department: string;
   referring_unit: string;
   referring_consultant: string;
+  referring_consultant_phone: string;
+  referring_senior_registrar_name: string;
+  referring_senior_registrar_phone: string;
+  referring_registrar_name: string;
+  referring_registrar_phone: string;
+  referring_house_officer_name: string;
+  referring_house_officer_phone: string;
+  referring_medical_officer_name: string;
+  referring_medical_officer_phone: string;
   referring_doctor_name: string;
   referring_doctor_role: string;
   referring_phone: string;
@@ -37,7 +49,13 @@ interface FormState {
 
 const EMPTY: FormState = {
   patient_name: '', hospital_number: '', age: '', sex: '', ward: '', bed_number: '',
-  referring_unit: '', referring_consultant: '', referring_doctor_name: '', referring_doctor_role: '',
+  referring_hospital: '', referring_department: '', referring_unit: '',
+  referring_consultant: '', referring_consultant_phone: '',
+  referring_senior_registrar_name: '', referring_senior_registrar_phone: '',
+  referring_registrar_name: '', referring_registrar_phone: '',
+  referring_house_officer_name: '', referring_house_officer_phone: '',
+  referring_medical_officer_name: '', referring_medical_officer_phone: '',
+  referring_doctor_name: '', referring_doctor_role: '',
   referring_phone: '', referring_alt_phone: '',
   primary_diagnosis: '', presenting_complaint: '', history_summary: '',
   examination_summary: '', investigations_summary: '',
@@ -72,10 +90,14 @@ export default function PublicConsultSubmitPage() {
     // Client-side checks
     const missing: string[] = [];
     if (!form.patient_name.trim()) missing.push('Patient name');
+    if (!form.referring_hospital.trim()) missing.push('Referring hospital');
+    if (!form.referring_department.trim()) missing.push('Referring department');
     if (!form.referring_unit.trim()) missing.push('Referring unit');
+    if (!form.referring_consultant.trim()) missing.push('Referring consultant');
+    if (!form.ward.trim()) missing.push('Ward');
     if (!form.referring_doctor_name.trim()) missing.push('Your name');
-    if (!form.referring_phone.trim()) missing.push('Phone number');
-    if (!form.indication.trim()) missing.push('Reason for consult');
+    if (!form.referring_phone.trim()) missing.push('Your phone number');
+    if (!form.indication.trim()) missing.push('Reason for referral');
     if (missing.length) { setError(`Please complete: ${missing.join(', ')}`); return; }
 
     setSubmitting(true);
@@ -83,6 +105,9 @@ export default function PublicConsultSubmitPage() {
       const payload = {
         ...form,
         age: form.age ? parseInt(form.age, 10) : undefined,
+        referral_priority: form.urgency,
+        reason_for_referral: form.indication,
+        referral_datetime: new Date().toISOString(),
       };
       const r = await publicSubmitConsult(token, payload);
       setSubmitted({ ref: r.consult_ref, message: r.message });
@@ -169,9 +194,29 @@ export default function PublicConsultSubmitPage() {
             <Field label="Bed number"          value={form.bed_number}       onChange={v => update('bed_number', v)} />
           </Section>
 
-          <Section title="Referring unit & contact">
-            <Field label="Referring unit *"        value={form.referring_unit}         onChange={v => update('referring_unit', v)} />
-            <Field label="Consultant in charge"    value={form.referring_consultant}   onChange={v => update('referring_consultant', v)} />
+          <Section title="Referring unit / inviting team">
+            <Field label="Referring hospital *"    value={form.referring_hospital}     onChange={v => update('referring_hospital', v)} placeholder="e.g. UNTH, Ituku-Ozalla" />
+            <Field label="Referring department *"  value={form.referring_department}   onChange={v => update('referring_department', v)} list="ref-departments" options={REFERRING_DEPARTMENTS} placeholder="e.g. General Surgery" />
+            <Field label="Referring unit *"        value={form.referring_unit}         onChange={v => update('referring_unit', v)} list="ref-units" options={REFERRING_UNITS} placeholder="e.g. Trauma Unit" />
+            <Select label="Referral priority *"
+              value={form.urgency}
+              onChange={v => update('urgency', v as Urgency)}
+              options={['routine', 'urgent', 'emergency']}
+              renderLabel={(o) => o.charAt(0).toUpperCase() + o.slice(1)}
+            />
+            <Field label="Referring consultant *"  value={form.referring_consultant}          onChange={v => update('referring_consultant', v)} />
+            <Field label="Consultant phone"        value={form.referring_consultant_phone}    onChange={v => update('referring_consultant_phone', v)} type="tel" />
+            <Field label="Senior registrar"        value={form.referring_senior_registrar_name}  onChange={v => update('referring_senior_registrar_name', v)} />
+            <Field label="Senior registrar phone"  value={form.referring_senior_registrar_phone} onChange={v => update('referring_senior_registrar_phone', v)} type="tel" />
+            <Field label="Registrar"               value={form.referring_registrar_name}      onChange={v => update('referring_registrar_name', v)} />
+            <Field label="Registrar phone"         value={form.referring_registrar_phone}     onChange={v => update('referring_registrar_phone', v)} type="tel" />
+            <Field label="House officer"           value={form.referring_house_officer_name}  onChange={v => update('referring_house_officer_name', v)} />
+            <Field label="House officer phone"     value={form.referring_house_officer_phone} onChange={v => update('referring_house_officer_phone', v)} type="tel" />
+            <Field label="Medical officer"         value={form.referring_medical_officer_name}  onChange={v => update('referring_medical_officer_name', v)} />
+            <Field label="Medical officer phone"   value={form.referring_medical_officer_phone} onChange={v => update('referring_medical_officer_phone', v)} type="tel" />
+          </Section>
+
+          <Section title="Your contact (for SMS feedback)">
             <Field label="Your name *"             value={form.referring_doctor_name}  onChange={v => update('referring_doctor_name', v)} />
             <Field label="Your role"               value={form.referring_doctor_role}  onChange={v => update('referring_doctor_role', v)} placeholder="e.g. Senior Registrar" />
             <Field label="Phone number * (for SMS feedback)" value={form.referring_phone} onChange={v => update('referring_phone', v)} type="tel" placeholder="08012345678" />
@@ -186,15 +231,9 @@ export default function PublicConsultSubmitPage() {
             <Textarea label="Relevant investigations"      value={form.investigations_summary} onChange={v => update('investigations_summary', v)} />
           </Section>
 
-          <Section title="Reason for consult">
-            <Textarea label="Indication for plastic surgery consult *" value={form.indication} onChange={v => update('indication', v)} required />
+          <Section title="Reason for referral">
+            <Textarea label="Reason for referral / indication for plastic surgery consult *" value={form.indication} onChange={v => update('indication', v)} required />
             <Textarea label="What input do you need?"                  value={form.requested_input} onChange={v => update('requested_input', v)} placeholder="e.g. opinion, take-over, theatre booking" />
-            <Select label="Urgency"
-              value={form.urgency}
-              onChange={v => update('urgency', v as Urgency)}
-              options={['routine', 'urgent', 'emergency']}
-              renderLabel={(o) => o.charAt(0).toUpperCase() + o.slice(1)}
-            />
           </Section>
 
           <div className="bg-white border border-gray-200 rounded-lg p-4 sticky bottom-4 shadow-md flex items-center justify-between">
@@ -222,17 +261,23 @@ function Section({ title, children }: { title: string; children: React.ReactNode
     </fieldset>
   );
 }
-function Field({ label, value, onChange, type = 'text', placeholder }: { label: string; value: string; onChange: (v: string) => void; type?: string; placeholder?: string }) {
+function Field({ label, value, onChange, type = 'text', placeholder, list, options }: { label: string; value: string; onChange: (v: string) => void; type?: string; placeholder?: string; list?: string; options?: string[] }) {
   return (
     <label className="block sm:col-span-1">
       <span className="text-xs text-gray-600">{label}</span>
       <input
         type={type}
         value={value}
+        list={list}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm"
       />
+      {list && options && (
+        <datalist id={list}>
+          {options.map(o => <option key={o} value={o} />)}
+        </datalist>
+      )}
     </label>
   );
 }

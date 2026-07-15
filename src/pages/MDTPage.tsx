@@ -37,6 +37,8 @@ import { safeFormatDate } from '../utils/dateUtils';
 import { useAuthStore } from '../store/authStore';
 import { DocumentScannerModal } from '../components/DocumentScannerModal';
 import SpeechToTextInput from '../components/SpeechToTextInput';
+import PhoneActions from '../components/PhoneActions';
+import { medicalTeamService, TeamMember } from '../services/medicalTeamService';
 
 const MDTPage: React.FC = () => {
   const { user } = useAuthStore();
@@ -48,7 +50,13 @@ const MDTPage: React.FC = () => {
   const [statistics, setStatistics] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
-  const [activeTab, setActiveTab] = useState<'team' | 'reviews' | 'meetings' | 'contacts'>('team');
+  const [activeTab, setActiveTab] = useState<'referral' | 'team' | 'reviews' | 'meetings' | 'contacts'>('referral');
+  const [psTeam, setPsTeam] = useState<TeamMember[]>([]);
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState({
+    search: '', department: '', unit: '', consultant: '', priority: '', ward: '',
+    date_from: '', date_to: '', discussion: '' as '' | 'discussed' | 'pending',
+  });
   
   // Modal states
   const [showAddPatient, setShowAddPatient] = useState(false);
@@ -81,6 +89,11 @@ const MDTPage: React.FC = () => {
   useEffect(() => {
     if (selectedPatient) {
       loadPatientData();
+      // Load the assigned plastic surgery team for the Referral tab.
+      setPsTeam([]);
+      medicalTeamService.getPatientMedicalTeamFromAPI(selectedPatient.patient_id)
+        .then(setPsTeam)
+        .catch(() => setPsTeam([]));
     }
   }, [selectedPatient]);
 
@@ -848,6 +861,40 @@ const MDTPage: React.FC = () => {
     );
   }
 
+  const activeFilterCount = Object.values(filters).filter(v => v && v !== '').length;
+  const visiblePatients = mdtPatients.filter(p => {
+    const r = p.referral || {};
+    const priority = (p.priority || r.referral_priority || '').toLowerCase();
+    const dt = r.referral_datetime ? new Date(r.referral_datetime) : null;
+    if (filters.search) {
+      const q = filters.search.toLowerCase();
+      const hay = [
+        p.patient_name, p.hospital_number, r.referring_hospital, r.referring_department,
+        r.referring_unit, r.referring_consultant, p.diagnosis,
+      ].filter(Boolean).join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    if (filters.department && (r.referring_department || '') !== filters.department) return false;
+    if (filters.unit && (r.referring_unit || '') !== filters.unit) return false;
+    if (filters.consultant) {
+      const c = filters.consultant.toLowerCase();
+      const psMatch = (p.specialties || []).some((s: any) => (s.consultant_name || '').toLowerCase().includes(c));
+      const refMatch = (r.referring_consultant || '').toLowerCase().includes(c);
+      if (!psMatch && !refMatch) return false;
+    }
+    if (filters.priority && priority !== filters.priority) return false;
+    if (filters.ward && (r.ward || '') !== filters.ward) return false;
+    if (filters.date_from && (!dt || dt < new Date(filters.date_from))) return false;
+    if (filters.date_to && (!dt || dt > new Date(filters.date_to + 'T23:59:59'))) return false;
+    if (filters.discussion === 'discussed' && !(p.team_reviews && p.team_reviews.length > 0)) return false;
+    if (filters.discussion === 'pending' && (p.team_reviews && p.team_reviews.length > 0)) return false;
+    return true;
+  });
+  const departmentOptions = Array.from(new Set(mdtPatients.map(p => p.referral?.referring_department).filter(Boolean))) as string[];
+  const unitOptions = Array.from(new Set(mdtPatients.map(p => p.referral?.referring_unit).filter(Boolean))) as string[];
+  const wardOptions = Array.from(new Set(mdtPatients.map(p => p.referral?.ward).filter(Boolean))) as string[];
+  const setFilter = (k: keyof typeof filters, v: string) => setFilters(f => ({ ...f, [k]: v }));
+
   return (
     <div className="p-6">
       {/* Header */}
@@ -855,6 +902,13 @@ const MDTPage: React.FC = () => {
         <div className="flex items-center justify-between mb-2">
           <h1 className="text-lg sm:text-2xl font-bold text-gray-900">Multidisciplinary Team (MDT)</h1>
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowFilters(s => !s)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md border ${activeFilterCount ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+            >
+              <Layers className="w-5 h-5" />
+              Filters{activeFilterCount ? ` (${activeFilterCount})` : ''}
+            </button>
             <button
               onClick={handleForceSync}
               disabled={syncing}
@@ -874,6 +928,32 @@ const MDTPage: React.FC = () => {
         </div>
         <p className="text-gray-600">Manage patients with multiple specialty involvement</p>
       </div>
+
+      {/* Filter bar */}
+      {showFilters && (
+        <div className="mb-6 bg-white border border-gray-200 rounded-lg p-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <FilterInput label="Search" value={filters.search} onChange={v => setFilter('search', v)} placeholder="Name, hospital no, unit…" />
+            <FilterSelect label="Referring department" value={filters.department} onChange={v => setFilter('department', v)} options={departmentOptions} />
+            <FilterSelect label="Referring unit" value={filters.unit} onChange={v => setFilter('unit', v)} options={unitOptions} />
+            <FilterInput label="Consultant (PS or referring)" value={filters.consultant} onChange={v => setFilter('consultant', v)} placeholder="Consultant name…" />
+            <FilterSelect label="Priority" value={filters.priority} onChange={v => setFilter('priority', v)} options={['emergency', 'urgent', 'routine']} />
+            <FilterSelect label="Ward" value={filters.ward} onChange={v => setFilter('ward', v)} options={wardOptions} />
+            <FilterInput label="From date" type="date" value={filters.date_from} onChange={v => setFilter('date_from', v)} />
+            <FilterInput label="To date" type="date" value={filters.date_to} onChange={v => setFilter('date_to', v)} />
+            <FilterSelect label="Discussion status" value={filters.discussion} onChange={v => setFilter('discussion', v as any)} options={['discussed', 'pending']} />
+          </div>
+          {activeFilterCount > 0 && (
+            <div className="mt-3 flex items-center justify-between">
+              <span className="text-xs text-gray-500">Showing {visiblePatients.length} of {mdtPatients.length}</span>
+              <button
+                onClick={() => setFilters({ search: '', department: '', unit: '', consultant: '', priority: '', ward: '', date_from: '', date_to: '', discussion: '' })}
+                className="text-xs text-blue-600 hover:underline"
+              >Clear all filters</button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Statistics Cards */}
       {statistics && (
@@ -914,7 +994,7 @@ const MDTPage: React.FC = () => {
 
       {/* MDT Patients Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        {mdtPatients.map(patient => (
+        {visiblePatients.map(patient => (
           <div
             key={patient.id}
             onClick={() => setSelectedPatient(patient)}
@@ -931,6 +1011,21 @@ const MDTPage: React.FC = () => {
                 {patient.specialties?.length || 0} specialties
               </span>
             </div>
+
+            {patient.referral?.referring_unit && (
+              <div className="mb-2 flex items-center gap-1.5 text-xs">
+                <MapPin className="w-3 h-3 text-blue-500 flex-shrink-0" />
+                <span className="text-gray-600 truncate">
+                  {patient.referral.referring_department ? `${patient.referral.referring_department} · ` : ''}
+                  {patient.referral.referring_unit}
+                </span>
+                {(patient.priority || patient.referral.referral_priority) && (
+                  <span className={`ml-auto px-1.5 py-0.5 rounded-full text-[10px] font-medium border ${ROLE_COLORS[(patient.priority || patient.referral.referral_priority || '').toLowerCase()] || 'bg-gray-100 text-gray-600 border-gray-300'}`}>
+                    {(patient.priority || patient.referral.referral_priority || '').charAt(0).toUpperCase() + (patient.priority || patient.referral.referral_priority || '').slice(1)}
+                  </span>
+                )}
+              </div>
+            )}
 
             {patient.specialties && patient.specialties.length > 0 && (
               <div className="space-y-1">
@@ -950,16 +1045,18 @@ const MDTPage: React.FC = () => {
           </div>
         ))}
 
-        {mdtPatients.length === 0 && (
+        {visiblePatients.length === 0 && (
           <div className="col-span-full text-center py-12 bg-gray-50 rounded-lg">
             <Users className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-            <p className="text-gray-600">No MDT patients yet</p>
-            <button
-              onClick={() => setShowAddPatient(true)}
-              className="mt-3 text-green-600 hover:text-green-700 font-medium"
-            >
-              Add your first MDT patient
-            </button>
+            <p className="text-gray-600">{mdtPatients.length === 0 ? 'No MDT patients yet' : 'No patients match the current filters'}</p>
+            {mdtPatients.length === 0 && (
+              <button
+                onClick={() => setShowAddPatient(true)}
+                className="mt-3 text-green-600 hover:text-green-700 font-medium"
+              >
+                Add your first MDT patient
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -985,6 +1082,7 @@ const MDTPage: React.FC = () => {
             {/* Tabs */}
             <div className="flex gap-2 border-b border-gray-200">
               {[
+                { id: 'referral', label: 'Referral', icon: MapPin },
                 { id: 'team', label: 'Team Members', icon: Users },
                 { id: 'reviews', label: 'Team Reviews', icon: FileText },
                 { id: 'meetings', label: 'MDT Meetings', icon: Calendar },
@@ -1008,6 +1106,10 @@ const MDTPage: React.FC = () => {
 
           {/* Tab Content */}
           <div className="p-6">
+            {activeTab === 'referral' && (
+              <ReferralTab patient={selectedPatient} psTeam={psTeam} />
+            )}
+
             {activeTab === 'team' && (
               <div className="space-y-4">
                 {selectedPatient.specialties && selectedPatient.specialties.length > 0 ? (
@@ -1568,5 +1670,147 @@ const MDTPage: React.FC = () => {
     </div>
   );
 };
+
+// ── Referral tab (Addendum v2.1 §4) ─────────────────────────────────────────
+const ROLE_COLORS: Record<string, string> = {
+  emergency: 'bg-red-100 text-red-800 border-red-300',
+  urgent: 'bg-orange-100 text-orange-800 border-orange-300',
+  routine: 'bg-blue-100 text-blue-800 border-blue-300',
+};
+
+function ReferralTab({ patient, psTeam }: { patient: MDTPatientTeam; psTeam: TeamMember[] }) {
+  const r = patient.referral || {};
+  const priority = (patient.priority || r.referral_priority || '').toLowerCase();
+  const dt = r.referral_datetime ? new Date(r.referral_datetime) : null;
+  const hasReferral = Object.values(r).some(v => v != null && v !== '');
+
+  return (
+    <div className="space-y-6">
+      {/* Patient Information */}
+      <ReferralSection title="Patient Information">
+        <InfoGrid items={[
+          ['Name', patient.patient_name],
+          ['Hospital Number', patient.hospital_number],
+          ['Diagnosis', patient.diagnosis],
+          ['Ward', r.ward],
+          ['Bed Number', r.bed_number],
+        ]} />
+      </ReferralSection>
+
+      {/* Plastic Surgery Team */}
+      <ReferralSection title="Plastic Surgery Team">
+        {psTeam.length === 0 ? (
+          <p className="text-sm text-gray-500">No assigned plastic surgery team on record.</p>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {psTeam.map(m => (
+              <div key={m.id} className="py-2 flex items-center justify-between gap-2 flex-wrap">
+                <div className="text-sm">
+                  <span className="text-gray-500">{m.roleLabel}:</span>{' '}
+                  <span className="font-medium text-gray-900">{m.full_name || m.name}</span>
+                </div>
+                {m.phone && <PhoneActions phone={m.phone} compact />}
+              </div>
+            ))}
+          </div>
+        )}
+      </ReferralSection>
+
+      {/* Referring Team */}
+      <ReferralSection title="Referring Team">
+        {!hasReferral ? (
+          <p className="text-sm text-gray-500">No referring-team details captured for this patient.</p>
+        ) : (
+          <>
+            <InfoGrid items={[
+              ['Hospital', r.referring_hospital],
+              ['Department', r.referring_department],
+              ['Unit', r.referring_unit],
+            ]} />
+            <div className="mt-2 divide-y divide-gray-100 border-t border-gray-100">
+              <ReferralPersonRow role="Consultant"       name={r.referring_consultant}                phone={r.referring_consultant_phone} />
+              <ReferralPersonRow role="Senior Registrar" name={r.referring_senior_registrar_name}     phone={r.referring_senior_registrar_phone} />
+              <ReferralPersonRow role="Registrar"        name={r.referring_registrar_name}            phone={r.referring_registrar_phone} />
+              <ReferralPersonRow role="House Officer"    name={r.referring_house_officer_name}        phone={r.referring_house_officer_phone} />
+              <ReferralPersonRow role="Medical Officer"  name={r.referring_medical_officer_name}      phone={r.referring_medical_officer_phone} />
+            </div>
+          </>
+        )}
+      </ReferralSection>
+
+      {/* Referral Information */}
+      <ReferralSection title="Referral Information">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-sm text-gray-500">Priority:</span>
+          {priority ? (
+            <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium border ${ROLE_COLORS[priority] || 'bg-gray-100 text-gray-700 border-gray-300'}`}>
+              {priority.charAt(0).toUpperCase() + priority.slice(1)}
+            </span>
+          ) : <span className="text-sm text-gray-700">—</span>}
+        </div>
+        <InfoGrid items={[
+          ['Date', dt ? dt.toLocaleDateString() : null],
+          ['Time', dt ? dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null],
+        ]} />
+        {r.reason_for_referral && (
+          <div className="mt-2 text-sm">
+            <div className="text-xs uppercase tracking-wide text-gray-500">Reason for Referral</div>
+            <div className="text-gray-900 whitespace-pre-wrap">{r.reason_for_referral}</div>
+          </div>
+        )}
+        {r.consult_ref && <p className="mt-2 text-xs text-gray-400">Source consult: {r.consult_ref}</p>}
+      </ReferralSection>
+    </div>
+  );
+}
+
+function FilterInput({ label, value, onChange, placeholder, type = 'text' }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; type?: string }) {
+  return (
+    <label className="block text-xs text-gray-600">{label}
+      <input type={type} value={value} placeholder={placeholder} onChange={e => onChange(e.target.value)}
+        className="mt-1 w-full px-2 py-1.5 border border-gray-300 rounded text-sm" />
+    </label>
+  );
+}
+function FilterSelect({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: string[] }) {
+  return (
+    <label className="block text-xs text-gray-600">{label}
+      <select value={value} onChange={e => onChange(e.target.value)}
+        className="mt-1 w-full px-2 py-1.5 border border-gray-300 rounded text-sm bg-white">
+        <option value="">All</option>
+        {options.map(o => <option key={o} value={o}>{o.charAt(0).toUpperCase() + o.slice(1)}</option>)}
+      </select>
+    </label>
+  );
+}
+
+function ReferralSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section>
+      <h4 className="text-sm font-semibold text-gray-700 mb-2 pb-1 border-b border-gray-100">{title}</h4>
+      {children}
+    </section>
+  );
+}
+function InfoGrid({ items }: { items: [string, string | null | undefined][] }) {
+  const shown = items.filter(([, v]) => v != null && v !== '');
+  if (shown.length === 0) return <p className="text-sm text-gray-400">—</p>;
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
+      {shown.map(([k, v]) => (
+        <div key={k} className="text-sm"><span className="text-gray-500">{k}:</span> <span className="text-gray-900">{v}</span></div>
+      ))}
+    </div>
+  );
+}
+function ReferralPersonRow({ role, name, phone }: { role: string; name?: string | null; phone?: string | null }) {
+  if ((!name || !name.trim()) && !phone) return null;
+  return (
+    <div className="py-1.5 flex items-center justify-between gap-2 flex-wrap">
+      <div className="text-sm"><span className="text-gray-500">{role}:</span> <span className="text-gray-900">{name || '—'}</span></div>
+      {phone && <PhoneActions phone={phone} compact />}
+    </div>
+  );
+}
 
 export default MDTPage;
