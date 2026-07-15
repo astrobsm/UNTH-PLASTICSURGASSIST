@@ -469,16 +469,17 @@ async function receivedAnalytics(req, res) {
        GROUP BY 1 ORDER BY count DESC, label ASC`, args
   )).rows;
 
-  const [byDepartment, byUnit, byConsultant, byWard, byPriority] = await Promise.all([
-    groupCount('referring_department'),
-    groupCount('referring_unit'),
-    groupCount('referring_consultant'),
-    groupCount('ward'),
-    query(
-      `SELECT COALESCE(NULLIF(TRIM(referral_priority), ''), urgency, 'routine') AS label, COUNT(*)::int AS count
-         FROM received_consults ${whereSql} GROUP BY 1 ORDER BY count DESC`, args
-    ).then(r => r.rows),
-  ]);
+  // Run sequentially (not Promise.all) so a single report request never holds
+  // more than one pooled DB connection at a time — the Supabase pooler caps
+  // concurrent clients, and parallel fan-out here was needlessly connection-hungry.
+  const byDepartment = await groupCount('referring_department');
+  const byUnit = await groupCount('referring_unit');
+  const byConsultant = await groupCount('referring_consultant');
+  const byWard = await groupCount('ward');
+  const byPriority = (await query(
+    `SELECT COALESCE(NULLIF(TRIM(referral_priority), ''), urgency, 'routine') AS label, COUNT(*)::int AS count
+       FROM received_consults ${whereSql} GROUP BY 1 ORDER BY count DESC`, args
+  )).rows;
 
   // Avg response time (first acknowledgement) in hours, overall and per unit.
   const respArgs = args.slice();
