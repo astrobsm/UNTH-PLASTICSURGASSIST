@@ -55,6 +55,57 @@ interface DashboardPatient {
   admission_date?: string;
 }
 
+// Resolved team for one patient (ids as strings, names ready to display).
+interface ResolvedTeam {
+  consultant_id: string | null; consultant: string;
+  sr_id: string | null; sr: string;
+  reg_id: string | null; reg: string;
+  ho_id: string | null; ho: string;
+}
+interface TeamMaps { apiMap: Map<string, any>; localMap: Map<string, any>; userById: Map<string, any>; }
+
+/**
+ * Build patient→team maps. Prefers the server endpoint (names resolved
+ * server-side, immune to id string/number mismatches); falls back to local
+ * IndexedDB when the API returns nothing (offline).
+ */
+async function buildTeamMaps(): Promise<TeamMaps> {
+  const apiAssignments = await medicalTeamService.getAllAssignmentsFromAPI();
+  const apiMap = new Map<string, any>();
+  for (const a of apiAssignments) apiMap.set(String(a.patient_id), a);
+  const localMap = new Map<string, any>();
+  const userById = new Map<string, any>();
+  if (apiAssignments.length === 0) {
+    try { for (const a of await db.patient_assignments.toArray()) if (a.is_active) localMap.set(String(a.patient_id), a); } catch { /* table may not exist */ }
+    try { for (const u of await db.users.toArray()) userById.set(String(u.id), u); } catch { /* */ }
+  }
+  return { apiMap, localMap, userById };
+}
+
+/** Resolve the full team for a patient id (string) from the maps, or null. */
+function resolveTeam(pidStr: string, maps: TeamMaps): ResolvedTeam | null {
+  const api = maps.apiMap.get(pidStr);
+  if (api) {
+    return {
+      consultant_id: api.consultant_id ?? null, consultant: api.consultant_name || '',
+      sr_id: api.senior_registrar_id ?? null, sr: api.senior_registrar_name || '',
+      reg_id: api.registrar_id ?? null, reg: api.registrar_name || '',
+      ho_id: api.house_officer_id ?? null, ho: api.house_officer_name || '',
+    };
+  }
+  const loc = maps.localMap.get(pidStr);
+  if (loc) {
+    const nm = (id: any) => { const u = id != null ? maps.userById.get(String(id)) : null; return u ? (u.full_name || u.name || '') : ''; };
+    return {
+      consultant_id: loc.consultant_id != null ? String(loc.consultant_id) : null, consultant: nm(loc.consultant_id),
+      sr_id: loc.senior_registrar_id != null ? String(loc.senior_registrar_id) : null, sr: nm(loc.senior_registrar_id),
+      reg_id: loc.registrar_id != null ? String(loc.registrar_id) : null, reg: nm(loc.registrar_id),
+      ho_id: loc.house_officer_id != null ? String(loc.house_officer_id) : null, ho: nm(loc.house_officer_id),
+    };
+  }
+  return null;
+}
+
 export default function Dashboard() {
   const { user } = useAuthStore();
   const navigate = useNavigate();
@@ -270,18 +321,10 @@ export default function Dashboard() {
         }
       }
 
-      // Load patient_assignments for accurate team data
-      let allAssignments: any[] = [];
-      try { allAssignments = await db.patient_assignments.toArray(); } catch { /* table may not exist */ }
-      const assignmentByPid = new Map<number, any>();
-      for (const a of allAssignments) {
-        if (a.is_active) assignmentByPid.set(a.patient_id, a);
-      }
-      // Build user lookup for resolving IDs to names
-      let allUsers: any[] = [];
-      try { allUsers = await db.users.toArray(); } catch { /* */ }
-      const userById = new Map<number, any>();
-      for (const u of allUsers) userById.set(u.id, u);
+      // Team assignments — server-resolved role names (source of truth), with a
+      // local IndexedDB fallback offline. Fixes auto-admitted teams not showing
+      // due to string/number id mismatches in the old local-only path.
+      const teamMaps = await buildTeamMaps();
 
       // Build dashboard patient list
       const userName = user?.name || '';
@@ -290,26 +333,21 @@ export default function Dashboard() {
 
       for (const p of activePatientsList) {
         const pid = String(p.id || p.serverId || '');
-        const numPid = Number(pid);
         const hn = (p.hospital_number || '').trim().toLowerCase();
         const adm = admissionByPid.get(pid) || (hn ? admissionByHn.get(hn) : undefined);
-        const assignment = assignmentByPid.get(numPid);
+        const team = resolveTeam(pid, teamMaps);
 
         const ward = adm?.ward_location || p.ward_id || '';
         const bed = adm?.bed_number || p.bed_number || '';
-        // Resolve consultant from patient_assignments first, then fallback to admission/patient text fields
-        const assignedConsultant = assignment?.consultant_id ? userById.get(assignment.consultant_id) : null;
-        const consultant = assignedConsultant ? (assignedConsultant.full_name || assignedConsultant.name || '') : (adm?.admitting_consultant || p.consultant_in_charge || '');
-        // Resolve resident from patient_assignments (senior_registrar or registrar), NOT admitting_doctor
-        const srUser = assignment?.senior_registrar_id ? userById.get(assignment.senior_registrar_id) : null;
-        const regUser = assignment?.registrar_id ? userById.get(assignment.registrar_id) : null;
-        const resident = srUser ? (srUser.full_name || srUser.name || '') : regUser ? (regUser.full_name || regUser.name || '') : (p.resident_in_charge || '');
-        const hoUser = assignment?.house_officer_id ? userById.get(assignment.house_officer_id) : null;
-        const houseOfficer = hoUser ? (hoUser.full_name || hoUser.name || '') : '';
+        // Team names come from the assignment (server-resolved); fall back to
+        // admission/patient text fields when there is no assignment row.
+        const consultant = team?.consultant || adm?.admitting_consultant || p.consultant_in_charge || '';
+        const resident = team?.sr || team?.reg || p.resident_in_charge || '';
+        const houseOfficer = team?.ho || (adm as any)?.assigned_house_officer || '';
         const admStatus = adm ? 'active' as const : 'outpatient' as const;
 
-        // For non-admin: check if patient is assigned to this user via name OR via patient_assignments
-        const myUserId = Number(userId);
+        // For non-admin: patient is visible if assigned to this user by id or name.
+        const myId = String(userId);
         const isAssigned = isAdmin ||
           consultant.toLowerCase().includes(userName.toLowerCase()) ||
           resident.toLowerCase().includes(userName.toLowerCase()) ||
@@ -318,12 +356,7 @@ export default function Dashboard() {
           adm?.admitting_doctor?.toLowerCase().includes(userName.toLowerCase()) ||
           adm?.admitting_consultant?.toLowerCase().includes(userName.toLowerCase()) ||
           adm?.created_by === userId ||
-          (assignment && (
-            assignment.consultant_id === myUserId ||
-            assignment.senior_registrar_id === myUserId ||
-            assignment.registrar_id === myUserId ||
-            assignment.house_officer_id === myUserId
-          ));
+          (!!team && [team.consultant_id, team.sr_id, team.reg_id, team.ho_id].includes(myId));
 
         if (isAdmin || isAssigned) {
           dPatients.push({
@@ -354,40 +387,20 @@ export default function Dashboard() {
         if (admPid && includedIds.has(admPid)) continue;
         if (admHn && includedHns.has(admHn)) continue;
 
-        const numPid = Number(adm.patient_id);
-        const assignment = assignmentByPid.get(numPid);
-        const assignedConsultant = assignment?.consultant_id
-          ? userById.get(assignment.consultant_id) : null;
-        const consultant = assignedConsultant
-          ? (assignedConsultant.full_name || assignedConsultant.name || '')
-          : (adm.admitting_consultant || '');
-        const srUser = assignment?.senior_registrar_id
-          ? userById.get(assignment.senior_registrar_id) : null;
-        const regUser = assignment?.registrar_id
-          ? userById.get(assignment.registrar_id) : null;
-        const resident = srUser
-          ? (srUser.full_name || srUser.name || '')
-          : regUser ? (regUser.full_name || regUser.name || '') : '';
-        const hoUser = assignment?.house_officer_id
-          ? userById.get(assignment.house_officer_id) : null;
-        const houseOfficer = hoUser
-          ? (hoUser.full_name || hoUser.name || '')
-          : ((adm as any).assigned_house_officer || '');
+        const team = resolveTeam(String(adm.patient_id), teamMaps);
+        const consultant = team?.consultant || adm.admitting_consultant || '';
+        const resident = team?.sr || team?.reg || '';
+        const houseOfficer = team?.ho || (adm as any).assigned_house_officer || '';
 
         // Honour role-based visibility for non-admin users
-        const myUserId = Number(user?.id || '');
+        const myId = String(user?.id || '');
         const isAssigned = isAdmin ||
           consultant.toLowerCase().includes(userName.toLowerCase()) ||
           resident.toLowerCase().includes(userName.toLowerCase()) ||
           (adm.admitting_doctor || '').toLowerCase().includes(userName.toLowerCase()) ||
           (adm.admitting_consultant || '').toLowerCase().includes(userName.toLowerCase()) ||
           adm.created_by === user?.id ||
-          (assignment && (
-            assignment.consultant_id === myUserId ||
-            assignment.senior_registrar_id === myUserId ||
-            assignment.registrar_id === myUserId ||
-            assignment.house_officer_id === myUserId
-          ));
+          (!!team && [team.consultant_id, team.sr_id, team.reg_id, team.ho_id].includes(myId));
         if (!isAdmin && !isAssigned) continue;
 
         dPatients.push({
@@ -660,19 +673,9 @@ export default function Dashboard() {
       const staffUser = staffList.find(u => String(u.id) === staffId);
       if (!staffUser) { setStaffPatients([]); return; }
       const staffName = staffUser.full_name.toLowerCase();
-      const staffNumId = Number(staffId);
 
-      // Load patient_assignments for ID-based matching
-      let allAssignments: any[] = [];
-      try { allAssignments = await db.patient_assignments.toArray(); } catch { /* */ }
-      const assignedPatientIds = new Set<number>();
-      for (const a of allAssignments) {
-        if (!a.is_active) continue;
-        if (a.consultant_id === staffNumId || a.senior_registrar_id === staffNumId ||
-            a.registrar_id === staffNumId || a.house_officer_id === staffNumId) {
-          assignedPatientIds.add(a.patient_id);
-        }
-      }
+      // Server-resolved team maps (source of truth), with local fallback offline.
+      const teamMaps = await buildTeamMaps();
 
       const allPatients = await patientService.getAllPatients();
       const activePatientsList = allPatients.filter((p: any) => !p.deleted);
@@ -685,55 +688,69 @@ export default function Dashboard() {
         if (adm.hospital_number) admissionByHn.set(adm.hospital_number.trim().toLowerCase(), adm);
       }
 
-      // Resolve HO names
-      let allUsers: any[] = [];
-      try { allUsers = await db.users.toArray(); } catch { /* */ }
-      const userById = new Map<number, any>();
-      for (const u of allUsers) userById.set(u.id, u);
-      const assignmentByPid = new Map<number, any>();
-      for (const a of allAssignments) { if (a.is_active) assignmentByPid.set(a.patient_id, a); }
-
       const matched: DashboardPatient[] = [];
+      const addIfAssigned = (pidStr: string, base: {
+        name: string; hospital_number: string; ward: string; bed: string;
+        adm?: Admission; consultantFallback?: string; residentFallback?: string;
+      }) => {
+        const team = resolveTeam(pidStr, teamMaps);
+        const consultant = team?.consultant || base.consultantFallback || '';
+        const resident = team?.sr || team?.reg || base.residentFallback || '';
+        const houseOfficer = team?.ho || (base.adm as any)?.assigned_house_officer || '';
+        // Match this staff member by assignment id (any role) OR by name.
+        const idMatch = !!team && [team.consultant_id, team.sr_id, team.reg_id, team.ho_id].includes(staffId);
+        const nameMatch =
+          consultant.toLowerCase().includes(staffName) ||
+          resident.toLowerCase().includes(staffName) ||
+          (base.consultantFallback || '').toLowerCase().includes(staffName) ||
+          (base.residentFallback || '').toLowerCase().includes(staffName) ||
+          (base.adm?.admitting_consultant || '').toLowerCase().includes(staffName) ||
+          base.adm?.created_by === staffId;
+        if (!idMatch && !nameMatch) return;
+        matched.push({
+          id: pidStr,
+          name: base.name,
+          hospital_number: base.hospital_number,
+          ward: base.ward,
+          bed: base.bed,
+          consultant,
+          resident,
+          house_officer: houseOfficer,
+          admission_status: base.adm ? 'active' as const : 'outpatient' as const,
+          admission_date: base.adm ? new Date(base.adm.admission_date).toLocaleDateString() : undefined,
+        });
+      };
+
+      const seen = new Set<string>();
       for (const p of activePatientsList) {
         const pid = String(p.id || p.serverId || '');
-        const numPid = Number(pid);
         const hn = (p.hospital_number || '').trim().toLowerCase();
         const adm = admissionByPid.get(pid) || (hn ? admissionByHn.get(hn) : undefined);
-        const assignment = assignmentByPid.get(numPid);
-        const consultant = (adm?.admitting_consultant || p.consultant_in_charge || '').toLowerCase();
-        // Resolve resident name from patient_assignments for matching, NOT admitting_doctor
-        const srMatch = assignment?.senior_registrar_id ? userById.get(assignment.senior_registrar_id) : null;
-        const regMatch = assignment?.registrar_id ? userById.get(assignment.registrar_id) : null;
-        const residentForMatch = (srMatch ? (srMatch.full_name || srMatch.name || '') : regMatch ? (regMatch.full_name || regMatch.name || '') : (p.resident_in_charge || '')).toLowerCase();
-
-        const isAssigned = assignedPatientIds.has(numPid) ||
-          consultant.includes(staffName) || residentForMatch.includes(staffName) ||
-          (p.consultant_in_charge || '').toLowerCase().includes(staffName) ||
-          (p.resident_in_charge || '').toLowerCase().includes(staffName) ||
-          adm?.admitting_consultant?.toLowerCase().includes(staffName) ||
-          adm?.created_by === staffId;
-
-        if (isAssigned) {
-          const hoUser = assignment?.house_officer_id ? userById.get(assignment.house_officer_id) : null;
-          // Resolve resident from patient_assignments (senior_registrar or registrar), NOT admitting_doctor
-          const srStaff = assignment?.senior_registrar_id ? userById.get(assignment.senior_registrar_id) : null;
-          const regStaff = assignment?.registrar_id ? userById.get(assignment.registrar_id) : null;
-          const residentName = srStaff ? (srStaff.full_name || srStaff.name || '') : regStaff ? (regStaff.full_name || regStaff.name || '') : (p.resident_in_charge || '');
-          const assignedConsultantUser = assignment?.consultant_id ? userById.get(assignment.consultant_id) : null;
-          const consultantName = assignedConsultantUser ? (assignedConsultantUser.full_name || assignedConsultantUser.name || '') : (adm?.admitting_consultant || p.consultant_in_charge || '');
-          matched.push({
-            id: p.id || p.serverId || '',
-            name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.full_name || 'Unknown',
-            hospital_number: p.hospital_number || '',
-            ward: adm?.ward_location || p.ward_id || '',
-            bed: adm?.bed_number || p.bed_number || '',
-            consultant: consultantName,
-            resident: residentName,
-            house_officer: hoUser ? (hoUser.full_name || hoUser.name || '') : '',
-            admission_status: adm ? 'active' as const : 'outpatient' as const,
-            admission_date: adm ? new Date(adm.admission_date).toLocaleDateString() : undefined
-          });
-        }
+        addIfAssigned(pid, {
+          name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.full_name || 'Unknown',
+          hospital_number: p.hospital_number || '',
+          ward: adm?.ward_location || p.ward_id || '',
+          bed: adm?.bed_number || p.bed_number || '',
+          adm,
+          consultantFallback: adm?.admitting_consultant || p.consultant_in_charge || '',
+          residentFallback: p.resident_in_charge || '',
+        });
+        seen.add(pid);
+        if (hn) seen.add('hn:' + hn);
+      }
+      // Backfill: admissions whose patient row isn't present locally.
+      for (const adm of activeAdmissions) {
+        const pid = String(adm.patient_id || '');
+        const hn = (adm.hospital_number || '').trim().toLowerCase();
+        if ((pid && seen.has(pid)) || (hn && seen.has('hn:' + hn))) continue;
+        addIfAssigned(pid, {
+          name: adm.patient_name || `Hosp ${adm.hospital_number || ''}` || 'Unknown',
+          hospital_number: adm.hospital_number || '',
+          ward: adm.ward_location || '',
+          bed: adm.bed_number || '',
+          adm,
+          consultantFallback: adm.admitting_consultant || '',
+        });
       }
       setStaffPatients(matched);
     } catch { setStaffPatients([]); }

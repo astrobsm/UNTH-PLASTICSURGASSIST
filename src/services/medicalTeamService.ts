@@ -43,6 +43,20 @@ export interface SuggestedTeam {
   house_officer: StaffByRole | null;
 }
 
+/** One active patient_assignments row with role names resolved server-side. */
+export interface AssignmentRow {
+  patient_id: string;
+  hospital_number?: string | null;
+  consultant_id?: string | null;
+  consultant_name?: string | null;
+  senior_registrar_id?: string | null;
+  senior_registrar_name?: string | null;
+  registrar_id?: string | null;
+  registrar_name?: string | null;
+  house_officer_id?: string | null;
+  house_officer_name?: string | null;
+}
+
 export interface TeamWorkload {
   consultant: { staff: StaffByRole[]; totalPatients: number; avgPatients: number };
   senior_registrar: { staff: StaffByRole[]; totalPatients: number; avgPatients: number };
@@ -286,6 +300,21 @@ class MedicalTeamService {
       console.error('Error fetching medical team from API:', error);
       // Fall back to local IndexedDB
       return this.getPatientMedicalTeam(Number(patientId));
+    }
+  }
+
+  /**
+   * Fetch every active patient assignment with role names resolved server-side.
+   * Source of truth for the dashboard + staff lookup; returns [] on failure so
+   * callers fall back to local IndexedDB data.
+   */
+  async getAllAssignmentsFromAPI(): Promise<AssignmentRow[]> {
+    try {
+      const data = await apiClient.get('/medical-team/assignments');
+      return (data.assignments || []) as AssignmentRow[];
+    } catch (error) {
+      console.warn('getAllAssignmentsFromAPI failed, will fall back to local:', error);
+      return [];
     }
   }
 

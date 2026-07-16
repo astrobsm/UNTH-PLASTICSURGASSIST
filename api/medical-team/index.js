@@ -36,6 +36,9 @@ export default async function handler(req, res) {
         if (pathParts[0] === 'patient') {
           return await getPatientMedicalTeam(req, res);
         }
+        if (pathParts[0] === 'assignments') {
+          return await getAllAssignments(res);
+        }
         return await getAllMedicalStaff(res);
       case 'POST':
         if (pathParts[0] === 'log-activity') {
@@ -51,6 +54,34 @@ export default async function handler(req, res) {
       error: 'Internal server error', 
       message: error.message
     });
+  }
+}
+
+/**
+ * Get every active patient_assignments row with role names resolved server-side.
+ * Powers the dashboard admitted-patients list and the staff patient lookup, so
+ * teams display correctly regardless of client-side IndexedDB sync state.
+ */
+async function getAllAssignments(res) {
+  try {
+    const result = await query(
+      `SELECT pa.patient_id, pa.hospital_number,
+              pa.consultant_id,        uc.full_name  AS consultant_name,
+              pa.senior_registrar_id,  usr.full_name AS senior_registrar_name,
+              pa.registrar_id,         ur.full_name  AS registrar_name,
+              pa.house_officer_id,     uho.full_name AS house_officer_name
+         FROM patient_assignments pa
+         LEFT JOIN users uc  ON uc.id::text  = pa.consultant_id
+         LEFT JOIN users usr ON usr.id::text = pa.senior_registrar_id
+         LEFT JOIN users ur  ON ur.id::text  = pa.registrar_id
+         LEFT JOIN users uho ON uho.id::text = pa.house_officer_id
+        WHERE pa.is_active = TRUE`
+    );
+    return res.status(200).json({ assignments: result.rows });
+  } catch (e) {
+    // Missing table / drift → return empty so the dashboard falls back gracefully.
+    console.warn('getAllAssignments failed:', e.message);
+    return res.status(200).json({ assignments: [] });
   }
 }
 
