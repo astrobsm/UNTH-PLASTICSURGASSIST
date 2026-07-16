@@ -125,9 +125,10 @@ class UserManagementService {
     }
   }
 
-  async updateUserStatus(userId: string, isActive: boolean): Promise<void> {
+  async updateUserStatus(userId: string, isActive: boolean): Promise<any> {
     try {
-      await apiClient.updateUserStatus(userId, isActive);
+      // Server returns { user, reassignment?: { reassigned, cleared }, message }
+      return await apiClient.updateUserStatus(userId, isActive);
     } catch (error) {
       console.error('Error updating user status:', error);
       throw error;

@@ -318,10 +318,15 @@ export default function Admin() {
     const action = isCurrentlyActive ? 'deactivate' : 'activate';
     setDeactivating(true);
     try {
-      await userManagementService.updateUserStatus(deactivateTarget.id, !isCurrentlyActive);
+      const result: any = await userManagementService.updateUserStatus(deactivateTarget.id, !isCurrentlyActive);
       setShowDeactivateModal(false);
       setDeactivateTarget(null);
-      toast.success(`${deactivateTarget.name} ${action}d successfully! This applies across all devices.`);
+      let msg = `${deactivateTarget.name} ${action}d successfully! This applies across all devices.`;
+      const rr = result?.reassignment;
+      if (rr && (rr.reassigned || rr.cleared)) {
+        msg += ` Reassigned ${rr.reassigned} patient(s)` + (rr.cleared ? `; ${rr.cleared} left unassigned (no available staff of that role)` : '') + '.';
+      }
+      toast.success(msg);
       await loadUsers();
     } catch (error: any) {
       setDeactivateError(`Failed to ${action} user: ${error.message}`);

@@ -1,6 +1,7 @@
 // User status (activate/deactivate) endpoint
 import { query } from '../_lib/db.js';
 import { cors, authenticateRequest } from '../_lib/auth.js';
+import { reassignDeactivatedUser } from '../_lib/teamAssignment.js';
 
 export default async function handler(req, res) {
   try {
@@ -48,9 +49,22 @@ export default async function handler(req, res) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    return res.status(200).json({ 
-      user: result.rows[0], 
-      message: is_active ? 'User activated successfully' : 'User deactivated successfully' 
+    // On deactivation, reassign this staff member's patients to the least-loaded
+    // remaining active staff of their role (leaving the slot empty if none exist).
+    let reassignment = null;
+    if (!is_active) {
+      try {
+        reassignment = await reassignDeactivatedUser(userId);
+        console.log(`Reassigned patients for deactivated user ${userId}:`, reassignment);
+      } catch (e) {
+        console.error('reassignDeactivatedUser failed:', e.message);
+      }
+    }
+
+    return res.status(200).json({
+      user: result.rows[0],
+      reassignment,
+      message: is_active ? 'User activated successfully' : 'User deactivated successfully'
     });
   } catch (error) {
     console.error('User status update error:', error);

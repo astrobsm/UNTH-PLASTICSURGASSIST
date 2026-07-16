@@ -30,6 +30,7 @@
 import crypto from 'crypto';
 import { query } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
+import { autoAdmitFromConsult } from './_lib/teamAssignment.js';
 
 // Status workflow definitions
 const RECEIVED_STATUSES   = ['received', 'acknowledged', 'reviewed', 'plan_approved', 'plan_implemented', 'closed', 'cancelled'];
@@ -550,6 +551,9 @@ async function createReceivedByStaff(body, user, res) {
     vals
   );
   await recordHistory('received', r.rows[0].id, null, 'received', body.notes || 'Created by staff', user);
+  // Staff-entered consults are trusted → auto-admit + assign a full team immediately.
+  try { await autoAdmitFromConsult(r.rows[0], user); }
+  catch (e) { console.error('auto-admit (staff entry) failed:', e.message); }
   return res.status(201).json(r.rows[0]);
 }
 
@@ -595,6 +599,12 @@ async function updateReceivedStatus(id, body, user, res) {
   args.push(id);
   const r = await query(`UPDATE received_consults SET ${sets.join(', ')} WHERE id=$${args.length} RETURNING *`, args);
   await recordHistory('received', id, c.status, to, body.notes, user);
+  // On acknowledgement, auto-admit the patient + assign a full team (covers
+  // public-link consults, which are not admitted at submission time).
+  if (to === 'acknowledged') {
+    try { await autoAdmitFromConsult(r.rows[0], user); }
+    catch (e) { console.error('auto-admit (acknowledge) failed:', e.message); }
+  }
   return res.status(200).json(r.rows[0]);
 }
 
