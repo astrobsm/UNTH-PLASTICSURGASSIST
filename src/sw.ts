@@ -517,9 +517,16 @@ self.addEventListener('message', async (event) => {
       break;
 
     case 'CACHE_URLS':
-      if (payload?.urls && payload?.cacheName) {
-        const cache = await caches.open(payload.cacheName);
-        await cache.addAll(payload.urls);
+      // Add URLs individually and swallow per-URL failures — cache.addAll() is
+      // all-or-nothing, so a single 401/timeout would reject the whole batch as
+      // an uncaught error. Never let cache warming throw.
+      if (Array.isArray(payload?.urls) && payload?.cacheName) {
+        try {
+          const cache = await caches.open(payload.cacheName);
+          await Promise.allSettled(
+            payload.urls.map((u: string) => cache.add(u).catch(() => { /* ignore */ }))
+          );
+        } catch { /* best-effort */ }
       }
       break;
 

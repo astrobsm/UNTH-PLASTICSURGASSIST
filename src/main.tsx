@@ -129,32 +129,14 @@ if ('serviceWorker' in navigator) {
     }
   });
 
-  // ── Aggressively pre-warm critical API caches when coming back online ──
-  window.addEventListener('online', async () => {
-    if (!navigator.serviceWorker.controller) return;
-    // Discover the live API cache name dynamically (SW bumps the version number)
-    let cacheName = 'api-cache-v9';
-    try {
-      const names = await caches.keys();
-      const apiCache = names.find(n => n.startsWith('api-cache-'));
-      if (apiCache) cacheName = apiCache;
-    } catch { /* ignore */ }
-
-    navigator.serviceWorker.controller.postMessage({
-      type: 'CACHE_URLS',
-      payload: {
-        cacheName,
-        urls: [
-          '/api/patients',
-          '/api/admissions/active',
-          '/api/treatment-plans',
-          '/api/prescriptions',
-          '/api/users/approved',
-        ],
-      },
-    });
-    console.log('🔄 Re-warming critical API caches after reconnection →', cacheName);
-    // Flush any queued offline mutations now that we're back online
+  // ── On reconnection: flush the offline mutation queue ──────────────────
+  // NOTE: we deliberately do NOT pre-warm authenticated /api/* endpoints from
+  // the page into the SW Cache API. The service worker has no access to the JWT,
+  // so a bare fetch of those URLs returns 401 and `cache.addAll` (all-or-nothing)
+  // then throws an uncaught "Request failed". The SW's runtime NetworkFirst route
+  // already caches real authenticated responses on the first request the app
+  // makes, which is the correct place for this. Just drain the queue here.
+  window.addEventListener('online', () => {
     offlineManager.forceSync().catch(() => {});
   });
 
