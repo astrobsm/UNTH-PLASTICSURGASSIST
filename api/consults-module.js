@@ -406,11 +406,14 @@ async function submitPublicConsult(token, body, res) {
   const placeholders = vals.map((_, i) => `$${i + 1}`).join(',');
   const r = await query(
     `INSERT INTO received_consults (${cols.join(',')}) VALUES (${placeholders})
-     RETURNING id, consult_ref, created_at`,
+     RETURNING *`,
     vals
   );
   await query(`UPDATE consult_submission_links SET submission_count = submission_count + 1, last_used_at = CURRENT_TIMESTAMP WHERE id=$1`, [link.id]);
   await recordHistory('received', r.rows[0].id, null, 'received', `Submitted via public link (${link.unit_label})`, null);
+  // Auto-admit + assign a full team for every received consult, on receipt.
+  try { await autoAdmitFromConsult(r.rows[0], null); }
+  catch (e) { console.error('auto-admit (public submit) failed:', e.message); }
   return res.status(201).json({
     success: true,
     consult_ref: r.rows[0].consult_ref,
