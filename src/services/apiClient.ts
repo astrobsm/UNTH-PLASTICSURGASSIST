@@ -617,6 +617,20 @@ class ApiClient {
     }
   }
 
+  /**
+   * Invalidate every cached endpoint starting with `prefix` (covers query-param
+   * variants like `/sync/patients?since=...`). Call after mutations so the next
+   * GET returns fresh data instead of the 30-day stale-while-revalidate copy.
+   */
+  async invalidateCacheByPrefix(prefix: string): Promise<void> {
+    try {
+      const keys = await db.api_cache.where('endpoint').startsWith(prefix).primaryKeys();
+      if (keys.length) await db.api_cache.bulkDelete(keys as any);
+    } catch {
+      // Best-effort — ignore errors
+    }
+  }
+
   private updateSyncTimestamp() {
     const timestamp = new Date().toISOString();
     this.syncState.lastSyncTimestamp = timestamp;
@@ -703,10 +717,14 @@ class ApiClient {
     phone?: string;
     role?: string;
   }) {
-    return this.request(`/users/${encodeURIComponent(userId)}`, {
+    const data = await this.request(`/users/${encodeURIComponent(userId)}`, {
       method: 'PUT',
       body: JSON.stringify(userData)
     });
+    // Drop stale cached user lists so the edit reflects immediately.
+    await this.invalidateCacheByPrefix('/users');
+    await this.invalidateCacheByPrefix('/medical-team');
+    return data;
   }
 
   async updateUserStatus(userId: string, isActive: boolean) {
@@ -797,10 +815,16 @@ class ApiClient {
   }
 
   async updatePatient(id: string, patientData: any) {
-    const data = await this.request(`/sync/patients/${id}`, {
+    // Use the REST patient endpoint (the /sync route has no PUT handler → 405).
+    const data = await this.request(`/patients/${id}`, {
       method: 'PUT',
       body: JSON.stringify(patientData)
     });
+    // Drop stale cached reads so the edit reflects immediately everywhere.
+    await this.invalidateCacheByPrefix('/patients');
+    await this.invalidateCacheByPrefix('/sync/patients');
+    await this.invalidateCacheByPrefix('/admissions');
+    await this.invalidateCacheByPrefix('/medical-team');
     return data.patient;
   }
 

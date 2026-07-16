@@ -1314,17 +1314,14 @@ const UserModal = ({
 
     try {
       if (user) {
-        // Update existing user via API
-        try {
-          await apiClient.updateUser(user.id, {
-            fullName: formData.name,
-            email: formData.email,
-            phone: formData.phone,
-            role: formData.role
-          });
-        } catch (err) {
-          console.warn('Server update failed, updating locally:', err);
-        }
+        // Update existing user via API. Let failures propagate to the outer
+        // catch so the admin sees a real error instead of a false success.
+        await apiClient.updateUser(user.id, {
+          fullName: formData.name,
+          email: formData.email,
+          phone: formData.phone,
+          role: formData.role
+        });
         const userData: User = {
           id: user.id,
           ...formData,

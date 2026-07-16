@@ -1,6 +1,7 @@
 // Individual patient endpoint for Vercel serverless
 import { query } from '../_lib/db.js';
 import { cors, authenticateRequest } from '../_lib/auth.js';
+import { propagatePatientDenormalized } from '../_lib/patientPropagation.js';
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
@@ -55,24 +56,31 @@ async function updatePatient(id, data, res) {
   const values = [];
   let paramCount = 1;
 
-  const fieldMap = {
-    hospitalNumber: 'hospital_number',
-    firstName: 'first_name',
-    lastName: 'last_name',
-    dateOfBirth: 'date_of_birth',
-    gender: 'gender',
-    phone: 'phone',
-    email: 'email',
-    address: 'address',
-    bloodGroup: 'blood_group',
-    allergies: 'allergies',
-    medicalHistory: 'medical_history',
-    emergencyContactName: 'emergency_contact_name',
-    emergencyContactPhone: 'emergency_contact_phone'
-  };
+  // Each DB column accepts several possible payload keys (snake_case from the
+  // app, camelCase legacy, plus dob/sex aliases). full_name is a generated
+  // column and is never set directly — first_name/last_name drive it.
+  const columns = [
+    ['hospital_number', ['hospital_number', 'hospitalNumber']],
+    ['first_name', ['first_name', 'firstName']],
+    ['last_name', ['last_name', 'lastName']],
+    ['date_of_birth', ['date_of_birth', 'dateOfBirth', 'dob']],
+    ['gender', ['gender', 'sex']],
+    ['phone', ['phone']],
+    ['email', ['email']],
+    ['address', ['address']],
+    ['blood_group', ['blood_group', 'bloodGroup']],
+    ['allergies', ['allergies']],
+    ['medical_history', ['medical_history', 'medicalHistory']],
+    ['primary_diagnosis', ['primary_diagnosis', 'primaryDiagnosis']],
+    ['ward', ['ward', 'ward_id']],
+    ['bed_number', ['bed_number', 'bedNumber']],
+    ['emergency_contact_name', ['emergency_contact_name', 'emergencyContactName']],
+    ['emergency_contact_phone', ['emergency_contact_phone', 'emergencyContactPhone']],
+  ];
 
-  for (const [key, dbField] of Object.entries(fieldMap)) {
-    if (data[key] !== undefined) {
+  for (const [dbField, keys] of columns) {
+    const key = keys.find(k => data[k] !== undefined);
+    if (key !== undefined) {
       fields.push(`${dbField} = $${paramCount}`);
       values.push(data[key]);
       paramCount++;
@@ -94,6 +102,11 @@ async function updatePatient(id, data, res) {
   if (result.rows.length === 0) {
     return res.status(404).json({ error: 'Patient not found' });
   }
+
+  // Propagate the (possibly changed) name + hospital number to every table that
+  // stores a denormalized copy, so the edit reflects everywhere it's referenced.
+  try { await propagatePatientDenormalized(id); }
+  catch (e) { console.warn('propagatePatientDenormalized failed:', e.message); }
 
   res.status(200).json({ patient: result.rows[0] });
 }

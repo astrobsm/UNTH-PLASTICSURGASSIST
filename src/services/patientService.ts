@@ -414,7 +414,14 @@ class PatientService {
       if (updatedPatient) {
         await db.patients.put(normalizePatientData({ ...updatedPatient, synced: true }));
       }
-      
+
+      // Bust caches so the edit reflects immediately across the app.
+      this._cache = null; this._cacheTime = 0;
+      try {
+        const { admissionDischargeService } = await import('./admissionDischargeService');
+        (admissionDischargeService as any).clearCache?.();
+      } catch { /* best-effort */ }
+
       return updatedPatient;
     } catch (error) {
       console.error('Error updating patient via API:', error);

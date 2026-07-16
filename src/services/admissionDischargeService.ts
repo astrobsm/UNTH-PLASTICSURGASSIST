@@ -353,6 +353,13 @@ class AdmissionDischargeService {
   private _admCacheTime = 0;
   private static ADM_CACHE_TTL = 30_000; // 30 seconds
 
+  /** Drop the in-memory admissions cache (call after a patient edit so the
+   *  admissions board picks up the new patient name/number immediately). */
+  clearCache(): void {
+    this._admCache = null;
+    this._admCacheTime = 0;
+  }
+
   async getActiveAdmissions(): Promise<Admission[]> {
     if (this._admCache && Date.now() - this._admCacheTime < AdmissionDischargeService.ADM_CACHE_TTL) {
       return this._admCache;
