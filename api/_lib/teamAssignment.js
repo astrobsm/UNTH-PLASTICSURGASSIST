@@ -147,6 +147,69 @@ export async function autoAdmitFromConsult(consult, user) {
 }
 
 /**
+ * Ensure every currently-admitted patient has a full team, filling only the
+ * empty role slots (least-loaded staff). Skips patients already complete, so
+ * it's cheap to run repeatedly (e.g. on dashboard load).
+ */
+export async function backfillActiveAdmissions() {
+  await ensureColumns();
+  const adms = (await query(
+    `SELECT DISTINCT patient_id FROM admissions
+      WHERE status IN ('active','admitted') AND patient_id IS NOT NULL`
+  )).rows;
+  const existing = (await query(
+    `SELECT patient_id, consultant_id, senior_registrar_id, registrar_id, house_officer_id
+       FROM patient_assignments WHERE is_active = TRUE`
+  )).rows;
+  const byPid = new Map(existing.map(r => [String(r.patient_id), r]));
+  let processed = 0;
+  for (const a of adms) {
+    const pid = String(a.patient_id);
+    const e = byPid.get(pid);
+    const complete = e && e.consultant_id && e.senior_registrar_id && e.registrar_id && e.house_officer_id;
+    if (complete) continue;
+    await assignFullTeam(pid, null); // COALESCE fills only the empty slots
+    processed++;
+  }
+  return { total: adms.length, processed };
+}
+
+/**
+ * Admin edit: set a patient's team explicitly. Unlike assignFullTeam this
+ * OVERWRITES each role (null clears it), so an admin can reassign or unassign.
+ */
+export async function setAssignment(patientId, roles) {
+  await ensureColumns();
+  const norm = (v) => (v === undefined || v === null || v === '') ? null : String(v);
+  await query(
+    `INSERT INTO patient_assignments
+       (patient_id, consultant_id, senior_registrar_id, registrar_id, house_officer_id, is_active, assigned_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,TRUE,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+     ON CONFLICT (patient_id) DO UPDATE SET
+       consultant_id = $2, senior_registrar_id = $3, registrar_id = $4, house_officer_id = $5,
+       is_active = TRUE, updated_at = CURRENT_TIMESTAMP`,
+    [String(patientId), norm(roles.consultant_id), norm(roles.senior_registrar_id), norm(roles.registrar_id), norm(roles.house_officer_id)]
+  );
+  return true;
+}
+
+/**
+ * End team assignments when patients are discharged — deactivate their rows so
+ * they drop off staff load and no longer appear in the staff patient lookup.
+ */
+export async function deactivateAssignmentsForPatients(patientIds) {
+  if (!patientIds || patientIds.length === 0) return 0;
+  await ensureColumns();
+  const ids = patientIds.map(String);
+  const r = await query(
+    `UPDATE patient_assignments SET is_active = FALSE, updated_at = CURRENT_TIMESTAMP
+      WHERE patient_id = ANY($1::text[]) AND is_active = TRUE`,
+    [ids]
+  );
+  return r.rowCount || 0;
+}
+
+/**
  * Reassign every active patient held by a now-deactivated user to the
  * least-loaded remaining active staff of that role. If none exists, the role
  * slot is cleared (left empty) and recorded for follow-up.

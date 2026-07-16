@@ -53,6 +53,11 @@ interface DashboardPatient {
   house_officer: string;
   admission_status: 'active' | 'discharged' | 'outpatient';
   admission_date?: string;
+  // Assignment role ids (for the admin edit modal); null when unassigned.
+  consultant_id?: string | null;
+  sr_id?: string | null;
+  reg_id?: string | null;
+  ho_id?: string | null;
 }
 
 // Resolved team for one patient (ids as strings, names ready to display).
@@ -267,6 +272,17 @@ export default function Dashboard() {
   useEffect(() => {
     const init = async () => {
       await loadDashboardData();
+      // Auto-assign a FULL team (consultant/SR/registrar/HO) to every admitted
+      // patient missing one — admin only, server-side, fills only empty slots.
+      try {
+        const role = useAuthStore.getState().user?.role;
+        if (role === 'admin') {
+          const bf = await medicalTeamService.backfillTeams();
+          if (bf && bf.processed > 0) await loadDashboardData();
+        }
+      } catch {
+        // best-effort on load
+      }
       // Auto-assign HOs to any newly admitted patients on startup
       try {
         const result = await medicalTeamService.autoAssignAdmittedPatientsToHouseOfficers();
@@ -369,7 +385,11 @@ export default function Dashboard() {
             resident,
             house_officer: houseOfficer,
             admission_status: admStatus,
-            admission_date: adm ? new Date(adm.admission_date).toLocaleDateString() : undefined
+            admission_date: adm ? new Date(adm.admission_date).toLocaleDateString() : undefined,
+            consultant_id: team?.consultant_id ?? null,
+            sr_id: team?.sr_id ?? null,
+            reg_id: team?.reg_id ?? null,
+            ho_id: team?.ho_id ?? null,
           });
         }
       }
@@ -414,7 +434,11 @@ export default function Dashboard() {
           house_officer: houseOfficer,
           admission_status: 'active' as const,
           admission_date: adm.admission_date
-            ? new Date(adm.admission_date).toLocaleDateString() : undefined
+            ? new Date(adm.admission_date).toLocaleDateString() : undefined,
+          consultant_id: team?.consultant_id ?? null,
+          sr_id: team?.sr_id ?? null,
+          reg_id: team?.reg_id ?? null,
+          ho_id: team?.ho_id ?? null,
         });
         if (admPid) includedIds.add(admPid);
         if (admHn) includedHns.add(admHn);
@@ -693,6 +717,8 @@ export default function Dashboard() {
         name: string; hospital_number: string; ward: string; bed: string;
         adm?: Admission; consultantFallback?: string; residentFallback?: string;
       }) => {
+        // Only admitted patients are assigned to staff — skip outpatients.
+        if (!base.adm) return;
         const team = resolveTeam(pidStr, teamMaps);
         const consultant = team?.consultant || base.consultantFallback || '';
         const resident = team?.sr || team?.reg || base.residentFallback || '';
@@ -781,6 +807,48 @@ export default function Dashboard() {
       setAutoAssignResult(`Error: ${err.message || 'Failed to reassign'}`);
     } finally { setAutoAssigning(false); }
   };
+
+  // Auto-assign a full team (consultant/SR/registrar/HO) to every admitted
+  // patient missing one. Fills only empty slots server-side.
+  const handleAutoAssignTeams = async () => {
+    setAutoAssigning(true);
+    setAutoAssignResult(null);
+    try {
+      const bf = await medicalTeamService.backfillTeams();
+      await loadDashboardData();
+      setAutoAssignResult(bf ? `Assigned full teams to ${bf.processed} of ${bf.total} admitted patients.` : 'Team assignment completed.');
+    } catch (err: any) {
+      setAutoAssignResult(`Error: ${err.message || 'Failed to assign teams'}`);
+    } finally { setAutoAssigning(false); }
+  };
+
+  // ── Admin: edit a patient's team ──────────────────────────────────────────
+  const [editTarget, setEditTarget] = useState<DashboardPatient | null>(null);
+  const [editRoles, setEditRoles] = useState({ consultant_id: '', senior_registrar_id: '', registrar_id: '', house_officer_id: '' });
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  const openEditTeam = (p: DashboardPatient) => {
+    setEditTarget(p);
+    setEditRoles({
+      consultant_id: p.consultant_id || '',
+      senior_registrar_id: p.sr_id || '',
+      registrar_id: p.reg_id || '',
+      house_officer_id: p.ho_id || '',
+    });
+  };
+  const saveEditTeam = async () => {
+    if (!editTarget) return;
+    setSavingEdit(true);
+    try {
+      await medicalTeamService.setPatientAssignment(editTarget.id, editRoles);
+      setEditTarget(null);
+      await loadDashboardData();
+      toast.success('Team updated');
+    } catch (err: any) {
+      toast.error(`Failed to update team: ${err.message || 'error'}`);
+    } finally { setSavingEdit(false); }
+  };
+  const staffByRoles = (roles: string[]) => staffList.filter(s => roles.includes(s.role));
 
   const toggleSelectPatient = (id: string | number) => {
     setSelectedForDischarge(prev => {
@@ -1088,9 +1156,16 @@ export default function Dashboard() {
             {isAdmin && (
               <>
                 <button
-                  onClick={handleAutoAssignHO}
+                  onClick={handleAutoAssignTeams}
                   disabled={autoAssigning}
                   className="px-3 py-1.5 text-xs font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50"
+                >
+                  {autoAssigning ? 'Assigning...' : 'Auto-Assign Teams'}
+                </button>
+                <button
+                  onClick={handleAutoAssignHO}
+                  disabled={autoAssigning}
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50"
                 >
                   {autoAssigning ? 'Assigning...' : 'Auto-Assign HOs'}
                 </button>
@@ -1235,7 +1310,18 @@ export default function Dashboard() {
                         </span>
                       </td>
                       <td className="px-3 py-3">
-                        <ChevronRight className="h-4 w-4 text-gray-400" />
+                        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                          {isAdmin && (
+                            <button
+                              onClick={() => openEditTeam(p)}
+                              className="text-xs font-medium text-primary-600 hover:text-primary-800 hover:underline"
+                              title="Edit assigned team"
+                            >
+                              Edit team
+                            </button>
+                          )}
+                          <ChevronRight className="h-4 w-4 text-gray-400 cursor-pointer" onClick={() => navigate(`/patients/${p.id}`)} />
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1738,6 +1824,45 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* Edit Team Modal (admin) */}
+      {editTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setEditTarget(null)}>
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+            <div className="px-5 py-3 border-b flex items-center justify-between">
+              <h3 className="font-semibold text-gray-900 truncate">Edit team — {editTarget.name}</h3>
+              <button onClick={() => setEditTarget(null)} className="text-gray-400 hover:text-gray-600"><X className="h-5 w-5" /></button>
+            </div>
+            <div className="p-5 space-y-3">
+              {([
+                ['Consultant', 'consultant_id', staffByRoles(['consultant'])],
+                ['Senior Registrar', 'senior_registrar_id', staffByRoles(['senior_registrar'])],
+                ['Registrar', 'registrar_id', staffByRoles(['registrar', 'junior_registrar'])],
+                ['House Officer', 'house_officer_id', staffByRoles(['house_officer'])],
+              ] as [string, keyof typeof editRoles, ApprovedUser[]][]).map(([label, key, opts]) => (
+                <label key={key} className="block text-sm">
+                  <span className="text-gray-600">{label}</span>
+                  <select
+                    value={editRoles[key]}
+                    onChange={(e) => setEditRoles(r => ({ ...r, [key]: e.target.value }))}
+                    className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white"
+                  >
+                    <option value="">— Unassigned —</option>
+                    {opts.map(s => <option key={s.id} value={String(s.id)}>{s.full_name}</option>)}
+                  </select>
+                </label>
+              ))}
+              <p className="text-xs text-gray-400">Choose "Unassigned" to clear a role. Changes apply across all devices.</p>
+            </div>
+            <div className="px-5 py-3 border-t flex justify-end gap-2">
+              <button onClick={() => setEditTarget(null)} className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded">Cancel</button>
+              <button onClick={saveEditTeam} disabled={savingEdit} className="px-4 py-1.5 bg-primary-600 text-white rounded text-sm hover:bg-primary-700 disabled:opacity-50">
+                {savingEdit ? 'Saving…' : 'Save team'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Force Admit Modal */}
       {showForceAdmitModal && (

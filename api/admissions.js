@@ -2,6 +2,7 @@
 import { query } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
 import { idempotent, rememberResponse } from './_lib/idempotency.js';
+import { deactivateAssignmentsForPatients } from './_lib/teamAssignment.js';
 
 // Transform database row to frontend format
 function transformAdmission(row) {
@@ -408,6 +409,12 @@ async function updateAdmission(id, data, res) {
     return res.status(404).json({ error: 'Admission not found' });
   }
 
+  // If this update discharged the patient, end their team assignment.
+  if (String(result.rows[0].status) === 'discharged') {
+    try { await deactivateAssignmentsForPatients([result.rows[0].patient_id]); }
+    catch (e) { console.warn('deactivate assignments (update) failed:', e.message); }
+  }
+
   // Get patient info for transformation
   const patientResult = await query(
     `SELECT first_name, last_name, hospital_number FROM patients WHERE id = (
@@ -457,9 +464,12 @@ async function forceDischargeAll(user, res) {
   );
 
   const count = result.rows.length;
+  // End team assignments for the discharged patients.
+  try { await deactivateAssignmentsForPatients(result.rows.map(r => r.patient_id)); }
+  catch (e) { console.warn('deactivate assignments (force-all) failed:', e.message); }
   console.log(`Force discharged ${count} admissions by admin ${user.name || user.id}`);
 
-  res.status(200).json({ 
+  res.status(200).json({
     message: `Successfully force-discharged ${count} active admissions`,
     count,
     discharged_ids: result.rows.map(r => r.id)
@@ -495,9 +505,12 @@ async function forceDischargeSelected(patientIds, user, res) {
   );
 
   const count = result.rows.length;
+  // End team assignments for the discharged patients.
+  try { await deactivateAssignmentsForPatients(result.rows.map(r => r.patient_id)); }
+  catch (e) { console.warn('deactivate assignments (force-selected) failed:', e.message); }
   console.log(`Force discharged ${count} admissions (${sanitizedIds.length} patients selected) by admin ${user.name || user.id}`);
 
-  res.status(200).json({ 
+  res.status(200).json({
     message: `Successfully force-discharged ${count} admissions for ${sanitizedIds.length} patients`,
     count,
     discharged_ids: result.rows.map(r => r.id)

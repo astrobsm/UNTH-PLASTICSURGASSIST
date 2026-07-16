@@ -2,6 +2,7 @@
 // Provides medical staff list by role with workload for auto-assignment
 import { query } from '../_lib/db.js';
 import { cors, authenticateRequest } from '../_lib/auth.js';
+import { backfillActiveAdmissions, setAssignment } from '../_lib/teamAssignment.js';
 
 export default async function handler(req, res) {
   try {
@@ -43,6 +44,18 @@ export default async function handler(req, res) {
       case 'POST':
         if (pathParts[0] === 'log-activity') {
           return await logTeamActivity(req.body, auth.user, res);
+        }
+        if (pathParts[0] === 'backfill') {
+          if (auth.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+          const result = await backfillActiveAdmissions();
+          return res.status(200).json(result);
+        }
+        if (pathParts[0] === 'assign') {
+          if (auth.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+          const b = req.body || {};
+          if (!b.patient_id) return res.status(400).json({ error: 'patient_id is required' });
+          await setAssignment(b.patient_id, b);
+          return res.status(200).json({ ok: true });
         }
         return res.status(400).json({ error: 'Invalid endpoint' });
       default:

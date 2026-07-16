@@ -319,6 +319,32 @@ class MedicalTeamService {
   }
 
   /**
+   * Auto-assign a full team to every admitted patient missing one (admin).
+   * Server fills only empty role slots, so it's safe to call repeatedly.
+   */
+  async backfillTeams(): Promise<{ total: number; processed: number } | null> {
+    try {
+      return await apiClient.post('/medical-team/backfill');
+    } catch (error) {
+      console.warn('backfillTeams failed:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Admin edit: set a patient's team explicitly (empty string clears a role).
+   */
+  async setPatientAssignment(patientId: string | number, roles: {
+    consultant_id?: string | null;
+    senior_registrar_id?: string | null;
+    registrar_id?: string | null;
+    house_officer_id?: string | null;
+  }): Promise<boolean> {
+    await apiClient.post('/medical-team/assign', { patient_id: String(patientId), ...roles });
+    return true;
+  }
+
+  /**
    * Update team assignment for a patient
    */
   async updateTeamAssignment(
