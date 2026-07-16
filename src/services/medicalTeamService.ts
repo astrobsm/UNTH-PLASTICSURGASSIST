@@ -332,6 +332,19 @@ class MedicalTeamService {
   }
 
   /**
+   * Rebalance all admitted patients' teams evenly across active+approved staff
+   * (admin). Overwrites existing assignments — use after adding/removing staff.
+   */
+  async rebalanceTeams(): Promise<{ processed: number; pools?: Record<string, number> } | null> {
+    try {
+      return await apiClient.post('/medical-team/rebalance');
+    } catch (error) {
+      console.warn('rebalanceTeams failed:', error);
+      return null;
+    }
+  }
+
+  /**
    * Admin edit: set a patient's team explicitly (empty string clears a role).
    */
   async setPatientAssignment(patientId: string | number, roles: {

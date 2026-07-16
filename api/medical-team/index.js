@@ -2,7 +2,7 @@
 // Provides medical staff list by role with workload for auto-assignment
 import { query } from '../_lib/db.js';
 import { cors, authenticateRequest } from '../_lib/auth.js';
-import { backfillActiveAdmissions, setAssignment } from '../_lib/teamAssignment.js';
+import { backfillActiveAdmissions, setAssignment, rebalanceAllTeams } from '../_lib/teamAssignment.js';
 
 export default async function handler(req, res) {
   try {
@@ -48,6 +48,11 @@ export default async function handler(req, res) {
         if (pathParts[0] === 'backfill') {
           if (auth.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
           const result = await backfillActiveAdmissions();
+          return res.status(200).json(result);
+        }
+        if (pathParts[0] === 'rebalance') {
+          if (auth.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+          const result = await rebalanceAllTeams();
           return res.status(200).json(result);
         }
         if (pathParts[0] === 'assign') {

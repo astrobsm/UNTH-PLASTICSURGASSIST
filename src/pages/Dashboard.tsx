@@ -49,7 +49,9 @@ interface DashboardPatient {
   ward: string;
   bed: string;
   consultant: string;
-  resident: string;
+  resident: string;            // legacy combined (sr || reg) — kept for name matching
+  senior_registrar: string;
+  registrar: string;
   house_officer: string;
   admission_status: 'active' | 'discharged' | 'outpatient';
   admission_date?: string;
@@ -383,6 +385,8 @@ export default function Dashboard() {
             bed,
             consultant,
             resident,
+            senior_registrar: team?.sr || '',
+            registrar: team?.reg || '',
             house_officer: houseOfficer,
             admission_status: admStatus,
             admission_date: adm ? new Date(adm.admission_date).toLocaleDateString() : undefined,
@@ -431,6 +435,8 @@ export default function Dashboard() {
           bed: adm.bed_number || '',
           consultant,
           resident,
+          senior_registrar: team?.sr || '',
+          registrar: team?.reg || '',
           house_officer: houseOfficer,
           admission_status: 'active' as const,
           admission_date: adm.admission_date
@@ -741,6 +747,8 @@ export default function Dashboard() {
           bed: base.bed,
           consultant,
           resident,
+          senior_registrar: team?.sr || '',
+          registrar: team?.reg || '',
           house_officer: houseOfficer,
           admission_status: base.adm ? 'active' as const : 'outpatient' as const,
           admission_date: base.adm ? new Date(base.adm.admission_date).toLocaleDateString() : undefined,
@@ -819,6 +827,22 @@ export default function Dashboard() {
       setAutoAssignResult(bf ? `Assigned full teams to ${bf.processed} of ${bf.total} admitted patients.` : 'Team assignment completed.');
     } catch (err: any) {
       setAutoAssignResult(`Error: ${err.message || 'Failed to assign teams'}`);
+    } finally { setAutoAssigning(false); }
+  };
+
+  // Rebalance all admitted patients' teams evenly across active staff (admin).
+  // Overwrites existing assignments — use after adding/activating staff.
+  const handleRebalanceTeams = async () => {
+    if (!window.confirm('Rebalance ALL admitted patients evenly across current active staff? This overwrites existing team assignments (including manual edits).')) return;
+    setAutoAssigning(true);
+    setAutoAssignResult(null);
+    try {
+      const r = await medicalTeamService.rebalanceTeams();
+      await loadDashboardData();
+      const pools = r?.pools ? ` (consultants: ${r.pools.consultant}, SR: ${r.pools.senior_registrar}, reg: ${r.pools.registrar}, HO: ${r.pools.house_officer})` : '';
+      setAutoAssignResult(r ? `Rebalanced ${r.processed} admitted patients${pools}.` : 'Rebalance completed.');
+    } catch (err: any) {
+      setAutoAssignResult(`Error: ${err.message || 'Failed to rebalance'}`);
     } finally { setAutoAssigning(false); }
   };
 
@@ -1163,6 +1187,14 @@ export default function Dashboard() {
                   {autoAssigning ? 'Assigning...' : 'Auto-Assign Teams'}
                 </button>
                 <button
+                  onClick={handleRebalanceTeams}
+                  disabled={autoAssigning}
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
+                  title="Redistribute all admitted patients evenly across current active staff"
+                >
+                  {autoAssigning ? 'Working...' : 'Rebalance Teams'}
+                </button>
+                <button
                   onClick={handleAutoAssignHO}
                   disabled={autoAssigning}
                   className="px-3 py-1.5 text-xs font-medium rounded-lg bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50"
@@ -1256,7 +1288,8 @@ export default function Dashboard() {
                     {isAdmin && (
                       <>
                         <th className="px-3 py-2 font-medium text-gray-600">Consultant</th>
-                        <th className="px-3 py-2 font-medium text-gray-600">Resident</th>
+                        <th className="px-3 py-2 font-medium text-gray-600">Senior Registrar</th>
+                        <th className="px-3 py-2 font-medium text-gray-600">Registrar</th>
                         <th className="px-3 py-2 font-medium text-gray-600">House Officer</th>
                       </>
                     )}
@@ -1296,7 +1329,8 @@ export default function Dashboard() {
                       {isAdmin && (
                         <>
                           <td className="px-3 py-3 text-gray-600">{p.consultant || <span className="text-gray-400 text-xs">Unassigned</span>}</td>
-                          <td className="px-3 py-3 text-gray-600">{p.resident || <span className="text-gray-400 text-xs">Unassigned</span>}</td>
+                          <td className="px-3 py-3 text-gray-600">{p.senior_registrar || <span className="text-gray-400 text-xs">Unassigned</span>}</td>
+                          <td className="px-3 py-3 text-gray-600">{p.registrar || <span className="text-gray-400 text-xs">Unassigned</span>}</td>
                           <td className="px-3 py-3 text-gray-600">{p.house_officer || <span className="text-gray-400 text-xs">Unassigned</span>}</td>
                         </>
                       )}
@@ -1367,13 +1401,12 @@ export default function Dashboard() {
                       {p.ward}{p.bed ? `, Bed ${p.bed}` : ''}
                     </p>
                   )}
-                  {isAdmin && (p.consultant || p.resident || p.house_officer) && (
-                    <div className="mt-1 text-xs text-gray-500">
+                  {isAdmin && (p.consultant || p.senior_registrar || p.registrar || p.house_officer) && (
+                    <div className="mt-1 text-xs text-gray-500 flex flex-wrap gap-x-1">
                       {p.consultant && <span>Consultant: {p.consultant}</span>}
-                      {p.consultant && p.resident && <span> · </span>}
-                      {p.resident && <span>Resident: {p.resident}</span>}
-                      {(p.consultant || p.resident) && p.house_officer && <span> · </span>}
-                      {p.house_officer && <span>HO: {p.house_officer}</span>}
+                      {p.senior_registrar && <span>· SR: {p.senior_registrar}</span>}
+                      {p.registrar && <span>· Reg: {p.registrar}</span>}
+                      {p.house_officer && <span>· HO: {p.house_officer}</span>}
                     </div>
                   )}
                 </div>

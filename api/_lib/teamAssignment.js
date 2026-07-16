@@ -175,6 +175,47 @@ export async function backfillActiveAdmissions() {
 }
 
 /**
+ * Rebalance EVERY admitted patient's team evenly (round-robin) across the
+ * current active+approved staff for each role. Overwrites existing assignments,
+ * so use it after adding/removing staff to spread load fresh. Roles with no
+ * active staff are left empty.
+ */
+export async function rebalanceAllTeams() {
+  await ensureColumns();
+  const adms = (await query(
+    `SELECT DISTINCT patient_id FROM admissions
+      WHERE status IN ('active','admitted') AND patient_id IS NOT NULL
+      ORDER BY patient_id`
+  )).rows;
+  const pool = {};
+  for (const roleKey of ROLES) {
+    pool[roleKey] = (await query(
+      `SELECT id FROM users WHERE role = ANY($1::text[]) AND is_active = TRUE AND is_approved = TRUE ORDER BY id`,
+      [ROLE_USERS[roleKey]]
+    )).rows.map(r => String(r.id));
+  }
+  const idx = { consultant: 0, senior_registrar: 0, registrar: 0, house_officer: 0 };
+  const pick = (roleKey) => {
+    const arr = pool[roleKey];
+    if (!arr.length) return null;
+    const v = arr[idx[roleKey] % arr.length];
+    idx[roleKey]++;
+    return v;
+  };
+  let processed = 0;
+  for (const a of adms) {
+    await setAssignment(String(a.patient_id), {
+      consultant_id: pick('consultant'),
+      senior_registrar_id: pick('senior_registrar'),
+      registrar_id: pick('registrar'),
+      house_officer_id: pick('house_officer'),
+    });
+    processed++;
+  }
+  return { processed, pools: Object.fromEntries(ROLES.map(r => [r, pool[r].length])) };
+}
+
+/**
  * Admin edit: set a patient's team explicitly. Unlike assignFullTeam this
  * OVERWRITES each role (null clears it), so an admin can reassign or unassign.
  */
