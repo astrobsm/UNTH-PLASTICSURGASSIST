@@ -13,14 +13,19 @@ export default function UnitRosterWidget() {
   const [loading, setLoading] = useState(true);
   const [staffLoading, setStaffLoading] = useState(true);
   // Three distinct staff pools by exact role:
+  const [availableConsultants, setAvailableConsultants] = useState<ApprovedUser[]>([]);
   const [availableSeniorRegistrars, setAvailableSeniorRegistrars] = useState<ApprovedUser[]>([]);
   const [availableJuniorRegistrars, setAvailableJuniorRegistrars] = useState<ApprovedUser[]>([]);
   const [availableHouseOfficers, setAvailableHouseOfficers] = useState<ApprovedUser[]>([]);
   const [allActiveUsers, setAllActiveUsers] = useState<ApprovedUser[]>([]);
 
-  // Setup form state — SR fixed per unit; JR rotates 6w; HO rotates 2w.
+  // Setup form state — consultants + SR fixed per unit; JR rotates 6w; HO rotates 2w.
   const [setupForm, setSetupForm] = useState({
     startDate: new Date().toISOString().split('T')[0],
+    managingConsultantUnit1: '',
+    consultant2Unit1: '',
+    managingConsultantUnit2: '',
+    consultant2Unit2: '',
     seniorRegistrarUnit1: '',
     seniorRegistrarUnit2: '',
     juniorRegistrar1: '',
@@ -35,6 +40,26 @@ export default function UnitRosterWidget() {
     loadRosterConfig();
     loadAvailableStaff();
   }, []);
+
+  // Pre-fill the Manage form from the active roster when it's opened, so an
+  // admin editing (e.g.) just the consultants doesn't blank the other tiers.
+  useEffect(() => {
+    if (!showSetup) return;
+    const c = rosterConfig;
+    setSetupForm({
+      startDate: c?.startDate || new Date().toISOString().split('T')[0],
+      managingConsultantUnit1: c?.consultantsUnit1?.[0] || PS_UNITS[0].consultants[0] || '',
+      consultant2Unit1: c?.consultantsUnit1?.[1] || PS_UNITS[0].consultants[1] || '',
+      managingConsultantUnit2: c?.consultantsUnit2?.[0] || PS_UNITS[1].consultants[0] || '',
+      consultant2Unit2: c?.consultantsUnit2?.[1] || PS_UNITS[1].consultants[1] || '',
+      seniorRegistrarUnit1: c?.seniorRegistrars?.[0] || '',
+      seniorRegistrarUnit2: c?.seniorRegistrars?.[1] || '',
+      juniorRegistrar1: c?.juniorRegistrars?.[0] || '',
+      juniorRegistrar2: c?.juniorRegistrars?.[1] || '',
+      houseOfficer1: c?.houseOfficers?.[0] || '',
+      houseOfficer2: c?.houseOfficers?.[1] || '',
+    });
+  }, [showSetup]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-setup roster only when BOTH roster config AND staff have finished loading
   useEffect(() => {
@@ -56,6 +81,8 @@ export default function UnitRosterWidget() {
               rotationWeeks: active.rotation_weeks || 2,
               houseOfficerRotationWeeks: active.house_officer_rotation_weeks || active.rotation_weeks || 2,
               juniorRegistrarRotationWeeks: active.junior_registrar_rotation_weeks || 6,
+              consultantsUnit1: active.consultants_unit1 || [],
+              consultantsUnit2: active.consultants_unit2 || [],
               seniorRegistrars: active.senior_registrars || [],
               juniorRegistrars: active.junior_registrars || [],
               houseOfficers: active.house_officers || [],
@@ -96,6 +123,9 @@ export default function UnitRosterWidget() {
     try {
       const allUsers = await userManagementService.getAllApprovedUsers();
       setAllActiveUsers(allUsers);
+      // Consultants: users registered as consultant (and admins, who are often
+      // consultants too, e.g. the unit heads).
+      setAvailableConsultants(allUsers.filter(u => u.role === 'consultant' || u.role === 'admin'));
       setAvailableSeniorRegistrars(allUsers.filter(u => u.role === 'senior_registrar'));
       setAvailableJuniorRegistrars(allUsers.filter(u => u.role === 'junior_registrar'));
       setAvailableHouseOfficers(allUsers.filter(u => u.role === 'house_officer'));
@@ -150,6 +180,8 @@ export default function UnitRosterWidget() {
               rotation_weeks: config.houseOfficerRotationWeeks ?? config.rotationWeeks ?? 2,
               house_officer_rotation_weeks: config.houseOfficerRotationWeeks ?? 2,
               junior_registrar_rotation_weeks: config.juniorRegistrarRotationWeeks ?? 6,
+              consultants_unit1: config.consultantsUnit1 || [],
+              consultants_unit2: config.consultantsUnit2 || [],
               senior_registrars: config.seniorRegistrars,
               junior_registrars: config.juniorRegistrars || [],
               house_officers: config.houseOfficers,
@@ -167,8 +199,12 @@ export default function UnitRosterWidget() {
     const srs = availableSeniorRegistrars;
     const jrs = availableJuniorRegistrars;
     const hos = availableHouseOfficers;
+    const cons = availableConsultants;
     setSetupForm(prev => ({
       ...prev,
+      // Consultants — one (managing) per unit from the consultant pool.
+      managingConsultantUnit1: cons[0]?.full_name || prev.managingConsultantUnit1,
+      managingConsultantUnit2: (cons[1] || cons[0])?.full_name || prev.managingConsultantUnit2,
       // Senior Registrars are FIXED per unit
       seniorRegistrarUnit1: srs[0]?.full_name || prev.seniorRegistrarUnit1,
       seniorRegistrarUnit2: srs[1]?.full_name || prev.seniorRegistrarUnit2,
@@ -204,6 +240,9 @@ export default function UnitRosterWidget() {
         rotationWeeks: 2,
         houseOfficerRotationWeeks: 2,
         juniorRegistrarRotationWeeks: 6,
+        // Seed consultants from the hardcoded defaults; admin can edit via Manage.
+        consultantsUnit1: PS_UNITS[0].consultants,
+        consultantsUnit2: PS_UNITS[1].consultants,
         seniorRegistrars: srs.slice(0, 2).map(u => u.full_name),
         juniorRegistrars: jrs.slice(0, 2).map(u => u.full_name),
         houseOfficers: hos.slice(0, 2).map(u => u.full_name),
@@ -221,13 +260,15 @@ export default function UnitRosterWidget() {
   };
 
   const handleSaveRoster = async () => {
-    // Require at least one rotating staff member to save a roster
+    // Require at least one team member to save a roster
     if (
+      !setupForm.managingConsultantUnit1 &&
+      !setupForm.managingConsultantUnit2 &&
       !setupForm.seniorRegistrarUnit1 &&
       !setupForm.juniorRegistrar1 &&
       !setupForm.houseOfficer1
     ) {
-      alert('Please assign at least one Senior Registrar, Registrar, or House Officer.');
+      alert('Please assign at least one Consultant, Senior Registrar, Registrar, or House Officer.');
       return;
     }
 
@@ -242,6 +283,8 @@ export default function UnitRosterWidget() {
         rotationWeeks: 2,
         houseOfficerRotationWeeks: 2,
         juniorRegistrarRotationWeeks: 6,
+        consultantsUnit1: [setupForm.managingConsultantUnit1, setupForm.consultant2Unit1].map(s => s.trim()).filter(Boolean),
+        consultantsUnit2: [setupForm.managingConsultantUnit2, setupForm.consultant2Unit2].map(s => s.trim()).filter(Boolean),
         seniorRegistrars: [setupForm.seniorRegistrarUnit1, setupForm.seniorRegistrarUnit2].filter(Boolean),
         juniorRegistrars: [setupForm.juniorRegistrar1, setupForm.juniorRegistrar2].filter(Boolean),
         houseOfficers: [setupForm.houseOfficer1, setupForm.houseOfficer2].filter(Boolean),
@@ -353,6 +396,53 @@ export default function UnitRosterWidget() {
                 Auto-Assign Staff
               </button>
             </div>
+
+            {/* Consultants — fixed per unit, from the database (index 0 = managing) */}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Consultant — PS-UNIT 1 (managing)</label>
+              <input
+                list="ps-consultant-options"
+                value={setupForm.managingConsultantUnit1}
+                onChange={(e) => setSetupForm({ ...setupForm, managingConsultantUnit1: e.target.value })}
+                placeholder="Select or type a consultant"
+                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Consultant — PS-UNIT 2 (managing)</label>
+              <input
+                list="ps-consultant-options"
+                value={setupForm.managingConsultantUnit2}
+                onChange={(e) => setSetupForm({ ...setupForm, managingConsultantUnit2: e.target.value })}
+                placeholder="Select or type a consultant"
+                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Consultant — PS-UNIT 1 (additional)</label>
+              <input
+                list="ps-consultant-options"
+                value={setupForm.consultant2Unit1}
+                onChange={(e) => setSetupForm({ ...setupForm, consultant2Unit1: e.target.value })}
+                placeholder="Optional second consultant"
+                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Consultant — PS-UNIT 2 (additional)</label>
+              <input
+                list="ps-consultant-options"
+                value={setupForm.consultant2Unit2}
+                onChange={(e) => setSetupForm({ ...setupForm, consultant2Unit2: e.target.value })}
+                placeholder="Optional second consultant"
+                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
+              />
+            </div>
+            <datalist id="ps-consultant-options">
+              {availableConsultants.map(u => (
+                <option key={u.id} value={u.full_name}>{u.role === 'admin' ? 'admin' : 'consultant'}</option>
+              ))}
+            </datalist>
 
             {/* Senior Registrars — FIXED per unit */}
             <div>
@@ -508,10 +598,10 @@ export default function UnitRosterWidget() {
                 {unit.name}
               </h4>
 
-              {/* Consultants */}
+              {/* Consultants (from the editable roster config, else defaults) */}
               <div className="mb-2">
                 <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Consultants</p>
-                {unit.consultants.map((c, i) => {
+                {(assignment?.consultants && assignment.consultants.length ? assignment.consultants : unit.consultants).map((c, i) => {
                   const consultantUser = allActiveUsers.find(u => u.full_name === c);
                   const isManaging = i === 0;
                   return (

@@ -40,6 +40,10 @@ export interface UnitRosterConfig {
   rotationWeeks?: number;                   // legacy: HO rotation (kept for compat)
   houseOfficerRotationWeeks?: number;       // typically 2
   juniorRegistrarRotationWeeks?: number;    // typically 6
+  // Consultants per unit (index 0 = managing consultant). When empty, the
+  // hardcoded PS_UNITS defaults are used. Editable from the roster manager.
+  consultantsUnit1?: string[];
+  consultantsUnit2?: string[];
   // Fixed-per-unit tier (index 0 → PS-UNIT-1, index 1 → PS-UNIT-2)
   seniorRegistrars: string[];
   // Rotating tiers
@@ -157,15 +161,22 @@ export function getCurrentAssignments(
   const u1: PSUnit = PS_UNITS[0];
   const u2: PSUnit = PS_UNITS[1];
 
+  // Consultants come from the (editable) config when set, else the defaults.
+  const consU1 = (config.consultantsUnit1 && config.consultantsUnit1.filter(Boolean).length)
+    ? config.consultantsUnit1.filter(Boolean) : u1.consultants;
+  const consU2 = (config.consultantsUnit2 && config.consultantsUnit2.filter(Boolean).length)
+    ? config.consultantsUnit2.filter(Boolean) : u2.consultants;
+
   const buildAssignment = (
     unit: PSUnit,
+    consultants: string[],
     sr: string,
     jr: string,
     ho: string
   ): CurrentUnitAssignment => ({
     unit,
-    consultants: unit.consultants,
-    managingConsultant: unit.consultants[0] || '',
+    consultants,
+    managingConsultant: consultants[0] || '',
     seniorRegistrar: sr,
     juniorRegistrar: jr,
     houseOfficer: ho,
@@ -179,8 +190,8 @@ export function getCurrentAssignments(
   });
 
   return {
-    unit1: buildAssignment(u1, srUnit1, jrs.unit1, hos.unit1),
-    unit2: buildAssignment(u2, srUnit2, jrs.unit2, hos.unit2),
+    unit1: buildAssignment(u1, consU1, srUnit1, jrs.unit1, hos.unit1),
+    unit2: buildAssignment(u2, consU2, srUnit2, jrs.unit2, hos.unit2),
   };
 }
 
@@ -199,9 +210,11 @@ export function getUnitTeam(
 } {
   const unit = PS_UNIT_MAP[unitId];
   if (!config || !config.isActive) {
+    const cfgCons = unitId === 'PS-UNIT-1' ? config?.consultantsUnit1 : config?.consultantsUnit2;
+    const cons = (cfgCons && cfgCons.filter(Boolean).length) ? cfgCons.filter(Boolean) : unit.consultants;
     return {
-      consultants: unit.consultants,
-      managingConsultant: unit.consultants[0] || '',
+      consultants: cons,
+      managingConsultant: cons[0] || '',
       seniorRegistrar: '',
       juniorRegistrar: '',
       houseOfficer: '',

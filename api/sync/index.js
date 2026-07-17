@@ -373,6 +373,8 @@ async function handlePush(data, user, res) {
             rotation_weeks,
             house_officer_rotation_weeks,
             junior_registrar_rotation_weeks,
+            consultants_unit1,
+            consultants_unit2,
             senior_registrars,
             junior_registrars,
             house_officers,
@@ -383,19 +385,24 @@ async function handlePush(data, user, res) {
             try { await query("ALTER TABLE ps_unit_rosters ADD COLUMN IF NOT EXISTS house_officer_rotation_weeks INTEGER DEFAULT 2"); } catch (_) {}
             try { await query("ALTER TABLE ps_unit_rosters ADD COLUMN IF NOT EXISTS junior_registrar_rotation_weeks INTEGER DEFAULT 6"); } catch (_) {}
             try { await query("ALTER TABLE ps_unit_rosters ADD COLUMN IF NOT EXISTS junior_registrars JSONB DEFAULT '[]'"); } catch (_) {}
+            try { await query("ALTER TABLE ps_unit_rosters ADD COLUMN IF NOT EXISTS consultants_unit1 JSONB DEFAULT '[]'"); } catch (_) {}
+            try { await query("ALTER TABLE ps_unit_rosters ADD COLUMN IF NOT EXISTS consultants_unit2 JSONB DEFAULT '[]'"); } catch (_) {}
 
             // Deactivate all existing rosters first
             await query('UPDATE ps_unit_rosters SET is_active = false, updated_at = CURRENT_TIMESTAMP');
             await query(
               `INSERT INTO ps_unit_rosters (
                  start_date, rotation_weeks, house_officer_rotation_weeks, junior_registrar_rotation_weeks,
+                 consultants_unit1, consultants_unit2,
                  senior_registrars, junior_registrars, house_officers, is_active
-               ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+               ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
               [
                 start_date,
                 rotation_weeks || 2,
                 house_officer_rotation_weeks || rotation_weeks || 2,
                 junior_registrar_rotation_weeks || 6,
+                JSON.stringify(consultants_unit1 || []),
+                JSON.stringify(consultants_unit2 || []),
                 JSON.stringify(senior_registrars || []),
                 JSON.stringify(junior_registrars || []),
                 JSON.stringify(house_officers || []),
