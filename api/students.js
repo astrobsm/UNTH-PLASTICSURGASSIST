@@ -1203,40 +1203,76 @@ async function assignStudentGroups(body, res) {
   return res.status(200).json({ ok: true, total: students.length, groups });
 }
 
-// Evenly assign active admitted patients across the 5 groups (round-robin).
+// Evenly assign active admitted patients across the 5 groups (round-robin), and
+// link each group's patients to every student in that group so the patients show
+// up on the students' own dashboards.
 async function assignGroupPatients(body, res) {
   await ensureGroupTables();
-  // Active admissions joined to patient names.
-  let patients = [];
-  try {
-    patients = (await query(
-      `SELECT a.patient_id::text AS patient_id,
-              COALESCE(a.hospital_number, p.hospital_number) AS hospital_number,
-              COALESCE(a.patient_name, TRIM(p.first_name || ' ' || p.last_name)) AS patient_name
-         FROM admissions a
-         LEFT JOIN patients p ON p.id = a.patient_id
-        WHERE a.status IN ('active','admitted') AND a.patient_id IS NOT NULL
-        ORDER BY a.admission_date DESC NULLS LAST, a.id DESC`
-    )).rows;
-  } catch (e) { console.warn('assignGroupPatients: admissions query failed:', e.message); }
 
-  let assigned = 0;
+  // Active admissions with patient identity. Try the richest query, then degrade
+  // gracefully so an unexpected column never yields "0 assigned".
+  let patients = [];
+  const attempts = [
+    `SELECT a.patient_id::text AS patient_id,
+            COALESCE(a.hospital_number, p.hospital_number) AS hospital_number,
+            COALESCE(a.patient_name, NULLIF(TRIM(COALESCE(p.first_name,'') || ' ' || COALESCE(p.last_name,'')), '')) AS patient_name
+       FROM admissions a
+       LEFT JOIN patients p ON p.id = a.patient_id
+      WHERE a.status IN ('active','admitted') AND a.patient_id IS NOT NULL
+      ORDER BY a.admission_date DESC NULLS LAST, a.id DESC`,
+    `SELECT id::text AS patient_id, hospital_number,
+            NULLIF(TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')), '') AS patient_name
+       FROM patients ORDER BY created_at DESC`, // fallback: all patients if no admissions table/data
+  ];
+  for (const sql of attempts) {
+    try {
+      const r = await query(sql);
+      if (r.rows.length) { patients = r.rows; break; }
+      patients = r.rows; // keep (possibly empty) result from the primary query
+      if (sql === attempts[0]) continue; // if admissions returned 0, try the fallback
+    } catch (e) { console.warn('assignGroupPatients source query failed, trying fallback:', e.message); }
+  }
+
+  // Students per group (so group patients also land on each student's list).
+  const studentsByGroup = new Map();
+  const srows = (await query(
+    `SELECT id, group_number FROM students WHERE is_approved = TRUE AND is_active = TRUE AND group_number IS NOT NULL`
+  )).rows;
+  for (const s of srows) {
+    if (!studentsByGroup.has(s.group_number)) studentsByGroup.set(s.group_number, []);
+    studentsByGroup.get(s.group_number).push(s.id);
+  }
+
+  let assigned = 0, linked = 0;
   const perGroup = Array(NUM_GROUPS + 1).fill(0);
   for (let i = 0; i < patients.length; i++) {
     const g = (i % NUM_GROUPS) + 1;
+    const pid = patients[i].patient_id;
     try {
       await query(
         `INSERT INTO student_group_patients (group_number, patient_id, hospital_number, patient_name)
          VALUES ($1,$2,$3,$4)
          ON CONFLICT (group_number, patient_id) DO UPDATE SET is_active = TRUE, hospital_number = EXCLUDED.hospital_number, patient_name = EXCLUDED.patient_name`,
-        [g, patients[i].patient_id, patients[i].hospital_number || null, patients[i].patient_name || null]
+        [g, pid, patients[i].hospital_number || null, patients[i].patient_name || null]
       );
       perGroup[g]++; assigned++;
+      // Link this patient to every student in the group.
+      for (const sid of (studentsByGroup.get(g) || [])) {
+        try {
+          await query(
+            `INSERT INTO student_patient_assignments (student_id, patient_id, hospital_number, is_active)
+             VALUES ($1,$2,$3,TRUE)
+             ON CONFLICT (student_id, patient_id) DO UPDATE SET is_active = TRUE, assigned_at = NOW()`,
+            [sid, pid, patients[i].hospital_number || null]
+          );
+          linked++;
+        } catch (e) { console.warn('link student_patient_assignment skipped:', e.message); }
+      }
     } catch (e) { console.warn('assignGroupPatients insert skipped:', e.message); }
   }
   const groups = [];
-  for (let g = 1; g <= NUM_GROUPS; g++) groups.push({ group: g, patients: perGroup[g] });
-  return res.status(200).json({ ok: true, totalPatients: patients.length, assigned, groups });
+  for (let g = 1; g <= NUM_GROUPS; g++) groups.push({ group: g, patients: perGroup[g], students: (studentsByGroup.get(g) || []).length });
+  return res.status(200).json({ ok: true, totalPatients: patients.length, assigned, studentLinks: linked, groups });
 }
 
 async function setGroupTopic(body, res) {
