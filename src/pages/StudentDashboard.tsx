@@ -7,6 +7,9 @@ import {
 import { apiClient } from '../services/apiClient';
 import { useAuthStore } from '../store/authStore';
 import { broadcastChange } from '../utils/crossTabSync';
+import { medicalTrainingService, CMETopic, TrainingLevel } from '../services/medicalTrainingService';
+import CMEArticleViewer from '../components/training/CMEArticleViewer';
+import CBTPage from '../components/cbt/CBTPage';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 interface Patient {
@@ -98,7 +101,13 @@ interface StudentMetrics {
 export default function StudentDashboard() {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
-  const [tab, setTab] = useState<'dashboard' | 'patients' | 'clerking' | 'plans'>('dashboard');
+  const [tab, setTab] = useState<'dashboard' | 'patients' | 'clerking' | 'plans' | 'learning'>('dashboard');
+  // Learning tab: CME / self-assessment / CBT + sign-out summary
+  const [learningLevel, setLearningLevel] = useState<TrainingLevel>('house_officer');
+  const [learningTopic, setLearningTopic] = useState<CMETopic | null>(null);
+  const [showStudentCBT, setShowStudentCBT] = useState(false);
+  const [trainingSummary, setTrainingSummary] = useState<any>(null);
+  const [completedTopics, setCompletedTopics] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [metrics, setMetrics] = useState<StudentMetrics | null>(null);
@@ -177,6 +186,26 @@ export default function StudentDashboard() {
       console.error('Plans load error:', err);
     }
   }, []);
+
+  const loadTrainingSummary = useCallback(async () => {
+    try {
+      const data = await apiClient.get('/students/training-summary');
+      setTrainingSummary(data);
+    } catch (err) {
+      console.error('Training summary load error:', err);
+    }
+  }, []);
+
+  // Record CME read / self-assessment / CBT participation (counts toward sign-out).
+  const recordTraining = useCallback(async (kind: 'cme' | 'cbt' | 'self_assessment', payload: { refId: string; title?: string; score?: number; total?: number }) => {
+    try {
+      await apiClient.post('/students/training', { kind, ...payload });
+      await loadTrainingSummary();
+      try { broadcastChange('training'); } catch { /* non-fatal */ }
+    } catch (err) {
+      console.warn('Failed to record training (will retry later):', err);
+    }
+  }, [loadTrainingSummary]);
 
   useEffect(() => {
     if (!user || (user.role as string) !== 'student') {
@@ -296,6 +325,33 @@ export default function StudentDashboard() {
     );
   }
 
+  // Full-screen CME article + self-assessment (records student participation).
+  if (learningTopic) {
+    return (
+      <CMEArticleViewer
+        topic={learningTopic}
+        onBack={() => setLearningTopic(null)}
+        isCompleted={completedTopics.has(String(learningTopic.id))}
+        onComplete={() => {
+          setCompletedTopics(prev => new Set([...prev, String(learningTopic.id)]));
+          recordTraining('cme', { refId: String(learningTopic.id), title: learningTopic.title });
+        }}
+        onSelfAssessment={(r) => recordTraining('self_assessment', { refId: `sa-${r.topicId}`, title: learningTopic.title, score: r.correct, total: r.total })}
+      />
+    );
+  }
+
+  // Full-screen CBT for students (records participation on submit).
+  if (showStudentCBT) {
+    return (
+      <CBTPage
+        level={learningLevel}
+        onBack={() => { setShowStudentCBT(false); loadTrainingSummary(); }}
+        onResult={(res) => recordTraining('cbt', { refId: `cbt-${res.testNumber}`, title: `CBT ${res.testNumber}`, score: res.score, total: res.total })}
+      />
+    );
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   // RENDER
   // ═══════════════════════════════════════════════════════════════════════════
@@ -327,10 +383,11 @@ export default function StudentDashboard() {
             { key: 'patients', label: 'My Patients', icon: Users },
             { key: 'clerking', label: 'Clerkings', icon: FileText },
             { key: 'plans', label: 'Treatment Plans', icon: Activity },
+            { key: 'learning', label: 'Learning & Sign-out', icon: GraduationCap },
           ] as const).map(t => (
             <button
               key={t.key}
-              onClick={() => { setTab(t.key); if (t.key === 'patients') loadPatients(); if (t.key === 'clerking') loadClerkings(); if (t.key === 'plans') loadPlans(); }}
+              onClick={() => { setTab(t.key); if (t.key === 'patients') loadPatients(); if (t.key === 'clerking') loadClerkings(); if (t.key === 'plans') loadPlans(); if (t.key === 'learning') loadTrainingSummary(); }}
               className={`flex items-center gap-1.5 px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${tab === t.key ? 'border-green-600 text-green-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
             >
               <t.icon className="w-4 h-4" /> {t.label}
@@ -891,6 +948,106 @@ export default function StudentDashboard() {
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {/* ═══ LEARNING & SIGN-OUT TAB ═══ */}
+        {tab === 'learning' && (
+          <div className="space-y-5">
+            {/* Sign-out status */}
+            <div className="bg-white border border-gray-200 rounded-xl p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold text-gray-900">Sign-out status</h3>
+                {trainingSummary && (
+                  <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${trainingSummary.signOutEligible ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                    {trainingSummary.signOutEligible ? 'Eligible to sign out' : 'Not yet eligible'}
+                  </span>
+                )}
+              </div>
+              {!trainingSummary ? (
+                <div className="py-4 text-center"><Loader2 className="w-5 h-5 animate-spin mx-auto text-green-600" /></div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+                  <div className="bg-blue-50 rounded-lg p-3">
+                    <p className="text-xs text-gray-500">CBT taken</p>
+                    <p className="text-lg font-bold text-blue-700">{trainingSummary.training?.cbt ?? 0}</p>
+                  </div>
+                  <div className="bg-green-50 rounded-lg p-3">
+                    <p className="text-xs text-gray-500">CME articles read</p>
+                    <p className="text-lg font-bold text-green-700">{trainingSummary.training?.cme ?? 0}</p>
+                  </div>
+                  <div className="bg-purple-50 rounded-lg p-3">
+                    <p className="text-xs text-gray-500">Self-assessments</p>
+                    <p className="text-lg font-bold text-purple-700">{trainingSummary.training?.selfAssessment ?? 0}</p>
+                  </div>
+                </div>
+              )}
+              {trainingSummary && (
+                <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Group activities (Group {trainingSummary.groupNumber ?? '—'})</p>
+                    <ul className="space-y-0.5 text-xs">
+                      {[...(trainingSummary.groupEligibility?.met || []).map((s: string) => ({ s, ok: true })),
+                        ...(trainingSummary.groupEligibility?.notMet || []).map((s: string) => ({ s, ok: false }))].map((x, i) => (
+                        <li key={i} className={`flex items-center gap-1 ${x.ok ? 'text-green-700' : 'text-gray-500'}`}>
+                          {x.ok ? <Star className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />} {x.s}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase mb-1">My learning</p>
+                    <ul className="space-y-0.5 text-xs">
+                      {[...(trainingSummary.individual?.met || []).map((s: string) => ({ s, ok: true })),
+                        ...(trainingSummary.individual?.notMet || []).map((s: string) => ({ s, ok: false }))].map((x, i) => (
+                        <li key={i} className={`flex items-center gap-1 ${x.ok ? 'text-green-700' : 'text-gray-500'}`}>
+                          {x.ok ? <Star className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />} {x.s}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* CBT + level */}
+            <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="font-semibold text-gray-900">Computer-Based Test (CBT)</h3>
+                <p className="text-xs text-gray-500">Take the weekly CBT — your score counts toward sign-out.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <select value={learningLevel} onChange={e => setLearningLevel(e.target.value as TrainingLevel)}
+                  className="text-sm border border-gray-300 rounded-lg px-2 py-1.5 bg-white">
+                  <option value="house_officer">House Officer</option>
+                  <option value="junior_resident">Junior Resident</option>
+                  <option value="senior_resident">Senior Resident</option>
+                </select>
+                <button onClick={() => setShowStudentCBT(true)} className="px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700">Take CBT</button>
+              </div>
+            </div>
+
+            {/* CME articles + self-assessment */}
+            <div className="bg-white border border-gray-200 rounded-xl p-4">
+              <h3 className="font-semibold text-gray-900 mb-1">CME Articles & Self-Assessment</h3>
+              <p className="text-xs text-gray-500 mb-3">Read each article, then take its self-assessment. Both count toward sign-out.</p>
+              <div className="space-y-3">
+                {medicalTrainingService.getModulesByLevel(learningLevel).map(mod => (
+                  <div key={mod.id}>
+                    <p className="text-sm font-semibold text-gray-700 mb-1">{mod.title}</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                      {mod.topics.map(topic => (
+                        <button key={topic.id} onClick={() => setLearningTopic(topic)}
+                          className="text-left text-xs px-3 py-2 rounded-lg border border-gray-200 hover:bg-green-50 hover:border-green-300 flex items-center justify-between gap-2">
+                          <span className="truncate">{topic.title}</span>
+                          <span className="text-[10px] text-gray-400 flex-shrink-0">{topic.article?.selfAssessment?.length || 0} MCQs{completedTopics.has(String(topic.id)) ? ' ✓' : ''}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )}
       </main>

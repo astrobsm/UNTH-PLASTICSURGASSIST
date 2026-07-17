@@ -13,11 +13,13 @@ import CBTResults from './CBTResults';
 interface CBTPageProps {
   level: TrainingLevel;
   onBack: () => void;
+  /** Optional: called after a test is submitted (used to record student participation). */
+  onResult?: (result: { testNumber: number; score: number; total: number; percentage: number }) => void;
 }
 
 type CBTView = 'selection' | 'exam' | 'results';
 
-const CBTPage: React.FC<CBTPageProps> = ({ level, onBack }) => {
+const CBTPage: React.FC<CBTPageProps> = ({ level, onBack, onResult }) => {
   const [currentView, setCurrentView] = useState<CBTView>('selection');
   const [currentTest, setCurrentTest] = useState<CBTTest | null>(null);
   const [currentAttempt, setCurrentAttempt] = useState<CBTAttempt | null>(null);
@@ -71,6 +73,14 @@ const CBTPage: React.FC<CBTPageProps> = ({ level, onBack }) => {
     const completedAttempt = cbtService.submitTest(test, attempt);
     setCompletedAttempt(completedAttempt);
     setCurrentView('results');
+    if (onResult) {
+      onResult({
+        testNumber: (test as any).testNumber ?? 0,
+        score: (completedAttempt as any).score ?? 0,
+        total: (test as any).totalMarks ?? (test as any).questions?.length ?? 0,
+        percentage: (completedAttempt as any).percentage ?? 0,
+      });
+    }
   };
   
   const handleViewResults = (testNumber: number) => {

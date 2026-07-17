@@ -1706,6 +1706,130 @@ const BackupModal = ({
 // ═══════════════════════════════════════════════════════════════════════════════
 // STUDENT MANAGEMENT TAB  
 // ═══════════════════════════════════════════════════════════════════════════════
+// ── Clinical posting groups (5 even groups + activities + sign-out eligibility) ──
+const GROUP_ACTS: { type: string; label: string }[] = [
+  { type: 'topic_presentation', label: 'Topic presentation' },
+  { type: 'patient_clerking', label: 'Clerk & present patient' },
+  { type: 'wound_dressing', label: 'Wound dressing (clinic)' },
+  { type: 'wound_inspection', label: 'Wound inspection (Tue)' },
+];
+
+function StudentGroupsPanel() {
+  const [groups, setGroups] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [working, setWorking] = useState<string | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    try { const d = await apiClient.get('/students/groups'); setGroups(d.groups || []); }
+    catch (e) { console.error('load groups failed', e); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { load(); }, []);
+
+  const run = async (key: string, fn: () => Promise<any>) => {
+    setWorking(key);
+    try { await fn(); await load(); } catch (e: any) { alert(e.message || 'Action failed'); }
+    finally { setWorking(null); }
+  };
+  const assignGroups = () => run('groups', () => apiClient.post('/students/assign-groups', {}));
+  const assignPatients = () => run('patients', () => apiClient.post('/students/assign-group-patients', {}));
+  const logActivity = (groupNumber: number, activityType: string) => {
+    const title = window.prompt(`Record "${GROUP_ACTS.find(a => a.type === activityType)?.label}" for Group ${groupNumber}. Enter a note / patient / topic:`, '');
+    if (title === null) return;
+    run(`act-${groupNumber}-${activityType}`, () => apiClient.post('/students/group-activity', { groupNumber, activityType, title }));
+  };
+  const setTopic = (groupNumber: number, current: string) => {
+    const t = window.prompt(`Presentation topic for Group ${groupNumber}:`, current || '');
+    if (t === null) return;
+    run(`topic-${groupNumber}`, () => apiClient.put('/students/group-topic', { groupNumber, topicTitle: t }));
+  };
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <h3 className="font-semibold text-gray-900 flex items-center gap-2"><Users className="w-5 h-5 text-green-600" /> Clinical Posting Groups (5)</h3>
+        <div className="flex gap-2">
+          <button onClick={assignGroups} disabled={!!working}
+            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 flex items-center gap-1">
+            {working === 'groups' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />} Auto-Assign into 5 Groups
+          </button>
+          <button onClick={assignPatients} disabled={!!working}
+            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1">
+            {working === 'patients' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UserPlus className="w-3.5 h-3.5" />} Assign Patients to Groups
+          </button>
+          <button onClick={load} disabled={!!working} className="px-2 py-1.5 text-xs rounded-lg border border-gray-300 hover:bg-gray-50"><RefreshCw className="w-3.5 h-3.5" /></button>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="py-8 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto text-green-600" /></div>
+      ) : groups.every(g => g.memberCount === 0) ? (
+        <p className="text-sm text-gray-500 py-4 text-center">No students in groups yet. Approve students, then click <b>Auto-Assign into 5 Groups</b>.</p>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          {groups.map(g => {
+            const elig = g.groupEligibility || { eligible: false };
+            const eligibleMembers = (g.members || []).filter((m: any) => m.signOutEligible).length;
+            return (
+              <div key={g.groupNumber} className="border border-gray-200 rounded-lg p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="font-semibold text-gray-800">Group {g.groupNumber}
+                    <span className="ml-2 text-xs font-normal text-gray-500">{g.memberCount} students · {g.patientCount} patients</span>
+                  </div>
+                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${elig.eligible ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                    {elig.eligible ? 'Activities complete' : 'Activities pending'}
+                  </span>
+                </div>
+
+                <div className="text-xs text-gray-600 mb-2">
+                  <button onClick={() => setTopic(g.groupNumber, g.topicTitle)} className="text-green-700 hover:underline">
+                    Topic: {g.topicTitle || <span className="italic text-gray-400">set topic</span>}{g.topicPresented ? ' ✓' : ''}
+                  </button>
+                </div>
+
+                {/* Activity checklist + quick record */}
+                <div className="grid grid-cols-2 gap-1.5 mb-2">
+                  {GROUP_ACTS.map(a => {
+                    const need = a.type === 'patient_clerking' ? 2 : 1;
+                    const have = g.activityCounts?.[a.type] || 0;
+                    const done = have >= need;
+                    return (
+                      <button key={a.type} onClick={() => logActivity(g.groupNumber, a.type)} disabled={!!working}
+                        className={`text-left text-[11px] px-2 py-1 rounded border flex items-center gap-1 ${done ? 'border-green-200 bg-green-50 text-green-700' : 'border-gray-200 hover:bg-gray-50 text-gray-600'}`}>
+                        {done ? <CheckCircle className="w-3 h-3 flex-shrink-0" /> : <Plus className="w-3 h-3 flex-shrink-0" />}
+                        <span className="truncate">{a.label} {have}/{need}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Members */}
+                {g.members?.length > 0 && (
+                  <div className="text-[11px] text-gray-600">
+                    <span className="text-gray-400">Sign-out eligible: {eligibleMembers}/{g.memberCount}</span>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {g.members.map((m: any) => (
+                        <span key={m.id} title={`CBT ${m.cbtCount} · CME ${m.cmeCount} · Self-assess ${m.selfAssessmentCount}`}
+                          className={`px-1.5 py-0.5 rounded ${m.signOutEligible ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                          {m.full_name.split(' ')[0]}{m.signOutEligible ? ' ✓' : ''}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <p className="mt-2 text-[11px] text-gray-400">
+        Sign-out per student = group activities (topic + ≥2 clerked patients + wound dressing + Tuesday wound inspection) AND individual CBT + CME reading + self-assessment.
+      </p>
+    </div>
+  );
+}
+
 function StudentManagementTab() {
   const [students, setStudents] = useState<any[]>([]);
   const [overview, setOverview] = useState<any>(null);
@@ -1902,6 +2026,9 @@ function StudentManagementTab() {
           </button>
         </div>
       </div>
+
+      {/* Clinical posting groups (5) */}
+      <StudentGroupsPanel />
 
       {/* Bulk Actions */}
       {overview && (parseInt(overview.pending_approval) > 0 || parseInt(overview.active_students) > 0) && (

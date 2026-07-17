@@ -36,6 +36,9 @@ export default async function handler(req, res) {
       if (method === 'GET' && action === 'treatment-plans') return await getStudentTreatmentPlans(auth.user.id, res);
       if (method === 'POST' && action === 'treatment-plans') return await createStudentTreatmentPlan(auth.user.id, req.body, res);
       if (method === 'PUT' && action === 'treatment-plans') return await updateStudentTreatmentPlan(auth.user.id, pathParts[1], req.body, res);
+      // Training participation (CME / CBT / self-assessment) + sign-out summary
+      if (method === 'POST' && action === 'training') return await recordStudentTraining(auth.user.id, req.body, res);
+      if (method === 'GET'  && action === 'training-summary') return await getStudentTrainingSummary(auth.user.id, res);
     }
 
     // ── Admin endpoints ──
@@ -52,6 +55,12 @@ export default async function handler(req, res) {
       if (method === 'POST' && action === 'assign-patient') return await adminAssignSinglePatient(req.body, res);
       if (method === 'PUT' && action === 'unassign-patient') return await adminUnassignPatient(req.body, res);
       if (method === 'GET' && action === 'available-patients') return await getAvailablePatients(url.searchParams, res);
+      // ── Group management (5 clinical-posting groups) ──
+      if (method === 'GET'  && action === 'groups') return await getStudentGroups(res);
+      if (method === 'POST' && action === 'assign-groups') return await assignStudentGroups(req.body, res);
+      if (method === 'POST' && action === 'assign-group-patients') return await assignGroupPatients(req.body, res);
+      if (method === 'POST' && action === 'group-activity') return await logGroupActivity(auth.user, req.body, res);
+      if (method === 'PUT'  && action === 'group-topic') return await setGroupTopic(req.body, res);
       if (method === 'GET' && action && action !== 'register' && action !== 'login') {
         return await getStudentDetail(action, res);
       }
@@ -1100,4 +1109,294 @@ async function getAvailablePatients(params, res) {
 
   const result = await query(sql, values);
   res.json(result.rows);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CLINICAL POSTING GROUPS (5 even groups) + activities + sign-out eligibility
+// ═══════════════════════════════════════════════════════════════════════════
+const NUM_GROUPS = 5;
+// Sign-out requirements per student = group activities + individual training.
+const STUDENT_REQ = {
+  topicPresentation: 1,   // group presents a topic
+  clerkings: 2,           // group clerks & presents >= 2 admitted patients
+  woundDressing: 1,       // group participates in wound-dressing clinic
+  woundInspection: 1,     // group does Tuesday wound inspection
+  cbt: 1,                 // individual: at least one CBT
+  cme: 3,                 // individual: CME articles read
+  selfAssessment: 3,      // individual: self-assessment tests
+};
+const GROUP_ACTIVITY_TYPES = ['topic_presentation', 'patient_clerking', 'wound_dressing', 'wound_inspection'];
+
+let _groupSchemaReady = false;
+async function ensureGroupTables() {
+  if (_groupSchemaReady) return;
+  await ensureTables();
+  const stmts = [
+    `ALTER TABLE students ADD COLUMN IF NOT EXISTS group_number INTEGER`,
+    `CREATE TABLE IF NOT EXISTS student_groups (
+       group_number INTEGER PRIMARY KEY,
+       topic_title TEXT,
+       topic_presented BOOLEAN DEFAULT FALSE,
+       topic_presented_at TIMESTAMPTZ,
+       notes TEXT,
+       updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+     )`,
+    `CREATE TABLE IF NOT EXISTS student_group_patients (
+       id SERIAL PRIMARY KEY,
+       group_number INTEGER NOT NULL,
+       patient_id VARCHAR(255) NOT NULL,
+       hospital_number VARCHAR(100),
+       patient_name VARCHAR(255),
+       assigned_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+       is_active BOOLEAN DEFAULT TRUE,
+       UNIQUE(group_number, patient_id)
+     )`,
+    `CREATE TABLE IF NOT EXISTS student_group_activities (
+       id SERIAL PRIMARY KEY,
+       group_number INTEGER NOT NULL,
+       activity_type VARCHAR(40) NOT NULL,
+       title TEXT,
+       patient_id VARCHAR(255),
+       hospital_number VARCHAR(100),
+       activity_date DATE DEFAULT CURRENT_DATE,
+       recorded_by VARCHAR(255),
+       notes TEXT,
+       created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+     )`,
+    `CREATE TABLE IF NOT EXISTS student_training_progress (
+       id SERIAL PRIMARY KEY,
+       student_id INTEGER NOT NULL,
+       kind VARCHAR(30) NOT NULL,          -- 'cme' | 'cbt' | 'self_assessment'
+       ref_id VARCHAR(255),                -- topic/test id
+       title TEXT,
+       score NUMERIC(5,2),
+       total INTEGER,
+       created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+       UNIQUE(student_id, kind, ref_id)
+     )`,
+    `CREATE INDEX IF NOT EXISTS idx_sgp_group ON student_group_patients(group_number)`,
+    `CREATE INDEX IF NOT EXISTS idx_sga_group ON student_group_activities(group_number, activity_type)`,
+    `CREATE INDEX IF NOT EXISTS idx_stp_student ON student_training_progress(student_id, kind)`,
+  ];
+  for (const s of stmts) { try { await query(s); } catch (e) { console.warn('ensureGroupTables skipped:', e.message); } }
+  // Seed the five group rows.
+  for (let g = 1; g <= NUM_GROUPS; g++) {
+    try { await query(`INSERT INTO student_groups (group_number) VALUES ($1) ON CONFLICT (group_number) DO NOTHING`, [g]); } catch (_) {}
+  }
+  _groupSchemaReady = true;
+}
+
+// Evenly distribute all approved+active students into the 5 groups (round-robin).
+async function assignStudentGroups(body, res) {
+  await ensureGroupTables();
+  const students = (await query(
+    `SELECT id FROM students WHERE is_approved = TRUE AND is_active = TRUE ORDER BY id`
+  )).rows;
+  const counts = Array(NUM_GROUPS + 1).fill(0);
+  for (let i = 0; i < students.length; i++) {
+    const g = (i % NUM_GROUPS) + 1;
+    await query(`UPDATE students SET group_number = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`, [g, students[i].id]);
+    counts[g]++;
+  }
+  const groups = [];
+  for (let g = 1; g <= NUM_GROUPS; g++) groups.push({ group: g, members: counts[g] });
+  return res.status(200).json({ ok: true, total: students.length, groups });
+}
+
+// Evenly assign active admitted patients across the 5 groups (round-robin).
+async function assignGroupPatients(body, res) {
+  await ensureGroupTables();
+  // Active admissions joined to patient names.
+  let patients = [];
+  try {
+    patients = (await query(
+      `SELECT a.patient_id::text AS patient_id,
+              COALESCE(a.hospital_number, p.hospital_number) AS hospital_number,
+              COALESCE(a.patient_name, TRIM(p.first_name || ' ' || p.last_name)) AS patient_name
+         FROM admissions a
+         LEFT JOIN patients p ON p.id = a.patient_id
+        WHERE a.status IN ('active','admitted') AND a.patient_id IS NOT NULL
+        ORDER BY a.admission_date DESC NULLS LAST, a.id DESC`
+    )).rows;
+  } catch (e) { console.warn('assignGroupPatients: admissions query failed:', e.message); }
+
+  let assigned = 0;
+  const perGroup = Array(NUM_GROUPS + 1).fill(0);
+  for (let i = 0; i < patients.length; i++) {
+    const g = (i % NUM_GROUPS) + 1;
+    try {
+      await query(
+        `INSERT INTO student_group_patients (group_number, patient_id, hospital_number, patient_name)
+         VALUES ($1,$2,$3,$4)
+         ON CONFLICT (group_number, patient_id) DO UPDATE SET is_active = TRUE, hospital_number = EXCLUDED.hospital_number, patient_name = EXCLUDED.patient_name`,
+        [g, patients[i].patient_id, patients[i].hospital_number || null, patients[i].patient_name || null]
+      );
+      perGroup[g]++; assigned++;
+    } catch (e) { console.warn('assignGroupPatients insert skipped:', e.message); }
+  }
+  const groups = [];
+  for (let g = 1; g <= NUM_GROUPS; g++) groups.push({ group: g, patients: perGroup[g] });
+  return res.status(200).json({ ok: true, totalPatients: patients.length, assigned, groups });
+}
+
+async function setGroupTopic(body, res) {
+  await ensureGroupTables();
+  const { groupNumber, topicTitle } = body || {};
+  if (!groupNumber) return res.status(400).json({ error: 'groupNumber required' });
+  await query(
+    `INSERT INTO student_groups (group_number, topic_title, updated_at)
+     VALUES ($1,$2,CURRENT_TIMESTAMP)
+     ON CONFLICT (group_number) DO UPDATE SET topic_title = EXCLUDED.topic_title, updated_at = CURRENT_TIMESTAMP`,
+    [groupNumber, topicTitle || null]
+  );
+  return res.status(200).json({ ok: true });
+}
+
+async function logGroupActivity(user, body, res) {
+  await ensureGroupTables();
+  const { groupNumber, activityType, title, patientId, hospitalNumber, activityDate, notes } = body || {};
+  if (!groupNumber || !GROUP_ACTIVITY_TYPES.includes(activityType)) {
+    return res.status(400).json({ error: `groupNumber and valid activityType (${GROUP_ACTIVITY_TYPES.join(', ')}) required` });
+  }
+  await query(
+    `INSERT INTO student_group_activities (group_number, activity_type, title, patient_id, hospital_number, activity_date, recorded_by, notes)
+     VALUES ($1,$2,$3,$4,$5,COALESCE($6::date, CURRENT_DATE),$7,$8)`,
+    [groupNumber, activityType, title || null, patientId || null, hospitalNumber || null, activityDate || null,
+     user?.full_name || user?.name || null, notes || null]
+  );
+  if (activityType === 'topic_presentation') {
+    await query(
+      `UPDATE student_groups SET topic_presented = TRUE, topic_presented_at = CURRENT_TIMESTAMP,
+              topic_title = COALESCE(topic_title, $2), updated_at = CURRENT_TIMESTAMP WHERE group_number = $1`,
+      [groupNumber, title || null]
+    );
+  }
+  return res.status(201).json({ ok: true });
+}
+
+// Group requirements met from activity counts.
+function groupEligibility(activityCounts) {
+  const met = [], notMet = [];
+  const chk = (label, actual, need) => { (actual >= need ? met : notMet).push(`${label}: ${actual}/${need}`); };
+  chk('Topic presentation', activityCounts.topic_presentation || 0, STUDENT_REQ.topicPresentation);
+  chk('Patients clerked & presented', activityCounts.patient_clerking || 0, STUDENT_REQ.clerkings);
+  chk('Wound-dressing clinic', activityCounts.wound_dressing || 0, STUDENT_REQ.woundDressing);
+  chk('Wound inspection (Tue)', activityCounts.wound_inspection || 0, STUDENT_REQ.woundInspection);
+  return { eligible: notMet.length === 0, met, notMet };
+}
+
+// Full group overview with members, patients, activities, individual training,
+// and combined sign-out eligibility (group activities + each member's CBT/CME/self-assessment).
+async function getStudentGroups(res) {
+  await ensureGroupTables();
+
+  const members = (await query(
+    `SELECT id, full_name, email, matric_number, group_number
+       FROM students WHERE is_approved = TRUE AND is_active = TRUE AND group_number IS NOT NULL
+      ORDER BY group_number, full_name`
+  )).rows;
+  const groupsMeta = (await query(`SELECT * FROM student_groups ORDER BY group_number`)).rows;
+  const patients = (await query(`SELECT * FROM student_group_patients WHERE is_active = TRUE ORDER BY group_number, assigned_at DESC`)).rows;
+  const activities = (await query(
+    `SELECT group_number, activity_type, COUNT(*)::int AS cnt FROM student_group_activities GROUP BY group_number, activity_type`
+  )).rows;
+  const training = (await query(
+    `SELECT student_id, kind, COUNT(*)::int AS cnt, COALESCE(AVG(score),0)::float AS avg_score
+       FROM student_training_progress GROUP BY student_id, kind`
+  )).rows;
+
+  const trainingByStudent = new Map();
+  for (const t of training) {
+    if (!trainingByStudent.has(t.student_id)) trainingByStudent.set(t.student_id, {});
+    trainingByStudent.get(t.student_id)[t.kind] = { count: t.cnt, avg: Math.round(t.avg_score * 10) / 10 };
+  }
+
+  const groups = [];
+  for (let g = 1; g <= NUM_GROUPS; g++) {
+    const meta = groupsMeta.find(m => m.group_number === g) || { group_number: g };
+    const gmembers = members.filter(m => m.group_number === g);
+    const gpatients = patients.filter(p => p.group_number === g);
+    const acts = {};
+    for (const a of activities.filter(a => a.group_number === g)) acts[a.activity_type] = a.cnt;
+    const grpElig = groupEligibility(acts);
+
+    const memberRows = gmembers.map(m => {
+      const tr = trainingByStudent.get(m.id) || {};
+      const cbt = tr.cbt?.count || 0, cme = tr.cme?.count || 0, sa = tr.self_assessment?.count || 0;
+      const indMet = cbt >= STUDENT_REQ.cbt && cme >= STUDENT_REQ.cme && sa >= STUDENT_REQ.selfAssessment;
+      return {
+        id: m.id, full_name: m.full_name, matric_number: m.matric_number,
+        cbtCount: cbt, cbtAvg: tr.cbt?.avg || 0,
+        cmeCount: cme, selfAssessmentCount: sa, selfAssessmentAvg: tr.self_assessment?.avg || 0,
+        individualEligible: indMet,
+        signOutEligible: indMet && grpElig.eligible,
+      };
+    });
+
+    groups.push({
+      groupNumber: g,
+      topicTitle: meta.topic_title || null,
+      topicPresented: !!meta.topic_presented,
+      members: memberRows,
+      memberCount: gmembers.length,
+      patients: gpatients,
+      patientCount: gpatients.length,
+      activityCounts: acts,
+      groupEligibility: grpElig,
+      requirements: STUDENT_REQ,
+    });
+  }
+  return res.status(200).json({ groups, numGroups: NUM_GROUPS, requirements: STUDENT_REQ });
+}
+
+// Student self-service: record CME read / CBT / self-assessment participation.
+async function recordStudentTraining(studentId, body, res) {
+  await ensureGroupTables();
+  const { kind, refId, title, score, total } = body || {};
+  if (!['cme', 'cbt', 'self_assessment'].includes(kind)) {
+    return res.status(400).json({ error: "kind must be 'cme' | 'cbt' | 'self_assessment'" });
+  }
+  await query(
+    `INSERT INTO student_training_progress (student_id, kind, ref_id, title, score, total)
+     VALUES ($1,$2,$3,$4,$5,$6)
+     ON CONFLICT (student_id, kind, ref_id) DO UPDATE SET
+       score = GREATEST(COALESCE(student_training_progress.score,0), COALESCE(EXCLUDED.score,0)),
+       title = EXCLUDED.title, created_at = CURRENT_TIMESTAMP`,
+    [studentId, kind, refId || `${kind}-${Date.now()}`, title || null, score ?? null, total ?? null]
+  );
+  return res.status(201).json({ ok: true });
+}
+
+// Student's own training + group + eligibility summary.
+async function getStudentTrainingSummary(studentId, res) {
+  await ensureGroupTables();
+  const student = (await query(`SELECT id, full_name, group_number FROM students WHERE id = $1`, [studentId])).rows[0];
+  if (!student) return res.status(404).json({ error: 'Student not found' });
+  const g = student.group_number;
+  const tr = (await query(
+    `SELECT kind, COUNT(*)::int AS cnt, COALESCE(AVG(score),0)::float AS avg FROM student_training_progress WHERE student_id = $1 GROUP BY kind`,
+    [studentId]
+  )).rows;
+  const t = {}; for (const r of tr) t[r.kind] = { count: r.cnt, avg: Math.round(r.avg * 10) / 10 };
+  let grpElig = { eligible: false, met: [], notMet: ['Not assigned to a group'] };
+  if (g) {
+    const acts = {};
+    for (const a of (await query(`SELECT activity_type, COUNT(*)::int AS cnt FROM student_group_activities WHERE group_number = $1 GROUP BY activity_type`, [g])).rows) acts[a.activity_type] = a.cnt;
+    grpElig = groupEligibility(acts);
+  }
+  const cbt = t.cbt?.count || 0, cme = t.cme?.count || 0, sa = t.self_assessment?.count || 0;
+  const indMet = [];
+  const indNotMet = [];
+  (cbt >= STUDENT_REQ.cbt ? indMet : indNotMet).push(`CBT: ${cbt}/${STUDENT_REQ.cbt}`);
+  (cme >= STUDENT_REQ.cme ? indMet : indNotMet).push(`CME articles: ${cme}/${STUDENT_REQ.cme}`);
+  (sa >= STUDENT_REQ.selfAssessment ? indMet : indNotMet).push(`Self-assessment: ${sa}/${STUDENT_REQ.selfAssessment}`);
+  const eligible = grpElig.eligible && indNotMet.length === 0;
+  return res.status(200).json({
+    groupNumber: g,
+    training: { cbt: cbt, cme: cme, selfAssessment: sa, cbtAvg: t.cbt?.avg || 0, selfAssessmentAvg: t.self_assessment?.avg || 0 },
+    groupEligibility: grpElig,
+    individual: { met: indMet, notMet: indNotMet },
+    signOutEligible: eligible,
+    requirements: STUDENT_REQ,
+  });
 }
