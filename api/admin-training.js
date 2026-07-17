@@ -5,6 +5,7 @@ import { cors, authenticateRequest } from './_lib/auth.js';
 // Reuse the unified metrics function so the admin table view shows the SAME
 // numbers as the HO Tracking card view (single source of truth).
 import { getHOFullMetrics } from './ho-tracking.js';
+import { getRequirements as sharedRequirements, pctOf, computeOverall, computeEligibility as sharedEligibility } from './_lib/traineeScoring.js';
 
 const ADMIN_ROLES = ['consultant', 'super_admin', 'admin'];
 let tablesEnsured = false;
@@ -450,13 +451,9 @@ function roleToLevel(role) {
   return map[role] || 'house_officer';
 }
 
+// Single source of truth for per-level requirements (comprehensive scoring).
 function getRequirements(level) {
-  const reqs = {
-    house_officer:   { cbtTests: 4, patientEntries: 30, duties: 20, loginDays: 25, cmeTopics: 50, overallScore: 70 },
-    junior_resident: { cbtTests: 12, patientEntries: 100, duties: 60, loginDays: 75, cmeTopics: 50, overallScore: 70 },
-    senior_resident: { cbtTests: 24, patientEntries: 200, duties: 120, loginDays: 150, cmeTopics: 50, overallScore: 70 },
-  };
-  return reqs[level] || reqs.house_officer;
+  return sharedRequirements(level);
 }
 
 async function getTraineeMetrics(userId, level, fullName, username) {
@@ -489,20 +486,30 @@ async function getTraineeMetrics(userId, level, fullName, username) {
   const m = hoResult.metrics || {};
   const cbtCompleted = m.cbtTestsCompleted || 0;
   const cbtAvgScore = m.cbtAvgScore || 0;
+  const selfAssessmentCount = m.selfAssessmentsCompleted || 0;
+  const selfAssessmentAvg = m.selfAssessmentAvgScore || 0;
   const patientCount = m.patientEntries || 0;     // distinct patients served
   const dutiesCount = m.dutiesCompleted || 0;
   const loginDays = m.loginDays || 0;
   const cmeCount = m.cmeTopicsCompleted || 0;
 
-  // Re-score using level-specific requirements
-  const patientScore = Math.min(100, (patientCount / reqs.patientEntries) * 100);
-  const dutyScore = Math.min(100, (dutiesCount / reqs.duties) * 100);
-  const attendanceScore = Math.min(100, (loginDays / reqs.loginDays) * 100);
-  const overallScore = (cbtAvgScore * 0.30) + (patientScore * 0.35) + (dutyScore * 0.25) + (attendanceScore * 0.10);
+  // Re-score using level-specific requirements + the shared comprehensive formula.
+  const cmeScore = pctOf(cmeCount, reqs.cmeTopics);
+  const patientScore = pctOf(patientCount, reqs.patients);
+  const dutyScore = pctOf(dutiesCount, reqs.duties);
+  const attendanceScore = pctOf(loginDays, reqs.loginDays);
+  const components = {
+    cme: cmeScore, cbt: cbtAvgScore, selfAssessment: selfAssessmentAvg,
+    clinical: patientScore, duties: dutyScore, attendance: attendanceScore,
+  };
+  const overallScore = computeOverall(components);
 
   return {
     cbtTestsCompleted: cbtCompleted,
     cbtAvgScore: Math.round(cbtAvgScore * 10) / 10,
+    selfAssessmentsCompleted: selfAssessmentCount,
+    selfAssessmentAvgScore: Math.round(selfAssessmentAvg * 10) / 10,
+    selfAssessmentScore: Math.round(selfAssessmentAvg * 10) / 10,
     patientEntries: patientCount,
     patientScore: Math.round(patientScore * 10) / 10,
     dutiesCompleted: dutiesCount,
@@ -510,7 +517,8 @@ async function getTraineeMetrics(userId, level, fullName, username) {
     loginDays,
     attendanceScore: Math.round(attendanceScore * 10) / 10,
     cmeTopicsCompleted: cmeCount,
-    overallScore: Math.round(overallScore * 10) / 10,
+    cmeScore: Math.round(cmeScore * 10) / 10,
+    overallScore,
   };
 }
 
@@ -755,23 +763,21 @@ async function backfillRotation(userId, level, startDate) {
 }
 
 function computeEligibility(metrics, reqs) {
-  const met = [];
-  const notMet = [];
-
-  if (metrics.cbtTestsCompleted >= reqs.cbtTests) met.push(`CBT: ${metrics.cbtTestsCompleted}/${reqs.cbtTests}`);
-  else notMet.push(`CBT: ${metrics.cbtTestsCompleted}/${reqs.cbtTests}`);
-
-  if (metrics.patientEntries >= reqs.patientEntries) met.push(`Patients: ${metrics.patientEntries}/${reqs.patientEntries}`);
-  else notMet.push(`Patients: ${metrics.patientEntries}/${reqs.patientEntries}`);
-
-  if (metrics.dutiesCompleted >= reqs.duties) met.push(`Duties: ${metrics.dutiesCompleted}/${reqs.duties}`);
-  else notMet.push(`Duties: ${metrics.dutiesCompleted}/${reqs.duties}`);
-
-  if (metrics.loginDays >= reqs.loginDays) met.push(`Attendance: ${metrics.loginDays}/${reqs.loginDays}`);
-  else notMet.push(`Attendance: ${metrics.loginDays}/${reqs.loginDays}`);
-
-  if (metrics.overallScore >= reqs.overallScore) met.push(`Overall: ${metrics.overallScore}%`);
-  else notMet.push(`Overall: ${metrics.overallScore}% (need ${reqs.overallScore}%)`);
-
-  return { eligible: notMet.length === 0, met, notMet };
+  const counts = {
+    cmeTopics: metrics.cmeTopicsCompleted || 0,
+    cbtTests: metrics.cbtTestsCompleted || 0,
+    selfAssessments: metrics.selfAssessmentsCompleted || 0,
+    patients: metrics.patientEntries || 0,
+    duties: metrics.dutiesCompleted || 0,
+    loginDays: metrics.loginDays || 0,
+  };
+  const components = {
+    cme: metrics.cmeScore || 0,
+    cbt: metrics.cbtAvgScore || 0,
+    selfAssessment: metrics.selfAssessmentAvgScore || 0,
+    clinical: metrics.patientScore || 0,
+    duties: metrics.dutyScore || 0,
+    attendance: metrics.attendanceScore || 0,
+  };
+  return sharedEligibility(counts, components, reqs, metrics.overallScore || 0);
 }

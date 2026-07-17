@@ -24,6 +24,8 @@ interface CMEArticleViewerProps {
   onBack: () => void;
   onComplete: () => void;
   isCompleted: boolean;
+  /** Called when the trainee submits the self-assessment, with their score. */
+  onSelfAssessment?: (result: { topicId: string; correct: number; total: number }) => void;
 }
 
 type TabType = 'article' | 'keypoints' | 'mcq';
@@ -45,7 +47,8 @@ const CMEArticleViewer: React.FC<CMEArticleViewerProps> = ({
   topic,
   onBack,
   onComplete,
-  isCompleted
+  isCompleted,
+  onSelfAssessment
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>('article');
   const [expandedSections, setExpandedSections] = useState<Set<number>>(new Set([0]));
@@ -214,10 +217,14 @@ const CMEArticleViewer: React.FC<CMEArticleViewerProps> = ({
 
   const handleSubmitMCQ = () => {
     setShowResults(true);
+    // Record the self-assessment score (persisted + scored toward sign-out).
+    const total = article.selfAssessment?.length || 0;
+    const correct = article.selfAssessment?.filter(q => mcqAnswers.get(q.id) === q.correctAnswer).length || 0;
+    if (total > 0 && onSelfAssessment) {
+      onSelfAssessment({ topicId: String(topic.id), correct, total });
+    }
     // Check if all answers are correct AND article was fully read
-    const allCorrect = article.selfAssessment?.every(q => 
-      mcqAnswers.get(q.id) === q.correctAnswer
-    );
+    const allCorrect = total > 0 && correct === total;
     if (allCorrect && !isCompleted && articleFullyRead) {
       onComplete();
     }

@@ -19,6 +19,9 @@ export default async function handler(req, res) {
       case 'GET':
         return await getProgress(req, res, userId);
       case 'POST':
+        if (req.body && req.body.action === 'self-assessment') {
+          return await saveSelfAssessment(req, res, userId);
+        }
         return await saveProgress(req, res, userId);
       default:
         res.setHeader('Allow', ['GET', 'POST']);
@@ -56,11 +59,57 @@ async function getProgress(req, res, userId) {
     console.warn('training-progress: cbt_attempts aggregate skipped:', e.message);
   }
   
+  // Self-assessment aggregate (best score per topic).
+  let selfAssessment = { count: 0, average: 0, topics: [] };
+  try {
+    const sa = await query(
+      `SELECT COUNT(*)::int AS count, COALESCE(AVG(percentage), 0)::float AS average
+         FROM self_assessment_attempts WHERE user_id = $1`, [userId]
+    );
+    const topics = await query(
+      `SELECT topic_id, percentage, passed, attempts, completed_at
+         FROM self_assessment_attempts WHERE user_id = $1 ORDER BY completed_at DESC`, [userId]
+    );
+    selfAssessment = { count: sa.rows[0].count, average: Math.round(sa.rows[0].average * 10) / 10, topics: topics.rows };
+  } catch (e) {
+    console.warn('training-progress: self_assessment aggregate skipped:', e.message);
+  }
+
   return res.status(200).json({
     completedTopics,
     progress: result.rows,
-    cbtProgress: cbtRows
+    cbtProgress: cbtRows,
+    selfAssessment
   });
+}
+
+async function saveSelfAssessment(req, res, userId) {
+  const { topicId, level, correct, total } = req.body;
+  if (!topicId || !total) {
+    return res.status(400).json({ error: 'topicId and total are required' });
+  }
+  await ensureTableExists();
+  const pct = Math.round((Number(correct || 0) / Number(total)) * 10000) / 100; // 2dp
+  const passed = pct >= 70;
+  const result = await query(
+    `INSERT INTO self_assessment_attempts (user_id, topic_id, level, correct, total, percentage, passed, attempts, completed_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, 1, CURRENT_TIMESTAMP)
+     ON CONFLICT (user_id, topic_id) DO UPDATE SET
+       attempts = self_assessment_attempts.attempts + 1,
+       correct = CASE WHEN EXCLUDED.percentage > self_assessment_attempts.percentage THEN EXCLUDED.correct ELSE self_assessment_attempts.correct END,
+       total = EXCLUDED.total,
+       percentage = GREATEST(self_assessment_attempts.percentage, EXCLUDED.percentage),
+       passed = (GREATEST(self_assessment_attempts.percentage, EXCLUDED.percentage) >= 70),
+       completed_at = CURRENT_TIMESTAMP
+     RETURNING *`,
+    [userId, topicId, level || 'house_officer', Number(correct || 0), Number(total), pct, passed]
+  );
+  await query(
+    `INSERT INTO activity_logs (user_id, activity_type, description, points, metadata, created_at)
+     VALUES ($1, 'self_assessment', $2, $3, $4, CURRENT_TIMESTAMP)`,
+    [userId, `Self-assessment: ${topicId} (${pct}%)`, Math.round(pct / 10), JSON.stringify({ topicId, level, correct, total, percentage: pct })]
+  ).catch(() => {});
+  return res.status(201).json({ success: true, record: result.rows[0] });
 }
 
 async function saveProgress(req, res, userId) {
@@ -108,4 +157,22 @@ async function ensureTableExists() {
   await query(`
     CREATE INDEX IF NOT EXISTS idx_training_progress_user ON training_progress(user_id)
   `).catch(() => {});
+
+  // Self-assessment attempts (best score kept per topic).
+  await query(`
+    CREATE TABLE IF NOT EXISTS self_assessment_attempts (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER,
+      topic_id VARCHAR(255) NOT NULL,
+      level VARCHAR(50) DEFAULT 'house_officer',
+      correct INTEGER DEFAULT 0,
+      total INTEGER DEFAULT 0,
+      percentage NUMERIC(5,2) DEFAULT 0,
+      passed BOOLEAN DEFAULT false,
+      attempts INTEGER DEFAULT 1,
+      completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id, topic_id)
+    )
+  `).catch(() => {});
+  await query(`CREATE INDEX IF NOT EXISTS idx_self_assessment_user ON self_assessment_attempts(user_id)`).catch(() => {});
 }

@@ -2,6 +2,8 @@
 // Manages admin rotation settings, responsibilities, and analytics
 import { query } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
+import { getRequirements as sharedRequirements, pctOf, computeOverall, computeEligibility } from './_lib/traineeScoring.js';
+import { getHOFullMetrics } from './ho-tracking.js';
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
@@ -312,13 +314,8 @@ async function computeTraineeAnalytics(userId) {
     
     const level = user.training_level || mapRoleToLevel(user.role);
     
-    // Requirements by level
-    const requirements = {
-      'house_officer': { cbtTests: 4, patientEntries: 30, duties: 20, loginDays: 25 },
-      'junior_resident': { cbtTests: 12, patientEntries: 100, duties: 60, loginDays: 75 },
-      'senior_resident': { cbtTests: 24, patientEntries: 200, duties: 120, loginDays: 150 }
-    };
-    const reqs = requirements[level] || requirements['house_officer'];
+    // Requirements by level — single source of truth (comprehensive scoring).
+    const reqs = sharedRequirements(level);
     
     // Get rotation info
     const rotationResult = await query(
@@ -354,50 +351,36 @@ async function computeTraineeAnalytics(userId) {
       progressPercent = totalDays > 0 ? Math.min(100, Math.round((daysElapsed / totalDays) * 100)) : 0;
     }
     
-    // CBT stats
-    const cbtResult = await query(
-      `SELECT COUNT(*) as count, COALESCE(AVG(percentage), 0) as avg_score
-       FROM cbt_attempts WHERE user_id = $1 AND completed = true`,
-      [userId]
-    );
-    const cbtTestsCompleted = parseInt(cbtResult.rows[0].count) || 0;
-    const cbtScore = parseFloat(cbtResult.rows[0].avg_score) || 0;
-    
-    // Patient care stats
-    const patientResult = await query(
-      `SELECT COUNT(*) as count, COALESCE(SUM(points), 0) as total_points
-       FROM activity_logs WHERE user_id = $1 
-       AND activity_type IN ('patient_entry', 'patient_update', 'treatment_plan', 'prescription', 'wound_care', 'surgery_booking', 'lab_order', 'discharge_summary', 'ward_round')`,
-      [userId]
-    );
-    const patientEntries = parseInt(patientResult.rows[0].count) || 0;
-    const expectedPoints = { house_officer: 300, junior_resident: 1000, senior_resident: 2000 };
-    const patientCareScore = Math.min(100, ((parseInt(patientResult.rows[0].total_points) || 0) / (expectedPoints[level] || 300)) * 100);
-    
-    // Duty stats
-    const dutyResult = await query(
-      `SELECT COUNT(*) as count, COALESCE(AVG(promptness_score), 0) as avg_score
-       FROM duty_assignments WHERE user_id = $1 AND status = 'completed'`,
-      [userId]
-    );
-    const dutiesCompleted = parseInt(dutyResult.rows[0].count) || 0;
-    const dutyPromptnessScore = parseFloat(dutyResult.rows[0].avg_score) || 0;
-    
-    // Attendance
-    const loginResult = await query(
-      `SELECT COUNT(DISTINCT DATE(created_at)) as count
-       FROM activity_logs WHERE user_id = $1 AND activity_type = 'login'`,
-      [userId]
-    );
-    const loginDays = parseInt(loginResult.rows[0].count) || 0;
+    // Pull the SAME unified metrics the HO Tracking + Training Admin views use,
+    // so the trainee's own score matches exactly. Then re-score with this
+    // trainee's level requirements via the shared comprehensive formula.
+    let hoMetrics = {};
+    try {
+      const hoResult = await getHOFullMetrics(userId, user.full_name, user.username);
+      hoMetrics = hoResult.metrics || {};
+    } catch (e) { console.warn('[rotation-config] getHOFullMetrics failed:', e?.message || e); }
+
+    const cbtTestsCompleted = hoMetrics.cbtTestsCompleted || 0;
+    const cbtScore = hoMetrics.cbtAvgScore || 0;
+    const selfAssessmentsCompleted = hoMetrics.selfAssessmentsCompleted || 0;
+    const selfAssessmentScore = hoMetrics.selfAssessmentAvgScore || 0;
+    const patientEntries = hoMetrics.patientEntries || 0;   // distinct patients served
+    const dutiesCompleted = hoMetrics.dutiesCompleted || 0;
+    const loginDays = hoMetrics.loginDays || 0;
+    const cmeTopicsCompleted = hoMetrics.cmeTopicsCompleted || 0;
     const loginDaysRequired = reqs.loginDays;
-    const attendanceScore = Math.min(100, (loginDays / loginDaysRequired) * 100);
-    
-    // Overall weighted score
-    const overallScore = Math.round(
-      (cbtScore * 0.30) + (patientCareScore * 0.35) + (dutyPromptnessScore * 0.25) + (attendanceScore * 0.10)
-    );
-    
+
+    // Component scores (0–100) for this trainee's level.
+    const cmeScoreComp = pctOf(cmeTopicsCompleted, reqs.cmeTopics);
+    const patientCareScore = pctOf(patientEntries, reqs.patients);
+    const dutyPromptnessScore = pctOf(dutiesCompleted, reqs.duties);
+    const attendanceScore = pctOf(loginDays, reqs.loginDays);
+    const components = {
+      cme: cmeScoreComp, cbt: cbtScore, selfAssessment: selfAssessmentScore,
+      clinical: patientCareScore, duties: dutyPromptnessScore, attendance: attendanceScore,
+    };
+    const overallScore = Math.round(computeOverall(components));
+
     // Responsibilities
     let assignedResponsibilities = 0, completedResponsibilities = 0, pendingResponsibilities = 0;
     try {
@@ -415,39 +398,25 @@ async function computeTraineeAnalytics(userId) {
     } catch (e) { /* table may not exist */ }
     
     // CME progress
-    let topicsCompleted = 0;
-    try {
-      const cmeResult = await query(
-        `SELECT COUNT(*) as count FROM training_progress WHERE user_id = $1`,
-        [userId]
-      );
-      topicsCompleted = parseInt(cmeResult.rows[0].count) || 0;
-    } catch (e) { /* table may not exist */ }
-    
-    const totalTopics = level === 'house_officer' ? 50 : level === 'junior_resident' ? 80 : 100;
+    const topicsCompleted = cmeTopicsCompleted;
+    const totalTopics = reqs.cmeTopics;
     const cmeProgress = totalTopics > 0 ? Math.min(100, Math.round((topicsCompleted / totalTopics) * 100)) : 0;
-    
-    // Sign-out eligibility
-    const requirementsMet = [];
-    const requirementsNotMet = [];
-    
-    if (cbtTestsCompleted >= reqs.cbtTests) requirementsMet.push(`CBT: ${cbtTestsCompleted}/${reqs.cbtTests}`);
-    else requirementsNotMet.push(`CBT: ${cbtTestsCompleted}/${reqs.cbtTests}`);
-    
-    if (patientEntries >= reqs.patientEntries) requirementsMet.push(`Patients: ${patientEntries}/${reqs.patientEntries}`);
-    else requirementsNotMet.push(`Patients: ${patientEntries}/${reqs.patientEntries}`);
-    
-    if (dutiesCompleted >= reqs.duties) requirementsMet.push(`Duties: ${dutiesCompleted}/${reqs.duties}`);
-    else requirementsNotMet.push(`Duties: ${dutiesCompleted}/${reqs.duties}`);
-    
-    if (loginDays >= reqs.loginDays) requirementsMet.push(`Attendance: ${loginDays}/${reqs.loginDays}`);
-    else requirementsNotMet.push(`Attendance: ${loginDays}/${reqs.loginDays}`);
-    
-    if (overallScore >= 70) requirementsMet.push(`Score: ${overallScore}% (≥70%)`);
-    else requirementsNotMet.push(`Score: ${overallScore}% (need 70%)`);
-    
-    const signOutEligible = requirementsNotMet.length === 0;
-    
+
+    // Sign-out eligibility — comprehensive shared formula (CME + CBT +
+    // self-assessment + clinical + duties + attendance, with section minimums).
+    const counts = {
+      cmeTopics: topicsCompleted,
+      cbtTests: cbtTestsCompleted,
+      selfAssessments: selfAssessmentsCompleted,
+      patients: patientEntries,
+      duties: dutiesCompleted,
+      loginDays,
+    };
+    const eligibility = computeEligibility(counts, components, reqs, overallScore);
+    const requirementsMet = eligibility.met;
+    const requirementsNotMet = eligibility.notMet;
+    const signOutEligible = eligibility.eligible;
+
     return {
       userId: user.id,
       userName: user.full_name || 'Unknown',
@@ -463,9 +432,12 @@ async function computeTraineeAnalytics(userId) {
       cbtScore: Math.round(cbtScore),
       cbtTestsCompleted,
       cbtTestsRequired: reqs.cbtTests,
+      selfAssessmentScore: Math.round(selfAssessmentScore),
+      selfAssessmentsCompleted,
+      selfAssessmentsRequired: reqs.selfAssessments,
       patientCareScore: Math.round(patientCareScore),
       patientEntries,
-      patientEntriesRequired: reqs.patientEntries,
+      patientEntriesRequired: reqs.patients,
       dutyPromptnessScore: Math.round(dutyPromptnessScore),
       dutiesCompleted,
       dutiesRequired: reqs.duties,

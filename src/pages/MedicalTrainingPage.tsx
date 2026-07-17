@@ -214,6 +214,28 @@ const MedicalTrainingPage: React.FC = () => {
     }
   };
 
+  // Persist the trainee's self-assessment score (feeds the comprehensive
+  // sign-out score shown here and in Training Admin / HO Tracking).
+  const handleSelfAssessment = async (result: { topicId: string; correct: number; total: number }) => {
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) return;
+      await apiClient.post('/training-progress', {
+        action: 'self-assessment',
+        topicId: result.topicId,
+        level: activeTab,
+        correct: result.correct,
+        total: result.total,
+      });
+      try {
+        const { broadcastChange } = await import('../utils/crossTabSync');
+        broadcastChange('training');
+      } catch { /* non-fatal */ }
+    } catch (error) {
+      console.warn('⚠️ Failed to save self-assessment score (will retry later):', error);
+    }
+  };
+
   const totalTopics = modules.reduce((sum, m) => sum + m.topics.length, 0);
   const completedCount = Array.from(completedTopics).filter(id => 
     modules.some(m => m.topics.some(t => t.id === id))
@@ -250,6 +272,7 @@ const MedicalTrainingPage: React.FC = () => {
         onBack={() => setSelectedTopic(null)}
         onComplete={() => handleTopicComplete(selectedTopic.id)}
         isCompleted={completedTopics.has(selectedTopic.id)}
+        onSelfAssessment={handleSelfAssessment}
       />
     );
   }

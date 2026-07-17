@@ -2,6 +2,7 @@
 // Provides detailed HO documentation logs, patient care metrics, and sign-out eligibility
 import { query } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
+import { getRequirements, pctOf, computeOverall, computeEligibility } from './_lib/traineeScoring.js';
 
 const ADMIN_ROLES = ['consultant', 'super_admin', 'admin', 'senior_registrar'];
 
@@ -715,43 +716,60 @@ async function getHOFullMetrics(userId, fullName, username) {
   );
   cmeCount += parseInt(cmeProgRow.cnt) || 0;
 
+  // ── 6b. Self-assessment (best score per topic) ──
+  const saRow = await safeQuery(
+    `SELECT COUNT(*) as cnt, COALESCE(AVG(percentage), 0) as avg
+       FROM self_assessment_attempts WHERE user_id = $1 OR user_id::text = $2`,
+    [uidInt, uid], { cnt: 0, avg: 0 }
+  );
+  const selfAssessmentCount = parseInt(saRow.cnt) || 0;
+  const selfAssessmentAvgScore = parseFloat(saRow.avg) || 0;
+
   // ── 7. Assigned patients (house_officer_id is VARCHAR, so cast uidInt to text) ──
   const assignedCount = await safeQuery(
     `SELECT COUNT(*) as cnt FROM patient_assignments WHERE (house_officer_id = $1::text OR house_officer_id = $2) AND is_active = true`, [uidInt, uid], { cnt: 0 }
   );
 
-  // ── Calculate Scores ──
-  // Use distinctPatientsServed for scoring (more realistic than raw entry count)
-  const reqs = { cbtTests: 4, patientEntries: 30, duties: 20, loginDays: 25, overallScore: 70 };
-  const patientScore = Math.min(100, (distinctPatientsServed / reqs.patientEntries) * 100);
-  const dutyScore = Math.min(100, (dutiesCompleted / reqs.duties) * 100);
-  const attendanceScore = Math.min(100, (loginDays / reqs.loginDays) * 100);
-  const overallScore = (cbtAvgScore * 0.30) + (patientScore * 0.35) + (dutyScore * 0.25) + (attendanceScore * 0.10);
+  // ── Calculate Scores (comprehensive, shared formula) ──
+  // HO Tracking is house-officer level; admin-training re-scores per level using
+  // the same shared module. Component scores are each 0–100.
+  const reqs = getRequirements('house_officer');
+  const cmeScore = pctOf(cmeCount, reqs.cmeTopics);
+  const patientScore = pctOf(distinctPatientsServed, reqs.patients);
+  const dutyScore = pctOf(dutiesCompleted, reqs.duties);
+  const attendanceScore = pctOf(loginDays, reqs.loginDays);
+  const components = {
+    cme: cmeScore,
+    cbt: cbtAvgScore,
+    selfAssessment: selfAssessmentAvgScore,
+    clinical: patientScore,
+    duties: dutyScore,
+    attendance: attendanceScore,
+  };
+  const counts = {
+    cmeTopics: cmeCount,
+    cbtTests: cbtCompleted,
+    selfAssessments: selfAssessmentCount,
+    patients: distinctPatientsServed,
+    duties: dutiesCompleted,
+    loginDays,
+  };
+  const overallScore = computeOverall(components);
+  const eligibility = computeEligibility(counts, components, reqs, overallScore);
 
-  // Eligibility — use distinct patients, not raw entries
-  const met = [];
-  const notMet = [];
-  if (cbtCompleted >= reqs.cbtTests) met.push(`CBT: ${cbtCompleted}/${reqs.cbtTests}`);
-  else notMet.push(`CBT: ${cbtCompleted}/${reqs.cbtTests}`);
-  if (distinctPatientsServed >= reqs.patientEntries) met.push(`Patients served: ${distinctPatientsServed}/${reqs.patientEntries}`);
-  else notMet.push(`Patients served: ${distinctPatientsServed}/${reqs.patientEntries}`);
-  if (dutiesCompleted >= reqs.duties) met.push(`Duties: ${dutiesCompleted}/${reqs.duties}`);
-  else notMet.push(`Duties: ${dutiesCompleted}/${reqs.duties}`);
-  if (loginDays >= reqs.loginDays) met.push(`Attendance: ${loginDays}/${reqs.loginDays}`);
-  else notMet.push(`Attendance: ${loginDays}/${reqs.loginDays}`);
-  if (overallScore >= reqs.overallScore) met.push(`Overall: ${Math.round(overallScore)}%`);
-  else notMet.push(`Overall: ${Math.round(overallScore)}% (need ${reqs.overallScore}%)`);
+  console.log(`[HO-Metrics] User ${uid} (${fullName}): CBT=${cbtCompleted}(${Math.round(cbtAvgScore)}%), SelfA=${selfAssessmentCount}(${Math.round(selfAssessmentAvgScore)}%), WR=${wardRoundsDocumented}, Patients=${distinctPatientsServed}, Duties=${dutiesCompleted}, Logins=${loginDays}, CME=${cmeCount}, Overall=${Math.round(overallScore)}%, Rotation=${rotationStart || 'none'}`);
 
-  // Debug log for troubleshooting
-  console.log(`[HO-Metrics] User ${uid} (${fullName}): CBT=${cbtCompleted}, WR=${wardRoundsDocumented}, Rx=${prescriptionsWritten}, Labs=${labOrdersPlaced}, Docs=${totalDocumentation}, Patients=${distinctPatientsServed}, Duties=${dutiesCompleted}, Logins=${loginDays}, CME=${cmeCount}, Overall=${Math.round(overallScore)}%, Rotation=${rotationStart || 'none'}`);
-
+  const bd = (score, weight) => ({ score: Math.round(score * 10) / 10, weight, contribution: Math.round(score * weight * 10) / 10 });
   return {
     metrics: {
       cbtTestsCompleted: cbtCompleted,
       cbtAvgScore: Math.round(cbtAvgScore * 10) / 10,
       cbtBestScore: Math.round(parseFloat(cbt.best_score || 0) * 10) / 10,
       cbtWorstScore: Math.round(parseFloat(cbt.worst_score || 0) * 10) / 10,
+      selfAssessmentsCompleted: selfAssessmentCount,
+      selfAssessmentAvgScore: Math.round(selfAssessmentAvgScore * 10) / 10,
       cmeTopicsCompleted: cmeCount,
+      cmeScore: Math.round(cmeScore * 10) / 10,
       wardRoundsDocumented,
       prescriptionsWritten,
       labOrdersPlaced,
@@ -761,21 +779,19 @@ async function getHOFullMetrics(userId, fullName, username) {
       dutiesCompleted,
       loginDays,
       assignedPatients: parseInt(assignedCount.cnt) || 0,
-      overallScore: Math.round(overallScore * 10) / 10,
-      // Score breakdown for transparency
+      overallScore,
+      // Score breakdown for transparency (comprehensive weights)
       scoreBreakdown: {
-        cbt: { score: Math.round(cbtAvgScore * 10) / 10, weight: 0.30, contribution: Math.round(cbtAvgScore * 0.30 * 10) / 10 },
-        patientCare: { score: Math.round(patientScore * 10) / 10, weight: 0.35, contribution: Math.round(patientScore * 0.35 * 10) / 10 },
-        duties: { score: Math.round(dutyScore * 10) / 10, weight: 0.25, contribution: Math.round(dutyScore * 0.25 * 10) / 10 },
-        attendance: { score: Math.round(attendanceScore * 10) / 10, weight: 0.10, contribution: Math.round(attendanceScore * 0.10 * 10) / 10 },
+        cme: bd(cmeScore, 0.15),
+        cbt: bd(cbtAvgScore, 0.20),
+        selfAssessment: bd(selfAssessmentAvgScore, 0.15),
+        patientCare: bd(patientScore, 0.30),
+        duties: bd(dutyScore, 0.10),
+        attendance: bd(attendanceScore, 0.10),
       },
       rotationStart: rotationStart || null,
     },
-    eligibility: {
-      eligible: notMet.length === 0,
-      met,
-      notMet,
-    },
+    eligibility,
     requirements: reqs,
   };
 }
