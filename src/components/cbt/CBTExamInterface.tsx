@@ -624,11 +624,13 @@ const CBTExamInterface: React.FC<CBTExamInterfaceProps> = ({ test, attempt, onSu
               </span>
             </div>
             
-            {/* Clinical Scenario */}
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 md:p-8 mb-6">
-              <h3 className="text-sm font-semibold text-blue-800 mb-3 uppercase tracking-wide">Clinical Scenario</h3>
-              <p className="text-blue-900 text-lg md:text-xl leading-relaxed whitespace-pre-wrap break-words">{question.clinicalScenario}</p>
-            </div>
+            {/* Clinical Scenario (only when present) */}
+            {question.clinicalScenario && question.clinicalScenario.trim() && (
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 md:p-8 mb-6">
+                <h3 className="text-sm font-semibold text-blue-800 mb-3 uppercase tracking-wide">Clinical Scenario</h3>
+                <p className="text-blue-900 text-base sm:text-lg md:text-xl leading-relaxed whitespace-pre-wrap break-words">{question.clinicalScenario}</p>
+              </div>
+            )}
             
             {/* Question */}
             <div className="mb-8 bg-gray-50 border border-gray-200 rounded-xl p-5 md:p-8">

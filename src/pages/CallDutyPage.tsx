@@ -44,6 +44,7 @@ import {
 } from '../services/callDutyService';
 import { useAuthStore } from '../store/authStore';
 import { format, parseISO, isSameDay } from 'date-fns';
+import PhoneActions from '../components/PhoneActions';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -103,6 +104,7 @@ export default function CallDutyPage() {
   const [seniorRegs, setSeniorRegs] = useState<StaffMember[]>([]);
   const [registrars, setRegistrars] = useState<StaffMember[]>([]);
   const [houseOfficers, setHouseOfficers] = useState<StaffMember[]>([]);
+  const [consultants, setConsultants] = useState<StaffMember[]>([]);
   const [staffLoaded, setStaffLoaded] = useState(false);
 
   // ── Handover notes state ────────────────────────────────────────────
@@ -156,14 +158,16 @@ export default function CallDutyPage() {
   const loadStaff = useCallback(async () => {
     if (staffLoaded) return;
     try {
-      const [sr, r, ho] = await Promise.all([
+      const [sr, r, ho, cons] = await Promise.all([
         callDutyService.getStaffByRole('senior_registrar'),
         callDutyService.getStaffByRole('junior_registrar'),
         callDutyService.getStaffByRole('house_officer'),
+        callDutyService.getStaffByRole('consultant'),
       ]);
       setSeniorRegs(sr);
       setRegistrars(r);
       setHouseOfficers(ho);
+      setConsultants(cons);
       setStaffLoaded(true);
     } catch {
       // ignore
@@ -759,6 +763,60 @@ export default function CallDutyPage() {
           </button>
         </div>
       )}
+
+      {/* ─── On-Call Team Contacts (phones) ─────────────────────────────── */}
+      {!loading && shifts.length > 0 && (() => {
+        const now = new Date();
+        const todayShift = shifts.find(s => { try { return now >= parseISO(s.start_date) && now < parseISO(s.end_date); } catch { return false; } });
+        const srPhone = todayShift?.senior_registrar_phone || seniorRegs.find(u => u.id === todayShift?.senior_registrar_id)?.phone || '';
+        const rPhone = todayShift?.registrar_phone || registrars.find(u => u.id === todayShift?.registrar_id)?.phone || '';
+        const contacts: { role: string; name?: string; phone?: string; color: string }[] = todayShift ? [
+          { role: 'Senior Registrar', name: todayShift.senior_registrar_name, phone: srPhone, color: 'text-purple-700' },
+          { role: 'Registrar', name: todayShift.registrar_name, phone: rPhone, color: 'text-blue-700' },
+          { role: 'House Officer (Ward)', name: todayShift.ho_ward_name, phone: todayShift.ho_ward_phone, color: 'text-green-700' },
+          ...(todayShift.ho_emergency_id && todayShift.ho_emergency_id !== todayShift.ho_ward_id
+            ? [{ role: 'House Officer (Emergency)', name: todayShift.ho_emergency_name, phone: todayShift.ho_emergency_phone, color: 'text-orange-700' }] : []),
+        ] : [];
+        return (
+          <div className="bg-white rounded-xl shadow-sm border p-4 mb-4">
+            <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+              <Users className="w-4 h-4 text-green-600" /> On-Call Team Contacts {todayShift ? '(today)' : ''}
+            </h3>
+            {/* Consultants */}
+            <div className="mb-3">
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Consultants</p>
+              {consultants.length === 0 ? (
+                <p className="text-xs text-gray-400">No consultants registered.</p>
+              ) : (
+                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                  {consultants.map(c => (
+                    <div key={c.id} className="text-sm flex items-center gap-1 flex-wrap">
+                      <span className="text-gray-800 font-medium">{c.full_name}</span>
+                      {c.phone ? <PhoneActions phone={c.phone} compact /> : <span className="text-xs text-gray-400">no phone</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            {/* Today's rostered team */}
+            {todayShift ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {contacts.map((c, i) => (
+                  <div key={i} className="flex items-center justify-between gap-2 border border-gray-100 rounded-lg px-3 py-1.5">
+                    <div className="text-sm min-w-0">
+                      <span className="text-gray-500">{c.role}:</span>{' '}
+                      <span className={`font-medium ${c.color}`}>{c.name || 'TBD'}</span>
+                    </div>
+                    {c.phone ? <PhoneActions phone={c.phone} compact /> : <span className="text-xs text-gray-400">no phone</span>}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-400">No shift is currently on call. See the roster below.</p>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ─── Table View ─────────────────────────────────────────────────── */}
       {!loading && shifts.length > 0 && viewMode === 'table' && (

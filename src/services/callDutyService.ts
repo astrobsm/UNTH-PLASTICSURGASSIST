@@ -16,9 +16,11 @@ export interface CallDutyShift {
   /** User ID of the senior registrar on call */
   senior_registrar_id: string;
   senior_registrar_name: string;
+  senior_registrar_phone?: string;
   /** User ID of the registrar on call */
   registrar_id: string;
   registrar_name: string;
+  registrar_phone?: string;
 
   // ── House Officer assignments ──
   /** Legacy single HO field (kept for compat) — same as ho_ward_id */
@@ -276,8 +278,10 @@ class CallDutyService {
         end_date: shiftEnd.toISOString(),
         senior_registrar_id: sr?.id || '',
         senior_registrar_name: sr?.full_name || 'TBD',
+        senior_registrar_phone: sr?.phone || '',
         registrar_id: r?.id || '',
         registrar_name: r?.full_name || 'TBD',
+        registrar_phone: r?.phone || '',
         // Legacy compat — primary HO is the ward HO
         house_officer_id: hoWard?.id || '',
         house_officer_name: hoWard?.full_name || 'TBD',

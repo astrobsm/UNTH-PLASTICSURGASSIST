@@ -198,77 +198,68 @@ const generateQuestionFromContent = (
 ): CBTQuestion => {
   const seed = (testNumber * 100) + questionNumber;
   const LETTERS: ('A' | 'B' | 'C' | 'D' | 'E')[] = ['A', 'B', 'C', 'D', 'E'];
+  void scenarioPrefix; // fabricated random scenarios removed — they were unrelated to the questions.
+
+  // A question is self-contained (its own vignette) when it already describes a case.
+  const looksLikeVignette = (t: string) =>
+    /\b(\d+\s*[-\s]?year[-\s]?old|presents?|admitted|complains?|brought to|history of|post[-\s]?op(?:erative)?|referred|develops?|on examination|following)\b/i.test(t || '');
+
+  // Turn a list of option texts (with the correct index) into a coherent A–E set.
+  const buildOptions = (opts: string[], correctIdx: number, s: number) => {
+    const cleaned = opts.map((text, i) => ({ text: (text || '').trim(), correct: i === correctIdx }))
+      .filter(o => o.text.length > 0);
+    const shuffled = shuffleWithSeed(cleaned, s).slice(0, 5);
+    const options = { A: '', B: '', C: '', D: '', E: '' } as CBTQuestion['options'];
+    let correctLetter: CBTQuestion['correctAnswer'] = 'A';
+    shuffled.forEach((o, i) => { options[LETTERS[i]] = o.text; if (o.correct) correctLetter = LETTERS[i]; });
+    return { options, correctLetter };
+  };
 
   if (selfAssessment.length > 0) {
     const saIndex = seed % selfAssessment.length;
     const sa = selfAssessment[saIndex];
-
-    // Pad to 5 options
-    const rawOptions = [...sa.options];
-    while (rawOptions.length < 5) rawOptions.push("None of the above");
-
-    // Build indexed pairs, shuffle, then find where the correct one landed
-    const indexed = rawOptions.map((text, i) => ({ text, origIdx: i }));
-    const shuffled = shuffleWithSeed(indexed, seed + saIndex);
-
-    const correctLetter = LETTERS[shuffled.findIndex(o => o.origIdx === sa.correctAnswer)];
+    const { options, correctLetter } = buildOptions(sa.options || [], sa.correctAnswer, seed + saIndex);
 
     return {
       id: `cbt-${level}-${testNumber}-${questionNumber}`,
       questionNumber,
-      clinicalScenario: scenarioPrefix + " the following clinical presentation:",
-      question: sa.question,
-      options: {
-        A: shuffled[0].text,
-        B: shuffled[1].text,
-        C: shuffled[2].text,
-        D: shuffled[3].text,
-        E: shuffled[4].text,
-      },
+      // If the question already embeds a clinical vignette, show it as the scenario
+      // and keep the stem concise; otherwise frame the question by its CME topic so
+      // the scenario and the question that follows are coherent.
+      clinicalScenario: looksLikeVignette(sa.question)
+        ? sa.question
+        : `This question assesses the principles of ${topicTitle}.`,
+      question: looksLikeVignette(sa.question)
+        ? 'Based on the clinical scenario above, select the single BEST answer:'
+        : sa.question,
+      options,
       correctAnswer: correctLetter,
-      explanation: sa.explanation,
+      explanation: sa.explanation || `Key concept from ${topicTitle}.`,
       topic: topicTitle,
       marks: 4,
     };
   }
 
-  // Generate from key points if no self-assessment available
-  const allContent = [...keyPoints, ...examTips, ...clinicalPearls];
+  // No self-assessment MCQ — build a coherent knowledge question from key content.
+  const allContent = [...keyPoints, ...examTips, ...clinicalPearls].map(s => (s || '').trim()).filter(Boolean);
   const contentIndex = seed % Math.max(allContent.length, 1);
-  const correctContent = allContent[contentIndex] || keyPoints[0] || "Standard management applies";
-
-  // Create distractors from common mistakes
-  const distractors = commonMistakes.length >= 4
-    ? commonMistakes.slice(0, 4)
-    : [
-        "Immediate surgical intervention without stabilization",
-        "Conservative management only",
-        "Delay treatment pending further investigations",
-        "Empirical broad-spectrum antibiotics alone",
-      ];
-
-  // Build 5 options with the correct one at index 0, then shuffle
-  const rawOptions = [correctContent, ...distractors.slice(0, 4)];
-  while (rawOptions.length < 5) rawOptions.push("No additional intervention required");
-
-  const indexed = rawOptions.map((text, i) => ({ text, origIdx: i }));
-  const shuffled = shuffleWithSeed(indexed, seed);
-  const correctLetter = LETTERS[shuffled.findIndex(o => o.origIdx === 0)];
+  const correctContent = allContent[contentIndex] || 'Standard evidence-based management applies';
+  const distractors = (commonMistakes.length >= 4 ? commonMistakes.slice(0, 4) : [
+    'Immediate surgical intervention without resuscitation or stabilization',
+    'Conservative management alone without further assessment',
+    'Delaying definitive treatment pending non-urgent investigations',
+    'Empirical broad-spectrum antibiotics as the sole intervention',
+  ]).map(s => (s || '').trim()).filter(Boolean);
+  const { options, correctLetter } = buildOptions([correctContent, ...distractors.slice(0, 4)], 0, seed);
 
   return {
     id: `cbt-${level}-${testNumber}-${questionNumber}`,
     questionNumber,
-    clinicalScenario: scenarioPrefix + " findings consistent with the topic area.",
-    question: `Based on this clinical scenario regarding ${topicTitle}, what is the MOST appropriate next step in management?`,
-    options: {
-      A: shuffled[0].text,
-      B: shuffled[1].text,
-      C: shuffled[2].text,
-      D: shuffled[3].text,
-      E: shuffled[4].text,
-    },
+    clinicalScenario: `This question relates to ${topicTitle}.`,
+    question: `Regarding ${topicTitle}, which of the following statements is MOST correct?`,
+    options,
     correctAnswer: correctLetter,
-    explanation: `The correct answer relates to: ${correctContent}. This is a key concept from ${topicTitle}.`,
+    explanation: `Correct answer: ${correctContent}. This is a key concept from ${topicTitle}.`,
     topic: topicTitle,
     marks: 4,
   };

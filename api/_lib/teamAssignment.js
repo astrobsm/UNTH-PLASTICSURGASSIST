@@ -137,12 +137,71 @@ export async function assignFullTeam(patientId, hospitalNumber) {
   return { consultant, senior_registrar: sr, registrar: reg, house_officer: ho };
 }
 
-/** Full pipeline: patient → admission → team. Best-effort; throws only on hard DB errors. */
+/**
+ * The senior registrar / registrar / house officer ON CALL for a given date,
+ * from the call_duty_roster shift whose [start_date, end_date] covers it.
+ * Returns null ids when no roster covers the date.
+ */
+export async function getOnCallTeam(dateISO) {
+  try {
+    const r = await query(
+      `SELECT senior_registrar_id, registrar_id, house_officer_id, ho_ward_id
+         FROM call_duty_roster
+        WHERE $1 BETWEEN start_date AND end_date
+        ORDER BY updated_at DESC NULLS LAST, id DESC
+        LIMIT 1`,
+      [dateISO]
+    );
+    const row = r.rows[0] || {};
+    return {
+      senior_registrar_id: row.senior_registrar_id || null,
+      registrar_id: row.registrar_id || null,
+      house_officer_id: row.house_officer_id || row.ho_ward_id || null,
+    };
+  } catch (e) {
+    console.warn('getOnCallTeam failed:', e.message);
+    return { senior_registrar_id: null, registrar_id: null, house_officer_id: null };
+  }
+}
+
+/**
+ * Assign a consult patient to the team ON CALL for that day: the on-call SR,
+ * registrar and house officer from the call-duty roster, plus a consultant.
+ * Falls back to the least-loaded staff for any role the roster doesn't cover
+ * (there is no consultant call rotation, so the consultant is always least-loaded).
+ */
+export async function assignOnCallTeamFromConsult(patientId, hospitalNumber) {
+  const today = new Date().toISOString().slice(0, 10);
+  const onCall = await getOnCallTeam(today);
+  const consultant = await pickLeastLoadedByRole('consultant');
+  const sr = onCall.senior_registrar_id || await pickLeastLoadedByRole('senior_registrar');
+  const reg = onCall.registrar_id || await pickLeastLoadedByRole('registrar');
+  const ho = onCall.house_officer_id || await pickLeastLoadedByRole('house_officer');
+  await query(
+    `INSERT INTO patient_assignments
+       (patient_id, hospital_number, consultant_id, senior_registrar_id, registrar_id, house_officer_id, assigned_at, is_active, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6, CURRENT_TIMESTAMP, TRUE, CURRENT_TIMESTAMP)
+     ON CONFLICT (patient_id) DO UPDATE SET
+       hospital_number     = COALESCE(EXCLUDED.hospital_number, patient_assignments.hospital_number),
+       consultant_id       = COALESCE(EXCLUDED.consultant_id, patient_assignments.consultant_id),
+       senior_registrar_id = COALESCE(EXCLUDED.senior_registrar_id, patient_assignments.senior_registrar_id),
+       registrar_id        = COALESCE(EXCLUDED.registrar_id, patient_assignments.registrar_id),
+       house_officer_id    = COALESCE(EXCLUDED.house_officer_id, patient_assignments.house_officer_id),
+       is_active = TRUE, updated_at = CURRENT_TIMESTAMP`,
+    [String(patientId), hospitalNumber || null, consultant ? String(consultant) : null,
+     sr ? String(sr) : null, reg ? String(reg) : null, ho ? String(ho) : null]
+  );
+  return { consultant, senior_registrar: sr, registrar: reg, house_officer: ho, source: 'on_call' };
+}
+
+/** Full pipeline: patient → admission → on-call team. Best-effort; throws only on hard DB errors. */
 export async function autoAdmitFromConsult(consult, user) {
   await ensureColumns();
   const patientId = await findOrCreatePatient(consult);
   await ensureActiveAdmission(patientId, consult, user?.id || null);
-  const team = await assignFullTeam(patientId, consult.hospital_number);
+  // Consult patients go to the team ON CALL for that day (SR/registrar/HO from
+  // the call-duty roster) + a consultant.
+  const team = await assignOnCallTeamFromConsult(patientId, consult.hospital_number);
   return { patientId, team };
 }
 
