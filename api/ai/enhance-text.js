@@ -5,6 +5,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import { chatCompletion, getOpenAIKey } from '../_lib/openai.js';
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -113,9 +114,7 @@ export default async function handler(req, res) {
     systemPrompt += '\n\nIMPORTANT: Preserve all numbers, measurements, vital signs, and medication names exactly as provided.';
 
     // Check if OpenAI API key is configured
-    const openaiApiKey = process.env.OPENAI_API_KEY;
-    
-    if (!openaiApiKey) {
+    if (!getOpenAIKey()) {
       // Fallback to basic local enhancement
       const enhancedText = enhanceTextLocally(text, context);
       return res.status(200).json({
@@ -126,40 +125,31 @@ export default async function handler(req, res) {
       });
     }
 
-    // Use OpenAI for enhancement
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${openaiApiKey}`
-      },
-      body: JSON.stringify({
+    // Use OpenAI for enhancement (shared helper: timeout + retry on 429/5xx).
+    let enhancedText;
+    try {
+      enhancedText = await chatCompletion({
         model: 'gpt-4o-mini',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: `Please improve the following medical text while preserving all factual information:\n\n${text}` }
         ],
         temperature: 0.3,
-        max_tokens: 2000
-      })
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error('OpenAI API error:', errorData);
-      
+        max_tokens: 2000,
+      });
+    } catch (aiErr) {
+      console.error('OpenAI API error:', aiErr.status, aiErr.message);
       // Fallback to local enhancement
-      const enhancedText = enhanceTextLocally(text, context);
+      const local = enhanceTextLocally(text, context);
       return res.status(200).json({
-        enhancedText,
+        enhancedText: local,
         confidence: 0.7,
         changes: ['Basic formatting applied (AI service error)'],
         usedAI: false
       });
     }
 
-    const aiResponse = await response.json();
-    const enhancedText = aiResponse.choices[0]?.message?.content || text;
+    enhancedText = enhancedText || text;
 
     // Calculate changes
     const changes = detectChanges(text, enhancedText);

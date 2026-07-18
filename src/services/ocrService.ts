@@ -337,37 +337,27 @@ class OCRService {
   private async prepareUploadImage(
     imageSource: File | Blob | string | HTMLImageElement | HTMLCanvasElement,
     maxDim: number = 2400,
-    quality: number = 0.85
+    quality: number = 0.85,
+    enhance: boolean = true
   ): Promise<string> {
     // Pass-through for already-encoded strings
     if (typeof imageSource === 'string') return imageSource;
 
-    // Cheap path: tiny files (< 350 KB) almost certainly don't need recompression
-    if ((imageSource instanceof File || imageSource instanceof Blob) && imageSource.size < 350 * 1024) {
+    // Cheap path only when NOT enhancing: tiny files don't need recompression.
+    if (!enhance && (imageSource instanceof File || imageSource instanceof Blob) && imageSource.size < 350 * 1024) {
       return this.imageToBase64(imageSource);
     }
 
     try {
-      // Resolve to an HTMLImageElement so we can measure + draw
-      let img: HTMLImageElement;
+      // Resolve to something drawable so we can measure, resize, and enhance.
+      let source: HTMLImageElement | HTMLCanvasElement;
       let cleanupUrl: string | null = null;
-      if (imageSource instanceof HTMLImageElement) {
-        img = imageSource;
-      } else if (imageSource instanceof HTMLCanvasElement) {
-        const long = Math.max(imageSource.width, imageSource.height);
-        if (long <= maxDim) return imageSource.toDataURL('image/jpeg', quality);
-        const scale = maxDim / long;
-        const c = document.createElement('canvas');
-        c.width = Math.round(imageSource.width * scale);
-        c.height = Math.round(imageSource.height * scale);
-        const ctx = c.getContext('2d');
-        if (!ctx) return this.imageToBase64(imageSource);
-        ctx.drawImage(imageSource, 0, 0, c.width, c.height);
-        return c.toDataURL('image/jpeg', quality);
+      if (imageSource instanceof HTMLImageElement || imageSource instanceof HTMLCanvasElement) {
+        source = imageSource;
       } else {
-        // File or Blob — decode via object URL (avoids reading whole file as base64 string in memory)
+        // File or Blob — decode via object URL (avoids holding the whole file as a base64 string)
         cleanupUrl = URL.createObjectURL(imageSource);
-        img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        source = await new Promise<HTMLImageElement>((resolve, reject) => {
           const i = new Image();
           i.onload = () => resolve(i);
           i.onerror = () => reject(new Error('Failed to decode image for compression'));
@@ -376,35 +366,83 @@ class OCRService {
       }
 
       try {
-        const w = img.naturalWidth || img.width;
-        const h = img.naturalHeight || img.height;
+        const w = (source as HTMLImageElement).naturalWidth || source.width;
+        const h = (source as HTMLImageElement).naturalHeight || source.height;
         const longEdge = Math.max(w, h);
         if (!longEdge) return this.imageToBase64(imageSource);
-        if (longEdge <= maxDim) {
-          // Already small enough — but re-encode as JPEG if it's likely a huge PNG screenshot
+
+        // Fast exit: small enough AND not enhancing → keep original bytes.
+        if (!enhance && longEdge <= maxDim) {
           if (imageSource instanceof File && /png/i.test(imageSource.type) && imageSource.size > 1024 * 1024) {
             const c = document.createElement('canvas');
             c.width = w; c.height = h;
             const ctx = c.getContext('2d');
-            if (ctx) { ctx.drawImage(img, 0, 0); return c.toDataURL('image/jpeg', quality); }
+            if (ctx) { ctx.drawImage(source, 0, 0); return c.toDataURL('image/jpeg', quality); }
           }
           return this.imageToBase64(imageSource);
         }
-        const scale = maxDim / longEdge;
+
+        const scale = longEdge > maxDim ? maxDim / longEdge : 1;
         const c = document.createElement('canvas');
         c.width = Math.round(w * scale);
         c.height = Math.round(h * scale);
         const ctx = c.getContext('2d');
         if (!ctx) return this.imageToBase64(imageSource);
-        ctx.drawImage(img, 0, 0, c.width, c.height);
+        ctx.drawImage(source, 0, 0, c.width, c.height);
+
+        // Gentle auto-level for OCR: normalises exposure/contrast on dim or backlit
+        // phone photos. Deliberately NON-destructive (percentile stretch, no
+        // binarisation) so GPT-4o Vision handwriting reading is helped, not harmed.
+        if (enhance) {
+          try { this.autoLevelForOCR(ctx, c.width, c.height); } catch { /* keep un-enhanced */ }
+        }
+
         return c.toDataURL('image/jpeg', quality);
       } finally {
         if (cleanupUrl) URL.revokeObjectURL(cleanupUrl);
       }
     } catch (err) {
-      console.warn('Image compression failed, sending original:', err);
+      console.warn('Image prepare/enhance failed, sending original:', err);
       return this.imageToBase64(imageSource);
     }
+  }
+
+  /**
+   * Mild luminance auto-level (contrast normalisation) for OCR uploads.
+   * Stretches the tonal range between the 0.5th and 99.5th luminance percentiles
+   * and applies a slight gamma lift, boosting faint pen strokes on paper without
+   * clipping detail or thresholding. Skips when the image already has good range.
+   */
+  private autoLevelForOCR(ctx: CanvasRenderingContext2D, w: number, h: number): void {
+    const img = ctx.getImageData(0, 0, w, h);
+    const d = img.data;
+    const n = w * h;
+    // Luminance histogram
+    const hist = new Uint32Array(256);
+    for (let i = 0; i < d.length; i += 4) {
+      const y = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) | 0;
+      hist[y]++;
+    }
+    const clip = Math.max(1, Math.floor(n * 0.005)); // ignore 0.5% tails
+    let lo = 0, hi = 255, acc = 0;
+    for (let v = 0; v < 256; v++) { acc += hist[v]; if (acc > clip) { lo = v; break; } }
+    acc = 0;
+    for (let v = 255; v >= 0; v--) { acc += hist[v]; if (acc > clip) { hi = v; break; } }
+    const range = hi - lo;
+    if (range < 8 || range > 245) return; // already full-range or nearly flat → leave as-is
+    const gamma = 0.9; // slight lift of mid-tones
+    const lut = new Uint8Array(256);
+    for (let v = 0; v < 256; v++) {
+      let t = (v - lo) / range;
+      t = t <= 0 ? 0 : t >= 1 ? 1 : Math.pow(t, gamma);
+      lut[v] = (t * 255) | 0;
+    }
+    for (let i = 0; i < d.length; i += 4) {
+      d[i] = lut[d[i]];
+      d[i + 1] = lut[d[i + 1]];
+      d[i + 2] = lut[d[i + 2]];
+    }
+    ctx.putImageData(img, 0, 0);
   }
 
   // ──────────────────────────────────────────────────────────

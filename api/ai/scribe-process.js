@@ -7,11 +7,12 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import { chatJSON, getOpenAIKey } from '../_lib/openai.js';
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-const supabase = supabaseUrl && supabaseServiceKey 
+const supabase = supabaseUrl && supabaseServiceKey
   ? createClient(supabaseUrl, supabaseServiceKey)
   : null;
 
@@ -114,9 +115,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Transcript is too short to process' });
     }
 
-    const openaiApiKey = process.env.OPENAI_API_KEY;
-
-    if (!openaiApiKey) {
+    if (!getOpenAIKey()) {
       // Return a flag so the client knows to use local extraction
       return res.status(200).json({
         structuredNote: null,
@@ -136,63 +135,28 @@ export default async function handler(req, res) {
     userMessage += `Context: ${contextHint}\n\n`;
     userMessage += `Transcript:\n${transcript}`;
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${openaiApiKey}`
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
+    // Scribe drives the most clinically sensitive free-text path, so use the
+    // full gpt-4o (not -mini) for best accuracy, via the shared helper
+    // (timeout + retry on 429/5xx + JSON salvage).
+    let structuredNote;
+    try {
+      structuredNote = await chatJSON({
+        model: 'gpt-4o',
         messages: [
           { role: 'system', content: SCRIBE_SYSTEM_PROMPT },
           { role: 'user', content: userMessage }
         ],
         temperature: 0.2,
         max_tokens: 3000,
-        response_format: { type: 'json_object' }
-      })
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      console.error('OpenAI API error:', errorData);
+      });
+    } catch (aiErr) {
+      console.error('Scribe AI error:', aiErr.status, aiErr.message);
       return res.status(200).json({
         structuredNote: null,
         usedAI: false,
         message: 'AI processing failed. Use local extraction.',
-        error: errorData.error?.message || 'Unknown API error'
+        error: aiErr.message
       });
-    }
-
-    const aiResponse = await response.json();
-    const content = aiResponse.choices?.[0]?.message?.content;
-
-    if (!content) {
-      return res.status(200).json({
-        structuredNote: null,
-        usedAI: false,
-        message: 'Empty AI response. Use local extraction.'
-      });
-    }
-
-    // Parse the JSON from the AI response
-    let structuredNote;
-    try {
-      structuredNote = JSON.parse(content);
-    } catch (parseError) {
-      // Try to extract JSON from markdown code block
-      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
-      if (jsonMatch) {
-        structuredNote = JSON.parse(jsonMatch[1].trim());
-      } else {
-        console.error('Failed to parse AI scribe response:', content.substring(0, 200));
-        return res.status(200).json({
-          structuredNote: null,
-          usedAI: false,
-          message: 'Failed to parse AI response. Use local extraction.'
-        });
-      }
     }
 
     // Validate essential fields

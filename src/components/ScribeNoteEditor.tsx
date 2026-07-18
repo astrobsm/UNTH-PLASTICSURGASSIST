@@ -46,6 +46,9 @@ interface ScribeNoteEditorProps {
   onApplyToForm?: (formData: Record<string, any>) => void;
   onClose: () => void;
   showApplyButton?: boolean;
+  /** When provided, enables "Save vitals to observation chart" for this patient. */
+  patientId?: string | number;
+  recordedBy?: { name?: string; role?: string };
 }
 
 export const ScribeNoteEditor: React.FC<ScribeNoteEditorProps> = ({
@@ -55,6 +58,8 @@ export const ScribeNoteEditor: React.FC<ScribeNoteEditorProps> = ({
   onApplyToForm,
   onClose,
   showApplyButton = true,
+  patientId,
+  recordedBy,
 }) => {
   const [editedNote, setEditedNote] = useState<StructuredNote>({ ...note });
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
@@ -62,6 +67,18 @@ export const ScribeNoteEditor: React.FC<ScribeNoteEditorProps> = ({
   );
   const [enhancingSection, setEnhancingSection] = useState<string | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
+  const [vitalsChartStatus, setVitalsChartStatus] = useState<'idle' | 'saving' | 'saved' | 'empty'>('idle');
+
+  // Push the (reviewed) dictated vitals onto the patient's observation chart.
+  const saveVitalsToChart = useCallback(async () => {
+    if (patientId == null) return;
+    setVitalsChartStatus('saving');
+    const saved = await medicalScribeService.saveVitalsToChart(editedNote, patientId, recordedBy);
+    setVitalsChartStatus(saved > 0 ? 'saved' : 'empty');
+    if (saved > 0) setTimeout(() => setVitalsChartStatus('idle'), 3000);
+  }, [editedNote, patientId, recordedBy]);
+
+  const hasAnyVital = Object.values(editedNote.vitals).some(v => v !== undefined && v !== null);
 
   // ─── Section Toggle ─────────────────────────────────────────────
 
@@ -413,6 +430,24 @@ export const ScribeNoteEditor: React.FC<ScribeNoteEditorProps> = ({
                   />
                 </div>
               </div>
+
+              {/* Push reviewed vitals onto the observation chart */}
+              {patientId != null && (
+                <div className="mt-3 flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={saveVitalsToChart}
+                    disabled={!hasAnyVital || vitalsChartStatus === 'saving'}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                  >
+                    {vitalsChartStatus === 'saving' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Thermometer className="w-4 h-4" />}
+                    Save vitals to observation chart
+                  </button>
+                  {vitalsChartStatus === 'saved' && <span className="text-xs text-green-600">✓ Added to chart</span>}
+                  {vitalsChartStatus === 'empty' && <span className="text-xs text-gray-500">No vitals to save</span>}
+                  <span className="text-xs text-gray-400">Review the values above first — this records a timed reading on the patient's trend chart.</span>
+                </div>
+              )}
             </div>
           )}
 

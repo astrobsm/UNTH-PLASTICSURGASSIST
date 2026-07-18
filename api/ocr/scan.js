@@ -18,6 +18,8 @@
  */
 
 import { performOCR, OCRError } from '../_lib/ocrService.js';
+import { chatCompletion } from '../_lib/openai.js';
+import { OCR_EXTRACTION_PROMPT } from '../_lib/ocrPrompts.js';
 
 // Max body size guard — Vercel has a 4.5 MB body limit for serverless;
 // images are base64 so ~33% overhead
@@ -301,37 +303,25 @@ async function runGPT4oVisionOCR(base64Image, mimeType, documentType, patientCon
     userMessage += '\n\nExtract ALL text including handwritten portions and structure into the JSON schema. Pay special attention to handwriting accuracy.';
   }
 
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: 'gpt-4o',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: userMessage },
-            { type: 'image_url', image_url: { url: dataUri, detail: 'high' } },
-          ],
-        },
-      ],
-      temperature: 0.1,
-      max_tokens: 8192,
-      response_format: { type: 'json_object' },
-    }),
-  });
+  // Shared helper: hard timeout + retry on 429/5xx (image OCR is the most
+  // rate-limit-prone call). Longer timeout since high-detail vision is slow.
+  const content = await chatCompletion({
+    model: 'gpt-4o',
+    messages: [
+      { role: 'system', content: systemPrompt },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: userMessage },
+          { type: 'image_url', image_url: { url: dataUri, detail: 'high' } },
+        ],
+      },
+    ],
+    temperature: 0.1,
+    max_tokens: 8192,
+    response_format: { type: 'json_object' },
+  }, { apiKey, timeoutMs: 90000 });
 
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`GPT-4o Vision API error (${response.status}): ${errText}`);
-  }
-
-  const data = await response.json();
-  const content = data.choices?.[0]?.message?.content;
   if (!content) throw new Error('Empty GPT-4o Vision response');
 
   const parsed = JSON.parse(content);
@@ -372,30 +362,18 @@ async function runAIPostProcessing(rawText, documentType, patientContext, apiKey
 
   userMessage += '\n\nPlease extract and structure ALL medical data from this OCR text into the appropriate JSON schema for this document type. Correct obvious OCR errors in medical terminology.';
 
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: 'gpt-4o',
-      messages: [
-        { role: 'system', content: AI_SYSTEM_PROMPT },
-        { role: 'user', content: userMessage },
-      ],
-      temperature: 0.1,
-      max_tokens: 4096,
-      response_format: { type: 'json_object' },
-    }),
-  });
+  // Shared helper: timeout + retry on 429/5xx.
+  const content = await chatCompletion({
+    model: 'gpt-4o',
+    messages: [
+      { role: 'system', content: AI_SYSTEM_PROMPT },
+      { role: 'user', content: userMessage },
+    ],
+    temperature: 0.1,
+    max_tokens: 4096,
+    response_format: { type: 'json_object' },
+  }, { apiKey, timeoutMs: 60000 });
 
-  if (!response.ok) {
-    throw new Error(`OpenAI API error: ${response.status}`);
-  }
-
-  const data = await response.json();
-  const content = data.choices?.[0]?.message?.content;
   if (!content) throw new Error('Empty AI response');
 
   return {
@@ -404,24 +382,5 @@ async function runAIPostProcessing(rawText, documentType, patientContext, apiKey
   };
 }
 
-const AI_SYSTEM_PROMPT = `You are an expert medical document OCR processor for a plastic surgery department. Analyze raw OCR text and structure it into appropriate medical form fields.
-
-Respond with ONLY valid JSON. For clinical notes (ward_round/review_note/general), use:
-{
-  "clinical_status": "improved|stable|deteriorating|critical",
-  "subjective": "...", "objective": "...", "assessment": "...", "plan": "...",
-  "vitals": { "temperature": null, "pulse": null, "bp_systolic": null, "bp_diastolic": null, "respiratory_rate": null, "spo2": null, "pain_score": null },
-  "medications": [{"name":"...","dose":"...","route":"...","frequency":"..."}],
-  "investigations": [{"type":"lab|imaging","name":"...","result":"...","abnormal":false}],
-  "wounds": [{"location":"...","description":"...","size":"...","dressing":"..."}],
-  "diagnoses": [], "allergies": [],
-  "diet": null, "activity": null, "notes": null, "confidence": 0.8
-}
-
-For lab_report: { "results": [{"test_name":"...","result_value":"...","unit":"...","reference_range":"...","abnormal":false,"flag":"normal"}], "specimen_type":"...", "confidence": 0.8 }
-
-For prescription: { "medications": [{"name":"...","dose":"...","route":"...","frequency":"...","duration":"..."}], "confidence": 0.8 }
-
-For imaging_report: { "modality":"...","body_part":"...","findings":"...","impression":"...","confidence": 0.8 }
-
-Rules: Extract ALL medical data. Correct OCR errors in medical terms. Use null for missing fields. Set abnormal flags based on standard ranges.`;
+// Unified with api/ai/ocr-process.js via the shared prompt (single source of truth).
+const AI_SYSTEM_PROMPT = OCR_EXTRACTION_PROMPT;

@@ -594,6 +594,8 @@ const ScribeDashboard: React.FC = () => {
         <ScribeNoteEditor
           note={viewingSession.structured_note}
           patientName={viewingSession.patient_name}
+          patientId={viewingSession.patient_id}
+          recordedBy={{ name: viewingSession.recorded_by, role: viewingSession.recorded_by_role }}
           onSave={handleNoteSave}
           onClose={() => setViewingSession(null)}
           showApplyButton={false}

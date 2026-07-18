@@ -2158,6 +2158,7 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
         <ScribeNoteEditor
           note={scribeNote}
           patientName={selectedPatient ? `${selectedPatient.first_name} ${selectedPatient.last_name}` : 'Patient'}
+          patientId={selectedPatient?.id}
           onSave={async (editedNote) => {
             if (scribeSession) {
               await medicalScribeService.updateStructuredNote(scribeSession.id, editedNote);

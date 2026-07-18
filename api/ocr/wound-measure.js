@@ -2,6 +2,7 @@
 // Handles server-side wound image analysis and stores measurement history
 import { query } from '../_lib/db.js';
 import { cors, authenticateRequest } from '../_lib/auth.js';
+import { chatCompletion, getOpenAIKey } from '../_lib/openai.js';
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
@@ -101,8 +102,7 @@ async function analyzeWound(body, user, res) {
     return res.status(400).json({ error: 'Image too large. Maximum 15MB.' });
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
+  if (!getOpenAIKey()) {
     return res.status(500).json({ error: 'OpenAI API key not configured' });
   }
 
@@ -113,14 +113,10 @@ async function analyzeWound(body, user, res) {
   }
 
   try {
-    // Call GPT-4o Vision
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
+    // Call GPT-4o Vision via the shared helper (timeout + retry on 429/5xx).
+    let content;
+    try {
+      content = await chatCompletion({
         model: 'gpt-4o',
         messages: [
           { role: 'system', content: prompt },
@@ -141,17 +137,12 @@ async function analyzeWound(body, user, res) {
         temperature: 0.1,
         max_tokens: 2048,
         response_format: { type: 'json_object' },
-      }),
-    });
-
-    if (!response.ok) {
-      const errBody = await response.text();
-      console.error('OpenAI API error:', errBody);
+      }, { timeoutMs: 90000 });
+    } catch (aiErr) {
+      console.error('OpenAI API error:', aiErr.status, aiErr.message);
       return res.status(502).json({ error: 'AI analysis failed' });
     }
 
-    const aiResult = await response.json();
-    const content = aiResult.choices?.[0]?.message?.content;
     if (!content) {
       return res.status(502).json({ error: 'Empty AI response' });
     }

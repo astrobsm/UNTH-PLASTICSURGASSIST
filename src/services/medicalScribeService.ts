@@ -1000,6 +1000,52 @@ class MedicalScribeService {
     return formData;
   }
 
+  // ─── Chart wiring ───────────────────────────────────────────────────
+
+  /**
+   * Persist a dictated note's vitals into the `vital_signs` store so they flow
+   * onto the patient's observation / trend charts (VitalSignsRecords) — the same
+   * sink used by manual entry and vitals-chart OCR. Previously scribe vitals only
+   * landed in ward-round text fields and never reached the charts.
+   *
+   * Returns the number of readings saved (0 when the note has no vitals).
+   */
+  async saveVitalsToChart(
+    note: StructuredNote | undefined,
+    patientId: string | number,
+    recordedBy?: { name?: string; role?: string }
+  ): Promise<number> {
+    const v = note?.vitals;
+    if (!v || !patientId) return 0;
+    const has = (x: unknown): x is number => typeof x === 'number' && !Number.isNaN(x);
+    // Nothing measurable → don't write an empty row.
+    if (![v.temperature, v.pulse, v.bp_systolic, v.bp_diastolic, v.respiratory_rate, v.spo2, v.pain_score].some(has)) {
+      return 0;
+    }
+    const pidNum = Number(patientId);
+    const record: Record<string, unknown> = {
+      patient_id: Number.isFinite(pidNum) ? pidNum : patientId,
+      temperature: has(v.temperature) ? v.temperature : undefined,
+      pulse: has(v.pulse) ? v.pulse : undefined,
+      systolic_bp: has(v.bp_systolic) ? v.bp_systolic : undefined,
+      diastolic_bp: has(v.bp_diastolic) ? v.bp_diastolic : undefined,
+      respiratory_rate: has(v.respiratory_rate) ? v.respiratory_rate : undefined,
+      spo2: has(v.spo2) ? v.spo2 : undefined,
+      pain_score: has(v.pain_score) ? v.pain_score : undefined,
+      recorded_by: recordedBy?.name || 'Medical Scribe',
+      recorded_by_role: recordedBy?.role || 'house_officer',
+      recorded_at: new Date().toISOString(),
+      source: 'scribe',
+    };
+    try {
+      await db.table('vital_signs').add(record);
+      return 1;
+    } catch (error) {
+      console.error('Failed to save scribe vitals to chart:', error);
+      return 0;
+    }
+  }
+
   // ─── Persistence ────────────────────────────────────────────────────
 
   /**
