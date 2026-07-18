@@ -35,6 +35,7 @@ import { warmCache, CacheWarmProgress } from '../services/cacheWarmer';
 import { syncService } from '../db/syncService';
 import toast from 'react-hot-toast';
 import UnitRosterWidget from '../components/UnitRosterWidget';
+import OnCallTeamCard from '../components/OnCallTeamCard';
 import { userManagementService, ApprovedUser } from '../services/userManagementService';
 import { medicalTeamService } from '../services/medicalTeamService';
 import { checkAndReassignHouseOfficers } from '../services/houseOfficerReassignmentService';
@@ -80,24 +81,28 @@ async function buildTeamMaps(): Promise<TeamMaps> {
   const apiAssignments = await medicalTeamService.getAllAssignmentsFromAPI();
   const apiMap = new Map<string, any>();
   for (const a of apiAssignments) apiMap.set(String(a.patient_id), a);
+  // Always load the local assignment + user maps too, so resolveTeam can fall back
+  // PER-PATIENT when the API response is missing a patient (not only when it's
+  // entirely empty) — a common cause of a staff member's patients disappearing.
   const localMap = new Map<string, any>();
   const userById = new Map<string, any>();
-  if (apiAssignments.length === 0) {
-    try { for (const a of await db.patient_assignments.toArray()) if (a.is_active) localMap.set(String(a.patient_id), a); } catch { /* table may not exist */ }
-    try { for (const u of await db.users.toArray()) userById.set(String(u.id), u); } catch { /* */ }
-  }
+  try { for (const a of await db.patient_assignments.toArray()) if (a.is_active) localMap.set(String(a.patient_id), a); } catch { /* table may not exist */ }
+  try { for (const u of await db.users.toArray()) userById.set(String(u.id), u); } catch { /* */ }
   return { apiMap, localMap, userById };
 }
 
 /** Resolve the full team for a patient id (string) from the maps, or null. */
 function resolveTeam(pidStr: string, maps: TeamMaps): ResolvedTeam | null {
+  const sid = (v: any) => (v != null && v !== '' ? String(v) : null);
   const api = maps.apiMap.get(pidStr);
   if (api) {
     return {
-      consultant_id: api.consultant_id ?? null, consultant: api.consultant_name || '',
-      sr_id: api.senior_registrar_id ?? null, sr: api.senior_registrar_name || '',
-      reg_id: api.registrar_id ?? null, reg: api.registrar_name || '',
-      ho_id: api.house_officer_id ?? null, ho: api.house_officer_name || '',
+      // Normalise ids to strings so id-matching in the staff lookup is reliable
+      // (the API can return numeric ids; the selected staffId is always a string).
+      consultant_id: sid(api.consultant_id), consultant: api.consultant_name || '',
+      sr_id: sid(api.senior_registrar_id), sr: api.senior_registrar_name || '',
+      reg_id: sid(api.registrar_id), reg: api.registrar_name || '',
+      ho_id: sid(api.house_officer_id), ho: api.house_officer_name || '',
     };
   }
   const loc = maps.localMap.get(pidStr);
@@ -729,16 +734,18 @@ export default function Dashboard() {
         const consultant = team?.consultant || base.consultantFallback || '';
         const resident = team?.sr || team?.reg || base.residentFallback || '';
         const houseOfficer = team?.ho || (base.adm as any)?.assigned_house_officer || '';
-        // Match this staff member by assignment id (any role) OR by name.
+        // Prefer a strict id match against the structured assignment (any role).
         const idMatch = !!team && [team.consultant_id, team.sr_id, team.reg_id, team.ho_id].includes(staffId);
-        const nameMatch =
-          consultant.toLowerCase().includes(staffName) ||
-          resident.toLowerCase().includes(staffName) ||
+        const createdByMatch = base.adm?.created_by === staffId;
+        // Fall back to fragile name-substring matching ONLY for legacy patients that
+        // have no structured team assignment — so a properly-assigned patient never
+        // mis-matches a different staff member whose name is a substring.
+        const nameMatch = !team && (
           (base.consultantFallback || '').toLowerCase().includes(staffName) ||
           (base.residentFallback || '').toLowerCase().includes(staffName) ||
-          (base.adm?.admitting_consultant || '').toLowerCase().includes(staffName) ||
-          base.adm?.created_by === staffId;
-        if (!idMatch && !nameMatch) return;
+          (base.adm?.admitting_consultant || '').toLowerCase().includes(staffName)
+        );
+        if (!idMatch && !createdByMatch && !nameMatch) return;
         matched.push({
           id: pidStr,
           name: base.name,
@@ -1614,6 +1621,9 @@ export default function Dashboard() {
           <p className="text-sm text-gray-400 text-center py-4">Select a staff member above to view their assigned patients.</p>
         )}
       </div>
+
+      {/* On-Call Team (today) — visible to everyone */}
+      <OnCallTeamCard />
 
       {/* PS Unit Roster & Schedule */}
       <UnitRosterWidget />

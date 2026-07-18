@@ -2218,6 +2218,13 @@ async function createTables() {
       IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'call_duty_roster' AND column_name = 'status') THEN
         ALTER TABLE call_duty_roster ADD COLUMN status VARCHAR(50) DEFAULT 'active';
       END IF;
+      -- Consultant on call (round-robin per shift) — used for call-day patient assignment
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'call_duty_roster' AND column_name = 'consultant_id') THEN
+        ALTER TABLE call_duty_roster ADD COLUMN consultant_id TEXT;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'call_duty_roster' AND column_name = 'consultant_name') THEN
+        ALTER TABLE call_duty_roster ADD COLUMN consultant_name TEXT;
+      END IF;
     END $$;
 
     -- =====================================================

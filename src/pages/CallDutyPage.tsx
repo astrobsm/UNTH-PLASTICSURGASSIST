@@ -105,6 +105,8 @@ export default function CallDutyPage() {
   const [registrars, setRegistrars] = useState<StaffMember[]>([]);
   const [houseOfficers, setHouseOfficers] = useState<StaffMember[]>([]);
   const [consultants, setConsultants] = useState<StaffMember[]>([]);
+  // Which day's on-call team to display in the contacts panel (defaults to today).
+  const [onCallDate, setOnCallDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [staffLoaded, setStaffLoaded] = useState(false);
 
   // ── Handover notes state ────────────────────────────────────────────
@@ -766,40 +768,44 @@ export default function CallDutyPage() {
 
       {/* ─── On-Call Team Contacts (phones) ─────────────────────────────── */}
       {!loading && shifts.length > 0 && (() => {
-        const now = new Date();
-        const todayShift = shifts.find(s => { try { return now >= parseISO(s.start_date) && now < parseISO(s.end_date); } catch { return false; } });
-        const srPhone = todayShift?.senior_registrar_phone || seniorRegs.find(u => u.id === todayShift?.senior_registrar_id)?.phone || '';
-        const rPhone = todayShift?.registrar_phone || registrars.find(u => u.id === todayShift?.registrar_id)?.phone || '';
-        const contacts: { role: string; name?: string; phone?: string; color: string }[] = todayShift ? [
-          { role: 'Senior Registrar', name: todayShift.senior_registrar_name, phone: srPhone, color: 'text-purple-700' },
-          { role: 'Registrar', name: todayShift.registrar_name, phone: rPhone, color: 'text-blue-700' },
-          { role: 'House Officer (Ward)', name: todayShift.ho_ward_name, phone: todayShift.ho_ward_phone, color: 'text-green-700' },
-          ...(todayShift.ho_emergency_id && todayShift.ho_emergency_id !== todayShift.ho_ward_id
-            ? [{ role: 'House Officer (Emergency)', name: todayShift.ho_emergency_name, phone: todayShift.ho_emergency_phone, color: 'text-orange-700' }] : []),
+        // The shift covering the selected date (noon avoids DST/boundary edge cases).
+        const sel = new Date(`${onCallDate}T12:00:00`);
+        const dayShift = shifts.find(s => { try { return sel >= parseISO(s.start_date) && sel < parseISO(s.end_date); } catch { return false; } });
+        const isToday = onCallDate === new Date().toISOString().slice(0, 10);
+        const consPhone = dayShift?.consultant_phone || consultants.find(u => u.id === dayShift?.consultant_id)?.phone || '';
+        const srPhone = dayShift?.senior_registrar_phone || seniorRegs.find(u => u.id === dayShift?.senior_registrar_id)?.phone || '';
+        const rPhone = dayShift?.registrar_phone || registrars.find(u => u.id === dayShift?.registrar_id)?.phone || '';
+        const contacts: { role: string; name?: string; phone?: string; color: string }[] = dayShift ? [
+          ...(dayShift.consultant_id ? [{ role: 'Consultant', name: dayShift.consultant_name, phone: consPhone, color: 'text-rose-700' }] : []),
+          { role: 'Senior Registrar', name: dayShift.senior_registrar_name, phone: srPhone, color: 'text-purple-700' },
+          { role: 'Registrar', name: dayShift.registrar_name, phone: rPhone, color: 'text-blue-700' },
+          { role: 'House Officer (Ward)', name: dayShift.ho_ward_name, phone: dayShift.ho_ward_phone, color: 'text-green-700' },
+          ...(dayShift.ho_emergency_id && dayShift.ho_emergency_id !== dayShift.ho_ward_id
+            ? [{ role: 'House Officer (Emergency)', name: dayShift.ho_emergency_name, phone: dayShift.ho_emergency_phone, color: 'text-orange-700' }] : []),
         ] : [];
         return (
           <div className="bg-white rounded-xl shadow-sm border p-4 mb-4">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-              <Users className="w-4 h-4 text-green-600" /> On-Call Team Contacts {todayShift ? '(today)' : ''}
-            </h3>
-            {/* Consultants */}
-            <div className="mb-3">
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Consultants</p>
-              {consultants.length === 0 ? (
-                <p className="text-xs text-gray-400">No consultants registered.</p>
-              ) : (
-                <div className="flex flex-wrap gap-x-4 gap-y-1">
-                  {consultants.map(c => (
-                    <div key={c.id} className="text-sm flex items-center gap-1 flex-wrap">
-                      <span className="text-gray-800 font-medium">{c.full_name}</span>
-                      {c.phone ? <PhoneActions phone={c.phone} compact /> : <span className="text-xs text-gray-400">no phone</span>}
-                    </div>
-                  ))}
-                </div>
-              )}
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+              <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                <Users className="w-4 h-4 text-green-600" /> On-Call Team Contacts {isToday ? '(today)' : ''}
+              </h3>
+              {/* Date selector — pick any day to see who is on call */}
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-gray-500">On call for</label>
+                <input
+                  type="date"
+                  value={onCallDate}
+                  onChange={(e) => setOnCallDate(e.target.value)}
+                  className="border rounded-lg px-2 py-1 text-sm"
+                />
+                {!isToday && (
+                  <button type="button" onClick={() => setOnCallDate(new Date().toISOString().slice(0, 10))}
+                    className="text-xs text-green-700 hover:underline">Today</button>
+                )}
+              </div>
             </div>
-            {/* Today's rostered team */}
-            {todayShift ? (
+            {/* On-call team for the selected day */}
+            {dayShift ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {contacts.map((c, i) => (
                   <div key={i} className="flex items-center justify-between gap-2 border border-gray-100 rounded-lg px-3 py-1.5">
@@ -812,8 +818,24 @@ export default function CallDutyPage() {
                 ))}
               </div>
             ) : (
-              <p className="text-xs text-gray-400">No shift is currently on call. See the roster below.</p>
+              <p className="text-xs text-gray-400">No shift on call for {onCallDate}. Pick a date within the generated roster, or generate a roster covering it.</p>
             )}
+            {/* Full consultant directory (reference) */}
+            <div className="mt-3 pt-3 border-t border-gray-100">
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">All Consultants</p>
+              {consultants.length === 0 ? (
+                <p className="text-xs text-gray-400">No consultants registered in the database.</p>
+              ) : (
+                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                  {consultants.map(c => (
+                    <div key={c.id} className="text-sm flex items-center gap-1 flex-wrap">
+                      <span className="text-gray-800 font-medium">{c.full_name}</span>
+                      {c.phone ? <PhoneActions phone={c.phone} compact /> : <span className="text-xs text-gray-400">no phone</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         );
       })()}

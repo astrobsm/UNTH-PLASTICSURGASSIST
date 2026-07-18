@@ -13,6 +13,10 @@ export interface CallDutyShift {
   start_date: string;
   /** ISO date string for shift end (48 h later) */
   end_date: string;
+  /** User ID of the consultant on call (round-robin per shift) */
+  consultant_id?: string;
+  consultant_name?: string;
+  consultant_phone?: string;
   /** User ID of the senior registrar on call */
   senior_registrar_id: string;
   senior_registrar_name: string;
@@ -217,15 +221,16 @@ class CallDutyService {
     endDate: Date,
     createdBy?: string
   ): Promise<CallDutyShift[]> {
-    // Fetch staff pools
-    const [seniorRegs, registrars, houseOfficers] = await Promise.all([
+    // Fetch staff pools (consultants rotate on call round-robin per 48h shift too)
+    const [consultants, seniorRegs, registrars, houseOfficers] = await Promise.all([
+      this.getStaffByRole('consultant'),
       this.getStaffByRole('senior_registrar'),
       this.getStaffByRole('junior_registrar'),
       this.getStaffByRole('house_officer'),
     ]);
 
-    if (seniorRegs.length === 0 && registrars.length === 0 && houseOfficers.length === 0) {
-      throw new Error('No staff found. Ensure there are approved users with roles: senior_registrar, junior_registrar, house_officer.');
+    if (consultants.length === 0 && seniorRegs.length === 0 && registrars.length === 0 && houseOfficers.length === 0) {
+      throw new Error('No staff found. Ensure there are approved users with roles: consultant, senior_registrar, junior_registrar, house_officer.');
     }
 
     const rKey = rosterKey(startDate, endDate);
@@ -233,6 +238,7 @@ class CallDutyService {
     const hoCount = houseOfficers.length;
 
     let shiftNumber = 1;
+    let consIdx = 0;
     let srIdx = 0;
     let rIdx = 0;
     let hoRotationIdx = 0;
@@ -245,6 +251,7 @@ class CallDutyService {
       const shiftStart = new Date(cursor);
       const shiftEnd = new Date(shiftStart.getTime() + 48 * 60 * 60 * 1000);
 
+      const consultant = consultants.length > 0 ? pick(consultants, consIdx) : null;
       const sr = seniorRegs.length > 0 ? pick(seniorRegs, srIdx) : null;
       const r = registrars.length > 0 ? pick(registrars, rIdx) : null;
 
@@ -276,6 +283,9 @@ class CallDutyService {
       shifts.push({
         start_date: shiftStart.toISOString(),
         end_date: shiftEnd.toISOString(),
+        consultant_id: consultant?.id || '',
+        consultant_name: consultant?.full_name || 'TBD',
+        consultant_phone: consultant?.phone || '',
         senior_registrar_id: sr?.id || '',
         senior_registrar_name: sr?.full_name || 'TBD',
         senior_registrar_phone: sr?.phone || '',
@@ -303,6 +313,7 @@ class CallDutyService {
         updated_at: new Date().toISOString(),
       });
 
+      consIdx++;
       srIdx++;
       rIdx++;
       hoRotationIdx++;
@@ -374,6 +385,30 @@ class CallDutyService {
   // ── Get roster by date range ────────────────────────────────────────
   async getRosterByRange(startDate: Date, endDate: Date): Promise<CallDutyShift[]> {
     return this.getRosterByKey(rosterKey(startDate, endDate));
+  }
+
+  // ── Find the shift covering a given date (across ALL saved rosters) ──
+  /**
+   * Returns the call-duty shift whose [start_date, end_date) window covers the
+   * given date, searching every saved roster. Used by the on-call team display
+   * (date selector) and the dashboard "who's on call" panel. Null if none covers it.
+   */
+  async getShiftForDate(date: Date): Promise<CallDutyShift | null> {
+    try {
+      const all: CallDutyShift[] = await (db as any).call_duty_roster.toArray();
+      const t = date.getTime();
+      const covering = all.filter(s => {
+        const start = new Date(s.start_date).getTime();
+        const end = new Date(s.end_date).getTime();
+        return t >= start && t < end;
+      });
+      if (covering.length === 0) return null;
+      // Prefer the most recently updated when overlapping rosters exist.
+      covering.sort((a, b) => new Date(b.updated_at || b.created_at || 0).getTime() - new Date(a.updated_at || a.created_at || 0).getTime());
+      return covering[0];
+    } catch {
+      return null;
+    }
   }
 
   // ── Delete roster by key ────────────────────────────────────────────

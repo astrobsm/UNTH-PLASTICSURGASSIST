@@ -145,7 +145,7 @@ export async function assignFullTeam(patientId, hospitalNumber) {
 export async function getOnCallTeam(dateISO) {
   try {
     const r = await query(
-      `SELECT senior_registrar_id, registrar_id, house_officer_id, ho_ward_id
+      `SELECT consultant_id, senior_registrar_id, registrar_id, house_officer_id, ho_ward_id
          FROM call_duty_roster
         WHERE $1 BETWEEN start_date AND end_date
         ORDER BY updated_at DESC NULLS LAST, id DESC
@@ -153,27 +153,30 @@ export async function getOnCallTeam(dateISO) {
       [dateISO]
     );
     const row = r.rows[0] || {};
+    const blank = (v) => (v === '' ? null : v);
     return {
-      senior_registrar_id: row.senior_registrar_id || null,
-      registrar_id: row.registrar_id || null,
-      house_officer_id: row.house_officer_id || row.ho_ward_id || null,
+      consultant_id: blank(row.consultant_id) || null,
+      senior_registrar_id: blank(row.senior_registrar_id) || null,
+      registrar_id: blank(row.registrar_id) || null,
+      house_officer_id: blank(row.house_officer_id) || blank(row.ho_ward_id) || null,
     };
   } catch (e) {
     console.warn('getOnCallTeam failed:', e.message);
-    return { senior_registrar_id: null, registrar_id: null, house_officer_id: null };
+    return { consultant_id: null, senior_registrar_id: null, registrar_id: null, house_officer_id: null };
   }
 }
 
 /**
- * Assign a consult patient to the team ON CALL for that day: the on-call SR,
- * registrar and house officer from the call-duty roster, plus a consultant.
- * Falls back to the least-loaded staff for any role the roster doesn't cover
- * (there is no consultant call rotation, so the consultant is always least-loaded).
+ * Assign a consult patient to the team ON CALL for that day: the on-call
+ * consultant, SR, registrar and house officer from the call-duty roster.
+ * Consultants now rotate on the roster (round-robin per shift), so a new
+ * admission goes to the consultant on call that day. Falls back to the
+ * least-loaded staff for any role the roster doesn't cover.
  */
 export async function assignOnCallTeamFromConsult(patientId, hospitalNumber) {
   const today = new Date().toISOString().slice(0, 10);
   const onCall = await getOnCallTeam(today);
-  const consultant = await pickLeastLoadedByRole('consultant');
+  const consultant = onCall.consultant_id || await pickLeastLoadedByRole('consultant');
   const sr = onCall.senior_registrar_id || await pickLeastLoadedByRole('senior_registrar');
   const reg = onCall.registrar_id || await pickLeastLoadedByRole('registrar');
   const ho = onCall.house_officer_id || await pickLeastLoadedByRole('house_officer');

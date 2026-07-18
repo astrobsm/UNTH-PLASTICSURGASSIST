@@ -397,52 +397,54 @@ export default function UnitRosterWidget() {
               </button>
             </div>
 
-            {/* Consultants — fixed per unit, from the database (index 0 = managing) */}
+            {/* Consultants — picked from the registered consultants in the database */}
+            {availableConsultants.length === 0 && (
+              <p className="text-xs text-amber-600">No consultants found in the database. Register users with the "consultant" role first.</p>
+            )}
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Consultant — PS-UNIT 1 (managing)</label>
-              <input
-                list="ps-consultant-options"
+              <select
                 value={setupForm.managingConsultantUnit1}
                 onChange={(e) => setSetupForm({ ...setupForm, managingConsultantUnit1: e.target.value })}
-                placeholder="Select or type a consultant"
                 className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
-              />
+              >
+                <option value="">— Select consultant —</option>
+                {availableConsultants.map(u => <option key={u.id} value={u.full_name}>{u.full_name}</option>)}
+              </select>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Consultant — PS-UNIT 2 (managing)</label>
-              <input
-                list="ps-consultant-options"
+              <select
                 value={setupForm.managingConsultantUnit2}
                 onChange={(e) => setSetupForm({ ...setupForm, managingConsultantUnit2: e.target.value })}
-                placeholder="Select or type a consultant"
                 className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
-              />
+              >
+                <option value="">— Select consultant —</option>
+                {availableConsultants.map(u => <option key={u.id} value={u.full_name}>{u.full_name}</option>)}
+              </select>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Consultant — PS-UNIT 1 (additional)</label>
-              <input
-                list="ps-consultant-options"
+              <select
                 value={setupForm.consultant2Unit1}
                 onChange={(e) => setSetupForm({ ...setupForm, consultant2Unit1: e.target.value })}
-                placeholder="Optional second consultant"
                 className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
-              />
+              >
+                <option value="">— None —</option>
+                {availableConsultants.map(u => <option key={u.id} value={u.full_name}>{u.full_name}</option>)}
+              </select>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Consultant — PS-UNIT 2 (additional)</label>
-              <input
-                list="ps-consultant-options"
+              <select
                 value={setupForm.consultant2Unit2}
                 onChange={(e) => setSetupForm({ ...setupForm, consultant2Unit2: e.target.value })}
-                placeholder="Optional second consultant"
                 className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
-              />
+              >
+                <option value="">— None —</option>
+                {availableConsultants.map(u => <option key={u.id} value={u.full_name}>{u.full_name}</option>)}
+              </select>
             </div>
-            <datalist id="ps-consultant-options">
-              {availableConsultants.map(u => (
-                <option key={u.id} value={u.full_name}>{u.role === 'admin' ? 'admin' : 'consultant'}</option>
-              ))}
-            </datalist>
 
             {/* Senior Registrars — FIXED per unit */}
             <div>
