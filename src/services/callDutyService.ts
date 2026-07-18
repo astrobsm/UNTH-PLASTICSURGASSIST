@@ -450,6 +450,10 @@ class CallDutyService {
   getStaffSummary(shifts: CallDutyShift[]): Record<string, { name: string; role: string; count: number; ward?: number; emergency?: number; off?: number }> {
     const summary: Record<string, { name: string; role: string; count: number; ward?: number; emergency?: number; off?: number }> = {};
     for (const s of shifts) {
+      if (s.consultant_id) {
+        if (!summary[s.consultant_id]) summary[s.consultant_id] = { name: s.consultant_name || 'TBD', role: 'Consultant', count: 0 };
+        summary[s.consultant_id].count++;
+      }
       if (s.senior_registrar_id) {
         if (!summary[s.senior_registrar_id]) summary[s.senior_registrar_id] = { name: s.senior_registrar_name, role: 'Senior Registrar', count: 0 };
         summary[s.senior_registrar_id].count++;

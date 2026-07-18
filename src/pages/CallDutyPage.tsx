@@ -397,6 +397,7 @@ export default function CallDutyPage() {
           <td style="border:1px solid #333;padding:8px;text-align:center;font-weight:600;">${s.shift_number}</td>
           <td style="border:1px solid #333;padding:8px;">${format(start, 'EEE, dd MMM yyyy')} 08:00</td>
           <td style="border:1px solid #333;padding:8px;">${format(end, 'EEE, dd MMM yyyy')} 08:00</td>
+          <td style="border:1px solid #333;padding:8px;font-weight:500;">${s.consultant_name || 'TBD'}${s.consultant_phone ? '<br/><span style="font-size:11px;color:#555;">📞 ' + s.consultant_phone + '</span>' : ''}</td>
           <td style="border:1px solid #333;padding:8px;font-weight:500;">${s.senior_registrar_name}</td>
           <td style="border:1px solid #333;padding:8px;font-weight:500;">${s.registrar_name}</td>
           <td style="border:1px solid #333;padding:8px;font-weight:500;">${s.ho_ward_name || s.house_officer_name}${is2HO ? ' (W+ER)' : ''}${s.ho_ward_phone ? '<br/><span style="font-size:11px;color:#555;">📞 ' + s.ho_ward_phone + '</span>' : ''}</td>
@@ -456,13 +457,14 @@ export default function CallDutyPage() {
           <thead>
             <tr>
               <th style="width:4%;text-align:center;">#</th>
-              <th style="width:14%;">Shift Start</th>
-              <th style="width:14%;">Shift End</th>
-              <th style="width:15%;">Senior Registrar</th>
-              <th style="width:14%;">Registrar</th>
-              <th style="width:14%;">HO (Ward)</th>
-              <th style="width:14%;">HO (Emergency)</th>
-              <th style="width:11%;">HO (Off)</th>
+              <th style="width:12%;">Shift Start</th>
+              <th style="width:12%;">Shift End</th>
+              <th style="width:14%;">Consultant</th>
+              <th style="width:13%;">Senior Registrar</th>
+              <th style="width:12%;">Registrar</th>
+              <th style="width:12%;">HO (Ward)</th>
+              <th style="width:12%;">HO (Emergency)</th>
+              <th style="width:9%;">HO (Off)</th>
             </tr>
           </thead>
           <tbody>${rows}</tbody>
@@ -850,6 +852,7 @@ export default function CallDutyPage() {
                   <th className="px-3 py-3 text-left font-semibold w-10">#</th>
                   <th className="px-3 py-3 text-left font-semibold">Shift Start</th>
                   <th className="px-3 py-3 text-left font-semibold">Shift End</th>
+                  <th className="px-3 py-3 text-left font-semibold">Consultant</th>
                   <th className="px-3 py-3 text-left font-semibold">Senior Registrar</th>
                   <th className="px-3 py-3 text-left font-semibold">Registrar</th>
                   <th className="px-3 py-3 text-left font-semibold">
@@ -880,6 +883,7 @@ export default function CallDutyPage() {
                       endDate={shiftEnd}
                       isToday={isToday}
                       isEditing={isEditing}
+                      consultants={consultants}
                       seniorRegs={seniorRegs}
                       registrars={registrars}
                       houseOfficers={houseOfficers}
@@ -1241,6 +1245,7 @@ interface ShiftRowProps {
   endDate: Date;
   isToday: boolean;
   isEditing: boolean;
+  consultants: StaffMember[];
   seniorRegs: StaffMember[];
   registrars: StaffMember[];
   houseOfficers: StaffMember[];
@@ -1253,7 +1258,7 @@ interface ShiftRowProps {
 
 function ShiftRow({
   shift, startDate, endDate, isToday, isEditing,
-  seniorRegs, registrars, houseOfficers, hasNotes,
+  consultants, seniorRegs, registrars, houseOfficers, hasNotes,
   onEdit, onSave, onCancel, onOpenHandover,
 }: ShiftRowProps) {
   const [localShift, setLocalShift] = useState(shift);
@@ -1262,9 +1267,10 @@ function ShiftRow({
     setLocalShift(shift);
   }, [shift]);
 
-  const handleStaffChange = (role: 'sr' | 'r' | 'ho_ward' | 'ho_emergency' | 'ho_off', userId: string, pool: StaffMember[]) => {
+  const handleStaffChange = (role: 'consultant' | 'sr' | 'r' | 'ho_ward' | 'ho_emergency' | 'ho_off', userId: string, pool: StaffMember[]) => {
     const staff = pool.find(s => s.id === userId);
     if (!staff) return;
+    if (role === 'consultant') setLocalShift(s => ({ ...s, consultant_id: staff.id, consultant_name: staff.full_name, consultant_phone: staff.phone }));
     if (role === 'sr') setLocalShift(s => ({ ...s, senior_registrar_id: staff.id, senior_registrar_name: staff.full_name }));
     if (role === 'r') setLocalShift(s => ({ ...s, registrar_id: staff.id, registrar_name: staff.full_name }));
     if (role === 'ho_ward') setLocalShift(s => ({ ...s, ho_ward_id: staff.id, ho_ward_name: staff.full_name, ho_ward_phone: staff.phone, house_officer_id: staff.id, house_officer_name: staff.full_name }));
@@ -1291,6 +1297,28 @@ function ShiftRow({
           <div className="font-medium">{format(endDate, 'EEE, dd MMM yyyy')}</div>
           <div className="text-xs text-gray-400">08:00 hrs</div>
         </div>
+      </td>
+
+      {/* Consultant */}
+      <td className="px-3 py-3">
+        {isEditing ? (
+          <select className="w-full border rounded px-2 py-1 text-sm" value={localShift.consultant_id || ''} onChange={e => handleStaffChange('consultant', e.target.value, consultants)} aria-label="Consultant">
+            <option value="">— TBD —</option>
+            {consultants.map(s => <option key={s.id} value={s.id}>{s.full_name}</option>)}
+          </select>
+        ) : (
+          <div>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-medium bg-rose-50 text-rose-700 border-rose-200">
+              <Users className="w-3 h-3" /> {shift.consultant_name || 'TBD'}
+            </span>
+            {shift.consultant_phone && (
+              <div className="flex items-center gap-1 mt-0.5 text-[11px] text-gray-500">
+                <Phone className="w-3 h-3" />
+                <a href={`tel:${shift.consultant_phone}`} className="hover:text-rose-700 hover:underline">{shift.consultant_phone}</a>
+              </div>
+            )}
+          </div>
+        )}
       </td>
 
       {/* Senior Registrar */}
