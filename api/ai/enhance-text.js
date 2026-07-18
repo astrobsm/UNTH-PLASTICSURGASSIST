@@ -4,16 +4,7 @@
  * Enhances medical text using AI for better documentation
  */
 
-import { createClient } from '@supabase/supabase-js';
 import { chatCompletion, getOpenAIKey } from '../_lib/openai.js';
-
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-// Only create Supabase client if credentials are available
-const supabase = supabaseUrl && supabaseServiceKey 
-  ? createClient(supabaseUrl, supabaseServiceKey)
-  : null;
 
 // Context-specific prompts for medical documentation
 const CONTEXT_PROMPTS = {
@@ -85,20 +76,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Verify authorization (optional if Supabase not configured)
-    const authHeader = req.headers.authorization;
-    
-    if (supabase && authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.replace('Bearer ', '');
-      
-      // Verify token with Supabase
-      const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-      if (authError || !user) {
-        console.warn('Token validation failed, continuing anyway for text enhancement');
-      }
-    }
-
-    const { text, context = 'general', customInstructions } = req.body;
+    const { text, context = 'general', customInstructions } = req.body || {};
 
     if (!text || typeof text !== 'string') {
       return res.status(400).json({ error: 'Text is required' });

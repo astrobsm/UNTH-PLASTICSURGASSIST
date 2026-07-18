@@ -6,15 +6,7 @@
  * with extracted vitals, medications, orders, and wound assessments.
  */
 
-import { createClient } from '@supabase/supabase-js';
 import { chatJSON, getOpenAIKey } from '../_lib/openai.js';
-
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-const supabase = supabaseUrl && supabaseServiceKey
-  ? createClient(supabaseUrl, supabaseServiceKey)
-  : null;
 
 // System prompt for structured note extraction
 const SCRIBE_SYSTEM_PROMPT = `You are an expert plastic surgery AI medical scribe. Your task is to process a spoken clinical transcript and produce a structured SOAP note in JSON format.
@@ -95,15 +87,6 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Optional auth verification
-    const authHeader = req.headers.authorization;
-    if (supabase && authHeader?.startsWith('Bearer ')) {
-      const token = authHeader.replace('Bearer ', '');
-      const { error: authError } = await supabase.auth.getUser(token);
-      if (authError) {
-        console.warn('Scribe: token validation failed, continuing anyway');
-      }
-    }
 
     const { transcript, context = 'ward_round', patientName, hospitalNumber, roundType } = req.body;
 

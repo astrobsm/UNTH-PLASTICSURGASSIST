@@ -15,7 +15,8 @@
  * Persistence: bloodTransfusionService — IndexedDB write-through with
  *   automatic /sync/blood-transfusions push (handled by the service).
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, lazy, Suspense } from 'react';
+const TransfusionVitalsChart = lazy(() => import('./TransfusionVitalsChart'));
 import { Droplet, Plus, ScanLine, Mic, MicOff, Save, X, AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
 import { ocrService } from '../services/ocrService';
 import { speechToTextService } from '../services/speechToTextService';
@@ -66,6 +67,31 @@ const emptyVitals = (kind: TransfusionVitals['measurement_type']): Omit<Transfus
   spo2: 98,
   recorded_at: new Date(),
 });
+
+// Parse a scanned chart row's date ("D/M/YY", day-first) + time ("2:30pm" | "14:30")
+// into a Date. Falls back to now (offset by row index so ordering is preserved).
+const parseSeriesDateTime = (date?: string, time?: string, index = 0): Date => {
+  const fallback = new Date(Date.now() + index * 60_000);
+  let y = fallback.getFullYear(), mo = fallback.getMonth(), d = fallback.getDate();
+  if (date && typeof date === 'string') {
+    const parts = date.split(/[\/.\-]/).map(p => parseInt(p, 10));
+    if (parts.length >= 3 && parts.every(n => Number.isFinite(n))) {
+      d = parts[0]; mo = parts[1] - 1; y = parts[2] < 100 ? 2000 + parts[2] : parts[2];
+    }
+  }
+  let hh = fallback.getHours(), mm = fallback.getMinutes();
+  if (time && typeof time === 'string') {
+    const m = time.trim().match(/(\d{1,2}):(\d{2})\s*(am|pm)?/i);
+    if (m) {
+      hh = parseInt(m[1], 10); mm = parseInt(m[2], 10);
+      const ap = m[3]?.toLowerCase();
+      if (ap === 'pm' && hh < 12) hh += 12;
+      if (ap === 'am' && hh === 12) hh = 0;
+    }
+  }
+  const dt = new Date(y, mo, d, hh, mm);
+  return Number.isNaN(dt.getTime()) ? fallback : dt;
+};
 
 const BloodTransfusionTab: React.FC<Props> = ({ patientId, hospitalNumber, patientName, userName }) => {
   const [history, setHistory] = useState<BloodTransfusion[]>([]);
@@ -175,7 +201,41 @@ const BloodTransfusionTab: React.FC<Props> = ({ patientId, hospitalNumber, patie
     }
 
     if (target === 'vitals') {
-      // Apply to "during" vitals (most common scan target during monitoring)
+      // A transfusion monitoring chart usually has MANY time-stamped rows. The
+      // vitals-chart OCR returns them as a `vital_signs_series`; import the WHOLE
+      // series into the "during" vitals so the trend chart is fully populated —
+      // previously only a single reading was kept and the series was discarded.
+      const series: any[] = Array.isArray(s.vital_signs_series) ? s.vital_signs_series
+        : Array.isArray(s.vitals_series) ? s.vitals_series
+        : Array.isArray(s.vitals) ? s.vitals : [];
+
+      const numOr = (val: any, fallback: number): number => {
+        const f = parseFloat(val);
+        return Number.isFinite(f) ? f : fallback;
+      };
+
+      if (series.length > 0) {
+        const rows = series.map((e: any, i: number) => {
+          const base = emptyVitals('during');
+          const sys = e.bp_systolic ?? (typeof e.bp === 'string' ? e.bp.split('/')[0] : undefined);
+          const dia = e.bp_diastolic ?? (typeof e.bp === 'string' ? e.bp.split('/')[1] : undefined);
+          return {
+            measurement_type: 'during' as const,
+            temperature: numOr(e.temperature, base.temperature),
+            pulse: numOr(e.pulse ?? e.heart_rate, base.pulse),
+            bp_systolic: numOr(sys, base.bp_systolic),
+            bp_diastolic: numOr(dia, base.bp_diastolic),
+            respiratory_rate: numOr(e.respiratory_rate ?? e.rr, base.respiratory_rate),
+            spo2: numOr(e.spo2 ?? e.sp_o2, base.spo2),
+            recorded_at: parseSeriesDateTime(e.date, e.time, i),
+          };
+        });
+        setDuringVitals(rows);
+        toast.success(`Imported ${rows.length} timed reading${rows.length > 1 ? 's' : ''} from the chart`);
+        return;
+      }
+
+      // Single-snapshot fallback: fill the last "during" row from scalar fields.
       const idx = duringVitals.length - 1;
       const next = [...duringVitals];
       const v: any = { ...next[idx] };
@@ -494,6 +554,17 @@ const BloodTransfusionTab: React.FC<Props> = ({ patientId, hospitalNumber, patie
               <input type="number" step="0.1" className="mt-1 w-32 border rounded px-2 py-1 text-sm"
                 value={postHb} onChange={(e) => setPostHb(e.target.value === '' ? '' : parseFloat(e.target.value))} />
             </label>
+
+            {/* Live vitals trend — populated instantly from a scanned monitoring chart */}
+            {duringVitals.length >= 2 && (
+              <Suspense fallback={<div className="text-xs text-gray-400 py-2">Loading chart…</div>}>
+                <TransfusionVitalsChart
+                  preVitals={preVitals as unknown as TransfusionVitals}
+                  duringVitals={duringVitals as unknown as TransfusionVitals[]}
+                  postVitals={postVitals as unknown as TransfusionVitals}
+                />
+              </Suspense>
+            )}
           </div>
 
           {/* Reactions */}
