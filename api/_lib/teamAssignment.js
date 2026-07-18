@@ -234,11 +234,13 @@ export async function backfillActiveAdmissions() {
 }
 
 /**
- * Rebalance EVERY admitted patient's team evenly (round-robin) across the
- * current active+approved staff for each role. Overwrites existing assignments,
- * so use it after adding/removing staff to spread load fresh. Roles with no
- * active staff are left empty.
+ * Rebalance EVERY admitted patient's junior team evenly (round-robin) across the
+ * current active+approved staff — SENIOR REGISTRAR, REGISTRAR and HOUSE OFFICER
+ * only. Each patient's CONSULTANT is deliberately left untouched (consultant
+ * relationships are stable and managed separately). Roles with no active staff
+ * are left empty. Use after adding/removing junior staff to spread load fresh.
  */
+const REBALANCE_ROLES = ['senior_registrar', 'registrar', 'house_officer'];
 export async function rebalanceAllTeams() {
   await ensureColumns();
   const adms = (await query(
@@ -247,13 +249,13 @@ export async function rebalanceAllTeams() {
       ORDER BY patient_id`
   )).rows;
   const pool = {};
-  for (const roleKey of ROLES) {
+  for (const roleKey of REBALANCE_ROLES) {
     pool[roleKey] = (await query(
       `SELECT id FROM users WHERE role = ANY($1::text[]) AND is_active = TRUE AND is_approved = TRUE ORDER BY id`,
       [ROLE_USERS[roleKey]]
     )).rows.map(r => String(r.id));
   }
-  const idx = { consultant: 0, senior_registrar: 0, registrar: 0, house_officer: 0 };
+  const idx = { senior_registrar: 0, registrar: 0, house_officer: 0 };
   const pick = (roleKey) => {
     const arr = pool[roleKey];
     if (!arr.length) return null;
@@ -263,15 +265,22 @@ export async function rebalanceAllTeams() {
   };
   let processed = 0;
   for (const a of adms) {
-    await setAssignment(String(a.patient_id), {
-      consultant_id: pick('consultant'),
-      senior_registrar_id: pick('senior_registrar'),
-      registrar_id: pick('registrar'),
-      house_officer_id: pick('house_officer'),
-    });
+    const sr = pick('senior_registrar');
+    const reg = pick('registrar');
+    const ho = pick('house_officer');
+    // Update only the three junior roles; consultant_id is preserved (not in SET).
+    await query(
+      `INSERT INTO patient_assignments
+         (patient_id, senior_registrar_id, registrar_id, house_officer_id, is_active, assigned_at, updated_at)
+       VALUES ($1,$2,$3,$4,TRUE,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+       ON CONFLICT (patient_id) DO UPDATE SET
+         senior_registrar_id = $2, registrar_id = $3, house_officer_id = $4,
+         is_active = TRUE, updated_at = CURRENT_TIMESTAMP`,
+      [String(a.patient_id), sr, reg, ho]
+    );
     processed++;
   }
-  return { processed, pools: Object.fromEntries(ROLES.map(r => [r, pool[r].length])) };
+  return { processed, pools: Object.fromEntries(REBALANCE_ROLES.map(r => [r, pool[r].length])) };
 }
 
 /**

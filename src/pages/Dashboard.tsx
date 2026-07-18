@@ -830,16 +830,17 @@ export default function Dashboard() {
     } finally { setAutoAssigning(false); }
   };
 
-  // Rebalance all admitted patients' teams evenly across active staff (admin).
-  // Overwrites existing assignments — use after adding/activating staff.
+  // Rebalance all admitted patients' JUNIOR team (SR/registrar/HO) evenly across
+  // active staff (admin). Consultants are left as-is. Use after adding/activating
+  // junior staff to spread load fresh.
   const handleRebalanceTeams = async () => {
-    if (!window.confirm('Rebalance ALL admitted patients evenly across current active staff? This overwrites existing team assignments (including manual edits).')) return;
+    if (!window.confirm('Rebalance ALL admitted patients across current active staff? This redistributes Senior Registrars, Registrars and House Officers only (consultants are left unchanged) and overwrites their existing SR/registrar/HO assignments (including manual edits).')) return;
     setAutoAssigning(true);
     setAutoAssignResult(null);
     try {
       const r = await medicalTeamService.rebalanceTeams();
       await loadDashboardData();
-      const pools = r?.pools ? ` (consultants: ${r.pools.consultant}, SR: ${r.pools.senior_registrar}, reg: ${r.pools.registrar}, HO: ${r.pools.house_officer})` : '';
+      const pools = r?.pools ? ` (SR: ${r.pools.senior_registrar}, reg: ${r.pools.registrar}, HO: ${r.pools.house_officer})` : '';
       setAutoAssignResult(r ? `Rebalanced ${r.processed} admitted patients${pools}.` : 'Rebalance completed.');
     } catch (err: any) {
       setAutoAssignResult(`Error: ${err.message || 'Failed to rebalance'}`);
@@ -1190,7 +1191,7 @@ export default function Dashboard() {
                   onClick={handleRebalanceTeams}
                   disabled={autoAssigning}
                   className="px-3 py-1.5 text-xs font-medium rounded-lg bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
-                  title="Redistribute all admitted patients evenly across current active staff"
+                  title="Redistribute Senior Registrars, Registrars and House Officers evenly across active staff (consultants unchanged)"
                 >
                   {autoAssigning ? 'Working...' : 'Rebalance Teams'}
                 </button>
