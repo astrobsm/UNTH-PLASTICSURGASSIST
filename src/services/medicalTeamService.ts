@@ -310,7 +310,9 @@ class MedicalTeamService {
    */
   async getAllAssignmentsFromAPI(): Promise<AssignmentRow[]> {
     try {
-      const data = await apiClient.get('/medical-team/assignments');
+      // Fresh read so the staff lookup reflects current assignments (a stale copy
+      // makes a just-reassigned/deactivated staff's patients flicker in and out).
+      const data = await apiClient.get('/medical-team/assignments', { freshRead: true });
       return (data.assignments || []) as AssignmentRow[];
     } catch (error) {
       console.warn('getAllAssignmentsFromAPI failed, will fall back to local:', error);

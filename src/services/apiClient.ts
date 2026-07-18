@@ -82,6 +82,9 @@ class ApiClient {
   private syncState: SyncState;
   private syncListeners: Set<(state: SyncState) => void>;
   private retryQueue: Map<string, { request: () => Promise<any>, retries: number }>;
+  // Short-lived memo so the several getUsers() callers on one page load share a
+  // single fresh /users fetch instead of each hitting the network.
+  private _usersMemo: { at: number; promise: Promise<any[]> } | null = null;
 
   constructor() {
     this.baseURL = API_BASE_URL;
@@ -167,11 +170,17 @@ class ApiClient {
     return this.token;
   }
 
-  async request<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  async request<T = any>(endpoint: string, options: RequestInit & { freshRead?: boolean } = {}): Promise<T> {
     // Ensure token is loaded from localStorage
     const token = this.getToken();
     const method = (options.method || 'GET').toUpperCase();
     const isGet = method === 'GET';
+    // When true, skip the stale-while-revalidate "return cached immediately" branch
+    // and wait for the network so the caller gets FRESH data (still cached for
+    // offline, and still falls back to cache on network failure). Used for small,
+    // correctness-critical reads like the staff list and team assignments, where a
+    // stale copy (e.g. a just-deactivated user) must not be shown.
+    const freshRead = options.freshRead === true;
     
     // Check if this is a protected endpoint that requires authentication
     const isProtectedEndpoint = !endpoint.includes('/auth') && !endpoint.includes('/health') && !endpoint.includes('/diagnostics') && !endpoint.includes('/students/register') && !endpoint.includes('/students/login');
@@ -229,7 +238,7 @@ class ApiClient {
     // ─── Stale-while-revalidate for GETs on poor networks ───
     // If we have cached data, return it immediately and refresh in background.
     // This prevents the app from hanging 3-4s per request on slow connections.
-    if (navigator.onLine && isGet) {
+    if (navigator.onLine && isGet && !freshRead) {
       const cached = await this.getCachedResponse<T>(endpoint, entityInfo);
       if (cached !== null) {
         // Return cached data immediately, refresh in background
@@ -564,8 +573,8 @@ class ApiClient {
   }
 
   // HTTP convenience methods
-  async get<T = any>(endpoint: string): Promise<T> {
-    return this.request<T>(endpoint, { method: 'GET' });
+  async get<T = any>(endpoint: string, opts?: { freshRead?: boolean }): Promise<T> {
+    return this.request<T>(endpoint, { method: 'GET', ...(opts?.freshRead ? { freshRead: true } : {}) } as any);
   }
 
   /**
@@ -679,16 +688,22 @@ class ApiClient {
 
   // User management
   async getUsers() {
-    const response = await this.request('/users');
-    // Handle different possible response structures
-    if (Array.isArray(response)) {
-      return response;
-    }
-    if (response && Array.isArray(response.users)) {
-      return response.users;
-    }
-    console.warn('Unexpected getUsers response structure:', response);
-    return [];
+    // Fresh read: active/approved status is correctness-critical (a deactivated
+    // resident must not linger in the cached copy and reappear on the dashboard).
+    // A ~4s memo lets the multiple callers on a single page load share one fetch.
+    const now = Date.now();
+    if (this._usersMemo && now - this._usersMemo.at < 4000) return this._usersMemo.promise;
+    const promise = (async () => {
+      const response = await this.request('/users', { freshRead: true } as any);
+      if (Array.isArray(response)) return response;
+      if (response && Array.isArray(response.users)) return response.users;
+      console.warn('Unexpected getUsers response structure:', response);
+      return [];
+    })();
+    // If the fetch rejects, drop the memo so the next call retries.
+    promise.catch(() => { if (this._usersMemo?.promise === promise) this._usersMemo = null; });
+    this._usersMemo = { at: now, promise };
+    return promise;
   }
 
   async approveUser(userId: string, isApproved: boolean = true) {
