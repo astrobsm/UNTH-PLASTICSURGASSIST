@@ -1,5 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, lazy, Suspense } from 'react';
 import MedicalAutocompleteTextarea from '../MedicalAutocompleteTextarea';
+const WoundHealingMap = lazy(() => import('../WoundHealingMap'));
 import { procedureService, WoundCareAssessment } from '../../services/procedureService';
 import { aiWoundMeasurement, WoundMeasurementResult, CalibrationReference } from '../../services/aiWoundMeasurement';
 import {
@@ -982,7 +983,35 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
                     <p className="text-lg font-bold text-green-700">{(aiMeasurementResult.confidence * 100).toFixed(0)}%</p>
                   </div>
                 </div>
-                
+
+                {/* Scale reliability */}
+                <div className={`mb-2 text-xs rounded-md px-2 py-1.5 ${
+                  aiMeasurementResult.scaleReliable ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'
+                }`}>
+                  {aiMeasurementResult.scaleReliable
+                    ? `✓ To scale (${aiMeasurementResult.calibrationMethod}, ${(aiMeasurementResult.calibrationConfidence * 100).toFixed(0)}%).`
+                    : '⚠ Scale reference weak — dimensions are approximate. Re-calibrate with a ruler/reference in frame.'}
+                </div>
+
+                {/* Tissue composition */}
+                {aiMeasurementResult.tissue && (
+                  <div className="mb-3">
+                    <p className="text-[11px] text-gray-500 mb-1">Wound-bed composition</p>
+                    <div className="flex h-3 rounded overflow-hidden">
+                      {([['granulation', '#DC2626'], ['slough', '#CA8A04'], ['necrotic', '#1F2937'], ['epithelial', '#F9A8D4']] as const).map(([k, color]) => {
+                        const v = (aiMeasurementResult.tissue as any)[k] as number;
+                        return v > 0 ? <div key={k} title={`${k}: ${v}%`} style={{ width: `${v}%`, backgroundColor: color }} /> : null;
+                      })}
+                    </div>
+                    <div className="flex flex-wrap gap-x-3 mt-1 text-[10px] text-gray-600">
+                      <span>🟥 Gran {aiMeasurementResult.tissue.granulation}%</span>
+                      <span>🟨 Slough {aiMeasurementResult.tissue.slough}%</span>
+                      <span>⬛ Necrotic {aiMeasurementResult.tissue.necrotic}%</span>
+                      <span>🟪 Epith {aiMeasurementResult.tissue.epithelial}%</span>
+                    </div>
+                  </div>
+                )}
+
                 <canvas
                   ref={segmentationCanvasRef}
                   className="w-full h-auto rounded-md border-2 border-green-300"
@@ -1071,6 +1100,18 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
             <span className="text-2xl mr-2">📊</span>
             Wound Measurement History & Progress Tracking
           </h4>
+
+          {/* Serial healing map */}
+          <div className="mb-4">
+            <Suspense fallback={<div className="bg-white rounded-lg p-3 text-center text-xs text-gray-400">Loading map…</div>}>
+              <WoundHealingMap
+                measurements={assessment.dimension_history.map(m => ({
+                  date: m.date, length: m.length, width: m.width, area: m.area,
+                }))}
+                height={280}
+              />
+            </Suspense>
+          </div>
 
           <div className="space-y-3 mb-4">
             {assessment.dimension_history.map((measurement, index) => (
