@@ -124,8 +124,11 @@ const WoundProgressChart: React.FC<WoundProgressChartProps> = ({ measurements, r
           </div>
           {report.estimatedHealingTime && (
             <div className="rounded-lg px-3 py-2 bg-blue-50">
-              <div className="text-xs font-medium text-blue-600">Est. Healing</div>
+              <div className="text-xs font-medium text-blue-600">Est. Closure</div>
               <div className="text-lg font-bold text-blue-800">~{report.estimatedHealingTime}d</div>
+              {report.estimatedClosureDate && (
+                <div className="text-[10px] text-blue-600">{new Date(report.estimatedClosureDate).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+              )}
             </div>
           )}
         </div>

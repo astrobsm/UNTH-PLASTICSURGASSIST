@@ -19,15 +19,45 @@ import * as tf from '@tensorflow/tfjs';
 // INTERFACES
 // ============================================
 
+/** Tissue composition of the wound bed (percentages, sum ~100). */
+export interface WoundTissueComposition {
+  granulation: number;   // healthy red/pink
+  slough: number;        // yellow / fibrinous
+  necrotic: number;      // black / eschar
+  epithelial: number;    // new pink margin
+}
+
+/** Structured qualitative assessment from the GPT-4o Vision layer (hybrid mode). */
+export interface AiWoundAssessment {
+  wound_type?: string;
+  location?: string;
+  dimensions?: {
+    length_cm?: number; width_cm?: number; depth_cm?: number | null;
+    area_cm2?: number; calibration_used?: boolean; calibration_type?: string;
+  };
+  wound_bed?: { granulation_pct?: number; slough_pct?: number; necrotic_pct?: number; epithelialization_pct?: number };
+  edges?: string;
+  exudate?: string;
+  exudate_type?: string;
+  surrounding_skin?: string;
+  signs_of_infection?: string[];
+  color_assessment?: string;
+  healing_stage?: string;
+  graft_viability?: string;
+  flap_status?: string;
+  observations?: string;
+  confidence?: number;
+}
+
 export interface WoundMeasurementResult {
   length: number;          // cm
   width: number;           // cm
-  area: number;            // cm�
+  area: number;            // cm²
   perimeter: number;       // cm
   depth?: number;
-  confidence: number;      // 0-1
+  confidence: number;      // 0-1 overall
   boundingBox: { x: number; y: number; width: number; height: number };
-  contourPoints: Array<{ x: number; y: number }>;
+  contourPoints: Array<{ x: number; y: number }>;   // pixel-space (for overlay)
   segmentationMask: ImageData;
   measurements: {
     pixelLength: number;
@@ -37,6 +67,14 @@ export interface WoundMeasurementResult {
     calibrationFactor: number; // pixels per cm
   };
   calibrationMethod: string;
+  // --- accuracy / serial-map additions ---
+  centroid: { x: number; y: number };               // pixel centroid of the wound
+  contourCm: Array<{ x: number; y: number }>;        // contour in cm, centred on centroid (for the healing map)
+  scaleReliable: boolean;                            // true when calibration is trustworthy for absolute cm
+  calibrationConfidence: number;                     // 0-1, the scale-detection confidence alone
+  tissue?: WoundTissueComposition;                   // on-device wound-bed composition
+  aiAssessment?: AiWoundAssessment;                  // GPT-4o Vision enrichment (hybrid mode)
+  warnings: string[];                                // e.g. "no scale reference", "AI/CV size disagree"
 }
 
 export interface CalibrationReference {
@@ -55,13 +93,18 @@ export interface WoundProgressEntry {
   perimeter?: number;
   granulation_percentage?: number;
   healing_phase?: string;
+  // Optional shape for the spatial healing map. When absent, the map synthesises
+  // an ellipse from length/width so historical entries still plot.
+  contourCm?: Array<{ x: number; y: number }>;
+  tissue?: WoundTissueComposition;
 }
 
 export interface WoundProgressReport {
   trend: 'improving' | 'stable' | 'worsening';
   percentageChange: number;
-  averageHealingRate: number;
-  estimatedHealingTime?: number;
+  averageHealingRate: number;          // cm²/day (positive = shrinking), least-squares slope
+  estimatedHealingTime?: number;       // days to closure from the latest measurement
+  estimatedClosureDate?: string;       // ISO date of projected closure
   weeklyRates: Array<{ week: string; rate: number }>;
   recommendations: string[];
 }
@@ -345,6 +388,95 @@ function detectRulerMarkings(gray: Uint8Array, w: number, h: number): { found: b
 }
 
 // ============================================
+// ILLUMINATION NORMALISATION (accuracy)
+// ============================================
+
+/**
+ * Gray-world white balance. Cameras and ward lighting shift colour temperature,
+ * which throws off HSV wound classification. Normalising each channel to a common
+ * mean makes red/yellow/black thresholds far more consistent across photos —
+ * the single biggest cheap win for segmentation accuracy.
+ */
+function grayWorldNormalize(data: Uint8ClampedArray): Uint8ClampedArray {
+  let rSum = 0, gSum = 0, bSum = 0, n = 0;
+  for (let i = 0; i < data.length; i += 4) { rSum += data[i]; gSum += data[i + 1]; bSum += data[i + 2]; n++; }
+  if (n === 0) return data;
+  const rM = rSum / n, gM = gSum / n, bM = bSum / n;
+  const gray = (rM + gM + bM) / 3;
+  const rG = rM > 1 ? gray / rM : 1, gG = gM > 1 ? gray / gM : 1, bG = bM > 1 ? gray / bM : 1;
+  const out = new Uint8ClampedArray(data.length);
+  for (let i = 0; i < data.length; i += 4) {
+    out[i] = Math.min(255, data[i] * rG);
+    out[i + 1] = Math.min(255, data[i + 1] * gG);
+    out[i + 2] = Math.min(255, data[i + 2] * bG);
+    out[i + 3] = 255;
+  }
+  return out;
+}
+
+/**
+ * Fill interior holes in a binary mask (slough/eschar islands inside a wound get
+ * classified out, which under-counts area). Flood-fill background from the border;
+ * any unreached background pixel is an interior hole → set it to wound.
+ */
+function fillHoles(mask: Uint8Array, w: number, h: number): Uint8Array {
+  const bgReach = new Uint8Array(w * h); // 1 = background connected to border
+  const stack: number[] = [];
+  const pushIf = (x: number, y: number) => {
+    if (x < 0 || x >= w || y < 0 || y >= h) return;
+    const idx = y * w + x;
+    if (mask[idx] === 0 && bgReach[idx] === 0) { bgReach[idx] = 1; stack.push(idx); }
+  };
+  for (let x = 0; x < w; x++) { pushIf(x, 0); pushIf(x, h - 1); }
+  for (let y = 0; y < h; y++) { pushIf(0, y); pushIf(w - 1, y); }
+  while (stack.length) {
+    const idx = stack.pop()!;
+    const x = idx % w, y = (idx - x) / w;
+    pushIf(x + 1, y); pushIf(x - 1, y); pushIf(x, y + 1); pushIf(x, y - 1);
+  }
+  const out = new Uint8Array(mask.length);
+  for (let i = 0; i < mask.length; i++) out[i] = (mask[i] > 0 || bgReach[i] === 0) ? 255 : 0;
+  return out;
+}
+
+// ============================================
+// TISSUE COMPOSITION (wound-bed classification)
+// ============================================
+
+type TissueClass = 'granulation' | 'slough' | 'necrotic' | 'epithelial';
+
+/** Classify a wound-bed pixel into a tissue class from HSV. */
+function classifyTissue(r: number, g: number, b: number): TissueClass {
+  const [hue, s, v] = rgbToHsv(r, g, b);
+  if (v < 30) return 'necrotic';                                   // black / eschar
+  if (hue >= 35 && hue <= 70 && s > 20) return 'slough';           // yellow / fibrinous
+  if ((hue <= 12 || hue >= 345) && s > 45 && v > 25) return 'granulation'; // deep red, beefy
+  if ((hue <= 25 || hue >= 330) && s <= 45 && v > 55) return 'epithelial'; // pale pink margin
+  if (hue >= 15 && hue <= 35 && v < 55) return 'slough';           // tan slough
+  return 'granulation';                                            // default red/pink bed
+}
+
+/** Percentage tissue composition over the wound mask pixels. */
+function computeTissueComposition(data: Uint8ClampedArray, mask: Uint8Array): WoundTissueComposition {
+  const counts = { granulation: 0, slough: 0, necrotic: 0, epithelial: 0 };
+  let total = 0;
+  for (let i = 0; i < mask.length; i++) {
+    if (mask[i] === 0) continue;
+    const idx = i * 4;
+    counts[classifyTissue(data[idx], data[idx + 1], data[idx + 2])]++;
+    total++;
+  }
+  if (total === 0) return { granulation: 0, slough: 0, necrotic: 0, epithelial: 0 };
+  const pct = (c: number) => Math.round((c / total) * 100);
+  return {
+    granulation: pct(counts.granulation),
+    slough: pct(counts.slough),
+    necrotic: pct(counts.necrotic),
+    epithelial: pct(counts.epithelial),
+  };
+}
+
+// ============================================
 // WOUND SEGMENTATION
 // ============================================
 
@@ -444,16 +576,23 @@ export class AIWoundMeasurementService {
     const calibration = calibrationOverride || await this.detectCalibration(imageData);
     const pxPerCm = calibration.pixelSize;
 
-    const blurred = gaussianBlur5x5(imageData.data, w, h);
+    // Normalise illumination on a copy (keep the original pixels for calibration &
+    // tissue colour), then blur + segment. Fill interior holes so slough/eschar
+    // islands inside the wound are counted in the area.
+    const normalized = grayWorldNormalize(imageData.data);
+    const blurred = gaussianBlur5x5(normalized, w, h);
     const blurredImageData = new ImageData(new Uint8ClampedArray(blurred), w, h);
-    const woundMask = await segmentWoundTF(blurredImageData);
+    const rawMask = await segmentWoundTF(blurredImageData);
+    const woundMask = fillHoles(rawMask, w, h);
 
     let pixelArea = 0;
     let minX = w, maxX = 0, minY = h, maxY = 0;
+    let sumX = 0, sumY = 0;
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
         if (woundMask[y * w + x] > 0) {
           pixelArea++;
+          sumX += x; sumY += y;
           minX = Math.min(minX, x); maxX = Math.max(maxX, x);
           minY = Math.min(minY, y); maxY = Math.max(maxY, y);
         }
@@ -467,9 +606,14 @@ export class AIWoundMeasurementService {
         boundingBox: { x: 0, y: 0, width: 0, height: 0 },
         contourPoints: [], segmentationMask: emptyMask,
         measurements: { pixelLength: 0, pixelWidth: 0, pixelArea: 0, pixelPerimeter: 0, calibrationFactor: pxPerCm },
-        calibrationMethod: calibration.type
+        calibrationMethod: calibration.type,
+        centroid: { x: 0, y: 0 }, contourCm: [],
+        scaleReliable: false, calibrationConfidence: calibration.confidence,
+        warnings: ['No wound region detected — check lighting, focus, and that the wound fills the frame.'],
       };
     }
+
+    const centroid = { x: sumX / pixelArea, y: sumY / pixelArea };
 
     const contour = traceContour(woundMask, w, h);
     const pixelPerimeter = contourPerimeter(contour);
@@ -482,8 +626,30 @@ export class AIWoundMeasurementService {
     const areaCm2 = pixelArea / (pxPerCm * pxPerCm);
     const perimeterCm = pixelPerimeter / pxPerCm;
 
+    // --- Sanity checks & scale reliability ---
+    const warnings: string[] = [];
+    const scalePlausible = pxPerCm > 3 && pxPerCm < 4000;
+    const scaleReliable = calibration.confidence >= 0.5 && scalePlausible;
+    if (!scaleReliable) {
+      warnings.push('Scale reference weak or missing — dimensions are approximate. Include a ruler or the printed marker for accurate cm.');
+    }
+    // Area vs. ellipse(L×W) consistency: a good segmentation is roughly elliptical.
+    const ellipseArea = Math.PI * (lengthCm / 2) * (widthCm / 2);
+    let shapeCoherence = 1;
+    if (ellipseArea > 0) {
+      const ratio = areaCm2 / ellipseArea; // ~0.5–1.0 typical for real wounds
+      shapeCoherence = ratio > 1.6 || ratio < 0.25 ? 0.4 : 1;
+      if (shapeCoherence < 1) warnings.push('Segmentation shape looks irregular — verify the outline before recording.');
+    }
+
     const fillRatio = pixelArea / ((maxX - minX + 1) * (maxY - minY + 1));
-    const confidence = Math.min(0.98, calibration.confidence * 0.5 + fillRatio * 0.3 + (contour.length > 50 ? 0.18 : 0.05));
+    const confidence = Math.min(
+      0.98,
+      calibration.confidence * 0.4 + fillRatio * 0.25 + (contour.length > 50 ? 0.2 : 0.05) + 0.1 * shapeCoherence
+    ) * (scaleReliable ? 1 : 0.7);
+
+    // Tissue composition (uses original colours, not the white-balanced copy).
+    const tissue = computeTissueComposition(imageData.data, woundMask);
 
     const maskImageData = new ImageData(w, h);
     for (let i = 0; i < woundMask.length; i++) {
@@ -498,6 +664,11 @@ export class AIWoundMeasurementService {
 
     const step = Math.max(1, Math.floor(contour.length / 200));
     const sampledContour = contour.filter((_, i) => i % step === 0);
+    // Contour in cm, centred on the centroid — the shape used by the serial healing map.
+    const contourCm = sampledContour.map(p => ({
+      x: parseFloat(((p.x - centroid.x) / pxPerCm).toFixed(3)),
+      y: parseFloat(((p.y - centroid.y) / pxPerCm).toFixed(3)),
+    }));
 
     return {
       length: parseFloat(lengthCm.toFixed(2)),
@@ -509,8 +680,77 @@ export class AIWoundMeasurementService {
       contourPoints: sampledContour,
       segmentationMask: maskImageData,
       measurements: { pixelLength: rect.length, pixelWidth: rect.width, pixelArea, pixelPerimeter, calibrationFactor: pxPerCm },
-      calibrationMethod: calibration.type
+      calibrationMethod: calibration.type,
+      centroid,
+      contourCm,
+      scaleReliable,
+      calibrationConfidence: parseFloat(calibration.confidence.toFixed(3)),
+      tissue,
+      warnings,
     };
+  }
+
+  /**
+   * Hybrid AI enrichment: send the photo to the GPT-4o Vision endpoint for a
+   * qualitative wound-bed assessment (tissue %, wound type, healing stage, edges,
+   * exudate, infection signs) and a size cross-check. Absolute dimensions still
+   * come from the calibrated on-device measurement — the AI layer enriches, it
+   * does not replace, the numbers. Returns null on any failure (offline, no key,
+   * etc.) so callers degrade gracefully to on-device-only.
+   */
+  async analyzeWithAI(
+    imageBase64: string,
+    patientId: string | number,
+    opts?: { woundRecordId?: string; calibrationType?: string; calibrationValue?: string }
+  ): Promise<AiWoundAssessment | null> {
+    try {
+      const { apiClient } = await import('./apiClient');
+      const resp = await apiClient.request<{ success?: boolean; analysis?: AiWoundAssessment }>(
+        '/ocr/wound-measure',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            action: 'analyze',
+            imageBase64,
+            patientId: String(patientId),
+            woundRecordId: opts?.woundRecordId,
+            calibrationType: opts?.calibrationType,
+            calibrationValue: opts?.calibrationValue,
+          }),
+        }
+      );
+      return resp?.analysis || null;
+    } catch (e) {
+      console.warn('AI wound assessment unavailable:', (e as Error)?.message);
+      return null;
+    }
+  }
+
+  /**
+   * Merge an AI assessment into a measurement result: attach the qualitative
+   * assessment, prefer AI tissue percentages when present, and flag a large
+   * disagreement between the AI's area estimate and the calibrated CV area.
+   */
+  mergeAiAssessment(result: WoundMeasurementResult, ai: AiWoundAssessment | null): WoundMeasurementResult {
+    if (!ai) return result;
+    const merged: WoundMeasurementResult = { ...result, aiAssessment: ai, warnings: [...result.warnings] };
+    const wb = ai.wound_bed;
+    if (wb && (wb.granulation_pct != null || wb.slough_pct != null || wb.necrotic_pct != null)) {
+      merged.tissue = {
+        granulation: Math.round(wb.granulation_pct ?? result.tissue?.granulation ?? 0),
+        slough: Math.round(wb.slough_pct ?? result.tissue?.slough ?? 0),
+        necrotic: Math.round(wb.necrotic_pct ?? result.tissue?.necrotic ?? 0),
+        epithelial: Math.round(wb.epithelialization_pct ?? result.tissue?.epithelial ?? 0),
+      };
+    }
+    const aiArea = ai.dimensions?.area_cm2;
+    if (aiArea && result.area > 0 && result.scaleReliable) {
+      const r = aiArea / result.area;
+      if (r > 2 || r < 0.5) {
+        merged.warnings.push(`AI area estimate (${aiArea.toFixed(1)} cm²) differs from the measured ${result.area} cm² — re-check the scale reference.`);
+      }
+    }
+    return merged;
   }
 
   /** Render measurement overlay on canvas */
@@ -592,8 +832,19 @@ export class AIWoundMeasurementService {
     const first = sorted[0], last = sorted[sorted.length - 1];
     const areaChange = first.area - last.area;
     const percentageChange = first.area > 0 ? (areaChange / first.area) * 100 : 0;
-    const totalDays = Math.max(1, (new Date(last.date).getTime() - new Date(first.date).getTime()) / 86400000);
-    const avgRate = areaChange / totalDays;
+
+    // Least-squares regression of area against days (t=0 at the first measurement).
+    // Slope = area change per day; a positive HEALING rate means area is shrinking,
+    // so healingRate = -slope. Regression is more robust to noise than first/last.
+    const t0 = new Date(first.date).getTime();
+    const pts = sorted.map(m => ({ t: (new Date(m.date).getTime() - t0) / 86400000, a: m.area }));
+    const n = pts.length;
+    const meanT = pts.reduce((s, p) => s + p.t, 0) / n;
+    const meanA = pts.reduce((s, p) => s + p.a, 0) / n;
+    let sTA = 0, sTT = 0;
+    for (const p of pts) { sTA += (p.t - meanT) * (p.a - meanA); sTT += (p.t - meanT) ** 2; }
+    const slope = sTT > 0 ? sTA / sTT : 0;   // cm\u00B2/day (negative when shrinking)
+    const healingRate = -slope;              // positive = shrinking = good
 
     const weeklyRates: Array<{ week: string; rate: number }> = [];
     for (let i = 1; i < sorted.length; i++) {
@@ -606,14 +857,23 @@ export class AIWoundMeasurementService {
     else if (percentageChange < -10) trend = 'worsening';
     else trend = 'stable';
 
+    // Project closure from the regression line: days from the LAST measurement
+    // until area reaches zero at the current healing rate.
     let estimatedHealingTime: number | undefined;
-    if (avgRate > 0 && last.area > 0) estimatedHealingTime = Math.ceil(last.area / avgRate);
+    let estimatedClosureDate: string | undefined;
+    if (healingRate > 0.0001 && last.area > 0) {
+      estimatedHealingTime = Math.ceil(last.area / healingRate);
+      if (estimatedHealingTime > 0 && estimatedHealingTime < 3650) {
+        estimatedClosureDate = new Date(new Date(last.date).getTime() + estimatedHealingTime * 86400000)
+          .toISOString().slice(0, 10);
+      }
+    }
 
     const recommendations: string[] = [];
     if (trend === 'improving') {
       recommendations.push('Wound is healing well \u2014 continue current treatment.');
-      recommendations.push(`Healing rate: ${avgRate.toFixed(2)} cm\u00B2/day`);
-      if (estimatedHealingTime) recommendations.push(`Estimated complete healing: ~${estimatedHealingTime} days`);
+      recommendations.push(`Healing rate: ${healingRate.toFixed(2)} cm\u00B2/day (regression over ${n} measurements).`);
+      if (estimatedClosureDate) recommendations.push(`Projected closure: ~${estimatedHealingTime} days (around ${estimatedClosureDate}).`);
     } else if (trend === 'worsening') {
       recommendations.push('Wound size increasing \u2014 reassess treatment immediately.');
       recommendations.push('Consider: infection, inadequate debridement, poor perfusion.');
@@ -627,8 +887,9 @@ export class AIWoundMeasurementService {
     return {
       trend,
       percentageChange: parseFloat(percentageChange.toFixed(1)),
-      averageHealingRate: parseFloat(avgRate.toFixed(3)),
+      averageHealingRate: parseFloat(healingRate.toFixed(3)),
       estimatedHealingTime,
+      estimatedClosureDate,
       weeklyRates,
       recommendations
     };

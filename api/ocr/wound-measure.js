@@ -15,7 +15,9 @@ export default async function handler(req, res) {
   const { method } = req;
   const url = new URL(req.url, `http://${req.headers.host}`);
   const pathParts = url.pathname.replace('/api/ocr/wound-measure', '').split('/').filter(Boolean);
-  const action = pathParts[0]; // 'analyze' | 'history' | 'trend'
+  // Action from the subpath (/analyze), else from the body or query string so the
+  // base route (/api/ocr/wound-measure) works without a Vercel subpath rewrite.
+  const action = pathParts[0] || (req.body && req.body.action) || url.searchParams.get('action'); // 'analyze' | 'history' | 'trend'
 
   try {
     switch (method) {

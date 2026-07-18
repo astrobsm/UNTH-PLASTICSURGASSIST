@@ -40,6 +40,7 @@ import { aiWoundMeasurement } from '../services/aiWoundMeasurement';
 import type { WoundMeasurementResult, WoundProgressEntry, CalibrationReference } from '../services/aiWoundMeasurement';
 // Lazy-load chart.js (~200 KB) only when the wound-progress panel actually renders
 const WoundProgressChart = lazy(() => import('../components/WoundProgressChart'));
+const WoundHealingMap = lazy(() => import('../components/WoundHealingMap'));
 
 // ============================================
 // TYPES & INTERFACES
@@ -65,6 +66,10 @@ interface WoundPhoto {
     area: number;
     perimeter: number;
   };
+  // For the serial healing map & tissue trend (captured with the measurement).
+  contourCm?: Array<{ x: number; y: number }>;
+  tissue?: { granulation: number; slough: number; necrotic: number; epithelial: number };
+  scaleReliable?: boolean;
 }
 
 interface WoundAssessment {
@@ -281,6 +286,11 @@ const WoundCarePage: React.FC = () => {
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const [lastMeasurementResult, setLastMeasurementResult] = useState<WoundMeasurementResult | null>(null);
+  // Hybrid AI: enrich the on-device measurement with GPT-4o Vision (tissue %, wound
+  // type, healing stage, cross-check). Sends the photo to the server → OpenAI, so
+  // staff can toggle it off per session for privacy / offline use.
+  const [useAiAssessment, setUseAiAssessment] = useState(true);
+  const [aiEnriching, setAiEnriching] = useState(false);
 
   // ----- Reference-marker & calibration state -----
   const [calibrationMethod, setCalibrationMethod] = useState<'auto' | 'coin' | 'card' | 'manual'>('auto');
@@ -436,14 +446,39 @@ const WoundCarePage: React.FC = () => {
       id: `photo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       dataUrl: overlayCanvasRef.current?.toDataURL('image/jpeg', 0.9) || dataUrl,
       timestamp: new Date(),
-      measurements
+      measurements,
+      contourCm: result.contourCm,
+      tissue: result.tissue,
+      scaleReliable: result.scaleReliable,
     };
     setCapturedPhotos(prev => [...prev, newPhoto]);
     if (capturedPhotos.length === 0 && measurements) {
       setFormData(prev => ({ ...prev, length: measurements.length, width: measurements.width }));
     }
-    setTimeout(() => setIsAnalyzing(false), 2000);
-    // Don't stop camera � allow multiple captures
+    setIsAnalyzing(false);
+    // Hybrid AI enrichment (non-blocking): merge tissue/type/stage into the result & photo.
+    void enrichWithAI(result, dataUrl, newPhoto.id);
+    // Don't stop camera — allow multiple captures
+  };
+
+  // Send the captured photo to the GPT-4o Vision endpoint and merge its qualitative
+  // assessment into the on-device result. Best-effort: silently no-ops when the AI
+  // toggle is off, no patient is selected, or the service is unavailable.
+  const enrichWithAI = async (result: WoundMeasurementResult, imageDataUrl: string, photoId: string) => {
+    if (!useAiAssessment || !selectedPatient?.id || result.area <= 0) return;
+    setAiEnriching(true);
+    try {
+      const ai = await aiWoundMeasurement.analyzeWithAI(imageDataUrl, selectedPatient.id, {
+        calibrationType: result.calibrationMethod,
+        calibrationValue: result.scaleReliable ? `${result.measurements.calibrationFactor.toFixed(1)} px/cm` : undefined,
+      });
+      if (!ai) return;
+      const merged = aiWoundMeasurement.mergeAiAssessment(result, ai);
+      setLastMeasurementResult(prev => (prev === result || prev?.contourCm === result.contourCm ? merged : prev));
+      setCapturedPhotos(prev => prev.map(p => p.id === photoId ? { ...p, tissue: merged.tissue } : p));
+    } finally {
+      setAiEnriching(false);
+    }
   };
 
   // Cleanup camera on unmount
@@ -488,15 +523,20 @@ const WoundCarePage: React.FC = () => {
           aiWoundMeasurement.renderOverlay(cctx, result, cvs.width, cvs.height);
           const overlayUrl = cvs.toDataURL('image/jpeg', 0.9);
           const measurements = { length: result.length, width: result.width, area: result.area, perimeter: result.perimeter };
-        
+
         const newPhoto: WoundPhoto = {
           id: `photo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           dataUrl: overlayUrl,
           timestamp: new Date(),
-          measurements
+          measurements,
+          contourCm: result.contourCm,
+          tissue: result.tissue,
+          scaleReliable: result.scaleReliable,
         };
-        
+
         setCapturedPhotos(prev => [...prev, newPhoto]);
+        // Hybrid AI enrichment uses the original (un-overlaid) image.
+        void enrichWithAI(result, dataUrl, newPhoto.id);
         
         // Auto-fill measurements if this is the first photo
         if (capturedPhotos.length === 0 && measurements) {
@@ -515,6 +555,13 @@ const WoundCarePage: React.FC = () => {
     setTimeout(() => setIsAnalyzing(false), 2000);
   };
 
+  // Pull the stored contour/tissue from an assessment's measured photo (newest with data)
+  // so the serial healing map can draw the real outline instead of only an ellipse.
+  const photoShape = (a: WoundAssessment): Pick<WoundProgressEntry, 'contourCm' | 'tissue'> => {
+    const p = [...(a.photos || [])].reverse().find(ph => ph.contourCm && ph.contourCm.length > 2);
+    return { contourCm: p?.contourCm, tissue: p?.tissue };
+  };
+
   // Build progress data for selected patient's particular wound (patient + location + wound_type)
   const getProgressData = useCallback((): WoundProgressEntry[] => {
     if (!selectedAssessment) return [];
@@ -531,7 +578,8 @@ const WoundCarePage: React.FC = () => {
         width: a.width,
         area: a.area,
         granulation_percentage: a.granulation_percentage,
-        healing_phase: a.healing_phase
+        healing_phase: a.healing_phase,
+        ...photoShape(a),
       }));
   }, [assessments, selectedAssessment]);
 
@@ -552,7 +600,8 @@ const WoundCarePage: React.FC = () => {
         width: a.width,
         area: a.area,
         granulation_percentage: a.granulation_percentage,
-        healing_phase: a.healing_phase
+        healing_phase: a.healing_phase,
+        ...photoShape(a),
       }));
   }, [assessments, selectedPatient, formData.location, formData.wound_type]);
 
@@ -1516,6 +1565,20 @@ const WoundCarePage: React.FC = () => {
               AI will look for our printed green markers, a visible ruler, or a 1cm grid. Confidence is shown after measurement.
             </p>
           )}
+          {/* Hybrid AI assessment toggle */}
+          <label className="flex items-center gap-2 mt-2 text-xs text-gray-700 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={useAiAssessment}
+              onChange={e => setUseAiAssessment(e.target.checked)}
+              className="rounded border-gray-300"
+            />
+            <span>
+              AI wound-bed assessment (tissue %, type, healing stage){' '}
+              <span className="text-gray-400">— sends the photo to the secure AI service; turn off for offline/private capture.</span>
+            </span>
+            {aiEnriching && <span className="text-indigo-600 animate-pulse">· analysing…</span>}
+          </label>
         </div>
 
         {/* Inline trend preview for THIS wound */}
@@ -1534,6 +1597,9 @@ const WoundCarePage: React.FC = () => {
               </p>
               <Suspense fallback={<div className="bg-gray-50 rounded-lg p-3 text-center text-xs text-gray-400">Loading chart…</div>}>
                 <WoundProgressChart measurements={inlineData} report={report} />
+                <div className="mt-3">
+                  <WoundHealingMap measurements={inlineData} height={260} />
+                </div>
               </Suspense>
             </div>
           );
@@ -1767,14 +1833,79 @@ const WoundCarePage: React.FC = () => {
                   <p className="text-[10px] text-gray-500">Perimeter (cm)</p>
                 </div>
               </div>
+
+              {/* Scale reliability */}
+              <div className={`mt-2 text-xs rounded-md px-2 py-1.5 flex items-center gap-1.5 ${
+                lastMeasurementResult.scaleReliable ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'
+              }`}>
+                {lastMeasurementResult.scaleReliable
+                  ? `✓ Scale reference detected (${lastMeasurementResult.calibrationMethod}, ${(lastMeasurementResult.calibrationConfidence * 100).toFixed(0)}%) — dimensions are to scale.`
+                  : '⚠ No reliable scale reference — dimensions are approximate. Add a ruler / printed marker, or set a manual scale.'}
+              </div>
+
+              {/* Tissue composition */}
+              {lastMeasurementResult.tissue && (
+                <div className="mt-2">
+                  <p className="text-[10px] text-gray-500 mb-1">Wound-bed composition{lastMeasurementResult.aiAssessment ? ' (AI)' : ''}</p>
+                  <div className="flex h-3 rounded overflow-hidden">
+                    {([
+                      ['granulation', '#DC2626', 'Granulation'],
+                      ['slough', '#CA8A04', 'Slough'],
+                      ['necrotic', '#1F2937', 'Necrotic'],
+                      ['epithelial', '#F9A8D4', 'Epithelial'],
+                    ] as const).map(([k, color]) => {
+                      const v = (lastMeasurementResult.tissue as any)[k] as number;
+                      return v > 0 ? <div key={k} title={`${k}: ${v}%`} style={{ width: `${v}%`, backgroundColor: color }} /> : null;
+                    })}
+                  </div>
+                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-[10px] text-gray-600">
+                    <span>🟥 Granulation {lastMeasurementResult.tissue.granulation}%</span>
+                    <span>🟨 Slough {lastMeasurementResult.tissue.slough}%</span>
+                    <span>⬛ Necrotic {lastMeasurementResult.tissue.necrotic}%</span>
+                    <span>🟪 Epithelial {lastMeasurementResult.tissue.epithelial}%</span>
+                  </div>
+                </div>
+              )}
+
+              {/* AI qualitative assessment (hybrid) */}
+              {lastMeasurementResult.aiAssessment && (
+                <div className="mt-2 text-xs bg-indigo-50 border border-indigo-200 rounded-md px-2 py-1.5 text-indigo-800 space-y-0.5">
+                  <p className="font-semibold flex items-center gap-1">🤖 AI assessment</p>
+                  {lastMeasurementResult.aiAssessment.wound_type && <p>Type: {lastMeasurementResult.aiAssessment.wound_type}</p>}
+                  {lastMeasurementResult.aiAssessment.healing_stage && <p>Stage: {lastMeasurementResult.aiAssessment.healing_stage}</p>}
+                  {lastMeasurementResult.aiAssessment.edges && <p>Edges: {lastMeasurementResult.aiAssessment.edges}</p>}
+                  {lastMeasurementResult.aiAssessment.exudate && <p>Exudate: {lastMeasurementResult.aiAssessment.exudate}{lastMeasurementResult.aiAssessment.exudate_type ? ` (${lastMeasurementResult.aiAssessment.exudate_type})` : ''}</p>}
+                  {Array.isArray(lastMeasurementResult.aiAssessment.signs_of_infection) && lastMeasurementResult.aiAssessment.signs_of_infection.length > 0 && (
+                    <p className="text-red-700">Infection signs: {lastMeasurementResult.aiAssessment.signs_of_infection.join(', ')}</p>
+                  )}
+                  {lastMeasurementResult.aiAssessment.observations && <p className="italic">{lastMeasurementResult.aiAssessment.observations}</p>}
+                </div>
+              )}
+
+              {/* Warnings */}
+              {lastMeasurementResult.warnings && lastMeasurementResult.warnings.length > 0 && (
+                <ul className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 space-y-0.5">
+                  {lastMeasurementResult.warnings.map((wmsg, i) => <li key={i}>⚠ {wmsg}</li>)}
+                </ul>
+              )}
+
               <div className="flex gap-2 mt-3">
                 <button
                   type="button"
                   onClick={() => {
+                    const t = lastMeasurementResult.tissue;
+                    const tissueTypes = t
+                      ? (['granulation', 'slough', 'necrotic', 'epithelial'] as const)
+                          .filter(k => (t as any)[k] >= 10)
+                          .map(k => k.charAt(0).toUpperCase() + k.slice(1))
+                      : undefined;
                     setFormData(prev => ({
                       ...prev,
                       length: lastMeasurementResult.length,
                       width: lastMeasurementResult.width,
+                      area: lastMeasurementResult.area,
+                      ...(t ? { granulation_percentage: t.granulation } : {}),
+                      ...(tissueTypes && tissueTypes.length ? { tissue_types: tissueTypes } : {}),
                     }));
                   }}
                   className="flex-1 px-3 py-2 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700"
@@ -2202,6 +2333,11 @@ const WoundCarePage: React.FC = () => {
               </h4>
               <Suspense fallback={<div className="bg-gray-50 rounded-lg p-4 text-center text-xs text-gray-400">Loading chart…</div>}>
                 <WoundProgressChart measurements={progressData} report={report} />
+                {progressData.length >= 1 && (
+                  <div className="mt-4">
+                    <WoundHealingMap measurements={progressData} height={300} />
+                  </div>
+                )}
               </Suspense>
             </div>
           );
