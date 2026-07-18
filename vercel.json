@@ -60,6 +60,10 @@
       "destination": "/api/mdt"
     },
     {
+      "source": "/api/investigation-uploads/:path*",
+      "destination": "/api/investigation-uploads"
+    },
+    {
       "source": "/api/:path*",
       "destination": "/api/:path*"
     },
