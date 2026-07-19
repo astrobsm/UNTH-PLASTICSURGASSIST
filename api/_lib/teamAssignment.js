@@ -322,6 +322,44 @@ export async function deactivateAssignmentsForPatients(patientIds) {
 }
 
 /**
+ * Blank a now-deactivated user out of CURRENT and FUTURE call-duty roster shifts
+ * (end_date >= now) so they never show as on call and are never picked as the
+ * on-call staff for a new admission. Past shifts are left as historical record.
+ * Each id column is cleared (''), and its name column, where one exists, set to
+ * 'TBD'. Best-effort per column. Returns the number of shift-slots blanked.
+ */
+export async function blankUserFromFutureRosters(userId) {
+  const uid = String(userId);
+  const nowIso = new Date().toISOString();
+  // id column -> name column (null when the table has no matching name column)
+  const cols = [
+    ['consultant_id', 'consultant_name'],
+    ['senior_registrar_id', 'senior_registrar_name'],
+    ['registrar_id', 'registrar_name'],
+    ['house_officer_id', 'house_officer_name'],
+    ['ho_ward_id', null],
+    ['ho_emergency_id', null],
+    ['ho_off_id', null],
+  ];
+  let blanked = 0;
+  for (const [idCol, nameCol] of cols) {
+    try {
+      const setClause = nameCol ? `${idCol} = '', ${nameCol} = 'TBD'` : `${idCol} = ''`;
+      const r = await query(
+        `UPDATE call_duty_roster
+            SET ${setClause}, updated_at = CURRENT_TIMESTAMP
+          WHERE ${idCol} = $1 AND end_date >= $2`,
+        [uid, nowIso]
+      );
+      blanked += r.rowCount || 0;
+    } catch (e) {
+      console.warn(`blankUserFromFutureRosters skip ${idCol}:`, e.message);
+    }
+  }
+  return blanked;
+}
+
+/**
  * Reassign every active patient held by a now-deactivated user to the
  * least-loaded remaining active staff of that role. If none exists, the role
  * slot is cleared (left empty) and recorded for follow-up.

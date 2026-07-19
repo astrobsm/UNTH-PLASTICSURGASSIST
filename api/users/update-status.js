@@ -1,7 +1,7 @@
 // User status (activate/deactivate) endpoint
 import { query } from '../_lib/db.js';
 import { cors, authenticateRequest } from '../_lib/auth.js';
-import { reassignDeactivatedUser } from '../_lib/teamAssignment.js';
+import { reassignDeactivatedUser, blankUserFromFutureRosters } from '../_lib/teamAssignment.js';
 
 export default async function handler(req, res) {
   try {
@@ -52,6 +52,7 @@ export default async function handler(req, res) {
     // On deactivation, reassign this staff member's patients to the least-loaded
     // remaining active staff of their role (leaving the slot empty if none exist).
     let reassignment = null;
+    let rosterSlotsBlanked = 0;
     if (!is_active) {
       try {
         reassignment = await reassignDeactivatedUser(userId);
@@ -59,11 +60,20 @@ export default async function handler(req, res) {
       } catch (e) {
         console.error('reassignDeactivatedUser failed:', e.message);
       }
+      // Also blank them out of current/future call-duty roster shifts so they
+      // never appear as on call or get picked for a new admission.
+      try {
+        rosterSlotsBlanked = await blankUserFromFutureRosters(userId);
+        console.log(`Blanked ${rosterSlotsBlanked} future roster slot(s) for deactivated user ${userId}`);
+      } catch (e) {
+        console.error('blankUserFromFutureRosters failed:', e.message);
+      }
     }
 
     return res.status(200).json({
       user: result.rows[0],
       reassignment,
+      rosterSlotsBlanked,
       message: is_active ? 'User activated successfully' : 'User deactivated successfully'
     });
   } catch (error) {
