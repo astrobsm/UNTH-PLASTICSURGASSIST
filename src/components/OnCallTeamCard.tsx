@@ -15,18 +15,22 @@ const OnCallTeamCard: React.FC = () => {
   const [consultants, setConsultants] = useState<StaffMember[]>([]);
   const [seniorRegs, setSeniorRegs] = useState<StaffMember[]>([]);
   const [registrars, setRegistrars] = useState<StaffMember[]>([]);
+  const [houseOfficers, setHouseOfficers] = useState<StaffMember[]>([]);
+  const [poolsLoaded, setPoolsLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [c, sr, r] = await Promise.all([
+      const [c, sr, r, ho] = await Promise.all([
         callDutyService.getStaffByRole('consultant'),
         callDutyService.getStaffByRole('senior_registrar'),
         callDutyService.getStaffByRole('junior_registrar'),
+        callDutyService.getStaffByRole('house_officer'),
       ]);
       if (cancelled) return;
-      setConsultants(c); setSeniorRegs(sr); setRegistrars(r);
+      setConsultants(c); setSeniorRegs(sr); setRegistrars(r); setHouseOfficers(ho);
+      setPoolsLoaded(true);
     })();
     return () => { cancelled = true; };
   }, []);
@@ -42,17 +46,28 @@ const OnCallTeamCard: React.FC = () => {
   }, [date]);
 
   const isToday = date === new Date().toISOString().slice(0, 10);
-  const phoneFor = (pool: StaffMember[], id?: string, direct?: string) =>
-    direct || pool.find(u => u.id === id)?.phone || '';
+
+  // Resolve a rostered person against the CURRENT active staff pool. A roster stores
+  // the staff who were on call when it was generated; if that person has since been
+  // deactivated they must not still show as on call. When the pool is loaded and the
+  // id is absent from it, treat the slot as needing reassignment.
+  const resolve = (pool: StaffMember[], id?: string, storedName?: string, directPhone?: string) => {
+    if (!id) return { name: storedName || 'TBD', phone: directPhone || '', inactive: false };
+    const match = pool.find(u => u.id === id);
+    if (match) return { name: match.full_name, phone: directPhone || match.phone || '', inactive: false };
+    if (poolsLoaded) return { name: 'Reassign', phone: '', inactive: true };
+    return { name: storedName || 'TBD', phone: directPhone || '', inactive: false };
+  };
 
   const contacts = shift ? [
-    ...(shift.consultant_id ? [{ role: 'Consultant', name: shift.consultant_name, phone: phoneFor(consultants, shift.consultant_id, shift.consultant_phone), color: 'text-rose-700' }] : []),
-    { role: 'Senior Registrar', name: shift.senior_registrar_name, phone: phoneFor(seniorRegs, shift.senior_registrar_id, shift.senior_registrar_phone), color: 'text-purple-700' },
-    { role: 'Registrar', name: shift.registrar_name, phone: phoneFor(registrars, shift.registrar_id, shift.registrar_phone), color: 'text-blue-700' },
-    { role: 'House Officer (Ward)', name: shift.ho_ward_name, phone: shift.ho_ward_phone, color: 'text-green-700' },
+    ...(shift.consultant_id ? [{ role: 'Consultant', color: 'text-rose-700', ...resolve(consultants, shift.consultant_id, shift.consultant_name, shift.consultant_phone) }] : []),
+    { role: 'Senior Registrar', color: 'text-purple-700', ...resolve(seniorRegs, shift.senior_registrar_id, shift.senior_registrar_name, shift.senior_registrar_phone) },
+    { role: 'Registrar', color: 'text-blue-700', ...resolve(registrars, shift.registrar_id, shift.registrar_name, shift.registrar_phone) },
+    { role: 'House Officer (Ward)', color: 'text-green-700', ...resolve(houseOfficers, shift.ho_ward_id, shift.ho_ward_name, shift.ho_ward_phone) },
     ...(shift.ho_emergency_id && shift.ho_emergency_id !== shift.ho_ward_id
-      ? [{ role: 'House Officer (Emergency)', name: shift.ho_emergency_name, phone: shift.ho_emergency_phone, color: 'text-orange-700' }] : []),
+      ? [{ role: 'House Officer (Emergency)', color: 'text-orange-700', ...resolve(houseOfficers, shift.ho_emergency_id, shift.ho_emergency_name, shift.ho_emergency_phone) }] : []),
   ] : [];
+  const hasInactive = contacts.some(c => c.inactive);
 
   return (
     <div className="bg-white rounded-xl shadow-sm border p-4">
@@ -74,17 +89,30 @@ const OnCallTeamCard: React.FC = () => {
       {loading ? (
         <p className="text-xs text-gray-400">Loading…</p>
       ) : shift ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {contacts.map((c, i) => (
-            <div key={i} className="flex items-center justify-between gap-2 border border-gray-100 rounded-lg px-3 py-1.5">
-              <div className="text-sm min-w-0">
-                <span className="text-gray-500">{c.role}:</span>{' '}
-                <span className={`font-medium ${c.color}`}>{c.name || 'TBD'}</span>
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {contacts.map((c, i) => (
+              <div key={i} className={`flex items-center justify-between gap-2 border rounded-lg px-3 py-1.5 ${c.inactive ? 'border-amber-200 bg-amber-50' : 'border-gray-100'}`}>
+                <div className="text-sm min-w-0">
+                  <span className="text-gray-500">{c.role}:</span>{' '}
+                  {c.inactive ? (
+                    <span className="font-medium text-amber-700 italic">Reassign — staff deactivated</span>
+                  ) : (
+                    <span className={`font-medium ${c.color}`}>{c.name || 'TBD'}</span>
+                  )}
+                </div>
+                {c.inactive
+                  ? null
+                  : c.phone ? <PhoneActions phone={c.phone} compact /> : <span className="text-xs text-gray-400">no phone</span>}
               </div>
-              {c.phone ? <PhoneActions phone={c.phone} compact /> : <span className="text-xs text-gray-400">no phone</span>}
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+          {hasInactive && (
+            <p className="mt-2 text-xs text-amber-700">
+              ⚠ One or more on-call staff have been deactivated. Regenerate the roster on the Call Duty page to fill their slots.
+            </p>
+          )}
+        </>
       ) : (
         <p className="text-sm text-gray-500">No call-duty roster covers {date}. Generate a roster on the Call Duty page.</p>
       )}

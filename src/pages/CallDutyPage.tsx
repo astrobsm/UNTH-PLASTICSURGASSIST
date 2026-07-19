@@ -774,16 +774,24 @@ export default function CallDutyPage() {
         const sel = new Date(`${onCallDate}T12:00:00`);
         const dayShift = shifts.find(s => { try { return sel >= parseISO(s.start_date) && sel < parseISO(s.end_date); } catch { return false; } });
         const isToday = onCallDate === new Date().toISOString().slice(0, 10);
-        const consPhone = dayShift?.consultant_phone || consultants.find(u => u.id === dayShift?.consultant_id)?.phone || '';
-        const srPhone = dayShift?.senior_registrar_phone || seniorRegs.find(u => u.id === dayShift?.senior_registrar_id)?.phone || '';
-        const rPhone = dayShift?.registrar_phone || registrars.find(u => u.id === dayShift?.registrar_id)?.phone || '';
-        const contacts: { role: string; name?: string; phone?: string; color: string }[] = dayShift ? [
-          ...(dayShift.consultant_id ? [{ role: 'Consultant', name: dayShift.consultant_name, phone: consPhone, color: 'text-rose-700' }] : []),
-          { role: 'Senior Registrar', name: dayShift.senior_registrar_name, phone: srPhone, color: 'text-purple-700' },
-          { role: 'Registrar', name: dayShift.registrar_name, phone: rPhone, color: 'text-blue-700' },
-          { role: 'House Officer (Ward)', name: dayShift.ho_ward_name, phone: dayShift.ho_ward_phone, color: 'text-green-700' },
+        // Resolve a rostered person against the CURRENT active staff pool, so a since-
+        // deactivated staff member (still stored on the roster) shows as "Reassign"
+        // rather than appearing on call. Pools here are the active staff lists.
+        const poolsReady = seniorRegs.length + registrars.length + houseOfficers.length + consultants.length > 0;
+        const resolveC = (pool: StaffMember[], id?: string, storedName?: string, directPhone?: string) => {
+          if (!id) return { name: storedName || 'TBD', phone: directPhone || '', inactive: false };
+          const m = pool.find(u => u.id === id);
+          if (m) return { name: m.full_name, phone: directPhone || m.phone || '', inactive: false };
+          if (poolsReady) return { name: 'Reassign', phone: '', inactive: true };
+          return { name: storedName || 'TBD', phone: directPhone || '', inactive: false };
+        };
+        const contacts: { role: string; name?: string; phone?: string; color: string; inactive?: boolean }[] = dayShift ? [
+          ...(dayShift.consultant_id ? [{ role: 'Consultant', color: 'text-rose-700', ...resolveC(consultants, dayShift.consultant_id, dayShift.consultant_name, dayShift.consultant_phone) }] : []),
+          { role: 'Senior Registrar', color: 'text-purple-700', ...resolveC(seniorRegs, dayShift.senior_registrar_id, dayShift.senior_registrar_name, dayShift.senior_registrar_phone) },
+          { role: 'Registrar', color: 'text-blue-700', ...resolveC(registrars, dayShift.registrar_id, dayShift.registrar_name, dayShift.registrar_phone) },
+          { role: 'House Officer (Ward)', color: 'text-green-700', ...resolveC(houseOfficers, dayShift.ho_ward_id, dayShift.ho_ward_name, dayShift.ho_ward_phone) },
           ...(dayShift.ho_emergency_id && dayShift.ho_emergency_id !== dayShift.ho_ward_id
-            ? [{ role: 'House Officer (Emergency)', name: dayShift.ho_emergency_name, phone: dayShift.ho_emergency_phone, color: 'text-orange-700' }] : []),
+            ? [{ role: 'House Officer (Emergency)', color: 'text-orange-700', ...resolveC(houseOfficers, dayShift.ho_emergency_id, dayShift.ho_emergency_name, dayShift.ho_emergency_phone) }] : []),
         ] : [];
         return (
           <div className="bg-white rounded-xl shadow-sm border p-4 mb-4">
@@ -808,17 +816,24 @@ export default function CallDutyPage() {
             </div>
             {/* On-call team for the selected day */}
             {dayShift ? (
+              <>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {contacts.map((c, i) => (
-                  <div key={i} className="flex items-center justify-between gap-2 border border-gray-100 rounded-lg px-3 py-1.5">
+                  <div key={i} className={`flex items-center justify-between gap-2 border rounded-lg px-3 py-1.5 ${c.inactive ? 'border-amber-200 bg-amber-50' : 'border-gray-100'}`}>
                     <div className="text-sm min-w-0">
                       <span className="text-gray-500">{c.role}:</span>{' '}
-                      <span className={`font-medium ${c.color}`}>{c.name || 'TBD'}</span>
+                      {c.inactive
+                        ? <span className="font-medium text-amber-700 italic">Reassign — staff deactivated</span>
+                        : <span className={`font-medium ${c.color}`}>{c.name || 'TBD'}</span>}
                     </div>
-                    {c.phone ? <PhoneActions phone={c.phone} compact /> : <span className="text-xs text-gray-400">no phone</span>}
+                    {c.inactive ? null : c.phone ? <PhoneActions phone={c.phone} compact /> : <span className="text-xs text-gray-400">no phone</span>}
                   </div>
                 ))}
               </div>
+              {contacts.some(c => c.inactive) && (
+                <p className="mt-2 text-xs text-amber-700">⚠ One or more on-call staff have been deactivated. Regenerate the roster to fill their slots.</p>
+              )}
+              </>
             ) : (
               <p className="text-xs text-gray-400">No shift on call for {onCallDate}. Pick a date within the generated roster, or generate a roster covering it.</p>
             )}
