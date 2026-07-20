@@ -136,7 +136,9 @@ export default function CallDutyPage() {
     setLoading(true);
     setError('');
     try {
-      const data = await callDutyService.getRosterByRange(startDate, endDate);
+      // Read from the server so the roster is consistent across all devices
+      // (falls back to the local cache when offline).
+      const data = await callDutyService.serverGetRange(startDate, endDate);
       setShifts(data);
     } catch (err: any) {
       setError(err.message || 'Failed to load roster');
@@ -186,8 +188,8 @@ export default function CallDutyPage() {
     setError('');
     setSuccess('');
     try {
-      const newShifts = await callDutyService.generateRoster(startDate, endDate, user?.id);
-      await callDutyService.saveRoster(newShifts);
+      // Generate + persist on the server (authoritative) so every device sees it.
+      const newShifts = await callDutyService.serverGenerate(startDate, endDate);
       setShifts(newShifts);
       await loadSavedKeys();
       const label = formatRosterLabel(currentRosterKey);
@@ -247,7 +249,8 @@ export default function CallDutyPage() {
 
   const saveEdit = async (shift: CallDutyShift) => {
     try {
-      await callDutyService.updateShift(shift.id!, shift);
+      // Persist the admin's edit on the server so it syncs to every device.
+      await callDutyService.serverUpdateShift(shift.id!, shift);
       setEditingShiftId(null);
       await loadRoster();
       setSuccess('Shift updated successfully.');

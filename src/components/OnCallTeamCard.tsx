@@ -38,11 +38,16 @@ const OnCallTeamCard: React.FC = () => {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    (async () => {
-      const s = await callDutyService.getShiftForDate(new Date(`${date}T12:00:00`));
+    const load = async () => {
+      // Server-authoritative so every device shows the same on-call team; the
+      // server auto-generates a roster if none covers the date.
+      const s = await callDutyService.serverGetOnCall(date);
       if (!cancelled) { setShift(s); setLoading(false); }
-    })();
-    return () => { cancelled = true; };
+    };
+    load();
+    // Near-real-time cross-device refresh: re-poll every 60s.
+    const timer = setInterval(load, 60000);
+    return () => { cancelled = true; clearInterval(timer); };
   }, [date]);
 
   const isToday = date === new Date().toISOString().slice(0, 10);

@@ -387,6 +387,63 @@ class CallDutyService {
     return this.getRosterByKey(rosterKey(startDate, endDate));
   }
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // Server-authoritative (cross-device) roster access. These are the source of
+  // truth so every device sees the same roster / on-call team. Local IndexedDB
+  // remains an offline cache/fallback.
+  // ══════════════════════════════════════════════════════════════════════════
+
+  /** The on-call shift for a date, from the server (auto-generates if none exists). */
+  async serverGetOnCall(dateISO: string): Promise<CallDutyShift | null> {
+    try {
+      const r: any = await apiClient.get(`/call-duty-roster?action=on-call&date=${encodeURIComponent(dateISO)}`, { freshRead: true });
+      return (r?.shift as CallDutyShift) || null;
+    } catch {
+      // Offline fallback — local cache.
+      return this.getShiftForDate(new Date(`${dateISO}T12:00:00`));
+    }
+  }
+
+  /** All shifts for a period, from the server; caches locally. Falls back to local when offline. */
+  async serverGetRange(startDate: Date, endDate: Date): Promise<CallDutyShift[]> {
+    try {
+      const s = startDate.toISOString(), e = endDate.toISOString();
+      const r: any = await apiClient.get(`/call-duty-roster?action=range&start=${encodeURIComponent(s)}&end=${encodeURIComponent(e)}`, { freshRead: true });
+      const shifts = (r?.shifts as CallDutyShift[]) || [];
+      if (shifts.length) { try { await this.cacheShifts(shifts); } catch { /* best effort */ } }
+      return shifts.length ? shifts : await this.getRosterByRange(startDate, endDate);
+    } catch {
+      return this.getRosterByRange(startDate, endDate);
+    }
+  }
+
+  /** Generate + persist a roster on the server (authoritative, cross-device). */
+  async serverGenerate(startDate: Date, endDate: Date): Promise<CallDutyShift[]> {
+    const r: any = await apiClient.post('/call-duty-roster?action=generate', {
+      start: startDate.toISOString(), end: endDate.toISOString(),
+    });
+    const shifts = (r?.shifts as CallDutyShift[]) || [];
+    if (shifts.length) { try { await this.cacheShifts(shifts); } catch { /* best effort */ } }
+    return shifts;
+  }
+
+  /** Admin edit of one shift on the server. */
+  async serverUpdateShift(id: number, updates: Partial<CallDutyShift>): Promise<CallDutyShift | null> {
+    const r: any = await apiClient.put('/call-duty-roster?action=shift', { id, ...updates });
+    return (r?.shift as CallDutyShift) || null;
+  }
+
+  /** Mirror server shifts into the local Dexie cache (offline fallback). */
+  private async cacheShifts(shifts: CallDutyShift[]): Promise<void> {
+    const key = shifts[0]?.month_key;
+    if (!key) return;
+    try {
+      const existing = await (db as any).call_duty_roster.where('month_key').equals(key).toArray();
+      if (existing.length) await (db as any).call_duty_roster.bulkDelete(existing.map((s: any) => s.id));
+      await (db as any).call_duty_roster.bulkPut(shifts.map(s => ({ ...s })));
+    } catch { /* ignore cache errors */ }
+  }
+
   // ── Find the shift covering a given date (across ALL saved rosters) ──
   /**
    * Returns the call-duty shift whose [start_date, end_date) window covers the

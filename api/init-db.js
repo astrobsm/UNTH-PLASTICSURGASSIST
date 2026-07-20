@@ -2225,6 +2225,18 @@ async function createTables() {
       IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'call_duty_roster' AND column_name = 'consultant_name') THEN
         ALTER TABLE call_duty_roster ADD COLUMN consultant_name TEXT;
       END IF;
+      -- Full name+phone columns so the server-authoritative roster is self-contained
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'call_duty_roster' AND column_name = 'consultant_phone') THEN
+        ALTER TABLE call_duty_roster ADD COLUMN consultant_phone TEXT;
+        ALTER TABLE call_duty_roster ADD COLUMN senior_registrar_phone TEXT;
+        ALTER TABLE call_duty_roster ADD COLUMN registrar_phone TEXT;
+        ALTER TABLE call_duty_roster ADD COLUMN ho_ward_name TEXT;
+        ALTER TABLE call_duty_roster ADD COLUMN ho_ward_phone TEXT;
+        ALTER TABLE call_duty_roster ADD COLUMN ho_emergency_name TEXT;
+        ALTER TABLE call_duty_roster ADD COLUMN ho_emergency_phone TEXT;
+        ALTER TABLE call_duty_roster ADD COLUMN ho_off_name TEXT;
+        ALTER TABLE call_duty_roster ADD COLUMN ho_off_phone TEXT;
+      END IF;
     END $$;
 
     -- =====================================================
