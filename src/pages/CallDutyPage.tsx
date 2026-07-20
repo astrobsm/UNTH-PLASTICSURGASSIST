@@ -783,9 +783,11 @@ export default function CallDutyPage() {
         const poolsReady = seniorRegs.length + registrars.length + houseOfficers.length + consultants.length > 0;
         const resolveC = (pool: StaffMember[], id?: string, storedName?: string, directPhone?: string) => {
           if (!id) return { name: storedName || 'TBD', phone: directPhone || '', inactive: false };
-          const m = pool.find(u => u.id === id);
+          // Normalise ids to strings (server returns text ids, pool ids may be numbers).
+          const m = pool.find(u => String(u.id) === String(id));
           if (m) return { name: m.full_name, phone: directPhone || m.phone || '', inactive: false };
-          if (poolsReady) return { name: 'Reassign', phone: '', inactive: true };
+          // Only flag deactivated when that role's active list is actually present.
+          if (poolsReady && pool.length > 0) return { name: 'Reassign', phone: '', inactive: true };
           return { name: storedName || 'TBD', phone: directPhone || '', inactive: false };
         };
         const contacts: { role: string; name?: string; phone?: string; color: string; inactive?: boolean }[] = dayShift ? [

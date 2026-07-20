@@ -58,9 +58,13 @@ const OnCallTeamCard: React.FC = () => {
   // id is absent from it, treat the slot as needing reassignment.
   const resolve = (pool: StaffMember[], id?: string, storedName?: string, directPhone?: string) => {
     if (!id) return { name: storedName || 'TBD', phone: directPhone || '', inactive: false };
-    const match = pool.find(u => u.id === id);
+    // Normalise ids to strings — the server returns ids as text while the staff
+    // pool ids may be numbers; a type mismatch would flag EVERYONE as deactivated.
+    const match = pool.find(u => String(u.id) === String(id));
     if (match) return { name: match.full_name, phone: directPhone || match.phone || '', inactive: false };
-    if (poolsLoaded) return { name: 'Reassign', phone: '', inactive: true };
+    // Only flag "deactivated" when we actually have that role's active list to
+    // validate against; an empty/unloaded pool must not mark everyone "Reassign".
+    if (poolsLoaded && pool.length > 0) return { name: 'Reassign', phone: '', inactive: true };
     return { name: storedName || 'TBD', phone: directPhone || '', inactive: false };
   };
 
