@@ -88,7 +88,18 @@ function ReceivedTab({ refreshKey, onOpen }: { refreshKey: number; onOpen: (id: 
     try {
       const r = await listReceived({ status: statusFilter, urgency: urgencyFilter, search, page, per_page: perPage });
       setItems(r.consults); setTotal(r.total);
-    } catch (e: any) { setError(e.message || 'Failed to load'); }
+    } catch (e: any) {
+      const msg = e?.message || 'Failed to load';
+      // A missing/expired session (common on offline field devices) surfaces as
+      // "No token provided" — show the actionable fix instead of the raw error.
+      if (/no token|token|401|unauthor/i.test(msg)) {
+        setError('Your session has expired. Reconnect to the internet and sign in again to view and respond to consults.');
+      } else if (!navigator.onLine) {
+        setError('You are offline. Reconnect to load the latest consults.');
+      } else {
+        setError(msg);
+      }
+    }
     finally { setLoading(false); }
   }, [statusFilter, urgencyFilter, search, page, refreshKey]);
   useEffect(() => { load(); }, [load]);

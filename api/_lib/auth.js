@@ -19,7 +19,11 @@ export function verifyToken(token) {
   }
 }
 
-export function signToken(payload, expiresIn = '24h') {
+// 30-day sessions: this is a ward app used on phones with intermittent/offline
+// connectivity. A 24h token expired between uses and got cleared, so field staff
+// (house officers, registrars) saw "No token provided" on protected pages like
+// Consults and — being offline — could not re-login. 30 days keeps them signed in.
+export function signToken(payload, expiresIn = '30d') {
   return jwt.sign(payload, JWT_SECRET, { expiresIn });
 }
 
