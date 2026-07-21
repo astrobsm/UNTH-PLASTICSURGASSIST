@@ -276,9 +276,23 @@ mutationMethods.forEach(method => {
       } catch (_err) {
         // Offline — bgSyncPlugin already queued the request.
         // Return a synthetic 503 so the app doesn't see an unhandled rejection.
-        return new Response(JSON.stringify({ error: 'Queued for background sync' }), {
+        //
+        // The headers matter: without them apiClient could not tell this apart
+        // from a genuine server 503 and surfaced it as a hard save failure, so
+        // the clinician re-entered the record and both copies reached the
+        // server on reconnect. X-BG-Queued also tells the app NOT to enqueue
+        // the same mutation into db.sync_queue — the SW owns the replay.
+        return new Response(JSON.stringify({
+          _offline: true,
+          _queued: true,
+          error: 'Queued for background sync',
+        }), {
           status: 503,
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Offline': 'true',
+            'X-BG-Queued': 'true',
+          },
         });
       }
     },

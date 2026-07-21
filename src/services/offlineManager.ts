@@ -4,6 +4,7 @@
  */
 
 import { db } from '../db/database';
+import { syncService } from '../db/syncService';
 import { apiClient } from './apiClient';
 import { logger } from '../utils/logger';
 import toast from 'react-hot-toast';
@@ -308,7 +309,27 @@ class OfflineManager {
     }
   }
 
-  // Sync all pending requests
+  /**
+   * Drain the outbound queue.
+   *
+   * This DELEGATES to syncService rather than running its own loop.
+   *
+   * Both classes are singletons, both registered a `window 'online'` listener,
+   * and both looped over the SAME db.sync_queue table with their own private
+   * syncInProgress flag — so neither could see that the other was already
+   * running. One reconnect fired both: each read the full queue before either
+   * had deleted anything, and each replayed every item. Only /admissions
+   * honours X-Idempotency-Key, so every reconnect with a non-empty queue
+   * created duplicate prescriptions, progress notes and ward rounds on the
+   * server. Duplicated drug charts on a ward app.
+   *
+   * syncService is the implementation kept: it carries per-item idempotency
+   * keys, preserves exhausted items in sync_dead_letter instead of destroying
+   * them, allows MAX_RETRIES=5 rather than 3, and purges stale entries. This
+   * loop had none of that — it hard-deleted a clinical entry after 3 failures
+   * with nothing but a toast, and because both loops incremented the same
+   * `retries` column, that threshold arrived roughly twice as fast.
+   */
   async syncAll(): Promise<{ synced: number; failed: number; errors: string[] }> {
     if (this.syncInProgress || !this.isOnline) {
       return { synced: 0, failed: 0, errors: ['Sync in progress or offline'] };
@@ -317,191 +338,19 @@ class OfflineManager {
     this.syncInProgress = true;
     this.notifyListeners();
 
-    const result = { synced: 0, failed: 0, errors: [] as string[] };
-
     try {
-      // Get all pending sync items, ordered by creation time
-      const pendingItems = await db.sync_queue
-        .orderBy('created_at')
-        .toArray();
-
-      console.log(`🔄 Syncing ${pendingItems.length} pending items...`);
-
-      for (const item of pendingItems) {
-        try {
-          await this.syncItem(item);
-          await db.sync_queue.delete(item.id!);
-          result.synced++;
-        } catch (error) {
-          result.failed++;
-          const errorMessage = error instanceof Error ? error.message : String(error);
-          result.errors.push(`${item.table} ${item.action}: ${errorMessage}`);
-
-          // Update retry count
-          const newRetries = item.retries + 1;
-          if (newRetries >= 3) {
-            // Remove after 3 failures
-            await db.sync_queue.delete(item.id!);
-            toast.error(`Failed to sync ${item.table} after 3 attempts`);
-          } else {
-            await db.sync_queue.update(item.id!, {
-              retries: newRetries,
-              last_error: errorMessage,
-            });
-          }
-        }
-      }
-
-      if (result.synced > 0) {
+      const r = await syncService.syncAll();
+      if (r.synced > 0) {
         this.lastSyncTime = new Date();
         localStorage.setItem('lastSyncTime', this.lastSyncTime.toISOString());
-        toast.success(`Synced ${result.synced} changes`, { duration: 3000 });
       }
-
-      console.log(`✅ Sync complete: ${result.synced} synced, ${result.failed} failed`);
+      return { synced: r.synced, failed: r.failed, errors: r.errors };
     } catch (error) {
-      result.errors.push(`Sync error: ${error}`);
       console.error('Sync error:', error);
+      return { synced: 0, failed: 0, errors: [`Sync error: ${error}`] };
     } finally {
       this.syncInProgress = false;
       this.notifyListeners();
-    }
-
-    return result;
-  }
-
-  // Sync a single item
-  private async syncItem(item: any): Promise<void> {
-    const { action, table, local_id, data } = item;
-    const token = apiClient.getToken();
-
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-    };
-
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-
-    // If we have URL info stored, use it
-    if (data.url) {
-      const response = await fetch(data.url, {
-        method: data.method || 'POST',
-        headers: { ...headers, ...data.headers },
-        body: data.body ? JSON.stringify(data.body) : undefined,
-        credentials: 'include',
-      });
-
-      if (!response.ok) {
-        // Handle 409 Conflict - record already exists on server
-        if (response.status === 409) {
-          if (local_id && table) {
-            const tableRef = (db as any)[table];
-            if (tableRef) {
-              await tableRef.update(local_id, { synced: true });
-            }
-          }
-          return; // Treat as success
-        }
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `HTTP ${response.status}`);
-      }
-
-      return;
-    }
-
-    // Otherwise, use the standard sync approach based on table and action
-    const baseUrl = (import.meta as any).env?.VITE_API_BASE_URL 
-      || ((import.meta as any).env?.PROD ? '/api' : 'http://localhost:3005/api');
-    const tableName = table.replace(/_/g, '-');
-
-    // Entities without a dedicated REST endpoint sync via the generic /sync/push
-    // endpoint. Building /api/<table> for these returns 404 (the original bug).
-    if (GENERIC_SYNC_TABLES.has(table)) {
-      const entityId = (data && (data.id ?? local_id)) ?? local_id;
-      const payload = { ...(data || {}) };
-      delete (payload as any).synced;
-      const response = await fetch(`${baseUrl}/sync/push`, {
-        method: 'POST',
-        headers,
-        credentials: 'include',
-        body: JSON.stringify({
-          changes: [{
-            entityType: table,
-            entityId: String(entityId),
-            action: action === 'delete' ? 'delete' : 'upsert',
-            payload,
-          }],
-        }),
-      });
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `HTTP ${response.status}`);
-      }
-      const tableRef = (db as any)[table];
-      if (tableRef && local_id) {
-        try { await tableRef.update(local_id, { synced: true }); } catch { /* string-key table */ }
-      }
-      return;
-    }
-
-    let endpoint: string;
-    let method: string;
-    let body: any;
-
-    switch (action) {
-      case 'create':
-        endpoint = `${baseUrl}/${tableName}`;
-        method = 'POST';
-        body = data;
-        break;
-      case 'update':
-        endpoint = `${baseUrl}/${tableName}/${local_id}`;
-        method = 'PUT';
-        body = data;
-        break;
-      case 'delete':
-        endpoint = `${baseUrl}/${tableName}/${local_id}`;
-        method = 'DELETE';
-        break;
-      default:
-        throw new Error(`Unknown action: ${action}`);
-    }
-
-    const response = await fetch(endpoint, {
-      method,
-      headers,
-      body: body ? JSON.stringify(body) : undefined,
-      credentials: 'include',
-    });
-
-    if (!response.ok) {
-      // Handle 409 Conflict - record already exists on server, mark as synced
-      if (response.status === 409 && action === 'create') {
-        const tableRef = (db as any)[table];
-        if (tableRef && local_id) {
-          await tableRef.update(local_id, { synced: true });
-          console.log(`✅ ${table} ${local_id} already on server, marked synced`);
-        }
-        return; // Treat as success
-      }
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || `HTTP ${response.status}`);
-    }
-
-    // If create, update local record with server ID
-    if (action === 'create' && local_id) {
-      const responseData = await response.json().catch(() => null);
-      if (responseData?.id) {
-        const tableRef = (db as any)[table];
-        if (tableRef) {
-          await tableRef.update(local_id, {
-            serverId: responseData.id,
-            synced: true,
-          });
-        }
-      }
     }
   }
 

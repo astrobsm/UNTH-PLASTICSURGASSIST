@@ -40,9 +40,14 @@ function generateIdempotencyKey(): string {
   });
 }
 
+/** A sync running longer than this is treated as stuck and may be reset. */
+const STUCK_SYNC_THRESHOLD_MS = 2 * 60 * 1000;
+
 class SyncService {
   private isOnline = navigator.onLine;
   private syncInProgress = false;
+  /** When the in-flight run started, so forceSync can tell "busy" from "stuck". */
+  private syncStartedAt: number | null = null;
   private retryTimeouts: Map<number, NodeJS.Timeout> = new Map();
   private syncListeners: Set<(status: { isOnline: boolean; pendingCount: number }) => void> = new Set();
   /** Idempotency key of the queue item currently being replayed. Read by apiCall
@@ -129,6 +134,7 @@ class SyncService {
     }
 
     this.syncInProgress = true;
+    this.syncStartedAt = Date.now();
     const result: SyncResult = { success: true, synced: 0, failed: 0, errors: [] };
 
     try {
@@ -198,6 +204,20 @@ class SyncService {
     } finally {
       this.currentIdempotencyKey = null;
       this.syncInProgress = false;
+      this.syncStartedAt = null;
+
+      // Never let permanently-failed clinical entries sit silently. They are
+      // recoverable via retryAllDeadLetter(), but only if someone knows.
+      try {
+        const dead = await this.getDeadLetterCount();
+        if (dead > 0) {
+          console.warn(`⚠️ ${dead} change(s) failed permanently and are held in the dead-letter queue.`);
+          toast.error(
+            `${dead} change${dead === 1 ? '' : 's'} could not sync and need attention.`,
+            { id: 'sync-dead-letter', duration: 6000 }
+          );
+        }
+      } catch { /* never let reporting break the sync */ }
       this.notifyListeners();
     }
 
@@ -826,7 +846,7 @@ class SyncService {
     const payload = { ...record };
     delete payload.synced;
 
-    await this.apiCall('POST', '/sync/push', {
+    const response = await this.apiCall('POST', '/sync/push', {
       changes: [{
         entityType: table,
         entityId: String(entityId),
@@ -834,6 +854,26 @@ class SyncService {
         payload
       }]
     });
+
+    // Inspect the per-change result before declaring success.
+    //
+    // The server used to answer 200 { success: true } even when every change
+    // failed, and this method marked the record synced unconditionally. A row
+    // rejected by an FK violation, a NOT NULL, or the broken mdt_meetings
+    // upsert was therefore dropped from the outbox and never retried — silently
+    // and permanently lost, while the UI showed a green "synced" state.
+    //
+    // /sync/push now returns 207 (partial) or 502 (total failure), which
+    // apiCall surfaces as a throw; this check additionally covers a 200 whose
+    // body still reports a per-change error.
+    const failed = Array.isArray(response?.results)
+      ? response.results.find((r: any) => r?.status === 'error')
+      : null;
+    if (failed) {
+      throw new Error(
+        `Server rejected ${table} ${entityId}: ${failed.message || failed.error || 'unknown error'}`
+      );
+    }
 
     // Mark as synced locally
     try {
@@ -1031,10 +1071,86 @@ class SyncService {
     return ids.length;
   }
 
+  // ── Dead-letter recovery ──────────────────────────────────────────────
+  //
+  // Items are moved to sync_dead_letter when they exhaust MAX_RETRIES or pass
+  // MAX_ITEM_AGE_MS, with the stated intent of "preserving data for recovery".
+  // Nothing read that table, so the data was preserved into a place no user or
+  // service could reach: a clinical entry the ward believed saved, invisible
+  // and unrecoverable. These make it reachable.
+
+  /** How many permanently-failed items are held. Non-zero warrants a UI warning. */
+  async getDeadLetterCount(): Promise<number> {
+    try { return await db.sync_dead_letter.count(); } catch { return 0; }
+  }
+
+  /** The failed items themselves, newest first, for display or export. */
+  async getDeadLetterItems(limit = 100): Promise<any[]> {
+    try {
+      const items = await db.sync_dead_letter.orderBy('failed_at').reverse().limit(limit).toArray();
+      return items;
+    } catch {
+      return [];
+    }
+  }
+
+  /** Put one dead-lettered item back on the queue with a fresh retry budget. */
+  async retryDeadLetterItem(id: number): Promise<boolean> {
+    try {
+      const item = await db.sync_dead_letter.get(id);
+      if (!item) return false;
+      await db.sync_queue.add({
+        table: item.table,
+        action: item.action,
+        local_id: item.local_id,
+        data: item.data,
+        created_at: new Date(),
+        retries: 0,
+        idempotency_key: generateIdempotencyKey(),
+      } as any);
+      await db.sync_dead_letter.delete(id);
+      this.notifyListeners();
+      return true;
+    } catch (e) {
+      console.error('Failed to requeue dead-letter item:', e);
+      return false;
+    }
+  }
+
+  /** Requeue everything. Returns how many were restored. */
+  async retryAllDeadLetter(): Promise<number> {
+    const items = await this.getDeadLetterItems(1000);
+    let restored = 0;
+    for (const item of items) {
+      if (await this.retryDeadLetterItem(item.id)) restored++;
+    }
+    if (restored > 0) {
+      console.log(`♻️ Restored ${restored} dead-lettered items to the sync queue`);
+      this.syncAll();
+    }
+    return restored;
+  }
+
   // Force sync (for manual trigger)
   async forceSync(): Promise<SyncResult> {
-    // Reset the syncInProgress flag in case it got stuck
-    this.syncInProgress = false;
+    // Only clear the flag if the current run is genuinely STUCK.
+    //
+    // This used to reset syncInProgress unconditionally, so tapping the sync
+    // button while the 5-minute periodic sync was mid-flight started a second
+    // concurrent loop over the same queue rows. Because currentIdempotencyKey
+    // is a single shared instance field, loop B's key then got stamped on loop
+    // A's outbound request — defeating the idempotency mechanism at exactly the
+    // moment it was needed — and whichever loop finished first cleared the flag
+    // while the other was still running.
+    if (this.syncInProgress) {
+      const runningFor = this.syncStartedAt ? Date.now() - this.syncStartedAt : Infinity;
+      if (runningFor < STUCK_SYNC_THRESHOLD_MS) {
+        console.log('⏳ Sync already in progress — ignoring duplicate force request');
+        return { success: false, synced: 0, failed: 0, errors: ['Sync already in progress'] };
+      }
+      console.warn(`⚠️ Sync appears stuck (${Math.round(runningFor / 1000)}s) — resetting`);
+      this.syncInProgress = false;
+    }
     return this.syncAll();
   }
 }

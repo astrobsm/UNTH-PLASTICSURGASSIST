@@ -312,6 +312,24 @@ class ApiClient {
               console.log(`📴 Offline, no cached data for ${endpoint}`);
               return [] as unknown as T;
             }
+          } else if (isOfflineResponse) {
+            // MUTATION already captured by the service worker's background-sync
+            // queue. The SW resolves with a synthetic 503 rather than throwing,
+            // so this fell past the `isGet` branch and surfaced as a hard save
+            // failure — the clinician saw "save failed", re-entered the entry,
+            // and BOTH copies landed on the server once connectivity returned.
+            //
+            // Report it as queued-pending instead. The SW owns the replay, so
+            // deliberately do NOT also add it to db.sync_queue — that would
+            // reintroduce the duplicate from the other direction.
+            console.log(`📥 SW queued ${method} ${endpoint} for background sync`);
+            return {
+              success: true,
+              _offline: true,
+              _queued: true,
+              _queuedBy: 'service-worker',
+              message: 'Saved on this device — will sync when you reconnect.',
+            } as unknown as T;
           }
         }
         

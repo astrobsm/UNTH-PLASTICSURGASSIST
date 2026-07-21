@@ -1,5 +1,5 @@
 // Sync API endpoint for offline data synchronization
-import { query } from '../_lib/db.js';
+import { query, getPool } from '../_lib/db.js';
 import { cors, authenticateRequest } from '../_lib/auth.js';
 
 // Cache table columns to avoid repeated information_schema queries
@@ -192,45 +192,64 @@ async function getSyncEntity(tableName, res, searchParams, user) {
 
   const isPatientScoped = !nonPatientTables.includes(tableName);
 
+  // ── Cursor-based incremental sync ──────────────────────────────────────
+  //
+  // Rows are ordered by updated_at ASCENDING, not descending. This is the
+  // difference between a resumable sync and one with permanent holes: with
+  // DESC + LIMIT, a table holding more than one page of changes returns only
+  // the newest page, and once the client advances its cursor past them the
+  // older rows are never requested again. Ascending order means a truncated
+  // page simply resumes from the last row received on the next pull.
+  //
+  // The client pairs this with a cursor taken from the max updated_at it
+  // actually received (see dataSyncService.pullEntityFromCloud) rather than
+  // from its own clock.
+  const LIMIT = isPatientScoped ? 2000 : 5000;
+  const where = [];
+  params = [];
+
   if (isPatientScoped && patientId) {
-    // Patient-scoped query: ALWAYS filter by patient_id when provided
     const parsedPatientId = parseInt(patientId, 10);
     if (isNaN(parsedPatientId)) {
       return res.status(400).json({ error: 'Invalid patientId' });
     }
-    if (since) {
-      queryStr = `SELECT * FROM ${tableName} WHERE patient_id = $1 AND updated_at > $2 ORDER BY updated_at DESC LIMIT 1000`;
-      params = [parsedPatientId, since];
-    } else {
-      queryStr = `SELECT * FROM ${tableName} WHERE patient_id = $1 ORDER BY updated_at DESC LIMIT 1000`;
-      params = [parsedPatientId];
-    }
+    params.push(parsedPatientId);
+    where.push(`patient_id = $${params.length}`);
   } else if (isPatientScoped && !patientId && userScopedFallbackTables[tableName] && user?.id) {
-    // No patientId — fall back to current-user-owned rows for whitelisted tables
-    const ownerCol = userScopedFallbackTables[tableName];
-    const userId = String(user.id);
-    if (since) {
-      queryStr = `SELECT * FROM ${tableName} WHERE ${ownerCol} = $1 AND updated_at > $2 ORDER BY updated_at DESC LIMIT 1000`;
-      params = [userId, since];
-    } else {
-      queryStr = `SELECT * FROM ${tableName} WHERE ${ownerCol} = $1 ORDER BY updated_at DESC LIMIT 1000`;
-      params = [userId];
-    }
-  } else if (isPatientScoped && !patientId) {
-    // Patient-scoped table but no patientId provided: return empty to prevent data leakage
-    // Callers MUST provide patientId for patient-scoped tables
-    return res.status(400).json({ error: 'patientId is required for patient-scoped data' });
-  } else {
-    // Non-patient-scoped table: return all (with since filter if applicable)
-    if (since) {
-      queryStr = `SELECT * FROM ${tableName} WHERE updated_at > $1 ORDER BY updated_at DESC LIMIT 5000`;
-      params = [since];
-    } else {
-      queryStr = `SELECT * FROM ${tableName} ORDER BY updated_at DESC LIMIT 5000`;
-    }
+    // Whitelisted tables fall back to rows owned by the current user.
+    params.push(String(user.id));
+    where.push(`${userScopedFallbackTables[tableName]} = $${params.length}`);
+  }
+  // Otherwise: no row filter.
+  //
+  // A patient-scoped table with no patientId used to hard-400 here. The client
+  // syncs a whole device rather than one chart, so it never sends patientId —
+  // and it swallowed the 400 while still advancing its cursor. Cross-device
+  // pull was therefore silently dead for ~28 of the 32 registered entities:
+  // admissions, prescriptions, ward rounds and progress notes written on one
+  // device never reached any other.
+  //
+  // Returning these rows is not a new disclosure. GET /api/patients already
+  // returns every patient to any authenticated staff member, and student
+  // accounts — the only self-registerable identity — are rejected by
+  // api/_lib/auth.js before this handler runs.
+
+  if (since) {
+    params.push(since);
+    where.push(`updated_at > $${params.length}`);
   }
 
+  queryStr =
+    `SELECT * FROM ${tableName}` +
+    (where.length ? ` WHERE ${where.join(' AND ')}` : '') +
+    ` ORDER BY updated_at ASC LIMIT ${LIMIT}`;
+
   const result = await query(queryStr, params);
+
+  // Raw array response is preserved for compatibility with existing callers.
+  // `X-Sync-Truncated` lets the client know to pull again immediately rather
+  // than waiting for the next interval when a page was capped.
+  res.setHeader('X-Sync-Truncated', result.rows.length >= LIMIT ? 'true' : 'false');
   res.status(200).json(result.rows);
 }
 
@@ -327,18 +346,59 @@ async function handlePush(data, user, res) {
         const { patient_id, meeting_date, meeting_title } = payload;
         if (patient_id && meeting_date) {
           const patientIdInt = parseInt(patient_id, 10);
-          await query(
-            `INSERT INTO mdt_meetings (patient_id, patient_name, hospital_number, meeting_title, 
-             meeting_date, meeting_time, location, meeting_type, status, agenda, 
-             attending_specialties, created_by) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-             ON CONFLICT (patient_id, meeting_date) DO UPDATE SET 
-             meeting_title = EXCLUDED.meeting_title, updated_at = CURRENT_TIMESTAMP`,
-            [patientIdInt, payload.patient_name, payload.hospital_number, meeting_title,
-             meeting_date, payload.meeting_time, payload.location, payload.meeting_type || 'routine',
-             payload.status || 'scheduled', payload.agenda, 
-             JSON.stringify(payload.attending_specialties || []), payload.created_by]
+
+          // SELECT-then-UPDATE/INSERT, matching the mdt_patient_teams branch
+          // above. This previously used `ON CONFLICT (patient_id, meeting_date)`,
+          // but mdt_meetings has no unique constraint or index on that pair —
+          // only plain non-unique indexes — so Postgres raised 42P10 on EVERY
+          // execution and no MDT meeting ever reached the database.
+          //
+          // The outcome columns (discussion_points, decisions_made,
+          // action_items, next_meeting_date) exist in the schema but were
+          // absent from both the INSERT list and the DO UPDATE clause, so the
+          // decisions and assigned actions were dropped on sync. They are
+          // persisted here.
+          const existingMeeting = await query(
+            'SELECT id FROM mdt_meetings WHERE patient_id = $1 AND meeting_date = $2',
+            [patientIdInt, meeting_date]
           );
+
+          const meetingValues = [
+            payload.patient_name, payload.hospital_number, meeting_title,
+            payload.meeting_time, payload.location, payload.meeting_type || 'routine',
+            payload.status || 'scheduled', payload.agenda,
+            JSON.stringify(payload.attending_specialties || []),
+            payload.discussion_points || null,
+            payload.decisions_made || null,
+            JSON.stringify(payload.action_items || []),
+            payload.next_meeting_date || null,
+            payload.created_by,
+          ];
+
+          if (existingMeeting.rows.length > 0) {
+            await query(
+              `UPDATE mdt_meetings SET
+                 patient_name = $1, hospital_number = $2, meeting_title = $3,
+                 meeting_time = $4, location = $5, meeting_type = $6,
+                 status = $7, agenda = $8, attending_specialties = $9,
+                 discussion_points = $10, decisions_made = $11,
+                 action_items = $12, next_meeting_date = $13, created_by = $14,
+                 updated_at = CURRENT_TIMESTAMP
+               WHERE id = $15`,
+              [...meetingValues, existingMeeting.rows[0].id]
+            );
+          } else {
+            await query(
+              `INSERT INTO mdt_meetings (
+                 patient_name, hospital_number, meeting_title,
+                 meeting_time, location, meeting_type, status, agenda,
+                 attending_specialties, discussion_points, decisions_made,
+                 action_items, next_meeting_date, created_by,
+                 patient_id, meeting_date)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+              [...meetingValues, patientIdInt, meeting_date]
+            );
+          }
           results.push({ entityId, status: 'synced' });
           continue;
         }
@@ -348,18 +408,49 @@ async function handlePush(data, user, res) {
         const { patient_id, contact_date, specialty_id } = payload;
         if (patient_id && contact_date) {
           const patientIdInt = parseInt(patient_id, 10);
-          await query(
-            `INSERT INTO mdt_contact_logs (patient_id, patient_name, hospital_number, 
-             specialty_id, specialty_name, contact_type, contact_date, contact_time, 
-             contacted_person, reason, discussion_summary, outcome, follow_up_required, 
-             follow_up_date, created_by) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
-            [patientIdInt, payload.patient_name, payload.hospital_number, specialty_id,
-             payload.specialty_name, payload.contact_type, contact_date, payload.contact_time,
-             payload.contacted_person, payload.reason, payload.discussion_summary, 
-             payload.outcome, payload.follow_up_required || false, payload.follow_up_date,
-             payload.created_by]
+
+          // Idempotent on (patient_id, specialty_id, contact_date, contact_time).
+          // This was a bare INSERT with no existence check and no unique
+          // constraint, so a push that committed server-side but whose response
+          // was lost (mobile handover, function timeout after commit) was
+          // re-pushed on the next cycle and duplicated — the same phone call to
+          // a specialty appearing two or three times in the patient's record.
+          const existingLog = await query(
+            `SELECT id FROM mdt_contact_logs
+             WHERE patient_id = $1 AND contact_date = $2
+               AND specialty_id IS NOT DISTINCT FROM $3
+               AND contact_time IS NOT DISTINCT FROM $4`,
+            [patientIdInt, contact_date, specialty_id ?? null, payload.contact_time ?? null]
           );
+
+          if (existingLog.rows.length > 0) {
+            await query(
+              `UPDATE mdt_contact_logs SET
+                 patient_name = $1, hospital_number = $2, specialty_name = $3,
+                 contact_type = $4, contacted_person = $5, reason = $6,
+                 discussion_summary = $7, outcome = $8, follow_up_required = $9,
+                 follow_up_date = $10, updated_at = CURRENT_TIMESTAMP
+               WHERE id = $11`,
+              [payload.patient_name, payload.hospital_number, payload.specialty_name,
+               payload.contact_type, payload.contacted_person, payload.reason,
+               payload.discussion_summary, payload.outcome,
+               payload.follow_up_required || false, payload.follow_up_date,
+               existingLog.rows[0].id]
+            );
+          } else {
+            await query(
+              `INSERT INTO mdt_contact_logs (patient_id, patient_name, hospital_number,
+               specialty_id, specialty_name, contact_type, contact_date, contact_time,
+               contacted_person, reason, discussion_summary, outcome, follow_up_required,
+               follow_up_date, created_by)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+              [patientIdInt, payload.patient_name, payload.hospital_number, specialty_id,
+               payload.specialty_name, payload.contact_type, contact_date, payload.contact_time,
+               payload.contacted_person, payload.reason, payload.discussion_summary,
+               payload.outcome, payload.follow_up_required || false, payload.follow_up_date,
+               payload.created_by]
+            );
+          }
           results.push({ entityId, status: 'synced' });
           continue;
         }
@@ -388,27 +479,44 @@ async function handlePush(data, user, res) {
             try { await query("ALTER TABLE ps_unit_rosters ADD COLUMN IF NOT EXISTS consultants_unit1 JSONB DEFAULT '[]'"); } catch (_) {}
             try { await query("ALTER TABLE ps_unit_rosters ADD COLUMN IF NOT EXISTS consultants_unit2 JSONB DEFAULT '[]'"); } catch (_) {}
 
-            // Deactivate all existing rosters first
-            await query('UPDATE ps_unit_rosters SET is_active = false, updated_at = CURRENT_TIMESTAMP');
-            await query(
-              `INSERT INTO ps_unit_rosters (
-                 start_date, rotation_weeks, house_officer_rotation_weeks, junior_registrar_rotation_weeks,
-                 consultants_unit1, consultants_unit2,
-                 senior_registrars, junior_registrars, house_officers, is_active
-               ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-              [
-                start_date,
-                rotation_weeks || 2,
-                house_officer_rotation_weeks || rotation_weeks || 2,
-                junior_registrar_rotation_weeks || 6,
-                JSON.stringify(consultants_unit1 || []),
-                JSON.stringify(consultants_unit2 || []),
-                JSON.stringify(senior_registrars || []),
-                JSON.stringify(junior_registrars || []),
-                JSON.stringify(house_officers || []),
-                is_active !== false,
-              ]
-            );
+            // Deactivate-then-insert must be ATOMIC.
+            //
+            // These were two separate autocommitted statements: the UPDATE
+            // deactivated every roster, and if the INSERT then failed (bad
+            // start_date, type violation, pooler hiccup, function timeout) the
+            // wipe was already committed. The result is no active PS unit
+            // roster at all — every consumer of `is_active = true` renders
+            // empty for all users until an admin re-saves.
+            const rosterClient = await getPool().connect();
+            try {
+              await rosterClient.query('BEGIN');
+              await rosterClient.query('UPDATE ps_unit_rosters SET is_active = false, updated_at = CURRENT_TIMESTAMP');
+              await rosterClient.query(
+                `INSERT INTO ps_unit_rosters (
+                   start_date, rotation_weeks, house_officer_rotation_weeks, junior_registrar_rotation_weeks,
+                   consultants_unit1, consultants_unit2,
+                   senior_registrars, junior_registrars, house_officers, is_active
+                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+                [
+                  start_date,
+                  rotation_weeks || 2,
+                  house_officer_rotation_weeks || rotation_weeks || 2,
+                  junior_registrar_rotation_weeks || 6,
+                  JSON.stringify(consultants_unit1 || []),
+                  JSON.stringify(consultants_unit2 || []),
+                  JSON.stringify(senior_registrars || []),
+                  JSON.stringify(junior_registrars || []),
+                  JSON.stringify(house_officers || []),
+                  is_active !== false,
+                ]
+              );
+              await rosterClient.query('COMMIT');
+            } catch (txErr) {
+              await rosterClient.query('ROLLBACK').catch(() => {});
+              throw txErr;
+            } finally {
+              rosterClient.release();
+            }
             results.push({ entityId, status: 'synced' });
             continue;
           }
@@ -501,7 +609,11 @@ async function handlePush(data, user, res) {
         'substance_use_clinical_summaries',
         'progress_notes', 'sjs_assessments', 'ward_rounds_clinical',
         'investigation_uploads', 'notice_board', 'patient_transfers',
-        'ho_tracking_assignments', 'ho_task_logs'
+        'ho_tracking_assignments', 'ho_task_logs',
+        // Registered client-side sync entities that were missing from this list
+        // and therefore fell through to the sync_queue dead end below.
+        'cbt_attempts', 'patient_assignments', 'vital_signs', 'fluid_balance',
+        'keloid_care_plans', 'clinic_appointments', 'mdt_documentation'
       ];
       
       if (clinicalEntities.includes(resolvedEntityType) && payload) {
@@ -716,23 +828,48 @@ async function handlePush(data, user, res) {
         }
       }
       
-      // Queue other changes for processing
+      // Unrecognised entity type.
+      //
+      // These were written to sync_queue and reported as 'queued'. Nothing in
+      // the codebase ever drains that table — there is no processor and no job
+      // — so the record vanished: absent from its real table, present only as
+      // opaque JSONB, and marked synced on the client. It is still recorded
+      // here for forensics, but reported as an ERROR so the client keeps the
+      // entry in its outbox and retries rather than discarding it.
       await query(
         `INSERT INTO sync_queue (user_id, entity_type, entity_id, action, data, status)
          VALUES ($1, $2, $3, $4, $5, 'pending')`,
         [user.id, entityType, entityId, action, JSON.stringify(payload)]
       );
-      
-      results.push({ entityId, status: 'queued' });
+
+      console.warn(`[SYNC PUSH] Unhandled entityType "${entityType}" — parked in sync_queue, reported as error so the client retries.`);
+      results.push({
+        entityId,
+        status: 'error',
+        message: `Unsupported entityType "${entityType}" — no server-side handler.`
+      });
     } catch (error) {
       results.push({ entityId, status: 'error', message: error.message });
     }
   }
 
-  res.status(200).json({ 
-    success: true, 
+  // Report per-change outcomes honestly.
+  //
+  // This used to be an unconditional 200 { success: true }, while individual
+  // changes could have failed on an FK violation, a NOT NULL, or the broken
+  // mdt_meetings ON CONFLICT. The client marked those records synced and never
+  // retried them, so clinical entries were silently and permanently lost while
+  // the UI showed a green "synced" state. 207 Multi-Status when some changes
+  // failed; 502 when every change failed (usually a server-side fault worth
+  // retrying wholesale).
+  const failed = results.filter(r => r.status === 'error');
+  const status = failed.length === 0 ? 200 : (failed.length === results.length ? 502 : 207);
+
+  res.status(status).json({
+    success: failed.length === 0,
     processed: results.length,
-    results 
+    failedCount: failed.length,
+    results
   });
 }
 
