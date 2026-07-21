@@ -41,6 +41,36 @@ export function UserApprovalManager() {
   const [togglingUser, setTogglingUser] = useState(false);
   const [resettingId, setResettingId] = useState<string | null>(null);
   const [resetInfo, setResetInfo] = useState<{ name: string; tempPassword: string } | null>(null);
+  // Self-service reset requests raised from the login screen. These were being
+  // written to password_reset_requests and read by nothing, so a locked-out
+  // user was told an administrator had been notified when none ever was.
+  const [resetRequests, setResetRequests] = useState<any[]>([]);
+  const [dismissingId, setDismissingId] = useState<number | null>(null);
+
+  const loadResetRequests = async () => {
+    try {
+      const data = await apiClient.request('/users/reset-requests');
+      setResetRequests(Array.isArray(data?.requests) ? data.requests : []);
+    } catch (e) {
+      // Non-fatal: the rest of user management still works.
+      console.warn('Could not load password reset requests:', e);
+    }
+  };
+
+  const handleDismissRequest = async (id: number) => {
+    setDismissingId(id);
+    try {
+      await apiClient.request('/users/reset-requests', {
+        method: 'PATCH',
+        body: JSON.stringify({ id }),
+      });
+      setResetRequests(prev => prev.filter(r => r.id !== id));
+    } catch (e: any) {
+      alert(e.message || 'Failed to dismiss request');
+    } finally {
+      setDismissingId(null);
+    }
+  };
 
   const handleResetPassword = async (userId: string, userName: string) => {
     if (!confirm(`Reset the password for ${userName}? A new temporary password will be generated and they must change it on next login.`)) return;
@@ -51,6 +81,9 @@ export function UserApprovalManager() {
         body: JSON.stringify({ userId }),
       });
       setResetInfo({ name: userName, tempPassword: data.temporaryPassword });
+      // The server resolves any matching pending request; mirror that here so
+      // the panel does not keep showing a request that has just been actioned.
+      loadResetRequests();
     } catch (e: any) {
       alert(e.message || 'Failed to reset password');
     } finally {
@@ -60,6 +93,7 @@ export function UserApprovalManager() {
 
   useEffect(() => {
     loadUsers();
+    loadResetRequests();
   }, []);
 
   const loadUsers = async () => {
@@ -196,6 +230,68 @@ export function UserApprovalManager() {
           </div>
         </div>
       </div>
+
+      {/* Password reset requests raised from the login screen.
+          Rendered above the tabs because a locked-out clinician cannot work at
+          all until this is actioned. */}
+      {resetRequests.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Clock className="h-5 w-5 text-amber-600 flex-shrink-0" />
+            <h3 className="font-semibold text-amber-900">
+              Password reset {resetRequests.length === 1 ? 'request' : 'requests'} ({resetRequests.length})
+            </h3>
+          </div>
+          <p className="text-sm text-amber-700 mb-3">
+            These users used “Forgot password” on the login screen and cannot sign in.
+            Resetting issues a temporary password to read out to them; they must change it on first login.
+          </p>
+          <ul className="space-y-2">
+            {resetRequests.map(req => {
+              const known = Boolean(req.user_id);
+              const displayName = req.full_name || req.email;
+              return (
+                <li
+                  key={req.id}
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white rounded-lg border border-amber-200 px-3 py-2"
+                >
+                  <div className="min-w-0">
+                    <div className="font-medium text-gray-800 truncate">{displayName}</div>
+                    <div className="text-xs text-gray-500 truncate">
+                      {req.email}
+                      {req.requested_at && ` • requested ${new Date(req.requested_at).toLocaleString()}`}
+                      {!known && ' • no matching account'}
+                      {known && req.is_active === false && ' • account deactivated'}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {known ? (
+                      <button
+                        onClick={() => handleResetPassword(String(req.user_id), displayName)}
+                        disabled={resettingId === String(req.user_id)}
+                        className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors"
+                      >
+                        {resettingId === String(req.user_id) ? 'Resetting…' : 'Reset password'}
+                      </button>
+                    ) : (
+                      // Shown rather than hidden: an admin needs to see someone
+                      // locked out under a mistyped address.
+                      <span className="text-xs text-gray-500 italic px-2">No account for this address</span>
+                    )}
+                    <button
+                      onClick={() => handleDismissRequest(req.id)}
+                      disabled={dismissingId === req.id}
+                      className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 text-gray-700 rounded-lg text-sm font-medium transition-colors"
+                    >
+                      {dismissingId === req.id ? 'Dismissing…' : 'Dismiss'}
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
 
       {/* View Toggle */}
       <div className="flex items-center gap-2 border-b">
