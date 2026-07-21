@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { CBTTest, CBTAttempt, cbtService } from '../../services/cbtService';
+import { CBTTest, CBTAttempt, CBT_CONFIG } from '../../services/cbtService';
 
 interface CBTResultsProps {
   test: CBTTest;
@@ -29,22 +29,41 @@ const CBTResults: React.FC<CBTResultsProps> = ({ test, attempt, onReturnToTests 
     return true;
   });
   
-  const getGrade = (percentage: number): { grade: string; color: string; bgColor: string } => {
-    if (percentage >= 90) return { grade: 'A+', color: 'text-green-600', bgColor: 'bg-green-100' };
-    if (percentage >= 80) return { grade: 'A', color: 'text-green-600', bgColor: 'bg-green-100' };
-    if (percentage >= 70) return { grade: 'B', color: 'text-blue-600', bgColor: 'bg-blue-100' };
-    if (percentage >= 60) return { grade: 'C', color: 'text-amber-600', bgColor: 'bg-amber-100' };
-    if (percentage >= 50) return { grade: 'D', color: 'text-orange-600', bgColor: 'bg-orange-100' };
-    return { grade: 'F', color: 'text-red-600', bgColor: 'bg-red-100' };
+  // Displayed rules come from the test itself, falling back to the shared
+  // config — both were previously hardcoded here as "10 minutes" and "50%",
+  // and the 50% contradicted the 75% pass mark actually applied to `passed`.
+  const passMark = test.passMark ?? CBT_CONFIG.passMarkPercentage;
+  const durationMinutes = Math.round((test.duration ?? CBT_CONFIG.durationSeconds) / 60);
+
+  /**
+   * Grade bands are anchored to the pass mark so the letter can never
+   * contradict the pass/fail banner. The old fixed scale awarded a "B" at 70%
+   * and a "D" at 50% — both failing grades under a 75% pass mark.
+   */
+  const getGrade = (pct: number): { grade: string; color: string } => {
+    if (pct >= 90) return { grade: 'A+', color: 'text-green-600' };
+    if (pct >= 100 - (100 - passMark) / 2) return { grade: 'A', color: 'text-green-600' };
+    if (pct >= passMark) return { grade: 'B', color: 'text-green-600' };
+    if (pct >= passMark - 10) return { grade: 'C', color: 'text-amber-600' };
+    if (pct >= passMark - 20) return { grade: 'D', color: 'text-orange-600' };
+    return { grade: 'F', color: 'text-red-600' };
   };
   
-  const { grade, color, bgColor } = getGrade(percentage);
-  
-  if (showReview && filteredQuestions.length > 0) {
-    const question = filteredQuestions[currentQuestion];
-    const userAnswer = attempt.answers[question.id];
-    const isCorrect = userAnswer === question.correctAnswer;
-    
+  const { grade, color } = getGrade(percentage);
+
+  // Clamp: switching filters can leave currentQuestion past the end of the
+  // new, shorter list.
+  const safeIndex = Math.min(currentQuestion, Math.max(0, filteredQuestions.length - 1));
+
+  // Guard on `showReview` alone. It used to also require a non-empty filter, so
+  // choosing a filter with zero matches (e.g. "Incorrect (0)" after scoring
+  // 100%) silently fell through to the summary while showReview stayed true —
+  // which then made the "Review Answers" button a dead no-op.
+  if (showReview) {
+    const question = filteredQuestions[safeIndex];
+    const userAnswer = question ? attempt.answers[question.id] : null;
+    const isCorrect = question ? userAnswer === question.correctAnswer : false;
+
     return (
       <div className="min-h-screen bg-gray-50 p-4 md:p-8">
         <div className="max-w-4xl mx-auto">
@@ -89,13 +108,40 @@ const CBTResults: React.FC<CBTResultsProps> = ({ test, attempt, onReturnToTests 
             </div>
           </div>
           
+          {/* Empty filter — keeps the filter chips reachable instead of
+              bouncing the user back to the summary with no explanation. */}
+          {!question && (
+            <div className="bg-white rounded-2xl shadow-lg p-10 text-center">
+              <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-green-100 flex items-center justify-center">
+                <svg className="w-8 h-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-800">
+                {filterMode === 'incorrect' ? 'No incorrect answers' : 'No correct answers'}
+              </h3>
+              <p className="text-gray-500 text-sm mt-1">
+                {filterMode === 'incorrect'
+                  ? 'You answered every question correctly in this test.'
+                  : 'None of your answers in this test were correct.'}
+              </p>
+              <button
+                onClick={() => { setFilterMode('all'); setCurrentQuestion(0); }}
+                className="mt-5 px-4 py-2 bg-gray-800 text-white rounded-lg text-sm font-medium hover:bg-gray-900 transition-colors"
+              >
+                Show all questions
+              </button>
+            </div>
+          )}
+
           {/* Question Review Card */}
+          {question && (
           <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
             {/* Question Header */}
             <div className={`p-4 ${isCorrect ? 'bg-green-500' : 'bg-red-500'} text-white`}>
               <div className="flex items-center justify-between">
                 <span className="font-medium">
-                  Question {currentQuestion + 1} of {filteredQuestions.length}
+                  Question {safeIndex + 1} of {filteredQuestions.length}
                 </span>
                 <span className={`px-3 py-1 rounded-full text-sm font-bold ${
                   isCorrect ? 'bg-green-400' : 'bg-red-400'
@@ -185,10 +231,10 @@ const CBTResults: React.FC<CBTResultsProps> = ({ test, attempt, onReturnToTests 
             {/* Navigation */}
             <div className="px-6 py-4 border-t flex items-center justify-between">
               <button
-                onClick={() => setCurrentQuestion(prev => Math.max(0, prev - 1))}
-                disabled={currentQuestion === 0}
+                onClick={() => setCurrentQuestion(Math.max(0, safeIndex - 1))}
+                disabled={safeIndex === 0}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
-                  currentQuestion === 0
+                  safeIndex === 0
                     ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                     : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                 }`}
@@ -198,12 +244,12 @@ const CBTResults: React.FC<CBTResultsProps> = ({ test, attempt, onReturnToTests 
                 </svg>
                 Previous
               </button>
-              
+
               <button
-                onClick={() => setCurrentQuestion(prev => Math.min(filteredQuestions.length - 1, prev + 1))}
-                disabled={currentQuestion >= filteredQuestions.length - 1}
+                onClick={() => setCurrentQuestion(Math.min(filteredQuestions.length - 1, safeIndex + 1))}
+                disabled={safeIndex >= filteredQuestions.length - 1}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
-                  currentQuestion >= filteredQuestions.length - 1
+                  safeIndex >= filteredQuestions.length - 1
                     ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                     : 'bg-green-500 text-white hover:bg-green-600'
                 }`}
@@ -215,6 +261,7 @@ const CBTResults: React.FC<CBTResultsProps> = ({ test, attempt, onReturnToTests 
               </button>
             </div>
           </div>
+          )}
         </div>
       </div>
     );
@@ -247,10 +294,9 @@ const CBTResults: React.FC<CBTResultsProps> = ({ test, attempt, onReturnToTests 
               {passed ? 'Congratulations!' : 'Keep Trying!'}
             </h1>
             <p className="text-white/90">
-              {passed 
-                ? 'You have successfully passed this test.' 
-                : 'You did not meet the passing score. Review the material and try again.'
-              }
+              {passed
+                ? `You scored ${percentage.toFixed(0)}%, at or above the ${passMark}% pass mark.`
+                : `You scored ${percentage.toFixed(0)}%; the pass mark is ${passMark}%. Review the material and try again.`}
             </p>
           </div>
           
@@ -327,12 +373,12 @@ const CBTResults: React.FC<CBTResultsProps> = ({ test, attempt, onReturnToTests 
             <div className="mt-4 bg-gray-50 rounded-xl p-4 border border-gray-200">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-center">
                 <div>
-                  <div className="text-sm text-gray-500">Test Duration</div>
-                  <div className="font-semibold text-gray-800">10 minutes</div>
+                  <div className="text-sm text-gray-500">Test duration</div>
+                  <div className="font-semibold text-gray-800">{durationMinutes} minutes</div>
                 </div>
                 <div>
-                  <div className="text-sm text-gray-500">Pass Mark</div>
-                  <div className="font-semibold text-gray-800">50%</div>
+                  <div className="text-sm text-gray-500">Pass mark</div>
+                  <div className="font-semibold text-gray-800">{passMark}%</div>
                 </div>
               </div>
             </div>
