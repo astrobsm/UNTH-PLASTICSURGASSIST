@@ -26,13 +26,18 @@ export default async function handler(req, res) {
     return res.status(auth.status || 401).json({ error: auth.error });
   }
 
-  // Fans out to EVERY registered device with requireInteraction:true. Restrict
-  // to senior clinical staff — previously any authenticated account could
-  // broadcast an arbitrary notification department-wide.
-  if (!['admin', 'super_admin', 'consultant', 'senior_registrar'].includes(auth.user.role)) {
-    return res.status(403).json({ error: 'Insufficient permissions to broadcast notifications' });
-  }
-
+  // No additional role gate here, deliberately.
+  //
+  // This endpoint fans out to every registered device, so it looks like it
+  // wants a seniority check — but the app calls it automatically on patient
+  // registration and admission (see pushNotificationService.broadcastToAllUsers),
+  // which house officers do routinely. Gating it to senior staff would silently
+  // kill those alerts department-wide whenever an HO admits a patient.
+  //
+  // The actual vulnerability was that a self-registered STUDENT account could
+  // reach it, and that is now blocked centrally in api/_lib/auth.js for every
+  // handler. Authenticated staff broadcasting admission alerts is the intended
+  // behaviour.
   const { method } = req;
 
   try {

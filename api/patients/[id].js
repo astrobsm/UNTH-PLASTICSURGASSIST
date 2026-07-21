@@ -18,13 +18,16 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Patient ID required' });
   }
 
-  // Writes are role-gated. Previously any authenticated caller could PUT or
-  // hard-DELETE a patient record — there is no soft-delete and no audit row,
-  // so a single request destroyed the chart permanently.
-  const CLINICAL_WRITE_ROLES = [
-    'admin', 'super_admin', 'consultant', 'senior_registrar',
-    'registrar', 'junior_registrar', 'house_officer',
-  ];
+  // Deleting a patient is a HARD delete with no soft-delete and no audit row,
+  // so a single request destroys the chart permanently — administrators only.
+  //
+  // Updates deliberately use a deny-by-exception model rather than an allowlist
+  // of clinical roles: this deployment's role vocabulary is wider than it looks
+  // (intern, junior_resident and senior_resident are all still live alongside
+  // the registrar grades), and an allowlist that misses one silently locks real
+  // staff out of charting. Student accounts — the actual threat here, since
+  // anyone can self-register one — are already rejected centrally in
+  // api/_lib/auth.js before this handler runs.
   const DELETE_ROLES = ['admin', 'super_admin'];
 
   try {
@@ -33,9 +36,6 @@ export default async function handler(req, res) {
         return await getPatient(id, res);
       case 'PUT':
       case 'PATCH':
-        if (!CLINICAL_WRITE_ROLES.includes(auth.user.role)) {
-          return res.status(403).json({ error: 'Insufficient permissions to modify patient records' });
-        }
         return await updatePatient(id, req.body, res);
       case 'DELETE':
         if (!DELETE_ROLES.includes(auth.user.role)) {

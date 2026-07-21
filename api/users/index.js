@@ -604,9 +604,14 @@ async function updateUser(id, data, currentUser, res) {
   // Only administrators may set a role at all, and only to a known value.
   // Unvalidated roles ("wizard") silently drop the user out of every
   // `role IN (...)` staff query — they vanish from rosters and assignment.
+  // The full live vocabulary, including the legacy grades that init-db's
+  // migrateRoles() still maps from and that ho-tracking / performance /
+  // admin-training continue to query. Omitting them would make a legitimate
+  // admin edit fail with a 400.
   const VALID_ROLES = [
-    'admin', 'super_admin', 'consultant', 'senior_registrar',
-    'registrar', 'junior_registrar', 'house_officer',
+    'admin', 'super_admin', 'consultant',
+    'senior_registrar', 'registrar', 'junior_registrar', 'house_officer',
+    'intern', 'junior_resident', 'senior_resident',
   ];
   if (data.role !== undefined) {
     if (!['admin', 'super_admin'].includes(currentUser.role)) {
