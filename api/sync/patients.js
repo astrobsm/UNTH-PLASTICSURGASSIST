@@ -17,7 +17,7 @@ export default async function handler(req, res) {
     const patientId = pathParts[0];
 
     if (req.method === 'GET') {
-      return await getPatients(res);
+      return await getPatients(res, url.searchParams.get('since'));
     }
     
     if (req.method === 'POST') {
@@ -45,13 +45,37 @@ export default async function handler(req, res) {
   }
 }
 
-async function getPatients(res) {
+const PATIENT_PAGE_LIMIT = 500;
+
+async function getPatients(res, since) {
+  // Incremental, resumable pull — matching getSyncEntity in ./index.js.
+  //
+  // This previously ignored `since` entirely and returned the 500 most recently
+  // updated patients, ordered DESC. Any ward with more than 500 patients could
+  // therefore never sync the rest: the same page came back every time and the
+  // older records were unreachable. Ordering ASC from the client's cursor makes
+  // a truncated page resume on the next pull instead of repeating.
+  //
+  // NULLS LAST is deliberate on the ASC ordering too: a row with a NULL
+  // updated_at cannot advance a cursor, so it must not sort ahead of rows that
+  // can, or the pull would stall on it forever.
+  const params = [];
+  let whereClause = '';
+  if (since) {
+    params.push(since);
+    whereClause = 'WHERE updated_at > $1';
+  }
+
   // Use SELECT * so missing/renamed columns never break the response.
   // The client tolerates whatever subset of fields the row contains.
   try {
     const result = await query(
-      `SELECT * FROM patients ORDER BY updated_at DESC NULLS LAST LIMIT 500`
+      `SELECT * FROM patients ${whereClause}
+       ORDER BY updated_at ASC NULLS LAST
+       LIMIT ${PATIENT_PAGE_LIMIT}`,
+      params
     );
+    res.setHeader('X-Sync-Truncated', result.rows.length >= PATIENT_PAGE_LIMIT ? 'true' : 'false');
     return res.status(200).json({
       patients: result.rows,
       serverTime: new Date().toISOString()
@@ -61,9 +85,10 @@ async function getPatients(res) {
     console.error('getPatients SELECT * failed, falling back to minimal columns:', err.message);
     const result = await query(
       `SELECT id, hospital_number, first_name, last_name, date_of_birth, gender, phone, created_at, updated_at
-       FROM patients
-       ORDER BY id DESC
-       LIMIT 500`
+       FROM patients ${whereClause}
+       ORDER BY updated_at ASC NULLS LAST
+       LIMIT ${PATIENT_PAGE_LIMIT}`,
+      params
     );
     return res.status(200).json({
       patients: result.rows,

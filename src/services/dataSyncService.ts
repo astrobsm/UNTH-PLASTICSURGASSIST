@@ -706,7 +706,9 @@ class DataSyncService {
       const serverData = await this.fetchFromServer(endpoint, since);
 
       if (!serverData || !Array.isArray(serverData) || serverData.length === 0) {
-        entityStatus.lastPullTime = new Date();
+        // Genuinely nothing new. fetchFromServer now THROWS on failure, so
+        // reaching here means the server confirmed an empty delta and the
+        // cursor can safely stay where it is.
         entityStatus.status = 'success';
         return 0;
       }
@@ -718,43 +720,83 @@ class DataSyncService {
 
       // Merge server data with local data
       let mergedCount = 0;
+      let failedItems = 0;
+      // The cursor advances to the newest updated_at we actually STORED, not to
+      // the local clock. Combined with the server's ascending order, a truncated
+      // page simply resumes from here on the next pull instead of being skipped.
+      let maxServerUpdatedAt = 0;
+
       for (const serverItem of serverData) {
         try {
           const localItem = await this.findLocalItem(table, serverItem);
-          
+
+          // Preserve the SERVER's timestamps. These were being overwritten with
+          // `new Date()` (this device's pull time), which meant: creation dates
+          // were wrong on every device that did not originate the record, lists
+          // sorted by created_at ordered by sync time rather than admission
+          // order, and the freshness comparison below ended up comparing a
+          // server clock against a local one — so on a device with a fast clock
+          // genuine server edits were discarded as "older" and the record froze.
+          const merged = (base: any) => ({
+            ...serverItem,
+            // Write at the key we MATCHED on. findLocalItem can match by
+            // serverId or hospital_number, but put() keys on serverItem.id — a
+            // different primary key. That mismatch either created a duplicate
+            // row alongside the original, or, because local autoincrement ids
+            // and server serial ids both start at 1 and overlap, overwrote an
+            // unrelated local patient with another patient's record.
+            ...(base ? { id: base.id } : {}),
+            ...(base && serverItem.id !== base.id ? { serverId: serverItem.id } : {}),
+            synced: true,
+          });
+
           if (localItem) {
-            // Check if local has unsynced changes
             if (localItem.synced === false) {
-              // Conflict: local has changes, server has changes
+              // Conflict: both sides changed.
               const resolution = this.resolveConflict(localItem, serverItem, entity);
               if (resolution.winner === 'server') {
-                await table.put({ ...serverItem, synced: true, updated_at: new Date() });
+                await table.put(merged(localItem));
                 mergedCount++;
               }
               // If local wins, keep local data (will be pushed on next sync)
             } else {
-              // No conflict: update only if server data is actually newer
+              // No conflict: update only if the server copy is actually newer.
               const serverTime = serverItem.updatedAt || serverItem.updated_at;
               const localTime = localItem.updatedAt || localItem.updated_at;
               const serverMs = serverTime ? new Date(serverTime).getTime() : 0;
               const localMs = localTime ? new Date(localTime).getTime() : 0;
               if (!localMs || serverMs > localMs) {
-                await table.put({ ...serverItem, synced: true, updated_at: new Date() });
+                await table.put(merged(localItem));
                 mergedCount++;
               }
             }
           } else {
-            // New item from server - use put() to preserve server ID
-            // (add() ignores the id with auto-increment tables)
-            await table.put({ ...serverItem, synced: true, created_at: new Date(), updated_at: new Date() });
+            await table.put(merged(null));
             mergedCount++;
           }
+
+          const ts = serverItem.updated_at || serverItem.updatedAt;
+          const tsMs = ts ? new Date(ts).getTime() : 0;
+          if (tsMs > maxServerUpdatedAt) maxServerUpdatedAt = tsMs;
         } catch (itemError) {
+          // A row we could not store must NOT advance the cursor past itself.
+          failedItems++;
           console.warn(`⚠️ Failed to merge ${entity} item:`, itemError);
         }
       }
 
-      entityStatus.lastPullTime = new Date();
+      if (failedItems > 0) {
+        // Leave the cursor untouched so the whole page is retried. Better to
+        // re-merge a few rows (writes are idempotent puts) than to skip one.
+        entityStatus.status = 'error';
+        entityStatus.error = `${failedItems} of ${serverData.length} ${entity} rows failed to merge`;
+        console.warn(`⚠️ ${entityStatus.error} — cursor held for retry`);
+        return mergedCount;
+      }
+
+      if (maxServerUpdatedAt > 0) {
+        entityStatus.lastPullTime = new Date(maxServerUpdatedAt);
+      }
       entityStatus.status = 'success';
       // Best practice: persist incremental sync cursor immediately so a page
       // refresh in the middle of a multi-entity sync doesn't lose progress.
@@ -816,25 +858,21 @@ class DataSyncService {
 
       return [];
     } catch (error) {
-      // Propagate auth errors so the pull loop can abort
-      if (error instanceof Error && (
-        error.message.includes('401') || 
-        error.message.includes('403') || 
-        error.message.includes('Not authenticated') ||
-        error.message.includes('No token')
-      )) {
-        throw error;
-      }
-
-      // Propagate 503 errors so the pull loop can apply backoff
-      if (error instanceof Error && (
-        error.message.includes('503') || error.message.includes('Service Unavailable')
-      )) {
-        throw error;
-      }
-
+      // ALL failures propagate.
+      //
+      // This used to swallow everything except 401/403/503 and return [], which
+      // the caller could not distinguish from "nothing new since the cursor".
+      // It therefore marked the entity synced and advanced lastPullTime past
+      // records it had never received — and once a later pull persisted that
+      // cursor, the gap was permanent. Patients and admissions created before a
+      // transient 500 simply never appeared on the device, while the sync UI
+      // reported success with zero errors.
+      //
+      // pullEntityFromCloud already has a per-entity try/catch that marks the
+      // entity errored and leaves the cursor untouched, so raising here is what
+      // makes a failed pull retryable.
       console.warn(`⚠️ Failed to fetch from ${endpoint}:`, error);
-      return [];
+      throw error instanceof Error ? error : new Error(String(error));
     }
   }
 
@@ -844,34 +882,48 @@ class DataSyncService {
    */
   private async findLocalItem(table: any, serverItem: any): Promise<any | null> {
     try {
-      // Try by id first (primary key — O(1) indexed lookup)
-      if (serverItem.id) {
-        const byId = await table.get(serverItem.id);
-        if (byId) return byId;
-      }
-
-      // Try by serverId using Dexie filter (scans but avoids full toArray())
+      // 1. Explicit server identity. Unambiguous, so it is tried FIRST.
       if (serverItem.id) {
         try {
           const byServerId = await table.filter((item: any) => item.serverId === serverItem.id).first();
           if (byServerId) return byServerId;
-        } catch (e) {
+        } catch {
           // Ignore filter errors
         }
       }
 
-      // Try by hospital_number using Dexie filter
+      // 2. Primary key — but ONLY for rows that came from the server.
+      //
+      // Local tables use Dexie `++id` autoincrement while Postgres uses its own
+      // serial, so the two id spaces overlap from 1. Matching purely on the
+      // primary key meant a pull of server record #3 could return an unrelated
+      // locally-created record #3 and overwrite one patient's chart with
+      // another's. A row that was created on this device and never synced
+      // (synced === false, no serverId) carries a local-only id that means
+      // nothing to the server, so it is not a valid match.
+      if (serverItem.id) {
+        const byId = await table.get(serverItem.id);
+        if (byId) {
+          const isLocalOnly = byId.synced === false && !byId.serverId;
+          if (!isLocalOnly) return byId;
+        }
+      }
+
+      // 3. Natural key. hospital_number is genuinely unique per patient, so it
+      //    safely reunites a record created offline with its server copy.
       if (serverItem.hospital_number) {
         try {
-          const byHospitalNumber = await table.filter((item: any) => item.hospital_number === serverItem.hospital_number).first();
+          const byHospitalNumber = await table
+            .filter((item: any) => item.hospital_number === serverItem.hospital_number)
+            .first();
           if (byHospitalNumber) return byHospitalNumber;
-        } catch (e) {
+        } catch {
           // Ignore filter errors
         }
       }
 
       return null;
-    } catch (e) {
+    } catch {
       return null;
     }
   }

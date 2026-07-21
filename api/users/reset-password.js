@@ -2,20 +2,36 @@
 // login) and resolve any pending reset requests. Reachable at
 // POST /api/users/reset-password with body { userId }.
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { query } from '../_lib/db.js';
 import { cors, authenticateRequest } from '../_lib/auth.js';
 
+// Temporary passwords are generated with a CSPRNG.
+//
+// This previously used Math.random() for both the character picks AND the
+// final shuffle. Math.random() is not cryptographically secure and its output
+// is predictable from observed values, so an attacker able to trigger or
+// observe resets could narrow down the temporary password issued to somebody
+// else — one that grants a full session on a clinical record system.
 function generatePassword(length = 12) {
-  const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%';
-  let password = '';
-  password += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[Math.floor(Math.random() * 26)];
-  password += 'abcdefghijklmnopqrstuvwxyz'[Math.floor(Math.random() * 26)];
-  password += '0123456789'[Math.floor(Math.random() * 10)];
-  password += '!@#$%'[Math.floor(Math.random() * 5)];
-  for (let i = password.length; i < length; i++) {
-    password += charset[Math.floor(Math.random() * charset.length)];
+  const upper = 'ABCDEFGHIJKLMNPQRSTUVWXYZ';   // no O
+  const lower = 'abcdefghijkmnpqrstuvwxyz';    // no l
+  const digits = '23456789';                   // no 0/1
+  const symbols = '!@#$%';
+  const charset = upper + lower + digits + symbols;
+
+  const pick = (set) => set[crypto.randomInt(0, set.length)];
+
+  // Guarantee one of each class, then fill.
+  const chars = [pick(upper), pick(lower), pick(digits), pick(symbols)];
+  while (chars.length < length) chars.push(pick(charset));
+
+  // Fisher-Yates with crypto randomness so position is not predictable either.
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = crypto.randomInt(0, i + 1);
+    [chars[i], chars[j]] = [chars[j], chars[i]];
   }
-  return password.split('').sort(() => Math.random() - 0.5).join('');
+  return chars.join('');
 }
 
 export default async function handler(req, res) {

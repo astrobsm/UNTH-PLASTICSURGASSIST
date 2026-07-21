@@ -1,14 +1,17 @@
 // Reset passwords for existing users - Admin utility endpoint
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { query } from '../_lib/db.js';
 import { cors, authenticateRequest } from '../_lib/auth.js';
 
-// Generate a random password
+// Generate a random password using a CSPRNG.
+// Math.random() is predictable from observed output and must never be used to
+// mint credentials — see the equivalent note in ./reset-password.js.
 function generatePassword(length = 12) {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
   let password = '';
   for (let i = 0; i < length; i++) {
-    password += chars.charAt(Math.floor(Math.random() * chars.length));
+    password += chars.charAt(crypto.randomInt(0, chars.length));
   }
   return password;
 }
