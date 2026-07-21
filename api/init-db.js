@@ -2,6 +2,15 @@
 import { query, getPool } from './_lib/db.js';
 import { cors } from './_lib/auth.js';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
+
+// Length-independent constant-time comparison. crypto.timingSafeEqual throws
+// when the buffers differ in length, so hash both sides to a fixed width first.
+function timingSafeEquals(a, b) {
+  const ha = crypto.createHash('sha256').update(String(a)).digest();
+  const hb = crypto.createHash('sha256').update(String(b)).digest();
+  return crypto.timingSafeEqual(ha, hb);
+}
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
@@ -11,9 +20,25 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed. Use POST to initialize database.' });
   }
 
-  // Require a secret key to initialize
-  const initSecret = req.headers['x-init-secret'] || req.body?.secret;
-  if (initSecret !== process.env.INIT_SECRET && initSecret !== 'plasticsurg2024') {
+  // Require a secret key to initialize.
+  //
+  // This gate previously accepted a hardcoded literal ('plasticsurg2024') that
+  // is committed to this repository, as an unconditional second key that
+  // setting INIT_SECRET did not disable. Worse, when INIT_SECRET was UNSET the
+  // comparison `undefined !== undefined` was false and short-circuited the
+  // `&&`, so a request carrying no secret at all passed. Either way an
+  // unauthenticated caller could run the full DDL plus migrateRoles(), which
+  // rewrites users.role across the table, and seed an admin account.
+  //
+  // Fail closed: no configured secret means the endpoint is disabled.
+  const expected = process.env.INIT_SECRET;
+  if (!expected) {
+    console.error('init-db called but INIT_SECRET is not configured — refusing.');
+    return res.status(503).json({ error: 'Database initialization is disabled' });
+  }
+
+  const provided = req.headers['x-init-secret'] || req.body?.secret;
+  if (typeof provided !== 'string' || !timingSafeEquals(provided, expected)) {
     return res.status(403).json({ error: 'Invalid initialization secret' });
   }
 

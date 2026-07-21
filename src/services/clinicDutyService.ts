@@ -270,6 +270,18 @@ class ClinicDutyService {
     try {
       const all = await apiClient.getUsers();
       if (!Array.isArray(all)) return [];
+      // Keep the offline mirror warm. Without this write nothing ever populates
+      // approved_users, so the catch below always returned [] — a failed fetch
+      // rendered as a confident "0 staff, duties redistributed".
+      try {
+        await db.approved_users.bulkPut(all.map((u: any) => ({
+          ...u,
+          id: String(u.id),
+          full_name: u.full_name || u.name || u.username || 'Unknown',
+        })) as any);
+      } catch (cacheErr) {
+        console.warn('Could not cache staff list for offline use (non-fatal):', cacheErr);
+      }
       return all
         .filter((u: any) => matchRole(u.role) && u.is_approved === true && u.is_active === true)
         .map((u: any) => ({
@@ -278,8 +290,12 @@ class ClinicDutyService {
           role: role === 'junior_registrar' || role === 'registrar' ? 'junior_registrar' : u.role,
           email: u.email,
         }));
-    } catch {
+    } catch (err) {
       const local = await db.approved_users.filter((u: any) => matchRole(u.role) && u.is_active === true).toArray();
+      // An empty mirror means we know nothing about the roster, not that the
+      // roster is empty. Propagate so the caller shows "couldn't load" rather
+      // than asserting there are no registrars on duty.
+      if (local.length === 0) throw err;
       return local.map((u: any) => ({
         id: String(u.id),
         full_name: u.full_name || u.name || 'Unknown',

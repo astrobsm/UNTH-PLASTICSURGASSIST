@@ -17,7 +17,12 @@ export function validateHospitalNumber(hospitalNumber: string): ValidationResult
   }
 
   // Format: 2-4 uppercase letters, slash, 4-6 digits (optionally with year)
-  const regex = /^[A-Z]{2,4}\/(\d{4}\/)?(\d{4,6})$/;
+  // Two accepted shapes, matching the two examples in the error message below:
+  //   PREFIX/NNNNNN       — 4-6 digit serial, no year (UNTH/123456)
+  //   PREFIX/YYYY/NNN     — year plus serial (NCH/2024/001)
+  // The previous pattern required 4-6 digits for the serial in BOTH shapes, so
+  // it rejected NCH/2024/001 — the format its own error text tells users to use.
+  const regex = /^[A-Z]{2,4}\/(?:\d{4}\/\d{1,6}|\d{4,6})$/;
   
   if (!regex.test(hospitalNumber.trim())) {
     return { 

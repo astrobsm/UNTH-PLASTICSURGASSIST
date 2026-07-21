@@ -20,26 +20,32 @@ import { startBackgroundTracking, stopBackgroundTracking } from './services/geol
 // clear caches and reload the page once to get fresh assets.
 function lazyWithRetry(importFn: () => Promise<any>) {
   return lazy(() =>
-    importFn().catch((error: any) => {
-      const hasReloaded = sessionStorage.getItem('chunk_reload');
-      if (!hasReloaded) {
-        sessionStorage.setItem('chunk_reload', '1');
-        // Clear service worker caches
-        if ('caches' in window) {
-          caches.keys().then(names => names.forEach(name => caches.delete(name)));
+    importFn()
+      .then((mod: any) => {
+        // Clear the flag only once an import actually SUCCEEDS. It previously
+        // got cleared at module-evaluation time (below), which runs on the
+        // reloaded page BEFORE any chunk import is attempted — so the
+        // "already retried" guard was always falsy and a permanently missing
+        // chunk produced an infinite reload loop that made the app unreachable.
+        sessionStorage.removeItem('chunk_reload');
+        return mod;
+      })
+      .catch((error: any) => {
+        const hasReloaded = sessionStorage.getItem('chunk_reload');
+        if (!hasReloaded) {
+          sessionStorage.setItem('chunk_reload', '1');
+          // Clear service worker caches
+          if ('caches' in window) {
+            caches.keys().then(names => names.forEach(name => caches.delete(name)));
+          }
+          window.location.reload();
+          return new Promise(() => {}); // never resolves, page is reloading
         }
-        window.location.reload();
-        return new Promise(() => {}); // never resolves, page is reloading
-      }
-      sessionStorage.removeItem('chunk_reload');
-      throw error; // re-throw if reload already attempted
-    })
+        // Reload already attempted and the chunk still fails — surface the
+        // error to the boundary instead of looping.
+        throw error;
+      })
   );
-}
-
-// Clear the reload flag on successful page load
-if (sessionStorage.getItem('chunk_reload')) {
-  sessionStorage.removeItem('chunk_reload');
 }
 
 // Lazy load pages for better performance (with stale-chunk auto-reload)

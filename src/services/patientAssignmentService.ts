@@ -42,7 +42,11 @@ export interface TeamMember {
   id: string;
   name: string;
   email: string;
-  role: 'consultant' | 'registrar' | 'house_officer';
+  // The API returns the full staff role set. Narrowing this to three values
+  // made the `role === 'junior_registrar'` check below a provably-dead
+  // comparison — junior_registrar is the role actually stored for most
+  // registrars, so that branch was silently unreachable.
+  role: 'consultant' | 'senior_registrar' | 'registrar' | 'junior_registrar' | 'house_officer';
   is_active: boolean;
   current_patient_count: number;
   max_patient_capacity: number;

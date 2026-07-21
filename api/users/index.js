@@ -592,8 +592,29 @@ async function updateUser(id, data, currentUser, res) {
   let paramCount = 1;
 
   const allowedFields = ['email', 'full_name', 'phone'];
-  if (['admin', 'super_admin', 'consultant'].includes(currentUser.role)) {
+  // Privilege fields are never self-editable. Without the isSelfEdit guard a
+  // consultant editing their OWN record passed the ownership check above and
+  // then landed in this branch, so `PUT /api/users/<own id> {"role":"admin"}`
+  // was a straight self-escalation to admin.
+  const isSelfEdit = parseInt(id, 10) === currentUser.id;
+  if (!isSelfEdit && ['admin', 'super_admin', 'consultant'].includes(currentUser.role)) {
     allowedFields.push('role', 'is_active', 'is_approved');
+  }
+
+  // Only administrators may set a role at all, and only to a known value.
+  // Unvalidated roles ("wizard") silently drop the user out of every
+  // `role IN (...)` staff query — they vanish from rosters and assignment.
+  const VALID_ROLES = [
+    'admin', 'super_admin', 'consultant', 'senior_registrar',
+    'registrar', 'junior_registrar', 'house_officer',
+  ];
+  if (data.role !== undefined) {
+    if (!['admin', 'super_admin'].includes(currentUser.role)) {
+      return res.status(403).json({ error: 'Only administrators may change a user\'s role' });
+    }
+    if (!VALID_ROLES.includes(data.role)) {
+      return res.status(400).json({ error: `Invalid role. Must be one of: ${VALID_ROLES.join(', ')}` });
+    }
   }
 
   const fieldMap = {

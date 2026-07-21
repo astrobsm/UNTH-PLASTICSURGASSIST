@@ -1007,7 +1007,10 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
 
       // Resolve assigned house officer name from selection
       const hoStaff = houseOfficers.find(h => h.id === selectedHouseOfficer);
-      const assignedHoName = hoStaff?.full_name || hoStaff?.name || undefined;
+      // StaffByRole has no `name` field — both producers (the server query and
+      // the local fallback) always populate full_name, so the old `|| .name`
+      // branch was dead code that only served to break the type.
+      const assignedHoName = hoStaff?.full_name || undefined;
 
       // Create admission with persistent HO assignment + geo-stamp
       const admissionId = await admissionDischargeService.createAdmission({

@@ -23,7 +23,14 @@ export default async function handler(req, res) {
 
   const auth = authenticateRequest(req);
   if (!auth.authenticated) {
-    return res.status(401).json({ error: auth.error });
+    return res.status(auth.status || 401).json({ error: auth.error });
+  }
+
+  // Fans out to EVERY registered device with requireInteraction:true. Restrict
+  // to senior clinical staff — previously any authenticated account could
+  // broadcast an arbitrary notification department-wide.
+  if (!['admin', 'super_admin', 'consultant', 'senior_registrar'].includes(auth.user.role)) {
+    return res.status(403).json({ error: 'Insufficient permissions to broadcast notifications' });
   }
 
   const { method } = req;

@@ -40,6 +40,11 @@ export default async function handler(req, res) {
         if (!patientId) {
           return res.status(400).json({ error: 'Patient ID required' });
         }
+        // Hard delete, no audit trail — administrators only.
+        // Mirrors the gate in api/patients/[id].js.
+        if (!['admin', 'super_admin'].includes(auth.user.role)) {
+          return res.status(403).json({ error: 'Only administrators may delete patient records' });
+        }
         return await deletePatient(patientId, res);
       default:
         res.status(405).json({ error: 'Method not allowed' });

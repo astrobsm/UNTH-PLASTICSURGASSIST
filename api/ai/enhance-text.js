@@ -5,6 +5,7 @@
  */
 
 import { chatCompletion, getOpenAIKey } from '../_lib/openai.js';
+import { cors, authenticateRequest } from '../_lib/auth.js';
 
 // Context-specific prompts for medical documentation
 const CONTEXT_PROMPTS = {
@@ -62,13 +63,15 @@ Preserve all information accurately.`
 };
 
 export default async function handler(req, res) {
-  // Set CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  // Shared CORS helper (origin allowlist) instead of a wildcard origin.
+  if (cors(req, res)) return;
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+  // Spends the deployment's OPENAI_API_KEY — must not be callable anonymously.
+  // Previously this endpoint had no auth and `Allow-Origin: *`, making it a
+  // free public LLM proxy; exhausting the quota breaks real ward scans.
+  const auth = authenticateRequest(req);
+  if (!auth.authenticated) {
+    return res.status(auth.status || 401).json({ error: auth.error });
   }
 
   if (req.method !== 'POST') {

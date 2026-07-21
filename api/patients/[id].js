@@ -18,14 +18,29 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Patient ID required' });
   }
 
+  // Writes are role-gated. Previously any authenticated caller could PUT or
+  // hard-DELETE a patient record — there is no soft-delete and no audit row,
+  // so a single request destroyed the chart permanently.
+  const CLINICAL_WRITE_ROLES = [
+    'admin', 'super_admin', 'consultant', 'senior_registrar',
+    'registrar', 'junior_registrar', 'house_officer',
+  ];
+  const DELETE_ROLES = ['admin', 'super_admin'];
+
   try {
     switch (method) {
       case 'GET':
         return await getPatient(id, res);
       case 'PUT':
       case 'PATCH':
+        if (!CLINICAL_WRITE_ROLES.includes(auth.user.role)) {
+          return res.status(403).json({ error: 'Insufficient permissions to modify patient records' });
+        }
         return await updatePatient(id, req.body, res);
       case 'DELETE':
+        if (!DELETE_ROLES.includes(auth.user.role)) {
+          return res.status(403).json({ error: 'Only administrators may delete patient records' });
+        }
         return await deletePatient(id, res);
       default:
         res.status(405).json({ error: 'Method not allowed' });

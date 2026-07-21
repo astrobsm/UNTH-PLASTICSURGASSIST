@@ -20,18 +20,25 @@
 import { performOCR, OCRError } from '../_lib/ocrService.js';
 import { chatCompletion } from '../_lib/openai.js';
 import { OCR_EXTRACTION_PROMPT } from '../_lib/ocrPrompts.js';
+import { cors, authenticateRequest } from '../_lib/auth.js';
 
 // Max body size guard — Vercel has a 4.5 MB body limit for serverless;
 // images are base64 so ~33% overhead
 const MAX_BASE64_LENGTH = 15 * 1024 * 1024; // ~10 MB decoded
 
 export default async function handler(req, res) {
-  // CORS
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  // Shared CORS helper (origin allowlist) instead of a wildcard origin.
+  if (cors(req, res)) return;
 
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  // Highest-cost endpoint in the API (gpt-4o Vision, up to 8192 output tokens
+  // per call) and it ingests images of clinical documents. It was reachable
+  // anonymously from any origin — its sibling api/ocr/wound-measure.js already
+  // authenticates, so this was an omission rather than a policy.
+  const auth = authenticateRequest(req);
+  if (!auth.authenticated) {
+    return res.status(auth.status || 401).json({ error: auth.error });
+  }
+
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {

@@ -35,17 +35,40 @@ export function getTokenFromRequest(req) {
   return null;
 }
 
-export function authenticateRequest(req) {
+// SECURITY: student tokens are default-denied.
+//
+// api/students.js exposes PUBLIC self-registration (POST /api/students/register)
+// and auto-approves the account on first login, then signs a token with the SAME
+// JWT_SECRET as staff tokens. Such a token satisfies a bare authenticated check,
+// so before this guard ANYONE on the internet could mint a credential that
+// passed the auth gate on every clinical handler in this API — including
+// DELETE /api/patients/:id.
+//
+// Students are only ever meant to use api/students.js, which is the sole caller
+// that opts in via { allowStudents: true }. Default-deny here fixes every other
+// handler at once rather than relying on 76 files each remembering to check.
+export function authenticateRequest(req, options = {}) {
+  const { allowStudents = false } = options;
   const token = getTokenFromRequest(req);
   if (!token) {
     return { authenticated: false, error: 'No token provided' };
   }
-  
+
   const decoded = verifyToken(token);
   if (!decoded) {
     return { authenticated: false, error: 'Invalid or expired token' };
   }
-  
+
+  // `role` covers tokens issued before sub_type existed, so already-issued
+  // student tokens are rejected too rather than being grandfathered in.
+  if (!allowStudents && (decoded.sub_type === 'student' || decoded.role === 'student')) {
+    return {
+      authenticated: false,
+      status: 403,
+      error: 'This endpoint is not available to student accounts',
+    };
+  }
+
   return { authenticated: true, user: decoded };
 }
 
@@ -84,10 +107,10 @@ export function cors(req, res) {
 
 // Role-based access control helper
 // Usage: const { user } = requireRole(req, res, ['admin', 'consultant']); if (!user) return;
-export function requireRole(req, res, allowedRoles) {
-  const auth = authenticateRequest(req);
+export function requireRole(req, res, allowedRoles, options = {}) {
+  const auth = authenticateRequest(req, options);
   if (!auth.authenticated) {
-    res.status(401).json({ error: auth.error });
+    res.status(auth.status || 401).json({ error: auth.error });
     return { user: null };
   }
   if (allowedRoles && allowedRoles.length > 0 && !allowedRoles.includes(auth.user.role)) {

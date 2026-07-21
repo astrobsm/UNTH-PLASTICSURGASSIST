@@ -9,18 +9,20 @@
 
 import { chatJSON, getOpenAIKey, OpenAIError } from '../_lib/openai.js';
 import { OCR_EXTRACTION_PROMPT } from '../_lib/ocrPrompts.js';
+import { cors, authenticateRequest } from '../_lib/auth.js';
 
 // Shared single-source-of-truth clinical extraction prompt.
 const OCR_SYSTEM_PROMPT = OCR_EXTRACTION_PROMPT;
 
 export default async function handler(req, res) {
-  // CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  // Shared CORS helper (origin allowlist) instead of a wildcard origin.
+  if (cors(req, res)) return;
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+  // Spends the deployment's OPENAI_API_KEY and receives OCR'd clinical
+  // documents — must not be callable anonymously.
+  const auth = authenticateRequest(req);
+  if (!auth.authenticated) {
+    return res.status(auth.status || 401).json({ error: auth.error });
   }
 
   if (req.method !== 'POST') {

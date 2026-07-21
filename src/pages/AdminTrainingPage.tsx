@@ -544,7 +544,10 @@ const AdminTrainingPage: React.FC = () => {
               </button>
             ))}
           </div>
-          <button onClick={fetchTrainees} className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-600">
+          {/* Wrapped: passing fetchTrainees directly hands React's MouseEvent
+              in as `opts`, so a future `if (opts)` check would silently take
+              the silent-refresh branch on a user click. */}
+          <button onClick={() => fetchTrainees()} className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-600">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
           </button>
         </div>
