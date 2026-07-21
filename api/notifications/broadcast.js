@@ -23,9 +23,21 @@ export default async function handler(req, res) {
 
   const auth = authenticateRequest(req);
   if (!auth.authenticated) {
-    return res.status(401).json({ error: auth.error });
+    return res.status(auth.status || 401).json({ error: auth.error });
   }
 
+  // No additional role gate here, deliberately.
+  //
+  // This endpoint fans out to every registered device, so it looks like it
+  // wants a seniority check — but the app calls it automatically on patient
+  // registration and admission (see pushNotificationService.broadcastToAllUsers),
+  // which house officers do routinely. Gating it to senior staff would silently
+  // kill those alerts department-wide whenever an HO admits a patient.
+  //
+  // The actual vulnerability was that a self-registered STUDENT account could
+  // reach it, and that is now blocked centrally in api/_lib/auth.js for every
+  // handler. Authenticated staff broadcasting admission alerts is the intended
+  // behaviour.
   const { method } = req;
 
   try {

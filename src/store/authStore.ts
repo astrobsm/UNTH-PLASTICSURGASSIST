@@ -4,6 +4,8 @@ import { userManagementService } from '../services/userManagementService';
 import { apiClient } from '../services/apiClient';
 import { encrypt, decrypt, initializeEncryption, clearEncryption } from '../utils/encryption';
 import { storeOfflineCredential, verifyOfflineCredential } from '../services/offlineAuthService';
+import { dataSyncService } from '../services/dataSyncService';
+import { db } from '../db/database';
 
 export interface User {
   id: string;
@@ -21,7 +23,7 @@ interface AuthState {
   token: string | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   initializeAuth: () => Promise<void>;
   clearMustChangePassword: () => void;
   useBackend: boolean;
@@ -140,7 +142,7 @@ export const useAuthStore = create<AuthState>()(
         );
       },
 
-      logout: () => {
+      logout: async () => {
         clearEncryption();
         localStorage.removeItem('userId');
         // SECURITY: Clear all patient-specific data from localStorage to prevent cross-user data leakage
@@ -152,6 +154,38 @@ export const useAuthStore = create<AuthState>()(
           }
         }
         keysToRemove.forEach(k => localStorage.removeItem(k));
+
+        // PHI hygiene on a SHARED ward device.
+        // Cached clinical data previously survived logout in IndexedDB and the
+        // service-worker cache, and api_cache is keyed by endpoint with no user
+        // scoping. The next user to sign in was served the previous user's
+        // patient list from the stale-while-revalidate path — and exclusively
+        // so while offline, where the cache is the only source.
+        try {
+          // Read caches are always safe to drop — they are server-derived.
+          await db.api_cache.clear();
+          if (typeof caches !== 'undefined') {
+            const keys = await caches.keys();
+            await Promise.all(
+              keys.filter(k => k.startsWith('api-cache')).map(k => caches.delete(k))
+            );
+          }
+
+          // Entity tables can hold records created offline that have not been
+          // pushed yet. Cache hygiene must never destroy un-synced clinical
+          // work, so only clear them when nothing is pending.
+          if (await dataSyncService.hasPendingChanges()) {
+            console.warn(
+              'Logout: unsynced changes present — keeping local clinical records. ' +
+              'They will sync when this device next reconnects.'
+            );
+          } else {
+            await dataSyncService.clearAllData();
+          }
+        } catch (err) {
+          console.error('Logout cache clear failed:', err);
+        }
+
         set({ user: null, token: null, loading: false });
         apiClient.logout();
       },
@@ -214,3 +248,17 @@ export const useAuthStore = create<AuthState>()(
     }
   )
 );
+
+// A CONFIRMED expiry (401/403 saying expired/invalid) clears apiClient's token,
+// but the route gate reads this store — without this the UI stays "logged in"
+// and every protected call fails locally with "No token provided". It also
+// stops apiClient.getToken() from healing itself back to a dead token.
+if (typeof window !== 'undefined') {
+  window.addEventListener('auth:expired', () => {
+    if (!useAuthStore.getState().token && !useAuthStore.getState().user) return;
+    console.warn('Session expired — clearing auth state');
+    clearEncryption();
+    localStorage.removeItem('userId');
+    useAuthStore.setState({ user: null, token: null, loading: false });
+  });
+}

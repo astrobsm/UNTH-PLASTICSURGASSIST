@@ -18,6 +18,18 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Patient ID required' });
   }
 
+  // Deleting a patient is a HARD delete with no soft-delete and no audit row,
+  // so a single request destroys the chart permanently — administrators only.
+  //
+  // Updates deliberately use a deny-by-exception model rather than an allowlist
+  // of clinical roles: this deployment's role vocabulary is wider than it looks
+  // (intern, junior_resident and senior_resident are all still live alongside
+  // the registrar grades), and an allowlist that misses one silently locks real
+  // staff out of charting. Student accounts — the actual threat here, since
+  // anyone can self-register one — are already rejected centrally in
+  // api/_lib/auth.js before this handler runs.
+  const DELETE_ROLES = ['admin', 'super_admin'];
+
   try {
     switch (method) {
       case 'GET':
@@ -26,6 +38,9 @@ export default async function handler(req, res) {
       case 'PATCH':
         return await updatePatient(id, req.body, res);
       case 'DELETE':
+        if (!DELETE_ROLES.includes(auth.user.role)) {
+          return res.status(403).json({ error: 'Only administrators may delete patient records' });
+        }
         return await deletePatient(id, res);
       default:
         res.status(405).json({ error: 'Method not allowed' });

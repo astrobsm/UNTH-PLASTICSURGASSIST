@@ -80,6 +80,46 @@ const POSTING_DURATION: Record<TrainingLevel, number> = {
 
 const PASS_MARK_PERCENTAGE = 75; // 75% pass mark for posting sign-out
 
+/**
+ * Single source of truth for CBT rules.
+ *
+ * The UI previously hardcoded these numbers in prose, and drifted: the
+ * pre-exam modal and the results screen both announced "Pass mark = 50%"
+ * while the actual rule — and the test-selection instructions — said 75%.
+ * Every surface now derives its copy from here (or from the CBTTest object),
+ * so the displayed rules cannot disagree with the enforced ones.
+ */
+export const CBT_CONFIG = {
+  passMarkPercentage: PASS_MARK_PERCENTAGE,
+  questionsPerTest: 25,
+  marksPerQuestion: 4,
+  durationSeconds: 600,
+  /**
+   * Weekly test window. `enforced` is the switch that used to be an
+   * `isDevelopment = true` literal buried inside isWithinTestWindow(), which
+   * made the window permanently open while the UI still told users they could
+   * only test on Tuesdays 8-10 AM. Flip to true to enforce it for real.
+   */
+  window: {
+    weekday: 2, // 0 = Sunday, 2 = Tuesday
+    startHour: 8,
+    endHour: 10,
+    enforced: false,
+  },
+} as const;
+
+const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+/** Human-readable window label, e.g. "Tuesdays 8-10 AM". Derived, never typed by hand. */
+export const getTestWindowLabel = (): string => {
+  const { weekday, startHour, endHour } = CBT_CONFIG.window;
+  const fmt = (h: number) => `${h % 12 === 0 ? 12 : h % 12}${h < 12 ? ' AM' : ' PM'}`;
+  return `${WEEKDAY_NAMES[weekday]}s ${fmt(startHour).replace(' AM', '')}-${fmt(endHour)}`;
+};
+
+/** The signed-in user, or '' when unknown. Attempts are scoped to this. */
+export const getCurrentUserId = (): string => localStorage.getItem('userId') || '';
+
 // Clinical scenario templates for generating questions
 const CLINICAL_SCENARIOS = {
   house_officer: [
@@ -328,39 +368,42 @@ const generateTestsForLevel = (level: TrainingLevel): CBTTest[] => {
   return tests;
 };
 
-// Check if current time is within test window
+/** Is the weekly window currently open? When not enforced, always true. */
 const isWithinTestWindow = (): boolean => {
+  if (!CBT_CONFIG.window.enforced) return true;
+  const { weekday, startHour, endHour } = CBT_CONFIG.window;
   const now = new Date();
-  const day = now.getDay(); // 0 = Sunday, 2 = Tuesday
-  const hours = now.getHours();
-  
-  // For development/demo, allow anytime. In production, enforce Tuesday 8-10 AM
-  const isDevelopment = true; // Set to false in production
-  
-  if (isDevelopment) {
-    return true;
-  }
-  
-  // Tuesday = 2, hours between 8 and 10
-  return day === 2 && hours >= 8 && hours < 10;
+  return now.getDay() === weekday && now.getHours() >= startHour && now.getHours() < endHour;
 };
 
-// Get next test window
+/**
+ * Start of the next window that has not yet passed.
+ *
+ * The old version returned a time IN THE PAST on window day: `(2 - day + 7) % 7 || 7`
+ * evaluates to 7 on a Tuesday (0 is falsy → 7), so it jumped to next week, then
+ * the "if it's Tuesday before 10 AM, use today" branch reset the date back to
+ * today while leaving the hour at 08:00. At 09:00 on a Tuesday it therefore
+ * reported the next window as an hour ago.
+ */
 const getNextTestWindow = (): Date => {
+  const { weekday, startHour, endHour } = CBT_CONFIG.window;
   const now = new Date();
-  const nextTuesday = new Date(now);
-  
-  // Find next Tuesday
-  const daysUntilTuesday = (2 - now.getDay() + 7) % 7 || 7;
-  nextTuesday.setDate(now.getDate() + daysUntilTuesday);
-  nextTuesday.setHours(8, 0, 0, 0);
-  
-  // If it's Tuesday before 10 AM, use today
-  if (now.getDay() === 2 && now.getHours() < 10) {
-    nextTuesday.setDate(now.getDate());
+
+  // Today's window, at its start hour.
+  const candidate = new Date(now);
+  candidate.setHours(startHour, 0, 0, 0);
+
+  // If today IS the window day and the window has not closed yet, that's the
+  // answer — whether it is about to open or is open right now.
+  if (now.getDay() === weekday && now.getHours() < endHour) {
+    return candidate;
   }
-  
-  return nextTuesday;
+
+  // Otherwise advance to the next occurrence of the window day. `|| 7` is
+  // correct here precisely because same-day was already handled above.
+  const daysAhead = ((weekday - now.getDay() + 7) % 7) || 7;
+  candidate.setDate(now.getDate() + daysAhead);
+  return candidate;
 };
 
 // Storage keys
@@ -453,9 +496,22 @@ const getAttempts = (): CBTAttempt[] => {
   return stored ? JSON.parse(stored) : [];
 };
 
-// Get attempts for a specific level
-const getAttemptsForLevel = (level: TrainingLevel): CBTAttempt[] => {
-  return getAttempts().filter(a => a.level === level);
+/**
+ * Attempts for a level, scoped to one user.
+ *
+ * IMPORTANT: the local `cbt_attempts` cache is populated from IndexedDB, which
+ * the sync layer fills with EVERY user's rows. Without the userId filter, a
+ * trainee's progress, average score and sign-out eligibility were computed from
+ * the whole cohort's attempts. hasAttemptedThisWeek always filtered correctly;
+ * getProgress/getCurrentPostingCycle/getNextTestNumber did not.
+ *
+ * Passing no userId keeps the old unscoped behaviour for admin/reporting callers
+ * that genuinely want every trainee's attempts.
+ */
+const getAttemptsForLevel = (level: TrainingLevel, userId?: string): CBTAttempt[] => {
+  const all = getAttempts().filter(a => a.level === level);
+  if (!userId) return all;
+  return all.filter(a => String(a.userId) === String(userId));
 };
 
 // Check if test is already completed
@@ -464,13 +520,13 @@ const isTestCompleted = (level: TrainingLevel, testNumber: number): boolean => {
   return attempts.some(a => a.testNumber === testNumber && a.completed);
 };
 
-// Get progress for a level (with posting cycle tracking)
-const getProgress = (level: TrainingLevel): CBTProgress => {
-  const allAttempts = getAttemptsForLevel(level).filter(a => a.completed);
+// Get progress for a level (with posting cycle tracking), scoped to one user
+const getProgress = (level: TrainingLevel, userId: string = getCurrentUserId()): CBTProgress => {
+  const allAttempts = getAttemptsForLevel(level, userId).filter(a => a.completed);
   const totalTests = getTotalTestsForLevel(level);
-  
+
   // Determine current posting cycle
-  const currentCycle = getCurrentPostingCycle(level);
+  const currentCycle = getCurrentPostingCycle(level, userId);
   
   // Current cycle attempts
   const currentCycleAttempts = allAttempts.filter(a => (a.postingCycle || 1) === currentCycle);
@@ -512,8 +568,8 @@ const calculateScore = (test: CBTTest, answers: { [questionId: string]: 'A' | 'B
 };
 
 // Check if user has already taken a CBT this week
-const hasAttemptedThisWeek = (level: TrainingLevel, userId: string): { attempted: boolean; lastAttemptDate: string | null } => {
-  const attempts = getAttemptsForLevel(level).filter(a => a.completed && a.userId === userId);
+const hasAttemptedThisWeek = (level: TrainingLevel, userId: string = getCurrentUserId()): { attempted: boolean; lastAttemptDate: string | null } => {
+  const attempts = getAttemptsForLevel(level, userId).filter(a => a.completed);
   if (attempts.length === 0) return { attempted: false, lastAttemptDate: null };
   
   // Get the most recent completed attempt
@@ -539,8 +595,8 @@ const hasAttemptedThisWeek = (level: TrainingLevel, userId: string): { attempted
 };
 
 // Get current posting cycle for a level
-const getCurrentPostingCycle = (level: TrainingLevel): number => {
-  const allAttempts = getAttemptsForLevel(level).filter(a => a.completed);
+const getCurrentPostingCycle = (level: TrainingLevel, userId: string = getCurrentUserId()): number => {
+  const allAttempts = getAttemptsForLevel(level, userId).filter(a => a.completed);
   const totalTests = getTotalTestsForLevel(level);
   
   if (allAttempts.length === 0) return 1;
@@ -572,9 +628,9 @@ const getCurrentPostingCycle = (level: TrainingLevel): number => {
 };
 
 // Get next available test number in current cycle
-const getNextTestNumber = (level: TrainingLevel): number => {
-  const currentCycle = getCurrentPostingCycle(level);
-  const allAttempts = getAttemptsForLevel(level).filter(a => a.completed);
+const getNextTestNumber = (level: TrainingLevel, userId: string = getCurrentUserId()): number => {
+  const currentCycle = getCurrentPostingCycle(level, userId);
+  const allAttempts = getAttemptsForLevel(level, userId).filter(a => a.completed);
   const currentCycleAttempts = allAttempts.filter(a => (a.postingCycle || 1) === currentCycle);
   const completedTestNumbers = new Set(currentCycleAttempts.map(a => a.testNumber));
   
@@ -588,9 +644,17 @@ const getNextTestNumber = (level: TrainingLevel): number => {
 
 // Export the service
 class CBTService {
+  /**
+   * Resolves once the IndexedDB → localStorage hydration has finished.
+   * Consumers read progress synchronously from localStorage, so without
+   * awaiting this the first paint showed "0 tests / 0%" and never corrected
+   * itself, because nothing invalidated the render.
+   */
+  public readonly ready: Promise<void>;
+
   constructor() {
     // On startup, load attempts from IndexedDB into localStorage cache
-    this.initFromLocalDB();
+    this.ready = this.initFromLocalDB();
   }
 
   /** Load persisted attempts from IndexedDB into localStorage cache */
@@ -603,9 +667,24 @@ class CBTService {
 
         for (const rec of dbAttempts) {
           if (!localMap.has(rec.id)) {
+            // Rows pulled from the server arrive as snake_case Postgres columns.
+            // Without this mapping userId/testNumber were undefined on every
+            // synced row, so user scoping silently matched nothing and the
+            // completed-test count collapsed to 1 regardless of real progress.
             const attempt: CBTAttempt = {
               ...rec,
-              answers: typeof rec.answers === 'string' ? JSON.parse(rec.answers) : rec.answers,
+              userId: String(rec.userId ?? rec.user_id ?? ''),
+              testNumber: Number(rec.testNumber ?? rec.test_number ?? 0),
+              testId: rec.testId ?? rec.test_id,
+              startTime: rec.startTime ?? rec.start_time,
+              endTime: rec.endTime ?? rec.end_time,
+              totalMarks: Number(rec.totalMarks ?? rec.total_marks ?? 0),
+              tabSwitchCount: Number(rec.tabSwitchCount ?? rec.tab_switch_count ?? 0),
+              suspiciousActivity: Boolean(rec.suspiciousActivity ?? rec.suspicious_activity ?? false),
+              postingCycle: Number(rec.postingCycle ?? rec.posting_cycle ?? 1),
+              percentage: Number(rec.percentage ?? 0),
+              score: Number(rec.score ?? 0),
+              answers: typeof rec.answers === 'string' ? JSON.parse(rec.answers) : (rec.answers || {}),
               flaggedForReview: typeof rec.flagged_for_review === 'string' ? JSON.parse(rec.flagged_for_review) : (rec.flaggedForReview || []),
             };
             localAttempts.push(attempt);
@@ -633,6 +712,9 @@ class CBTService {
   getCurrentPostingCycle = getCurrentPostingCycle;
   getNextTestNumber = getNextTestNumber;
   PASS_MARK_PERCENTAGE = PASS_MARK_PERCENTAGE;
+  CONFIG = CBT_CONFIG;
+  getTestWindowLabel = getTestWindowLabel;
+  getCurrentUserId = getCurrentUserId;
   
   // Start a new test attempt
   startTest(test: CBTTest, userId: string): CBTAttempt {

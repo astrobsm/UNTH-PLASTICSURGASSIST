@@ -129,7 +129,9 @@ class AITextEnhancementService {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+          // Key is 'auth_token' — 'authToken' does not exist, so this sent
+          // "Bearer null" on every call.
+          'Authorization': `Bearer ${localStorage.getItem('auth_token') || ''}`
         },
         body: JSON.stringify({
           text: processedText,

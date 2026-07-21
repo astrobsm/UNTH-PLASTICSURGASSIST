@@ -27,6 +27,26 @@ export default async function handler(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const action = url.searchParams.get('action') || (req.body && req.body.action);
 
+  // Roster writes were completely ungated: any authenticated user could
+  // regenerate the roster — whose first statement is a DELETE of the whole
+  // month_key — or wipe it outright, which also misroutes every subsequent
+  // auto-admitted consult, since teamAssignment.js reads this table to pick
+  // the on-call team.
+  //
+  // Restricted to senior clinical staff rather than strictly admin: CallDutyPage
+  // exposes Generate and Edit to every user with no UI role check, so an
+  // admin-only rule would start 403-ing consultants and senior registrars who
+  // manage the roster today. This still keeps it out of reach of house officers
+  // and self-registered student accounts.
+  //
+  // NOTE: GET is intentionally left open — the roster auto-generates on the
+  // read path (?action=on-call), and gating that would break on-call lookup
+  // for everyone.
+  const ROSTER_WRITE_ROLES = ['admin', 'super_admin', 'consultant', 'senior_registrar'];
+  const isAdmin = ROSTER_WRITE_ROLES.includes(auth.user.role);
+  const denyNonAdmin = () =>
+    res.status(403).json({ error: 'Only consultants, senior registrars or administrators may modify the call-duty roster' });
+
   try {
     await ensureColumns();
     switch (req.method) {
@@ -35,11 +55,14 @@ export default async function handler(req, res) {
         if (action === 'keys') return await getKeys(res);
         return await getRange(url.searchParams, res); // default: range
       case 'POST':
+        if (!isAdmin) return denyNonAdmin();
         if (action === 'generate') return await generate(req.body, auth.user, res);
         return res.status(400).json({ error: 'Unknown action' });
       case 'PUT':
+        if (!isAdmin) return denyNonAdmin();
         return await updateShift(req.body, res);
       case 'DELETE':
+        if (!isAdmin) return denyNonAdmin();
         return await deleteRoster(url.searchParams, res);
       default:
         return res.status(405).json({ error: 'Method not allowed' });

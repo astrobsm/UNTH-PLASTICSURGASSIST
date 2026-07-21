@@ -551,6 +551,9 @@ function TuesdayClinicPreview() {
   const [alreadyLogged, setAlreadyLogged] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  // False until a roster load succeeds. Zero staff then means "we don't know"
+  // rather than "nobody is on", so we must not claim duties were redistributed.
+  const [staffLoaded, setStaffLoaded] = useState(false);
 
   const clinicDate = useMemo(() => getNextTuesday(tuesdayOffset), [tuesdayOffset]);
 
@@ -578,6 +581,7 @@ function TuesdayClinicPreview() {
     setApplied(false);
     setError('');
     setSuccess('');
+    setStaffLoaded(false);
     try {
       const [srStaff, regStaff, hoStaff] = await Promise.all([
         clinicDutyService.getStaffByRole('senior_registrar'),
@@ -590,6 +594,7 @@ function TuesdayClinicPreview() {
         registrars: regStaff,
         senior_registrars: srStaff,
       });
+      setStaffLoaded(true);
 
       // Check if duties already logged for this Tuesday
       const dateStr = clinicDate.toISOString().split('T')[0];
@@ -811,8 +816,10 @@ function TuesdayClinicPreview() {
                     <span key={s.id} className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">{s.full_name}</span>
                   ))}
                 </div>
-              ) : (
+              ) : staffLoaded ? (
                 <div className="mt-2 text-xs text-orange-600 font-medium">No registrars — duties redistributed</div>
+              ) : (
+                <div className="mt-2 text-xs text-gray-400 font-medium">Staff list unavailable</div>
               )}
             </div>
             <div className="bg-white rounded-xl shadow-sm border p-4">

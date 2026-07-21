@@ -61,18 +61,25 @@ const MedicalTrainingPage: React.FC = () => {
 
   // Load CBT status for dashboard display
   useEffect(() => {
-    const loadCbtStatus = () => {
+    let cancelled = false;
+    const loadCbtStatus = async () => {
       try {
-        const progress = cbtService.getProgress(activeTab as any);
-        setCbtProgress(progress);
-        const userId = localStorage.getItem('userId') || `user-${Date.now()}`;
-        const weeklyStatus = cbtService.hasAttemptedThisWeek(activeTab as any, userId);
-        setCbtWeeklyStatus(weeklyStatus);
+        // Attempts hydrate from IndexedDB asynchronously; reading before that
+        // resolves showed a permanent "0 tests / 0%" on the training dashboard.
+        await cbtService.ready;
+        if (cancelled) return;
+        // `localStorage.getItem('userId') || \`user-${Date.now()}\`` used to mint
+        // a fresh throwaway id whenever userId was missing, so the weekly-limit
+        // lookup could never match a real prior attempt.
+        const userId = cbtService.getCurrentUserId();
+        setCbtProgress(cbtService.getProgress(activeTab as any, userId));
+        setCbtWeeklyStatus(cbtService.hasAttemptedThisWeek(activeTab as any, userId));
       } catch (e) {
         console.warn('Failed to load CBT status:', e);
       }
     };
     loadCbtStatus();
+    return () => { cancelled = true; };
   }, [activeTab, showCBT]); // Refresh when returning from CBT page
 
   // Record login on component mount

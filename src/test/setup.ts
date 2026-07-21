@@ -28,13 +28,31 @@ if (typeof global.crypto === 'undefined') {
   } as any;
 }
 
-// Mock localStorage
-const localStorageMock = {
-  getItem: (key: string) => null,
-  setItem: (key: string, value: string) => {},
-  removeItem: (key: string) => {},
-  clear: () => {}
-};
+// In-memory Web Storage implementation.
+// The previous stub discarded every write and returned null from getItem, so any
+// code under test that round-trips through storage (auth tokens, CSRF tokens,
+// sync timestamps) silently read back nothing. That made the suite unable to
+// catch storage-state bugs — the exact class of defect that produced the
+// auth_token/psa-auth session divergence in production.
+function createStorageMock(): Storage {
+  let store = new Map<string, string>();
+  return {
+    getItem: (key: string) => (store.has(key) ? store.get(key)! : null),
+    setItem: (key: string, value: string) => { store.set(String(key), String(value)); },
+    removeItem: (key: string) => { store.delete(key); },
+    clear: () => { store = new Map(); },
+    key: (index: number) => Array.from(store.keys())[index] ?? null,
+    get length() { return store.size; },
+  } as Storage;
+}
 
-global.localStorage = localStorageMock as any;
-global.sessionStorage = localStorageMock as any;
+// Two INDEPENDENT stores. They previously shared one object, so a write to
+// localStorage was readable via sessionStorage and vice versa.
+global.localStorage = createStorageMock();
+global.sessionStorage = createStorageMock();
+
+// Storage must not leak between tests.
+afterEach(() => {
+  localStorage.clear();
+  sessionStorage.clear();
+});

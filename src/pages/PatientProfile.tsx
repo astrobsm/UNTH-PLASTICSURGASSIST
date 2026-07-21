@@ -735,9 +735,15 @@ const EncountersTab: React.FC<{ patientId: string; hospitalNumber: string; patie
   const [showOCRScanner, setShowOCRScanner] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mountedRef = useRef(true);
+  // Always holds the patient currently being viewed. mountedRef alone could not
+  // discriminate by patient — it is reset to true on every effect run — so an
+  // in-flight request for patient A would commit its results after the user had
+  // already navigated to patient B, rendering A's notes on B's chart.
+  const currentPatientRef = useRef(patientId);
 
   useEffect(() => {
     mountedRef.current = true;
+    currentPatientRef.current = patientId;
     // CRITICAL: Reset state to prevent showing previous patient's data
     setEncounters([]);
     setNewNote('');
@@ -830,6 +836,13 @@ const EncountersTab: React.FC<{ patientId: string; hospitalNumber: string; patie
   };
 
   const loadEncounters = async (silent = false) => {
+    // Captured per request; every commit below checks it still matches the
+    // patient on screen. Route changes reuse this component instance, so a
+    // slow request for the previous patient can otherwise land on the new one.
+    const requestedPatientId = patientId;
+    const isStillCurrent = () =>
+      mountedRef.current && currentPatientRef.current === requestedPatientId;
+
     if (silent) setRefreshing(true); else setLoading(true);
     try {
       const pid = Number(patientId) || patientId;
@@ -884,7 +897,7 @@ const EncountersTab: React.FC<{ patientId: string; hospitalNumber: string; patie
         }),
         ...admissions,
       ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-      if (mountedRef.current) setEncounters(all);
+      if (isStillCurrent()) setEncounters(all);
     } catch {
       // Fallback to IndexedDB when offline / API error — use indexed queries
       try {
@@ -905,10 +918,10 @@ const EncountersTab: React.FC<{ patientId: string; hospitalNumber: string; patie
           ...localNotes.map((n: any) => ({ ...n, _type: n.type || 'progress_note', created_at: n.created_at || n.date })),
           ...localAdm.map((a: any) => ({ ...a, _type: 'admission', created_at: a.admission_date || a.created_at })),
         ].sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-        if (mountedRef.current) setEncounters(all);
-      } catch { if (mountedRef.current) setEncounters([]); }
+        if (isStillCurrent()) setEncounters(all);
+      } catch { if (isStillCurrent()) setEncounters([]); }
     } finally {
-      if (mountedRef.current) { setLoading(false); setRefreshing(false); }
+      if (isStillCurrent()) { setLoading(false); setRefreshing(false); }
     }
   };
 

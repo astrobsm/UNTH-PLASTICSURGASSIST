@@ -167,6 +167,24 @@ class ApiClient {
     if (!this.token) {
       this.token = localStorage.getItem('auth_token');
     }
+    // Last resort: recover from the persisted auth store. `auth_token` and the
+    // zustand `psa-auth` token are two copies of the same session and can
+    // diverge — a 401 handler clears only `auth_token`, and the offline-login
+    // path only ever writes the store. When they diverge the UI stays logged in
+    // (the route gate reads the store) while every protected request throws
+    // "No token provided" locally without reaching the server. Read the store
+    // directly rather than importing it: authStore imports this module.
+    if (!this.token) {
+      try {
+        const persisted = localStorage.getItem('psa-auth');
+        const storeToken = persisted ? JSON.parse(persisted)?.state?.token : null;
+        if (storeToken) {
+          this.setToken(storeToken); // heal the divergence
+        }
+      } catch {
+        // Corrupt/absent persisted state — fall through to null.
+      }
+    }
     return this.token;
   }
 
@@ -229,6 +247,7 @@ class ApiClient {
       const cached = await this.getCachedResponse<T>(endpoint, entityInfo);
       if (cached !== null) {
         console.log(`📦 Offline: serving cached data for ${endpoint}`);
+        clearTimeout(timeoutHandle);
         return cached;
       }
       // No cache — let SERVICE WORKER handle (it may have Cache API data)
@@ -238,10 +257,17 @@ class ApiClient {
     // ─── Stale-while-revalidate for GETs on poor networks ───
     // If we have cached data, return it immediately and refresh in background.
     // This prevents the app from hanging 3-4s per request on slow connections.
-    if (navigator.onLine && isGet && !freshRead) {
+    // Auth endpoints are EXCLUDED: /auth/me is the startup token check, and
+    // serving it from cache made that check a no-op from the second load
+    // onward — a revoked or deactivated account kept a "valid" client session
+    // for the full 30-day token life because no GET could ever see a 401.
+    if (navigator.onLine && isGet && !freshRead && !isAuthEndpoint) {
       const cached = await this.getCachedResponse<T>(endpoint, entityInfo);
       if (cached !== null) {
-        // Return cached data immediately, refresh in background
+        // Return cached data immediately, refresh in background.
+        // clearTimeout first: this request's abort timer is still armed, and
+        // _backgroundRefresh must not inherit it (see below).
+        clearTimeout(timeoutHandle);
         this._backgroundRefresh<T>(endpoint, fetchOptions, entityInfo);
         return cached;
       }
@@ -249,7 +275,8 @@ class ApiClient {
     }
 
     // ─── Offline: queue mutations immediately ───
-    if (!navigator.onLine && !isGet) {
+    // Auth is never queued — see the queueing guard in the catch block.
+    if (!navigator.onLine && !isGet && !isAuthEndpoint) {
       return this.queueOfflineMutation<T>(endpoint, method, options, token, entityInfo);
     }
 
@@ -364,7 +391,13 @@ class ApiClient {
       // Mutation failed because of poor network → queue for sync instead of erroring
       // (User on hospital Wi-Fi clicks Save → request hangs → before this fix the
       //  call would just throw and the entry would be lost.)
-      if (!isGet && isPoorNetworkFailure) {
+      // NEVER queue auth endpoints. A login POST that times out on hospital
+      // Wi-Fi was being written to db.sync_queue with the PLAINTEXT PASSWORD in
+      // the body, persisted indefinitely in IndexedDB on a shared ward device,
+      // and later replayed as a stray unauthenticated POST. Let the timeout
+      // propagate instead — authStore.login() already falls back to the offline
+      // credential path on a thrown error.
+      if (!isGet && isPoorNetworkFailure && !isAuthEndpoint) {
         console.log(`📥 ${isAbort ? 'Timeout' : 'Network error'}: queueing ${method} ${endpoint} for background sync`);
         return this.queueOfflineMutation<T>(endpoint, method, options, token, entityInfo);
       }
@@ -440,8 +473,28 @@ class ApiClient {
     if (this._backgroundRefreshInFlight.has(endpoint)) return;
     this._backgroundRefreshInFlight.add(endpoint);
 
-    fetch(`${this.baseURL}${endpoint}`, fetchOptions)
+    // Own abort budget. This previously reused the caller's fetchOptions.signal,
+    // whose 12s timer was already armed and running — so on the slow networks
+    // this mechanism exists for, revalidation was aborted mid-flight and the
+    // abort swallowed below. The cache then never refreshed and users were
+    // served stale clinical data indefinitely. Nobody is waiting on this
+    // request, so give it a generous budget.
+    const refreshController = new AbortController();
+    const refreshTimeout = setTimeout(() => refreshController.abort(), 45000);
+
+    fetch(`${this.baseURL}${endpoint}`, { ...fetchOptions, signal: refreshController.signal })
       .then(async (response) => {
+        // A 401/403 here is the only signal that a cached-GET session died.
+        // Silently discarding it is what let revoked sessions live on.
+        if (response.status === 401 || response.status === 403) {
+          const errorData = await response.json().catch(() => ({} as any));
+          const errorMsg = typeof errorData?.error === 'string' ? errorData.error : '';
+          if (errorMsg.includes('expired') || errorMsg.includes('invalid')) {
+            this.setToken(null);
+            window.dispatchEvent(new CustomEvent('auth:expired'));
+          }
+          return;
+        }
         if (response.ok) {
           const data = await response.json();
           if (data) {
@@ -453,6 +506,7 @@ class ApiClient {
         // Network failed — silently ignore, cached data already served
       })
       .finally(() => {
+        clearTimeout(refreshTimeout);
         this._backgroundRefreshInFlight.delete(endpoint);
       });
   }
@@ -659,7 +713,13 @@ class ApiClient {
     if (!data || !data.user) {
       console.error('🔐 Login response missing user:', JSON.stringify(data));
     }
-    
+
+    // Guard before setToken: a null/tokenless body would throw a raw TypeError
+    // here, and setToken(undefined) actively REMOVES auth_token — turning a
+    // malformed login response into a logout of the existing working session.
+    if (!data?.token) {
+      throw new Error('Login failed — server did not return a session token.');
+    }
     this.setToken(data.token);
 
     // Log login activity for training tracking (non-blocking)

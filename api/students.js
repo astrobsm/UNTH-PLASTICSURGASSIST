@@ -21,9 +21,10 @@ export default async function handler(req, res) {
     }
 
     // ── Auth required for all other endpoints ──
-    const auth = authenticateRequest(req);
+    // The ONLY place student tokens are accepted — see api/_lib/auth.js.
+    const auth = authenticateRequest(req, { allowStudents: true });
     if (!auth.authenticated) {
-      return res.status(401).json({ error: auth.error });
+      return res.status(auth.status || 401).json({ error: auth.error });
     }
 
     // ── Student endpoints ──
@@ -418,7 +419,11 @@ async function loginStudent(body, res) {
     id: student.id,
     name: student.full_name,
     email: student.email,
-    role: 'student'
+    role: 'student',
+    // Marks the id as belonging to the `students` sequence, not `users`.
+    // The two are independent SERIALs, so without this a student id can
+    // collide with a staff user id in ownership checks like updateUser's.
+    sub_type: 'student'
   });
 
   // Auto-assign patients if none yet

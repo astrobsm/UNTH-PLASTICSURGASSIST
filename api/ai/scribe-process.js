@@ -7,6 +7,7 @@
  */
 
 import { chatJSON, getOpenAIKey } from '../_lib/openai.js';
+import { cors, authenticateRequest } from '../_lib/auth.js';
 
 // System prompt for structured note extraction
 const SCRIBE_SYSTEM_PROMPT = `You are an expert plastic surgery AI medical scribe. Your task is to process a spoken clinical transcript and produce a structured SOAP note in JSON format.
@@ -74,12 +75,15 @@ const CONTEXT_PROMPTS = {
 };
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  // Shared CORS helper (origin allowlist) instead of a wildcard origin.
+  if (cors(req, res)) return;
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+  // Spends the deployment's OPENAI_API_KEY — must not be callable anonymously.
+  // This endpoint also receives clinical transcripts, so anonymous access was
+  // an inbound PHI path as well as a cost exposure.
+  const auth = authenticateRequest(req);
+  if (!auth.authenticated) {
+    return res.status(auth.status || 401).json({ error: auth.error });
   }
 
   if (req.method !== 'POST') {
