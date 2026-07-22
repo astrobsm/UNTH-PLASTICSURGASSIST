@@ -239,6 +239,8 @@ export class PlasticSurgeonDB extends Dexie {
   sync_conflicts!: Table<any>; // Sync conflict log for manual resolution
   sync_dead_letter!: Table<any>; // Dead letter queue for permanently failed sync items
   vital_signs!: Table<any>; // For vital signs records with server persistence
+  wounds!: Table<any>; // WoundProgress Monitor: first-class longitudinal wound entity
+  wound_assessments!: Table<any>; // WoundProgress Monitor: serial assessment timeline
 
   constructor() {
     super('PlasticSurgeonDB');
@@ -1314,6 +1316,14 @@ export class PlasticSurgeonDB extends Dexie {
     // Version 36: Vital signs table for offline-first vital signs caching
     this.version(36).stores({
       vital_signs: '++id, patient_id, hospital_number, date, created_at'
+    });
+
+    // Version 37: WoundProgress Monitor — first-class longitudinal wound entity
+    // (wounds) and its serial assessment timeline (wound_assessments). synced
+    // and serverId are indexed so the shared sync layer can reconcile them.
+    this.version(37).stores({
+      wounds: '++id, serverId, patient_id, status, healing_status, updated_at, synced',
+      wound_assessments: '++id, serverId, wound_id, patient_id, assessed_at, synced'
     });
 
     // Add hooks to automatically track changes

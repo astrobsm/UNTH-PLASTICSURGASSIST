@@ -2326,6 +2326,93 @@ async function createTables() {
     CREATE INDEX IF NOT EXISTS idx_wound_measurements_record ON wound_measurements(wound_record_id);
     CREATE INDEX IF NOT EXISTS idx_wound_measurements_date ON wound_measurements(measured_at);
 
+    -- ═══════════════════════════════════════════════════════════════════════
+    -- WoundProgress Monitor — first-class longitudinal wound tracking.
+    --
+    -- The pre-existing wound tables (wound_care_records, wound_measurements)
+    -- are per-ASSESSMENT rows loosely grouped by patient+type+location, so a
+    -- single physical wound cannot be followed cleanly over time. The wounds
+    -- table is one row PER PHYSICAL WOUND; wound_assessments is its serial
+    -- timeline. This is the entity the Monitor dashboard and analytics run on.
+    -- ═══════════════════════════════════════════════════════════════════════
+    CREATE TABLE IF NOT EXISTS wounds (
+      id SERIAL PRIMARY KEY,
+      patient_id INTEGER NOT NULL,
+      hospital_number VARCHAR(100),
+      label VARCHAR(160),                       -- e.g. "Left heel pressure injury"
+      wound_type VARCHAR(100),                  -- burn / pressure_injury / venous_ulcer / dfu / surgical / flap / graft_donor / ...
+      anatomical_location VARCHAR(160),
+      body_side VARCHAR(20),                     -- left / right / midline / bilateral
+      etiology VARCHAR(160),
+      stage VARCHAR(60),
+      date_first_seen DATE,
+      date_of_injury DATE,
+      cause TEXT,
+      status VARCHAR(30) NOT NULL DEFAULT 'active',   -- active / healed / archived
+      -- Denormalised snapshot of the most recent assessment, so the Monitor
+      -- dashboard lists wounds without an N+1 over wound_assessments.
+      baseline_area_cm2 DECIMAL(8,2),
+      latest_area_cm2 DECIMAL(8,2),
+      latest_assessment_at TIMESTAMPTZ,
+      assessment_count INTEGER NOT NULL DEFAULT 0,
+      healing_status VARCHAR(20) DEFAULT 'insufficient_data', -- improving / stagnant / worsening / healed / insufficient_data
+      healing_velocity_cm2_per_week DECIMAL(8,3),
+      created_by INTEGER,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_wounds_patient ON wounds(patient_id);
+    CREATE INDEX IF NOT EXISTS idx_wounds_status ON wounds(status);
+    CREATE INDEX IF NOT EXISTS idx_wounds_updated ON wounds(updated_at);
+
+    CREATE TABLE IF NOT EXISTS wound_assessments (
+      id SERIAL PRIMARY KEY,
+      wound_id INTEGER NOT NULL,
+      patient_id INTEGER NOT NULL,
+      assessed_by INTEGER,
+      assessed_at TIMESTAMPTZ DEFAULT NOW(),
+      -- Measurements (mirrors wound_measurements so the existing AI pipeline
+      -- output maps straight in).
+      length_cm DECIMAL(6,2),
+      width_cm DECIMAL(6,2),
+      depth_cm DECIMAL(6,2),
+      area_cm2 DECIMAL(8,2),
+      perimeter_cm DECIMAL(8,2),
+      -- Tissue composition (percentages, sum ~100).
+      granulation_pct DECIMAL(5,2),
+      slough_pct DECIMAL(5,2),
+      necrotic_pct DECIMAL(5,2),
+      epithelial_pct DECIMAL(5,2),
+      -- Qualitative assessment.
+      exudate_amount VARCHAR(30),
+      exudate_type VARCHAR(50),
+      edges VARCHAR(120),
+      periwound_skin VARCHAR(160),
+      signs_of_infection JSONB DEFAULT '[]',
+      pain_score INTEGER,                        -- 0-10
+      healing_stage VARCHAR(60),
+      -- Standardised scores (nullable — populated where computable).
+      push_score DECIMAL(5,2),
+      bwat_score DECIMAL(5,2),
+      -- AI provenance & clinician sign-off.
+      clinical_description TEXT,
+      ai_confidence DECIMAL(4,3) DEFAULT 0,
+      ai_raw_response JSONB DEFAULT '{}',
+      calibration_type VARCHAR(50) DEFAULT 'none',
+      scale_reliable BOOLEAN DEFAULT FALSE,
+      contour_cm JSONB DEFAULT '[]',             -- centred contour for the serial healing map
+      image_url TEXT,                            -- original photo (storage ref)
+      overlay_url TEXT,                          -- AI-segmented overlay
+      approved_by INTEGER,                       -- clinician who signed off (conflict resolution: approved wins)
+      approved_at TIMESTAMPTZ,
+      notes TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_wound_assessments_wound ON wound_assessments(wound_id);
+    CREATE INDEX IF NOT EXISTS idx_wound_assessments_patient ON wound_assessments(patient_id);
+    CREATE INDEX IF NOT EXISTS idx_wound_assessments_date ON wound_assessments(assessed_at);
+
     -- Clinical Notes OCR Extractions — structured entities from clinical notes
     CREATE TABLE IF NOT EXISTS clinical_notes_extractions (
       id SERIAL PRIMARY KEY,

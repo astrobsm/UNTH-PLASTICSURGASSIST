@@ -98,6 +98,7 @@ export const patientActions = [
   { name: 'Limb Salvage', href: '/limb-salvage', icon: Footprints },
   { name: 'Burn Care', href: '/burn-care', icon: Flame },
   { name: 'Wound Care', href: '/wound-care', icon: HeartPulse },
+  { name: 'WoundProgress Monitor', href: '/wound-monitor', icon: Activity },
   { name: 'Keloid Care', href: '/keloid-care', icon: Syringe },
   { name: 'Sickle Cell Ulcer', href: '/sickle-cell-ulcer', icon: HeartPulse },
   { name: 'Soft Tissue Infection', href: '/soft-tissue-infection', icon: Bug },

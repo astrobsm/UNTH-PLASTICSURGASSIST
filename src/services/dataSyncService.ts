@@ -34,6 +34,8 @@ export type SyncableEntity =
   | 'surgeries'
   | 'ward_rounds'
   | 'wound_care'
+  | 'wounds'
+  | 'wound_assessments'
   | 'mdt_patient_teams'
   | 'mdt_meetings'
   | 'mdt_contact_logs'
@@ -108,6 +110,8 @@ class DataSyncService {
     surgeries: '/sync/surgeries',
     ward_rounds: '/sync/ward-rounds',
     wound_care: '/sync/wound-care',
+    wounds: '/sync/wounds',
+    wound_assessments: '/sync/wound-assessments',
     mdt_patient_teams: '/sync/mdt-patient-teams',
     mdt_meetings: '/sync/mdt-meetings',
     mdt_contact_logs: '/sync/mdt-contact-logs',
@@ -144,6 +148,8 @@ class DataSyncService {
     surgeries: 'surgery_bookings',
     ward_rounds: 'ward_rounds',
     wound_care: 'wound_care',
+    wounds: 'wounds',
+    wound_assessments: 'wound_assessments',
     mdt_patient_teams: 'mdt_patient_teams',
     mdt_meetings: 'mdt_meetings',
     mdt_contact_logs: 'mdt_contact_logs',
