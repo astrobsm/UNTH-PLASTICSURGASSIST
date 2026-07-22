@@ -34,6 +34,7 @@ import { db } from '../db/database';
 import { useAuthStore } from '../store/authStore';
 import toast from 'react-hot-toast';
 import { SyncConflictsViewer } from '../components/SyncConflictsViewer';
+import { SyncIssuesViewer } from '../components/SyncIssuesViewer';
 import ClinicConfigPanel from '../components/ClinicConfigPanel';
 
 interface LocalDataSummary {
@@ -719,6 +720,9 @@ export default function Settings() {
           </div>
         )}
       </div>
+
+      {/* ──────────────────────── SYNC ISSUES (dead-letter) ──────────────────────── */}
+      <SyncIssuesViewer />
 
       {/* ──────────────────────── SYNC CONFLICTS LOG ──────────────────────── */}
       <SyncConflictsViewer />

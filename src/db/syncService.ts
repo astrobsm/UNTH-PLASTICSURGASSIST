@@ -206,17 +206,23 @@ class SyncService {
       this.syncInProgress = false;
       this.syncStartedAt = null;
 
-      // Never let permanently-failed clinical entries sit silently. They are
-      // recoverable via retryAllDeadLetter(), but only if someone knows.
+      // Never let permanently-failed clinical entries sit silently. But do not
+      // nag on every sync for items the user already knows about: only toast
+      // when the count INCREASES (a genuinely NEW failure). The full list is
+      // always available in Settings → Sync issues (SyncIssuesViewer), where it
+      // can be inspected, retried or dismissed.
       try {
         const dead = await this.getDeadLetterCount();
-        if (dead > 0) {
-          console.warn(`⚠️ ${dead} change(s) failed permanently and are held in the dead-letter queue.`);
+        const lastSeen = Number(localStorage.getItem('sync_dead_letter_seen') || '0');
+        if (dead > lastSeen) {
+          const added = dead - lastSeen;
+          console.warn(`⚠️ ${added} new change(s) failed to sync; ${dead} total held for review.`);
           toast.error(
-            `${dead} change${dead === 1 ? '' : 's'} could not sync and need attention.`,
-            { id: 'sync-dead-letter', duration: 6000 }
+            `${added} change${added === 1 ? '' : 's'} couldn't sync. Open Settings → Sync issues to review.`,
+            { id: 'sync-dead-letter', duration: 7000 }
           );
         }
+        localStorage.setItem('sync_dead_letter_seen', String(dead));
       } catch { /* never let reporting break the sync */ }
       this.notifyListeners();
     }
