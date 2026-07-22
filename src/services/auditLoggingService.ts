@@ -5,6 +5,7 @@
 
 import { db } from '../db/database';
 import { apiClient } from './apiClient';
+import { captureLocation, getCachedLocation } from './geolocationService';
 
 export interface AuditLog {
   id?: number;
@@ -19,6 +20,44 @@ export interface AuditLog {
   ip_address?: string;
   timestamp: string;
   synced?: boolean;
+  // Geo-stamp — the where of "who did what, when, where". Populated from the
+  // background-tracked location (see geolocationService); `address` is the
+  // reverse-geocoded street address when the fix was precise enough.
+  latitude?: number | null;
+  longitude?: number | null;
+  accuracy_meters?: number | null;
+  geofence_name?: string | null;
+  is_inside_geofence?: boolean | null;
+  address?: string | null;
+}
+
+/**
+ * Best-available location for stamping a log, without ever blocking the caller.
+ *
+ * Prefers the background-tracked cached fix (already reverse-geocoded to a
+ * street address, refreshed every ~2 min). If the cache is cold — first action
+ * of a session, or tracking not yet warmed — it kicks off a non-blocking
+ * capture so the NEXT log is stamped, and returns whatever exists now (possibly
+ * nothing). A log is never delayed or dropped for want of a location.
+ */
+function currentGeoStamp(): Pick<AuditLog,
+  'latitude' | 'longitude' | 'accuracy_meters' | 'geofence_name' | 'is_inside_geofence' | 'address'> {
+  const loc = getCachedLocation();
+  if (!loc) {
+    // Warm the cache for subsequent events; do not await.
+    captureLocation({ skipReverseGeocode: false })
+      .then(() => { /* result is cached inside the service on the tracking path */ })
+      .catch(() => {});
+    return {};
+  }
+  return {
+    latitude: loc.latitude,
+    longitude: loc.longitude,
+    accuracy_meters: Math.round(loc.accuracy),
+    geofence_name: loc.geofenceName ?? null,
+    is_inside_geofence: loc.isInsideGeofence ?? null,
+    address: loc.address ?? null,
+  };
 }
 
 /**
@@ -28,9 +67,12 @@ export async function logAudit(audit: Omit<AuditLog, 'id' | 'timestamp' | 'synce
   try {
     const auditLog: AuditLog = {
       ...audit,
+      // Precise, timezone-anchored timestamp with millisecond resolution.
       timestamp: new Date().toISOString(),
       synced: false,
-      ip_address: await getClientIP()
+      ip_address: await getClientIP(),
+      // Geo-stamp every audit event centrally, so all call sites inherit it.
+      ...currentGeoStamp(),
     };
 
     // Save locally first
