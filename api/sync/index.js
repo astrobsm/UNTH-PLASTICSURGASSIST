@@ -62,7 +62,9 @@ export default async function handler(req, res) {
           'treatment-plans': 'treatment_plans',
           'lab-orders': 'lab_orders', 'lab-investigations': 'lab_orders',
           'prescriptions': 'prescriptions',
-          'wound-care': 'wound_care_records', 
+          'wound-care': 'wound_care_records',
+          'wounds': 'wounds',
+          'wound-assessments': 'wound_assessments', 'wound_assessments': 'wound_assessments',
           'ward-rounds': 'ward_rounds',
           'discharges': 'discharge_summaries', 'discharge-summaries': 'discharge_summaries',
           'mdt-patient-teams': 'mdt_patient_teams', 'mdt_patient_teams': 'mdt_patient_teams',
@@ -613,7 +615,9 @@ async function handlePush(data, user, res) {
         // Registered client-side sync entities that were missing from this list
         // and therefore fell through to the sync_queue dead end below.
         'cbt_attempts', 'patient_assignments', 'vital_signs', 'fluid_balance',
-        'keloid_care_plans', 'clinic_appointments', 'mdt_documentation'
+        'keloid_care_plans', 'clinic_appointments', 'mdt_documentation',
+        // WoundProgress Monitor entities.
+        'wounds', 'wound_assessments'
       ];
       
       if (clinicalEntities.includes(resolvedEntityType) && payload) {
