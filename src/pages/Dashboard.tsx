@@ -21,7 +21,8 @@ import {
   Plus,
   Siren,
   X,
-  Edit3
+  Edit3,
+  Clock
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
@@ -42,6 +43,7 @@ import { checkAndReassignHouseOfficers } from '../services/houseOfficerReassignm
 import { getCurrentUserName } from '../utils/getCurrentUser';
 import { PS_UNITS, getCurrentAssignments, getTodaySchedule, UnitRosterConfig } from '../config/psUnits';
 import HOResponsibilitiesGuide, { HOResponsibilitiesCard } from '../components/HOResponsibilitiesGuide';
+import { careDuration, careDurationTone, CARE_TONE_CLASSES } from '../utils/careDuration';
 
 interface DashboardPatient {
   id: number | string;
@@ -56,6 +58,12 @@ interface DashboardPatient {
   house_officer: string;
   admission_status: 'active' | 'discharged' | 'outpatient';
   admission_date?: string;
+  // Start of the unit's responsibility — the consult referral date for a
+  // referred patient, the admission date for our own. Drives the "Day N" badge.
+  care_start_date?: string | null;
+  care_start_source?: 'consult' | 'admission' | null;
+  /** Set when the patient reached us by referral, whichever date started the clock. */
+  care_consult_ref?: string | null;
   // Assignment role ids (for the admin edit modal); null when unassigned.
   consultant_id?: string | null;
   sr_id?: string | null;
@@ -69,6 +77,15 @@ interface ResolvedTeam {
   sr_id: string | null; sr: string;
   reg_id: string | null; reg: string;
   ho_id: string | null; ho: string;
+  // Server-resolved patient context (present on API rows, absent on local ones).
+  care_start_date?: string | null;
+  care_start_source?: 'consult' | 'admission' | null;
+  care_consult_ref?: string | null;
+  ward_location?: string | null;
+  bed_number?: string | null;
+  patient_name?: string | null;
+  admission_id?: number | string | null;
+  admission_date?: string | null;
 }
 interface TeamMaps { apiMap: Map<string, any>; localMap: Map<string, any>; userById: Map<string, any>; }
 
@@ -91,6 +108,29 @@ async function buildTeamMaps(): Promise<TeamMaps> {
   return { apiMap, localMap, userById };
 }
 
+/**
+ * "Day N" badge — how long the patient has been under the unit's care, counted
+ * from the day their consult was sent for our review, or the day we admitted
+ * them if they are our own patient. Only meaningful for a current inpatient.
+ */
+function CareDurationBadge({ patient, className = '' }: { patient: DashboardPatient; className?: string }) {
+  if (patient.admission_status !== 'active') return null;
+  const dur = careDuration(patient.care_start_date, patient.care_start_source);
+  if (!dur) return null;
+  return (
+    <span
+      title={dur.detail}
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${CARE_TONE_CLASSES[careDurationTone(dur.dayNumber)]} ${className}`}
+    >
+      <Clock className="h-3 w-3" />
+      {dur.label}
+      {patient.care_consult_ref && (
+        <span className="opacity-70" title={`Referred to us — consult ${patient.care_consult_ref}`}>·ref</span>
+      )}
+    </span>
+  );
+}
+
 /** Resolve the full team for a patient id (string) from the maps, or null. */
 function resolveTeam(pidStr: string, maps: TeamMaps): ResolvedTeam | null {
   const sid = (v: any) => (v != null && v !== '' ? String(v) : null);
@@ -103,6 +143,14 @@ function resolveTeam(pidStr: string, maps: TeamMaps): ResolvedTeam | null {
       sr_id: sid(api.senior_registrar_id), sr: api.senior_registrar_name || '',
       reg_id: sid(api.registrar_id), reg: api.registrar_name || '',
       ho_id: sid(api.house_officer_id), ho: api.house_officer_name || '',
+      care_start_date: api.care_start_date ?? null,
+      care_start_source: api.care_start_source ?? null,
+      care_consult_ref: api.care_consult_ref ?? null,
+      ward_location: api.ward_location ?? null,
+      bed_number: api.bed_number ?? null,
+      patient_name: api.patient_name ?? null,
+      admission_id: api.admission_id ?? null,
+      admission_date: api.admission_date ?? null,
     };
   }
   const loc = maps.localMap.get(pidStr);
@@ -392,6 +440,13 @@ export default function Dashboard() {
             house_officer: houseOfficer,
             admission_status: admStatus,
             admission_date: adm ? new Date(adm.admission_date).toLocaleDateString() : undefined,
+            // Prefer the admission's own care start; the assignment row carries
+            // the same value and covers patients whose admission didn't load.
+            care_start_date: adm?.care_start_date || team?.care_start_date
+              || (adm ? adm.admission_date : null),
+            care_start_source: adm?.care_start_source || team?.care_start_source
+              || (adm ? 'admission' : null),
+            care_consult_ref: adm?.care_consult_ref || team?.care_consult_ref || null,
             consultant_id: team?.consultant_id ?? null,
             sr_id: team?.sr_id ?? null,
             reg_id: team?.reg_id ?? null,
@@ -443,6 +498,9 @@ export default function Dashboard() {
           admission_status: 'active' as const,
           admission_date: adm.admission_date
             ? new Date(adm.admission_date).toLocaleDateString() : undefined,
+          care_start_date: adm.care_start_date || team?.care_start_date || adm.admission_date || null,
+          care_start_source: adm.care_start_source || team?.care_start_source || 'admission',
+          care_consult_ref: adm.care_consult_ref || team?.care_consult_ref || null,
           consultant_id: team?.consultant_id ?? null,
           sr_id: team?.sr_id ?? null,
           reg_id: team?.reg_id ?? null,
@@ -769,6 +827,9 @@ export default function Dashboard() {
           admission_date: adm?.admission_date
             ? new Date(adm.admission_date).toLocaleDateString()
             : assignment?.admission_date ? new Date(assignment.admission_date).toLocaleDateString() : undefined,
+          care_start_date: assignment?.care_start_date || adm?.care_start_date || null,
+          care_start_source: assignment?.care_start_source || adm?.care_start_source || null,
+          care_consult_ref: assignment?.care_consult_ref || adm?.care_consult_ref || null,
         });
       };
       for (const [pid, a] of teamMaps.apiMap) considerAssignment(pid, a);
@@ -1362,6 +1423,11 @@ export default function Dashboard() {
                       </>
                     )}
                     <th className="px-3 py-2 font-medium text-gray-600">Status</th>
+                    <th className="px-3 py-2 font-medium text-gray-600">
+                      <span className="flex items-center gap-1" title="Time under our care — from the day the consult was sent for our review, or the day we admitted the patient">
+                        <Clock className="h-3.5 w-3.5" /> Under our care
+                      </span>
+                    </th>
                     <th className="px-3 py-2 font-medium text-gray-600"></th>
                   </tr>
                 </thead>
@@ -1410,6 +1476,11 @@ export default function Dashboard() {
                         }`}>
                           {p.admission_status === 'active' ? 'Admitted' : 'Outpatient'}
                         </span>
+                      </td>
+                      <td className="px-3 py-3">
+                        {p.admission_status === 'active'
+                          ? <CareDurationBadge patient={p} />
+                          : <span className="text-gray-400 text-xs">—</span>}
                       </td>
                       <td className="px-3 py-3">
                         <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
@@ -1463,12 +1534,15 @@ export default function Dashboard() {
                       {p.admission_status === 'active' ? 'Admitted' : 'Outpatient'}
                     </span>
                   </div>
-                  {p.ward && (
-                    <p className="text-xs text-gray-600 mt-1 flex items-center gap-1">
-                      <MapPin className="h-3 w-3 text-primary-500" />
-                      {p.ward}{p.bed ? `, Bed ${p.bed}` : ''}
-                    </p>
-                  )}
+                  <div className="flex flex-wrap items-center gap-2 mt-1">
+                    {p.ward && (
+                      <p className="text-xs text-gray-600 flex items-center gap-1">
+                        <MapPin className="h-3 w-3 text-primary-500" />
+                        {p.ward}{p.bed ? `, Bed ${p.bed}` : ''}
+                      </p>
+                    )}
+                    <CareDurationBadge patient={p} />
+                  </div>
                   {isAdmin && (p.consultant || p.senior_registrar || p.registrar || p.house_officer) && (
                     <div className="mt-1 text-xs text-gray-500 flex flex-wrap gap-x-1">
                       {p.consultant && <span>Consultant: {p.consultant}</span>}
@@ -1648,6 +1722,7 @@ export default function Dashboard() {
                     <th className="px-3 py-2 font-medium text-gray-600">Hospital #</th>
                     <th className="px-3 py-2 font-medium text-gray-600">Ward</th>
                     <th className="px-3 py-2 font-medium text-gray-600">Status</th>
+                    <th className="px-3 py-2 font-medium text-gray-600">Under our care</th>
                     <th className="px-3 py-2"></th>
                   </tr>
                 </thead>
@@ -1661,6 +1736,11 @@ export default function Dashboard() {
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${p.admission_status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
                           {p.admission_status === 'active' ? 'Admitted' : 'Outpatient'}
                         </span>
+                      </td>
+                      <td className="px-3 py-2">
+                        {p.admission_status === 'active'
+                          ? <CareDurationBadge patient={p} />
+                          : <span className="text-gray-400 text-xs">—</span>}
                       </td>
                       <td className="px-3 py-2"><ChevronRight className="h-4 w-4 text-gray-400" /></td>
                     </tr>
@@ -1681,7 +1761,10 @@ export default function Dashboard() {
                       {p.admission_status === 'active' ? 'Admitted' : 'Outpatient'}
                     </span>
                   </div>
-                  {p.ward && <p className="text-xs text-gray-600 mt-1">{p.ward}{p.bed ? `, Bed ${p.bed}` : ''}</p>}
+                  <div className="flex flex-wrap items-center gap-2 mt-1">
+                    {p.ward && <p className="text-xs text-gray-600">{p.ward}{p.bed ? `, Bed ${p.bed}` : ''}</p>}
+                    <CareDurationBadge patient={p} />
+                  </div>
                 </div>
               ))}
             </div>

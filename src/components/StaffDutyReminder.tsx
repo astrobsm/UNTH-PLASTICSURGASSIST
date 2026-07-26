@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import { normalizeForWhatsApp } from './PhoneActions';
 import { userManagementService, ApprovedUser } from '../services/userManagementService';
 import { medicalTeamService } from '../services/medicalTeamService';
+import { careDuration } from '../utils/careDuration';
 
 /**
  * Duty reminder generator.
@@ -28,6 +29,8 @@ interface Row {
   location: string;
   diagnosis: string;
   role: string;
+  /** e.g. "Day 6 under our care — referred 20 Jul 2026" */
+  care: string;
 }
 
 const CONSULT_CHECKS_PER_DAY = 3;
@@ -80,6 +83,7 @@ const StaffDutyReminder: React.FC<{ onPostToBoard?: (title: string, content: str
         if (String(a.house_officer_id ?? '') === id) roles.push('House Officer');
         if (roles.length === 0) continue;
 
+        const dur = careDuration(a.care_start_date, a.care_start_source);
         out.push({
           hospitalNumber: (a.hospital_number || '').trim() || '—',
           name: (a.patient_name || '').trim() || 'Unknown',
@@ -87,6 +91,7 @@ const StaffDutyReminder: React.FC<{ onPostToBoard?: (title: string, content: str
             .filter(Boolean).join(', ') || 'Ward not recorded',
           diagnosis: (a.diagnosis || '').trim() || 'Diagnosis not recorded',
           role: roles.join(' & '),
+          care: dur ? dur.detail : '',
         });
       }
       out.sort((a, b) => a.location.localeCompare(b.location) || a.name.localeCompare(b.name));
@@ -121,6 +126,7 @@ const StaffDutyReminder: React.FC<{ onPostToBoard?: (title: string, content: str
         lines.push(`${i + 1}. ${r.name} (${r.hospitalNumber})`);
         lines.push(`    Location: ${r.location}`);
         lines.push(`    Diagnosis: ${r.diagnosis}`);
+        if (r.care) lines.push(`    ${r.care}`);
       });
     }
 

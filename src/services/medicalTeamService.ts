@@ -65,6 +65,10 @@ export interface AssignmentRow {
   ward_location?: string | null;
   bed_number?: string | null;
   diagnosis?: string | null;
+  // Start of the unit's responsibility: consult referral date, else admission date.
+  care_start_date?: string | null;
+  care_start_source?: 'consult' | 'admission' | null;
+  care_consult_ref?: string | null;
 }
 
 export interface TeamWorkload {

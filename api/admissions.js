@@ -3,6 +3,7 @@ import { query } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
 import { idempotent, rememberResponse } from './_lib/idempotency.js';
 import { deactivateAssignmentsForPatients } from './_lib/teamAssignment.js';
+import { consultStartJoin, careStartColumns } from './_lib/careDuration.js';
 
 // Transform database row to frontend format
 function transformAdmission(row) {
@@ -47,6 +48,11 @@ function transformAdmission(row) {
     initial_management_plan: row.initial_management_plan,
     status: row.status,
     discharge_date: row.discharge_date,
+    // When the unit took the patient on, and which event started the clock.
+    // Falls back to the admission date so this is never blank for an admission.
+    care_start_date: row.care_start_date || row.admission_date || null,
+    care_start_source: row.care_start_source || (row.admission_date ? 'admission' : null),
+    care_consult_ref: row.care_consult_ref || null,
     assigned_house_officer: row.assigned_house_officer || null,
     assigned_house_officer_id: row.assigned_house_officer_id || null,
     assigned_unit: row.assigned_unit || null,
@@ -116,10 +122,14 @@ async function getAllAdmissions(searchParams, res) {
   const patientId = searchParams.get('patientId');
   const status = searchParams.get('status');
 
+  // care_start_date is the day the unit became responsible: the consult referral
+  // date for a referred patient, otherwise the admission date.
   let queryStr = `
-    SELECT a.*, p.first_name, p.last_name, p.hospital_number AS p_hospital_number
+    SELECT a.*, p.first_name, p.last_name, p.hospital_number AS p_hospital_number,
+           ${careStartColumns('a')}
     FROM admissions a
     LEFT JOIN patients p ON a.patient_id = p.id
+    ${consultStartJoin('p', 'a')}
     WHERE 1=1
   `;
   const params = [];

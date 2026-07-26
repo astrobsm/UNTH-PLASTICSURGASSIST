@@ -65,6 +65,12 @@ export interface Admission {
   initial_management_plan?: string;
   status: 'active' | 'discharged' | 'transferred' | 'deceased';
   discharge_date?: string;
+  // When the unit became responsible for this patient: the day the consult was
+  // sent for our review if they were referred, otherwise the admission date.
+  // Resolved server-side — see api/_lib/careDuration.js.
+  care_start_date?: string | null;
+  care_start_source?: 'consult' | 'admission' | null;
+  care_consult_ref?: string | null;
   // Persistent house officer assignment (set on admission, kept until discharge or HO finishes both rotations)
   assigned_house_officer?: string;
   assigned_house_officer_id?: string | number;

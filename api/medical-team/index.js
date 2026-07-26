@@ -6,6 +6,7 @@ import {
   backfillActiveAdmissions, setAssignment, rebalanceAllTeams,
   deactivateAssignmentsWithoutOpenAdmission,
 } from '../_lib/teamAssignment.js';
+import { consultStartJoin, careStartColumns } from '../_lib/careDuration.js';
 
 // Discharged patients must not linger on anyone's team. Discharge ends the
 // assignment already; this catches rows that drifted out of step. Throttled per
@@ -124,7 +125,8 @@ async function getAllAssignments(res, searchParams) {
               adm.ward              AS ward_location,
               adm.bed_number,
               COALESCE(NULLIF(adm.provisional_diagnosis, ''), NULLIF(adm.admitting_diagnosis, ''),
-                       NULLIF(adm.reasons_for_admission, '')) AS diagnosis
+                       NULLIF(adm.reasons_for_admission, '')) AS diagnosis,
+              ${careStartColumns('adm')}
          FROM patient_assignments pa
          LEFT JOIN users uc  ON uc.id::text  = pa.consultant_id
          LEFT JOIN users usr ON usr.id::text = pa.senior_registrar_id
@@ -139,6 +141,7 @@ async function getAllAssignments(res, searchParams) {
             ORDER BY a.admission_date DESC NULLS LAST, a.id DESC
             LIMIT 1
          ) adm ON TRUE
+         ${consultStartJoin('p', 'adm')}
         WHERE pa.is_active = TRUE`
     );
 
