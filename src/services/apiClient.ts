@@ -821,10 +821,33 @@ class ApiClient {
   }
 
   async updateUserStatus(userId: string, isActive: boolean) {
-    return this.request('/users/update-status', {
+    const data = await this.request('/users/update-status', {
       method: 'PATCH',
       body: JSON.stringify({ userId, is_active: isActive })
     });
+    // The 4s memo and the cached /users list would otherwise keep serving the
+    // old status to everything that just re-read the staff directory.
+    this._usersMemo = null;
+    await this.invalidateCacheByPrefix('/users');
+    await this.invalidateCacheByPrefix('/medical-team');
+    return data;
+  }
+
+  /**
+   * Officially sign a user out: ends their sessions on every device AND
+   * deactivates the account, reassigning their patients and clearing their
+   * call-duty slots server-side.
+   */
+  async signOutAndDeactivateUser(userId: string, reason?: string) {
+    const data = await this.request('/users/sign-out', {
+      method: 'POST',
+      body: JSON.stringify({ userId, reason })
+    });
+    this._usersMemo = null;
+    await this.invalidateCacheByPrefix('/users');
+    await this.invalidateCacheByPrefix('/medical-team');
+    await this.invalidateCacheByPrefix('/call-duty-roster');
+    return data;
   }
 
   async deleteUser(userId: string) {

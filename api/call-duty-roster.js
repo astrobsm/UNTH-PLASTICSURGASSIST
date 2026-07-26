@@ -11,13 +11,23 @@
 //   DELETE ?action=roster&key=             -> delete a roster
 import { query } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
+import { coverRosterVacancies } from './_lib/teamAssignment.js';
+import { rolesForGrade } from './_lib/roles.js';
 
-const ROLE_POOLS = {
+// Fallback only — the live role→grade mapping comes from the staff_roles
+// registry, so a unit-defined role that rosters as a registrar is picked up here
+// without a code change.
+const FALLBACK_ROLE_POOLS = {
   consultant: ['consultant'],
   senior_registrar: ['senior_registrar'],
   registrar: ['registrar', 'junior_registrar'],
   house_officer: ['house_officer'],
 };
+
+// Senior registrars hold call in BLOCKS rather than swapping every shift: 4
+// consecutive 48-hour shifts = 8 days, so a block never splits a shift between
+// two senior registrars. Everyone else still rotates shift by shift.
+const SR_SHIFTS_PER_BLOCK = 4;
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
@@ -94,7 +104,13 @@ async function ensureColumns() {
 
 // ── Staff pools ─────────────────────────────────────────────────────────────
 async function pool(roleKey) {
-  const roles = ROLE_POOLS[roleKey];
+  let roles = FALLBACK_ROLE_POOLS[roleKey];
+  try {
+    const fromRegistry = await rolesForGrade(roleKey);
+    if (fromRegistry && fromRegistry.length) roles = fromRegistry;
+  } catch (e) {
+    console.warn(`pool(${roleKey}) using fallback roles:`, e.message);
+  }
   const r = await query(
     `SELECT id::text AS id, full_name, phone
        FROM users
@@ -103,6 +119,84 @@ async function pool(roleKey) {
     [roles]
   );
   return r.rows.map(u => ({ id: u.id, full_name: u.full_name || 'TBD', phone: u.phone || '' }));
+}
+
+// ── Live staff resolution ───────────────────────────────────────────────────
+// A roster row is a SNAPSHOT of who was on call when it was generated. Names and
+// phones stored there go stale: deactivate a house officer and, until the roster
+// is regenerated, the row still carries their name/phone. Clients cannot be
+// relied on to filter this out — they need the full staff directory loaded to do
+// it, and when that fetch fails (offline, slow mobile) they fall back to showing
+// the stored name. So every read resolves the stored ids against the users table
+// here: active staff get their CURRENT name/phone, and anyone deactivated,
+// unapproved or deleted is blanked and flagged `<slot>_inactive` for the UI.
+const SHIFT_SLOTS = [
+  { id: 'consultant_id', name: 'consultant_name', phone: 'consultant_phone', flag: 'consultant_inactive' },
+  { id: 'senior_registrar_id', name: 'senior_registrar_name', phone: 'senior_registrar_phone', flag: 'senior_registrar_inactive' },
+  { id: 'registrar_id', name: 'registrar_name', phone: 'registrar_phone', flag: 'registrar_inactive' },
+  { id: 'house_officer_id', name: 'house_officer_name', phone: null, flag: 'house_officer_inactive' },
+  { id: 'ho_ward_id', name: 'ho_ward_name', phone: 'ho_ward_phone', flag: 'ho_ward_inactive' },
+  { id: 'ho_emergency_id', name: 'ho_emergency_name', phone: 'ho_emergency_phone', flag: 'ho_emergency_inactive' },
+  { id: 'ho_off_id', name: 'ho_off_name', phone: 'ho_off_phone', flag: 'ho_off_inactive' },
+];
+
+// Placeholders that mean "nobody assigned" rather than a stale real person.
+const PLACEHOLDER_NAMES = new Set(['', 'tbd', 'off', 'none', 'n/a', '-']);
+
+async function hydrateShifts(rows) {
+  if (!rows || rows.length === 0) return rows || [];
+  const ids = new Set();
+  for (const row of rows) {
+    for (const slot of SHIFT_SLOTS) {
+      const v = row[slot.id];
+      if (v !== null && v !== undefined && String(v).trim() !== '') ids.add(String(v).trim());
+    }
+  }
+  // Compare as text: the roster stores ids in TEXT columns, so matching on
+  // id::text works whatever type users.id happens to be and cannot blow up on a
+  // malformed value the way a numeric cast would (which would silently mark the
+  // whole team deactivated). The users table is small, so the seq scan is fine.
+  const live = new Map();
+  const lookup = [...ids];
+  if (lookup.length) {
+    const r = await query(
+      `SELECT id::text AS id, full_name, phone
+         FROM users
+        WHERE id::text = ANY($1::text[]) AND is_active = TRUE AND is_approved = TRUE`,
+      [lookup]
+    );
+    for (const u of r.rows) live.set(String(u.id), u);
+  }
+
+  return rows.map(row => {
+    const out = { ...row };
+    for (const slot of SHIFT_SLOTS) {
+      const rawId = row[slot.id] === null || row[slot.id] === undefined ? '' : String(row[slot.id]).trim();
+      const storedName = (row[slot.name] || '').trim();
+      const isOffSlot = slot.id === 'ho_off_id';
+      if (rawId) {
+        const u = live.get(rawId);
+        if (u) {
+          // Still active — refresh from the directory so renames and new phone
+          // numbers show without regenerating the roster.
+          out[slot.name] = u.full_name || 'TBD';
+          if (slot.phone) out[slot.phone] = u.phone || '';
+        } else {
+          out[slot.id] = '';
+          out[slot.name] = isOffSlot ? 'Off' : 'TBD';
+          if (slot.phone) out[slot.phone] = '';
+          out[slot.flag] = true;
+        }
+      } else if (storedName && !PLACEHOLDER_NAMES.has(storedName.toLowerCase())) {
+        // Id already cleared (deactivation) but the name/phone were left behind
+        // by an older blanking pass — scrub them and flag the vacant slot.
+        out[slot.name] = isOffSlot ? 'Off' : 'TBD';
+        if (slot.phone) out[slot.phone] = '';
+        out[slot.flag] = true;
+      }
+    }
+    return out;
+  });
 }
 
 // ── Roster generation (round-robin per 48h shift) ───────────────────────────
@@ -120,10 +214,13 @@ async function generateShifts(startDate, endDate) {
   const shifts = [];
   const cursor = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate(), 8, 0, 0);
   const rangeEnd = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), 8, 0, 0);
-  let n = 1, ci = 0, si = 0, ri = 0, hi = 0;
+  let n = 1, ci = 0, ri = 0, hi = 0;
   while (cursor < rangeEnd) {
     const shiftStart = new Date(cursor);
     const shiftEnd = new Date(shiftStart.getTime() + 48 * 3600 * 1000);
+    // Senior registrars change every SR_SHIFTS_PER_BLOCK shifts (a weekly block
+    // aligned to shift boundaries); the other grades rotate every shift.
+    const si = Math.floor((n - 1) / SR_SHIFTS_PER_BLOCK);
     const c = pick(consultants, ci), sr = pick(srs, si), r = pick(regs, ri);
     let hoW = null, hoE = null, hoO = null;
     if (hoCount >= 3) { hoW = hos[hi % hoCount]; hoE = hos[(hi + 1) % hoCount]; hoO = hos[(hi + 2) % hoCount]; }
@@ -140,7 +237,7 @@ async function generateShifts(startDate, endDate) {
       ho_off_id: hoO?.id || '', ho_off_name: hoO?.full_name || 'Off', ho_off_phone: hoO?.phone || '',
       ho_count: hoCount, shift_number: n,
     });
-    ci++; si++; ri++; hi++; n++;
+    ci++; ri++; hi++; n++;
     cursor.setDate(cursor.getDate() + 2);
   }
   return shifts;
@@ -180,7 +277,7 @@ async function generate(body, user, res) {
   if (shifts.length === 0) return res.status(400).json({ error: 'No shifts generated for range' });
   await persistRoster(shifts, key, user?.id);
   const saved = await query(`SELECT * FROM call_duty_roster WHERE month_key = $1 ORDER BY shift_number`, [key]);
-  return res.status(200).json({ month_key: key, shifts: saved.rows });
+  return res.status(200).json({ month_key: key, shifts: await hydrateShifts(saved.rows) });
 }
 
 async function getRange(params, res) {
@@ -188,7 +285,7 @@ async function getRange(params, res) {
   if (start && end) {
     const key = rosterKey(new Date(start), new Date(end));
     const r = await query(`SELECT * FROM call_duty_roster WHERE month_key = $1 ORDER BY shift_number`, [key]);
-    if (r.rows.length) return res.status(200).json({ month_key: key, shifts: r.rows });
+    if (r.rows.length) return res.status(200).json({ month_key: key, shifts: await hydrateShifts(r.rows) });
     // No exact-key roster: fall back to any shifts overlapping the range.
     const noonStart = `${start.slice(0, 10)}T12:00:00.000Z`;
     const noonEnd = `${end.slice(0, 10)}T12:00:00.000Z`;
@@ -196,7 +293,7 @@ async function getRange(params, res) {
       `SELECT * FROM call_duty_roster WHERE end_date > $1 AND start_date < $2 ORDER BY start_date, shift_number`,
       [noonStart, noonEnd]
     );
-    return res.status(200).json({ month_key: key, shifts: ov.rows });
+    return res.status(200).json({ month_key: key, shifts: await hydrateShifts(ov.rows) });
   }
   return res.status(400).json({ error: 'start and end are required' });
 }
@@ -216,7 +313,50 @@ async function getOnCall(params, res) {
         ORDER BY updated_at DESC NULLS LAST, id DESC LIMIT 1`, [noon]
     );
   }
-  return res.status(200).json({ shift: r.rows[0] || null, date });
+  let [shift] = await hydrateShifts(r.rows);
+
+  // Self-heal vacant duties. Historical deactivations left slots empty (and the
+  // fix that clears a departing person's slot leaves one too when nobody covers
+  // it yet), which showed up as "Reassign — staff deactivated" on the on-call
+  // card. Cover them with an active colleague of the same grade the first time
+  // anyone reads the roster. Fill-only: an active person's shift is never moved,
+  // so a generated roster is otherwise stable until an admin regenerates it.
+  if (shift && hasVacancy(shift) && shouldRunCover()) {
+    try {
+      const cover = await coverRosterVacancies();
+      if (cover.shiftsTouched > 0) {
+        const again = await query(
+          `SELECT * FROM call_duty_roster WHERE $1 >= start_date AND $1 < end_date
+            ORDER BY updated_at DESC NULLS LAST, id DESC LIMIT 1`, [noon]
+        );
+        [shift] = await hydrateShifts(again.rows);
+      }
+    } catch (e) {
+      console.warn('getOnCall: roster cover skipped:', e.message);
+    }
+  }
+  return res.status(200).json({ shift: shift || null, date });
+}
+
+const VACANCY_FLAGS = [
+  'consultant_inactive', 'senior_registrar_inactive', 'registrar_inactive',
+  'ho_ward_inactive', 'ho_emergency_inactive',
+];
+function hasVacancy(shift) {
+  // ho_off is deliberately excluded — nobody being off duty is not a vacancy.
+  return VACANCY_FLAGS.some(f => shift[f]);
+}
+
+// Every client polls the on-call card, so throttle the cover pass per instance:
+// once the vacancies are filled the flags clear and it stops running anyway, but
+// a vacancy no active colleague can fill must not re-scan on every poll.
+let lastCoverAt = 0;
+const COVER_MIN_INTERVAL_MS = 60_000;
+function shouldRunCover() {
+  const now = Date.now();
+  if (now - lastCoverAt < COVER_MIN_INTERVAL_MS) return false;
+  lastCoverAt = now;
+  return true;
 }
 
 async function autoGenerate(dateObj) {
@@ -250,7 +390,8 @@ async function updateShift(body, res) {
       WHERE id = $${vals.length} RETURNING *`, vals
   );
   if (r.rows.length === 0) return res.status(404).json({ error: 'Shift not found' });
-  return res.status(200).json({ shift: r.rows[0] });
+  const [shift] = await hydrateShifts(r.rows);
+  return res.status(200).json({ shift });
 }
 
 async function deleteRoster(params, res) {

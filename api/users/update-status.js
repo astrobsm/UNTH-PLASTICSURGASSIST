@@ -1,7 +1,7 @@
 // User status (activate/deactivate) endpoint
 import { query } from '../_lib/db.js';
 import { cors, authenticateRequest } from '../_lib/auth.js';
-import { reassignDeactivatedUser, blankUserFromFutureRosters } from '../_lib/teamAssignment.js';
+import { reassignDeactivatedUser, coverRosterVacancies } from '../_lib/teamAssignment.js';
 
 export default async function handler(req, res) {
   try {
@@ -53,6 +53,7 @@ export default async function handler(req, res) {
     // remaining active staff of their role (leaving the slot empty if none exist).
     let reassignment = null;
     let rosterSlotsBlanked = 0;
+    let rosterCover = null;
     if (!is_active) {
       try {
         reassignment = await reassignDeactivatedUser(userId);
@@ -60,13 +61,16 @@ export default async function handler(req, res) {
       } catch (e) {
         console.error('reassignDeactivatedUser failed:', e.message);
       }
-      // Also blank them out of current/future call-duty roster shifts so they
-      // never appear as on call or get picked for a new admission.
+      // Also take them off current/future call-duty shifts, handing each duty to
+      // an active colleague of the same grade so the on-call roster keeps working
+      // (slots are only cleared when nobody of that grade is left). Everyone
+      // else's shifts are untouched.
       try {
-        rosterSlotsBlanked = await blankUserFromFutureRosters(userId);
-        console.log(`Blanked ${rosterSlotsBlanked} future roster slot(s) for deactivated user ${userId}`);
+        rosterCover = await coverRosterVacancies({ replacing: userId });
+        rosterSlotsBlanked = rosterCover.covered + rosterCover.cleared;
+        console.log(`Roster cover for deactivated user ${userId}:`, rosterCover);
       } catch (e) {
-        console.error('blankUserFromFutureRosters failed:', e.message);
+        console.error('coverRosterVacancies failed:', e.message);
       }
     }
 
@@ -74,6 +78,7 @@ export default async function handler(req, res) {
       user: result.rows[0],
       reassignment,
       rosterSlotsBlanked,
+      rosterCover,
       message: is_active ? 'User activated successfully' : 'User deactivated successfully'
     });
   } catch (error) {

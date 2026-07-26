@@ -261,4 +261,44 @@ if (typeof window !== 'undefined') {
     localStorage.removeItem('userId');
     useAuthStore.setState({ user: null, token: null, loading: false });
   });
+
+  // ─── Session watchdog ──────────────────────────────────────────────────
+  // Tokens are stateless and last 30 days, so when an admin signs someone out
+  // (or deactivates them) the running session on that person's phone would
+  // otherwise keep working until the app was next restarted. Re-checking
+  // /auth/me picks up the server-side cutoff; a rejection there clears the
+  // token and raises 'auth:expired', which the listener above turns into a
+  // logout. Checks run only while online and signed in: on tab focus, on
+  // reconnect, and every 5 minutes.
+  const SESSION_CHECK_INTERVAL_MS = 5 * 60 * 1000;
+  let lastSessionCheck = 0;
+  let checking = false;
+
+  const verifySession = async (force = false) => {
+    const { token, user } = useAuthStore.getState();
+    if (!token || !user || !navigator.onLine || checking) return;
+    const now = Date.now();
+    // Focus/online fire in bursts (and together); don't stampede the endpoint.
+    if (!force && now - lastSessionCheck < 60_000) return;
+    checking = true;
+    lastSessionCheck = now;
+    try {
+      await apiClient.getCurrentUser();
+    } catch (error) {
+      // apiClient has already cleared the token and raised 'auth:expired' for a
+      // confirmed rejection. Anything else here is transient (offline, cold
+      // start, timeout) and must NOT sign a working clinician out mid-round.
+      const msg = error instanceof Error ? error.message : String(error);
+      console.log('Session check inconclusive, keeping session:', msg);
+    } finally {
+      checking = false;
+    }
+  };
+
+  setInterval(() => verifySession(true), SESSION_CHECK_INTERVAL_MS);
+  window.addEventListener('online', () => verifySession());
+  window.addEventListener('focus', () => verifySession());
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') verifySession();
+  });
 }

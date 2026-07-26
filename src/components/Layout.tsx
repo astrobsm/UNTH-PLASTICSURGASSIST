@@ -66,6 +66,7 @@ const navigation = [
   { name: 'Medical Training', href: '/medical-training', icon: BookOpen },
   { name: 'Call Duty Roster', href: '/call-duty', icon: PhoneCall },
   { name: 'Clinic Duties', href: '/clinic-duties', icon: Shield },
+  { name: 'Clinic Day Log', href: '/clinic-day-log', icon: ClipboardCheck },
   { name: 'Clinic Appointments', href: '/clinic-appointments', icon: CalendarCheck },
   { name: 'Consults', href: '/consults', icon: Stethoscope },
   { name: 'WoundProgress Monitor', href: '/wound-monitor', icon: Activity },

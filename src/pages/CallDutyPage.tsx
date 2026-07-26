@@ -27,7 +27,9 @@ import {
   Check,
   RotateCcw,
   Phone,
+  UserCog,
 } from 'lucide-react';
+import DutyAssignmentPanel from '../components/DutyAssignmentPanel';
 import {
   callDutyService,
   CallDutyShift,
@@ -92,7 +94,7 @@ export default function CallDutyPage() {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [viewMode, setViewMode] = useState<'table' | 'calendar' | 'handover' | 'tasks'>('table');
+  const [viewMode, setViewMode] = useState<'table' | 'calendar' | 'assign' | 'handover' | 'tasks'>('table');
   const [editingShiftId, setEditingShiftId] = useState<number | null>(null);
   const [showSummary, setShowSummary] = useState(false);
 
@@ -549,6 +551,15 @@ export default function CallDutyPage() {
             <Calendar className="w-4 h-4" />
             Calendar
           </button>
+          {/* Manual duty assignment. Works on a phone, unlike the inline editor
+              in the desktop table. */}
+          <button
+            onClick={() => { setViewMode('assign'); loadStaff(); }}
+            className={`px-3 py-2 text-sm rounded-lg flex items-center gap-1 ${viewMode === 'assign' ? 'bg-green-100 text-green-800' : 'bg-gray-100 hover:bg-gray-200'}`}
+          >
+            <UserCog className="w-4 h-4" />
+            Assign
+          </button>
           <button
             onClick={() => setViewMode('handover')}
             className={`px-3 py-2 text-sm rounded-lg flex items-center gap-1 ${viewMode === 'handover' ? 'bg-green-100 text-green-800' : 'bg-gray-100 hover:bg-gray-200'}`}
@@ -777,26 +788,37 @@ export default function CallDutyPage() {
         const sel = new Date(`${onCallDate}T12:00:00`);
         const dayShift = shifts.find(s => { try { return sel >= parseISO(s.start_date) && sel < parseISO(s.end_date); } catch { return false; } });
         const isToday = onCallDate === new Date().toISOString().slice(0, 10);
-        // Resolve a rostered person against the CURRENT active staff pool, so a since-
-        // deactivated staff member (still stored on the roster) shows as "Reassign"
-        // rather than appearing on call. Pools here are the active staff lists.
+        // Resolve a rostered person so a since-deactivated staff member (still stored
+        // on the roster) shows as "Reassign" rather than appearing on call. The
+        // server's `<slot>_inactive` flag is authoritative — it is computed against
+        // the live users table, so it still works when the staff-pool fetch below
+        // fails (offline / slow mobile), which used to leave this card falling back
+        // to the deactivated person's stored name and phone number.
         const poolsReady = seniorRegs.length + registrars.length + houseOfficers.length + consultants.length > 0;
-        const resolveC = (pool: StaffMember[], id?: string, storedName?: string, directPhone?: string) => {
-          if (!id) return { name: storedName || 'TBD', phone: directPhone || '', inactive: false };
+        const resolveC = (pool: StaffMember[], id?: string, storedName?: string, directPhone?: string, serverInactive?: boolean) => {
+          const vacant = { name: 'Reassign', phone: '', inactive: true };
+          if (serverInactive) return vacant;
+          // No id but a real stored name = slot vacated by a deactivation that left
+          // the name behind; never render it as if that person were on call.
+          if (!id) {
+            const placeholder = !storedName || ['TBD', 'Off'].includes(storedName.trim());
+            return placeholder ? { name: storedName || 'TBD', phone: '', inactive: false } : vacant;
+          }
           // Normalise ids to strings (server returns text ids, pool ids may be numbers).
           const m = pool.find(u => String(u.id) === String(id));
           if (m) return { name: m.full_name, phone: directPhone || m.phone || '', inactive: false };
           // Only flag deactivated when that role's active list is actually present.
-          if (poolsReady && pool.length > 0) return { name: 'Reassign', phone: '', inactive: true };
+          if (poolsReady && pool.length > 0) return vacant;
           return { name: storedName || 'TBD', phone: directPhone || '', inactive: false };
         };
         const contacts: { role: string; name?: string; phone?: string; color: string; inactive?: boolean }[] = dayShift ? [
-          ...(dayShift.consultant_id ? [{ role: 'Consultant', color: 'text-rose-700', ...resolveC(consultants, dayShift.consultant_id, dayShift.consultant_name, dayShift.consultant_phone) }] : []),
-          { role: 'Senior Registrar', color: 'text-purple-700', ...resolveC(seniorRegs, dayShift.senior_registrar_id, dayShift.senior_registrar_name, dayShift.senior_registrar_phone) },
-          { role: 'Registrar', color: 'text-blue-700', ...resolveC(registrars, dayShift.registrar_id, dayShift.registrar_name, dayShift.registrar_phone) },
-          { role: 'House Officer (Ward)', color: 'text-green-700', ...resolveC(houseOfficers, dayShift.ho_ward_id, dayShift.ho_ward_name, dayShift.ho_ward_phone) },
-          ...(dayShift.ho_emergency_id && dayShift.ho_emergency_id !== dayShift.ho_ward_id
-            ? [{ role: 'House Officer (Emergency)', color: 'text-orange-700', ...resolveC(houseOfficers, dayShift.ho_emergency_id, dayShift.ho_emergency_name, dayShift.ho_emergency_phone) }] : []),
+          ...(dayShift.consultant_id || dayShift.consultant_inactive
+            ? [{ role: 'Consultant', color: 'text-rose-700', ...resolveC(consultants, dayShift.consultant_id, dayShift.consultant_name, dayShift.consultant_phone, dayShift.consultant_inactive) }] : []),
+          { role: 'Senior Registrar', color: 'text-purple-700', ...resolveC(seniorRegs, dayShift.senior_registrar_id, dayShift.senior_registrar_name, dayShift.senior_registrar_phone, dayShift.senior_registrar_inactive) },
+          { role: 'Registrar', color: 'text-blue-700', ...resolveC(registrars, dayShift.registrar_id, dayShift.registrar_name, dayShift.registrar_phone, dayShift.registrar_inactive) },
+          { role: 'House Officer (Ward)', color: 'text-green-700', ...resolveC(houseOfficers, dayShift.ho_ward_id, dayShift.ho_ward_name, dayShift.ho_ward_phone, dayShift.ho_ward_inactive) },
+          ...(dayShift.ho_emergency_inactive || (dayShift.ho_emergency_id && dayShift.ho_emergency_id !== dayShift.ho_ward_id)
+            ? [{ role: 'House Officer (Emergency)', color: 'text-orange-700', ...resolveC(houseOfficers, dayShift.ho_emergency_id, dayShift.ho_emergency_name, dayShift.ho_emergency_phone, dayShift.ho_emergency_inactive) }] : []),
         ] : [];
         return (
           <div className="bg-white rounded-xl shadow-sm border p-4 mb-4">
@@ -919,6 +941,19 @@ export default function CallDutyPage() {
             </table>
           </div>
         </div>
+      )}
+
+      {/* ─── Assign Duties View ────────────────────────────────────────── */}
+      {!loading && viewMode === 'assign' && (
+        <DutyAssignmentPanel
+          shifts={shifts}
+          consultants={consultants}
+          seniorRegs={seniorRegs}
+          registrars={registrars}
+          houseOfficers={houseOfficers}
+          staffLoaded={staffLoaded}
+          onSaved={loadRoster}
+        />
       )}
 
       {/* ─── Calendar View ──────────────────────────────────────────────── */}

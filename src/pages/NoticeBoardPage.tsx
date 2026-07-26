@@ -10,10 +10,12 @@ import {
   User,
   X,
   Save,
-  AlertCircle
+  AlertCircle,
+  BellRing
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { noticeBoardService, NoticePost, NOTICE_CATEGORIES } from '../services/noticeBoardService';
+import StaffDutyReminder from '../components/StaffDutyReminder';
 
 export default function NoticeBoardPage() {
   const { user } = useAuthStore();
@@ -22,6 +24,7 @@ export default function NoticeBoardPage() {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingNotice, setEditingNotice] = useState<NoticePost | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showReminder, setShowReminder] = useState(false);
 
   // Form state
   const [formTitle, setFormTitle] = useState('');
@@ -121,6 +124,26 @@ export default function NoticeBoardPage() {
     setShowCreateForm(true);
   };
 
+  /** Put a generated reminder on the board as a notice, so it is on the record
+   *  as well as in the person's WhatsApp. */
+  const postReminderToBoard = async (title: string, content: string) => {
+    try {
+      await noticeBoardService.createNotice({
+        title,
+        category: 'general' as NoticePost['category'],
+        content,
+        posted_by: user?.id || '',
+        posted_by_name: user?.name || 'Unknown',
+        posted_by_role: user?.role || 'unknown',
+        is_pinned: false,
+        is_active: true,
+      });
+      await loadNotices();
+    } catch (error) {
+      console.error('Error posting reminder to the board:', error);
+    }
+  };
+
   const getCategoryInfo = (category: string) => {
     return NOTICE_CATEGORIES.find(c => c.value === category) || NOTICE_CATEGORIES[5];
   };
@@ -151,16 +174,34 @@ export default function NoticeBoardPage() {
             Weekly activities, announcements, and important updates
           </p>
         </div>
-        {isAdmin && (
+        <div className="flex flex-wrap gap-2">
+          {/* Build a per-staff duty reminder to send on WhatsApp. */}
           <button
-            onClick={() => { resetForm(); setShowCreateForm(true); }}
-            className="btn-primary flex items-center gap-2"
+            onClick={() => setShowReminder(v => !v)}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
+              showReminder ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+            }`}
           >
-            <Plus className="h-4 w-4" />
-            Post Notice
+            <BellRing className="h-4 w-4" />
+            Duty Reminder
           </button>
-        )}
+          {isAdmin && (
+            <button
+              onClick={() => { resetForm(); setShowCreateForm(true); }}
+              className="btn-primary flex items-center gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              Post Notice
+            </button>
+          )}
+        </div>
       </div>
+
+      {showReminder && (
+        <StaffDutyReminder
+          onPostToBoard={isAdmin ? postReminderToBoard : undefined}
+        />
+      )}
 
       {/* Category Filter */}
       <div className="flex flex-wrap gap-2">

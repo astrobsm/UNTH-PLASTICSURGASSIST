@@ -135,6 +135,21 @@ class UserManagementService {
     }
   }
 
+  /**
+   * Officially sign a user out of the unit: ends every session they have open
+   * (on all devices), deactivates the account so they cannot log back in,
+   * reassigns their patients and clears their call-duty slots.
+   * Returns { user, signedOutAt, reassignment?: { reassigned, cleared }, rosterSlotsBlanked }.
+   */
+  async signOutAndDeactivate(userId: string, reason?: string): Promise<any> {
+    try {
+      return await apiClient.signOutAndDeactivateUser(userId, reason);
+    } catch (error) {
+      console.error('Error signing user out:', error);
+      throw error;
+    }
+  }
+
   async deleteUser(userId: string): Promise<void> {
     try {
       await apiClient.deleteUser(userId);

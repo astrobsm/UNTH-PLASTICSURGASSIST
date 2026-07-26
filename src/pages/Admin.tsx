@@ -46,7 +46,8 @@ import {
   Check,
   GraduationCap,
   Loader2,
-  Star
+  Star,
+  LogOut
 } from 'lucide-react';
 import Layout from '../components/Layout';
 import { UserApprovalManager } from '../components/UserApprovalManager';
@@ -60,9 +61,12 @@ import { db } from '../db/database';
 import { resetDatabase, fullDatabaseRecovery, triggerEmergencyRecovery } from '../utils/dbReset';
 import toast from 'react-hot-toast';
 import RotationManagement from '../components/admin/RotationManagement';
+import RoleManagement from '../components/admin/RoleManagement';
 import { UnitRosterConfig } from '../config/psUnits';
+import { useAuthStore } from '../store/authStore';
+import { rolesService, StaffRole } from '../services/rolesService';
 
-type AdminTab = 'dashboard' | 'user-approvals' | 'users' | 'bulk-import' | 'team-analytics' | 'rotations' | 'students' | 'system' | 'database' | 'security' | 'analytics' | 'settings';
+type AdminTab = 'dashboard' | 'user-approvals' | 'users' | 'bulk-import' | 'team-analytics' | 'roles' | 'rotations' | 'students' | 'system' | 'database' | 'security' | 'analytics' | 'settings';
 
 interface User {
   id: string;
@@ -70,7 +74,9 @@ interface User {
   email: string;
   name: string;
   phone?: string;
-  role: 'admin' | 'consultant' | 'senior_registrar' | 'junior_registrar' | 'house_officer';
+  // Roles are a registry now (Admin ▸ Roles), not a fixed union — a unit can add
+  // its own. The four built-in clinical grades stay the common case.
+  role: string;
   department: string;
   status: 'active' | 'inactive' | 'suspended';
   lastLogin: Date | null;
@@ -109,9 +115,12 @@ export default function Admin() {
   const [activeTab, setActiveTab] = useState<AdminTab>(() => {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab');
-    return (tab && ['dashboard','user-approvals','users','bulk-import','team-analytics','rotations','students','system','database','security','analytics','settings'].includes(tab))
+    return (tab && ['dashboard','user-approvals','users','bulk-import','team-analytics','roles','rotations','students','system','database','security','analytics','settings'].includes(tab))
       ? tab as AdminTab : 'dashboard';
   });
+  // The signed-in admin — used to hide the sign-out action on their own row
+  // (the server rejects it too; this keeps the UI from offering a dead button).
+  const currentUserId = useAuthStore(s => (s.user?.id != null ? String(s.user.id) : ''));
   const [users, setUsers] = useState<User[]>([]);
   const [metrics, setMetrics] = useState<SystemMetrics | null>(null);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
@@ -121,13 +130,15 @@ export default function Admin() {
   const [showUserModal, setShowUserModal] = useState(false);
   const [showBackupModal, setShowBackupModal] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
-  // Deactivation modal state
+  // Deactivation modal state. `mode` distinguishes the plain activate/deactivate
+  // toggle from an official sign-out (ends sessions everywhere + deactivates).
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
-  const [deactivateTarget, setDeactivateTarget] = useState<{ id: string; name: string; currentStatus: string } | null>(null);
+  const [deactivateTarget, setDeactivateTarget] = useState<{ id: string; name: string; currentStatus: string; mode: 'toggle' | 'signout' } | null>(null);
   const [deactivatePassword, setDeactivatePassword] = useState('');
   const [deactivateError, setDeactivateError] = useState('');
   const [deactivating, setDeactivating] = useState(false);
   const [showDeactivatePassword, setShowDeactivatePassword] = useState(false);
+  const [signOutReason, setSignOutReason] = useState('');
 
   useEffect(() => {
     loadAdminData();
@@ -297,15 +308,21 @@ export default function Admin() {
     }
   };
 
-  const handleDeactivateUser = (userId: string) => {
+  const openStatusModal = (userId: string, mode: 'toggle' | 'signout') => {
     const user = users.find(u => u.id === userId);
     if (!user) return;
-    setDeactivateTarget({ id: userId, name: user.name, currentStatus: user.status });
+    setDeactivateTarget({ id: userId, name: user.name, currentStatus: user.status, mode });
     setDeactivatePassword('');
     setDeactivateError('');
+    setSignOutReason('');
     setShowDeactivatePassword(false);
     setShowDeactivateModal(true);
   };
+
+  const handleDeactivateUser = (userId: string) => openStatusModal(userId, 'toggle');
+
+  /** Officially sign a user out: ends their sessions everywhere + deactivates. */
+  const handleSignOutUser = (userId: string) => openStatusModal(userId, 'signout');
 
   const handleDeactivateConfirm = async () => {
     if (deactivatePassword !== 'blackvelvet') {
@@ -314,17 +331,25 @@ export default function Admin() {
     }
     if (!deactivateTarget) return;
 
+    const isSignOut = deactivateTarget.mode === 'signout';
     const isCurrentlyActive = deactivateTarget.currentStatus === 'active';
-    const action = isCurrentlyActive ? 'deactivate' : 'activate';
+    const action = isSignOut ? 'sign out' : isCurrentlyActive ? 'deactivate' : 'activate';
     setDeactivating(true);
     try {
-      const result: any = await userManagementService.updateUserStatus(deactivateTarget.id, !isCurrentlyActive);
+      const result: any = isSignOut
+        ? await userManagementService.signOutAndDeactivate(deactivateTarget.id, signOutReason)
+        : await userManagementService.updateUserStatus(deactivateTarget.id, !isCurrentlyActive);
       setShowDeactivateModal(false);
       setDeactivateTarget(null);
-      let msg = `${deactivateTarget.name} ${action}d successfully! This applies across all devices.`;
+      let msg = isSignOut
+        ? `${deactivateTarget.name} has been signed out of all devices and deactivated.`
+        : `${deactivateTarget.name} ${action}d successfully! This applies across all devices.`;
       const rr = result?.reassignment;
       if (rr && (rr.reassigned || rr.cleared)) {
         msg += ` Reassigned ${rr.reassigned} patient(s)` + (rr.cleared ? `; ${rr.cleared} left unassigned (no available staff of that role)` : '') + '.';
+      }
+      if (isSignOut && result?.rosterSlotsBlanked) {
+        msg += ` Cleared ${result.rosterSlotsBlanked} call-duty slot(s).`;
       }
       toast.success(msg);
       await loadUsers();
@@ -473,6 +498,7 @@ export default function Admin() {
         <TabButton tab="users" label="Users" icon={Users} />
         <TabButton tab="bulk-import" label="Bulk Import" icon={UserPlus} />
         <TabButton tab="team-analytics" label="Team Analytics" icon={Activity} />
+        <TabButton tab="roles" label="Roles" icon={Shield} />
         <TabButton tab="rotations" label="Rotations" icon={Calendar} />
         <TabButton tab="students" label="Students" icon={GraduationCap} />
         <TabButton tab="system" label="System" icon={Activity} />
@@ -658,6 +684,18 @@ export default function Admin() {
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
+                  {/* Official sign-out — only meaningful for an account that is
+                      still active and never for the admin's own account. */}
+                  {user.status === 'active' && user.id !== currentUserId && (
+                    <button
+                      onClick={() => handleSignOutUser(user.id)}
+                      className="w-full px-3 py-2.5 text-sm rounded-lg font-bold flex items-center justify-center gap-1 bg-orange-600 text-white hover:bg-orange-700"
+                      title="End their sessions on all devices and deactivate the account"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      SIGN OUT &amp; DEACTIVATE
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
@@ -769,6 +807,18 @@ export default function Admin() {
                             <Lock className="h-3.5 w-3.5" />
                             {user.status === 'active' ? 'Deactivate' : 'Activate'}
                           </button>
+                          {/* Official sign-out — ends their sessions on every
+                              device, then deactivates. Hidden on your own row. */}
+                          {user.status === 'active' && user.id !== currentUserId && (
+                            <button
+                              onClick={() => handleSignOutUser(user.id)}
+                              className="px-3 py-1.5 rounded-md transition text-xs font-medium flex items-center gap-1 bg-orange-50 text-orange-700 hover:bg-orange-100 border border-orange-200"
+                              title="Sign out of all devices and deactivate the account"
+                            >
+                              <LogOut className="h-3.5 w-3.5" />
+                              Sign Out
+                            </button>
+                          )}
                           <button
                             onClick={() => handleDeleteUser(user.id)}
                             className="text-red-600 hover:text-red-900" title="Delete"
@@ -792,21 +842,54 @@ export default function Admin() {
           <div className="bg-white rounded-none sm:rounded-lg shadow-xl w-full sm:max-w-md h-full sm:h-auto">
             <div className="px-3 sm:px-6 py-3 sm:py-4 border-b flex items-center gap-3">
               <div className={`p-2 rounded-full ${
-                deactivateTarget.currentStatus === 'active' ? 'bg-red-100' : 'bg-green-100'
+                deactivateTarget.mode === 'signout' ? 'bg-orange-100'
+                  : deactivateTarget.currentStatus === 'active' ? 'bg-red-100' : 'bg-green-100'
               }`}>
-                <Lock className={`h-5 w-5 ${
-                  deactivateTarget.currentStatus === 'active' ? 'text-red-600' : 'text-green-600'
-                }`} />
+                {deactivateTarget.mode === 'signout'
+                  ? <LogOut className="h-5 w-5 text-orange-600" />
+                  : <Lock className={`h-5 w-5 ${
+                      deactivateTarget.currentStatus === 'active' ? 'text-red-600' : 'text-green-600'
+                    }`} />}
               </div>
               <div>
                 <h3 className="text-lg font-bold text-gray-900">
-                  {deactivateTarget.currentStatus === 'active' ? 'Deactivate' : 'Activate'} User
+                  {deactivateTarget.mode === 'signout'
+                    ? 'Sign Out & Deactivate'
+                    : `${deactivateTarget.currentStatus === 'active' ? 'Deactivate' : 'Activate'} User`}
                 </h3>
                 <p className="text-sm text-gray-500">{deactivateTarget.name}</p>
               </div>
             </div>
             <div className="p-6 space-y-4">
-              {deactivateTarget.currentStatus === 'active' && (
+              {deactivateTarget.mode === 'signout' ? (
+                <>
+                  <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                    <p className="text-sm text-orange-800"><strong>This officially ends their posting.</strong> It will:</p>
+                    <ul className="text-xs text-orange-700 mt-1 ml-4 list-disc space-y-0.5">
+                      <li>Sign them out of the app on <strong>every device</strong> they are logged in on</li>
+                      <li>Deactivate the account so they cannot log back in</li>
+                      <li>Hand their patients to the least-loaded remaining staff of the same role</li>
+                      <li>Clear them from current &amp; future call-duty shifts</li>
+                    </ul>
+                    <p className="text-[11px] text-orange-600 mt-2">
+                      A device that is currently offline is signed out as soon as it reconnects.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Reason <span className="text-gray-400 font-normal">(optional — recorded in the audit log)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={signOutReason}
+                      onChange={(e) => setSignOutReason(e.target.value)}
+                      placeholder="e.g. Rotation ended, transferred out of the unit"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      maxLength={200}
+                    />
+                  </div>
+                </>
+              ) : deactivateTarget.currentStatus === 'active' && (
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
                   <p className="text-sm text-amber-800"><strong>Warning:</strong> Deactivating this user will:</p>
                   <ul className="text-xs text-amber-700 mt-1 ml-4 list-disc space-y-0.5">
@@ -848,12 +931,18 @@ export default function Admin() {
                   onClick={handleDeactivateConfirm}
                   disabled={!deactivatePassword || deactivating}
                   className={`flex-1 px-4 py-2 rounded-lg font-medium text-white transition disabled:opacity-50 ${
-                    deactivateTarget.currentStatus === 'active'
+                    deactivateTarget.mode === 'signout'
+                      ? 'bg-orange-600 hover:bg-orange-700'
+                      : deactivateTarget.currentStatus === 'active'
                       ? 'bg-red-600 hover:bg-red-700'
                       : 'bg-green-600 hover:bg-green-700'
                   }`}
                 >
-                  {deactivating ? 'Processing...' : deactivateTarget.currentStatus === 'active' ? 'Deactivate' : 'Activate'}
+                  {deactivating
+                    ? 'Processing...'
+                    : deactivateTarget.mode === 'signout'
+                    ? 'Sign Out & Deactivate'
+                    : deactivateTarget.currentStatus === 'active' ? 'Deactivate' : 'Activate'}
                 </button>
                 <button
                   onClick={() => { setShowDeactivateModal(false); setDeactivateTarget(null); }}
@@ -1144,6 +1233,9 @@ export default function Admin() {
         </div>
       )}
 
+      {/* Roles Tab */}
+      {activeTab === 'roles' && <RoleManagement />}
+
       {/* Rotations Tab */}
       {activeTab === 'rotations' && (
         <RotationManagement />
@@ -1306,6 +1398,18 @@ const UserModal = ({
     mustChangePassword: boolean;
   } | null>(null);
   const [copied, setCopied] = useState(false);
+  // Roles come from the registry (Admin ▸ Roles) so a role added there is
+  // immediately offered here. The person's current role is always kept in the
+  // list, even if it has since been retired, so editing them can't silently
+  // change it.
+  const [roleOptions, setRoleOptions] = useState<StaffRole[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    rolesService.assignable()
+      .then(rs => { if (!cancelled) setRoleOptions(rs); })
+      .catch(() => { /* rolesService already falls back to the built-in list */ });
+    return () => { cancelled = true; };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1559,15 +1663,23 @@ const UserModal = ({
               </label>
               <select
                 value={formData.role}
-                onChange={(e) => setFormData({ ...formData, role: e.target.value as User['role'] })}
+                onChange={(e) => setFormData({ ...formData, role: e.target.value })}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-transparent"
               >
-                <option value="house_officer">House Officer</option>
-                <option value="junior_registrar">Registrar</option>
-                <option value="senior_registrar">Senior Registrar</option>
-                <option value="consultant">Consultant</option>
-                <option value="admin">Admin</option>
+                {roleOptions.map(r => (
+                  <option key={r.role_key} value={r.role_key}>
+                    {r.label}{r.rosters_as ? '' : ' (not rostered)'}
+                  </option>
+                ))}
+                {formData.role && !roleOptions.some(r => r.role_key === formData.role) && (
+                  <option value={formData.role}>
+                    {formData.role.replace(/_/g, ' ')} (current)
+                  </option>
+                )}
               </select>
+              <p className="text-[11px] text-gray-500 mt-1">
+                Manage this list in <strong>Admin ▸ Roles</strong>.
+              </p>
             </div>
 
             <div>

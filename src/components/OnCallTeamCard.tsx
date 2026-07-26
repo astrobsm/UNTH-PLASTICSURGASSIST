@@ -52,29 +52,49 @@ const OnCallTeamCard: React.FC = () => {
 
   const isToday = date === new Date().toISOString().slice(0, 10);
 
-  // Resolve a rostered person against the CURRENT active staff pool. A roster stores
-  // the staff who were on call when it was generated; if that person has since been
-  // deactivated they must not still show as on call. When the pool is loaded and the
-  // id is absent from it, treat the slot as needing reassignment.
-  const resolve = (pool: StaffMember[], id?: string, storedName?: string, directPhone?: string) => {
-    if (!id) return { name: storedName || 'TBD', phone: directPhone || '', inactive: false };
+  // Resolve a rostered person. A roster stores the staff who were on call when it
+  // was generated, so anyone deactivated since must not still show as on call.
+  //
+  // The server checks each stored id against the live users table and sets
+  // `<slot>_inactive`; that is authoritative and works even when the staff-pool
+  // fetch below fails (offline / slow mobile), which used to leave the card
+  // silently falling back to the stale stored name and phone. The pool check
+  // stays as a second line of defence for locally cached offline rosters.
+  const resolve = (
+    pool: StaffMember[],
+    id?: string,
+    storedName?: string,
+    directPhone?: string,
+    serverInactive?: boolean,
+  ) => {
+    const vacant = { name: 'Reassign', phone: '', inactive: true };
+    if (serverInactive) return vacant;
+    // No id but a real stored name = the slot was vacated by a deactivation and
+    // the name was left behind. Never render it as if that person were on call.
+    if (!id) {
+      const placeholder = !storedName || ['TBD', 'Off'].includes(storedName.trim());
+      return placeholder
+        ? { name: storedName || 'TBD', phone: '', inactive: false }
+        : vacant;
+    }
     // Normalise ids to strings — the server returns ids as text while the staff
     // pool ids may be numbers; a type mismatch would flag EVERYONE as deactivated.
     const match = pool.find(u => String(u.id) === String(id));
     if (match) return { name: match.full_name, phone: directPhone || match.phone || '', inactive: false };
     // Only flag "deactivated" when we actually have that role's active list to
     // validate against; an empty/unloaded pool must not mark everyone "Reassign".
-    if (poolsLoaded && pool.length > 0) return { name: 'Reassign', phone: '', inactive: true };
+    if (poolsLoaded && pool.length > 0) return vacant;
     return { name: storedName || 'TBD', phone: directPhone || '', inactive: false };
   };
 
   const contacts = shift ? [
-    ...(shift.consultant_id ? [{ role: 'Consultant', color: 'text-rose-700', ...resolve(consultants, shift.consultant_id, shift.consultant_name, shift.consultant_phone) }] : []),
-    { role: 'Senior Registrar', color: 'text-purple-700', ...resolve(seniorRegs, shift.senior_registrar_id, shift.senior_registrar_name, shift.senior_registrar_phone) },
-    { role: 'Registrar', color: 'text-blue-700', ...resolve(registrars, shift.registrar_id, shift.registrar_name, shift.registrar_phone) },
-    { role: 'House Officer (Ward)', color: 'text-green-700', ...resolve(houseOfficers, shift.ho_ward_id, shift.ho_ward_name, shift.ho_ward_phone) },
-    ...(shift.ho_emergency_id && shift.ho_emergency_id !== shift.ho_ward_id
-      ? [{ role: 'House Officer (Emergency)', color: 'text-orange-700', ...resolve(houseOfficers, shift.ho_emergency_id, shift.ho_emergency_name, shift.ho_emergency_phone) }] : []),
+    ...(shift.consultant_id || shift.consultant_inactive
+      ? [{ role: 'Consultant', color: 'text-rose-700', ...resolve(consultants, shift.consultant_id, shift.consultant_name, shift.consultant_phone, shift.consultant_inactive) }] : []),
+    { role: 'Senior Registrar', color: 'text-purple-700', ...resolve(seniorRegs, shift.senior_registrar_id, shift.senior_registrar_name, shift.senior_registrar_phone, shift.senior_registrar_inactive) },
+    { role: 'Registrar', color: 'text-blue-700', ...resolve(registrars, shift.registrar_id, shift.registrar_name, shift.registrar_phone, shift.registrar_inactive) },
+    { role: 'House Officer (Ward)', color: 'text-green-700', ...resolve(houseOfficers, shift.ho_ward_id, shift.ho_ward_name, shift.ho_ward_phone, shift.ho_ward_inactive) },
+    ...(shift.ho_emergency_inactive || (shift.ho_emergency_id && shift.ho_emergency_id !== shift.ho_ward_id)
+      ? [{ role: 'House Officer (Emergency)', color: 'text-orange-700', ...resolve(houseOfficers, shift.ho_emergency_id, shift.ho_emergency_name, shift.ho_emergency_phone, shift.ho_emergency_inactive) }] : []),
   ] : [];
   const hasInactive = contacts.some(c => c.inactive);
 

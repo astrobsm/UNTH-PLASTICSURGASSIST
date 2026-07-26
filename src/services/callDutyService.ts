@@ -7,6 +7,14 @@ import { userManagementService } from './userManagementService';
 
 export type HOAssignment = 'ward' | 'emergency' | 'ward_and_emergency' | 'off';
 
+/**
+ * Senior registrars hold call in blocks instead of swapping every shift: 4
+ * consecutive 48-hour shifts = 8 days, a weekly block that never splits a shift
+ * between two senior registrars. Must match SR_SHIFTS_PER_BLOCK in
+ * api/call-duty-roster.js, which is what generates the authoritative roster.
+ */
+export const SR_SHIFTS_PER_BLOCK = 4;
+
 export interface CallDutyShift {
   id?: number;
   /** ISO date string for shift start (e.g. "2026-03-01T08:00:00") */
@@ -56,6 +64,19 @@ export interface CallDutyShift {
   created_by?: string;
   created_at?: string;
   updated_at?: string;
+
+  // ── Server-resolved status (set by the API on every read, never stored) ──
+  // The roster stores who was on call when it was generated; the server checks
+  // each stored id against the live users table and sets these when the person
+  // is no longer active/approved, so the slot renders as needing reassignment
+  // instead of showing a deactivated staff member's name and phone.
+  consultant_inactive?: boolean;
+  senior_registrar_inactive?: boolean;
+  registrar_inactive?: boolean;
+  house_officer_inactive?: boolean;
+  ho_ward_inactive?: boolean;
+  ho_emergency_inactive?: boolean;
+  ho_off_inactive?: boolean;
 }
 
 export interface StaffMember {
@@ -188,20 +209,44 @@ function pick<T>(list: T[], index: number): T {
 class CallDutyService {
   // ── Fetch staff by role ──────────────────────────────────────────────
   async getStaffByRole(role: string): Promise<StaffMember[]> {
+    // 'registrar' and 'junior_registrar' are the same grade — the server pools
+    // them together, so matching one spelling only left the pool empty.
+    const matchRole = (userRole: string) =>
+      (role === 'junior_registrar' || role === 'registrar')
+        ? (userRole === 'junior_registrar' || userRole === 'registrar')
+        : userRole === role;
+    const toStaff = (u: any): StaffMember => ({
+      id: String(u.id),
+      full_name: u.full_name,
+      email: u.email,
+      role: u.role,
+      phone: u.phone || '',
+    });
+
     try {
       const allUsers = await userManagementService.getAllApprovedUsers();
-      return allUsers
-        .filter(u => u.role === role && u.is_active)
-        .map(u => ({
-          id: u.id,
-          full_name: u.full_name,
-          email: u.email,
-          role: u.role,
-          phone: u.phone || '',
-        }));
+      // Keep the offline mirror warm. Without it a failed staff fetch left every
+      // on-call card with no way to tell an active person from a deactivated one,
+      // so it fell back to the roster's stored name — which is exactly how a
+      // deactivated house officer kept showing as on call on a phone with a bad
+      // connection. The mirror stores everyone (active or not) and is filtered
+      // on read, so deactivations known at last sync are still honoured offline.
+      try {
+        await db.approved_users.bulkPut(allUsers.map(u => ({ ...u, id: String(u.id) })) as any);
+      } catch (cacheErr) {
+        console.warn('Could not cache staff list for offline use (non-fatal):', cacheErr);
+      }
+      return allUsers.filter(u => matchRole(u.role) && u.is_active).map(toStaff);
     } catch (err) {
       console.error(`Error fetching ${role} users:`, err);
-      return [];
+      try {
+        const local = await db.approved_users
+          .filter((u: any) => matchRole(u.role) && u.is_active === true && u.is_approved !== false)
+          .toArray();
+        return local.map(toStaff);
+      } catch {
+        return [];
+      }
     }
   }
 
@@ -239,7 +284,6 @@ class CallDutyService {
 
     let shiftNumber = 1;
     let consIdx = 0;
-    let srIdx = 0;
     let rIdx = 0;
     let hoRotationIdx = 0;
 
@@ -252,6 +296,10 @@ class CallDutyService {
       const shiftEnd = new Date(shiftStart.getTime() + 48 * 60 * 60 * 1000);
 
       const consultant = consultants.length > 0 ? pick(consultants, consIdx) : null;
+      // Senior registrars hold call in blocks of SR_SHIFTS_PER_BLOCK shifts
+      // (a weekly block aligned to 48h shift boundaries) instead of swapping
+      // every shift; must match generateShifts() in api/call-duty-roster.js.
+      const srIdx = Math.floor((shiftNumber - 1) / SR_SHIFTS_PER_BLOCK);
       const sr = seniorRegs.length > 0 ? pick(seniorRegs, srIdx) : null;
       const r = registrars.length > 0 ? pick(registrars, rIdx) : null;
 
@@ -314,7 +362,6 @@ class CallDutyService {
       });
 
       consIdx++;
-      srIdx++;
       rIdx++;
       hoRotationIdx++;
       shiftNumber++;
@@ -364,6 +411,56 @@ class CallDutyService {
     }
   }
 
+  /**
+   * Scrub locally cached shifts against the offline staff mirror. Cached rosters
+   * can be months old and still name someone who has since been deactivated;
+   * online the API does this against the live users table, and this is the same
+   * guarantee for the offline fallback path. Anyone no longer active is blanked
+   * and the slot flagged `<slot>_inactive` so the UI shows "Reassign" instead of
+   * a deactivated colleague's name and phone number. If the mirror is empty we
+   * know nothing about staff status, so the shifts are returned untouched.
+   */
+  private async scrubLocalShifts(shifts: CallDutyShift[]): Promise<CallDutyShift[]> {
+    if (shifts.length === 0) return shifts;
+    let activeIds: Set<string>;
+    try {
+      const mirror = await db.approved_users.toArray();
+      if (mirror.length === 0) return shifts;
+      activeIds = new Set(
+        mirror.filter((u: any) => u.is_active === true && u.is_approved !== false).map((u: any) => String(u.id))
+      );
+    } catch {
+      return shifts;
+    }
+    const SLOTS: { id: keyof CallDutyShift; name: keyof CallDutyShift; phone?: keyof CallDutyShift; flag: keyof CallDutyShift }[] = [
+      { id: 'consultant_id', name: 'consultant_name', phone: 'consultant_phone', flag: 'consultant_inactive' },
+      { id: 'senior_registrar_id', name: 'senior_registrar_name', phone: 'senior_registrar_phone', flag: 'senior_registrar_inactive' },
+      { id: 'registrar_id', name: 'registrar_name', phone: 'registrar_phone', flag: 'registrar_inactive' },
+      { id: 'house_officer_id', name: 'house_officer_name', flag: 'house_officer_inactive' },
+      { id: 'ho_ward_id', name: 'ho_ward_name', phone: 'ho_ward_phone', flag: 'ho_ward_inactive' },
+      { id: 'ho_emergency_id', name: 'ho_emergency_name', phone: 'ho_emergency_phone', flag: 'ho_emergency_inactive' },
+      { id: 'ho_off_id', name: 'ho_off_name', phone: 'ho_off_phone', flag: 'ho_off_inactive' },
+    ];
+    const PLACEHOLDERS = new Set(['', 'tbd', 'off', 'none', 'n/a', '-']);
+    return shifts.map(shift => {
+      const out: any = { ...shift };
+      for (const slot of SLOTS) {
+        const id = shift[slot.id] === undefined || shift[slot.id] === null ? '' : String(shift[slot.id]).trim();
+        const storedName = String(shift[slot.name] ?? '').trim();
+        const isOff = slot.id === 'ho_off_id';
+        const vacated = id
+          ? !activeIds.has(id)
+          : !!storedName && !PLACEHOLDERS.has(storedName.toLowerCase());
+        if (!vacated) continue;
+        out[slot.id] = '';
+        out[slot.name] = isOff ? 'Off' : 'TBD';
+        if (slot.phone) out[slot.phone] = '';
+        out[slot.flag] = true;
+      }
+      return out as CallDutyShift;
+    });
+  }
+
   // ── Fetch saved roster by roster key ────────────────────────────────
   async getRosterByKey(rKey: string): Promise<CallDutyShift[]> {
     try {
@@ -371,7 +468,8 @@ class CallDutyService {
         .where('month_key')
         .equals(rKey)
         .toArray();
-      return shifts.sort((a: CallDutyShift, b: CallDutyShift) => a.shift_number - b.shift_number);
+      shifts.sort((a: CallDutyShift, b: CallDutyShift) => a.shift_number - b.shift_number);
+      return await this.scrubLocalShifts(shifts);
     } catch {
       return [];
     }
@@ -462,7 +560,8 @@ class CallDutyService {
       if (covering.length === 0) return null;
       // Prefer the most recently updated when overlapping rosters exist.
       covering.sort((a, b) => new Date(b.updated_at || b.created_at || 0).getTime() - new Date(a.updated_at || a.created_at || 0).getTime());
-      return covering[0];
+      const [scrubbed] = await this.scrubLocalShifts([covering[0]]);
+      return scrubbed || null;
     } catch {
       return null;
     }

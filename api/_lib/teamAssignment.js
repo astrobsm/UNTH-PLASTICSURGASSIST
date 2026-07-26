@@ -14,6 +14,7 @@
 // ============================================================================
 
 import { query } from './db.js';
+import { rolesForGrade } from './roles.js';
 
 const ROLE_COLUMN = {
   consultant: 'consultant_id',
@@ -21,14 +22,25 @@ const ROLE_COLUMN = {
   registrar: 'registrar_id',
   house_officer: 'house_officer_id',
 };
-// The DB role enum uses 'junior_registrar'; UI/columns call it 'registrar' —
-// accept both as one pool (matches api/medical-team behaviour).
-const ROLE_USERS = {
+// Fallback role keys per grade. The live mapping comes from the staff_roles
+// registry (so a unit-defined role like 'medical_officer' that rosters as a
+// registrar joins the registrar pool automatically); this literal is only used
+// if that lookup fails, so assignment never stops working.
+const FALLBACK_ROLE_USERS = {
   consultant: ['consultant'],
   senior_registrar: ['senior_registrar'],
   registrar: ['registrar', 'junior_registrar'],
   house_officer: ['house_officer'],
 };
+async function roleKeysFor(grade) {
+  try {
+    const keys = await rolesForGrade(grade);
+    if (keys && keys.length) return keys;
+  } catch (e) {
+    console.warn(`roleKeysFor(${grade}) falling back:`, e.message);
+  }
+  return FALLBACK_ROLE_USERS[grade] || [];
+}
 const ROLES = ['consultant', 'senior_registrar', 'registrar', 'house_officer'];
 
 let ensured = false;
@@ -48,8 +60,9 @@ async function ensureColumns() {
 /** Least-loaded active+approved staff id (string) for a role, or null. */
 export async function pickLeastLoadedByRole(roleKey, excludeUserId = null) {
   const col = ROLE_COLUMN[roleKey];
-  const roles = ROLE_USERS[roleKey];
-  if (!col || !roles) return null;
+  if (!col) return null;
+  const roles = await roleKeysFor(roleKey);
+  if (!roles.length) return null;
   const params = [roles];
   let exclude = '';
   if (excludeUserId != null) { params.push(String(excludeUserId)); exclude = `AND u.id::text <> $${params.length}`; }
@@ -255,7 +268,7 @@ export async function rebalanceAllTeams() {
   for (const roleKey of REBALANCE_ROLES) {
     pool[roleKey] = (await query(
       `SELECT id FROM users WHERE role = ANY($1::text[]) AND is_active = TRUE AND is_approved = TRUE ORDER BY id`,
-      [ROLE_USERS[roleKey]]
+      [await roleKeysFor(roleKey)]
     )).rows.map(r => String(r.id));
   }
   const idx = { senior_registrar: 0, registrar: 0, house_officer: 0 };
@@ -321,42 +334,153 @@ export async function deactivateAssignmentsForPatients(patientIds) {
   return r.rowCount || 0;
 }
 
+// ── Call-duty roster cover ──────────────────────────────────────────────────
+// Roster slot -> the staff grade that fills it. house_officer_id is the legacy
+// mirror of ho_ward_id and is kept in step with it rather than filled separately.
+const ROSTER_SLOTS = [
+  { id: 'consultant_id', name: 'consultant_name', phone: 'consultant_phone', grade: 'consultant' },
+  { id: 'senior_registrar_id', name: 'senior_registrar_name', phone: 'senior_registrar_phone', grade: 'senior_registrar' },
+  { id: 'registrar_id', name: 'registrar_name', phone: 'registrar_phone', grade: 'registrar' },
+  { id: 'ho_ward_id', name: 'ho_ward_name', phone: 'ho_ward_phone', grade: 'house_officer' },
+  { id: 'ho_emergency_id', name: 'ho_emergency_name', phone: 'ho_emergency_phone', grade: 'house_officer' },
+  // "Off" is the HO who is NOT on duty — a vacancy here needs no cover, only
+  // clearing if the person named in it has been deactivated.
+  { id: 'ho_off_id', name: 'ho_off_name', phone: 'ho_off_phone', grade: 'house_officer', neverFill: true },
+];
+
 /**
- * Blank a now-deactivated user out of CURRENT and FUTURE call-duty roster shifts
- * (end_date >= now) so they never show as on call and are never picked as the
- * on-call staff for a new admission. Past shifts are left as historical record.
- * Each id column is cleared (''), and its name column, where one exists, set to
- * 'TBD'. Best-effort per column. Returns the number of shift-slots blanked.
+ * Keep CURRENT and FUTURE call-duty shifts (end_date >= now) staffed by people
+ * who are actually active, WITHOUT disturbing anyone else's duties.
+ *
+ * A slot is only touched when the person in it is gone — deactivated, removed,
+ * or the slot was already empty. Everyone still active keeps the exact shifts
+ * they were given, so a generated roster stays put until an admin regenerates
+ * or edits it. Vacated slots are covered by the least-loaded active colleague of
+ * the same grade (counting shifts across this same window, so cover spreads
+ * evenly instead of piling onto one person), and are cleared only when nobody of
+ * that grade is left. Past shifts are left as historical record.
+ *
+ * Idempotent by design: it writes only columns whose value actually changes, so
+ * an unfillable vacancy costs nothing on subsequent runs.
+ *
+ * @param {{replacing?: string|number}} opts `replacing` treats that user as gone
+ *        even if the pool query hasn't caught up with their deactivation yet.
+ * @returns {{covered: number, cleared: number, shiftsTouched: number}}
  */
-export async function blankUserFromFutureRosters(userId) {
-  const uid = String(userId);
+export async function coverRosterVacancies({ replacing = null } = {}) {
+  const uid = replacing == null ? null : String(replacing);
   const nowIso = new Date().toISOString();
-  // id column -> name column (null when the table has no matching name column)
-  const cols = [
-    ['consultant_id', 'consultant_name'],
-    ['senior_registrar_id', 'senior_registrar_name'],
-    ['registrar_id', 'registrar_name'],
-    ['house_officer_id', 'house_officer_name'],
-    ['ho_ward_id', null],
-    ['ho_emergency_id', null],
-    ['ho_off_id', null],
-  ];
-  let blanked = 0;
-  for (const [idCol, nameCol] of cols) {
+  const result = { covered: 0, cleared: 0, shiftsTouched: 0 };
+
+  const pools = {};
+  for (const grade of ['consultant', 'senior_registrar', 'registrar', 'house_officer']) {
     try {
-      const setClause = nameCol ? `${idCol} = '', ${nameCol} = 'TBD'` : `${idCol} = ''`;
       const r = await query(
-        `UPDATE call_duty_roster
-            SET ${setClause}, updated_at = CURRENT_TIMESTAMP
-          WHERE ${idCol} = $1 AND end_date >= $2`,
-        [uid, nowIso]
+        `SELECT id::text AS id, full_name, phone FROM users
+          WHERE role = ANY($1::text[]) AND is_active = TRUE AND is_approved = TRUE
+          ORDER BY id`,
+        [await roleKeysFor(grade)]
       );
-      blanked += r.rowCount || 0;
+      pools[grade] = r.rows.filter(u => u.id !== uid);
     } catch (e) {
-      console.warn(`blankUserFromFutureRosters skip ${idCol}:`, e.message);
+      console.warn(`coverRosterVacancies pool ${grade}:`, e.message);
+      pools[grade] = [];
     }
   }
-  return blanked;
+
+  let shifts;
+  try {
+    shifts = (await query(
+      `SELECT * FROM call_duty_roster WHERE end_date >= $1 ORDER BY start_date, shift_number`,
+      [nowIso]
+    )).rows;
+  } catch (e) {
+    console.warn('coverRosterVacancies: roster read failed:', e.message);
+    return result;
+  }
+  if (shifts.length === 0) return result;
+
+  // Existing load per person over the window being edited.
+  const load = new Map();
+  const bump = (id) => { if (id) load.set(id, (load.get(id) || 0) + 1); };
+  for (const s of shifts) {
+    for (const slot of ROSTER_SLOTS) {
+      const v = s[slot.id] ? String(s[slot.id]).trim() : '';
+      if (v && v !== uid) bump(v);
+    }
+  }
+
+  for (const shift of shifts) {
+    const updates = {};
+    // Who is already on this shift for each grade — so one person isn't handed
+    // two slots of the same grade while a colleague sits idle.
+    const used = {};
+    const noteUsed = (grade, id) => { (used[grade] = used[grade] || new Set()).add(id); };
+    for (const slot of ROSTER_SLOTS) {
+      const cur = shift[slot.id] ? String(shift[slot.id]).trim() : '';
+      if (cur && cur !== uid && pools[slot.grade].some(u => u.id === cur)) noteUsed(slot.grade, cur);
+    }
+
+    for (const slot of ROSTER_SLOTS) {
+      const cur = shift[slot.id] ? String(shift[slot.id]).trim() : '';
+      const storedName = String(shift[slot.name] ?? '').trim();
+      const stillActive = !!cur && cur !== uid && pools[slot.grade].some(u => u.id === cur);
+      if (stillActive) continue; // ← stability: an active person's duty is never moved
+
+      let pick = null;
+      if (!slot.neverFill) {
+        const pool = pools[slot.grade];
+        const taken = used[slot.grade] || new Set();
+        const free = pool.filter(u => !taken.has(u.id));
+        const from = free.length ? free : pool; // duplicate only if the grade is that thin
+        if (from.length) {
+          pick = from.reduce((best, u) => ((load.get(u.id) || 0) < (load.get(best.id) || 0) ? u : best), from[0]);
+        }
+      }
+
+      if (pick) {
+        updates[slot.id] = pick.id;
+        updates[slot.name] = pick.full_name || 'TBD';
+        if (slot.phone) updates[slot.phone] = pick.phone || '';
+        bump(pick.id);
+        noteUsed(slot.grade, pick.id);
+        result.covered++;
+      } else if (cur || (storedName && !['TBD', 'Off'].includes(storedName))) {
+        // Nobody of that grade left (or an Off slot): clear it, so a deactivated
+        // person can never be shown as on call.
+        updates[slot.id] = '';
+        updates[slot.name] = slot.id === 'ho_off_id' ? 'Off' : 'TBD';
+        if (slot.phone) updates[slot.phone] = '';
+        result.cleared++;
+      }
+    }
+
+    // Legacy single-HO mirror follows the ward HO.
+    const wardId = 'ho_ward_id' in updates ? updates.ho_ward_id : String(shift.ho_ward_id || '');
+    const wardName = 'ho_ward_name' in updates ? updates.ho_ward_name : String(shift.ho_ward_name || '');
+    if (String(shift.house_officer_id || '') !== String(wardId)) {
+      updates.house_officer_id = wardId;
+      updates.house_officer_name = wardName;
+    }
+
+    const changed = Object.keys(updates).filter(c => String(shift[c] ?? '') !== String(updates[c] ?? ''));
+    if (changed.length === 0) continue;
+    const vals = changed.map(c => updates[c]);
+    const sets = changed.map((c, i) => `${c} = $${i + 1}`);
+    vals.push(shift.id);
+    try {
+      await query(
+        `UPDATE call_duty_roster SET ${sets.join(', ')}, updated_at = CURRENT_TIMESTAMP
+          WHERE id = $${vals.length}`,
+        vals
+      );
+      result.shiftsTouched++;
+    } catch (e) {
+      console.warn(`coverRosterVacancies: shift ${shift.id} update failed:`, e.message);
+    }
+  }
+
+  return result;
 }
 
 /**

@@ -155,6 +155,9 @@ export default function Dashboard() {
   const [staffList, setStaffList] = useState<ApprovedUser[]>([]);
   const [selectedStaffId, setSelectedStaffId] = useState('');
   const [staffPatients, setStaffPatients] = useState<DashboardPatient[]>([]);
+  // Set when the lookup could not load — so a failure is never shown as "no
+  // patients assigned to this staff member".
+  const [staffLookupError, setStaffLookupError] = useState<string | null>(null);
   const [forceDischarging, setForceDischarging] = useState(false);
   const [selectedForDischarge, setSelectedForDischarge] = useState<Set<string | number>>(new Set());
 
@@ -290,7 +293,8 @@ export default function Dashboard() {
       } catch {
         // best-effort on load
       }
-      // Auto-assign HOs to any newly admitted patients on startup
+      // Auto-assign HOs to any newly admitted patients on startup. Fill-only:
+      // a patient who already has a house officer is never touched.
       try {
         const result = await medicalTeamService.autoAssignAdmittedPatientsToHouseOfficers();
         if (result.assigned > 0) {
@@ -300,21 +304,14 @@ export default function Dashboard() {
       } catch {
         // Silently ignore — assignment is best-effort on load
       }
-      // HO rotation cron: reassign HOs whose tour has ended (throttled to 1/hr)
-      try {
-        const role = useAuthStore.getState().user?.role;
-        if (role && ['admin', 'consultant', 'senior_registrar'].includes(role)) {
-          const reassign = await checkAndReassignHouseOfficers();
-          if (reassign.reassigned > 0) {
-            toast.success(
-              `${reassign.reassigned} patient${reassign.reassigned === 1 ? '' : 's'} reassigned to new house officers (rotation complete)`
-            );
-            await loadDashboardData();
-          }
-        }
-      } catch {
-        // best-effort
-      }
+      // NOTE: the automatic HO-rotation pass that used to run here has been
+      // removed. It rewrote existing assignments whenever a house officer's
+      // roster tour had elapsed (or their name wasn't on the current roster),
+      // so a patient's team silently changed under the staff caring for them.
+      // Assignments are now STABLE: they only change when an admin edits them,
+      // or when a staff member is deactivated (the server then hands that
+      // person's patients to other active staff of the same grade). The rotation
+      // pass is still available on demand from the admin actions below.
     };
     init();
     loadStaffList();
@@ -702,20 +699,34 @@ export default function Dashboard() {
 
   const handleStaffLookup = async (staffId: string) => {
     setSelectedStaffId(staffId);
+    setStaffLookupError(null);
     if (!staffId) { setStaffPatients([]); return; }
     setStaffLookupLoading(true);
     try {
       const staffUser = staffList.find(u => String(u.id) === staffId);
-      if (!staffUser) { setStaffPatients([]); return; }
-      const staffName = staffUser.full_name.toLowerCase();
+      const staffName = (staffUser?.full_name || '').trim().toLowerCase();
 
-      // Server-resolved team maps (source of truth), with local fallback offline.
+      // The assignment row is the source of truth for "assigned to this staff
+      // member". It is NOT gated on an admission record loading: this list used
+      // to skip any patient whose admission wasn't in hand, so one failed
+      // admissions fetch made a senior registrar with 26 patients read as
+      // "No patients assigned".
       const teamMaps = await buildTeamMaps();
 
       const allPatients = await patientService.getAllPatients();
-      const activePatientsList = allPatients.filter((p: any) => !p.deleted);
+      const patientByPid = new Map<string, any>();
+      const patientByHn = new Map<string, any>();
+      for (const p of (allPatients || []).filter((x: any) => !x.deleted)) {
+        const pid = String(p.id || p.serverId || '');
+        if (pid) patientByPid.set(pid, p);
+        const hn = (p.hospital_number || '').trim().toLowerCase();
+        if (hn) patientByHn.set(hn, p);
+      }
+
       let activeAdmissions: Admission[] = [];
-      try { activeAdmissions = await admissionDischargeService.getActiveAdmissions(); } catch {}
+      let admissionsLoaded = true;
+      try { activeAdmissions = await admissionDischargeService.getActiveAdmissions(); }
+      catch { admissionsLoaded = false; }
       const admissionByPid = new Map<string, Admission>();
       const admissionByHn = new Map<string, Admission>();
       for (const adm of activeAdmissions) {
@@ -723,79 +734,84 @@ export default function Dashboard() {
         if (adm.hospital_number) admissionByHn.set(adm.hospital_number.trim().toLowerCase(), adm);
       }
 
-      const matched: DashboardPatient[] = [];
-      const addIfAssigned = (pidStr: string, base: {
-        name: string; hospital_number: string; ward: string; bed: string;
-        adm?: Admission; consultantFallback?: string; residentFallback?: string;
-      }) => {
-        // Only admitted patients are assigned to staff — skip outpatients.
-        if (!base.adm) return;
-        const team = resolveTeam(pidStr, teamMaps);
-        const consultant = team?.consultant || base.consultantFallback || '';
-        const resident = team?.sr || team?.reg || base.residentFallback || '';
-        const houseOfficer = team?.ho || (base.adm as any)?.assigned_house_officer || '';
-        // Prefer a strict id match against the structured assignment (any role).
-        const idMatch = !!team && [team.consultant_id, team.sr_id, team.reg_id, team.ho_id].includes(staffId);
-        const createdByMatch = base.adm?.created_by === staffId;
-        // Fall back to fragile name-substring matching ONLY for legacy patients that
-        // have no structured team assignment — so a properly-assigned patient never
-        // mis-matches a different staff member whose name is a substring.
-        const nameMatch = !team && (
-          (base.consultantFallback || '').toLowerCase().includes(staffName) ||
-          (base.residentFallback || '').toLowerCase().includes(staffName) ||
-          (base.adm?.admitting_consultant || '').toLowerCase().includes(staffName)
-        );
-        if (!idMatch && !createdByMatch && !nameMatch) return;
-        matched.push({
-          id: pidStr,
-          name: base.name,
-          hospital_number: base.hospital_number,
-          ward: base.ward,
-          bed: base.bed,
-          consultant,
-          resident,
-          senior_registrar: team?.sr || '',
-          registrar: team?.reg || '',
-          house_officer: houseOfficer,
-          admission_status: base.adm ? 'active' as const : 'outpatient' as const,
-          admission_date: base.adm ? new Date(base.adm.admission_date).toLocaleDateString() : undefined,
+      const matched = new Map<string, DashboardPatient>();
+
+      // ── 1. Structured assignments naming this staff member in any role ──
+      const considerAssignment = (pid: string, assignment: any) => {
+        if (matched.has(pid)) return;
+        const team = resolveTeam(pid, teamMaps);
+        if (!team) return;
+        if (![team.consultant_id, team.sr_id, team.reg_id, team.ho_id].includes(staffId)) return;
+        const rowHn = String(assignment?.hospital_number || '').trim();
+        const p = patientByPid.get(pid) || (rowHn ? patientByHn.get(rowHn.toLowerCase()) : undefined);
+        const hn = (p?.hospital_number || rowHn || '').trim();
+        const adm = admissionByPid.get(pid) || (hn ? admissionByHn.get(hn.toLowerCase()) : undefined);
+        matched.set(pid, {
+          id: p?.id ?? pid,
+          name: p
+            ? (`${p.first_name || ''} ${p.last_name || ''}`.trim() || p.full_name || 'Unknown')
+            : (adm?.patient_name || (hn ? `Hosp ${hn}` : 'Unknown')),
+          hospital_number: hn,
+          ward: adm?.ward_location || p?.ward_id || '',
+          bed: adm?.bed_number || p?.bed_number || '',
+          consultant: team.consultant,
+          resident: team.sr || team.reg,
+          senior_registrar: team.sr,
+          registrar: team.reg,
+          house_officer: team.ho || (adm as any)?.assigned_house_officer || '',
+          admission_status: adm ? 'active' as const : 'outpatient' as const,
+          admission_date: adm?.admission_date ? new Date(adm.admission_date).toLocaleDateString() : undefined,
         });
       };
+      for (const [pid, a] of teamMaps.apiMap) considerAssignment(pid, a);
+      for (const [pid, a] of teamMaps.localMap) if (!teamMaps.apiMap.has(pid)) considerAssignment(pid, a);
 
-      const seen = new Set<string>();
-      for (const p of activePatientsList) {
-        const pid = String(p.id || p.serverId || '');
-        const hn = (p.hospital_number || '').trim().toLowerCase();
-        const adm = admissionByPid.get(pid) || (hn ? admissionByHn.get(hn) : undefined);
-        addIfAssigned(pid, {
-          name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.full_name || 'Unknown',
-          hospital_number: p.hospital_number || '',
-          ward: adm?.ward_location || p.ward_id || '',
-          bed: adm?.bed_number || p.bed_number || '',
-          adm,
-          consultantFallback: adm?.admitting_consultant || p.consultant_in_charge || '',
-          residentFallback: p.resident_in_charge || '',
-        });
-        seen.add(pid);
-        if (hn) seen.add('hn:' + hn);
+      // ── 2. Legacy: admitted patients with NO structured team, where this
+      //      staff member is named on the admission (or admitted them). Name
+      //      matching stays confined to these, so a properly-assigned patient
+      //      can never mis-match a colleague whose name is a substring.
+      if (staffName) {
+        for (const adm of activeAdmissions) {
+          const pid = String(adm.patient_id || '');
+          const hn = (adm.hospital_number || '').trim();
+          const key = pid || `hn:${hn.toLowerCase()}`;
+          if (!key || matched.has(key)) continue;
+          if (resolveTeam(pid, teamMaps)) continue;
+          const named = [adm.admitting_consultant, adm.admitting_doctor, (adm as any).assigned_house_officer]
+            .some(v => (v || '').toLowerCase().includes(staffName));
+          if (!named && String(adm.created_by || '') !== staffId) continue;
+          const p = patientByPid.get(pid) || (hn ? patientByHn.get(hn.toLowerCase()) : undefined);
+          matched.set(key, {
+            id: p?.id ?? pid,
+            name: adm.patient_name
+              || (p ? (`${p.first_name || ''} ${p.last_name || ''}`.trim() || p.full_name) : '')
+              || (hn ? `Hosp ${hn}` : 'Unknown'),
+            hospital_number: hn || p?.hospital_number || '',
+            ward: adm.ward_location || '',
+            bed: adm.bed_number || '',
+            consultant: adm.admitting_consultant || '',
+            resident: '',
+            senior_registrar: '',
+            registrar: '',
+            house_officer: (adm as any).assigned_house_officer || '',
+            admission_status: 'active' as const,
+            admission_date: adm.admission_date ? new Date(adm.admission_date).toLocaleDateString() : undefined,
+          });
+        }
       }
-      // Backfill: admissions whose patient row isn't present locally.
-      for (const adm of activeAdmissions) {
-        const pid = String(adm.patient_id || '');
-        const hn = (adm.hospital_number || '').trim().toLowerCase();
-        if ((pid && seen.has(pid)) || (hn && seen.has('hn:' + hn))) continue;
-        addIfAssigned(pid, {
-          name: adm.patient_name || `Hosp ${adm.hospital_number || ''}` || 'Unknown',
-          hospital_number: adm.hospital_number || '',
-          ward: adm.ward_location || '',
-          bed: adm.bed_number || '',
-          adm,
-          consultantFallback: adm.admitting_consultant || '',
-        });
+
+      const rows = [...matched.values()].sort((a, b) => a.name.localeCompare(b.name));
+      setStaffPatients(rows);
+      if (!admissionsLoaded && rows.length > 0) {
+        setStaffLookupError('Admission details could not be loaded, so ward/bed and admitted status may be incomplete.');
       }
-      setStaffPatients(matched);
-    } catch { setStaffPatients([]); }
-    finally { setStaffLookupLoading(false); }
+    } catch (err: any) {
+      // Never let a failed load read as "this staff member has no patients".
+      setStaffPatients([]);
+      setStaffLookupError(
+        `Could not load assignments${err?.message ? `: ${err.message}` : ''}. Check your connection and try again.`
+      );
+    } finally { setStaffLookupLoading(false); }
   };
 
   const handleAutoAssignHO = async () => {
@@ -808,6 +824,31 @@ export default function Dashboard() {
       await loadDashboardData();
     } catch (err: any) {
       setAutoAssignResult(`Error: ${err.message || 'Failed to auto-assign'}`);
+    } finally { setAutoAssigning(false); }
+  };
+
+  /**
+   * Apply the roster-tour rotation on demand: patients whose house officer has
+   * rotated off the unit move to the HO now covering it. Explicitly admin-run —
+   * it used to fire automatically on every dashboard load, which is why teams
+   * appeared to change on their own.
+   */
+  const handleRotateHOTours = async () => {
+    if (!window.confirm(
+      'Apply house-officer rotation now?\n\nPatients whose house officer\'s roster tour has ended will be moved to the house officer currently covering that unit. Everyone else is left unchanged.'
+    )) return;
+    setAutoAssigning(true);
+    setAutoAssignResult(null);
+    try {
+      const r = await checkAndReassignHouseOfficers(true);
+      setAutoAssignResult(
+        r.reassigned > 0
+          ? `Rotation applied: ${r.reassigned} of ${r.checked} admitted patient(s) moved to the covering house officer.`
+          : `No changes needed — all ${r.checked} admitted patient(s) are with a house officer who is still covering them.`
+      );
+      if (r.reassigned > 0) await loadDashboardData();
+    } catch (err: any) {
+      setAutoAssignResult(`Error: ${err.message || 'Failed to apply rotation'}`);
     } finally { setAutoAssigning(false); }
   };
 
@@ -1216,6 +1257,17 @@ export default function Dashboard() {
                 >
                   {autoAssigning ? 'Reassigning...' : 'Reassign All HOs'}
                 </button>
+                {/* Roster-tour rotation. This used to run automatically on every
+                    dashboard load, silently moving patients between house
+                    officers; it is now an explicit admin action. */}
+                <button
+                  onClick={handleRotateHOTours}
+                  disabled={autoAssigning}
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50"
+                  title="Move patients whose house officer's roster tour has ended to the HO now covering that unit"
+                >
+                  {autoAssigning ? 'Working...' : 'Apply HO Rotation'}
+                </button>
                 <button
                   onClick={handleForceDischargeSelected}
                   disabled={forceDischarging || selectedForDischarge.size === 0}
@@ -1561,6 +1613,21 @@ export default function Dashboard() {
           <div className="text-center py-4"><Loader2 className="h-5 w-5 animate-spin mx-auto text-primary-600" /></div>
         )}
 
+        {!staffLookupLoading && staffLookupError && (
+          <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-2">
+            <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="text-xs text-amber-800">
+              {staffLookupError}
+              <button
+                onClick={() => handleStaffLookup(selectedStaffId)}
+                className="ml-2 underline font-medium hover:text-amber-900"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        )}
+
         {!staffLookupLoading && selectedStaffId && staffPatients.length > 0 && (
           <div className="space-y-2">
             <p className="text-sm text-gray-500 mb-2">{staffPatients.length} patient(s) assigned</p>
@@ -1613,7 +1680,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {!staffLookupLoading && selectedStaffId && staffPatients.length === 0 && (
+        {!staffLookupLoading && !staffLookupError && selectedStaffId && staffPatients.length === 0 && (
           <p className="text-sm text-gray-500 text-center py-4">No patients assigned to this staff member.</p>
         )}
 

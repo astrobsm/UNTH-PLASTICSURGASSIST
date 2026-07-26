@@ -93,6 +93,7 @@ const DepartmentalMeetingsPage = lazyWithRetry(() => import('./pages/Departmenta
 const PrescriptionsPage = lazyWithRetry(() => import('./pages/PrescriptionsPage'));
 const CallDutyPage = lazyWithRetry(() => import('./pages/CallDutyPage'));
 const ClinicDutiesPage = lazyWithRetry(() => import('./pages/ClinicDutiesPage'));
+const ClinicDayLogPage = lazyWithRetry(() => import('./pages/ClinicDayLogPage'));
 const NoticeBoardPage = lazyWithRetry(() => import('./pages/NoticeBoardPage'));
 const ScribeDashboard = lazyWithRetry(() => import('./pages/ScribeDashboard'));
 const PatientActionRecords = lazyWithRetry(() => import('./pages/PatientActionRecords'));
@@ -330,6 +331,7 @@ function App() {
               <Route path="/patient-education" element={<PatientEducation />} />
               <Route path="/call-duty" element={<CallDutyPage />} />
               <Route path="/clinic-duties" element={<ClinicDutiesPage />} />
+              <Route path="/clinic-day-log" element={<ClinicDayLogPage />} />
               <Route path="/shopping-list" element={<ShoppingList />} />
               <Route path="/limb-salvage" element={<LimbSalvagePage />} />
               <Route path="/burn-care" element={<BurnCarePage />} />
