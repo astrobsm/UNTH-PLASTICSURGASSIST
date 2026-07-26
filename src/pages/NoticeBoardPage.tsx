@@ -16,6 +16,7 @@ import {
 import { useAuthStore } from '../store/authStore';
 import { noticeBoardService, NoticePost, NOTICE_CATEGORIES } from '../services/noticeBoardService';
 import StaffDutyReminder from '../components/StaffDutyReminder';
+import DutyReminderQueue from '../components/DutyReminderQueue';
 
 export default function NoticeBoardPage() {
   const { user } = useAuthStore();
@@ -198,9 +199,14 @@ export default function NoticeBoardPage() {
       </div>
 
       {showReminder && (
-        <StaffDutyReminder
-          onPostToBoard={isAdmin ? postReminderToBoard : undefined}
-        />
+        <>
+          <StaffDutyReminder
+            onPostToBoard={isAdmin ? postReminderToBoard : undefined}
+          />
+          {/* The day's scheduled run — building and sending in bulk is a senior
+              staff job, so the queue is only shown to them. */}
+          {isAdmin && <DutyReminderQueue />}
+        </>
       )}
 
       {/* Category Filter */}

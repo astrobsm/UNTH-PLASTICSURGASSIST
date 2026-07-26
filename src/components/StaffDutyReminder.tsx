@@ -1,48 +1,34 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { format } from 'date-fns';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
-  BellRing, Copy, Check, Loader2, AlertTriangle, Send, Megaphone, RefreshCw,
+  BellRing, Copy, Check, Loader2, AlertTriangle, Send, Megaphone, RefreshCw, CalendarClock, Info,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { normalizeForWhatsApp } from './PhoneActions';
 import { userManagementService, ApprovedUser } from '../services/userManagementService';
-import { medicalTeamService } from '../services/medicalTeamService';
-import { careDuration } from '../utils/careDuration';
+import { dutyReminderService, ReminderPreview, ReminderKind, ReminderStatus } from '../services/dutyReminderService';
 
 /**
  * Duty reminder generator.
  *
- * Pick a staff member and this builds the message their WhatsApp gets: every
- * patient currently assigned to them with ward/bed and diagnosis, plus what the
- * unit expects of them — a written review twice a week (Monday and Friday),
- * daily status updates from house officers, and checking the consult module
- * three times a day to acknowledge and act on new referrals.
+ * Pick a staff member and this shows the message they will receive: every
+ * admitted patient assigned to them with ward/bed, diagnosis and how long the
+ * patient has been under our care, plus what the unit expects — a written review
+ * every Monday and Friday, daily status updates from house officers, and
+ * checking the consult module three times a day.
  *
- * The patient list is built from the same assignment rows the rest of the app
- * uses, so it says what the app says. Nothing is sent automatically: the message
- * is shown in full first, and sending is one deliberate tap.
+ * The message is composed on the SERVER, so this preview is exactly what the
+ * scheduled Monday/Friday run sends. Nothing goes out from this screen without a
+ * deliberate tap.
  */
-
-interface Row {
-  hospitalNumber: string;
-  name: string;
-  location: string;
-  diagnosis: string;
-  role: string;
-  /** e.g. "Day 6 under our care — referred 20 Jul 2026" */
-  care: string;
-}
-
-const CONSULT_CHECKS_PER_DAY = 3;
-
 const StaffDutyReminder: React.FC<{ onPostToBoard?: (title: string, content: string) => void }> = ({ onPostToBoard }) => {
   const [staff, setStaff] = useState<ApprovedUser[]>([]);
   const [staffId, setStaffId] = useState('');
-  const [rows, setRows] = useState<Row[] | null>(null);
+  const [kind, setKind] = useState<ReminderKind>('weekly');
+  const [preview, setPreview] = useState<ReminderPreview | null>(null);
   const [loading, setLoading] = useState(false);
   const [staffLoading, setStaffLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [status, setStatus] = useState<ReminderStatus | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -56,99 +42,35 @@ const StaffDutyReminder: React.FC<{ onPostToBoard?: (title: string, content: str
         if (!cancelled) setStaffLoading(false);
       }
     })();
+    dutyReminderService.status().then(s => { if (!cancelled) setStatus(s); }).catch(() => {});
     return () => { cancelled = true; };
   }, []);
 
-  const selected = useMemo(() => staff.find(s => String(s.id) === staffId), [staff, staffId]);
-
-  const build = useCallback(async (id: string) => {
-    if (!id) { setRows(null); return; }
+  const build = useCallback(async (id: string, k: ReminderKind) => {
+    if (!id) { setPreview(null); return; }
     setLoading(true);
     setError(null);
     try {
-      // One server call: only currently-admitted patients, with name, hospital
-      // number, ward/bed and diagnosis already resolved. Stitching the
-      // assignment, patient and admission lists together on the client is what
-      // made every patient read as "Not currently admitted / Diagnosis not
-      // recorded" — one of the three fetches came back empty and nothing could
-      // tell that apart from the patient genuinely not being admitted.
-      const assignments = await medicalTeamService.getAdmittedAssignments();
-
-      const out: Row[] = [];
-      for (const a of assignments) {
-        const roles: string[] = [];
-        if (String(a.consultant_id ?? '') === id) roles.push('Consultant');
-        if (String(a.senior_registrar_id ?? '') === id) roles.push('Senior Registrar');
-        if (String(a.registrar_id ?? '') === id) roles.push('Registrar');
-        if (String(a.house_officer_id ?? '') === id) roles.push('House Officer');
-        if (roles.length === 0) continue;
-
-        const dur = careDuration(a.care_start_date, a.care_start_source);
-        out.push({
-          hospitalNumber: (a.hospital_number || '').trim() || '—',
-          name: (a.patient_name || '').trim() || 'Unknown',
-          location: [a.ward_location, a.bed_number ? `Bed ${a.bed_number}` : '']
-            .filter(Boolean).join(', ') || 'Ward not recorded',
-          diagnosis: (a.diagnosis || '').trim() || 'Diagnosis not recorded',
-          role: roles.join(' & '),
-          care: dur ? dur.detail : '',
-        });
-      }
-      out.sort((a, b) => a.location.localeCompare(b.location) || a.name.localeCompare(b.name));
-      setRows(out);
+      // The SERVER composes the message, so what is previewed here is exactly
+      // what a scheduled Monday/Friday run will send — no second copy of the
+      // wording or the patient-list logic to drift out of step.
+      setPreview(await dutyReminderService.preview(id, k));
     } catch (e: any) {
       // Never let a failed load look like "this person has no patients" — the
       // whole point of the message is that the list is complete.
-      setRows(null);
-      setError(e?.message?.replace(/^\[HTTP \d+\]\s*/, '') || 'Could not load the assigned patients.');
+      setPreview(null);
+      setError(e?.message?.replace(/^\[HTTP \d+\]\s*/, '') || 'Could not build the reminder.');
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => { build(staffId); }, [staffId, build]);
-
-  const isHouseOfficer = (selected?.role || '').includes('house_officer');
-
-  const message = useMemo(() => {
-    if (!selected || !rows) return '';
-    const when = format(new Date(), 'EEE d MMM yyyy');
-    const lines: string[] = [];
-    lines.push(`*Plastic Surgery Unit — Duty Reminder*`);
-    lines.push(`${selected.full_name} (${(selected.role || '').replace(/_/g, ' ')}) — ${when}`);
-    lines.push('');
-
-    if (rows.length === 0) {
-      lines.push('You have *no admitted patients* assigned at the moment.');
-    } else {
-      lines.push(`*Your admitted patients (${rows.length}):*`);
-      rows.forEach((r, i) => {
-        lines.push(`${i + 1}. ${r.name} (${r.hospitalNumber})`);
-        lines.push(`    Location: ${r.location}`);
-        lines.push(`    Diagnosis: ${r.diagnosis}`);
-        if (r.care) lines.push(`    ${r.care}`);
-      });
-    }
-
-    lines.push('');
-    lines.push('*What is expected:*');
-    lines.push('• Review each of the patients above and upload their updates to the app *every Monday and Friday*.');
-    if (isHouseOfficer) {
-      lines.push('• As house officer, update every patient\'s status on the app *daily*.');
-    } else {
-      lines.push('• House officers on your team must update patient status on the app daily — please confirm they have.');
-    }
-    lines.push(`• Check the *Consults module at least ${CONSULT_CHECKS_PER_DAY} times a day*: acknowledge new consults, review them, and upload your findings and plan.`);
-    lines.push('');
-    lines.push('Please record what you do in the Clinic Day Log.');
-    return lines.join('\n');
-  }, [selected, rows, isHouseOfficer]);
-
-  const waNumber = normalizeForWhatsApp(selected?.phone || '');
+  useEffect(() => { build(staffId, kind); }, [staffId, kind, build]);
 
   const copy = async () => {
+    if (!preview) return;
     try {
-      await navigator.clipboard.writeText(message);
+      await navigator.clipboard.writeText(preview.message);
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
     } catch {
@@ -158,26 +80,56 @@ const StaffDutyReminder: React.FC<{ onPostToBoard?: (title: string, content: str
 
   return (
     <div className="bg-white rounded-xl shadow-sm border p-4 mb-4">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-3">
         <div>
           <h3 className="text-sm sm:text-base font-semibold text-gray-800 flex items-center gap-2">
             <BellRing className="w-4 h-4 text-amber-500" /> Duty Reminder
           </h3>
           <p className="text-xs text-gray-500 mt-0.5">
-            Pick a staff member to build their reminder — every patient assigned to them with
-            location and diagnosis, plus the review, daily-update and consult-check expectations.
+            Every patient assigned to them with location, diagnosis and days under our care,
+            plus the review, daily-update and consult-check expectations.
           </p>
         </div>
-        {staffId && (
-          <button
-            onClick={() => build(staffId)}
-            disabled={loading}
-            className="self-start px-2.5 py-1.5 text-xs rounded-lg border text-gray-600 hover:bg-gray-50 inline-flex items-center gap-1 disabled:opacity-50"
-          >
-            <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} /> Refresh
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          <div className="flex rounded-lg border overflow-hidden">
+            <button
+              onClick={() => setKind('weekly')}
+              className={`px-2.5 py-1.5 text-xs font-medium ${kind === 'weekly' ? 'bg-amber-500 text-white' : 'bg-white text-gray-600'}`}
+              title="The Monday & Friday review reminder"
+            >
+              Mon/Fri review
+            </button>
+            <button
+              onClick={() => setKind('daily')}
+              className={`px-2.5 py-1.5 text-xs font-medium ${kind === 'daily' ? 'bg-amber-500 text-white' : 'bg-white text-gray-600'}`}
+              title="The daily house-officer status-update reminder"
+            >
+              Daily update
+            </button>
+          </div>
+          {staffId && (
+            <button
+              onClick={() => build(staffId, kind)}
+              disabled={loading}
+              className="px-2.5 py-1.5 text-xs rounded-lg border text-gray-600 hover:bg-gray-50 inline-flex items-center gap-1 disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+          )}
+        </div>
       </div>
+
+      {status && (
+        <p className="text-[11px] text-gray-500 flex items-start gap-1 mb-3">
+          <CalendarClock className="w-3 h-3 mt-0.5 flex-shrink-0" />
+          {status.cronConfigured
+            ? <span>Scheduled: Mon &amp; Fri 07:00 for reviews, daily 07:30 for house officers.</span>
+            : <span>Scheduled sending is not switched on yet — reminders are built here on demand.</span>}
+          {!status.canDeliver && (
+            <span className="text-amber-700"> Messages are not delivered automatically; send them with the WhatsApp button.</span>
+          )}
+        </p>
+      )}
 
       <select
         value={staffId}
@@ -199,7 +151,7 @@ const StaffDutyReminder: React.FC<{ onPostToBoard?: (title: string, content: str
           <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
           <p className="text-xs text-amber-800">
             {error}
-            {staffId && <button onClick={() => build(staffId)} className="ml-2 underline font-medium">Retry</button>}
+            {staffId && <button onClick={() => build(staffId, kind)} className="ml-2 underline font-medium">Retry</button>}
           </p>
         </div>
       )}
@@ -208,13 +160,13 @@ const StaffDutyReminder: React.FC<{ onPostToBoard?: (title: string, content: str
         <div className="py-6 text-center"><Loader2 className="w-5 h-5 animate-spin mx-auto text-green-600" /></div>
       )}
 
-      {!loading && selected && rows && (
+      {!loading && preview && (
         <>
           <div className="flex flex-wrap items-center gap-2 mb-2 text-xs">
-            <span className={`px-2 py-0.5 rounded-full font-medium ${rows.length ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
-              {rows.length} admitted patient(s) assigned
+            <span className={`px-2 py-0.5 rounded-full font-medium ${preview.patientCount ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
+              {preview.patientCount} admitted patient(s) assigned
             </span>
-            {!selected.phone && (
+            {!preview.staff.phone && (
               <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-medium">
                 No phone number on file — copy the message instead
               </span>
@@ -222,13 +174,13 @@ const StaffDutyReminder: React.FC<{ onPostToBoard?: (title: string, content: str
           </div>
 
           <pre className="whitespace-pre-wrap break-words text-xs bg-gray-50 border border-gray-200 rounded-lg p-3 max-h-72 overflow-y-auto font-sans text-gray-800">
-            {message}
+            {preview.message}
           </pre>
 
           <div className="flex flex-wrap gap-2 mt-3">
-            {waNumber && (
+            {preview.whatsappLink && (
               <a
-                href={`https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`}
+                href={preview.whatsappLink}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="px-3 py-2 text-sm font-medium rounded-lg bg-green-600 text-white hover:bg-green-700 inline-flex items-center gap-1"
@@ -245,13 +197,20 @@ const StaffDutyReminder: React.FC<{ onPostToBoard?: (title: string, content: str
             </button>
             {onPostToBoard && (
               <button
-                onClick={() => onPostToBoard(`Duty reminder — ${selected.full_name}`, message)}
+                onClick={() => onPostToBoard(`Duty reminder — ${preview.staff.full_name}`, preview.message)}
                 className="px-3 py-2 text-sm font-medium rounded-lg border text-gray-700 hover:bg-gray-50 inline-flex items-center gap-1"
               >
                 <Megaphone className="w-4 h-4" /> Post to board
               </button>
             )}
           </div>
+
+          {preview.patientCount === 0 && (
+            <p className="text-[11px] text-gray-500 mt-2 flex items-start gap-1">
+              <Info className="w-3 h-3 mt-0.5 flex-shrink-0" />
+              Scheduled runs skip anyone with no admitted patients, so this person would not be messaged.
+            </p>
+          )}
         </>
       )}
     </div>

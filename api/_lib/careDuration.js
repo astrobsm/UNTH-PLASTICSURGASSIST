@@ -103,8 +103,12 @@ export function consultStartJoin(patientAlias, admissionAlias, joinAlias = 'cs')
 export function careStartColumns(admissionAlias, joinAlias = 'cs') {
   const aDay = admissionDay(`${admissionAlias}.admission_date`);
   const cDay = `${joinAlias}.consult_day`;
+  // ::text so the value crosses the wire as a plain 'YYYY-MM-DD'. A bare DATE
+  // comes back from pg as a JS Date in the server's zone, which then serialises
+  // to an instant and can land on the previous day for a client further west —
+  // and a Date is not a string, which silently broke day counting.
   return `
-    LEAST(COALESCE(${cDay}, ${aDay}), COALESCE(${aDay}, ${cDay})) AS care_start_date,
+    LEAST(COALESCE(${cDay}, ${aDay}), COALESCE(${aDay}, ${cDay}))::text AS care_start_date,
     CASE
       WHEN ${cDay} IS NOT NULL
        AND (${aDay} IS NULL OR ${cDay} <= ${aDay}) THEN 'consult'
