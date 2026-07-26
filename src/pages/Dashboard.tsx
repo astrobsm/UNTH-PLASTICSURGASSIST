@@ -746,21 +746,29 @@ export default function Dashboard() {
         const p = patientByPid.get(pid) || (rowHn ? patientByHn.get(rowHn.toLowerCase()) : undefined);
         const hn = (p?.hospital_number || rowHn || '').trim();
         const adm = admissionByPid.get(pid) || (hn ? admissionByHn.get(hn.toLowerCase()) : undefined);
+        // The API resolves ward/bed and admission state server-side; prefer that
+        // over the locally-joined admission, which is blank whenever the
+        // admissions fetch failed.
+        const srvWard = String(assignment?.ward_location || '').trim();
+        const srvBed = String(assignment?.bed_number || '').trim();
+        const srvAdmitted = !!assignment?.admission_id;
         matched.set(pid, {
           id: p?.id ?? pid,
           name: p
             ? (`${p.first_name || ''} ${p.last_name || ''}`.trim() || p.full_name || 'Unknown')
-            : (adm?.patient_name || (hn ? `Hosp ${hn}` : 'Unknown')),
+            : (assignment?.patient_name || adm?.patient_name || (hn ? `Hosp ${hn}` : 'Unknown')),
           hospital_number: hn,
-          ward: adm?.ward_location || p?.ward_id || '',
-          bed: adm?.bed_number || p?.bed_number || '',
+          ward: srvWard || adm?.ward_location || p?.ward_id || '',
+          bed: srvBed || adm?.bed_number || p?.bed_number || '',
           consultant: team.consultant,
           resident: team.sr || team.reg,
           senior_registrar: team.sr,
           registrar: team.reg,
           house_officer: team.ho || (adm as any)?.assigned_house_officer || '',
-          admission_status: adm ? 'active' as const : 'outpatient' as const,
-          admission_date: adm?.admission_date ? new Date(adm.admission_date).toLocaleDateString() : undefined,
+          admission_status: (srvAdmitted || adm) ? 'active' as const : 'outpatient' as const,
+          admission_date: adm?.admission_date
+            ? new Date(adm.admission_date).toLocaleDateString()
+            : assignment?.admission_date ? new Date(assignment.admission_date).toLocaleDateString() : undefined,
         });
       };
       for (const [pid, a] of teamMaps.apiMap) considerAssignment(pid, a);

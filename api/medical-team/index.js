@@ -2,7 +2,28 @@
 // Provides medical staff list by role with workload for auto-assignment
 import { query } from '../_lib/db.js';
 import { cors, authenticateRequest } from '../_lib/auth.js';
-import { backfillActiveAdmissions, setAssignment, rebalanceAllTeams } from '../_lib/teamAssignment.js';
+import {
+  backfillActiveAdmissions, setAssignment, rebalanceAllTeams,
+  deactivateAssignmentsWithoutOpenAdmission,
+} from '../_lib/teamAssignment.js';
+
+// Discharged patients must not linger on anyone's team. Discharge ends the
+// assignment already; this catches rows that drifted out of step. Throttled per
+// instance because every client reads this endpoint, and it is a no-op once clean.
+let lastSweepAt = 0;
+const SWEEP_MIN_INTERVAL_MS = 60_000;
+async function sweepDischargedAssignments() {
+  if (Date.now() - lastSweepAt < SWEEP_MIN_INTERVAL_MS) return 0;
+  lastSweepAt = Date.now();
+  try {
+    const n = await deactivateAssignmentsWithoutOpenAdmission();
+    if (n > 0) console.log(`Ended ${n} assignment(s) for patients no longer admitted`);
+    return n;
+  } catch (e) {
+    console.warn('sweepDischargedAssignments skipped:', e.message);
+    return 0;
+  }
+}
 
 export default async function handler(req, res) {
   try {
@@ -38,7 +59,8 @@ export default async function handler(req, res) {
           return await getPatientMedicalTeam(req, res);
         }
         if (pathParts[0] === 'assignments') {
-          return await getAllAssignments(res);
+          await sweepDischargedAssignments();
+          return await getAllAssignments(res, new URL(req.url, `http://${req.headers.host}`).searchParams);
         }
         return await getAllMedicalStaff(res);
       case 'POST':
@@ -80,22 +102,54 @@ export default async function handler(req, res) {
  * Powers the dashboard admitted-patients list and the staff patient lookup, so
  * teams display correctly regardless of client-side IndexedDB sync state.
  */
-async function getAllAssignments(res) {
+async function getAllAssignments(res, searchParams) {
   try {
+    // Patient identity, ward/bed and diagnosis are resolved HERE, in one query,
+    // rather than by stitching the assignment, patient and admission lists
+    // together on the client. That stitching was the bug behind duty reminders
+    // that said "Not currently admitted / Diagnosis not recorded" for every
+    // patient: one of the three client fetches came back empty and there was no
+    // way to tell that apart from a patient genuinely not being admitted.
     const result = await query(
-      `SELECT pa.patient_id, pa.hospital_number,
+      `SELECT pa.patient_id,
+              COALESCE(NULLIF(pa.hospital_number, ''), p.hospital_number, adm.hospital_number) AS hospital_number,
+              COALESCE(NULLIF(TRIM(CONCAT_WS(' ', p.first_name, p.last_name)), ''), adm.patient_name) AS patient_name,
               pa.consultant_id,        uc.full_name  AS consultant_name,
               pa.senior_registrar_id,  usr.full_name AS senior_registrar_name,
               pa.registrar_id,         ur.full_name  AS registrar_name,
-              pa.house_officer_id,     uho.full_name AS house_officer_name
+              pa.house_officer_id,     uho.full_name AS house_officer_name,
+              adm.id                AS admission_id,
+              adm.status            AS admission_status,
+              adm.admission_date,
+              adm.ward              AS ward_location,
+              adm.bed_number,
+              COALESCE(NULLIF(adm.provisional_diagnosis, ''), NULLIF(adm.admitting_diagnosis, ''),
+                       NULLIF(adm.reasons_for_admission, '')) AS diagnosis
          FROM patient_assignments pa
          LEFT JOIN users uc  ON uc.id::text  = pa.consultant_id
          LEFT JOIN users usr ON usr.id::text = pa.senior_registrar_id
          LEFT JOIN users ur  ON ur.id::text  = pa.registrar_id
          LEFT JOIN users uho ON uho.id::text = pa.house_officer_id
+         LEFT JOIN patients p ON p.id::text = pa.patient_id::text
+         -- The patient's CURRENT admission: most recent open one.
+         LEFT JOIN LATERAL (
+           SELECT a.* FROM admissions a
+            WHERE a.patient_id::text = pa.patient_id::text
+              AND a.status IN ('active', 'admitted')
+            ORDER BY a.admission_date DESC NULLS LAST, a.id DESC
+            LIMIT 1
+         ) adm ON TRUE
         WHERE pa.is_active = TRUE`
     );
-    return res.status(200).json({ assignments: result.rows });
+
+    let assignments = result.rows;
+    // A team is a team for an ADMITTED patient. Callers that show "who is caring
+    // for whom right now" ask for only_admitted so a discharged patient can
+    // never appear on someone's list.
+    if (searchParams?.get('only_admitted') === 'true') {
+      assignments = assignments.filter(a => !!a.admission_id);
+    }
+    return res.status(200).json({ assignments });
   } catch (e) {
     // Missing table / drift → return empty so the dashboard falls back gracefully.
     console.warn('getAllAssignments failed:', e.message);

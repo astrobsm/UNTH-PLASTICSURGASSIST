@@ -7,8 +7,6 @@ import toast from 'react-hot-toast';
 import { normalizeForWhatsApp } from './PhoneActions';
 import { userManagementService, ApprovedUser } from '../services/userManagementService';
 import { medicalTeamService } from '../services/medicalTeamService';
-import { patientService } from '../services/patientService';
-import { admissionDischargeService } from '../services/admissionDischargeService';
 
 /**
  * Duty reminder generator.
@@ -65,29 +63,16 @@ const StaffDutyReminder: React.FC<{ onPostToBoard?: (title: string, content: str
     setLoading(true);
     setError(null);
     try {
-      const assignments = await medicalTeamService.getAllAssignmentsFromAPI();
-      const patients = await patientService.getAllPatients().catch(() => []);
-      let admissions: any[] = [];
-      try { admissions = await admissionDischargeService.getActiveAdmissions(); } catch { /* location falls back below */ }
-
-      const patientByPid = new Map<string, any>();
-      const patientByHn = new Map<string, any>();
-      for (const p of (patients || []).filter((x: any) => !x.deleted)) {
-        const pid = String(p.id ?? p.serverId ?? '');
-        if (pid) patientByPid.set(pid, p);
-        const hn = (p.hospital_number || '').trim().toLowerCase();
-        if (hn) patientByHn.set(hn, p);
-      }
-      const admByPid = new Map<string, any>();
-      const admByHn = new Map<string, any>();
-      for (const a of admissions) {
-        admByPid.set(String(a.patient_id), a);
-        if (a.hospital_number) admByHn.set(String(a.hospital_number).trim().toLowerCase(), a);
-      }
+      // One server call: only currently-admitted patients, with name, hospital
+      // number, ward/bed and diagnosis already resolved. Stitching the
+      // assignment, patient and admission lists together on the client is what
+      // made every patient read as "Not currently admitted / Diagnosis not
+      // recorded" — one of the three fetches came back empty and nothing could
+      // tell that apart from the patient genuinely not being admitted.
+      const assignments = await medicalTeamService.getAdmittedAssignments();
 
       const out: Row[] = [];
       for (const a of assignments) {
-        const pid = String(a.patient_id);
         const roles: string[] = [];
         if (String(a.consultant_id ?? '') === id) roles.push('Consultant');
         if (String(a.senior_registrar_id ?? '') === id) roles.push('Senior Registrar');
@@ -95,20 +80,12 @@ const StaffDutyReminder: React.FC<{ onPostToBoard?: (title: string, content: str
         if (String(a.house_officer_id ?? '') === id) roles.push('House Officer');
         if (roles.length === 0) continue;
 
-        const hnRaw = String((a as any).hospital_number || '').trim();
-        const p = patientByPid.get(pid) || (hnRaw ? patientByHn.get(hnRaw.toLowerCase()) : undefined);
-        const hn = (p?.hospital_number || hnRaw || '').trim();
-        const adm = admByPid.get(pid) || (hn ? admByHn.get(hn.toLowerCase()) : undefined);
-
         out.push({
-          hospitalNumber: hn || '—',
-          name: p
-            ? (`${p.first_name || ''} ${p.last_name || ''}`.trim() || p.full_name || 'Unknown')
-            : (adm?.patient_name || 'Unknown'),
-          location: [adm?.ward_location, adm?.bed_number ? `Bed ${adm.bed_number}` : '']
-            .filter(Boolean).join(', ') || (adm ? 'Ward not recorded' : 'Not currently admitted'),
-          diagnosis: adm?.provisional_diagnosis || (adm as any)?.admitting_diagnosis
-            || (adm as any)?.reasons_for_admission || p?.diagnosis || 'Diagnosis not recorded',
+          hospitalNumber: (a.hospital_number || '').trim() || '—',
+          name: (a.patient_name || '').trim() || 'Unknown',
+          location: [a.ward_location, a.bed_number ? `Bed ${a.bed_number}` : '']
+            .filter(Boolean).join(', ') || 'Ward not recorded',
+          diagnosis: (a.diagnosis || '').trim() || 'Diagnosis not recorded',
           role: roles.join(' & '),
         });
       }
@@ -137,9 +114,9 @@ const StaffDutyReminder: React.FC<{ onPostToBoard?: (title: string, content: str
     lines.push('');
 
     if (rows.length === 0) {
-      lines.push('You have *no patients* assigned at the moment.');
+      lines.push('You have *no admitted patients* assigned at the moment.');
     } else {
-      lines.push(`*Your patients (${rows.length}):*`);
+      lines.push(`*Your admitted patients (${rows.length}):*`);
       rows.forEach((r, i) => {
         lines.push(`${i + 1}. ${r.name} (${r.hospitalNumber})`);
         lines.push(`    Location: ${r.location}`);
@@ -229,7 +206,7 @@ const StaffDutyReminder: React.FC<{ onPostToBoard?: (title: string, content: str
         <>
           <div className="flex flex-wrap items-center gap-2 mb-2 text-xs">
             <span className={`px-2 py-0.5 rounded-full font-medium ${rows.length ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
-              {rows.length} patient(s) assigned
+              {rows.length} admitted patient(s) assigned
             </span>
             {!selected.phone && (
               <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-medium">

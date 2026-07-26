@@ -484,6 +484,32 @@ export async function coverRosterVacancies({ replacing = null } = {}) {
 }
 
 /**
+ * End the team assignment of every patient who no longer has an open admission.
+ *
+ * A care team means "these people are looking after this admitted patient", so a
+ * discharged patient must not sit on anyone's list. Discharge already ends the
+ * assignment (see api/admissions.js), but rows drift out of step when a patient
+ * is discharged by another route or the discharge hook failed, and those rows
+ * then show up on duty reminders. Idempotent: returns 0 once clean.
+ */
+export async function deactivateAssignmentsWithoutOpenAdmission() {
+  await ensureColumns();
+  const r = await query(
+    `UPDATE patient_assignments pa
+        SET is_active = FALSE,
+            reassigned_reason = COALESCE(pa.reassigned_reason, 'Ended: patient no longer admitted'),
+            updated_at = CURRENT_TIMESTAMP
+      WHERE pa.is_active = TRUE
+        AND NOT EXISTS (
+          SELECT 1 FROM admissions a
+           WHERE a.patient_id::text = pa.patient_id::text
+             AND a.status IN ('active', 'admitted')
+        )`
+  );
+  return r.rowCount || 0;
+}
+
+/**
  * Reassign every active patient held by a now-deactivated user to the
  * least-loaded remaining active staff of that role. If none exists, the role
  * slot is cleared (left empty) and recorded for follow-up.

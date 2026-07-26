@@ -55,6 +55,16 @@ export interface AssignmentRow {
   registrar_name?: string | null;
   house_officer_id?: string | null;
   house_officer_name?: string | null;
+  // Resolved server-side from the patient record and their current open
+  // admission, so callers never have to join three client-side lists (which is
+  // how ward and diagnosis silently came out blank).
+  patient_name?: string | null;
+  admission_id?: number | string | null;
+  admission_status?: string | null;
+  admission_date?: string | null;
+  ward_location?: string | null;
+  bed_number?: string | null;
+  diagnosis?: string | null;
 }
 
 export interface TeamWorkload {
@@ -318,6 +328,24 @@ class MedicalTeamService {
       console.warn('getAllAssignmentsFromAPI failed, will fall back to local:', error);
       return [];
     }
+  }
+
+  /**
+   * Assignments for patients who are CURRENTLY ADMITTED, with the patient's
+   * name, hospital number, ward/bed and diagnosis resolved server-side.
+   *
+   * Use this wherever a list of "who is looking after whom right now" is shown.
+   * It throws rather than returning [] on failure, because an empty list here is
+   * indistinguishable from "nobody is assigned" and that difference matters —
+   * silently swallowing it is what produced duty reminders claiming every
+   * patient was not admitted and had no diagnosis.
+   */
+  async getAdmittedAssignments(): Promise<AssignmentRow[]> {
+    const data = await apiClient.get('/medical-team/assignments?only_admitted=true', { freshRead: true } as any);
+    if (!data || !Array.isArray(data.assignments)) {
+      throw new Error('The assignment list could not be read from the server.');
+    }
+    return data.assignments as AssignmentRow[];
   }
 
   /**
