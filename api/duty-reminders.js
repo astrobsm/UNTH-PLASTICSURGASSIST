@@ -1,23 +1,20 @@
-// Duty reminders — scheduled and on demand.
+// Duty reminders.
 //
-//   GET  ?action=preview&user_id=&kind=       -> one person's message (no send)
+//   GET  ?action=preview&user_id=&kind=       -> one person's message
 //   GET  ?action=queue[&date=][&status=]      -> what a run produced
-//   GET  ?action=status                       -> can this deployment deliver?
-//   POST ?action=run   { kind: weekly|daily } -> build, record, attempt delivery
-//   POST ?action=mark-sent { id }             -> record a hand-sent message
+//   GET  ?action=status                       -> unit date/weekday, delivery mode
+//   POST ?action=run   { kind: weekly|daily } -> build and queue the day's messages
+//   POST ?action=mark-sent { id }             -> record that one was sent
 //
-// The run route is what Vercel Cron hits (see vercel.json). It authorises EITHER
-// an admin token OR the CRON_SECRET bearer Vercel attaches to scheduled calls.
-//
-// Delivery is best-effort by design: with no messaging provider configured the
-// reminders are still built and stored with status 'pending' and a wa.me link,
-// so an admin can send them in one tap from the Notice Board. Nothing here ever
-// reports a message as sent when it was not.
+// Building is one press; SENDING IS MANUAL. A run prepares one message per
+// person holding admitted patients and queues it with a wa.me link — nothing is
+// transmitted from the server. Each message is then read and sent by a person
+// from the Notice Board, and marked done. A reminder shown as "sent" always was.
 import { query } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
 import { buildRun, buildMessage, patientsFor, loadAdmittedAssignments, loadCareStaff, unitToday, unitWeekday }
   from './_lib/dutyReminder.js';
-import { sendWhatsApp, whatsAppLink, canDeliver, activeProvider } from './_lib/messaging.js';
+import { whatsAppLink } from './_lib/messaging.js';
 
 const ADMIN_ROLES = ['admin', 'super_admin', 'consultant', 'senior_registrar'];
 const KINDS = ['weekly', 'daily'];
@@ -48,22 +45,14 @@ async function ensureTable() {
   `);
   for (const s of [
     `CREATE INDEX IF NOT EXISTS idx_duty_reminders_date ON duty_reminders (reminder_date DESC)`,
-    // One reminder per person per kind per day: a cron that fires twice (retry,
-    // redeploy) must not message the same house officer twice.
+    // One reminder per person per kind per day, so pressing Run twice cannot
+    // produce two messages for the same house officer.
     `CREATE UNIQUE INDEX IF NOT EXISTS uq_duty_reminders_day
        ON duty_reminders (reminder_date, kind, user_id)`,
   ]) {
     try { await query(s); } catch (e) { console.warn('duty_reminders index skipped:', e.message); }
   }
   tableReady = true;
-}
-
-/** Vercel Cron sends `Authorization: Bearer $CRON_SECRET` when that env is set. */
-function isCronCall(req) {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return false;
-  const header = req.headers.authorization || '';
-  return header === `Bearer ${secret}`;
 }
 
 export default async function handler(req, res) {
@@ -73,27 +62,16 @@ export default async function handler(req, res) {
   const params = url.searchParams;
   const action = params.get('action') || (req.body && req.body.action) || 'queue';
 
-  const cron = isCronCall(req);
-  const auth = cron ? { authenticated: true, user: { id: 'cron', role: 'admin', fullName: 'Scheduled run' } }
-                    : authenticateRequest(req);
+  const auth = authenticateRequest(req);
   if (!auth.authenticated) return res.status(auth.status || 401).json({ error: auth.error });
-  const isAdmin = cron || ADMIN_ROLES.includes(auth.user.role);
+  const isAdmin = ADMIN_ROLES.includes(auth.user.role);
 
   try {
     await ensureTable();
     if (req.method === 'GET') {
-      // Vercel Cron invokes scheduled paths with GET, so the run action has to
-      // be reachable that way. Gated on the cron secret or a senior-staff token
-      // — never open, precisely because it has side effects.
-      if (action === 'run') {
-        if (!isAdmin) return res.status(403).json({ error: 'Only senior staff can run duty reminders' });
-        return await run({ kind: params.get('kind') }, auth.user, cron, res);
-      }
       if (action === 'status') {
         return res.status(200).json({
-          provider: activeProvider(),
-          canDeliver: canDeliver(),
-          cronConfigured: !!process.env.CRON_SECRET,
+          delivery: 'manual',
           unitDate: unitToday(),
           unitWeekday: unitWeekday(),
         });
@@ -103,7 +81,7 @@ export default async function handler(req, res) {
     }
     if (req.method === 'POST') {
       if (!isAdmin) return res.status(403).json({ error: 'Only senior staff can run duty reminders' });
-      if (action === 'run') return await run(req.body, auth.user, cron, res);
+      if (action === 'run') return await run(req.body, auth.user, res);
       if (action === 'mark-sent') return await markSent(req.body, auth.user, res);
       return res.status(400).json({ error: 'Unknown action' });
     }
@@ -133,7 +111,6 @@ async function preview(params, res) {
     patients,
     message: buildMessage({ staff: person, patients, kind }),
     whatsappLink: whatsAppLink(person.phone, buildMessage({ staff: person, patients, kind })),
-    canDeliver: canDeliver(),
   });
 }
 
@@ -150,59 +127,42 @@ async function listQueue(params, res) {
   return res.status(200).json({
     date: (params.get('date') || unitToday()).slice(0, 10),
     reminders: r.rows,
-    canDeliver: canDeliver(),
-    provider: activeProvider(),
   });
 }
 
-async function run(body, user, isCron, res) {
+async function run(body, user, res) {
   const b = parseBody(body);
   const kind = KINDS.includes(b.kind) ? b.kind : 'weekly';
   const today = unitToday();
-  const weekday = unitWeekday();
-
-  // The cron fires daily; the weekly reminder only belongs on Monday and Friday.
-  // A human pressing "Run now" is trusted to mean it.
-  if (isCron && kind === 'weekly' && ![1, 5].includes(weekday)) {
-    return res.status(200).json({
-      skipped: true, reason: 'Weekly reminders go out on Monday and Friday only', weekday, date: today,
-    });
-  }
 
   const built = await buildRun({ kind });
-  const results = { date: today, kind, built: built.length, created: 0, delivered: 0, pending: 0, failed: 0, duplicate: 0 };
+  const results = { date: today, kind, built: built.length, created: 0, pending: 0, noPhone: 0, duplicate: 0 };
 
   for (const item of built) {
-    const send = await sendWhatsApp({ toPhone: item.staff.phone, message: item.message });
-    const status = send.delivered ? 'sent' : (send.error ? 'failed' : 'pending');
+    // Prepared, never transmitted. The link is what a person taps to send.
+    const link = whatsAppLink(item.staff.phone, item.message);
+    if (!link) results.noPhone++;
 
     const inserted = await query(
       `INSERT INTO duty_reminders
          (reminder_date, kind, user_id, user_name, user_role, phone, patient_count,
-          message, status, provider, provider_id, error_message, whatsapp_link, sent_at, sent_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+          message, status, error_message, whatsapp_link)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pending',$9,$10)
        ON CONFLICT (reminder_date, kind, user_id) DO NOTHING
        RETURNING id`,
       [today, kind, String(item.staff.id), item.staff.full_name, item.staff.role, item.staff.phone || null,
-       item.patientCount, item.message, status, send.provider || null, send.providerId || null,
-       send.error || null, send.link || null,
-       send.delivered ? new Date() : null, send.delivered ? (isCron ? 'cron' : String(user.id)) : null]
+       item.patientCount, item.message, link ? null : 'No phone number on file', link]
     );
 
     if (inserted.rows.length === 0) { results.duplicate++; continue; }
     results.created++;
-    if (status === 'sent') results.delivered++;
-    else if (status === 'failed') results.failed++;
-    else results.pending++;
+    results.pending++;
   }
 
   return res.status(200).json({
     ...results,
-    canDeliver: canDeliver(),
-    provider: activeProvider(),
-    note: canDeliver()
-      ? undefined
-      : 'No messaging provider is configured, so nothing was delivered. The reminders are queued with WhatsApp links for sending by hand.',
+    delivery: 'manual',
+    note: 'Reminders are queued with WhatsApp links. Nothing has been sent — press Send on each one.',
   });
 }
 

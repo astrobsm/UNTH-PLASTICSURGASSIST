@@ -122,12 +122,10 @@ const StaffDutyReminder: React.FC<{ onPostToBoard?: (title: string, content: str
       {status && (
         <p className="text-[11px] text-gray-500 flex items-start gap-1 mb-3">
           <CalendarClock className="w-3 h-3 mt-0.5 flex-shrink-0" />
-          {status.cronConfigured
-            ? <span>Scheduled: Mon &amp; Fri 07:00 for reviews, daily 07:30 for house officers.</span>
-            : <span>Scheduled sending is not switched on yet — reminders are built here on demand.</span>}
-          {!status.canDeliver && (
-            <span className="text-amber-700"> Messages are not delivered automatically; send them with the WhatsApp button.</span>
-          )}
+          <span>
+            Reminders are sent by hand: build them here or in the run below, check the message,
+            then send. Nothing goes out on its own.
+          </span>
         </p>
       )}
 

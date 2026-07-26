@@ -10,28 +10,7 @@
       "memory": 1024
     }
   },
-  "crons": [
-    {
-      "comment": "Monday & Friday review reminder. 06:00 UTC = 07:00 West Africa Time, before the ward round. The handler re-checks the weekday in the unit's timezone and skips any other day.",
-      "path": "/api/cron/duty-reminders-weekly",
-      "schedule": "0 6 * * 1,5"
-    },
-    {
-      "comment": "Daily house-officer status-update reminder, 06:30 UTC = 07:30 WAT.",
-      "path": "/api/cron/duty-reminders-daily",
-      "schedule": "30 6 * * *"
-    }
-  ],
   "rewrites": [
-    {
-      "comment": "Cron entry points. Separate paths rather than query strings on the cron itself, so a scheduled call can never lose its action and quietly do nothing.",
-      "source": "/api/cron/duty-reminders-weekly",
-      "destination": "/api/duty-reminders?action=run&kind=weekly"
-    },
-    {
-      "source": "/api/cron/duty-reminders-daily",
-      "destination": "/api/duty-reminders?action=run&kind=daily"
-    },
     {
       "source": "/api/consults/:path*",
       "destination": "/api/consults"

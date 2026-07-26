@@ -3,21 +3,19 @@ import {
   ListChecks, Send, Check, Loader2, AlertTriangle, Play, RefreshCw, Clock,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { dutyReminderService, QueuedReminder, ReminderKind, ReminderStatus } from '../services/dutyReminderService';
+import { dutyReminderService, QueuedReminder, ReminderKind } from '../services/dutyReminderService';
 
 /**
  * The day's reminder run.
  *
- * A scheduled run builds one message per person with admitted patients. Where a
- * messaging provider is configured they are delivered outright; where none is —
- * which is the case until credentials are set — they queue here with a WhatsApp
- * link so someone can send them in a few taps and mark them done. The queue is
- * deliberately explicit about which of the two happened: a reminder shown as
- * "sent" always was.
+ * Building is one press: it prepares a message for every person holding admitted
+ * patients, which is the tedious part. SENDING STAYS MANUAL — each one queues
+ * here with a WhatsApp link so it is read and sent by a person. The queue is
+ * deliberately explicit about what happened to each: a reminder shown as "sent"
+ * always was.
  */
 const DutyReminderQueue: React.FC = () => {
   const [reminders, setReminders] = useState<QueuedReminder[]>([]);
-  const [status, setStatus] = useState<ReminderStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState<ReminderKind | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -38,31 +36,22 @@ const DutyReminderQueue: React.FC = () => {
     }
   }, []);
 
-  useEffect(() => {
-    load();
-    dutyReminderService.status().then(setStatus).catch(() => {});
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
 
   const runNow = async (kind: ReminderKind) => {
     const label = kind === 'weekly' ? 'Monday/Friday review' : 'daily house-officer';
     if (!window.confirm(
       `Build the ${label} reminders for everyone with admitted patients?\n\n` +
-      (status?.canDeliver
-        ? 'They will be delivered on WhatsApp straight away.'
-        : 'No messaging provider is configured, so they will queue here with WhatsApp links for you to send.')
+      'They will be listed here with WhatsApp links — nothing is sent until you press Send on each one.'
     )) return;
     setRunning(kind);
     try {
       const r = await dutyReminderService.run(kind);
-      if (r?.skipped) toast(r.reason || 'Nothing due today');
-      else {
-        toast.success(
-          `${r.created} reminder(s) built` +
-          (r.delivered ? `, ${r.delivered} delivered` : '') +
-          (r.pending ? `, ${r.pending} waiting to be sent` : '') +
-          (r.duplicate ? ` (${r.duplicate} already existed today)` : '')
-        );
-      }
+      toast.success(
+        `${r.created} reminder(s) built` +
+        (r.duplicate ? ` (${r.duplicate} already built today)` : '') +
+        (r.noPhone ? ` — ${r.noPhone} have no phone number` : '')
+      );
       await load(date);
     } catch (e: any) {
       toast.error(e?.message?.replace(/^\[HTTP \d+\]\s*/, '') || 'Could not run the reminders');
@@ -82,7 +71,7 @@ const DutyReminderQueue: React.FC = () => {
 
   const pending = reminders.filter(r => r.status === 'pending');
   const sent = reminders.filter(r => r.status === 'sent');
-  const failed = reminders.filter(r => r.status === 'failed');
+  const noPhone = reminders.filter(r => !r.phone);
 
   return (
     <div className="bg-white rounded-xl shadow-sm border p-4 mb-4">
@@ -93,9 +82,7 @@ const DutyReminderQueue: React.FC = () => {
             {date && <span className="text-xs font-normal text-gray-400">{date}</span>}
           </h3>
           <p className="text-xs text-gray-500 mt-0.5">
-            {status?.canDeliver
-              ? `Delivered automatically via ${status.provider}.`
-              : 'Built here and sent by hand — no messaging provider is configured yet.'}
+            Build the day's reminders in one press, then send each on WhatsApp and mark it done.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -139,7 +126,7 @@ const DutyReminderQueue: React.FC = () => {
         <div className="py-6 text-center"><Loader2 className="w-5 h-5 animate-spin mx-auto text-green-600" /></div>
       ) : reminders.length === 0 ? (
         <p className="text-sm text-gray-500 text-center py-5">
-          Nothing built for this day yet. Use the buttons above, or wait for the scheduled run.
+          Nothing built for this day yet — use the buttons above.
         </p>
       ) : (
         <>
@@ -150,8 +137,8 @@ const DutyReminderQueue: React.FC = () => {
             {sent.length > 0 && (
               <span className="px-2 py-0.5 rounded-full bg-green-100 text-green-800 font-medium">{sent.length} sent</span>
             )}
-            {failed.length > 0 && (
-              <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-medium">{failed.length} failed</span>
+            {noPhone.length > 0 && (
+              <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-medium">{noPhone.length} without a phone number</span>
             )}
           </div>
 
@@ -160,8 +147,7 @@ const DutyReminderQueue: React.FC = () => {
               <div
                 key={r.id}
                 className={`border rounded-lg px-3 py-2 flex flex-wrap items-center gap-2 ${
-                  r.status === 'sent' ? 'border-green-200 bg-green-50/40'
-                    : r.status === 'failed' ? 'border-red-200 bg-red-50/40' : 'border-gray-200'
+                  r.status === 'sent' ? 'border-green-200 bg-green-50/40' : 'border-gray-200'
                 }`}
               >
                 <div className="min-w-0 flex-1">

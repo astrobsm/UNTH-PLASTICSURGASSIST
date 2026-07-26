@@ -1,8 +1,10 @@
 import { apiClient } from './apiClient';
 
 /**
- * Duty reminders. The message is composed on the SERVER so a preview in the app
- * and the message a scheduled run sends on Monday morning are byte-identical.
+ * Duty reminders. The message is composed on the SERVER so the preview in the
+ * app and the message a run queues are byte-identical. Sending is manual: the
+ * server never transmits anything, it prepares WhatsApp links for a person to
+ * send.
  */
 
 export type ReminderKind = 'weekly' | 'daily';
@@ -23,7 +25,6 @@ export interface ReminderPreview {
   patients: ReminderPatient[];
   message: string;
   whatsappLink: string | null;
-  canDeliver: boolean;
 }
 
 export interface QueuedReminder {
@@ -44,9 +45,8 @@ export interface QueuedReminder {
 }
 
 export interface ReminderStatus {
-  provider: string;
-  canDeliver: boolean;
-  cronConfigured: boolean;
+  /** Always 'manual' — nothing is sent without someone pressing send. */
+  delivery: 'manual';
   unitDate: string;
   unitWeekday: number;
 }
@@ -58,19 +58,19 @@ class DutyReminderService {
     return await apiClient.get(`/duty-reminders?${qs.toString()}`, { freshRead: true } as any);
   }
 
-  /** Whether this deployment can actually deliver, and when the unit thinks it is. */
+  /** Delivery mode and the unit's current date/weekday. */
   async status(): Promise<ReminderStatus> {
     return await apiClient.get('/duty-reminders?action=status', { freshRead: true } as any);
   }
 
-  async queue(date?: string, kind?: ReminderKind): Promise<{ date: string; reminders: QueuedReminder[]; canDeliver: boolean; provider: string }> {
+  async queue(date?: string, kind?: ReminderKind): Promise<{ date: string; reminders: QueuedReminder[] }> {
     const qs = new URLSearchParams({ action: 'queue' });
     if (date) qs.set('date', date);
     if (kind) qs.set('kind', kind);
     return await apiClient.get(`/duty-reminders?${qs.toString()}`, { freshRead: true } as any);
   }
 
-  /** Build (and deliver, if a provider is configured) this run's reminders. */
+  /** Build and queue this run's reminders. Sends nothing. */
   async run(kind: ReminderKind): Promise<any> {
     return await apiClient.post('/duty-reminders?action=run', { kind });
   }
