@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { unthPatientService, PatientRegistration, Ward } from '../services/unthPatientService';
 import { riskAssessmentService } from '../services/riskAssessmentService';
+import { apiClient } from '../services/apiClient';
 import { useAuthStore } from '../store/authStore';
 import { validateHospitalNumber, validatePhoneNumber, validateAge } from '../utils/validation';
 import {
@@ -2375,27 +2376,24 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
         try {
           const wardObj = availableWards.find(w => w.id === formData.ward_id);
           const wardLabel = wardObj?.name || formData.ward_id || 'Ward';
-          const admissionRes = await fetch('/api/admissions', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-            },
-            body: JSON.stringify({
-              patientId,
-              admissionDate: new Date().toISOString(),
-              ward: wardLabel,
-              bedNumber: formData.bed_number || null,
-              routeOfAdmission: formData.admission_type || 'clinic',
-              patientName: `${formData.first_name || ''} ${formData.last_name || ''}`.trim(),
-              hospitalNumber: formData.hospital_number || null,
-              gender: formData.sex === 'male' ? 'Male' : (formData.sex === 'female' ? 'Female' : null),
-              status: 'active',
-              notes: 'Auto-admission created from patient registration form.'
-            })
+          // Via apiClient, not raw fetch: offline it queues the admission for
+          // replay instead of throwing it away. A patient registered on the ward
+          // with no signal used to arrive at the server with no admission
+          // attached, so they never appeared on the active-admissions list.
+          const admissionRes: any = await apiClient.post('/admissions', {
+            patientId,
+            admissionDate: new Date().toISOString(),
+            ward: wardLabel,
+            bedNumber: formData.bed_number || null,
+            routeOfAdmission: formData.admission_type || 'clinic',
+            patientName: `${formData.first_name || ''} ${formData.last_name || ''}`.trim(),
+            hospitalNumber: formData.hospital_number || null,
+            gender: formData.sex === 'male' ? 'Male' : (formData.sex === 'female' ? 'Female' : null),
+            status: 'active',
+            notes: 'Auto-admission created from patient registration form.'
           });
-          if (!admissionRes.ok) {
-            console.warn('Auto-admission API returned non-OK:', admissionRes.status);
+          if (admissionRes?._queued) {
+            console.log('Auto-admission queued offline — will sync on reconnect');
           }
         } catch (admitErr) {
           console.warn('Auto-admission failed (patient still registered):', admitErr);

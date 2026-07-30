@@ -38,3 +38,18 @@ yarn-error.log*
 db-env.mjs
 create-superadmin.mjs
 reset-password.mjs
+
+# Offline assets copied out of node_modules by scripts/prepare-offline-assets.mjs.
+# Regenerated on every build and reproducible with no network, so they stay out
+# of VCS. public/tesseract/eng.traineddata.gz is the exception — it is the only
+# file that must be downloaded, so it IS committed to keep builds offline-safe.
+public/fonts/
+public/tesseract/worker.min.js
+public/tesseract/tesseract-core-*.wasm.js
+public/tesseract/manifest.json
+
+# Playwright (offline e2e suite)
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/

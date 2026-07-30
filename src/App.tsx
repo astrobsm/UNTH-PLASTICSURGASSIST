@@ -31,6 +31,17 @@ function lazyWithRetry(importFn: () => Promise<any>) {
         return mod;
       })
       .catch((error: any) => {
+        // NEVER purge caches while offline. The recovery below assumes the
+        // network can supply fresh assets; offline it deletes the precache that
+        // IS the app — including every chunk that was working a moment ago —
+        // and the reload then lands on a blank page with no way back until the
+        // device finds a connection. Offline, surface the error so the boundary
+        // can offer a retry with the caches intact.
+        if (!navigator.onLine) {
+          console.warn('Chunk load failed while offline — keeping caches:', error);
+          throw error;
+        }
+
         const hasReloaded = sessionStorage.getItem('chunk_reload');
         if (!hasReloaded) {
           sessionStorage.setItem('chunk_reload', '1');
@@ -169,6 +180,26 @@ function App() {
           console.error('Failed to sync local changes:', err);
         });
       }
+
+      // ── Warm the offline cache for EVERY module, not just visited pages ──
+      // Without this, a module the clinician had never opened while online had
+      // nothing cached, so it rendered empty on the ward. Runs in the
+      // background, throttled to a few hours, and also on reconnect: leaving
+      // the hospital and coming back is the moment a stale device needs
+      // refreshing. Deferred so it never competes with the first paint.
+      const reWarm = () => {
+        import('./services/cacheWarmer').then(({ autoWarmCache }) => {
+          autoWarmCache().catch(() => { /* opportunistic */ });
+        });
+      };
+      const warmTimer = setTimeout(reWarm, 5000);
+      window.addEventListener('online', reWarm);
+
+      return () => {
+        clearTimeout(warmTimer);
+        window.removeEventListener('online', reWarm);
+        stopBackgroundTracking();
+      };
     }
     return () => {
       // Stop geolocation tracking when user logs out

@@ -33,6 +33,13 @@ const API_CACHE = `api-cache-${CACHE_VERSION}`;
 const IMAGE_CACHE = `images-cache-${CACHE_VERSION}`;
 const FONT_CACHE = `fonts-cache-${CACHE_VERSION}`;
 const STATIC_CACHE = `static-cache-${CACHE_VERSION}`;
+// Unversioned on purpose: the OCR engine files are content-immutable and cost
+// ~4 MB to fetch. Tying them to CACHE_VERSION would throw them away — and leave
+// OCR broken for any device that deploys a new build while off-network — on
+// every release.
+// (mirrors OCR_CACHE_NAME in src/config/ocrAssets.ts, which the page-side warmer
+// writes into — the two must stay identical)
+const OCR_CACHE = 'ocr-engine-cache';
 
 // ─── Enable Navigation Preload (speeds up NetworkFirst) ─────
 // This makes the browser start a network request in parallel with the SW boot,
@@ -55,7 +62,7 @@ self.addEventListener('activate', (event) => {
       // Clean old version caches (those with a different CACHE_VERSION)
       const cacheNames = await caches.keys();
       const currentCacheSuffixes = [
-        API_CACHE, IMAGE_CACHE, FONT_CACHE, STATIC_CACHE,
+        API_CACHE, IMAGE_CACHE, FONT_CACHE, STATIC_CACHE, OCR_CACHE,
         `app-shell-${CACHE_VERSION}`,
         `default-cache-${CACHE_VERSION}`,
       ];
@@ -64,8 +71,6 @@ self.addEventListener('activate', (event) => {
           .filter(name => {
             // Keep workbox precache
             if (name.startsWith('workbox-precache')) return false;
-            // Keep google fonts (no version suffix)
-            if (name.startsWith('google-fonts')) return false;
             // Keep current version caches
             if (currentCacheSuffixes.includes(name)) return false;
             // Delete everything else (old versioned caches)
@@ -219,6 +224,10 @@ registerRoute(
 // Endpoints that need real-time responses (not suitable for background sync)
 const REALTIME_POST_PREFIXES = [
   '/api/ai/',        // OCR / AI processing — needs immediate structured data
+  '/api/ocr/',       // Cloud Vision scan / wound measure. Never queue these: the
+                     // body is a multi-megabyte base64 image and a scan replayed
+                     // hours later has no caller left to receive the text. Failing
+                     // fast hands over to the local Tesseract engine instead.
   '/api/auth',       // Login / register — needs immediate auth response (no trailing slash: /api/auth is the login endpoint)
   '/api/students/register', // Student self-registration — needs immediate response
   '/api/students/login',    // Student login — needs immediate auth response
@@ -299,6 +308,23 @@ mutationMethods.forEach(method => {
     method
   );
 });
+
+// ─── OCR engine (/tesseract/*) → CacheFirst, never expires ──
+// The wasm core + traineddata are large, immutable and excluded from the
+// precache manifest (see injectManifest.globIgnores). They must be matched
+// BEFORE the generic script route below, which would otherwise file them under
+// the 30-day/100-entry static cache and let the LRU evict the OCR engine —
+// silently turning offline scanning back off weeks after install.
+registerRoute(
+  ({ url }) => url.origin === self.location.origin && url.pathname.startsWith('/tesseract/'),
+  new CacheFirst({
+    cacheName: OCR_CACHE,
+    plugins: [
+      new CacheableResponsePlugin({ statuses: [0, 200] }),
+      new ExpirationPlugin({ maxEntries: 12, maxAgeSeconds: 365 * 24 * 60 * 60 }),
+    ],
+  })
+);
 
 // ─── Static assets (JS/CSS) → StaleWhileRevalidate ─────────
 // Exclude external CDN scripts (tesseract.js workers, etc.) from SW caching
@@ -388,22 +414,10 @@ setCatchHandler(async ({ request }) => {
   return new Response('', { status: 503, statusText: 'Offline' });
 });
 
-// ─── Google Fonts → StaleWhileRevalidate / CacheFirst ───────
-registerRoute(
-  ({ url }) => url.origin === 'https://fonts.googleapis.com',
-  new StaleWhileRevalidate({ cacheName: 'google-fonts-stylesheets' })
-);
-
-registerRoute(
-  ({ url }) => url.origin === 'https://fonts.gstatic.com',
-  new CacheFirst({
-    cacheName: 'google-fonts-webfonts',
-    plugins: [
-      new CacheableResponsePlugin({ statuses: [0, 200] }),
-      new ExpirationPlugin({ maxEntries: 30, maxAgeSeconds: 365 * 24 * 60 * 60 }),
-    ],
-  })
-);
+// NOTE: the Google Fonts routes that used to live here are gone. Inter is now
+// self-hosted under /fonts/ (scripts/prepare-offline-assets.mjs) and lands in
+// the precache manifest, so the app no longer touches fonts.googleapis.com at
+// all. Their old caches are dropped by the activate handler above.
 
 // ─── Push Notifications ─────────────────────────────────────
 self.addEventListener('push', (event) => {

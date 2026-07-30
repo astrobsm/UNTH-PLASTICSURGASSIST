@@ -29,6 +29,7 @@ import {
   Target
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { apiClient } from '../../services/apiClient';
 import { rotationConfigService, RotationConfig, AssignedResponsibility, TraineeAnalytics } from '../../services/rotationConfigService';
 import { TrainingLevel } from '../../services/medicalTrainingService';
 
@@ -86,24 +87,22 @@ const RotationManagement: React.FC = () => {
       setConfigs(cfgs);
       setAnalytics(allAnalytics);
       
-      // Load responsibilities
+      // Load responsibilities. Via apiClient so the answer comes from the
+      // IndexedDB cache when offline — the raw fetch this replaces was answered
+      // by the service worker's empty offline payload, which is a 200, so the
+      // list rendered blank instead of falling through to the local copy.
+      let loaded: any[] | null = null;
       try {
-        const token = localStorage.getItem('auth_token');
-        if (token) {
-          const resp = await fetch('/api/rotation-config?action=all-responsibilities', {
-            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
-          });
-          if (resp.ok) {
-            const data = await resp.json();
-            setResponsibilities(data.responsibilities || []);
-          }
+        const data: any = await apiClient.get('/rotation-config?action=all-responsibilities');
+        if (Array.isArray(data?.responsibilities) && data.responsibilities.length) {
+          loaded = data.responsibilities;
         }
       } catch { /* Use local */ }
-      
-      // Fallback: load local responsibilities
-      if (responsibilities.length === 0) {
-        setResponsibilities(rotationConfigService.getResponsibilities());
-      }
+
+      // Fallback: the bundled defaults. Checked against the value we just
+      // fetched, not `responsibilities` — that state read is stale inside this
+      // closure and so the fallback fired even on a successful load.
+      setResponsibilities(loaded ?? rotationConfigService.getResponsibilities());
     } catch (error) {
       console.error('Failed to load rotation data:', error);
       toast.error('Failed to load rotation data');

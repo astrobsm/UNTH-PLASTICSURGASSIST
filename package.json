@@ -10,6 +10,8 @@
     "dev": "vite",
     "dev:api": "node local-server.js",
     "dev:full": "concurrently \"npm run dev:api\" \"npm run dev\"",
+    "offline-assets": "node scripts/prepare-offline-assets.mjs",
+    "prebuild": "npm run offline-assets",
     "build": "vite build",
     "build:strict": "tsc && vite build",
     "preview": "vite preview",
@@ -20,7 +22,10 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "e2e": "playwright test",
-    "vercel-build": "vite build"
+    "e2e:build": "npm run build && playwright test",
+    "e2e:ui": "playwright test --ui",
+    "e2e:install": "playwright install chromium",
+    "vercel-build": "npm run offline-assets && vite build"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.8.4",

@@ -1,4 +1,7 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+/* Inter is self-hosted from /fonts/inter.css (linked in index.html and
+   precached by the service worker). It used to be an @import from
+   fonts.googleapis.com, which blocked first paint on every cold start and
+   could never resolve on a device that had been offline since install. */
 
 @tailwind base;
 @tailwind components;

@@ -1916,7 +1916,7 @@ export default function Dashboard() {
                 {cacheProgress?.status === 'warming'
                   ? `Caching: ${cacheProgress.currentModule} (${cacheProgress.current}/${cacheProgress.total})`
                   : cacheProgress?.status === 'done'
-                    ? `Offline ready! ${cacheProgress.cached} modules cached`
+                    ? `Offline ready! ${cacheProgress.cached} items cached`
                     : !navigator.onLine
                       ? 'Go online to cache data'
                       : 'Download for Offline Use'}
@@ -1942,6 +1942,7 @@ export default function Dashboard() {
             {cacheProgress?.status === 'done' && (
               <p className="text-xs text-gray-500 mt-1 text-center">
                 ✓ {cacheProgress.cached} cached
+                {!!cacheProgress.patientsWarmed && `, ${cacheProgress.patientsWarmed} patient record${cacheProgress.patientsWarmed !== 1 ? 's' : ''}`}
                 {cacheProgress.skipped > 0 && `, ${cacheProgress.skipped} unavailable`}
                 {cacheProgress.errors.length > 0 && `, ${cacheProgress.errors.length} error${cacheProgress.errors.length !== 1 ? 's' : ''}`}
               </p>

@@ -1,5 +1,75 @@
 # Plastic Surgeon Assistant PWA - Offline Functionality Implementation
 
+## Zero external dependencies (build step — read this first)
+
+A production build must have **no runtime CDN calls**, or "offline" only works
+for the pages the clinician happened to visit while online.
+
+`npm run build` runs `scripts/prepare-offline-assets.mjs` first (via `prebuild`;
+`vercel-build` chains it explicitly). It materialises into `public/`:
+
+| Asset | Was fetched from | Now |
+|---|---|---|
+| Inter webfont | `fonts.googleapis.com` (`@import` in `src/index.css`) | `public/fonts/` + `<link>` in `index.html` |
+| Tesseract worker + wasm core | `cdn.jsdelivr.net` at first scan | `public/tesseract/` |
+| `eng.traineddata` | `tessdata.projectnaptha.com` at first scan | `public/tesseract/` |
+
+The script is idempotent and only the traineddata needs network — that one file
+is committed, everything else is copied out of `node_modules`, so a build with
+no connectivity still produces a fully offline app. **If you add a library that
+loads anything at runtime, add it here.**
+
+Caching split:
+
+* **Precache** (`vite.config.ts` → `injectManifest`) — the app shell, all ~128
+  lazy route chunks, CSS, icons and fonts. Every module is therefore reachable
+  offline whether or not it has ever been opened.
+* **`ocr-engine-cache`** — the OCR engine (~6 MB) is deliberately excluded from
+  the precache (all-or-nothing, would stall first install) and warmed in the
+  background by `cacheWarmer.warmOfflineAssets()`. Its cache name is unversioned
+  so releases don't discard it. See the `/tesseract/` route in `src/sw.ts`.
+* **`api_cache` (IndexedDB) + `api-cache-*`** — clinical data, warmed across
+  every module by `cacheWarmer.autoWarmCache()` on login and on reconnect
+  (throttled to 6 h), including per-patient detail for admitted patients.
+
+Note that the service worker is **production-only** — `npm run dev` deliberately
+unregisters it so it can't fight Vite's HMR. Test offline behaviour with
+`npm run build && npm run preview`, then DevTools → Network → Offline.
+
+## Automated offline tests
+
+```bash
+npm run e2e:install     # once per machine — downloads Chromium
+npm run e2e:build       # build, then run the suite
+npm run e2e             # run against an existing dist/ (much faster)
+npm run e2e:ui          # Playwright UI mode for debugging
+```
+
+`e2e/offline.spec.ts` boots the built app, installs the service worker, warms the
+OCR pack, then **cuts the network via `context.setOffline(true)`** and asserts:
+
+1. **Shell, chunks and assets** — the login screen renders from cache, *every*
+   code-split chunk in the precache fetches successfully (not just the ones this
+   page imported — that is what proves unvisited modules work), the self-hosted
+   font and OCR engine are served, and **no third-party origin was contacted at
+   any point during the run**.
+2. **OCR** — drives the real `ocrService` singleton out of its built chunk to
+   read text from a canvas-generated image. Guards the whole local Tesseract
+   path: worker, wasm core selection, and traineddata all resolving from cache.
+3. **Every module route** — walks all routes with soft assertions, so one broken
+   module reports alongside the rest instead of masking every route after it.
+
+The route list is **parsed out of `src/App.tsx`** rather than hard-coded, so a
+module added later is covered without anyone remembering to update the test.
+Routes that can't be asserted this way are listed with their reason in
+`ROUTE_EXCLUSIONS` (`e2e/helpers.ts`).
+
+Runs serially on purpose: each test installs a service worker and writes
+multi-megabyte wasm into the Cache API, which parallel workers only thrash.
+Expect roughly 6-8 minutes. Missing a build fails immediately with instructions
+rather than a webServer timeout.
+
+
 ## 🎉 Successfully Implemented Features
 
 ### ✅ **IndexedDB Offline Queue System**

@@ -9,6 +9,11 @@
 
 import type { Worker } from 'tesseract.js';
 import { apiClient } from './apiClient';
+import {
+  TESSERACT_LANG_PATH,
+  TESSERACT_WORKER_PATH,
+  pickTesseractCore,
+} from '../config/ocrAssets';
 import { validateVitals, validateLabValue, assessImageQuality, type ValidatedVitalReading, type VitalAlert } from './medicalValidation';
 import { extractClinicalNotes, type ClinicalNotesExtractionResult } from './clinicalNotesExtraction';
 
@@ -141,6 +146,11 @@ class OCRService {
       const { createWorker, OEM, PSM } = await import('tesseract.js');
 
       this.worker = await createWorker('eng', OEM.LSTM_ONLY, {
+        // All three point at same-origin files shipped with the build, so a
+        // scan started with no connectivity resolves entirely from cache.
+        workerPath: TESSERACT_WORKER_PATH,
+        corePath: pickTesseractCore(),
+        langPath: TESSERACT_LANG_PATH,
         logger: (m: any) => {
           if (onProgress && m.progress !== undefined) {
             onProgress({

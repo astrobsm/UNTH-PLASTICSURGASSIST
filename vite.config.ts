@@ -96,6 +96,12 @@ export default defineConfig(({ mode }) => ({
       // InjectManifest Workbox config
       injectManifest: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2,json}'],
+        // The OCR engine (~5.7 MB of wasm cores + traineddata) is deliberately
+        // NOT precached: precaching is all-or-nothing, so bundling it would push
+        // several minutes onto the very first install before the app becomes
+        // usable. It is warmed separately, in the background, by
+        // cacheWarmer.warmOfflineAssets() — see the /tesseract/ route in sw.ts.
+        globIgnores: ['tesseract/**'],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
       },
 
