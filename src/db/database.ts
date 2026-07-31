@@ -241,6 +241,8 @@ export class PlasticSurgeonDB extends Dexie {
   vital_signs!: Table<any>; // For vital signs records with server persistence
   wounds!: Table<any>; // WoundProgress Monitor: first-class longitudinal wound entity
   wound_assessments!: Table<any>; // WoundProgress Monitor: serial assessment timeline
+  tumor_board_cases!: Table<any>; // Tumor Board: oncology case identity
+  tumor_board_assessments!: Table<any>; // Tumor Board: append-only staging timeline
 
   constructor() {
     super('PlasticSurgeonDB');
@@ -1324,6 +1326,15 @@ export class PlasticSurgeonDB extends Dexie {
     this.version(37).stores({
       wounds: '++id, serverId, patient_id, status, healing_status, updated_at, synced',
       wound_assessments: '++id, serverId, wound_id, patient_id, assessed_at, synced'
+    });
+
+    // Version 38: Tumor Board — oncology case identity (tumor_board_cases) and
+    // its APPEND-ONLY staging timeline (tumor_board_assessments). `version` is
+    // indexed because the current stage is always the highest version for a
+    // case, and the whole history has to stay readable offline.
+    this.version(38).stores({
+      tumor_board_cases: '++id, serverId, patient_id, tumor_family, status, current_stage_group, updated_at, synced',
+      tumor_board_assessments: '++id, serverId, case_id, patient_id, version, basis, assessed_at, synced'
     });
 
     // Add hooks to automatically track changes

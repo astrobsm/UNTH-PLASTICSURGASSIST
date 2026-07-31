@@ -64,6 +64,10 @@
       "destination": "/api/investigation-uploads"
     },
     {
+      "source": "/api/tumor-board/:path*",
+      "destination": "/api/tumor-board"
+    },
+    {
       "source": "/api/:path*",
       "destination": "/api/:path*"
     },

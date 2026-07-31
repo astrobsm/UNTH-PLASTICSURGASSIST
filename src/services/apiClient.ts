@@ -66,6 +66,7 @@ const ENDPOINT_TO_TABLE: Record<string, string> = {
   'mdt-contact-logs': 'mdt_contact_logs',
   'mdt-patient-teams': 'mdt_patient_teams',
   'vital-signs': 'vital_signs',
+  'tumor-board': 'tumor_board_cases',
 };
 
 // Sync state for cross-device sync

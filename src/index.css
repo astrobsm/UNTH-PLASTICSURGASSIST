@@ -51,6 +51,15 @@
 }
 
 @layer components {
+  /* Shared form control. 16px minimum font size is deliberate: anything smaller
+     makes iOS Safari zoom the viewport on focus, which throws the layout off
+     mid-entry on a ward tablet. */
+  .input {
+    @apply w-full rounded-md border border-gray-300 px-3 py-2 text-base;
+    @apply focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500;
+    @apply disabled:bg-gray-100 disabled:cursor-not-allowed;
+  }
+
   .btn {
     @apply inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none;
     @apply min-h-[44px] px-4; /* Touch-friendly min height */
