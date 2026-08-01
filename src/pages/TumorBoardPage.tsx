@@ -34,6 +34,7 @@ import {
   generateBoardSummaryPdf, generateAllReferralLettersPdf,
   generateSurveillancePdf, generateCounsellingPdf,
 } from '../services/tumorBoardPdfService';
+import { GUIDELINE_BASIS, isAwaitingClinicalReview, provenanceLine } from '../services/oncology/guidelineProvenance';
 
 const TUMOR_FAMILIES: { value: TumorFamily; label: string; hint: string }[] = [
   { value: 'cutaneous_melanoma', label: 'Cutaneous melanoma', hint: 'Staged on Breslow thickness and ulceration' },
@@ -131,6 +132,8 @@ export default function TumorBoardPage() {
           </div>
         </div>
 
+        <ClinicalReviewBanner />
+
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
           <StatCard icon={<ClipboardList className="w-5 h-5" />} label="Open cases" value={summary.total} tone="bg-blue-50 text-blue-700" />
           <StatCard icon={<FlaskConical className="w-5 h-5" />} label="Awaiting histology" value={summary.awaitingHistology} tone="bg-amber-50 text-amber-700" />
@@ -220,6 +223,48 @@ export default function TumorBoardPage() {
   }
 
   return null;
+}
+
+/**
+ * Surfaces the module's guideline basis and whether an oncologist here has
+ * signed the treatment logic off. Deliberately NOT dismissible: it states a fact
+ * about the tool's status, and a clinician who dismissed it once should not have
+ * that decision made permanently on their behalf. It disappears on its own when
+ * localReview is set to 'ratified' in guidelineProvenance.ts.
+ */
+function ClinicalReviewBanner() {
+  const [open, setOpen] = useState(false);
+  const pending = isAwaitingClinicalReview();
+
+  return (
+    <div className={`mb-4 rounded-lg border p-3 ${pending ? 'bg-amber-50 border-amber-300' : 'bg-gray-50 border-gray-200'}`}>
+      <div className="flex items-start gap-2">
+        <AlertTriangle className={`w-4 h-4 flex-shrink-0 mt-0.5 ${pending ? 'text-amber-700' : 'text-gray-500'}`} />
+        <div className="flex-1 min-w-0">
+          <p className={`text-sm ${pending ? 'text-amber-900' : 'text-gray-700'}`}>
+            {pending
+              ? 'Decision support only. The treatment logic in this module follows published guidance but has not yet been reviewed by an oncologist at this institution. Every plan requires tumour board ratification.'
+              : provenanceLine()}
+          </p>
+          <button onClick={() => setOpen(o => !o)} className="text-xs underline mt-1 text-gray-600">
+            {open ? 'Hide' : 'Show'} guideline basis
+          </button>
+          {open && (
+            <ul className="mt-2 space-y-1">
+              <li className="text-xs text-gray-700 font-medium">
+                {GUIDELINE_BASIS.stagingSystem} · last checked {GUIDELINE_BASIS.lastCheckedISO}
+              </li>
+              {GUIDELINE_BASIS.sources.map((s, i) => (
+                <li key={i} className="text-xs text-gray-600">
+                  <span className="font-medium">{s.name}</span> — {s.scope}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function StatCard({ icon, label, value, tone }: { icon: React.ReactNode; label: string; value: number; tone: string }) {

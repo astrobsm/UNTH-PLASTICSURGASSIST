@@ -28,6 +28,7 @@ import { SPECIALTY_LABELS } from './oncology/managementPlan';
 import type { ReferralLetter } from './oncology/referralLetters';
 import type { SurveillancePlan } from './oncology/surveillance';
 import type { CounsellingDocument } from './oncology/counselling';
+import { provenanceLine } from './oncology/guidelineProvenance';
 import type { TumorBoardAssessment, TumorBoardCase } from './tumorBoardService';
 
 const clean = (t: string | undefined | null): string => sanitizeTextForPDF(t || '');
@@ -176,6 +177,12 @@ export function generateBoardSummaryPdf(args: {
     y = sectionTitle(doc, 'Caveats', y);
     for (const c of args.plan.caveats) y = writeBlock(doc, `- ${c}`, y);
   }
+
+  // Provenance travels with the document: a board summary printed and filed
+  // outlives this conversation, and whoever reads it later needs to know which
+  // staging edition produced it and whether the logic had been signed off.
+  y = sectionTitle(doc, 'Guideline Basis', y);
+  writeBlock(doc, provenanceLine(), y, { size: 8 });
 
   addFooter(doc);
   doc.save(`tumour-board-summary-${args.case.hospital_number || args.case.patient_id}.pdf`);
