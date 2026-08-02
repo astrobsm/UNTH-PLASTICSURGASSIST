@@ -701,6 +701,22 @@ export default function Admin() {
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
+                  {/* Leave / posting on the card view too. The desktop table is
+                      hidden below the sm breakpoint, so a tablet user would
+                      otherwise never see this action at all. */}
+                  <button
+                    onClick={() => setAbsenceTarget({ id: user.id, name: user.name, role: user.role })}
+                    className={`w-full px-3 py-2.5 text-sm rounded-lg font-bold flex items-center justify-center gap-1 border ${
+                      activeAbsences[String(user.id)]
+                        ? 'bg-amber-100 text-amber-800 border-amber-300'
+                        : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                    }`}
+                  >
+                    <Plane className="h-4 w-4" />
+                    {activeAbsences[String(user.id)]
+                      ? `AWAY TO ${activeAbsences[String(user.id)].end_date}`
+                      : 'LEAVE / POSTING'}
+                  </button>
                   {/* Official sign-out — only meaningful for an account that is
                       still active and never for the admin's own account. */}
                   {user.status === 'active' && user.id !== currentUserId && (
@@ -776,8 +792,8 @@ export default function Admin() {
                         <div className="text-sm text-gray-900 capitalize">{user.role.replace('_', ' ')}</div>
                         <div className="text-sm text-gray-500">{user.department}</div>
                       </td>
-                      <td className="px-2 sm:px-4 py-2 sm:py-4 whitespace-nowrap">
-                        <div className="flex items-center gap-2">
+                      <td className="px-2 sm:px-4 py-2 sm:py-4">
+                        <div className="flex flex-wrap items-center gap-2">
                           <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                             user.status === 'active' 
                               ? 'bg-green-100 text-green-800'
