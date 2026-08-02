@@ -29,6 +29,7 @@ import {
   Phone,
   UserCog,
 } from 'lucide-react';
+import { openPrintWindow } from '../utils/printText';
 import DutyAssignmentPanel from '../components/DutyAssignmentPanel';
 import {
   callDutyService,
@@ -389,7 +390,7 @@ export default function CallDutyPage() {
 
   // ── PDF generation ────────────────────────────────────────────────────
   const generatePDF = () => {
-    const title = `CALL DUTY ROSTER — ${rangeLabel.toUpperCase()}`;
+    const title = `CALL DUTY ROSTER - ${rangeLabel.toUpperCase()}`;
     const deptName = 'PLASTIC SURGERY UNIT';
     const hospitalName = 'UNIVERSITY OF NIGERIA TEACHING HOSPITAL (UNTH), ENUGU';
 
@@ -402,12 +403,12 @@ export default function CallDutyPage() {
           <td style="border:1px solid #333;padding:8px;text-align:center;font-weight:600;">${s.shift_number}</td>
           <td style="border:1px solid #333;padding:8px;">${format(start, 'EEE, dd MMM yyyy')} 08:00</td>
           <td style="border:1px solid #333;padding:8px;">${format(end, 'EEE, dd MMM yyyy')} 08:00</td>
-          <td style="border:1px solid #333;padding:8px;font-weight:500;">${s.consultant_name || 'TBD'}${s.consultant_phone ? '<br/><span style="font-size:11px;color:#555;">📞 ' + s.consultant_phone + '</span>' : ''}</td>
+          <td style="border:1px solid #333;padding:8px;font-weight:500;">${s.consultant_name || 'TBD'}${s.consultant_phone ? '<br/><span style="font-size:11px;color:#555;">Tel: ' + s.consultant_phone + '</span>' : ''}</td>
           <td style="border:1px solid #333;padding:8px;font-weight:500;">${s.senior_registrar_name}</td>
           <td style="border:1px solid #333;padding:8px;font-weight:500;">${s.registrar_name}</td>
-          <td style="border:1px solid #333;padding:8px;font-weight:500;">${s.ho_ward_name || s.house_officer_name}${is2HO ? ' (W+ER)' : ''}${s.ho_ward_phone ? '<br/><span style="font-size:11px;color:#555;">📞 ' + s.ho_ward_phone + '</span>' : ''}</td>
-          <td style="border:1px solid #333;padding:8px;font-weight:500;">${is2HO ? '↑ same' : (s.ho_emergency_name || '—')}${!is2HO && s.ho_emergency_phone ? '<br/><span style="font-size:11px;color:#555;">📞 ' + s.ho_emergency_phone + '</span>' : ''}</td>
-          <td style="border:1px solid #333;padding:8px;color:#888;">${s.ho_off_name || '—'}${s.ho_off_phone ? '<br/><span style="font-size:11px;color:#999;">📞 ' + s.ho_off_phone + '</span>' : ''}</td>
+          <td style="border:1px solid #333;padding:8px;font-weight:500;">${s.ho_ward_name || s.house_officer_name}${is2HO ? ' (W+ER)' : ''}${s.ho_ward_phone ? '<br/><span style="font-size:11px;color:#555;">Tel: ' + s.ho_ward_phone + '</span>' : ''}</td>
+          <td style="border:1px solid #333;padding:8px;font-weight:500;">${is2HO ? 'As Ward (same officer)' : (s.ho_emergency_name || '-')}${!is2HO && s.ho_emergency_phone ? '<br/><span style="font-size:11px;color:#555;">Tel: ' + s.ho_emergency_phone + '</span>' : ''}</td>
+          <td style="border:1px solid #333;padding:8px;color:#888;">${s.ho_off_name || '-'}${s.ho_off_phone ? '<br/><span style="font-size:11px;color:#999;">Tel: ' + s.ho_off_phone + '</span>' : ''}</td>
         </tr>`;
     }).join('');
 
@@ -418,16 +419,17 @@ export default function CallDutyPage() {
           <td style="border:1px solid #333;padding:6px;">${s.name}</td>
           <td style="border:1px solid #333;padding:6px;text-align:center;">${s.role}</td>
           <td style="border:1px solid #333;padding:6px;text-align:center;font-weight:600;">${s.count}</td>
-          <td style="border:1px solid #333;padding:6px;text-align:center;">${s.ward ?? '—'}</td>
-          <td style="border:1px solid #333;padding:6px;text-align:center;">${s.emergency ?? '—'}</td>
-          <td style="border:1px solid #333;padding:6px;text-align:center;">${s.off ?? '—'}</td>
+          <td style="border:1px solid #333;padding:6px;text-align:center;">${s.ward ?? '-'}</td>
+          <td style="border:1px solid #333;padding:6px;text-align:center;">${s.emergency ?? '-'}</td>
+          <td style="border:1px solid #333;padding:6px;text-align:center;">${s.off ?? '-'}</td>
         </tr>`)
       .join('');
 
     const html = `
       <!DOCTYPE html>
-      <html>
+      <html lang="en">
       <head>
+        <meta charset="utf-8">
         <title>${title}</title>
         <style>
           @page { size: A4 landscape; margin: 15mm; }
@@ -502,23 +504,17 @@ export default function CallDutyPage() {
         </div>
 
         <div class="footer">
-          <p>Generated on ${format(new Date(), 'PPPp')} | Plastic Surgeon Assistant – UNTH Enugu</p>
+          <p>Generated on ${format(new Date(), 'PPPp')} | Plastic Surgeon Assistant - UNTH Enugu</p>
           <p>Each call duty shift runs for 48 continuous hours (08:00 to 08:00). HO rotation: Ward / Emergency / Off.</p>
         </div>
       </body>
       </html>
     `;
 
-    const blob = new Blob([html], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const printWindow = window.open(url, '_blank');
-    if (printWindow) {
-      printWindow.onload = () => {
-        setTimeout(() => {
-          printWindow.print();
-        }, 500);
-      };
-    }
+    // openPrintWindow tags the blob 'text/html;charset=utf-8'. Without that (and
+    // the <meta charset> above) the browser decoded these bytes as Windows-1252
+    // and phone numbers printed as "ðŸ“ž 08033328385".
+    openPrintWindow(html);
   };
 
   // ── Render ────────────────────────────────────────────────────────────

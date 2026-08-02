@@ -1300,7 +1300,7 @@ class LabService {
     `;
 
     // Convert HTML to Blob for download
-    const blob = new Blob([htmlContent], { type: 'text/html' });
+    const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
     return blob;
   }
 
@@ -1421,7 +1421,7 @@ class LabService {
       </html>
     `;
 
-    const blob = new Blob([htmlContent], { type: 'text/html' });
+    const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
     return blob;
   }
 }

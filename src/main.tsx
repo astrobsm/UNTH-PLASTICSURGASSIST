@@ -6,6 +6,12 @@ import { Toaster } from 'react-hot-toast';
 import App from './App.tsx';
 import './index.css';
 import { offlineManager } from './services/offlineManager';
+import { installPdfTextSanitizer } from './utils/pdfSafeText';
+
+// Guard every PDF in the app against characters jsPDF's built-in fonts cannot
+// render. Installed here rather than in a PDF module because twenty modules
+// construct jsPDF directly, so coverage must not depend on import order.
+installPdfTextSanitizer();
 
 // ─── App Version ─────────────────────────────────────────────
 const APP_VERSION = '7.0.0';

@@ -1074,7 +1074,7 @@ ul{margin:4px 0;padding-left:18px}li{margin:2px 0;font-size:10pt}
 
   const handleDownloadPDF = (assessment: LymphedemaAssessment) => {
     const html = generatePatientEducationPDF(assessment);
-    const blob = new Blob([html], { type: 'text/html' });
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -1095,7 +1095,7 @@ ul{margin:4px 0;padding-left:18px}li{margin:2px 0;font-size:10pt}
 
   const handleSharePDF = async (assessment: LymphedemaAssessment) => {
     const html = generatePatientEducationPDF(assessment);
-    const blob = new Blob([html], { type: 'text/html' });
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
     const file = new File([blob], `Lymphedema_CarePlan_${assessment.patient_name.replace(/\s+/g, '_')}.html`, { type: 'text/html' });
     if (navigator.share) {
       try {

@@ -38,6 +38,7 @@ import {
   getDutyLabel,
 } from '../services/clinicDutyService';
 import { useAuthStore } from '../store/authStore';
+import { openPrintWindow } from '../utils/printText';
 import { format, parseISO, startOfWeek, endOfWeek, addWeeks, subWeeks } from 'date-fns';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -204,7 +205,7 @@ export default function ClinicDutiesPage() {
   // ── Generate PDF report ────────────────────────────────────────────────
 
   const generateWeeklyPDF = () => {
-    const weekLabel = `Week ${selectedWeekNum} — ${format(selectedWeekStart, 'dd MMM')} to ${format(selectedWeekEnd, 'dd MMM yyyy')}`;
+    const weekLabel = `Week ${selectedWeekNum} - ${format(selectedWeekStart, 'dd MMM')} to ${format(selectedWeekEnd, 'dd MMM yyyy')}`;
 
     const roleBlocks = (['senior_registrar', 'registrar', 'house_officer'] as DutyCategory[]).map(role => {
       const peopleLogs = weeklySummary.filter(s => s.role === role);
@@ -214,15 +215,15 @@ export default function ClinicDutiesPage() {
         const dutyRows = p.duties.map((d: any) => `
           <tr>
             <td style="border:1px solid #999;padding:5px;font-size:12px;">${getDutyLabel(d.duty_type)}</td>
-            <td style="border:1px solid #999;padding:5px;font-size:12px;">${d.patient_name || '—'}</td>
+            <td style="border:1px solid #999;padding:5px;font-size:12px;">${d.patient_name || '-'}</td>
             <td style="border:1px solid #999;padding:5px;font-size:12px;">${d.description || ''}</td>
             <td style="border:1px solid #999;padding:5px;font-size:12px;text-align:center;">${d.status}</td>
-            <td style="border:1px solid #999;padding:5px;font-size:12px;">${d.completed_date ? format(parseISO(d.completed_date), 'dd MMM HH:mm') : '—'}</td>
+            <td style="border:1px solid #999;padding:5px;font-size:12px;">${d.completed_date ? format(parseISO(d.completed_date), 'dd MMM HH:mm') : '-'}</td>
           </tr>`).join('');
 
         return `
           <tr style="background:#f0fdf4;">
-            <td colspan="5" style="padding:8px;font-weight:600;border:1px solid #999;">${p.user_name} — ${p.completed}/${p.total} duties completed</td>
+            <td colspan="5" style="padding:8px;font-weight:600;border:1px solid #999;">${p.user_name} - ${p.completed}/${p.total} duties completed</td>
           </tr>
           ${dutyRows}`;
       }).join('');
@@ -247,7 +248,8 @@ export default function ClinicDutiesPage() {
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Clinic Duties Report — ${weekLabel}</title>
+        <meta charset="utf-8">
+        <title>Clinic Duties Report - ${weekLabel}</title>
         <style>
           @page { size: A4 landscape; margin: 15mm; }
           body { font-family: 'Segoe UI', Arial, sans-serif; color: #222; padding: 20px; }
@@ -263,23 +265,21 @@ export default function ClinicDutiesPage() {
       <body>
         <div class="header">
           <h1>University of Nigeria Teaching Hospital (UNTH), Enugu</h1>
-          <h2>Plastic Surgery Unit — Clinic Duty Report</h2>
+          <h2>Plastic Surgery Unit - Clinic Duty Report</h2>
           <div class="line"></div>
           <h3>${weekLabel}</h3>
         </div>
         ${roleBlocks || '<p>No duty logs recorded for this week.</p>'}
         <div class="footer">
-          <p>Generated on ${format(new Date(), 'PPPp')} | Plastic Surgeon Assistant — UNTH Enugu</p>
+          <p>Generated on ${format(new Date(), 'PPPp')} | Plastic Surgeon Assistant - UNTH Enugu</p>
         </div>
       </body>
       </html>`;
 
-    const blob = new Blob([html], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const win = window.open(url, '_blank');
-    if (win) {
-      win.onload = () => setTimeout(() => win.print(), 500);
-    }
+    // Charset is set on both the meta tag and the blob type by openPrintWindow;
+    // without it the browser falls back to Windows-1252 and mangles any
+    // non-ASCII character in the report.
+    openPrintWindow(html);
   };
 
   // ─── RENDER ───────────────────────────────────────────────────────────
@@ -396,7 +396,7 @@ export default function ClinicDutiesPage() {
                   Week {selectedWeekNum}, {selectedYear}
                 </div>
                 <div className="text-sm text-gray-500">
-                  {format(selectedWeekStart, 'dd MMM')} — {format(selectedWeekEnd, 'dd MMM yyyy')}
+                  {format(selectedWeekStart, 'dd MMM')} - {format(selectedWeekEnd, 'dd MMM yyyy')}
                 </div>
               </div>
               <button onClick={() => setWeekOffset(w => w + 1)} className="p-2 hover:bg-gray-100 rounded-lg">
@@ -631,7 +631,7 @@ function TuesdayClinicPreview() {
           assignmentMap.get(staff.id)!.duties.push({ duty, isRedistributed: false });
         });
       } else {
-        // No registrars — redistribute registrar duties evenly to HOs + SRs
+        // No registrars - redistribute registrar duties evenly to HOs + SRs
         const pool = [...hoStaff, ...srStaff];
         if (pool.length > 0) {
           regDuties.forEach((duty, idx) => {
@@ -718,7 +718,7 @@ function TuesdayClinicPreview() {
             <div className="text-center">
               <div className="text-lg font-bold text-gray-900 flex items-center gap-2 justify-center">
                 <Calendar className="w-5 h-5 text-green-600" />
-                Tuesday Clinic — {format(clinicDate, 'dd MMMM yyyy')}
+                Tuesday Clinic - {format(clinicDate, 'dd MMMM yyyy')}
               </div>
               <div className="text-sm text-gray-500">
                 {isToday ? (
@@ -817,7 +817,7 @@ function TuesdayClinicPreview() {
                   ))}
                 </div>
               ) : staffLoaded ? (
-                <div className="mt-2 text-xs text-orange-600 font-medium">No registrars — duties redistributed</div>
+                <div className="mt-2 text-xs text-orange-600 font-medium">No registrars - duties redistributed</div>
               ) : (
                 <div className="mt-2 text-xs text-gray-400 font-medium">Staff list unavailable</div>
               )}
@@ -885,7 +885,7 @@ function TuesdayClinicPreview() {
             )}
           </div>
 
-          {/* Assignment Cards — grouped by person */}
+          {/* Assignment Cards - grouped by person */}
           {assignments.length === 0 ? (
             <div className="bg-white rounded-xl shadow-sm border p-12 text-center">
               <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
@@ -907,7 +907,7 @@ function TuesdayClinicPreview() {
                       <Icon className="w-5 h-5" />
                       <div className="flex-1">
                         <div className="font-semibold">{staff.full_name}</div>
-                        <div className="text-xs opacity-80">{badge.label} — {duties.length} {duties.length === 1 ? 'duty' : 'duties'}</div>
+                        <div className="text-xs opacity-80">{badge.label} - {duties.length} {duties.length === 1 ? 'duty' : 'duties'}</div>
                       </div>
                     </div>
                     {/* Duties list */}
