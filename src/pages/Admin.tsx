@@ -47,10 +47,13 @@ import {
   GraduationCap,
   Loader2,
   Star,
-  LogOut
+  LogOut,
+  Plane
 } from 'lucide-react';
 import Layout from '../components/Layout';
 import { UserApprovalManager } from '../components/UserApprovalManager';
+import StaffAbsenceDialog from '../components/admin/StaffAbsenceDialog';
+import { getActiveAbsences, type StaffAbsence } from '../services/staffAbsenceService';
 import { AISettingsPanel } from '../components/AISettingsPanel';
 import { userManagementService } from '../services/userManagementService';
 import BulkUserImport from '../components/BulkUserImport';
@@ -132,6 +135,20 @@ export default function Admin() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   // Deactivation modal state. `mode` distinguishes the plain activate/deactivate
   // toggle from an official sign-out (ends sessions everywhere + deactivates).
+  // Leave / outside posting: dialog target plus a map of who is currently away,
+  // so each row can badge without a request per user.
+  const [absenceTarget, setAbsenceTarget] = useState<{ id: string; name: string; role?: string } | null>(null);
+  const [activeAbsences, setActiveAbsences] = useState<Record<string, StaffAbsence>>({});
+
+  const refreshAbsences = async () => {
+    const { absences } = await getActiveAbsences();
+    const byUser: Record<string, StaffAbsence> = {};
+    for (const a of absences) byUser[String(a.user_id)] = a;
+    setActiveAbsences(byUser);
+  };
+
+  useEffect(() => { refreshAbsences(); }, []);
+
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
   const [deactivateTarget, setDeactivateTarget] = useState<{ id: string; name: string; currentStatus: string; mode: 'toggle' | 'signout' } | null>(null);
   const [deactivatePassword, setDeactivatePassword] = useState('');
@@ -819,6 +836,28 @@ export default function Admin() {
                               Sign Out
                             </button>
                           )}
+                          {/* Leave / outside posting. Distinct from Deactivate:
+                              this is temporary and dated, and it hands the
+                              person's patients and duties to colleagues for the
+                              period, then gives them back. */}
+                          <button
+                            onClick={() => setAbsenceTarget({ id: user.id, name: user.name, role: user.role })}
+                            className={`px-3 py-1.5 rounded-md transition text-xs font-medium flex items-center gap-1 border ${
+                              activeAbsences[String(user.id)]
+                                ? 'bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200'
+                                : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                            }`}
+                            title={
+                              activeAbsences[String(user.id)]
+                                ? `Away until ${activeAbsences[String(user.id)].end_date} — patients and duties are covered`
+                                : 'Record leave or an outside posting; patients and duties are reassigned for the period'
+                            }
+                          >
+                            <Plane className="h-3.5 w-3.5" />
+                            {activeAbsences[String(user.id)]
+                              ? `Away to ${activeAbsences[String(user.id)].end_date}`
+                              : 'Leave / posting'}
+                          </button>
                           <button
                             onClick={() => handleDeleteUser(user.id)}
                             className="text-red-600 hover:text-red-900" title="Delete"
@@ -1363,6 +1402,15 @@ export default function Admin() {
           onClose={() => setShowBackupModal(false)}
           onBackup={handleDatabaseBackup}
           loading={loading}
+        />
+      )}
+      {absenceTarget && (
+        <StaffAbsenceDialog
+          userId={absenceTarget.id}
+          userName={absenceTarget.name}
+          userRole={absenceTarget.role}
+          onClose={() => setAbsenceTarget(null)}
+          onChanged={() => { refreshAbsences(); loadUsers(); }}
         />
       )}
     </div>
@@ -2439,6 +2487,7 @@ function StudentManagementTab() {
           </div>
         </div>
       )}
+
     </div>
   );
 }

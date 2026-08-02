@@ -1,11 +1,15 @@
 // @vitest-environment node
 import { describe, it, expect } from 'vitest';
-import { planRebalance } from '../../scripts/rebalance-consultants.mjs';
+import { planRebalance } from '../../api/_lib/loadBalance.js';
 
 /**
  * The levelling arithmetic shared by the consultant rebalance script and the
  * absence engine's levelGrade(). Pure and worth pinning down: an off-by-one
  * here silently gives one clinician a permanently heavier list.
+ *
+ * Imported from api/_lib/loadBalance.js, NOT from the CLI script — importing
+ * the script pulled a database connection and an `import.meta` guard into the
+ * test run, which Vitest could not parse.
  */
 
 const counts = (...ns: number[]) => ns.map((n, i) => ({ id: String(i + 1), name: `S${i + 1}`, count: n }));

@@ -29,6 +29,7 @@
 import pg from 'pg';
 import { pathToFileURL } from 'node:url';
 import { requireDatabaseUrl } from '../db-env.mjs';
+import { planRebalance } from '../api/_lib/loadBalance.js';
 
 const args = process.argv.slice(2);
 const apply = args.includes('--apply');
@@ -36,34 +37,6 @@ const toIndex = args.indexOf('--to');
 const targetHint = toIndex >= 0 ? args[toIndex + 1] : null;
 
 const REASON = 'Load rebalance on consultant joining unit';
-
-/**
- * Decide how many patients each consultant gives up or receives.
- * Levels towards the mean: everyone above target sheds, everyone below receives.
- */
-export function planRebalance(counts) {
-  const total = counts.reduce((s, c) => s + c.count, 0);
-  const n = counts.length;
-  if (!n) return { moves: [], targets: new Map() };
-
-  const base = Math.floor(total / n);
-  const remainder = total % n;
-
-  // Consultants with the largest existing load absorb the remainder, so the
-  // people already carrying the most are not levelled below their peers.
-  const sorted = [...counts].sort((a, b) => b.count - a.count);
-  const targets = new Map();
-  sorted.forEach((c, i) => targets.set(c.id, base + (i < remainder ? 1 : 0)));
-
-  const donors = sorted
-    .filter(c => c.count > targets.get(c.id))
-    .map(c => ({ ...c, give: c.count - targets.get(c.id) }));
-  const receivers = sorted
-    .filter(c => c.count < targets.get(c.id))
-    .map(c => ({ ...c, take: targets.get(c.id) - c.count }));
-
-  return { targets, donors, receivers, total, base, remainder };
-}
 
 async function main() {
   const pool = new pg.Pool({
