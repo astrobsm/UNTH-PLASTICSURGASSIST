@@ -205,12 +205,43 @@ function rosterKey(start, end) {
   return `${d(start)}_${d(end)}`;
 }
 
+/** Absence windows overlapping a date range, as Date objects for comparison. */
+async function absencesOverlapping(startDate, endDate) {
+  try {
+    const r = await query(
+      `SELECT user_id, start_date, end_date FROM staff_absences
+       WHERE status IN ('scheduled','active') AND start_date <= $2 AND end_date >= $1`,
+      [startDate.toISOString().slice(0, 10), endDate.toISOString().slice(0, 10)]
+    );
+    return r.rows.map(a => ({
+      user_id: String(a.user_id),
+      start: new Date(a.start_date),
+      // An absence covers its whole end day, so extend to that day's last moment.
+      end: new Date(new Date(a.end_date).getTime() + 86399999),
+    }));
+  } catch {
+    // No absence table yet — roster generation must not stop.
+    return [];
+  }
+}
+
 async function generateShifts(startDate, endDate) {
-  const [consultants, srs, regs, hos] = await Promise.all([
+  const [consultants, srs, regs, hos, absences] = await Promise.all([
     pool('consultant'), pool('senior_registrar'), pool('registrar'), pool('house_officer'),
+    absencesOverlapping(startDate, endDate),
   ]);
+
+  // Someone on leave must not be rostered for a shift that falls inside their
+  // absence — the pool is drawn once for the whole range, so without this the
+  // rotation happily lands on them weeks ahead. Checked per shift rather than
+  // per range: a fortnight's leave should only remove them from the shifts it
+  // actually covers.
+  const availableDuring = (list, shiftStart, shiftEnd) =>
+    list.filter(p => !absences.some(a =>
+      String(a.user_id) === String(p.id) && a.start <= shiftEnd && a.end >= shiftStart
+    ));
+
   const pick = (list, i) => (list.length ? list[i % list.length] : null);
-  const hoCount = hos.length;
   const shifts = [];
   const cursor = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate(), 8, 0, 0);
   const rangeEnd = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), 8, 0, 0);
@@ -221,11 +252,17 @@ async function generateShifts(startDate, endDate) {
     // Senior registrars change every SR_SHIFTS_PER_BLOCK shifts (a weekly block
     // aligned to shift boundaries); the other grades rotate every shift.
     const si = Math.floor((n - 1) / SR_SHIFTS_PER_BLOCK);
-    const c = pick(consultants, ci), sr = pick(srs, si), r = pick(regs, ri);
+    const availC = availableDuring(consultants, shiftStart, shiftEnd);
+    const availSr = availableDuring(srs, shiftStart, shiftEnd);
+    const availReg = availableDuring(regs, shiftStart, shiftEnd);
+    const hosAvail = availableDuring(hos, shiftStart, shiftEnd);
+    const hoCount = hosAvail.length;
+    const hos_ = hosAvail;
+    const c = pick(availC, ci), sr = pick(availSr, si), r = pick(availReg, ri);
     let hoW = null, hoE = null, hoO = null;
-    if (hoCount >= 3) { hoW = hos[hi % hoCount]; hoE = hos[(hi + 1) % hoCount]; hoO = hos[(hi + 2) % hoCount]; }
-    else if (hoCount === 2) { hoW = hos[hi % 2]; hoE = hos[hi % 2]; hoO = hos[(hi + 1) % 2]; }
-    else if (hoCount === 1) { hoW = hos[0]; hoE = hos[0]; hoO = null; }
+    if (hoCount >= 3) { hoW = hos_[hi % hoCount]; hoE = hos_[(hi + 1) % hoCount]; hoO = hos_[(hi + 2) % hoCount]; }
+    else if (hoCount === 2) { hoW = hos_[hi % 2]; hoE = hos_[hi % 2]; hoO = hos_[(hi + 1) % 2]; }
+    else if (hoCount === 1) { hoW = hos_[0]; hoE = hos_[0]; hoO = null; }
     shifts.push({
       start_date: shiftStart.toISOString(), end_date: shiftEnd.toISOString(),
       consultant_id: c?.id || '', consultant_name: c?.full_name || 'TBD', consultant_phone: c?.phone || '',

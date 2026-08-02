@@ -82,6 +82,27 @@ export async function getActiveAbsences(): Promise<{ absences: StaffAbsence[]; a
   }
 }
 
+/**
+ * Who will be away on a specific date.
+ *
+ * Rosters are drawn up in advance, so a clinic or call list for a future date
+ * must count absences that are still `scheduled` as well as active ones —
+ * asking only "who is away right now" is what put a clinician on leave onto a
+ * future clinic day.
+ *
+ * Returns an empty list when offline or on error. That is a deliberate
+ * fail-open: showing a full roster is a smaller harm than hiding staff who are
+ * actually available because the check could not be made.
+ */
+export async function getAbsentUserIdsOn(dateISO: string): Promise<{ ids: string[]; absences: StaffAbsence[] }> {
+  try {
+    const res: any = await apiClient.get(`${BASE}?action=absent-on&date=${encodeURIComponent(dateISO)}`);
+    return { ids: (res?.absentUserIds || []).map(String), absences: res?.absences || [] };
+  } catch {
+    return { ids: [], absences: [] };
+  }
+}
+
 export async function getAbsenceDetail(
   id: number
 ): Promise<{ absence: StaffAbsence; reassignments: AbsenceReassignment[] } | null> {

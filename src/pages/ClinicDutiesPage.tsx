@@ -39,6 +39,7 @@ import {
 } from '../services/clinicDutyService';
 import { useAuthStore } from '../store/authStore';
 import { openPrintWindow } from '../utils/printText';
+import { getAbsentUserIdsOn, ABSENCE_TYPE_LABELS, type StaffAbsence } from '../services/staffAbsenceService';
 import { format, parseISO, startOfWeek, endOfWeek, addWeeks, subWeeks } from 'date-fns';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -540,6 +541,7 @@ function getNextTuesday(offset: number): Date {
 function TuesdayClinicPreview() {
   const [loading, setLoading] = useState(true);
   const [tuesdayOffset, setTuesdayOffset] = useState(0);
+  const [absentOnDay, setAbsentOnDay] = useState<StaffAbsence[]>([]);
   const [staffByRole, setStaffByRole] = useState<{
     house_officers: { id: string; full_name: string; role: string }[];
     registrars: { id: string; full_name: string; role: string }[];
@@ -583,11 +585,23 @@ function TuesdayClinicPreview() {
     setSuccess('');
     setStaffLoaded(false);
     try {
-      const [srStaff, regStaff, hoStaff] = await Promise.all([
+      const clinicDateStr = `${clinicDate.getFullYear()}-${String(clinicDate.getMonth() + 1).padStart(2, '0')}-${String(clinicDate.getDate()).padStart(2, '0')}`;
+
+      const [srAll, regAll, hoAll, away] = await Promise.all([
         clinicDutyService.getStaffByRole('senior_registrar'),
         clinicDutyService.getStaffByRole('junior_registrar'),
         clinicDutyService.getStaffByRole('house_officer'),
+        // Absence is checked against the CLINIC DATE, not today: this list is
+        // built in advance, so someone whose leave starts tomorrow must already
+        // be off next week's roster.
+        getAbsentUserIdsOn(clinicDateStr),
       ]);
+
+      const isAway = (id: string) => away.ids.includes(String(id));
+      const srStaff = srAll.filter(s => !isAway(s.id));
+      const regStaff = regAll.filter(s => !isAway(s.id));
+      const hoStaff = hoAll.filter(s => !isAway(s.id));
+      setAbsentOnDay(away.absences);
 
       setStaffByRole({
         house_officers: hoStaff,
@@ -854,6 +868,23 @@ function TuesdayClinicPreview() {
                   Redistributed duties are marked with a <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 text-xs font-medium">Redistributed</span> badge.
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* Anyone away on this clinic date. Named explicitly rather than just
+              dropped from the list: a roster that silently omits someone looks
+              like a bug to whoever is reading it. */}
+          {absentOnDay.length > 0 && (
+            <div className="bg-amber-50 border border-amber-300 rounded-xl p-3">
+              <p className="text-sm text-amber-900">
+                <span className="font-semibold">Not rostered — away on this date:</span>{' '}
+                {absentOnDay.map(a => (
+                  `${a.user_name} (${ABSENCE_TYPE_LABELS[a.absence_type] || a.absence_type}, to ${String(a.end_date).slice(0, 10)})`
+                )).join('; ')}
+              </p>
+              <p className="text-xs text-amber-800 mt-1">
+                Their duties have been shared among the remaining staff of the same grade.
+              </p>
             </div>
           )}
 

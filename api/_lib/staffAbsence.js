@@ -114,6 +114,29 @@ export async function isUserAbsent(userId) {
 }
 
 /**
+ * User ids absent ON A GIVEN DATE, including absences that have not started yet.
+ *
+ * Distinct from getAbsentUserIds(), which answers "away right now" and is what
+ * the assignment pool needs. Rosters are drawn up ahead of time, so a clinic
+ * list for next Tuesday must ask "will this person be away THEN" — a
+ * still-`scheduled` absence covering that date counts, which is exactly the case
+ * that put someone on leave onto a future clinic day.
+ */
+export async function getAbsentUserIdsOn(dateISO) {
+  try {
+    const r = await query(
+      `SELECT DISTINCT user_id FROM staff_absences
+       WHERE status IN ('scheduled', 'active')
+         AND $1::date BETWEEN start_date AND end_date`,
+      [dateISO]
+    );
+    return r.rows.map(x => String(x.user_id));
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Least-loaded colleague of the same grade, excluding the person going away
  * AND anyone else currently absent — covering one absence with someone who is
  * themselves on leave is the obvious failure mode here.

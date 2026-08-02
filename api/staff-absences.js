@@ -19,7 +19,7 @@ import { query } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
 import {
   ensureAbsenceTables, processDueAbsences, activateAbsence, completeAbsence,
-  getAbsentUserIds, ABSENCE_TYPES,
+  getAbsentUserIds, getAbsentUserIdsOn, ABSENCE_TYPES,
 } from './_lib/staffAbsence.js';
 
 // Recording someone as away moves live patients between clinicians, so it sits
@@ -47,6 +47,7 @@ export default async function handler(req, res) {
     switch (req.method) {
       case 'GET':
         if (action === 'active') return await listActive(res);
+        if (action === 'absent-on') return await listAbsentOn(url.searchParams, res);
         if (action === 'detail') return await getDetail(id, res);
         return await listAbsences(url.searchParams, res);
 
@@ -109,6 +110,28 @@ async function listActive(res) {
      ORDER BY a.end_date ASC`
   );
   return res.status(200).json({ absences: r.rows, absentUserIds: ids });
+}
+
+/**
+ * Who will be away on a given date. Used by roster screens, which are built
+ * ahead of time and therefore need scheduled absences counted, not just active
+ * ones.
+ */
+async function listAbsentOn(searchParams, res) {
+  const date = searchParams.get('date');
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return res.status(400).json({ error: 'date=YYYY-MM-DD is required' });
+  }
+  const ids = await getAbsentUserIdsOn(date);
+  const rows = ids.length
+    ? (await query(
+        `SELECT a.user_id, a.user_name, a.absence_type, a.start_date, a.end_date, a.status
+         FROM staff_absences a
+         WHERE a.status IN ('scheduled','active') AND $1::date BETWEEN a.start_date AND a.end_date`,
+        [date]
+      )).rows
+    : [];
+  return res.status(200).json({ date, absentUserIds: ids, absences: rows });
 }
 
 async function getDetail(id, res) {
