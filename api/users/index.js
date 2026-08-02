@@ -237,6 +237,18 @@ export default async function handler(req, res) {
       }
     }
 
+    // Absences activate and expire on their own dates. This repo has no cron
+    // (one was removed for breaking the deploy — commit 03693a5), so the check
+    // rides on the staff endpoint, which any admin session hits early. It is
+    // throttled per warm instance, no-ops when nothing is due, and never
+    // throws, so it cannot affect this handler's response.
+    try {
+      const { processDueAbsences } = await import('../_lib/staffAbsence.js');
+      await processDueAbsences();
+    } catch (e) {
+      console.warn('absence processing skipped:', e.message);
+    }
+
     const auth = authenticateRequest(req);
     if (!auth.authenticated) {
       return res.status(401).json({ error: auth.error });

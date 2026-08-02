@@ -57,15 +57,45 @@ async function ensureColumns() {
   ensured = true;
 }
 
-/** Least-loaded active+approved staff id (string) for a role, or null. */
+/**
+ * Staff currently on leave / outside posting. Excluded from every assignment
+ * pool: handing a new patient to someone who is away is the whole failure mode
+ * the absence feature exists to prevent.
+ *
+ * Imported lazily to avoid a circular import — staffAbsence.js imports this
+ * module for pickLeastLoadedByRole. Failures are swallowed so that assignment
+ * keeps working exactly as before if the absence tables are not present yet.
+ */
+async function absentUserIds() {
+  try {
+    const { getAbsentUserIds } = await import('./staffAbsence.js');
+    return await getAbsentUserIds();
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Least-loaded active+approved staff id (string) for a role, or null.
+ * `excludeUserId` accepts a single id or an array of ids.
+ */
 export async function pickLeastLoadedByRole(roleKey, excludeUserId = null) {
   const col = ROLE_COLUMN[roleKey];
   if (!col) return null;
   const roles = await roleKeysFor(roleKey);
   if (!roles.length) return null;
+
+  const explicit = excludeUserId == null
+    ? []
+    : (Array.isArray(excludeUserId) ? excludeUserId : [excludeUserId]).map(String);
+  const excludeIds = [...new Set([...explicit, ...(await absentUserIds())])];
+
   const params = [roles];
   let exclude = '';
-  if (excludeUserId != null) { params.push(String(excludeUserId)); exclude = `AND u.id::text <> $${params.length}`; }
+  if (excludeIds.length) {
+    params.push(excludeIds);
+    exclude = `AND NOT (u.id::text = ANY($${params.length}::text[]))`;
+  }
   const r = await query(
     `SELECT u.id
        FROM users u

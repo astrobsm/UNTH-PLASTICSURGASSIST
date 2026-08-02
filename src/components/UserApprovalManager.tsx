@@ -19,9 +19,12 @@ import {
   Lock,
   Eye,
   EyeOff,
-  Key
+  Key,
+  Plane
 } from 'lucide-react';
 import { format } from 'date-fns';
+import StaffAbsenceDialog from './admin/StaffAbsenceDialog';
+import { getActiveAbsences, ABSENCE_TYPE_LABELS, type StaffAbsence } from '../services/staffAbsenceService';
 
 export function UserApprovalManager() {
   const [pendingUsers, setPendingUsers] = useState<PendingUser[]>([]);
@@ -38,6 +41,19 @@ export function UserApprovalManager() {
   const [passwordError, setPasswordError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [toggleTargetUser, setToggleTargetUser] = useState<{ id: string; currentStatus: boolean; name: string } | null>(null);
+  // Absence dialog target, and a map of who is currently away so the table can
+  // badge them without a request per row.
+  const [absenceTarget, setAbsenceTarget] = useState<{ id: string; name: string; role?: string } | null>(null);
+  const [activeAbsences, setActiveAbsences] = useState<Record<string, StaffAbsence>>({});
+
+  const refreshAbsences = async () => {
+    const { absences } = await getActiveAbsences();
+    const byUser: Record<string, StaffAbsence> = {};
+    for (const a of absences) byUser[String(a.user_id)] = a;
+    setActiveAbsences(byUser);
+  };
+
+  useEffect(() => { refreshAbsences(); }, []);
   const [togglingUser, setTogglingUser] = useState(false);
   const [resettingId, setResettingId] = useState<string | null>(null);
   const [resetInfo, setResetInfo] = useState<{ name: string; tempPassword: string } | null>(null);
@@ -498,6 +514,14 @@ export function UserApprovalManager() {
                         {user.is_active ? <CheckCircle className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
                         {user.is_active ? 'Active' : 'Inactive'}
                       </span>
+                      {activeAbsences[String(user.id)] && (
+                        <span
+                          className="ml-1 inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800"
+                          title={`${ABSENCE_TYPE_LABELS[activeAbsences[String(user.id)].absence_type]} until ${activeAbsences[String(user.id)].end_date}`}
+                        >
+                          <Plane className="h-3 w-3" /> Away
+                        </span>
+                      )}
                     </td>
                     <td className="px-2 sm:px-4 py-2 sm:py-4 text-sm text-gray-600">
                       {user.last_login ? format(new Date(user.last_login), 'MMM dd, yyyy HH:mm') : 'Never'}
@@ -518,6 +542,24 @@ export function UserApprovalManager() {
                         >
                           <Lock className="h-3.5 w-3.5" />
                           {user.is_active ? 'Deactivate' : 'Activate'}
+                        </button>
+                        <button
+                          onClick={() => setAbsenceTarget({ id: user.id!, name: user.full_name, role: user.role })}
+                          className={`px-3 py-1.5 rounded-md transition text-xs font-medium flex items-center gap-1 border ${
+                            activeAbsences[String(user.id)]
+                              ? 'bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200'
+                              : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                          }`}
+                          title={
+                            activeAbsences[String(user.id)]
+                              ? `Away until ${activeAbsences[String(user.id)].end_date} — patients and duties are covered`
+                              : 'Record leave or an outside posting; patients and duties are reassigned for the period'
+                          }
+                        >
+                          <Plane className="h-3.5 w-3.5" />
+                          {activeAbsences[String(user.id)]
+                            ? `Away to ${activeAbsences[String(user.id)].end_date}`
+                            : 'Leave / posting'}
                         </button>
                         <button
                           onClick={() => handleResetPassword(user.id!, user.full_name)}
@@ -744,6 +786,16 @@ export function UserApprovalManager() {
             </div>
           </div>
         </div>
+      )}
+
+      {absenceTarget && (
+        <StaffAbsenceDialog
+          userId={absenceTarget.id}
+          userName={absenceTarget.name}
+          userRole={absenceTarget.role}
+          onClose={() => setAbsenceTarget(null)}
+          onChanged={() => { refreshAbsences(); loadUsers(); }}
+        />
       )}
     </div>
   );

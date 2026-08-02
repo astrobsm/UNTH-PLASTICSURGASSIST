@@ -27,6 +27,7 @@
  */
 
 import pg from 'pg';
+import { pathToFileURL } from 'node:url';
 import { requireDatabaseUrl } from '../db-env.mjs';
 
 const args = process.argv.slice(2);
@@ -184,4 +185,8 @@ async function main() {
   }
 }
 
-main();
+// Only run when invoked directly. planRebalance() is imported by the unit
+// tests, and without this guard that import would connect to the production
+// database and run a rebalance as a side effect of `npm test`.
+const invokedDirectly = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (invokedDirectly) main();

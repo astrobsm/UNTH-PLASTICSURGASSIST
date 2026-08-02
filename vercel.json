@@ -68,6 +68,10 @@
       "destination": "/api/tumor-board"
     },
     {
+      "source": "/api/staff-absences/:path*",
+      "destination": "/api/staff-absences"
+    },
+    {
       "source": "/api/:path*",
       "destination": "/api/:path*"
     },
