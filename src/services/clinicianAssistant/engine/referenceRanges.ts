@@ -93,17 +93,17 @@ export const ANALYTES: AnalyteDef[] = [
   }),
   D({
     key: 'lymph', label: 'Lymphocytes (absolute)', module: 'fbc', unitRule: 'wbc', unit: 'x10^9/L',
-    synonyms: ['absolute lymphocyte count', 'lymphocytes absolute', 'lymphocyte count', 'lymphocytes', 'lymphocyte'],
+    synonyms: ['absolute lymphocyte count', 'lymphocytes absolute', 'lymphocyte count', 'lymphocytes', 'lymphocyte', 'lym'],
     ref: { low: 1.0, high: 4.0 }, decimals: 2, plausible: { low: 0, high: 300 },
   }),
   D({
     key: 'mono', label: 'Monocytes (absolute)', module: 'fbc', unitRule: 'wbc', unit: 'x10^9/L',
-    synonyms: ['monocyte count', 'monocytes', 'monocyte'],
+    synonyms: ['monocyte count', 'monocytes', 'monocyte', 'mon'],
     ref: { low: 0.2, high: 0.8 }, decimals: 2, plausible: { low: 0, high: 100 },
   }),
   D({
     key: 'eos', label: 'Eosinophils (absolute)', module: 'fbc', unitRule: 'wbc', unit: 'x10^9/L',
-    synonyms: ['eosinophil count', 'eosinophils', 'eosinophil'],
+    synonyms: ['eosinophil count', 'eosinophils', 'eosinophil', 'eos'],
     ref: { low: 0.04, high: 0.40 }, decimals: 2, plausible: { low: 0, high: 100 },
   }),
   D({
