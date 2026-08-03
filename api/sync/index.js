@@ -778,6 +778,16 @@ async function handlePush(data, user, res) {
           // For all entities with patient_id, try lookup by patient_id + date
           if ((!existing || existing.rows.length === 0) && snakePayload.patient_id) {
             const dateFieldMap = {
+              // Tables absent from this map fall through to a blind INSERT on
+              // every push, because the id lookup above is skipped for SERIAL
+              // keys. treatment_plans was missing, which is how one patient
+              // accumulated 140+ identical plans and the table reached 6,000
+              // rows. Any patient-scoped table pushed through this path needs
+              // an entry here.
+              'treatment_plans': 'created_at',
+              'plan_steps': 'created_at',
+              'progress_notes': 'created_at',
+              'vital_signs': 'recorded_at',
               'dvt_assessments': 'assessment_date',
               'pressure_sore_assessments': 'assessment_date',
               'nutritional_assessments': 'assessment_date',
@@ -816,6 +826,25 @@ async function handlePush(data, user, res) {
               [...values, existing.rows[0].id]
             );
           } else {
+            // A patient-scoped record with no patient_id cannot be deduplicated,
+            // reconciled or displayed — it can only accumulate. 4,674 such rows
+            // reached treatment_plans before this guard existed. Reject rather
+            // than insert; the client keeps the record locally and can retry
+            // once it has a patient id.
+            const PATIENT_SCOPED = new Set([
+              'treatment_plans', 'plan_steps', 'progress_notes', 'vital_signs',
+              'admissions', 'prescriptions', 'lab_orders', 'ward_rounds',
+              'wound_care_records', 'discharge_summaries', 'surgeries',
+            ]);
+            if (PATIENT_SCOPED.has(resolvedEntityType) && !snakePayload.patient_id) {
+              results.push({
+                entityId,
+                status: 'rejected',
+                message: `${resolvedEntityType} requires patient_id; not inserted`,
+              });
+              continue;
+            }
+
             // Insert (for SERIAL tables, PostgreSQL auto-generates the id)
             const quotedColumns = columns.map(c => `"${c}"`).join(', ');
             await query(
