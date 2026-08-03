@@ -95,6 +95,7 @@ function buildGlobalModules(): ModuleGroup[] {
     { module: 'SJS/TEN Assessments', endpoints: ['/sjs-assessments'] },
     { module: 'Substance & Detox', endpoints: ['/substance-assessments'] },
     { module: 'Risk Assessments', endpoints: ['/risk-assessments'] },
+    { module: 'Clinician Assistant', endpoints: ['/clinician-assistant?action=recent&limit=50'] },
     { module: 'Tumor Board', endpoints: ['/tumor-board?action=board', '/tumor-board?action=surveillance&withinDays=90'] },
 
     // ── Team, duty & scheduling ──
@@ -176,6 +177,7 @@ function patientEndpoints(patientId: string | number): string[] {
     `/investigation-uploads?patientId=${id}`,
     `/mdt-documentation?patientId=${id}`,
     `/tumor-board?patientId=${id}`,
+    `/clinician-assistant?patientId=${id}`,
   ];
 }
 

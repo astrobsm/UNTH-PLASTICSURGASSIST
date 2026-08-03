@@ -95,6 +95,7 @@ const PreSurgicalConferencePage = lazyWithRetry(() => import('./pages/PreSurgica
 const WoundCarePage = lazyWithRetry(() => import('./pages/WoundCarePage'));
 const WoundProgressMonitorPage = lazyWithRetry(() => import('./pages/WoundProgressMonitorPage'));
 const TumorBoardPage = lazyWithRetry(() => import('./pages/TumorBoardPage'));
+const ClinicianAssistantPage = lazyWithRetry(() => import('./pages/ClinicianAssistantPage'));
 const KeloidCarePage = lazyWithRetry(() => import('./pages/KeloidCarePage'));
 const SickleCellUlcerPage = lazyWithRetry(() => import('./pages/SickleCellUlcerPage'));
 const SoftTissueInfectionPage = lazyWithRetry(() => import('./pages/SoftTissueInfectionPage'));
@@ -372,6 +373,7 @@ function App() {
               <Route path="/wound-care" element={<WoundCarePage />} />
               <Route path="/wound-monitor" element={<WoundProgressMonitorPage />} />
               <Route path="/tumor-board" element={<TumorBoardPage />} />
+              <Route path="/clinician-assistant" element={<ClinicianAssistantPage />} />
               <Route path="/keloid-care" element={<KeloidCarePage />} />
               <Route path="/sickle-cell-ulcer" element={<SickleCellUlcerPage />} />
               <Route path="/soft-tissue-infection" element={<SoftTissueInfectionPage />} />

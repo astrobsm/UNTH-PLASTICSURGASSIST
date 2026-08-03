@@ -243,6 +243,7 @@ export class PlasticSurgeonDB extends Dexie {
   wound_assessments!: Table<any>; // WoundProgress Monitor: serial assessment timeline
   tumor_board_cases!: Table<any>; // Tumor Board: oncology case identity
   tumor_board_assessments!: Table<any>; // Tumor Board: append-only staging timeline
+  clinician_analyses!: Table<any>; // Clinician Assistant: saved diagnostic analyses
 
   constructor() {
     super('PlasticSurgeonDB');
@@ -1336,6 +1337,13 @@ export class PlasticSurgeonDB extends Dexie {
       tumor_board_cases: '++id, serverId, patient_id, tumor_family, status, current_stage_group, updated_at, synced',
       tumor_board_assessments: '++id, serverId, case_id, patient_id, version, basis, assessed_at, synced'
     });
+    // Version 39: Clinician Assistant — saved diagnostic analyses, readable
+    // offline so a previous interpretation is available on a ward round even
+    // when the record itself cannot be refetched.
+    this.version(39).stores({
+      clinician_analyses: '++id, serverId, patient_id, overall_severity, analysed_at, synced'
+    });
+
 
     // Add hooks to automatically track changes
     this.patients.hook('creating', (primKey, obj, trans) => {
