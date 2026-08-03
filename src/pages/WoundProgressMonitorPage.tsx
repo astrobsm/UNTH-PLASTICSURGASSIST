@@ -18,7 +18,7 @@
 import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity, AlertTriangle, ArrowLeft, Camera, ChevronRight, LineChart, Plus,
-  RefreshCw, Ruler, Search, TrendingDown, TrendingUp, Minus, Loader2, X,
+  RefreshCw, Ruler, Search, TrendingDown, TrendingUp, Minus, Loader2, X, Upload,
 } from 'lucide-react';
 import { apiClient } from '../services/apiClient';
 import { aiWoundMeasurement, type WoundProgressEntry } from '../services/aiWoundMeasurement';
@@ -29,6 +29,7 @@ import {
 } from '../services/woundMonitorService';
 
 const WoundHealingMap = lazy(() => import('../components/WoundHealingMap'));
+const WoundCalibrationPicker = lazy(() => import('../components/WoundCalibrationPicker'));
 const WoundProgressChart = lazy(() => import('../components/WoundProgressChart'));
 
 const WOUND_TYPES = [
@@ -662,10 +663,47 @@ const CaptureAssessmentModal: React.FC<{ wound: Wound; onClose: () => void; onSa
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
+  const galleryRef = useRef<HTMLInputElement>(null);
+  // The last photo analysed, kept so the scale can be set manually and the
+  // measurement recomputed without asking for the picture again.
+  const [pending, setPending] = useState<{ url: string; imageData: ImageData; w: number; h: number } | null>(null);
+  const [showCalibration, setShowCalibration] = useState(false);
   // Editable measurement fields (auto-filled by AI, clinician confirms).
   const [m, setM] = useState<Partial<WoundAssessment>>({});
   const [scaleReliable, setScaleReliable] = useState(false);
   const [calibType, setCalibType] = useState('reference-card');
+
+  /**
+   * Re-run the measurement with a scale the clinician set by hand. This is the
+   * accurate path when a coin or card was used, since the automatic detector
+   * cannot recognise either.
+   */
+  const applyManualScale = async (pixelsPerCm: number, referenceLabel: string) => {
+    if (!pending) return;
+    setShowCalibration(false);
+    setAnalyzing(true);
+    setError('');
+    try {
+      await aiWoundMeasurement.initialize();
+      const calibration = aiWoundMeasurement.createManualCalibration(pixelsPerCm, 1);
+      const result = await aiWoundMeasurement.measureWound(pending.imageData, calibration);
+      setScaleReliable(true);
+      setCalibType(`manual:${referenceLabel}`);
+      setM(prev => ({
+        ...prev,
+        length_cm: round(result.length),
+        width_cm: round(result.width),
+        area_cm2: round(result.area),
+        perimeter_cm: round(result.perimeter),
+        ai_confidence: result.confidence,
+        contour_cm: result.contourCm,
+      }));
+    } catch (e: any) {
+      setError(e?.message || 'Could not apply the scale');
+    } finally {
+      setAnalyzing(false);
+    }
+  };
 
   const analyzePhoto = async (file: File) => {
     setAnalyzing(true);
@@ -678,10 +716,14 @@ const CaptureAssessmentModal: React.FC<{ wound: Wound; onClose: () => void; onSa
       ctx.drawImage(bitmap, 0, 0);
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
+      // Keep the image: if auto-detection cannot find a marker, the clinician
+      // sets the scale by hand against it rather than re-taking the photo.
+      setPending({ url: URL.createObjectURL(file), imageData, w: canvas.width, h: canvas.height });
+
       await aiWoundMeasurement.initialize();
-      // measureWound auto-detects the calibration marker internally (green
-      // marker → grid → ruler → fallback) and reports scaleReliable, so no
-      // manual calibration step is needed here.
+      // Auto-detection only recognises green printed markers, grid paper and
+      // ruler tick marks — NOT coins or cards. When it fails, measureFromScale
+      // below takes over with an exact, user-supplied scale.
       const result = await aiWoundMeasurement.measureWound(imageData);
       setScaleReliable(Boolean(result.scaleReliable));
       setCalibType(result.calibrationMethod || 'reference-card');
@@ -752,20 +794,67 @@ const CaptureAssessmentModal: React.FC<{ wound: Wound; onClose: () => void; onSa
 
       {mode === 'photo' && (
         <div className="mb-4">
+          {/* Two separate inputs. A single input with capture="environment"
+              forces the camera on mobile, so there was no way to pick an
+              existing photo from the device. */}
           <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden"
-            onChange={e => { const f = e.target.files?.[0]; if (f) analyzePhoto(f); }} />
-          <button
-            onClick={() => fileRef.current?.click()} disabled={analyzing}
-            className="w-full py-6 border-2 border-dashed border-teal-300 rounded-xl text-teal-700 hover:bg-teal-50 flex flex-col items-center gap-2 disabled:opacity-60"
-          >
-            {analyzing ? <Loader2 className="w-6 h-6 animate-spin" /> : <Camera className="w-6 h-6" />}
-            <span className="text-sm font-medium">{analyzing ? 'Analysing…' : 'Capture or upload wound photo'}</span>
-            <span className="text-xs text-gray-500">Include a calibration marker (coin / card / ruler) for accurate sizing</span>
-          </button>
+            onChange={e => { const f = e.target.files?.[0]; if (f) analyzePhoto(f); e.target.value = ''; }} />
+          <input ref={galleryRef} type="file" accept="image/*" className="hidden"
+            onChange={e => { const f = e.target.files?.[0]; if (f) analyzePhoto(f); e.target.value = ''; }} />
+
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => fileRef.current?.click()} disabled={analyzing}
+              className="py-6 border-2 border-dashed border-teal-300 rounded-xl text-teal-700 hover:bg-teal-50 flex flex-col items-center gap-2 disabled:opacity-60"
+            >
+              {analyzing ? <Loader2 className="w-6 h-6 animate-spin" /> : <Camera className="w-6 h-6" />}
+              <span className="text-sm font-medium">{analyzing ? 'Analysing…' : 'Take photo'}</span>
+              <span className="text-xs text-gray-500">Use the camera</span>
+            </button>
+            <button
+              onClick={() => galleryRef.current?.click()} disabled={analyzing}
+              className="py-6 border-2 border-dashed border-teal-300 rounded-xl text-teal-700 hover:bg-teal-50 flex flex-col items-center gap-2 disabled:opacity-60"
+            >
+              <Upload className="w-6 h-6" />
+              <span className="text-sm font-medium">Upload from device</span>
+              <span className="text-xs text-gray-500">Choose an existing photo</span>
+            </button>
+          </div>
+
+          <p className="text-xs text-gray-500 mt-2">
+            Place a marker of known size <span className="font-medium">flat beside the wound, on the same
+            surface</span>, and shoot square to it. A bank or ID card is the most reliable; a coin or ruler
+            also works.
+          </p>
+
           {!analyzing && m.area_cm2 != null && (
-            <p className={`text-xs mt-2 ${scaleReliable ? 'text-green-600' : 'text-amber-600'}`}>
-              {scaleReliable ? '✓ Calibrated measurement' : '⚠ No reliable calibration marker — size is approximate. Confirm below.'}
-            </p>
+            <div className={`mt-2 rounded-lg border p-2 ${scaleReliable ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-300'}`}>
+              <p className={`text-xs ${scaleReliable ? 'text-green-800' : 'text-amber-900'}`}>
+                {scaleReliable
+                  ? `Calibrated measurement (${calibType.startsWith('manual:') ? calibType.slice(7) : calibType}).`
+                  : 'No marker detected automatically. Automatic detection only recognises green printed markers, grid paper and ruler tick marks — not coins or cards. Set the scale by hand for an accurate size.'}
+              </p>
+              {pending && (
+                <button
+                  onClick={() => setShowCalibration(true)}
+                  className="mt-2 px-3 py-1.5 rounded-md text-xs font-medium bg-primary-600 text-white hover:bg-primary-700 inline-flex items-center gap-1"
+                >
+                  <Ruler className="w-3.5 h-3.5" /> {scaleReliable ? 'Adjust scale' : 'Set scale from marker'}
+                </button>
+              )}
+            </div>
+          )}
+
+          {showCalibration && pending && (
+            <Suspense fallback={null}>
+              <WoundCalibrationPicker
+                imageUrl={pending.url}
+                naturalWidth={pending.w}
+                naturalHeight={pending.h}
+                onCancel={() => setShowCalibration(false)}
+                onCalibrated={({ pixelsPerCm, referenceLabel }) => applyManualScale(pixelsPerCm, referenceLabel)}
+              />
+            </Suspense>
           )}
         </div>
       )}
