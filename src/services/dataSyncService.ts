@@ -983,6 +983,37 @@ class DataSyncService {
   /**
    * Push a single entity to cloud (for immediate sync after create/update)
    */
+  /**
+   * Stable per-record identity for the server's upsert.
+   *
+   * Generated once when a record is first pushed and stored on the local row,
+   * so every subsequent push of the same record carries the same key and the
+   * server updates instead of inserting. This is what makes repeated pushes
+   * idempotent — without it the push path fell back to per-table heuristics
+   * that missed treatment_plans entirely and duplicated it on every sync cycle.
+   *
+   * crypto.randomUUID where available; the fallback only needs to be unique,
+   * not unguessable, since the key is an identity not a secret.
+   */
+  private async ensureSyncKey(entity: SyncableEntity, localId: number | string, data: any): Promise<string> {
+    if (data?.sync_key) return data.sync_key;
+
+    const key = (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
+      ? crypto.randomUUID()
+      : `${entity}-${localId}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+    try {
+      const tableName = this.entityTables[entity];
+      const table = (db as any)[tableName];
+      // Persist before the push: if the request fails and is retried later, the
+      // retry must reuse this key rather than mint a new one and insert a copy.
+      if (table && localId != null) await table.update(localId, { sync_key: key });
+    } catch (err) {
+      console.warn(`Could not persist sync_key for ${entity}:`, err);
+    }
+    return key;
+  }
+
   public async pushEntityToCloud(entity: SyncableEntity, localId: number | string, data: any): Promise<boolean> {
     if (!this.isOnline) {
       // Queue for later sync
@@ -992,9 +1023,10 @@ class DataSyncService {
 
     try {
       const endpoint = this.entityEndpoints[entity];
+      const syncKey = await this.ensureSyncKey(entity, localId, data);
       const response = await apiClient.request(endpoint, {
         method: 'POST',
-        body: JSON.stringify(data)
+        body: JSON.stringify({ ...data, sync_key: syncKey })
       });
 
       // Update local record with server ID

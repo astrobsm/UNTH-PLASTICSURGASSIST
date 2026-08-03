@@ -27,6 +27,12 @@
  * from any patient record and cannot be deduplicated meaningfully, so they are
  * only removed with --purge-orphans, which is deliberately a separate flag.
  *
+ * Orphans are COPIED TO sync_orphan_archive BEFORE deletion. They may hold
+ * clinical text a clinician actually wrote that simply failed to attach to a
+ * patient; that is recoverable from the archive and unrecoverable from a
+ * DELETE. The archive keeps the whole row as JSONB, so nothing is lost even if
+ * the source table later changes shape.
+ *
  * DRY RUN IS THE DEFAULT. Nothing is deleted without --apply.
  */
 
@@ -116,8 +122,23 @@ async function main() {
       }
 
       if (apply && purgeOrphans && orphans > 0) {
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS sync_orphan_archive (
+            id SERIAL PRIMARY KEY,
+            source_table VARCHAR(100) NOT NULL,
+            source_id INTEGER,
+            row_data JSONB NOT NULL,
+            archived_at TIMESTAMPTZ DEFAULT NOW(),
+            reason TEXT
+          )`);
+        const copied = await client.query(
+          `INSERT INTO sync_orphan_archive (source_table, source_id, row_data, reason)
+           SELECT $1, id, to_jsonb(t), 'NULL patient_id — unreachable after sync push bug'
+           FROM ${t.name} t WHERE patient_id IS NULL`,
+          [t.name]
+        );
         const res = await client.query(`DELETE FROM ${t.name} WHERE patient_id IS NULL`);
-        console.log(`  deleted ${res.rowCount} orphan rows (NULL patient_id)`);
+        console.log(`  archived ${copied.rowCount} then deleted ${res.rowCount} orphan rows`);
       }
     }
 

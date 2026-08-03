@@ -760,7 +760,34 @@ async function handlePush(data, user, res) {
 
           // Check if record exists
           let existing = null;
-          
+
+          // ── sync_key: the durable identity ──────────────────────────────
+          // When the client supplies one, upsert on it and skip every heuristic
+          // below. This is what makes repeated pushes idempotent regardless of
+          // table, key type or which columns happen to be registered in the
+          // date map — the failure that duplicated treatment_plans 140-fold.
+          if (snakePayload.sync_key && (!validColumns || validColumns.has('sync_key'))) {
+            try {
+              const quotedColumns = columns.map(c => `"${c}"`).join(', ');
+              const updates = columns
+                .filter(c => c !== 'sync_key' && c !== 'id')
+                .map(c => `"${c}" = EXCLUDED."${c}"`)
+                .join(', ');
+              await query(
+                `INSERT INTO ${resolvedEntityType} (${quotedColumns}) VALUES (${placeholders})
+                 ON CONFLICT (sync_key) WHERE sync_key IS NOT NULL
+                 DO UPDATE SET ${updates || '"sync_key" = EXCLUDED."sync_key"'}`,
+                values
+              );
+              results.push({ entityId, status: 'synced' });
+              continue;
+            } catch (upsertErr) {
+              // A table without the column or index yet — fall through to the
+              // legacy path rather than losing the record.
+              console.warn(`sync_key upsert unavailable for ${resolvedEntityType}:`, upsertErr.message);
+            }
+          }
+
           if (!isSerialKey) {
             // VARCHAR id tables: look up by id directly
             const existingId = snakePayload.server_id || snakePayload.id;
