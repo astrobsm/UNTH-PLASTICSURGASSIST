@@ -27,6 +27,7 @@ import {
   ENGINE_VERSION, type RunResult, type SavedAnalysisSummary,
 } from '../services/clinicianAssistant/clinicianAssistantService';
 import type { Severity } from '../services/clinicianAssistant/engine/types';
+import BedsideCalculators from '../components/clinicianAssistant/BedsideCalculators';
 
 /**
  * Findings that already have a dedicated module in this app. Matched on the
@@ -72,6 +73,7 @@ export default function ClinicianAssistantPage() {
   const [history, setHistory] = useState<SavedAnalysisSummary[]>([]);
   const [recent, setRecent] = useState<SavedAnalysisSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<'analysis' | 'calculators'>('analysis');
 
   useEffect(() => {
     (async () => {
@@ -250,11 +252,36 @@ export default function ClinicianAssistantPage() {
         </div>
       </div>
 
-      {running && (
+      <div className="flex gap-1 border-b mb-4">
+        {([['analysis', 'Analysis'], ['calculators', 'Calculators']] as const).map(([id, label]) => (
+          <button
+            key={id}
+            onClick={() => setTab(id)}
+            className={`px-4 py-2 text-sm border-b-2 ${
+              tab === id ? 'border-primary-600 text-primary-700 font-medium' : 'border-transparent text-gray-600'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'calculators' && (
+        <BedsideCalculators
+          prefill={{
+            weightKg: result?.analysis.patient.weightKg ?? null,
+            heightCm: result?.analysis.patient.heightCm ?? null,
+            ageYears: result?.analysis.patient.age ?? null,
+            sex: result?.analysis.patient.sex,
+          }}
+        />
+      )}
+
+      {tab === 'analysis' && running && (
         <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-primary-600" /></div>
       )}
 
-      {result && !running && (
+      {tab === 'analysis' && result && !running && (
         <div className="space-y-4">
           <div className={`rounded-lg border p-4 ${tone(result.analysis.overallSeverity)}`}>
             <div className="text-xs uppercase tracking-wide font-semibold mb-1">Overall</div>
