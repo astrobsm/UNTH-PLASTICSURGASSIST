@@ -48,6 +48,7 @@
     "jspdf-autotable": "^5.0.7",
     "lucide-react": "^0.292.0",
     "openai": "^6.8.1",
+    "pdfjs-dist": "^4.10.38",
     "pg": "^8.11.3",
     "react": "^18.2.0",
     "react-chartjs-2": "^5.3.1",

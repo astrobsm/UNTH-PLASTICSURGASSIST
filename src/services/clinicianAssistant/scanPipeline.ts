@@ -7,6 +7,11 @@
  * a raised white count means something different alongside a raised creatinine
  * than it does alone.
  *
+ * PDFs ARE READ, NOT PHOTOGRAPHED. An electronically issued report carries a
+ * real text layer, and reading it is exact where OCR of the same page is a
+ * best guess. Only pages with no usable text layer are rasterised and passed
+ * through OCR — which is what a scanned-to-PDF report is.
+ *
  * OCR IS THE APP'S EXISTING ENGINE. ocrService already runs Cloud Vision with a
  * local Tesseract fallback, is self-hosted for offline use, and is the thing
  * this app maintains. PocketClinician's own OCR layer was deliberately not
@@ -15,6 +20,7 @@
  */
 
 import { ocrService } from '../ocrService';
+import { readPdf } from './pdfReader';
 import { classifyReport } from './parse/classify';
 import { parseLabValues, resolvePercentages, parseDemographics } from './parse/labParser';
 import { parseMicrobiology } from './parse/microParser';
@@ -37,6 +43,14 @@ export interface ScannedFile {
   confidence: number;
   error?: string;
   text?: string;
+  /** Pages in the source document; 1 for a photograph. */
+  pageCount?: number;
+  /**
+   * How the text was obtained. 'text-layer' means it was read exactly from the
+   * PDF and carries no recognition error — worth showing, because it changes
+   * how much the values need checking.
+   */
+  readMethod?: 'ocr' | 'text-layer' | 'mixed';
 }
 
 export interface ScanResult {
@@ -71,14 +85,57 @@ async function readOne(
   const extraction = emptyExtraction();
 
   try {
-    const ocr = await ocrService.extractText(file, 'lab_report', p => {
-      entry.progress = p.progress ?? 0;
-      onProgress(entry.progress);
-    });
+    const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+    let text = '';
+    let confidence = 0;
 
-    const text = ocr?.text || '';
+    if (isPdf) {
+      // Text layer first. Pages that have one need no recognition at all, and
+      // their values are exact rather than inferred.
+      const { pages } = await readPdf(file, (done, total) => {
+        entry.progress = total ? done / total : 0;
+        onProgress(entry.progress);
+      });
+
+      const parts: string[] = [];
+      let ocrPages = 0;
+      let ocrConfidenceTotal = 0;
+
+      for (const page of pages) {
+        if (page.text) {
+          parts.push(page.text);
+          continue;
+        }
+        // No text layer: this page is a scan inside a PDF wrapper.
+        if (page.canvas) {
+          const ocr = await ocrService.extractText(page.canvas, 'lab_report');
+          if (ocr?.text) {
+            parts.push(ocr.text);
+            ocrPages++;
+            ocrConfidenceTotal += ocr.confidence ?? 0;
+          }
+        }
+      }
+
+      text = parts.join('\n\n');
+      // A page read from its text layer is exact; only OCR'd pages carry
+      // recognition uncertainty, so confidence reflects those alone.
+      confidence = ocrPages ? ocrConfidenceTotal / ocrPages : 1;
+      entry.pageCount = pages.length;
+      entry.readMethod = ocrPages === 0 ? 'text-layer'
+        : ocrPages === pages.length ? 'ocr' : 'mixed';
+    } else {
+      const ocr = await ocrService.extractText(file, 'lab_report', p => {
+        entry.progress = p.progress ?? 0;
+        onProgress(entry.progress);
+      });
+      text = ocr?.text || '';
+      confidence = ocr?.confidence ?? 0;
+      entry.readMethod = 'ocr';
+    }
+
     entry.text = text;
-    entry.confidence = ocr?.confidence ?? 0;
+    entry.confidence = confidence;
     entry.status = 'parsing';
 
     if (!text.trim()) {
@@ -114,7 +171,7 @@ async function readOne(
       id: entry.id,
       fileName: file.name,
       mime: file.type || 'image/*',
-      pageCount: 1,
+      pageCount: entry.pageCount ?? 1,
       rawText: text,
       meanConfidence: entry.confidence,
       detectedModules: classification.modules,

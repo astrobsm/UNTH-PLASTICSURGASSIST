@@ -99,7 +99,7 @@ export default function ScanReportsPanel({ patient, recordExtraction, onCancel, 
 
       <input ref={cameraRef} type="file" accept="image/*" capture="environment" multiple className="hidden"
         onChange={e => { addFiles(e.target.files); e.target.value = ''; }} />
-      <input ref={galleryRef} type="file" accept="image/*" multiple className="hidden"
+      <input ref={galleryRef} type="file" accept="image/*,application/pdf" multiple className="hidden"
         onChange={e => { addFiles(e.target.files); e.target.value = ''; }} />
 
       <div className="grid grid-cols-2 gap-2">
@@ -117,7 +117,7 @@ export default function ScanReportsPanel({ patient, recordExtraction, onCancel, 
           className="py-5 border-2 border-dashed border-primary-300 rounded-xl text-primary-700 hover:bg-primary-50 flex flex-col items-center gap-1.5 disabled:opacity-60"
         >
           <Upload className="w-5 h-5" />
-          <span className="text-sm font-medium">Upload from device</span>
+          <span className="text-sm font-medium">Upload files or PDFs</span>
         </button>
       </div>
 
@@ -160,7 +160,7 @@ export default function ScanReportsPanel({ patient, recordExtraction, onCancel, 
             <div key={f.id} className="p-2.5 flex items-center justify-between gap-3 text-sm">
               <span className="truncate flex-1">{f.name}</span>
               <span className="text-xs text-gray-500 whitespace-nowrap">
-                {f.kind ? `${f.kind} · ` : ''}{STATUS_LABEL[f.status]}
+                {f.kind ? `${f.kind} · ` : ''}{f.readMethod === 'text-layer' ? 'PDF text · ' : f.readMethod === 'mixed' ? 'PDF mixed · ' : ''}{STATUS_LABEL[f.status]}
                 {f.status === 'done' && ` · ${f.valueCount} value(s)`}
               </span>
               {f.status === 'done' && <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0" />}

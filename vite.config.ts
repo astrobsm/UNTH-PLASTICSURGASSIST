@@ -95,7 +95,10 @@ export default defineConfig(({ mode }) => ({
 
       // InjectManifest Workbox config
       injectManifest: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2,json}'],
+        // mjs is included for the pdf.js worker, which Vite emits as .mjs.
+        // Without it the worker is not precached and reading a PDF report
+        // fails offline — the one condition the module is built for.
+        globPatterns: ['**/*.{js,mjs,css,html,ico,png,svg,woff,woff2,json}'],
         // The OCR engine (~5.7 MB of wasm cores + traineddata) is deliberately
         // NOT precached: precaching is all-or-nothing, so bundling it would push
         // several minutes onto the very first install before the app becomes
