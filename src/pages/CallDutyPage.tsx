@@ -513,7 +513,7 @@ export default function CallDutyPage() {
 
     // openPrintWindow tags the blob 'text/html;charset=utf-8'. Without that (and
     // the <meta charset> above) the browser decoded these bytes as Windows-1252
-    // and phone numbers printed as "ðŸ“ž 08033328385".
+    // and phone numbers printed as "📞 08033328385".
     openPrintWindow(html);
   };
 

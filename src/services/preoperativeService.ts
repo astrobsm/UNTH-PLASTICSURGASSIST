@@ -434,7 +434,7 @@ class PreoperativeService {
    */
   async generateComprehensiveSummary(data: ComprehensiveSummaryData): Promise<string> {
     const apiKey = localStorage.getItem('openai_api_key');
-    if (!apiKey || apiKey === 'â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢') {
+    if (!apiKey || apiKey === '••••••••••••••••') {
       // Return a structured summary without AI
       return this.generateStructuredSummary(data);
     }
@@ -541,27 +541,27 @@ Anaesthesia: ${surgery_details.anaesthesia_type}
 Scheduled Date: ${surgery_details.date}
 
 CURRENT MEDICATIONS:
-${assessment.current_medications.map(m => `â€¢ ${m.drug_name} ${m.dosage} ${m.frequency} (${m.route}) - ${m.indication}${m.stop_before_surgery ? ` [STOP ${m.stop_hours_before}h pre-op]` : ''}`).join('\n')}
+${assessment.current_medications.map(m => `• ${m.drug_name} ${m.dosage} ${m.frequency} (${m.route}) - ${m.indication}${m.stop_before_surgery ? ` [STOP ${m.stop_hours_before}h pre-op]` : ''}`).join('\n')}
 
 RISK ASSESSMENT SUMMARY:
-â€¢ Bleeding Risk: ${assessment.bleeding_risk?.risk_level?.toUpperCase() || 'NOT ASSESSED'} (Score: ${assessment.bleeding_risk?.risk_score || 'N/A'})
+• Bleeding Risk: ${assessment.bleeding_risk?.risk_level?.toUpperCase() || 'NOT ASSESSED'} (Score: ${assessment.bleeding_risk?.risk_score || 'N/A'})
   ${assessment.bleeding_risk?.recommendations.map(r => `  - ${r}`).join('\n  ') || ''}
   
-â€¢ DVT Risk: ${assessment.dvt_risk?.risk_category?.toUpperCase() || 'NOT ASSESSED'} (Caprini: ${assessment.dvt_risk?.total_score || 'N/A'})
+• DVT Risk: ${assessment.dvt_risk?.risk_category?.toUpperCase() || 'NOT ASSESSED'} (Caprini: ${assessment.dvt_risk?.total_score || 'N/A'})
   Prophylaxis: ${assessment.dvt_risk?.prophylaxis_recommendation || 'Not specified'}
   
-â€¢ Cardiovascular Risk: ${assessment.cardiovascular_risk?.risk_level?.toUpperCase() || 'NOT ASSESSED'} (RCRI: ${assessment.cardiovascular_risk?.rcri_score || 'N/A'}, ${assessment.cardiovascular_risk?.cardiac_event_risk_percent}% event risk)
+• Cardiovascular Risk: ${assessment.cardiovascular_risk?.risk_level?.toUpperCase() || 'NOT ASSESSED'} (RCRI: ${assessment.cardiovascular_risk?.rcri_score || 'N/A'}, ${assessment.cardiovascular_risk?.cardiac_event_risk_percent}% event risk)
   ${assessment.cardiovascular_risk?.recommendations.map(r => `  - ${r}`).join('\n  ') || ''}
   
-â€¢ Pressure Sore Risk: ${assessment.pressure_sore_risk?.risk_category?.toUpperCase() || 'NOT ASSESSED'} (Braden: ${assessment.pressure_sore_risk?.braden_total || 'N/A'})
+• Pressure Sore Risk: ${assessment.pressure_sore_risk?.risk_category?.toUpperCase() || 'NOT ASSESSED'} (Braden: ${assessment.pressure_sore_risk?.braden_total || 'N/A'})
   ${assessment.pressure_sore_risk?.preventive_measures.map(m => `  - ${m}`).join('\n  ') || ''}
 
 COMORBIDITIES AND MANAGEMENT:
-${assessment.comorbidities_medications.map(cm => `â€¢ ${cm.comorbidity}\n  Medications: ${cm.medications.map(m => m.drug_name).join(', ')}`).join('\n')}
+${assessment.comorbidities_medications.map(cm => `• ${cm.comorbidity}\n  Medications: ${cm.medications.map(m => m.drug_name).join(', ')}`).join('\n')}
 
 DOCUMENTATION:
-â€¢ Consent: ${assessment.consent_document ? 'Signed and uploaded' : 'PENDING'}
-â€¢ Payment: ${assessment.insurance_covered ? 'Insurance covered' : assessment.payment_evidence ? 'Evidence uploaded' : 'PENDING'}
+• Consent: ${assessment.consent_document ? 'Signed and uploaded' : 'PENDING'}
+• Payment: ${assessment.insurance_covered ? 'Insurance covered' : assessment.payment_evidence ? 'Evidence uploaded' : 'PENDING'}
 
 ---
 Summary prepared by: ${assessment.assessed_by}
@@ -574,7 +574,7 @@ Date: ${new Date().toLocaleDateString()}
    */
   async generatePreOpInstructions(data: ComprehensiveSummaryData): Promise<string> {
     const apiKey = localStorage.getItem('openai_api_key');
-    if (!apiKey || apiKey === 'â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢') {
+    if (!apiKey || apiKey === '••••••••••••••••') {
       return this.generateStructuredInstructions(data);
     }
 
@@ -686,40 +686,40 @@ You are scheduled for ${surgery_details.procedure_name} on ${surgery_details.dat
 Please follow these instructions carefully:
 
 â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-
-âš ï¸  CRITICAL FASTING REQUIREMENTS (${anaesthesiaType.toUpperCase()} ANAESTHESIA)
+⚠️  CRITICAL FASTING REQUIREMENTS (${anaesthesiaType.toUpperCase()} ANAESTHESIA)
 â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-
 
-ðŸš« SOLID FOOD: Nothing to eat for ${fastingHoursSolid} hours before surgery
-ðŸ’§ CLEAR FLUIDS: Nothing to drink for ${fastingHoursClear} hours before surgery
+🚫 SOLID FOOD: Nothing to eat for ${fastingHoursSolid} hours before surgery
+💧 CLEAR FLUIDS: Nothing to drink for ${fastingHoursClear} hours before surgery
 
 This means:
-â€¢ NO food after [calculate ${fastingHoursSolid} hours before surgery time]
-â€¢ NO drinks (including water) after [calculate ${fastingHoursClear} hours before surgery time]
-â€¢ NO chewing gum or sweets
+• NO food after [calculate ${fastingHoursSolid} hours before surgery time]
+• NO drinks (including water) after [calculate ${fastingHoursClear} hours before surgery time]
+• NO chewing gum or sweets
 
-âš ï¸  FAILURE TO FAST MAY RESULT IN SURGERY CANCELLATION FOR YOUR SAFETY
+⚠️  FAILURE TO FAST MAY RESULT IN SURGERY CANCELLATION FOR YOUR SAFETY
 
 â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-
-ðŸ’Š MEDICATION INSTRUCTIONS
+💊 MEDICATION INSTRUCTIONS
 â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-
 
 MEDICATIONS TO STOP:
 ${assessment.current_medications.filter(m => m.stop_before_surgery).map(m => 
-  `âŒ ${m.drug_name}: STOP ${m.stop_hours_before} hours before surgery`
+  `❌ ${m.drug_name}: STOP ${m.stop_hours_before} hours before surgery`
 ).join('\n')}
 
 MEDICATIONS TO CONTINUE:
 ${assessment.current_medications.filter(m => !m.stop_before_surgery).map(m => 
-  `âœ… ${m.drug_name}: Continue as prescribed (take with small sip of water if needed)`
+  `✅ ${m.drug_name}: Continue as prescribed (take with small sip of water if needed)`
 ).join('\n')}
 
 ${assessment.comorbidities_medications.length > 0 ? `
 SPECIAL INSTRUCTIONS FOR YOUR CONDITIONS:
-${assessment.comorbidities_medications.map(cm => `â€¢ ${cm.comorbidity}: Continue prescribed medications unless instructed otherwise`).join('\n')}
+${assessment.comorbidities_medications.map(cm => `• ${cm.comorbidity}: Continue prescribed medications unless instructed otherwise`).join('\n')}
 ` : ''}
 
 â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-
-ðŸ› PREPARATION THE NIGHT BEFORE
+🛁 PREPARATION THE NIGHT BEFORE
 â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-
 
 1. Take a shower or bath using antibacterial soap
@@ -729,27 +729,27 @@ ${assessment.comorbidities_medications.map(cm => `â€¢ ${cm.comorbidity}: Con
 5. Get a good night's sleep
 
 â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-
-ðŸ¥ ON THE DAY OF SURGERY
+🏥 ON THE DAY OF SURGERY
 â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-
 
 MORNING OF SURGERY:
-â–¡ Shower again with antibacterial soap (do not apply lotions, creams, or deodorant)
-â–¡ Brush your teeth (do not swallow water)
-â–¡ Do NOT eat or drink anything (unless cleared medications with sip of water)
-â–¡ Wear comfortable, loose-fitting clothing
-â–¡ Remove all jewelry, piercings, contact lenses
+□ Shower again with antibacterial soap (do not apply lotions, creams, or deodorant)
+□ Brush your teeth (do not swallow water)
+□ Do NOT eat or drink anything (unless cleared medications with sip of water)
+□ Wear comfortable, loose-fitting clothing
+□ Remove all jewelry, piercings, contact lenses
 
 WHAT TO BRING:
-â–¡ Valid ID and hospital card
-â–¡ Insurance card (if applicable)
-${!assessment.insurance_covered ? 'â–¡ Payment receipt/evidence' : ''}
-â–¡ List of current medications
-â–¡ Copy of signed consent form
-â–¡ Comfortable clothes for discharge
-â–¡ Someone to drive you home
+□ Valid ID and hospital card
+□ Insurance card (if applicable)
+${!assessment.insurance_covered ? '□ Payment receipt/evidence' : ''}
+□ List of current medications
+□ Copy of signed consent form
+□ Comfortable clothes for discharge
+□ Someone to drive you home
 
 â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-
-â° ARRIVAL TIME
+⏰ ARRIVAL TIME
 â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-
 
 Please arrive at the hospital at: [INSERT TIME - typically 2 hours before surgery]
@@ -757,19 +757,19 @@ Please arrive at the hospital at: [INSERT TIME - typically 2 hours before surger
 Report to: Admissions/Pre-operative Area
 
 â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-
-ðŸš¨ IMPORTANT SAFETY INFORMATION
+🚨 IMPORTANT SAFETY INFORMATION
 â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-
 
 CALL THE HOSPITAL IMMEDIATELY IF:
-â€¢ You develop a cold, fever, or infection
-â€¢ You have any changes in your health
-â€¢ You cannot follow the fasting instructions
-â€¢ You have questions or concerns
+• You develop a cold, fever, or infection
+• You have any changes in your health
+• You cannot follow the fasting instructions
+• You have questions or concerns
 
 Emergency Contact: [INSERT HOSPITAL NUMBER]
 
 â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-
-ðŸ“‹ WHAT TO EXPECT
+📋 WHAT TO EXPECT
 â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-
 
 1. Check-in and registration
@@ -785,16 +785,16 @@ Emergency Contact: [INSERT HOSPITAL NUMBER]
 â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-
 
 ${assessment.cardiovascular_risk?.risk_level === 'high' || assessment.cardiovascular_risk?.risk_level === 'intermediate' ? 
-`âš ï¸  SPECIAL CARDIAC PRECAUTIONS:
+`⚠️  SPECIAL CARDIAC PRECAUTIONS:
 Due to your cardiovascular risk, extra monitoring will be provided during surgery.
-${assessment.cardiovascular_risk.recommendations.map(r => `â€¢ ${r}`).join('\n')}
+${assessment.cardiovascular_risk.recommendations.map(r => `• ${r}`).join('\n')}
 ` : ''}
 
 ${assessment.dvt_risk?.risk_category === 'high' || assessment.dvt_risk?.risk_category === 'very-high' ?
-`âš ï¸  DVT PREVENTION:
+`⚠️  DVT PREVENTION:
 You are at ${assessment.dvt_risk.risk_category} risk for blood clots.
-â€¢ ${assessment.dvt_risk.prophylaxis_recommendation}
-â€¢ Early mobilization after surgery is important
+• ${assessment.dvt_risk.prophylaxis_recommendation}
+• Early mobilization after surgery is important
 ` : ''}
 
 We look forward to providing you with excellent care.
@@ -828,14 +828,14 @@ Date: ${new Date().toLocaleDateString()}
       // Try to sync to server first
       try {
         const saved = await apiClient.createPreoperativeAssessment(assessment);
-        console.log('âœ… Preoperative assessment synced to server:', saved.id);
+        console.log('✅ Preoperative assessment synced to server:', saved.id);
         await db.preoperative_assessments.add({ ...assessment, id: saved.id, synced: true } as any);
         return saved.id;
       } catch (syncError) {
-        console.warn('âš ï¸ Failed to sync preoperative assessment to server, saving locally', syncError);
+        console.warn('⚠️ Failed to sync preoperative assessment to server, saving locally', syncError);
         const localId = await db.preoperative_assessments.add({ ...assessment, synced: false } as any);
         await syncService.queueAction('create', 'preoperative_assessments', localId as any, assessment);
-        console.log('ðŸ“± Preoperative assessment saved locally, will sync when online:', localId);
+        console.log('📱 Preoperative assessment saved locally, will sync when online:', localId);
         return String(localId);
       }
     } catch (error) {

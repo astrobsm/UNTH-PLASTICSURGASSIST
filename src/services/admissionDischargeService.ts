@@ -299,7 +299,7 @@ class AdmissionDischargeService {
           id: savedAdmission.id,
           synced: true
         } as any);
-        logger.log('âœ… Admission synced to server:', savedAdmission.id);
+        logger.log('✅ Admission synced to server:', savedAdmission.id);
         
         // Send notification to all users with voice announcement (lazy-loaded)
         try {
@@ -314,12 +314,12 @@ class AdmissionDischargeService {
         return savedAdmission.id;
       }
     } catch (error) {
-      logger.warn('âš ï¸ Failed to sync admission to server, saving locally:', error);
+      logger.warn('⚠️ Failed to sync admission to server, saving locally:', error);
     }
 
     // Fallback: save locally only
     const localId = await db.admissions.add({ ...admission, synced: false } as any);
-    logger.log('ðŸ“± Admission saved locally, will sync when online:', localId);
+    logger.log('📱 Admission saved locally, will sync when online:', localId);
     
     // Queue for sync
     await syncService.queueAction('create', 'admissions', localId as number, admission);
@@ -419,7 +419,7 @@ class AdmissionDischargeService {
         }
       }
     } catch (error) {
-      console.warn('âš ï¸ Could not fetch patient admissions from server');
+      console.warn('⚠️ Could not fetch patient admissions from server');
     }
 
     const admissions = await db.admissions.toArray();
@@ -474,27 +474,27 @@ class AdmissionDischargeService {
   // ============= SYNC METHODS =============
 
   async syncUnsyncedAdmissions(): Promise<void> {
-    console.log('ðŸ”„ Syncing unsynced admissions...');
+    console.log('🔄 Syncing unsynced admissions...');
     
     // Get all unsynced admissions
     const unsyncedAdmissions = await db.admissions
       .filter(a => a.synced === false)
       .toArray();
     
-    console.log(`ðŸ“Š Found ${unsyncedAdmissions.length} unsynced admissions`);
+    console.log(`📊 Found ${unsyncedAdmissions.length} unsynced admissions`);
     
     for (const admission of unsyncedAdmissions) {
       try {
         // Queue for sync via syncService
         await syncService.queueAction('create', 'admissions', admission.id!, admission);
-        console.log(`âœ… Queued admission ${admission.id} for sync`);
+        console.log(`✅ Queued admission ${admission.id} for sync`);
       } catch (error) {
-        console.error(`âŒ Failed to queue admission ${admission.id}:`, error);
+        console.error(`❌ Failed to queue admission ${admission.id}:`, error);
       }
     }
     
     // Note: syncService will automatically process queue on next sync cycle
-    console.log('âœ… Admissions queued for background sync');
+    console.log('✅ Admissions queued for background sync');
   }
 
   // ============= WHO DISCHARGE SCORING =============
@@ -695,16 +695,16 @@ class AdmissionDischargeService {
           });
         }
 
-        console.log('âœ… Discharge synced to server:', savedDischarge.id);
+        console.log('✅ Discharge synced to server:', savedDischarge.id);
         return savedDischarge.id;
       }
     } catch (error) {
-      console.warn('âš ï¸ Failed to sync discharge to server, saving locally:', error);
+      console.warn('⚠️ Failed to sync discharge to server, saving locally:', error);
     }
 
     // Fallback: save locally only
     const localId = await db.discharges.add({ ...discharge, synced: false } as any);
-    console.log('ðŸ“± Discharge saved locally, will sync when online:', localId);
+    console.log('📱 Discharge saved locally, will sync when online:', localId);
 
     // Update admission status locally
     if (dischargeData.admission_id) {
@@ -889,7 +889,7 @@ class AdmissionDischargeService {
     if (discharge.secondary_diagnoses?.length) {
       summary += `Secondary Diagnoses:\n`;
       discharge.secondary_diagnoses.forEach(d => {
-        summary += `  â€¢ ${d}\n`;
+        summary += `  • ${d}\n`;
       });
     }
     summary += `\n`;
@@ -898,7 +898,7 @@ class AdmissionDischargeService {
       summary += `PROCEDURES PERFORMED\n`;
       summary += `-`.repeat(30) + `\n`;
       discharge.procedures_performed.forEach(p => {
-        summary += `  â€¢ ${p}\n`;
+        summary += `  • ${p}\n`;
       });
       summary += `\n`;
     }
@@ -928,7 +928,7 @@ class AdmissionDischargeService {
       summary += `FOLLOW-UP APPOINTMENTS\n`;
       summary += `-`.repeat(30) + `\n`;
       discharge.follow_up_appointments.forEach(apt => {
-        summary += `  â€¢ ${format(new Date(apt.date), 'dd MMM yyyy')} - ${apt.clinic}\n`;
+        summary += `  • ${format(new Date(apt.date), 'dd MMM yyyy')} - ${apt.clinic}\n`;
         summary += `    Purpose: ${apt.purpose}\n`;
       });
       summary += `\n`;
@@ -956,21 +956,21 @@ class AdmissionDischargeService {
     report += `Assessed By: ${whoScore.assessed_by}\n\n`;
 
     report += `Clinical Stability:\n`;
-    report += `  â€¢ Vital Signs: ${['Unstable', 'Borderline', 'Stable 24h', 'Stable 48h+'][whoScore.vital_signs_stable]}\n`;
-    report += `  â€¢ Pain Control: ${['Severe', 'Moderate', 'Mild', 'Minimal/None'][whoScore.pain_controlled]}\n`;
-    report += `  â€¢ Oral Intake: ${['NPO', 'Liquids only', 'Soft diet', 'Regular diet'][whoScore.oral_intake_adequate]}\n`;
-    report += `  â€¢ Mobility: ${['Bedbound', 'Needs assistance', 'Walks with aid', 'Independent'][whoScore.mobility_status]}\n`;
-    report += `  â€¢ Wound Status: ${['Infected', 'Concerning', 'Healing', 'Well-healed'][whoScore.wound_healing_status]}\n\n`;
+    report += `  • Vital Signs: ${['Unstable', 'Borderline', 'Stable 24h', 'Stable 48h+'][whoScore.vital_signs_stable]}\n`;
+    report += `  • Pain Control: ${['Severe', 'Moderate', 'Mild', 'Minimal/None'][whoScore.pain_controlled]}\n`;
+    report += `  • Oral Intake: ${['NPO', 'Liquids only', 'Soft diet', 'Regular diet'][whoScore.oral_intake_adequate]}\n`;
+    report += `  • Mobility: ${['Bedbound', 'Needs assistance', 'Walks with aid', 'Independent'][whoScore.mobility_status]}\n`;
+    report += `  • Wound Status: ${['Infected', 'Concerning', 'Healing', 'Well-healed'][whoScore.wound_healing_status]}\n\n`;
 
     report += `Functional Readiness:\n`;
-    report += `  â€¢ Self-Care: ${['Dependent', 'Needs help', 'Minimal help', 'Independent'][whoScore.self_care_ability]}\n`;
-    report += `  â€¢ Medication Understanding: ${['None', 'Poor', 'Moderate', 'Good'][whoScore.medication_understanding]}\n`;
-    report += `  â€¢ Follow-up Arranged: ${['No', 'Pending', 'Partially', 'Complete'][whoScore.follow_up_arranged]}\n\n`;
+    report += `  • Self-Care: ${['Dependent', 'Needs help', 'Minimal help', 'Independent'][whoScore.self_care_ability]}\n`;
+    report += `  • Medication Understanding: ${['None', 'Poor', 'Moderate', 'Good'][whoScore.medication_understanding]}\n`;
+    report += `  • Follow-up Arranged: ${['No', 'Pending', 'Partially', 'Complete'][whoScore.follow_up_arranged]}\n\n`;
 
     report += `Social Support:\n`;
-    report += `  â€¢ Caregiver Available: ${['None', 'Occasionally', 'Most times', 'Always'][whoScore.caregiver_available]}\n`;
-    report += `  â€¢ Transport: ${['No', 'Uncertain', 'Planned', 'Confirmed'][whoScore.transport_arranged]}\n`;
-    report += `  â€¢ Home Environment: ${['Unsafe', 'Concerns', 'Acceptable', 'Safe'][whoScore.home_environment_safe]}\n\n`;
+    report += `  • Caregiver Available: ${['None', 'Occasionally', 'Most times', 'Always'][whoScore.caregiver_available]}\n`;
+    report += `  • Transport: ${['No', 'Uncertain', 'Planned', 'Confirmed'][whoScore.transport_arranged]}\n`;
+    report += `  • Home Environment: ${['Unsafe', 'Concerns', 'Acceptable', 'Safe'][whoScore.home_environment_safe]}\n\n`;
 
     report += `TOTAL SCORE: ${whoScore.total_score}/33\n`;
     report += `RECOMMENDATION: ${whoScore.recommendation.replace(/_/g, ' ').toUpperCase()}\n\n`;
@@ -1025,7 +1025,7 @@ class AdmissionDischargeService {
       instructions += `ACTIVITY RESTRICTIONS\n`;
       instructions += `-`.repeat(30) + `\n`;
       discharge.activity_restrictions.forEach(r => {
-        instructions += `  â€¢ ${r}\n`;
+        instructions += `  • ${r}\n`;
       });
       instructions += `\n`;
     }
@@ -1039,7 +1039,7 @@ class AdmissionDischargeService {
     if (discharge.lifestyle_modifications?.length) {
       instructions += `Lifestyle Changes:\n`;
       discharge.lifestyle_modifications.forEach(m => {
-        instructions += `  â€¢ ${m}\n`;
+        instructions += `  • ${m}\n`;
       });
       instructions += `\n`;
     }
@@ -1050,11 +1050,11 @@ class AdmissionDischargeService {
       instructions += `-`.repeat(30) + `\n`;
       instructions += `Special Considerations:\n`;
       discharge.meal_plan_7_day.special_considerations.forEach(c => {
-        instructions += `  â€¢ ${c}\n`;
+        instructions += `  • ${c}\n`;
       });
       instructions += `\nFoods to Avoid:\n`;
       discharge.meal_plan_7_day.foods_to_avoid.forEach(f => {
-        instructions += `  â€¢ ${f}\n`;
+        instructions += `  • ${f}\n`;
       });
       instructions += `\nHydration: ${discharge.meal_plan_7_day.hydration_goals}\n\n`;
     }
@@ -1063,7 +1063,7 @@ class AdmissionDischargeService {
     instructions += `WARNING SIGNS - SEEK MEDICAL ATTENTION IF:\n`;
     instructions += `-`.repeat(30) + `\n`;
     const warningSigns = discharge.warning_signs || [
-      'Fever above 38Â°C (100.4Â°F)',
+      'Fever above 38°C (100.4°F)',
       'Increasing pain not controlled by medications',
       'Wound redness, swelling, or discharge',
       'Difficulty breathing',
@@ -1072,7 +1072,7 @@ class AdmissionDischargeService {
       'Confusion or altered consciousness'
     ];
     warningSigns.forEach(w => {
-      instructions += `  âš ï¸ ${w}\n`;
+      instructions += `  ⚠️ ${w}\n`;
     });
     instructions += `\n`;
 
@@ -1081,7 +1081,7 @@ class AdmissionDischargeService {
       instructions += `FOLLOW-UP APPOINTMENTS\n`;
       instructions += `-`.repeat(30) + `\n`;
       discharge.follow_up_appointments.forEach(apt => {
-        instructions += `ðŸ“… ${format(new Date(apt.date), 'EEEE, dd MMMM yyyy')}\n`;
+        instructions += `📅 ${format(new Date(apt.date), 'EEEE, dd MMMM yyyy')}\n`;
         instructions += `   Clinic: ${apt.clinic}\n`;
         instructions += `   Purpose: ${apt.purpose}\n`;
         if (apt.special_instructions) instructions += `   Note: ${apt.special_instructions}\n`;
@@ -1166,7 +1166,7 @@ class AdmissionDischargeService {
         if (item && item.trim()) {
           checkPageBreak(8);
           const cleanItem = clean(item);
-          const bulletText = 'â€¢ ' + cleanItem;
+          const bulletText = '• ' + cleanItem;
           const lines = pdf.splitTextToSize(bulletText, pageWidth - PDF_MARGINS.left - PDF_MARGINS.right - 5);
           lines.forEach((line: string, idx: number) => {
             pdf.text(idx === 0 ? line : '  ' + line, PDF_MARGINS.left + 3, yPos);
@@ -1293,7 +1293,7 @@ class AdmissionDischargeService {
 
     // Warning Signs Box
     const warningSigns = discharge.warning_signs || [
-      'Fever above 38Â°C (100.4Â°F)',
+      'Fever above 38°C (100.4°F)',
       'Increasing pain not relieved by medication',
       'Wound redness, swelling, or discharge',
       'Difficulty breathing',
@@ -1317,7 +1317,7 @@ class AdmissionDischargeService {
     pdf.setTextColor(0, 0, 0);
     warningSigns.forEach((sign) => {
       if (sign && sign.trim()) {
-        pdf.text('â€¢ ' + clean(sign), PDF_MARGINS.left + 8, yPos);
+        pdf.text('• ' + clean(sign), PDF_MARGINS.left + 8, yPos);
         yPos += 6;
       }
     });
@@ -1337,7 +1337,7 @@ class AdmissionDischargeService {
       pdf.setFont('times', 'normal');
       discharge.follow_up_appointments.forEach(apt => {
         checkPageBreak(8);
-        const aptText = `â€¢ ${format(new Date(apt.date), 'dd MMM yyyy')} - ${clean(apt.clinic)}: ${clean(apt.purpose)}`;
+        const aptText = `• ${format(new Date(apt.date), 'dd MMM yyyy')} - ${clean(apt.clinic)}: ${clean(apt.purpose)}`;
         pdf.text(aptText, PDF_MARGINS.left + 3, yPos);
         yPos += 6;
       });

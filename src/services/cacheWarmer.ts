@@ -68,9 +68,6 @@ function buildGlobalModules(): ModuleGroup[] {
       module: 'Admissions & Discharges',
       endpoints: ['/admissions', '/admissions?status=active', '/discharge-summaries'],
     },
-    { module: 'Treatment Plans', endpoints: ['/treatment-plans'] },
-    { module: 'Prescriptions', endpoints: ['/prescriptions'] },
-    { module: 'Lab Orders & Results', endpoints: ['/lab-orders', '/lab-results'] },
     { module: 'Progress Notes', endpoints: ['/progress-notes'] },
     { module: 'Ward Rounds', endpoints: ['/ward-rounds'] },
     { module: 'Patient Activities', endpoints: ['/activities'] },
@@ -79,18 +76,16 @@ function buildGlobalModules(): ModuleGroup[] {
     // ── Theatre & peri-operative ──
     {
       module: 'Surgeries',
-      endpoints: ['/surgeries', `/surgeries?date=${today}`, '/surgery-planning'],
+      endpoints: ['/surgeries', `/surgeries?date=${today}`],
     },
     { module: 'Preoperative Assessments', endpoints: ['/preoperative-assessments'] },
     { module: 'Pre-Surgical Conference', endpoints: ['/pre-surgical-conference'] },
     { module: 'Blood Transfusion', endpoints: ['/sync/blood-transfusions'] },
 
     // ── Wound & condition-specific protocols ──
-    { module: 'Wound Care', endpoints: ['/wound-care'] },
-    { module: 'Wound Progress Monitor', endpoints: ['/wounds'] },
+    { module: 'Wound Progress Monitor', endpoints: ['/wounds?action=monitor'] },
     { module: 'Keloid Care', endpoints: ['/keloid-care', '/keloid-care/scheduled-patients'] },
     { module: 'Pressure Sores', endpoints: ['/pressure-sore-protocol'] },
-    { module: 'Sickle Cell Ulcer', endpoints: ['/sickle-cell-ulcer'] },
     { module: 'Soft Tissue Infection', endpoints: ['/sti-protocol'] },
     { module: 'SJS/TEN Assessments', endpoints: ['/sjs-assessments'] },
     { module: 'Substance & Detox', endpoints: ['/substance-assessments'] },

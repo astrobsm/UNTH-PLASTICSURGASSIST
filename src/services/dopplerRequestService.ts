@@ -270,7 +270,7 @@ export const dopplerRequestService = {
     yPos += 7;
     pdf.text('Performed By: ___________________________', PDF_MARGINS.left, yPos);
     yPos += 7;
-    pdf.text('Report Attached: â˜ Yes  â˜ No', PDF_MARGINS.left, yPos);
+    pdf.text('Report Attached: ☐ Yes  ☐ No', PDF_MARGINS.left, yPos);
     
     // Add footer
     addFooter(pdf, 'Doppler Ultrasound Request - UNTH Plastic Surgery');

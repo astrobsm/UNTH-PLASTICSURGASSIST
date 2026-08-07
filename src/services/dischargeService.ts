@@ -235,7 +235,7 @@ class DischargeService {
     if (procedures_performed.length > 0) {
       instructions += `PROCEDURES PERFORMED:\n`;
       procedures_performed.forEach(proc => {
-        instructions += `â€¢ ${proc}\n`;
+        instructions += `• ${proc}\n`;
       });
       instructions += `\n`;
     }
@@ -261,48 +261,48 @@ class DischargeService {
         final_diagnosis.toLowerCase().includes('graft') ||
         procedures_performed.some(p => p.toLowerCase().includes('surgery'))) {
       instructions += `WOUND CARE:\n`;
-      instructions += `â€¢ Keep the wound clean and dry\n`;
-      instructions += `â€¢ Change dressings as instructed by your healthcare team\n`;
-      instructions += `â€¢ Watch for signs of infection (increased redness, swelling, pus, fever)\n`;
-      instructions += `â€¢ Do not remove stitches or staples yourself\n`;
-      instructions += `â€¢ Avoid soaking the wound in water until healed\n\n`;
+      instructions += `• Keep the wound clean and dry\n`;
+      instructions += `• Change dressings as instructed by your healthcare team\n`;
+      instructions += `• Watch for signs of infection (increased redness, swelling, pus, fever)\n`;
+      instructions += `• Do not remove stitches or staples yourself\n`;
+      instructions += `• Avoid soaking the wound in water until healed\n\n`;
     }
 
     // Activity restrictions
     instructions += `ACTIVITY:\n`;
-    instructions += `â€¢ Rest adequately and avoid strenuous activities for 2 weeks\n`;
-    instructions += `â€¢ Gradually increase activity as tolerated\n`;
-    instructions += `â€¢ Avoid heavy lifting (>5kg) for 2-4 weeks\n`;
-    instructions += `â€¢ Follow specific activity restrictions given by your doctor\n\n`;
+    instructions += `• Rest adequately and avoid strenuous activities for 2 weeks\n`;
+    instructions += `• Gradually increase activity as tolerated\n`;
+    instructions += `• Avoid heavy lifting (>5kg) for 2-4 weeks\n`;
+    instructions += `• Follow specific activity restrictions given by your doctor\n\n`;
 
     // Diet
     instructions += `DIET:\n`;
-    instructions += `â€¢ Maintain a balanced, nutritious diet\n`;
-    instructions += `â€¢ Increase protein intake to promote healing (eggs, fish, lean meat, beans)\n`;
-    instructions += `â€¢ Stay well hydrated (8-10 glasses of water daily)\n`;
-    instructions += `â€¢ Include fresh fruits and vegetables\n`;
-    instructions += `â€¢ Avoid alcohol and smoking\n`;
+    instructions += `• Maintain a balanced, nutritious diet\n`;
+    instructions += `• Increase protein intake to promote healing (eggs, fish, lean meat, beans)\n`;
+    instructions += `• Stay well hydrated (8-10 glasses of water daily)\n`;
+    instructions += `• Include fresh fruits and vegetables\n`;
+    instructions += `• Avoid alcohol and smoking\n`;
     if (final_diagnosis.toLowerCase().includes('burn')) {
-      instructions += `â€¢ Consider high-calorie diet to support burn healing\n`;
-      instructions += `â€¢ Vitamin C and zinc supplements may aid healing\n`;
+      instructions += `• Consider high-calorie diet to support burn healing\n`;
+      instructions += `• Vitamin C and zinc supplements may aid healing\n`;
     }
     instructions += `\n`;
 
     // Warning signs
     instructions += `SEEK IMMEDIATE MEDICAL ATTENTION IF YOU EXPERIENCE:\n`;
-    instructions += `â€¢ Fever above 38Â°C (100.4Â°F)\n`;
-    instructions += `â€¢ Increasing pain not relieved by medication\n`;
-    instructions += `â€¢ Signs of wound infection (redness, swelling, pus, foul odor)\n`;
-    instructions += `â€¢ Excessive bleeding from wound site\n`;
-    instructions += `â€¢ Shortness of breath or chest pain\n`;
-    instructions += `â€¢ Severe nausea or vomiting\n`;
-    instructions += `â€¢ Any other concerning symptoms\n\n`;
+    instructions += `• Fever above 38°C (100.4°F)\n`;
+    instructions += `• Increasing pain not relieved by medication\n`;
+    instructions += `• Signs of wound infection (redness, swelling, pus, foul odor)\n`;
+    instructions += `• Excessive bleeding from wound site\n`;
+    instructions += `• Shortness of breath or chest pain\n`;
+    instructions += `• Severe nausea or vomiting\n`;
+    instructions += `• Any other concerning symptoms\n\n`;
 
     // Follow-up
     instructions += `FOLLOW-UP:\n`;
-    instructions += `â€¢ Attend all scheduled follow-up appointments\n`;
-    instructions += `â€¢ Bring this discharge summary and all medications to your follow-up visit\n`;
-    instructions += `â€¢ Contact the clinic if you need to reschedule\n\n`;
+    instructions += `• Attend all scheduled follow-up appointments\n`;
+    instructions += `• Bring this discharge summary and all medications to your follow-up visit\n`;
+    instructions += `• Contact the clinic if you need to reschedule\n\n`;
 
     instructions += `EMERGENCY CONTACT:\n`;
     instructions += `For urgent concerns, contact the Plastic Surgery Unit or visit the nearest emergency department.\n\n`;
@@ -319,38 +319,38 @@ class DischargeService {
 
     if (diagnosisLower.includes('burn')) {
       instructions += `SPECIFIC INSTRUCTIONS FOR BURN CARE:\n`;
-      instructions += `â€¢ Keep burn areas moisturized with prescribed creams\n`;
-      instructions += `â€¢ Protect healing skin from sun exposure (use SPF 30+ sunscreen)\n`;
-      instructions += `â€¢ Perform range of motion exercises to prevent contractures\n`;
-      instructions += `â€¢ Use pressure garments as prescribed\n`;
-      instructions += `â€¢ Massage healed areas with moisturizer to reduce scarring\n`;
-      instructions += `â€¢ Avoid tight clothing over burn areas\n\n`;
+      instructions += `• Keep burn areas moisturized with prescribed creams\n`;
+      instructions += `• Protect healing skin from sun exposure (use SPF 30+ sunscreen)\n`;
+      instructions += `• Perform range of motion exercises to prevent contractures\n`;
+      instructions += `• Use pressure garments as prescribed\n`;
+      instructions += `• Massage healed areas with moisturizer to reduce scarring\n`;
+      instructions += `• Avoid tight clothing over burn areas\n\n`;
     }
 
     if (diagnosisLower.includes('graft') || diagnosisLower.includes('flap')) {
       instructions += `SPECIFIC INSTRUCTIONS FOR GRAFT/FLAP CARE:\n`;
-      instructions += `â€¢ Protect the graft site from trauma\n`;
-      instructions += `â€¢ Elevate the grafted area when resting\n`;
-      instructions += `â€¢ Avoid direct pressure on the graft\n`;
-      instructions += `â€¢ Monitor for signs of graft failure (dark color, coolness, loss of sensation)\n`;
-      instructions += `â€¢ Keep donor site clean and covered as instructed\n\n`;
+      instructions += `• Protect the graft site from trauma\n`;
+      instructions += `• Elevate the grafted area when resting\n`;
+      instructions += `• Avoid direct pressure on the graft\n`;
+      instructions += `• Monitor for signs of graft failure (dark color, coolness, loss of sensation)\n`;
+      instructions += `• Keep donor site clean and covered as instructed\n\n`;
     }
 
     if (diagnosisLower.includes('hand') || diagnosisLower.includes('finger')) {
       instructions += `HAND THERAPY:\n`;
-      instructions += `â€¢ Elevate hand above heart level when resting\n`;
-      instructions += `â€¢ Perform prescribed hand exercises regularly\n`;
-      instructions += `â€¢ Use hand splint as directed\n`;
-      instructions += `â€¢ Attend hand therapy sessions as scheduled\n\n`;
+      instructions += `• Elevate hand above heart level when resting\n`;
+      instructions += `• Perform prescribed hand exercises regularly\n`;
+      instructions += `• Use hand splint as directed\n`;
+      instructions += `• Attend hand therapy sessions as scheduled\n\n`;
     }
 
     if (diagnosisLower.includes('pressure sore') || diagnosisLower.includes('ulcer')) {
       instructions += `PRESSURE ULCER PREVENTION:\n`;
-      instructions += `â€¢ Change position every 2 hours if bedridden\n`;
-      instructions += `â€¢ Use pressure-relieving cushions and mattresses\n`;
-      instructions += `â€¢ Keep skin clean and dry\n`;
-      instructions += `â€¢ Maintain good nutrition and hydration\n`;
-      instructions += `â€¢ Inspect skin daily for new pressure areas\n\n`;
+      instructions += `• Change position every 2 hours if bedridden\n`;
+      instructions += `• Use pressure-relieving cushions and mattresses\n`;
+      instructions += `• Keep skin clean and dry\n`;
+      instructions += `• Maintain good nutrition and hydration\n`;
+      instructions += `• Inspect skin daily for new pressure areas\n\n`;
     }
 
     return instructions;

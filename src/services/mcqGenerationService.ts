@@ -1068,7 +1068,7 @@ class MCQGenerationService {
     let recommendations = '';
 
     if (accuracy >= 80) {
-      recommendations = `ðŸŽ‰ **Excellent Performance!** 
+      recommendations = `🎉 **Excellent Performance!** 
 
 You've demonstrated strong understanding of this clinical topic (${accuracy.toFixed(1)}% accuracy).
 
@@ -1088,7 +1088,7 @@ You've demonstrated strong understanding of this clinical topic (${accuracy.toFi
 - Attempt senior-level questions for challenge
 - Share insights with colleagues`;
     } else if (accuracy >= 60) {
-      recommendations = `ðŸ‘ **Good Performance - Room for Growth**
+      recommendations = `👍 **Good Performance - Room for Growth**
 
 You've shown competent understanding (${accuracy.toFixed(1)}% accuracy) with areas to strengthen.
 
@@ -1112,7 +1112,7 @@ ${session.weakAreas.slice(0, 3).map(area => `- ${area}`).join('\n')}
 3. Attend relevant clinical cases this week
 4. Reattempt similar questions in 1 week`;
     } else if (accuracy >= 40) {
-      recommendations = `âš ï¸ **Performance Needs Improvement**
+      recommendations = `⚠️ **Performance Needs Improvement**
 
 Your score of ${accuracy.toFixed(1)}% indicates significant knowledge gaps requiring urgent attention.
 
@@ -1143,7 +1143,7 @@ ${session.weakAreas.slice(0, 5).map(area => `- ${area}`).join('\n')}
 - Attend consultant-led teaching rounds
 - Utilize departmental resources`;
     } else {
-      recommendations = `ðŸš¨ **Urgent: Significant Learning Gaps Identified**
+      recommendations = `🚨 **Urgent: Significant Learning Gaps Identified**
 
 Score: ${accuracy.toFixed(1)}% - This indicates fundamental knowledge deficits requiring **immediate intervention**.
 
@@ -1660,7 +1660,7 @@ Apply these algorithms systematically in your clinical practice.`
       );
     }
 
-    console.log(`âœ… Initialized ${allTopics.length} WACS curriculum topics`);
+    console.log(`✅ Initialized ${allTopics.length} WACS curriculum topics`);
   }
 
   /**
@@ -1668,7 +1668,7 @@ Apply these algorithms systematically in your clinical practice.`
    * Sends push notifications every Tuesday at 9:30 AM
    */
   startWeeklyTestNotificationScheduler(): void {
-    console.log('ðŸ“… Starting Weekly MCQ Test Notification Scheduler...');
+    console.log('📅 Starting Weekly MCQ Test Notification Scheduler...');
 
     // Check every hour if it's Tuesday 9:30 AM
     setInterval(async () => {
@@ -1678,7 +1678,7 @@ Apply these algorithms systematically in your clinical practice.`
     // Also check immediately on startup
     this.checkAndSendTestReminders();
 
-    console.log('âœ… Weekly test notification scheduler started');
+    console.log('✅ Weekly test notification scheduler started');
   }
 
   /**
@@ -1692,7 +1692,7 @@ Apply these algorithms systematically in your clinical practice.`
 
     // Check if it's Tuesday (day 2) and between 9:30-10:30 AM
     if (day === 2 && hour === 9 && minute >= 30) {
-      console.log('ðŸ“š It\'s Tuesday 9:30 AM - Sending MCQ test reminders...');
+      console.log('📚 It\'s Tuesday 9:30 AM - Sending MCQ test reminders...');
       await this.sendWeeklyTestNotifications();
     }
   }
@@ -1723,7 +1723,7 @@ Apply these algorithms systematically in your clinical practice.`
         const topicTitle = await this.getTopicTitle(test.topicId);
         
         const notification = {
-          title: 'ðŸ“ Weekly MCQ Assessment Ready!',
+          title: '📝 Weekly MCQ Assessment Ready!',
           body: `${topicTitle} - 25 questions, 10 minutes. Take your test now!`,
           icon: '/logo192.png',
           badge: '/badge-72x72.png',
@@ -1756,7 +1756,7 @@ Apply these algorithms systematically in your clinical practice.`
             if (permission === 'granted') {
               const registration = await navigator.serviceWorker.ready;
               await registration.showNotification(notification.title, notification);
-              console.log(`âœ… Test reminder sent: ${topicTitle}`);
+              console.log(`✅ Test reminder sent: ${topicTitle}`);
               
               // Mark notification as sent
               test.notificationSent = true;
@@ -1825,7 +1825,7 @@ Apply these algorithms systematically in your clinical practice.`
       // Schedule for next Tuesday 9:30 AM
       await this.scheduleTest(selectedTopic);
       
-      console.log(`âœ… Auto-scheduled test for next Tuesday: ${selectedTopic.title}`);
+      console.log(`✅ Auto-scheduled test for next Tuesday: ${selectedTopic.title}`);
     } catch (error) {
       console.error('Error auto-scheduling test:', error);
     }

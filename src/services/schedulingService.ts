@@ -394,14 +394,14 @@ class SchedulingService {
     // Try to sync to server first
     try {
       const saved = await apiClient.createSurgery(apiPayload);
-      console.log('âœ… Surgery booking synced to server:', saved.id);
+      console.log('✅ Surgery booking synced to server:', saved.id);
       await db.surgery_bookings.add({ ...newBooking, id: saved.id, synced: true });
       return saved.id;
     } catch (error) {
-      console.warn('âš ï¸ Failed to sync surgery booking to server, saving locally', error);
+      console.warn('⚠️ Failed to sync surgery booking to server, saving locally', error);
       await db.surgery_bookings.add({ ...newBooking, synced: false });
       await syncService.queueAction('create', 'surgeries', id as any, newBooking);
-      console.log('ðŸ“± Surgery booking saved locally, will sync when online:', id);
+      console.log('📱 Surgery booking saved locally, will sync when online:', id);
       return id;
     }
   }
@@ -741,8 +741,8 @@ class SchedulingService {
       
       // Checklist Status
       const checklistItems: string[] = [];
-      if (surgery.pre_op_checklist_completed) checklistItems.push('âœ“ Pre-op');
-      if (surgery.consent_obtained) checklistItems.push('âœ“ Consent');
+      if (surgery.pre_op_checklist_completed) checklistItems.push('✓ Pre-op');
+      if (surgery.consent_obtained) checklistItems.push('✓ Consent');
       
       if (checklistItems.length > 0) {
         pdf.setFontSize(8);

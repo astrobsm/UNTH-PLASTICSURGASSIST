@@ -554,7 +554,7 @@ class TransfusionPdfService {
       if (entry) {
         pdf.text(entry.volume_infused_ml ? `${entry.volume_infused_ml} mL` : '', xPos, yPos + 2);
         xPos += colWidths[1];
-        pdf.text(entry.temperature ? `${entry.temperature}Â°C` : '', xPos, yPos + 2);
+        pdf.text(entry.temperature ? `${entry.temperature}°C` : '', xPos, yPos + 2);
         xPos += colWidths[2];
         pdf.text(entry.pulse ? `${entry.pulse}` : '', xPos, yPos + 2);
         xPos += colWidths[3];
@@ -694,7 +694,7 @@ class TransfusionPdfService {
     // Monitoring Table
     const tableStartY = yPos;
     const colWidths = [25, 28, 22, 22, 35, 22, 22, 25, 52, 25];
-    const headers = ['Time', 'Vol Infused', 'Temp (Â°C)', 'Pulse', 'BP (mmHg)', 'RR', 'SpO2 %', 'Urine mL', 'Observations', 'Initials'];
+    const headers = ['Time', 'Vol Infused', 'Temp (°C)', 'Pulse', 'BP (mmHg)', 'RR', 'SpO2 %', 'Urine mL', 'Observations', 'Initials'];
     
     // Draw table header
     pdf.setFillColor(139, 0, 0);

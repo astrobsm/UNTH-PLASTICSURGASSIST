@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wound Calibration Marker — Plastic Surgery Unit</title>
+<style>
+  /* Physical units throughout. The markers are only valid if the page prints
+     at exactly 100% — every dimension below is in millimetres for that reason. */
+  @page { size: A4 portrait; margin: 12mm; }
+
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    color: #111;
+    margin: 0;
+    padding: 12mm;
+    max-width: 190mm;
+  }
+
+  h1 { font-size: 16pt; margin: 0 0 2mm; }
+  h2 { font-size: 12pt; margin: 6mm 0 2mm; color: #0E9F6E; }
+  p, li { font-size: 10pt; line-height: 1.5; }
+
+  .lead { color: #444; margin-top: 0; }
+
+  .warn {
+    border: 1.5pt solid #b91c1c;
+    background: #fef2f2;
+    padding: 3mm;
+    margin: 4mm 0;
+    font-size: 10pt;
+  }
+
+  .marker-box {
+    border: 0.4mm dashed #666;
+    padding: 6mm;
+    margin: 5mm 0;
+    page-break-inside: avoid;
+  }
+
+  /* THE MARKER ITSELF.
+     Colour #00A000 is RGB(0,160,0): hue exactly 120°, saturation 100%,
+     value 63%. The app's detector accepts hue 80-160 with saturation above 30
+     and value above 25, so this sits dead centre of that window rather than
+     near an edge where print variation or white balance could push it out. */
+  .bar-5cm {
+    width: 50mm;
+    height: 10mm;      /* aspect 5.0 — see the note on aspect ratio below */
+    background: #00A000;
+  }
+
+  .bar-15cm {
+    width: 150mm;
+    height: 15mm;      /* aspect 10.0 */
+    background: #00A000;
+  }
+
+  .label { font-size: 9pt; color: #444; margin-top: 2mm; }
+  .label b { color: #111; }
+
+  table { border-collapse: collapse; width: 100%; font-size: 9.5pt; margin: 3mm 0; }
+  th, td { border: 0.3mm solid #999; padding: 2mm; text-align: left; vertical-align: top; }
+  th { background: #f0fdf4; }
+
+  ol { padding-left: 6mm; }
+  ol li { margin-bottom: 2.5mm; }
+
+  .check { font-size: 9.5pt; }
+  .check li { margin-bottom: 1.5mm; }
+
+  .footer { margin-top: 8mm; font-size: 8.5pt; color: #666; border-top: 0.3mm solid #ccc; padding-top: 2mm; }
+
+  @media print {
+    body { padding: 0; }
+    .noprint { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Wound Calibration Marker</h1>
+<p class="lead">
+  For AI wound measurement in the WoundProgress Monitor.
+  Plastic Surgery Unit, University of Nigeria Teaching Hospital, Enugu.
+</p>
+
+<div class="warn">
+  <b>Print at exactly 100%.</b> In the print dialog set Scale to 100% and turn off
+  &ldquo;Fit to page&rdquo;, &ldquo;Shrink to fit&rdquo; and &ldquo;Scale to fit&rdquo;.
+  A page printed at 97% makes every wound measure 3% larger, and nothing on screen
+  will indicate that it happened. Verify with a ruler before first use — the check
+  is at the bottom of this sheet.
+</div>
+
+<h2>Marker A — 5 cm bar (standard)</h2>
+<div class="marker-box">
+  <div class="bar-5cm"></div>
+  <div class="label"><b>50 mm × 10 mm.</b> Use for most wounds. Cut along the dashed border.</div>
+</div>
+
+<h2>Marker B — 15 cm bar (large wounds)</h2>
+<div class="marker-box">
+  <div class="bar-15cm"></div>
+  <div class="label"><b>150 mm × 15 mm.</b> Use when the wound is longer than about 10 cm.</div>
+</div>
+
+<h2>Why this shape and this colour</h2>
+<p>
+  The app finds the marker by looking for the largest green region in the photograph,
+  then works out which marker it is from the ratio of its length to its width.
+  Both properties matter:
+</p>
+<table>
+  <tr><th style="width:32%">Property</th><th>Reason</th></tr>
+  <tr>
+    <td>Green, hue 120°</td>
+    <td>Human skin, blood, slough, granulation tissue and most dressings contain
+        no green of this hue and saturation, so the marker cannot be confused with
+        the wound or the patient.</td>
+  </tr>
+  <tr>
+    <td>Aspect ratio 5:1 and 10:1</td>
+    <td>The app reads 5 cm from a ratio between 3 and 8, and 15 cm from a ratio
+        above 8. These two shapes sit clear of both boundaries, so a slightly
+        oblique photograph cannot tip one into being read as the other.</td>
+  </tr>
+  <tr>
+    <td>Solid block, no printed scale</td>
+    <td>The measurement is taken from the block's outline. Printed numbers or tick
+        marks add nothing and can break the shape up under poor lighting.</td>
+  </tr>
+  <tr>
+    <td>Matte paper, not glossy</td>
+    <td>Glossy stock produces a specular highlight that reads as white, splitting
+        the green region in two and halving the apparent length.</td>
+  </tr>
+</table>
+
+<h2>How to use it — step by step</h2>
+<ol>
+  <li><b>Prepare the marker.</b> Cut out ONE marker. Laminate it or seal it in a
+      clear specimen bag so it can be wiped between patients. Never place bare
+      paper against an open wound.</li>
+
+  <li><b>Position it in the same plane as the wound.</b> Lay the marker flat on the
+      skin immediately beside the wound, on the same surface and at the same height.
+      A marker resting on the trunk while the wound is on a limb is nearer the
+      camera and will make the wound measure larger than it is. This is the single
+      largest source of error.</li>
+
+  <li><b>Do not let it overlap the wound.</b> Place it 1–2 cm to the side. Keep it
+      clear of the wound edge so the outline of neither is obscured.</li>
+
+  <li><b>Square the camera to the surface.</b> Hold the phone so the lens is directly
+      above the wound and parallel to the skin — not angled. An oblique shot
+      foreshortens the marker, and every measurement derived from it is then too
+      large.</li>
+
+  <li><b>Fill the frame sensibly.</b> Both the wound and the whole marker must be
+      visible, with a little margin. Roughly 20–30 cm from the surface suits most
+      wounds.</li>
+
+  <li><b>Light it evenly.</b> Use indirect daylight or ward lighting. Avoid direct
+      flash, which produces glare on the marker, and avoid photographing in your
+      own shadow.</li>
+
+  <li><b>Remove other green objects from view.</b> Green drapes, green gloves, green
+      gowns and green-labelled dressing packs will compete with the marker; the app
+      uses the largest green region it can find. Move them out of frame.</li>
+
+  <li><b>Take the photograph</b> from the WoundProgress Monitor, using
+      <i>New assessment → Take photo</i>, or select an existing image with
+      <i>Upload from device</i>.</li>
+
+  <li><b>Check the result.</b> If the app reports a calibrated measurement, confirm
+      the figure looks right against what you can see. If it reports that no marker
+      was detected, use <b>Set scale from marker</b> and drag a line along the long
+      edge of the marker, then choose the matching length from the list.</li>
+
+  <li><b>Confirm before saving.</b> The measurements remain editable. The number
+      that enters the record is the one you accept, not the one the app proposed.</li>
+</ol>
+
+<h2>Before you photograph — quick check</h2>
+<ul class="check">
+  <li>Marker flat on the same surface as the wound</li>
+  <li>Marker beside the wound, not touching or overlapping it</li>
+  <li>Camera square to the skin, not angled</li>
+  <li>Whole marker and whole wound in frame</li>
+  <li>No glare on the marker; no other green in view</li>
+  <li>Marker clean, dry and uncreased</li>
+</ul>
+
+<h2>Verify your print</h2>
+<p>
+  Hold a ruler against Marker A. The green block must measure <b>exactly 50 mm</b>
+  long and <b>10 mm</b> deep. Marker B must measure <b>150 mm</b> by <b>15 mm</b>.
+  If either is out by more than a millimetre the page did not print at full size —
+  reprint with scaling disabled. A marker that is 5% short makes every wound area
+  read about 10% too large, because area scales with the square of the length.
+</p>
+
+<h2>When to replace it</h2>
+<p>
+  Replace the marker if it becomes creased, stained, faded or curled. A bent marker
+  does not lie flat, and a marker that does not lie flat is not in the plane of the
+  wound. Print a fresh sheet monthly for a busy unit.
+</p>
+
+<div class="footer">
+  Marker colour #00A000 · Marker A 50 × 10 mm · Marker B 150 × 15 mm ·
+  Generated for the WoundProgress Monitor, Plastic Surgeon Assistant.
+  Measurements produced with this marker are decision support; the clinician
+  confirms every figure before it is recorded.
+</div>
+
+</body>
+</html>

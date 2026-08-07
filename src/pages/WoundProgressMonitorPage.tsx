@@ -823,9 +823,18 @@ const CaptureAssessmentModal: React.FC<{ wound: Wound; onClose: () => void; onSa
 
           <p className="text-xs text-gray-500 mt-2">
             Place a marker of known size <span className="font-medium">flat beside the wound, on the same
-            surface</span>, and shoot square to it. A bank or ID card is the most reliable; a coin or ruler
-            also works.
+            surface</span>, and shoot square to it. The unit's printed green marker is detected
+            automatically; a bank or ID card, coin or ruler works with <span className="font-medium">Set
+            scale from marker</span> below.
           </p>
+          <a
+            href="/wound-calibration-marker.html"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-teal-700 underline inline-flex items-center gap-1 mt-1"
+          >
+            <Ruler className="w-3 h-3" /> Print the calibration marker &amp; step-by-step guide
+          </a>
 
           {!analyzing && m.area_cm2 != null && (
             <div className={`mt-2 rounded-lg border p-2 ${scaleReliable ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-300'}`}>
