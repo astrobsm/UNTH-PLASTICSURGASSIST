@@ -1,3 +1,4 @@
+import { sanitizePdfDocument } from '../utils/pdfSafeText';
 import React, { useState, useEffect, useRef, useCallback, Suspense, lazy } from 'react';
 import { useOnSelectedPatient } from '../hooks/useSelectedPatient';
 import {
@@ -723,11 +724,11 @@ const WoundCarePage: React.FC = () => {
     
     const estimatedHeight = 250 + (protocol.length * 12);
     
-    const doc = new jsPDF({
+    const doc = sanitizePdfDocument(new jsPDF({
       orientation: 'portrait',
       unit: 'mm',
       format: [thermalWidth, estimatedHeight]
-    });
+    }));
 
     const margin = 3;
     let yPos = margin;
@@ -904,11 +905,11 @@ const WoundCarePage: React.FC = () => {
     const { jsPDF } = await import('jspdf');
     
     // A4 dimensions in mm: 210 x 297 (portrait)
-    const doc = new jsPDF({
+    const doc = sanitizePdfDocument(new jsPDF({
       orientation: 'portrait',
       unit: 'mm',
       format: 'a4'
-    });
+    }));
 
     const pageWidth = 210;
     const pageHeight = 297;

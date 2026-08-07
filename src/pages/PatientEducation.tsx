@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Download, BookOpen, AlertCircle, Info, FileText, Heart, Activity, User, Search, MessageCircle, Loader2, Printer } from 'lucide-react';
 import jsPDF from 'jspdf';
+import { sanitizePdfDocument } from '../utils/pdfSafeText';
 import {
   createPDF,
   sanitizeTextForPDF,
@@ -2513,7 +2514,7 @@ export default function PatientEducation() {
     estHeight += topic.content.keyPoints.length * 5;
     estHeight = Math.max(estHeight, 200);
 
-    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [thermalWidth, estHeight] });
+    const doc = sanitizePdfDocument(new jsPDF({ orientation: 'portrait', unit: 'mm', format: [thermalWidth, estHeight] }));
     const margin = 3;
     let yPos = margin;
 

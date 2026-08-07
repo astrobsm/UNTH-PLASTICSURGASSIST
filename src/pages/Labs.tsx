@@ -40,6 +40,7 @@ import { logDataExport } from '../services/auditLoggingService';
 import { useAuthStore } from '../store/authStore';
 import { dataSyncService } from '../services/dataSyncService';
 import jsPDF from 'jspdf';
+import { sanitizePdfDocument } from '../utils/pdfSafeText';
 import toast from 'react-hot-toast';
 import { DocumentScannerModal } from '../components/DocumentScannerModal';
 
@@ -464,7 +465,7 @@ function generateLabRequestPDF(investigation: LabInvestigation, mode: 'a4' | 'th
     return;
   }
 
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const doc = sanitizePdfDocument(new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' }));
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 15;
   const contentWidth = pageWidth - margin * 2;
@@ -626,7 +627,7 @@ function generateLabRequestThermal(investigation: LabInvestigation) {
   if (investigation.special_instructions) estHeight += 12;
   estHeight = Math.max(estHeight, 80);
 
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [thermalWidth, estHeight] });
+  const doc = sanitizePdfDocument(new jsPDF({ orientation: 'portrait', unit: 'mm', format: [thermalWidth, estHeight] }));
   let y = 6;
 
   // Header

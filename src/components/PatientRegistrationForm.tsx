@@ -1,3 +1,4 @@
+import { sanitizePdfDocument } from '../utils/pdfSafeText';
 import React, { useState } from 'react';
 import { unthPatientService, PatientRegistration, Ward } from '../services/unthPatientService';
 import { riskAssessmentService } from '../services/riskAssessmentService';
@@ -2218,7 +2219,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     const m = 3;
     const clean = (text: string | undefined | null): string => sanitizeTextForPDF(text || '');
 
-    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [thermalWidth, 300] });
+    const doc = sanitizePdfDocument(new jsPDF({ orientation: 'portrait', unit: 'mm', format: [thermalWidth, 300] }));
     let y = m;
 
     doc.setFont('times', 'bold');

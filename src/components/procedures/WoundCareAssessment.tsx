@@ -1,3 +1,4 @@
+import { sanitizePdfDocument } from '../../utils/pdfSafeText';
 import React, { useState, useRef, useEffect, lazy, Suspense } from 'react';
 import MedicalAutocompleteTextarea from '../MedicalAutocompleteTextarea';
 const WoundHealingMap = lazy(() => import('../WoundHealingMap'));
@@ -375,7 +376,7 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
     const m = 3;
     const clean = (text: string | undefined | null): string => sanitizeTextForPDF(text || '');
 
-    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [thermalWidth, 250] });
+    const doc = sanitizePdfDocument(new jsPDF({ orientation: 'portrait', unit: 'mm', format: [thermalWidth, 250] }));
     let y = m;
 
     doc.setFont('times', 'bold');

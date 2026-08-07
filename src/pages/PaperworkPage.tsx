@@ -1,3 +1,4 @@
+import { sanitizePdfDocument } from '../utils/pdfSafeText';
 import React, { useState, useEffect } from 'react';
 import { FileText, Download, Plus, Send, Edit, Trash2, Printer } from 'lucide-react';
 import { db } from '../db/database';
@@ -112,7 +113,7 @@ const PaperworkPage: React.FC = () => {
     const contentLen = (doc.content || '').length;
     const estHeight = Math.max(100 + contentLen * 0.15, 200);
 
-    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [thermalWidth, estHeight] });
+    const pdf = sanitizePdfDocument(new jsPDF({ orientation: 'portrait', unit: 'mm', format: [thermalWidth, estHeight] }));
     const m = 3;
     let y = m;
 

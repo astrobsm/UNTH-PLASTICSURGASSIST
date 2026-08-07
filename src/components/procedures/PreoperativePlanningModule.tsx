@@ -1,3 +1,4 @@
+import { sanitizePdfDocument } from '../../utils/pdfSafeText';
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -642,11 +643,11 @@ export const PreoperativePlanningModule: React.FC<PreoperativePlanningModuleProp
     const firstCategory = categories[0];
     const firstPageHeight = getPageHeight(byCategory[firstCategory]?.length || 0);
     
-    const doc = new jsPDF({
+    const doc = sanitizePdfDocument(new jsPDF({
       orientation: 'portrait',
       unit: 'mm',
       format: [thermalWidth, firstPageHeight]
-    });
+    }));
 
     const margin = 3;
     

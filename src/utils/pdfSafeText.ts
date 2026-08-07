@@ -47,40 +47,60 @@ function sanitizeArg<T>(arg: T): T {
   return arg;
 }
 
-let installed = false;
+/** Marks a document that has already been wrapped, so it is not wrapped twice. */
+const WRAPPED = Symbol.for('psa.pdfTextSanitized');
 
 /**
- * Install the guard. Idempotent, and safe to call before any PDF is created.
- * Called once from main.tsx so coverage does not depend on import order.
+ * Wrap ONE jsPDF document so its text output is sanitised.
+ *
+ * Instance-level, not prototype-level, and that is forced by the library: in
+ * jsPDF v4 `text` and `splitTextToSize` are assigned as OWN PROPERTIES of each
+ * document inside the constructor. jsPDF.prototype.text is undefined, so an
+ * earlier attempt to patch the prototype installed nothing and logged
+ * "jsPDF API not as expected" on every production boot while every PDF went
+ * out unsanitised.
+ *
+ * Call this on every document. createPDF() and createThermalPDF() do it for
+ * their callers; code constructing `new jsPDF()` directly must call it itself.
  */
-export function installPdfTextSanitizer(): void {
-  if (installed) return;
+export function sanitizePdfDocument<T>(doc: T): T {
+  const d = doc as unknown as Record<string | symbol, any>;
+  if (!d || d[WRAPPED]) return doc;
 
-  const proto = (jsPDF as unknown as { prototype: Record<string, any> })?.prototype;
-  if (!proto || typeof proto.text !== 'function') {
-    // Never let a failed patch break PDF generation entirely — an unsanitised
-    // PDF is far better than no PDF on a ward.
-    console.warn('[pdf] Could not install text sanitizer; jsPDF API not as expected');
-    return;
-  }
-  installed = true;
-
-  const originalText = proto.text;
-  proto.text = function patchedText(this: unknown, ...args: unknown[]) {
+  if (typeof d.text === 'function') {
+    const originalText = d.text.bind(doc);
     // Signature is text(text, x, y, options) — only the first argument carries
     // content; the rest are coordinates and options and must pass through.
-    if (args.length) args[0] = sanitizeArg(args[0]);
-    return originalText.apply(this, args as never);
-  };
+    d.text = (...args: unknown[]) => {
+      if (args.length) args[0] = sanitizeArg(args[0]);
+      return originalText(...args);
+    };
+  }
 
   // splitTextToSize measures a string to wrap it. If it measured the raw text
   // while text() rendered the sanitised version, line breaks would be computed
-  // for characters that never appear, so wrap widths would drift.
-  if (typeof proto.splitTextToSize === 'function') {
-    const originalSplit = proto.splitTextToSize;
-    proto.splitTextToSize = function patchedSplit(this: unknown, ...args: unknown[]) {
+  // for characters that never appear and wrap widths would drift.
+  if (typeof d.splitTextToSize === 'function') {
+    const originalSplit = d.splitTextToSize.bind(doc);
+    d.splitTextToSize = (...args: unknown[]) => {
       if (args.length) args[0] = sanitizeArg(args[0]);
-      return originalSplit.apply(this, args as never);
+      return originalSplit(...args);
     };
+  }
+
+  d[WRAPPED] = true;
+  return doc;
+}
+
+/**
+ * Retained so main.tsx keeps a single obvious call site, and to fail loudly if
+ * a future jsPDF version moves these methods back onto the prototype — in which
+ * case wrapping instances would still work, but the assumption should be
+ * re-checked rather than silently relied upon.
+ */
+export function installPdfTextSanitizer(): void {
+  const proto = (jsPDF as unknown as { prototype?: Record<string, any> })?.prototype;
+  if (proto && typeof proto.text === 'function') {
+    console.info('[pdf] jsPDF now exposes text() on the prototype; instance wrapping still applies.');
   }
 }

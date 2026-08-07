@@ -29,6 +29,7 @@ import { apiClient } from '../services/apiClient';
 import { useOnSelectedPatient } from '../hooks/useSelectedPatient';
 import jsPDF from 'jspdf';
 
+import { sanitizePdfDocument } from '../utils/pdfSafeText';
 // ─── TYPES ──────────────────────────────────────────────────────────────────
 
 interface PatientContext {
@@ -444,7 +445,7 @@ export default function PrescriptionsPage() {
   function handlePrintPrescription() {
     if (prescriptions.length === 0) return;
 
-    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const doc = sanitizePdfDocument(new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' }));
     const pageWidth = doc.internal.pageSize.getWidth();
     const margin = 15;
     const contentWidth = pageWidth - margin * 2;
@@ -579,7 +580,7 @@ export default function PrescriptionsPage() {
     if (patientContext.allergies.length > 0) estHeight += 10;
     estHeight = Math.max(estHeight, 100);
 
-    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [thermalWidth, estHeight] });
+    const doc = sanitizePdfDocument(new jsPDF({ orientation: 'portrait', unit: 'mm', format: [thermalWidth, estHeight] }));
     let y = 6;
 
     // Header

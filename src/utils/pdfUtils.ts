@@ -30,6 +30,7 @@
  *    - Timestamped, page-numbered
  */
 
+import { sanitizePdfDocument } from './pdfSafeText';
 import jsPDF from 'jspdf';
 
 // ============================================================================
@@ -151,8 +152,11 @@ export function createPDF(orientation: 'portrait' | 'landscape' = 'portrait'): j
   
   pdf.setTextColor(PDF_COLORS.text.r, PDF_COLORS.text.g, PDF_COLORS.text.b);
   pdf.setFontSize(PDF_FONT_SIZES.body);
-  
-  return pdf;
+
+  // Wrap before returning. jsPDF v4 assigns text() as an own property of each
+  // instance, so this is the only point at which it can be intercepted for
+  // every caller of this factory — patching the prototype does nothing.
+  return sanitizePdfDocument(pdf);
 }
 
 /**
@@ -175,8 +179,8 @@ export function createThermalPDF(): jsPDF {
   }
   pdf.setTextColor(0, 0, 0);
   pdf.setFontSize(PDF_THERMAL.fontSize);
-  
-  return pdf;
+
+  return sanitizePdfDocument(pdf);
 }
 
 /**

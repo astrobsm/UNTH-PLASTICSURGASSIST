@@ -26,6 +26,7 @@ import {
   addTwoColumnText, needsNewPage, addSimpleTable, PDF_MARGINS, PDF_FONT_SIZES, PDF_LINE_HEIGHT, PDF_COLORS, PDF_PAGE,
 } from '../utils/pdfUtils';
 import jsPDF from 'jspdf';
+import { sanitizePdfDocument } from '../utils/pdfSafeText';
 import { useAuthStore } from '../store/authStore';
 import { ocrService } from '../services/ocrService';
 import { getUnitTeam, UnitRosterConfig, PS_UNITS } from '../config/psUnits';
@@ -1119,7 +1120,7 @@ export default function BookingRegisterPage() {
     if (dayCases.length === 0) { toast.error('No cases booked for this date'); return; }
 
     // Use landscape A4 for more horizontal space
-    const doc = new jsPDF('l', 'mm', 'a4'); // 297 x 210 mm
+    const doc = sanitizePdfDocument(new jsPDF('l', 'mm', 'a4')); // 297 x 210 mm
     const pageW = 297;
     const marginL = 10;
     const marginR = 10;
@@ -1288,7 +1289,7 @@ export default function BookingRegisterPage() {
 
   const generateInvestigationRequestThermal = useCallback(() => {
     if (!planData || !selectedPatient) return;
-    const doc = new jsPDF({ unit: 'mm', format: [80, 200] });
+    const doc = sanitizePdfDocument(new jsPDF({ unit: 'mm', format: [80, 200] }));
     doc.setFont('times', 'normal');
     let y = 4;
     doc.setFontSize(9);
@@ -1320,7 +1321,7 @@ export default function BookingRegisterPage() {
     if (!planData || !selectedPatient || planData.shopping_items.length === 0) {
       toast.error('No items in shopping list'); return;
     }
-    const doc = new jsPDF({ unit: 'mm', format: [80, 200] });
+    const doc = sanitizePdfDocument(new jsPDF({ unit: 'mm', format: [80, 200] }));
     doc.setFont('times', 'normal');
     let y = 4;
     doc.setFontSize(9);

@@ -1,3 +1,4 @@
+import { sanitizePdfDocument } from '../utils/pdfSafeText';
 ﻿// Keloid Care Plan PDF Generation Service - Standardized with pdfUtils
 import { KeloidCarePlan, KELOID_EDUCATION } from './keloidCareService';
 import { format } from 'date-fns';
@@ -719,7 +720,7 @@ class KeloidPdfService {
     estHeight += (plan.surgery_notes ? 40 : 0);
     estHeight = Math.max(estHeight, 250);
 
-    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [thermalWidth, estHeight] });
+    const doc = sanitizePdfDocument(new jsPDF({ orientation: 'portrait', unit: 'mm', format: [thermalWidth, estHeight] }));
     let y = m;
 
     doc.setFont('times', 'bold');

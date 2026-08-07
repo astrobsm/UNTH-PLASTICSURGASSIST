@@ -1,3 +1,4 @@
+import { sanitizePdfDocument } from '../../utils/pdfSafeText';
 import React, { useState, useEffect } from 'react';
 import { 
   ClipboardList, 
@@ -686,11 +687,11 @@ export const PreoperativePlanning: React.FC<PreoperativePlanningProps> = ({
     const thermalWidth = 80;
     const estimatedHeight = 120 + (orderedInvestigations.length * 7);
     
-    const doc = new jsPDF({
+    const doc = sanitizePdfDocument(new jsPDF({
       orientation: 'portrait',
       unit: 'mm',
       format: [thermalWidth, estimatedHeight]
-    });
+    }));
 
     const margin = 3;
     let yPos = margin;
@@ -1179,7 +1180,7 @@ export const PreoperativePlanning: React.FC<PreoperativePlanningProps> = ({
                           ...prev,
                           renal: { ...prev.renal, lastEGFR: e.target.value }
                         }))}
-                        placeholder="mL/min/1.73m²"
+                        placeholder="mL/min/1.73mï¿½"
                         className="w-full px-3 py-2 border rounded"
                       />
                     </div>

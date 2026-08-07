@@ -1,3 +1,4 @@
+import { sanitizePdfDocument } from '../../utils/pdfSafeText';
 import React, { useState } from 'react';
 import { procedureService, IntraoperativeFindings } from '../../services/procedureService';
 import {
@@ -820,7 +821,7 @@ export const IntraoperativeFindingsForm: React.FC<IntraoperativeFindingsFormProp
     estHeight += (findings.postoperative_instructions?.length || 0) * 0.12;
     estHeight = Math.max(estHeight, 250);
 
-    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [thermalWidth, estHeight] });
+    const doc = sanitizePdfDocument(new jsPDF({ orientation: 'portrait', unit: 'mm', format: [thermalWidth, estHeight] }));
     let y = m;
 
     doc.setFont('times', 'bold');

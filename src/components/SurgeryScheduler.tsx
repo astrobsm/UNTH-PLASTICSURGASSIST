@@ -13,6 +13,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Calendar, Search, FileDown, MessageCircle, AlertTriangle, X, Plus, Trash2, RefreshCw, Stethoscope } from 'lucide-react';
 import jsPDF from 'jspdf';
+import { sanitizePdfDocument } from '../utils/pdfSafeText';
 import autoTable from 'jspdf-autotable';
 import toast from 'react-hot-toast';
 import { apiClient } from '../services/apiClient';
@@ -332,7 +333,7 @@ export const SurgeryScheduler: React.FC = () => {
     if (!slate.length) {
       return toast.error('No surgeries booked for this date');
     }
-    const doc = new jsPDF({ orientation: 'landscape' });
+    const doc = sanitizePdfDocument(new jsPDF({ orientation: 'landscape' }));
     doc.setFontSize(14);
     doc.text('UNTH Plastic Surgery Unit — Theatre Slate', 14, 14);
     doc.setFontSize(11);

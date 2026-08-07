@@ -1,3 +1,4 @@
+import { sanitizePdfDocument } from '../utils/pdfSafeText';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { db } from '../db/database';
@@ -3477,7 +3478,7 @@ const WoundAssessmentTab: React.FC<{ patientId: string; patientName: string; hos
     const { jsPDF } = await import('jspdf');
     const thermalWidth = 80;
     const estimatedHeight = 220 + (wa.recommendations.length * 5) + (wa.protocol.length * 5);
-    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [thermalWidth, estimatedHeight] });
+    const doc = sanitizePdfDocument(new jsPDF({ orientation: 'portrait', unit: 'mm', format: [thermalWidth, estimatedHeight] }));
     const m = 3;
     let y = m;
     const clean = (t: string) => t.replace(/[^\x20-\x7E]/g, '');

@@ -1,3 +1,4 @@
+import { sanitizePdfDocument } from '../utils/pdfSafeText';
 import React, { useState, useEffect, useRef } from 'react';
 import { format } from 'date-fns';
 import { createPDF, sanitizeTextForPDF, PDF_MARGINS, PDF_FONT_SIZES, PDF_COLORS, addFooter } from '../utils/pdfUtils';
@@ -286,7 +287,7 @@ export default function DischargeDocumentsPreview({
         {/* Warning Signs */}
         <div className="bg-red-50 p-3 rounded border border-red-200">
           <h4 className="font-semibold text-red-700 flex items-center gap-2">
-            è RETURN TO HOSPITAL IMMEDIATELY IF YOU EXPERIENCE:
+            ÔøΩ RETURN TO HOSPITAL IMMEDIATELY IF YOU EXPERIENCE:
           </h4>
           <ul className="mt-2 space-y-1">
             {discharge.warning_signs?.map((sign, i) => (
@@ -689,7 +690,7 @@ export default function DischargeDocumentsPreview({
     estHeight += (discharge.medications?.length || 0) * 10;
     estHeight = Math.max(estHeight, 300);
 
-    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [thermalWidth, estHeight] });
+    const doc = sanitizePdfDocument(new jsPDF({ orientation: 'portrait', unit: 'mm', format: [thermalWidth, estHeight] }));
     let y = m;
 
     doc.setFont('times', 'bold');

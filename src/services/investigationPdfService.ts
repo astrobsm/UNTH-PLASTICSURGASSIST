@@ -1,3 +1,4 @@
+import { sanitizePdfDocument } from '../utils/pdfSafeText';
 ﻿// Investigation Request Form PDF Service
 // Generates thermal print PDF for requested investigations
 
@@ -33,11 +34,11 @@ class InvestigationPdfService {
     const thermalWidth = 80; // mm
     const estimatedHeight = 180 + (data.investigations.length * 12);
     
-    const doc = new jsPDF({
+    const doc = sanitizePdfDocument(new jsPDF({
       orientation: 'portrait',
       unit: 'mm',
       format: [thermalWidth, estimatedHeight]
-    });
+    }));
 
     const margin = 3;
     let yPos = margin;

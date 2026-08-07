@@ -1,3 +1,4 @@
+import { sanitizePdfDocument } from '../../utils/pdfSafeText';
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   ChevronLeft, 
@@ -2319,7 +2320,7 @@ async function generateLabAndImagingPDF(
   setLoading(true);
   try {
     const { jsPDF } = await import('jspdf');
-    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const doc = sanitizePdfDocument(new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' }));
     const pw = doc.internal.pageSize.getWidth();
     const margin = 14;
     let y = 12;
@@ -2589,7 +2590,7 @@ async function generateCounsellingAndConsentPDF(
   setLoading(true);
   try {
     const { jsPDF } = await import('jspdf');
-    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const doc = sanitizePdfDocument(new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' }));
     const pw = doc.internal.pageSize.getWidth();
     const margin = 15;
     let y = 12;

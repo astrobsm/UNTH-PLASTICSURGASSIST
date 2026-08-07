@@ -1,3 +1,4 @@
+import { sanitizePdfDocument } from '../utils/pdfSafeText';
 import { useState, useEffect } from 'react';
 import { Download, ShoppingCart, User, Search, Heart, Scissors, Plus, Minus, Trash2, MessageCircle, Loader2, Printer, List, Calendar, Package } from 'lucide-react';
 import {
@@ -348,11 +349,11 @@ export default function ShoppingList() {
     const maxTextWidth = thermalWidth - (margin * 2) - 22; // Leave space for qty and checkbox columns
     const estimatedHeight = 200 + (selectedItems.length * 14); // Estimate height based on items
     
-    const doc = new jsPDF({
+    const doc = sanitizePdfDocument(new jsPDF({
       orientation: 'portrait',
       unit: 'mm',
       format: [thermalWidth, estimatedHeight]
-    });
+    }));
 
     let yPos = margin;
 
