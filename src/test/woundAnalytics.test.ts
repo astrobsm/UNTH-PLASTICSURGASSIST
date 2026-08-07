@@ -29,6 +29,62 @@ function series(areas: number[], opts: { reliable?: boolean } = {}): WoundAssess
   }));
 }
 
+/**
+ * The shape the SERVER actually returns.
+ *
+ * area_cm2 is a Postgres DECIMAL, and node-postgres returns those as strings to
+ * preserve precision. Every test above builds fixtures with JavaScript numbers,
+ * which is why a `typeof area_cm2 === 'number'` check passed the whole suite
+ * while discarding every real assessment in production — a wound with recorded
+ * measurements displayed "0 assessments" and no current area.
+ */
+function serverSeries(areas: string[]): WoundAssessment[] {
+  const base = Date.UTC(2026, 0, 1);
+  return areas.map((area, i) => ({
+    wound_id: 3,
+    patient_id: 821,
+    area_cm2: area as unknown as number,
+    assessed_at: new Date(base + i * WEEK).toISOString(),
+  }));
+}
+
+describe('decimal values arriving as strings from Postgres', () => {
+  it('counts a single server-returned assessment', () => {
+    // The exact row from the wound that surfaced this: area "81.20".
+    const result = computeHealingAnalytics(serverSeries(['81.20']));
+    expect(result.assessmentCount).toBe(1);
+  });
+
+  it('computes reduction and velocity across string areas', () => {
+    const result = computeHealingAnalytics(serverSeries(['100.00', '80.00', '60.00']));
+    expect(result.assessmentCount).toBe(3);
+    expect(result.percentAreaReduction).toBeCloseTo(40, 1);
+    expect(result.velocityCm2PerWeek).toBeCloseTo(-20, 1);
+  });
+
+  it('treats a null area as missing, not as zero', () => {
+    // Coercion must not turn an absent measurement into a real 0 cm² wound,
+    // which would read as complete healing.
+    const mixed = serverSeries(['50.00', '40.00']);
+    (mixed[1] as any).area_cm2 = null;
+    expect(computeHealingAnalytics(mixed).assessmentCount).toBe(1);
+  });
+
+  it('ignores a non-numeric string rather than counting it as zero', () => {
+    const bad = serverSeries(['50.00']);
+    (bad[0] as any).area_cm2 = 'not measured';
+    expect(computeHealingAnalytics(bad).assessmentCount).toBe(0);
+  });
+
+  it('agrees with the numeric fixtures it is meant to mirror', () => {
+    const asStrings = computeHealingAnalytics(serverSeries(['90.00', '45.00']));
+    const asNumbers = computeHealingAnalytics(series([90, 45]));
+    expect(asStrings.assessmentCount).toBe(asNumbers.assessmentCount);
+    expect(asStrings.percentAreaReduction).toBeCloseTo(asNumbers.percentAreaReduction, 3);
+    expect(asStrings.velocityCm2PerWeek).toBeCloseTo(asNumbers.velocityCm2PerWeek, 3);
+  });
+});
+
 describe('areaVelocityCm2PerWeek', () => {
   it('is negative when the wound is shrinking', () => {
     const v = areaVelocityCm2PerWeek(series([10, 8, 6, 4]));

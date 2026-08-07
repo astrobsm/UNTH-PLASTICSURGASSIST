@@ -129,7 +129,15 @@ function usableSeries(assessments: WoundAssessment[]): Array<{ t: number; area: 
   return assessments
     .map(a => ({
       t: a.assessed_at ? new Date(a.assessed_at).getTime() : NaN,
-      area: typeof a.area_cm2 === 'number' ? a.area_cm2 : NaN,
+      // Coerced, not type-checked. area_cm2 is a Postgres DECIMAL, and
+      // node-postgres returns those as STRINGS to preserve precision — "81.20",
+      // not 81.2. A `typeof === 'number'` test therefore rejected every
+      // assessment that came from the server, so a wound with recorded
+      // measurements reported "0 assessments" and no current area while its
+      // healing map and tissue composition rendered normally, because those
+      // paths already coerced. null and undefined still become NaN and are
+      // filtered out below, so a genuinely missing area is still excluded.
+      area: a.area_cm2 == null ? NaN : Number(a.area_cm2),
       reliable: a.scale_reliable !== false,
     }))
     .filter(p => Number.isFinite(p.t) && Number.isFinite(p.area) && p.area >= 0)
