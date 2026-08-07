@@ -827,14 +827,26 @@ const CaptureAssessmentModal: React.FC<{ wound: Wound; onClose: () => void; onSa
             automatically; a bank or ID card, coin or ruler works with <span className="font-medium">Set
             scale from marker</span> below.
           </p>
-          <a
-            href="/wound-calibration-marker.html"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-teal-700 underline inline-flex items-center gap-1 mt-1"
-          >
-            <Ruler className="w-3 h-3" /> Print the calibration marker &amp; step-by-step guide
-          </a>
+          <div className="flex flex-wrap items-center gap-3 mt-1">
+            <button
+              type="button"
+              onClick={async () => {
+                const { downloadMarkerSheet } = await import('../services/woundMarkerPdfService');
+                downloadMarkerSheet();
+              }}
+              className="text-xs text-white bg-teal-600 hover:bg-teal-700 rounded px-2 py-1 inline-flex items-center gap-1"
+            >
+              <Ruler className="w-3 h-3" /> Download marker sheet (PDF)
+            </button>
+            <a
+              href="/wound-calibration-marker.html"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-teal-700 underline inline-flex items-center gap-1"
+            >
+              Step-by-step guide
+            </a>
+          </div>
 
           {!analyzing && m.area_cm2 != null && (
             <div className={`mt-2 rounded-lg border p-2 ${scaleReliable ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-300'}`}>

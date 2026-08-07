@@ -332,7 +332,15 @@ function detectGreenMarkers(data: Uint8ClampedArray, w: number, h: number): { fo
   const mW = maxX - minX, mH = maxY - minY;
   const longer = Math.max(mW, mH);
   const aspect = mW > mH ? mW / Math.max(1, mH) : mH / Math.max(1, mW);
-  const knownCm = aspect > 8 ? 15 : aspect > 3 ? 5 : 1;
+  // Aspect ratio identifies WHICH printed marker this is. The unit issues two,
+  // and their proportions are chosen so neither can be mistaken for the other:
+  //   100 x 10 mm  → aspect 10  → 10 cm
+  //    50 x 10 mm  → aspect  5  →  5 cm
+  // Anything squarer is treated as a 1 cm reference. The long marker was
+  // previously assumed to be 15 cm, which no issued marker matches — a 10 cm
+  // bar would have been read as 15 cm and inflated every measurement by half.
+  // See public/wound-calibration-marker.html and woundMarkerPdfService.
+  const knownCm = aspect > 8 ? 10 : aspect > 3 ? 5 : 1;
   const pxPerCm = longer / knownCm;
   const fill = count / ((mW + 1) * (mH + 1));
   return { found: true, pixelsPerCm: pxPerCm, confidence: Math.min(0.95, 0.5 + fill * 0.3 + (longer > 100 ? 0.15 : 0)) };
