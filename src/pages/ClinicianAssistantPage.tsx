@@ -28,6 +28,10 @@ import {
 } from '../services/clinicianAssistant/clinicianAssistantService';
 import type { Severity } from '../services/clinicianAssistant/engine/types';
 import BedsideCalculators from '../components/clinicianAssistant/BedsideCalculators';
+import ScanReportsPanel from '../components/clinicianAssistant/ScanReportsPanel';
+import { buildFromPatientRecord } from '../services/clinicianAssistant/patientBridge';
+import { runForContext } from '../services/clinicianAssistant/clinicianAssistantService';
+import type { Extraction } from '../services/clinicianAssistant/engine/context';
 
 /**
  * Findings that already have a dedicated module in this app. Matched on the
@@ -74,6 +78,13 @@ export default function ClinicianAssistantPage() {
   const [recent, setRecent] = useState<SavedAnalysisSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'analysis' | 'calculators'>('analysis');
+  // What the clinician chose to analyse from. 'choose' is the step the module
+  // previously skipped — selecting a patient went straight to the record, so
+  // the scan path had no way in.
+  const [mode, setMode] = useState<'choose' | 'record' | 'scan'>('choose');
+  // Record values kept so a scan can be merged with them rather than replacing.
+  const [recordExtraction, setRecordExtraction] = useState<Extraction | null>(null);
+  const [analysisSource, setAnalysisSource] = useState<'record' | 'scan' | 'mixed'>('record');
 
   useEffect(() => {
     (async () => {
@@ -100,14 +111,30 @@ export default function ClinicianAssistantPage() {
       .slice(0, 40);
   }, [patients, search]);
 
+  /** Choosing a patient opens the source chooser; it no longer auto-analyses. */
+  const choosePatient = useCallback(async (patient: PatientRow) => {
+    setSelected(patient);
+    setResult(null);
+    setRecordExtraction(null);
+    setMode('choose');
+    setHistory(await listForPatient(patient.id).catch(() => []));
+  }, []);
+
   const run = useCallback(async (patient: PatientRow) => {
     setSelected(patient);
     setResult(null);
+    setMode('record');
+    setAnalysisSource('record');
     setRunning(true);
     try {
-      const [r, h] = await Promise.all([runForPatient(patient.id), listForPatient(patient.id).catch(() => [])]);
+      const [r, h, bridge] = await Promise.all([
+        runForPatient(patient.id),
+        listForPatient(patient.id).catch(() => []),
+        buildFromPatientRecord(patient.id).catch(() => null),
+      ]);
       setResult(r);
       setHistory(h);
+      setRecordExtraction(bridge?.extraction ?? null);
       if (r.sources.investigations === 0 && r.sources.vitals === 0) {
         toast('No recorded investigations or vitals for this patient', { icon: 'ℹ️' });
       }
@@ -122,7 +149,7 @@ export default function ClinicianAssistantPage() {
     if (!result || !selected) return;
     setSaving(true);
     try {
-      await saveAnalysis(selected.id, result, { source: 'record' });
+      await saveAnalysis(selected.id, result, { source: analysisSource });
       toast.success('Analysis saved to the patient record');
       setHistory(await listForPatient(selected.id).catch(() => []));
     } catch (err: any) {
@@ -181,7 +208,7 @@ export default function ClinicianAssistantPage() {
               {filtered.map(p => (
                 <button
                   key={String(p.id)}
-                  onClick={() => run(p)}
+                  onClick={() => choosePatient(p)}
                   className="w-full text-left bg-white border rounded-lg p-3 hover:border-primary-400 hover:shadow-sm transition flex items-center justify-between"
                 >
                   <div>
@@ -242,16 +269,102 @@ export default function ClinicianAssistantPage() {
             </p>
           )}
         </div>
-        <div className="flex gap-2">
-          <button onClick={() => run(selected)} disabled={running} className="px-3 py-2 border rounded-lg text-sm flex items-center gap-2 disabled:opacity-50">
-            <RefreshCw className={`w-4 h-4 ${running ? 'animate-spin' : ''}`} /> Re-run
-          </button>
-          <button onClick={save} disabled={!result || saving} className="px-3 py-2 bg-primary-600 text-white rounded-lg text-sm flex items-center gap-2 disabled:opacity-50">
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save to record
-          </button>
-        </div>
+        {mode !== 'choose' && (
+          <div className="flex gap-2">
+            <button onClick={() => setMode('choose')} className="px-3 py-2 border rounded-lg text-sm">
+              Change source
+            </button>
+            {mode === 'record' && (
+              <button onClick={() => run(selected)} disabled={running} className="px-3 py-2 border rounded-lg text-sm flex items-center gap-2 disabled:opacity-50">
+                <RefreshCw className={`w-4 h-4 ${running ? 'animate-spin' : ''}`} /> Re-run
+              </button>
+            )}
+            <button onClick={save} disabled={!result || saving} className="px-3 py-2 bg-primary-600 text-white rounded-lg text-sm flex items-center gap-2 disabled:opacity-50">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save to record
+            </button>
+          </div>
+        )}
       </div>
 
+      {/* The source chooser. Selecting a patient used to run the record
+          analysis immediately, which left no way to reach the scan path at all. */}
+      {mode === 'choose' && (
+        <div className="space-y-3">
+          <p className="text-sm text-gray-600">What should this analysis be based on?</p>
+
+          <button
+            onClick={() => run(selected)}
+            className="w-full text-left bg-white border rounded-lg p-4 hover:border-primary-400 hover:shadow-sm transition flex items-start gap-3"
+          >
+            <ClipboardList className="w-5 h-5 text-primary-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <div className="font-medium text-gray-900">Analyse existing records</div>
+              <p className="text-sm text-gray-600">
+                Uses the investigation results and vital signs already recorded for this patient.
+                Nothing to scan; works offline from cached data.
+              </p>
+            </div>
+          </button>
+
+          <button
+            onClick={() => { setMode('scan'); setAnalysisSource('scan'); }}
+            className="w-full text-left bg-white border rounded-lg p-4 hover:border-primary-400 hover:shadow-sm transition flex items-start gap-3"
+          >
+            <FileText className="w-5 h-5 text-primary-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <div className="font-medium text-gray-900">Scan reports (multiple pages)</div>
+              <p className="text-sm text-gray-600">
+                Photograph or upload printed reports — blood count, biochemistry, blood gas,
+                culture, ECG. Values are read off each page, shown for checking, and interpreted
+                together so findings can be correlated across modalities. Can be combined with
+                what is already on record.
+              </p>
+            </div>
+          </button>
+
+          {history.length > 0 && (
+            <p className="text-xs text-gray-500">
+              {history.length} previous analysis(es) on file for this patient.
+            </p>
+          )}
+        </div>
+      )}
+
+      {mode === 'scan' && !result && selected && (
+        <div className="bg-white border rounded-lg p-4">
+          <ScanReportsPanel
+            patient={{
+              ...(recordExtraction ? {} : {}),
+              name: `${selected.first_name || ''} ${selected.last_name || ''}`.trim(),
+              hospitalNumber: selected.hospital_number || '',
+            } as any}
+            recordExtraction={recordExtraction}
+            onCancel={() => setMode('choose')}
+            onAnalyse={async (extraction, documents) => {
+              setRunning(true);
+              try {
+                // Build the patient context from the record so age, sex and
+                // known comorbidity still inform the interpretation even when
+                // the values themselves came off paper.
+                const bridge = await buildFromPatientRecord(selected.id).catch(() => null);
+                const ctx = bridge?.patient ?? null;
+                if (!ctx) throw new Error('Could not load patient context');
+
+                const analysis = runForContext(ctx, extraction);
+                setResult({ analysis, unmapped: [], sources: { investigations: extraction.analytes.length, vitals: 0 } });
+                setAnalysisSource(recordExtraction && recordExtraction.analytes.length ? 'mixed' : 'scan');
+                setTab('analysis');
+              } catch (err: any) {
+                toast.error(err?.message || 'Could not analyse the scanned reports');
+              } finally {
+                setRunning(false);
+              }
+            }}
+          />
+        </div>
+      )}
+
+      {mode !== 'choose' && (
       <div className="flex gap-1 border-b mb-4">
         {([['analysis', 'Analysis'], ['calculators', 'Calculators']] as const).map(([id, label]) => (
           <button
@@ -265,8 +378,9 @@ export default function ClinicianAssistantPage() {
           </button>
         ))}
       </div>
+      )}
 
-      {tab === 'calculators' && (
+      {mode !== 'choose' && tab === 'calculators' && (
         <BedsideCalculators
           prefill={{
             weightKg: result?.analysis.patient.weightKg ?? null,
