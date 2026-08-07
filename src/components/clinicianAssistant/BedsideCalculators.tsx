@@ -7,18 +7,33 @@
  * markup, which is what the original Critical Care Calculator could not do
  * because its maths was embedded in JSX.
  *
- * Only four calculators appear here. The other eleven from that app already
- * exist elsewhere in this codebase and are reached through the analysis tab's
- * hand-off links instead of being reimplemented.
+ * All fifteen categories from that app are here. Four are implemented in
+ * calculators.ts; the rest are forms over logic this codebase already had —
+ * the acid-base and electrolyte engines, the burn care service, the risk
+ * assessment service, the food composition data. Nothing clinical is
+ * reimplemented, so a number shown here cannot drift from the module that owns
+ * it.
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
-import { Activity, Calculator, Droplet, HeartPulse, Scale } from 'lucide-react';
+import React, { Suspense, lazy, useEffect, useMemo, useState } from 'react';
+import {
+  Activity, Apple, Bed, Droplet, Flame, FlaskConical, Heart, HeartPulse, Loader2,
+  Pill, Soup, TrendingDown, TrendingUp, UtensilsCrossed, Zap,
+} from 'lucide-react';
 import {
   weightGainPlan, weightReductionPlan, assessSepsis, fluidDeficitMl,
   maintenanceFluidMlPerHour, sickleCrisisPlan,
   type ActivityLevel, type Sex, type DehydrationSeverity,
 } from '../../services/clinicianAssistant/calculators';
+import {
+  AcidBasePanel, ElectrolytePanel, GfrPanel, BurnsPanel, DvtPanel,
+  PressureSorePanel, MustPanel, WoundMealPlanPanel, NutritionPanel, MealPlanDays,
+} from './CalculatorPanels';
+import { generateMealPlan } from '../../data/nigerianFoods';
+
+// The BNF database is several thousand drug records. Loading it with the tab
+// would make every other calculator wait for data most of them never touch.
+const BnfDrugPanel = lazy(() => import('./panels/BnfDrugPanel'));
 
 /** Values carried over from the selected patient, so nothing is re-typed. */
 export interface PatientPrefill {
@@ -28,13 +43,35 @@ export interface PatientPrefill {
   sex?: Sex;
 }
 
-type Tool = 'resuscitation' | 'sickle' | 'gain' | 'reduction';
+type Tool =
+  | 'resuscitation' | 'sickle' | 'gain' | 'reduction'
+  | 'sodium' | 'potassium' | 'acidbase' | 'gfr' | 'bnf'
+  | 'burns' | 'nutrition' | 'dvt' | 'pressuresore' | 'must' | 'woundmeal';
 
-const TOOLS: { id: Tool; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
-  { id: 'resuscitation', label: 'Resuscitation & sepsis', icon: Activity },
-  { id: 'sickle', label: 'Sickle cell crisis', icon: HeartPulse },
-  { id: 'gain', label: 'Weight gain', icon: Scale },
-  { id: 'reduction', label: 'Weight reduction', icon: Scale },
+type ToolDef = {
+  id: Tool;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  /** Which of the shared demographic fields this calculator actually uses. */
+  needs?: ('weight' | 'height' | 'age' | 'sex')[];
+};
+
+const TOOLS: ToolDef[] = [
+  { id: 'resuscitation', label: 'Emergency & sepsis', icon: Activity, needs: ['weight'] },
+  { id: 'sodium', label: 'Sodium', icon: Droplet, needs: ['weight', 'age', 'sex'] },
+  { id: 'potassium', label: 'Potassium', icon: Zap, needs: ['weight', 'age', 'sex'] },
+  { id: 'acidbase', label: 'Acid-base', icon: FlaskConical, needs: [] },
+  { id: 'gfr', label: 'GFR', icon: Activity, needs: ['age', 'sex'] },
+  { id: 'bnf', label: 'BNF drugs', icon: Pill, needs: ['weight', 'age', 'sex'] },
+  { id: 'burns', label: 'Burns', icon: Flame, needs: ['weight', 'age'] },
+  { id: 'nutrition', label: 'Nutrition', icon: UtensilsCrossed, needs: ['weight'] },
+  { id: 'dvt', label: 'DVT risk', icon: Heart, needs: ['weight', 'height', 'age'] },
+  { id: 'pressuresore', label: 'Pressure sore', icon: Bed, needs: [] },
+  { id: 'must', label: 'MUST score', icon: Apple, needs: ['weight', 'height'] },
+  { id: 'woundmeal', label: 'Wound meal plan', icon: Soup, needs: ['weight'] },
+  { id: 'reduction', label: 'Weight loss', icon: TrendingDown, needs: ['weight', 'height', 'age', 'sex'] },
+  { id: 'gain', label: 'Weight gain', icon: TrendingUp, needs: ['weight', 'height', 'age', 'sex'] },
+  { id: 'sickle', label: 'Sickle cell', icon: HeartPulse, needs: ['weight'] },
 ];
 
 const num = (v: string): number => {
@@ -74,12 +111,22 @@ export default function BedsideCalculators({ prefill }: { prefill?: PatientPrefi
   const [age, setAge] = useState('');
   const [sex, setSex] = useState<Sex>('unspecified');
 
+  // Lifted so the BNF tab can warn on renal dosing using a GFR the clinician
+  // has already calculated, rather than asking for the creatinine twice.
+  const [gfr, setGfr] = useState<number | null>(null);
+
   useEffect(() => {
     if (prefill?.weightKg) setWeight(String(prefill.weightKg));
     if (prefill?.heightCm) setHeight(String(prefill.heightCm));
     if (prefill?.ageYears) setAge(String(prefill.ageYears));
     if (prefill?.sex) setSex(prefill.sex);
   }, [prefill]);
+
+  const active = TOOLS.find(t => t.id === tool);
+  const needs = active?.needs ?? ['weight', 'height', 'age', 'sex'];
+  const showDemographics = needs.length > 0;
+
+  const w = num(weight), h = num(height), a = num(age);
 
   return (
     <div className="space-y-4">
@@ -98,29 +145,63 @@ export default function BedsideCalculators({ prefill }: { prefill?: PatientPrefi
       </div>
 
       <div className="bg-white border rounded-lg p-4">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4 pb-4 border-b">
-          <Field label="Weight (kg)">
-            <input type="number" value={weight} onChange={e => setWeight(e.target.value)} className="input" />
-          </Field>
-          <Field label="Height (cm)">
-            <input type="number" value={height} onChange={e => setHeight(e.target.value)} className="input" />
-          </Field>
-          <Field label="Age (years)">
-            <input type="number" value={age} onChange={e => setAge(e.target.value)} className="input" />
-          </Field>
-          <Field label="Sex">
-            <select value={sex} onChange={e => setSex(e.target.value as Sex)} className="input">
-              <option value="unspecified">Not specified</option>
-              <option value="male">Male</option>
-              <option value="female">Female</option>
-            </select>
-          </Field>
-        </div>
+        {/* Only the fields the selected calculator actually uses. A form that
+            asks for a height it will not use invites someone to believe the
+            result depended on it. */}
+        {showDemographics && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4 pb-4 border-b">
+            {needs.includes('weight') && (
+              <Field label="Weight (kg)">
+                <input type="number" value={weight} onChange={e => setWeight(e.target.value)} className="input" />
+              </Field>
+            )}
+            {needs.includes('height') && (
+              <Field label="Height (cm)">
+                <input type="number" value={height} onChange={e => setHeight(e.target.value)} className="input" />
+              </Field>
+            )}
+            {needs.includes('age') && (
+              <Field label="Age (years)">
+                <input type="number" value={age} onChange={e => setAge(e.target.value)} className="input" />
+              </Field>
+            )}
+            {needs.includes('sex') && (
+              <Field label="Sex">
+                <select value={sex} onChange={e => setSex(e.target.value as Sex)} className="input">
+                  <option value="unspecified">Not specified</option>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                </select>
+              </Field>
+            )}
+          </div>
+        )}
 
-        {tool === 'resuscitation' && <Resuscitation weightKg={num(weight)} />}
-        {tool === 'sickle' && <SickleCell weightKg={num(weight)} />}
-        {tool === 'gain' && <WeightPlan mode="gain" weightKg={num(weight)} heightCm={num(height)} ageYears={num(age)} sex={sex} />}
-        {tool === 'reduction' && <WeightPlan mode="reduction" weightKg={num(weight)} heightCm={num(height)} ageYears={num(age)} sex={sex} />}
+        {tool === 'resuscitation' && <Resuscitation weightKg={w} />}
+        {tool === 'sickle' && <SickleCell weightKg={w} />}
+        {tool === 'gain' && <WeightPlan mode="gain" weightKg={w} heightCm={h} ageYears={a} sex={sex} />}
+        {tool === 'reduction' && <WeightPlan mode="reduction" weightKg={w} heightCm={h} ageYears={a} sex={sex} />}
+
+        {tool === 'sodium' && <ElectrolytePanel analyte="sodium" weightKg={w} ageYears={a} sex={sex} />}
+        {tool === 'potassium' && <ElectrolytePanel analyte="potassium" weightKg={w} ageYears={a} sex={sex} />}
+        {tool === 'acidbase' && <AcidBasePanel />}
+        {tool === 'gfr' && <GfrPanel ageYears={a} sex={sex} onGfr={setGfr} />}
+        {tool === 'burns' && <BurnsPanel weightKg={w} ageYears={a} />}
+        {tool === 'nutrition' && <NutritionPanel weightKg={w} />}
+        {tool === 'dvt' && <DvtPanel weightKg={w} heightCm={h} ageYears={a} />}
+        {tool === 'pressuresore' && <PressureSorePanel />}
+        {tool === 'must' && <MustPanel weightKg={w} heightCm={h} />}
+        {tool === 'woundmeal' && <WoundMealPlanPanel weightKg={w} />}
+
+        {tool === 'bnf' && (
+          <Suspense fallback={
+            <div className="py-8 flex items-center justify-center gap-2 text-sm text-gray-600">
+              <Loader2 className="w-4 h-4 animate-spin" /> Loading the drug database…
+            </div>
+          }>
+            <BnfDrugPanel weightKg={w} ageYears={a} sex={sex} gfr={gfr} />
+          </Suspense>
+        )}
       </div>
     </div>
   );
@@ -351,10 +432,53 @@ function WeightPlan({
           )}
 
           <p className="text-xs text-gray-500">
-            Energy requirement from the Harris-Benedict equation. Meal planning against these targets is
-            available in the nutrition module, which holds the local food composition data.
+            Energy requirement from the Harris-Benedict equation.
           </p>
+
+          <MealPlanSection
+            mode={mode}
+            targetCalories={plan.targetCalories}
+            proteinG={plan.proteinG}
+          />
         </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * A seven-day plan against the targets just calculated, built from the app's
+ * West African food composition data — the same generator the wound-healing
+ * plan uses. It is collapsed by default because the numbers above are what
+ * most consultations need; the plan is what the patient goes home with.
+ */
+function MealPlanSection({
+  mode, targetCalories, proteinG,
+}: { mode: 'gain' | 'reduction'; targetCalories: number; proteinG: number }) {
+  const [open, setOpen] = useState(false);
+  const days = useMemo(
+    () => (open ? generateMealPlan(targetCalories, proteinG) : null),
+    [open, targetCalories, proteinG]
+  );
+
+  return (
+    <div className="pt-3 border-t">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="text-sm font-medium text-primary-700 hover:underline"
+      >
+        {open ? 'Hide' : 'Show'} seven-day {mode === 'gain' ? 'weight gain' : 'weight loss'} meal plan
+      </button>
+
+      {days && (
+        <div className="mt-3">
+          <p className="text-xs text-gray-600 mb-2">
+            Built to {targetCalories.toLocaleString()} kcal and {proteinG} g protein per day using local
+            foods and household measures.
+            {mode === 'reduction' && ' Protein is held high so the deficit comes off fat rather than muscle.'}
+          </p>
+          <MealPlanDays days={days} />
+        </div>
       )}
     </div>
   );

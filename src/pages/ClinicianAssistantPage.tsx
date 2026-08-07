@@ -17,7 +17,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Activity, AlertTriangle, ArrowLeft, ClipboardList, ExternalLink, FileText,
+  Activity, AlertTriangle, ArrowLeft, Calculator, ClipboardList, ExternalLink, FileText,
   Loader2, RefreshCw, Save, Search, Stethoscope,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -78,6 +78,7 @@ export default function ClinicianAssistantPage() {
   const [recent, setRecent] = useState<SavedAnalysisSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'analysis' | 'calculators'>('analysis');
+  const [standaloneCalcs, setStandaloneCalcs] = useState(false);
   // What the clinician chose to analyse from. 'choose' is the step the module
   // previously skipped — selecting a patient went straight to the record, so
   // the scan path had no way in.
@@ -170,6 +171,28 @@ export default function ClinicianAssistantPage() {
   }, [result]);
 
   // ── Patient picker ─────────────────────────────────────────────────────
+  // The calculators without a patient. Acid-base, Braden and BNF dosing need
+  // no record, and requiring one before a clinician can reach them puts a
+  // patient search in front of a thirty-second calculation.
+  if (!selected && standaloneCalcs) {
+    return (
+      <div className="p-4 md:p-6 max-w-6xl mx-auto">
+        <button
+          onClick={() => setStandaloneCalcs(false)}
+          className="mb-4 text-sm text-gray-600 flex items-center gap-1 hover:text-gray-900"
+        >
+          <ArrowLeft className="w-4 h-4" /> Back to patients
+        </button>
+        <h1 className="text-xl font-bold text-gray-900 mb-1">Bedside calculators</h1>
+        <p className="text-sm text-gray-600 mb-4">
+          No patient selected — enter the values by hand. Select a patient first to have weight,
+          height, age and sex filled in from the record.
+        </p>
+        <BedsideCalculators />
+      </div>
+    );
+  }
+
   if (!selected) {
     return (
       <div className="p-4 md:p-6 max-w-6xl mx-auto">
@@ -184,6 +207,20 @@ export default function ClinicianAssistantPage() {
             cross-modality correlation.
           </p>
         </div>
+
+        <button
+          onClick={() => setStandaloneCalcs(true)}
+          className="w-full text-left bg-white border rounded-lg p-3 mb-4 hover:border-primary-400 hover:shadow-sm transition flex items-center gap-3"
+        >
+          <Calculator className="w-5 h-5 text-primary-600 flex-shrink-0" />
+          <div>
+            <div className="font-medium text-gray-900">Bedside calculators</div>
+            <p className="text-sm text-gray-600">
+              Acid-base, electrolytes, GFR, burns, BNF dosing, risk scores and meal plans —
+              no patient needed.
+            </p>
+          </div>
+        </button>
 
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-sm text-blue-900">
           Decision support only. Every finding is derived from values already in the record and must
@@ -288,7 +325,7 @@ export default function ClinicianAssistantPage() {
 
       {/* The source chooser. Selecting a patient used to run the record
           analysis immediately, which left no way to reach the scan path at all. */}
-      {mode === 'choose' && (
+      {mode === 'choose' && tab === 'analysis' && (
         <div className="space-y-3">
           <p className="text-sm text-gray-600">What should this analysis be based on?</p>
 
@@ -364,7 +401,10 @@ export default function ClinicianAssistantPage() {
         </div>
       )}
 
-      {mode !== 'choose' && (
+      {/* The tab bar is always visible, including on the chooser. Most
+          calculators — acid-base, Braden, BNF dosing — need no patient at all,
+          and making a clinician commit to an analysis path before reaching one
+          put a pointless step in front of the fastest tool here. */}
       <div className="flex gap-1 border-b mb-4">
         {([['analysis', 'Analysis'], ['calculators', 'Calculators']] as const).map(([id, label]) => (
           <button
@@ -378,9 +418,8 @@ export default function ClinicianAssistantPage() {
           </button>
         ))}
       </div>
-      )}
 
-      {mode !== 'choose' && tab === 'calculators' && (
+      {tab === 'calculators' && (
         <BedsideCalculators
           prefill={{
             weightKg: result?.analysis.patient.weightKg ?? null,
