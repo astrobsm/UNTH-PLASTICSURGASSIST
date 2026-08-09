@@ -28,6 +28,9 @@ import {
 } from '../services/clinicianAssistant/clinicianAssistantService';
 import type { Severity } from '../services/clinicianAssistant/engine/types';
 import BedsideCalculators from '../components/clinicianAssistant/BedsideCalculators';
+import {
+  EVIDENCE_BASIS, isAwaitingClinicalReview, provenanceLine,
+} from '../services/clinicianAssistant/clinicalProvenance';
 import ScanReportsPanel from '../components/clinicianAssistant/ScanReportsPanel';
 import { buildFromPatientRecord } from '../services/clinicianAssistant/patientBridge';
 import { runForContext } from '../services/clinicianAssistant/clinicianAssistantService';
@@ -65,6 +68,49 @@ interface PatientRow {
   last_name?: string;
   hospital_number?: string;
   ward?: string;
+}
+
+/**
+ * States plainly whether a consultant here has signed this logic off.
+ *
+ * The banner is driven by clinicalProvenance.ts rather than being written into
+ * the markup, so it cannot say "reviewed" while the source of truth says
+ * otherwise — and it reverts to the pending wording automatically if the
+ * clinical logic changes after a sign-off.
+ */
+function ClinicalReviewBanner() {
+  const [open, setOpen] = useState(false);
+  const pending = isAwaitingClinicalReview();
+
+  return (
+    <div className={`mb-4 rounded-lg border p-3 ${pending ? 'bg-amber-50 border-amber-300' : 'bg-gray-50 border-gray-200'}`}>
+      <div className="flex items-start gap-2">
+        <AlertTriangle className={`w-4 h-4 flex-shrink-0 mt-0.5 ${pending ? 'text-amber-700' : 'text-gray-500'}`} />
+        <div className="flex-1 min-w-0">
+          <p className={`text-sm ${pending ? 'text-amber-900' : 'text-gray-700'}`}>
+            {pending
+              ? 'Decision support only. Every finding is derived from values already in the record and must be checked against the source report before it informs treatment. This logic follows published guidance but has not yet been reviewed by a consultant at this institution.'
+              : provenanceLine()}
+          </p>
+          <button onClick={() => setOpen(o => !o)} className="text-xs underline mt-1 text-gray-600">
+            {open ? 'Hide' : 'Show'} evidence basis
+          </button>
+          {open && (
+            <ul className="mt-2 space-y-1">
+              <li className="text-xs text-gray-700 font-medium">
+                Last checked {EVIDENCE_BASIS.lastCheckedISO}
+              </li>
+              {EVIDENCE_BASIS.sources.map((s, i) => (
+                <li key={i} className="text-xs text-gray-600">
+                  <span className="font-medium">{s.name}</span> — {s.scope}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function ClinicianAssistantPage() {
@@ -222,10 +268,7 @@ export default function ClinicianAssistantPage() {
           </div>
         </button>
 
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-sm text-blue-900">
-          Decision support only. Every finding is derived from values already in the record and must
-          be checked against the source report before it informs treatment.
-        </div>
+        <ClinicalReviewBanner />
 
         <div className="relative mb-4">
           <Search className="w-4 h-4 absolute left-3 top-3 text-gray-400" />

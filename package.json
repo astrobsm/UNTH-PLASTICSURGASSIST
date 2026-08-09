@@ -19,6 +19,8 @@
     "lint:fix": "eslint . --ext ts,tsx --fix",
     "format": "prettier --write .",
     "type-check": "tsc --noEmit",
+    "clinical:status": "node scripts/clinicalContentHash.mjs",
+    "clinical:check": "node scripts/clinicalContentHash.mjs --check",
     "test": "vitest",
     "test:ui": "vitest --ui",
     "e2e": "playwright test",

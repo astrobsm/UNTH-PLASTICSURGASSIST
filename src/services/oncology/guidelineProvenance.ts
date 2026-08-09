@@ -8,11 +8,20 @@
  * entitled to know that. Recording it in a commit message reaches no one who
  * actually uses the module; a banner sourced from this file reaches everyone.
  *
- * TO RECORD SIGN-OFF: set `localReview` below to `{ status: 'ratified', ... }`
- * with the reviewer's name and date, and redeploy. The banner disappears
- * automatically. Keep it in source, not in the database, so the attestation is
- * versioned with the logic it attests to — a review is only meaningful against
- * the exact content that was reviewed.
+ * TO RECORD SIGN-OFF
+ *   1. An oncologist reviews the logic covered by the digest (run
+ *      `node scripts/clinicalContentHash.mjs` to list the exact files).
+ *   2. Set `status: 'ratified'`, the reviewer's name and the date.
+ *   3. Set `ratifiedContentHash` to the digest that script prints.
+ *
+ * The banner disappears automatically. Kept in source, not the database, so the
+ * attestation is versioned with the logic it attests to — a review is only
+ * meaningful against the exact content that was reviewed.
+ *
+ * The hash is what keeps that true over time. If anyone later edits the staging
+ * or treatment logic, the digest stops matching, the module reverts to the "not
+ * yet reviewed" banner, and `npm run clinical:check` fails. A sign-off cannot
+ * silently come to cover code the reviewer never saw.
  */
 
 export interface GuidelineSource {
@@ -44,6 +53,12 @@ export interface LocalReview {
   /** Named clinician who reviewed the treatment logic. */
   reviewedBy?: string;
   reviewedOnISO?: string;
+  /**
+   * Digest of the clinical logic reviewed, from scripts/clinicalContentHash.mjs.
+   * A ratification without one, or with one that no longer matches, is treated
+   * as pending.
+   */
+  ratifiedContentHash?: string;
   /** Anything the reviewer wants users to know (local formulary limits, etc.). */
   note?: string;
 }
@@ -56,14 +71,19 @@ export interface LocalReview {
  */
 export const localReview: LocalReview = {
   status: 'pending_local_review',
+  ratifiedContentHash: '',
 };
 
-export const isAwaitingClinicalReview = (): boolean => localReview.status === 'pending_local_review';
+// A ratification with no digest cannot be verified against anything, so it does
+// not count as reviewed. The staleness check itself lives in the test suite,
+// which can read the source tree; the browser cannot.
+export const isAwaitingClinicalReview = (): boolean =>
+  localReview.status !== 'ratified' || !localReview.ratifiedContentHash;
 
 /** One-line summary for banners and PDF footers. */
 export function provenanceLine(): string {
   const base = `Staging: ${GUIDELINE_BASIS.stagingSystem}. Guidance last checked ${GUIDELINE_BASIS.lastCheckedISO}.`;
-  if (localReview.status === 'ratified') {
+  if (!isAwaitingClinicalReview()) {
     return `${base} Locally ratified${localReview.reviewedBy ? ` by ${localReview.reviewedBy}` : ''}${
       localReview.reviewedOnISO ? ` on ${localReview.reviewedOnISO}` : ''
     }.`;
