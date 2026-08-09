@@ -72,6 +72,10 @@
       "destination": "/api/staff-absences"
     },
     {
+      "source": "/api/sjs-assessments/:path*",
+      "destination": "/api/sjs-assessments"
+    },
+    {
       "source": "/api/clinician-assistant/:path*",
       "destination": "/api/clinician-assistant"
     },

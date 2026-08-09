@@ -173,9 +173,15 @@ export async function logDataExport(
  */
 export async function getPatientAuditLogs(hospitalNumber: string): Promise<AuditLog[]> {
   try {
-    // Try to get from server first
+    // Try to get from server first.
+    // The endpoint filters by query parameter; there is no /patient/<id>
+    // subpath and there never was, so this call 404'd every time and silently
+    // fell through to local data — which looks identical to "no server logs
+    // yet" and is why it went unnoticed.
     try {
-      const response = await apiClient.get(`/audit-logs/patient/${hospitalNumber}`);
+      const response = await apiClient.get(
+        `/audit-logs?patient_id=${encodeURIComponent(hospitalNumber)}`
+      );
       return response.data;
     } catch (error) {
       // Fallback to local data

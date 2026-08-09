@@ -251,7 +251,7 @@ export default function SJSManagementPage() {
 
   const loadSavedAssessments = async () => {
     try {
-      const response = await apiClient.get<{ assessments: any[] }>('/api/sjs-assessments?status=active');
+      const response = await apiClient.get<{ assessments: any[] }>('/sjs-assessments?status=active');
       setSavedAssessments(response.assessments || []);
     } catch {
       // Fallback to IndexedDB
@@ -305,8 +305,8 @@ export default function SJSManagementPage() {
       // Try to save to server
       try {
         const response = savedId
-          ? await apiClient.put<{ assessment: any }>(`/api/sjs-assessments/${savedId}`, payload)
-          : await apiClient.post<{ assessment: any }>('/api/sjs-assessments', payload);
+          ? await apiClient.put<{ assessment: any }>(`/sjs-assessments/${savedId}`, payload)
+          : await apiClient.post<{ assessment: any }>('/sjs-assessments', payload);
         const serverAssessment = response.assessment;
         setSavedId(serverAssessment.id);
         // Update local record with server ID

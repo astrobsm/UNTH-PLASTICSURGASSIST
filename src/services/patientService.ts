@@ -449,7 +449,11 @@ class PatientService {
    */
   async getNameHistory(id: string | number) {
     try {
-      const data = await apiClient.request(`/patients/${id}/name-history`);
+      // Query form, not /patients/<id>/name-history: Vercel routes that
+      // two-segment path to patients/[id].js, which does not serve it.
+      const data = await apiClient.request(
+        `/patients?name_history=${encodeURIComponent(String(id))}`
+      );
       return data?.history || [];
     } catch (error) {
       console.error('Error fetching name history:', error);

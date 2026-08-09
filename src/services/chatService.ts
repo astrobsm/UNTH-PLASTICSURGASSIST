@@ -518,13 +518,21 @@ class ChatService {
    * Search messages
    */
   async searchMessages(query: string, roomId?: string): Promise<ChatMessage[]> {
+    // Respects the same availability latch as getRooms/getMessages. Without it
+    // this was the one call that retried after the API had been established as
+    // absent, logging an error on every keystroke-triggered search.
+    if (this.apiChecked && !this.apiAvailable) {
+      return [];
+    }
+
     try {
       const params = new URLSearchParams({ q: query });
       if (roomId) params.append('roomId', roomId);
 
       return await apiClient.get<ChatMessage[]>(`/chat/messages/search?${params}`);
     } catch (error) {
-      console.error('Error searching messages:', error);
+      this.apiAvailable = false;
+      this.apiChecked = true;
       return [];
     }
   }

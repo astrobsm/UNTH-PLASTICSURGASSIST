@@ -20,6 +20,16 @@ export default async function handler(req, res) {
   try {
     switch (method) {
       case 'GET':
+        // Query form first. /api/patients/:id/name-history never reaches this
+        // file — Vercel routes two-segment paths to patients/[id].js, which
+        // knows nothing about name history, so the subpath 404'd. The query
+        // form lands on /api/patients directly and cannot be mis-routed.
+        {
+          const nameHistoryId = url.searchParams.get('name_history');
+          if (nameHistoryId) {
+            return await getPatientNameHistory(nameHistoryId, res);
+          }
+        }
         if (patientId && subResource === 'name-history') {
           return await getPatientNameHistory(patientId, res);
         }
