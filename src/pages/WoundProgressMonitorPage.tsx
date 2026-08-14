@@ -18,7 +18,7 @@
 import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity, AlertTriangle, ArrowLeft, Camera, ChevronRight, LineChart, Plus,
-  RefreshCw, Ruler, Search, TrendingDown, TrendingUp, Minus, Loader2, X, Upload,
+  RefreshCw, Ruler, Search, TrendingDown, TrendingUp, Minus, Loader2, X, Upload, Pencil,
 } from 'lucide-react';
 import { apiClient } from '../services/apiClient';
 import { aiWoundMeasurement, type WoundProgressEntry } from '../services/aiWoundMeasurement';
@@ -40,6 +40,7 @@ import {
 
 const WoundHealingMap = lazy(() => import('../components/WoundHealingMap'));
 const WoundCalibrationPicker = lazy(() => import('../components/WoundCalibrationPicker'));
+const WoundContourEditor = lazy(() => import('../components/WoundContourEditor'));
 const WoundProgressChart = lazy(() => import('../components/WoundProgressChart'));
 
 const WOUND_TYPES = [
@@ -687,6 +688,16 @@ const CaptureAssessmentModal: React.FC<{ wound: Wound; onClose: () => void; onSa
   const [quality, setQuality] = useState<ImageQualityReport | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
 
+  // The clinician's correction, kept apart from the pipeline's outline. Both are
+  // saved: the pair is the audit trail and the training data.
+  const [showEditor, setShowEditor] = useState(false);
+  const [aiContour, setAiContour] = useState<Array<{ x: number; y: number }> | undefined>();
+  const [aiCentroidPx, setAiCentroidPx] = useState<{ x: number; y: number } | null>(null);
+  const [pxPerCm, setPxPerCm] = useState(0);
+  const [correction, setCorrection] = useState<{
+    contourCm: Array<{ x: number; y: number }>; reason: string; magnitude: number;
+  } | null>(null);
+
   /**
    * Re-run the measurement with a scale the clinician set by hand. This is the
    * accurate path when a coin or card was used, since the automatic detector
@@ -756,6 +767,13 @@ const CaptureAssessmentModal: React.FC<{ wound: Wound; onClose: () => void; onSa
 
       setScaleReliable(Boolean(result.scaleReliable));
       setCalibType(result.calibrationMethod || 'reference-card');
+
+      // Held so the clinician can correct the outline against the photograph.
+      setAiContour(result.contourCm);
+      setAiCentroidPx(result.centroid);
+      setPxPerCm(result.measurements.calibrationFactor);
+      setCorrection(null);
+
       setM({
         length_cm: round(result.length),
         width_cm: round(result.width),
@@ -809,10 +827,17 @@ const CaptureAssessmentModal: React.FC<{ wound: Wound; onClose: () => void; onSa
         ai_confidence: Number(m.ai_confidence) || 0,
         calibration_type: calibType,
         scale_reliable: scaleReliable,
-        contour_cm: m.contour_cm,
+        // contour_cm carries whichever outline the measurements came from, so
+        // existing readers keep working; the pair below is what preserves the
+        // history.
+        contour_cm: correction?.contourCm ?? m.contour_cm,
         // The automated contour is kept apart from any correction, so a later
-        // edit cannot destroy what the pipeline actually produced.
-        ai_contour_cm: m.contour_cm,
+        // edit cannot destroy what the pipeline actually produced. Together
+        // they record how wrong it was — the material a future model is trained
+        // and judged against.
+        ai_contour_cm: aiContour ?? m.contour_cm,
+        clinician_contour_cm: correction?.contourCm,
+        correction_reason: correction?.reason,
         image_quality_score: quality?.score,
         image_quality_flags: quality?.flags,
         model_name: 'on-device-cv',
@@ -922,14 +947,57 @@ const CaptureAssessmentModal: React.FC<{ wound: Wound; onClose: () => void; onSa
                   : 'No marker detected automatically. Automatic detection only recognises green printed markers, grid paper and ruler tick marks — not coins or cards. Set the scale by hand for an accurate size.'}
               </p>
               {pending && (
-                <button
-                  onClick={() => setShowCalibration(true)}
-                  className="mt-2 px-3 py-1.5 rounded-md text-xs font-medium bg-primary-600 text-white hover:bg-primary-700 inline-flex items-center gap-1"
-                >
-                  <Ruler className="w-3.5 h-3.5" /> {scaleReliable ? 'Adjust scale' : 'Set scale from marker'}
-                </button>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    onClick={() => setShowCalibration(true)}
+                    className="px-3 py-1.5 rounded-md text-xs font-medium bg-primary-600 text-white hover:bg-primary-700 inline-flex items-center gap-1"
+                  >
+                    <Ruler className="w-3.5 h-3.5" /> {scaleReliable ? 'Adjust scale' : 'Set scale from marker'}
+                  </button>
+                  {aiContour && aiContour.length > 2 && aiCentroidPx && pxPerCm > 0 && (
+                    <button
+                      onClick={() => setShowEditor(true)}
+                      className="px-3 py-1.5 rounded-md text-xs font-medium border border-primary-300 text-primary-700 hover:bg-primary-50 inline-flex items-center gap-1"
+                    >
+                      <Pencil className="w-3.5 h-3.5" /> {correction ? 'Edit my outline' : 'Correct the outline'}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {correction && (
+                <p className="mt-2 text-xs text-primary-800">
+                  Using your corrected outline — {Math.round(correction.magnitude * 100)}% area change
+                  from the detected one. Both are saved.
+                </p>
               )}
             </div>
+          )}
+
+          {showEditor && pending && aiContour && aiCentroidPx && (
+            <Suspense fallback={null}>
+              <WoundContourEditor
+                imageUrl={pending.url}
+                pixelsPerCm={pxPerCm}
+                aiContourCm={aiContour}
+                aiCentroidPx={aiCentroidPx}
+                onCancel={() => setShowEditor(false)}
+                onConfirm={({ contourCm, measurements, reason, magnitude }) => {
+                  // The corrected outline drives the numbers. A measurement the
+                  // clinician did not endorse must not sit beside an outline
+                  // they did.
+                  setCorrection({ contourCm, reason, magnitude });
+                  setM(prev => ({
+                    ...prev,
+                    length_cm: measurements.length,
+                    width_cm: measurements.width,
+                    area_cm2: measurements.area,
+                    perimeter_cm: measurements.perimeter,
+                  }));
+                  setShowEditor(false);
+                }}
+              />
+            </Suspense>
           )}
 
           {showCalibration && pending && (
