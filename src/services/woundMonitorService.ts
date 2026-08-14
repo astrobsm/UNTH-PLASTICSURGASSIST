@@ -94,6 +94,29 @@ export interface WoundAssessment {
   approved_by?: number;
   approved_at?: string;
   notes?: string;
+
+  // --- provenance (add-wound-provenance-columns.sql) ---
+  /** The automated pipeline's contour. Never overwritten by a correction. */
+  ai_contour_cm?: Array<{ x: number; y: number }>;
+  /** The clinician's corrected contour, kept separately so both survive. */
+  clinician_contour_cm?: Array<{ x: number; y: number }>;
+  correction_reason?: string;
+  model_name?: string;
+  model_version?: string;
+  model_checksum?: string;
+  preprocessing_version?: string;
+  image_quality_score?: number;
+  image_quality_flags?: string[];
+  /**
+   * Where the tissue percentages came from. 'none' unless a clinician entered
+   * them or a validated model produced them — never assume a number in those
+   * columns is a measurement.
+   */
+  tissue_source?: 'none' | 'clinician' | 'model';
+  epithelialised_pct?: number | null;
+  residual_raw_pct?: number | null;
+  /** True when the pipeline found nothing measurable. Dimensions are meaningless. */
+  no_wound_detected?: boolean;
   created_at?: string;
   updated_at?: string;
   synced?: boolean;

@@ -15,6 +15,7 @@
 
 import * as tf from '@tensorflow/tfjs';
 import { maySendToCloud, type CloudAnalysisConsent } from './woundCloudConsent';
+import { assessImageQuality, type ImageQualityReport } from './woundImageQuality';
 
 // ============================================
 // INTERFACES
@@ -99,6 +100,11 @@ export interface WoundMeasurementResult {
   calibrationConfidence: number;                     // 0-1, the scale-detection confidence alone
   /** True when nothing measurable was found. All dimensions are 0 and must not be recorded. */
   noWoundDetected?: boolean;
+  /**
+   * Quality of the photograph the measurement came from. Recorded with the
+   * assessment so a number can always be read against the image behind it.
+   */
+  imageQuality: ImageQualityReport;
   /**
    * Where the tissue composition came from. 'none' while TISSUE_MODEL_VALIDATED
    * is false — the colour classifier's output is not presented as a measurement.
@@ -698,6 +704,30 @@ export class AIWoundMeasurementService {
     const calibration = calibrationOverride || await this.detectCalibration(imageData);
     const pxPerCm = calibration.pixelSize;
 
+    // Judge the photograph before measuring it. A blurred or blown-out image
+    // still segments perfectly happily and returns an area to two decimal
+    // places; the number simply means nothing. Refusing here is what stops a
+    // serial chart recording a change in the lighting as a change in the wound.
+    const imageQuality = assessImageQuality(imageData.data, w, h);
+    if (!imageQuality.usable) {
+      const emptyMask = new ImageData(w, h);
+      return {
+        length: 0, width: 0, area: 0, perimeter: 0, confidence: 0,
+        boundingBox: { x: 0, y: 0, width: 0, height: 0 },
+        contourPoints: [], segmentationMask: emptyMask,
+        measurements: { pixelLength: 0, pixelWidth: 0, pixelArea: 0, pixelPerimeter: 0, calibrationFactor: pxPerCm },
+        calibrationMethod: calibration.type,
+        centroid: { x: 0, y: 0 }, contourCm: [],
+        scaleReliable: false, calibrationConfidence: calibration.confidence,
+        noWoundDetected: true,
+        tissueSource: 'none',
+        imageQuality,
+        warnings: imageQuality.findings
+          .filter(f => f.severity === 'blocking')
+          .map(f => f.message),
+      };
+    }
+
     // Normalise illumination on a copy (keep the original pixels for calibration &
     // tissue colour), then blur + segment. Fill interior holes so slough/eschar
     // islands inside the wound are counted in the area.
@@ -741,6 +771,7 @@ export class AIWoundMeasurementService {
         scaleReliable: false, calibrationConfidence: calibration.confidence,
         noWoundDetected: true,
         tissueSource: 'none',
+        imageQuality,
         warnings: [evidence.reason || 'No measurable wound detected.'],
       };
     }
@@ -759,7 +790,13 @@ export class AIWoundMeasurementService {
     const perimeterCm = pixelPerimeter / pxPerCm;
 
     // --- Sanity checks & scale reliability ---
-    const warnings: string[] = [];
+    // Non-blocking quality findings travel with the measurement. The image was
+    // good enough to measure, but the clinician should know what was imperfect
+    // about it before treating the number as firm.
+    const warnings: string[] = imageQuality.findings
+      .filter(f => f.severity === 'warning')
+      .map(f => f.message);
+
     const scalePlausible = pxPerCm > 3 && pxPerCm < 4000;
     const scaleReliable = calibration.confidence >= 0.5 && scalePlausible;
     if (!scaleReliable) {
@@ -808,6 +845,7 @@ export class AIWoundMeasurementService {
     }));
 
     return {
+      imageQuality,
       length: parseFloat(lengthCm.toFixed(2)),
       width: parseFloat(widthCm.toFixed(2)),
       area: parseFloat(areaCm2.toFixed(2)),
