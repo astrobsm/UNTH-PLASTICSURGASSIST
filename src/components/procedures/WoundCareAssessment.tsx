@@ -994,7 +994,20 @@ export const WoundCareAssessmentForm: React.FC<WoundCareAssessmentFormProps> = (
                     : '⚠ Scale reference weak — dimensions are approximate. Re-calibrate with a ruler/reference in frame.'}
                 </div>
 
-                {/* Tissue composition */}
+                {/* Tissue composition is clinician-entered, not measured.
+                    The colour classifier that used to fill this in was six fixed
+                    HSV cutoffs with no validation behind it, so its percentages
+                    were not evidence of anything. See TISSUE_MODEL_VALIDATED. */}
+                {aiMeasurementResult.tissueSource === 'none' && (
+                  <div className="mb-3 rounded-md border border-gray-200 bg-gray-50 p-2">
+                    <p className="text-[11px] text-gray-600">
+                      Wound-bed composition is not measured automatically. Record granulation,
+                      slough, necrotic and epithelial percentages from your own inspection —
+                      automated tissue typing is not yet validated for clinical use.
+                    </p>
+                  </div>
+                )}
+
                 {aiMeasurementResult.tissue && (
                   <div className="mb-3">
                     <p className="text-[11px] text-gray-500 mb-1">Wound-bed composition</p>

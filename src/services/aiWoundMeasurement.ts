@@ -27,6 +27,30 @@ export interface WoundTissueComposition {
   epithelial: number;    // new pink margin
 }
 
+/**
+ * Whether the on-device tissue classifier may present its output as a measurement.
+ *
+ * It is FALSE and must stay false until a validated model exists.
+ *
+ * `classifyTissue` assigns every wound pixel to one of four tissue types using six
+ * fixed hue/saturation/value cutoffs. That is not a trained classifier and it has
+ * never been validated against clinician ground truth. No public dataset with
+ * per-tissue pixel labels was found that would allow it to be validated. Slough,
+ * fibrin and pale granulation occupy overlapping colour ranges, and every cutoff
+ * moves with the ward lighting.
+ *
+ * The percentages are therefore not produced. Clinicians enter tissue composition
+ * themselves, and those entries are the ground truth a future model would be
+ * trained and judged against.
+ *
+ * To re-enable: train a model, validate it against two independent annotators,
+ * record the result, and only then flip this to true.
+ */
+export const TISSUE_MODEL_VALIDATED = false;
+
+/** Where a tissue composition came from — mirrors wound_assessments.tissue_source. */
+export type TissueSource = 'none' | 'clinician' | 'model';
+
 /** Structured qualitative assessment from the GPT-4o Vision layer (hybrid mode). */
 export interface AiWoundAssessment {
   wound_type?: string;
@@ -72,7 +96,14 @@ export interface WoundMeasurementResult {
   contourCm: Array<{ x: number; y: number }>;        // contour in cm, centred on centroid (for the healing map)
   scaleReliable: boolean;                            // true when calibration is trustworthy for absolute cm
   calibrationConfidence: number;                     // 0-1, the scale-detection confidence alone
-  tissue?: WoundTissueComposition;                   // on-device wound-bed composition
+  /** True when nothing measurable was found. All dimensions are 0 and must not be recorded. */
+  noWoundDetected?: boolean;
+  /**
+   * Where the tissue composition came from. 'none' while TISSUE_MODEL_VALIDATED
+   * is false — the colour classifier's output is not presented as a measurement.
+   */
+  tissueSource: TissueSource;
+  tissue?: WoundTissueComposition;                   // only populated when a validated model produces it
   aiAssessment?: AiWoundAssessment;                  // GPT-4o Vision enrichment (hybrid mode)
   warnings: string[];                                // e.g. "no scale reference", "AI/CV size disagree"
 }
@@ -533,6 +564,88 @@ async function segmentWoundTF(imageData: ImageData): Promise<Uint8Array> {
   return dilateMask(result, w, h, 1);
 }
 
+/** Absolute redness score for one pixel, on a 0-1 channel scale. */
+function rednessScore(r: number, g: number, b: number): number {
+  return (r / 255) - 0.5 * (g / 255) - 0.3 * (b / 255);
+}
+
+export interface WoundEvidence {
+  plausible: boolean;
+  reason?: string;
+  /** Fraction of the region passing the absolute wound-colour test. */
+  strictFraction: number;
+  /** Mean redness inside the region minus mean redness outside it. */
+  contrast: number;
+  /** Region size as a fraction of the frame. */
+  coverage: number;
+}
+
+/**
+ * Decides whether a segmented region is plausibly a wound at all.
+ *
+ * WHY THIS IS NEEDED
+ * segmentWoundTF normalises its redness score between each image's own minimum
+ * and maximum, so the score always spans the full 0-1 range whatever the picture
+ * contains. The mask then keeps the largest connected component. Together those
+ * two facts mean the segmenter returns a confident-looking outline from a
+ * photograph of a bare forearm, a bedsheet or a ceiling — it has no way to
+ * conclude that there is nothing to measure.
+ *
+ * This gate re-checks the region against absolute criteria rather than
+ * image-relative ones:
+ *
+ *   strictFraction — does the region actually hold wound-like colour, judged by
+ *                    fixed HSV bounds rather than by comparison with the rest of
+ *                    the frame?
+ *   contrast       — does it stand out from its surroundings? A uniform expanse
+ *                    of skin scores high on redness everywhere, so the difference
+ *                    is what distinguishes a wound from an arm.
+ *   coverage       — a region filling almost the whole frame is a failed
+ *                    segmentation, not a wound.
+ *
+ * These thresholds are heuristic. They are chosen to reject obvious non-wounds,
+ * not validated against annotated data, and they are deliberately permissive:
+ * the cost of refusing a genuine wound is a retake, while the cost of measuring
+ * a non-wound is a fabricated number in the clinical record.
+ */
+export function assessWoundEvidence(
+  data: Uint8ClampedArray,
+  mask: Uint8Array,
+  totalPixels: number,
+): WoundEvidence {
+  let inCount = 0, outCount = 0;
+  let inScore = 0, outScore = 0;
+  let strict = 0;
+
+  for (let i = 0; i < mask.length; i++) {
+    const idx = i * 4;
+    const s = rednessScore(data[idx], data[idx + 1], data[idx + 2]);
+    if (mask[i] > 0) {
+      inCount++;
+      inScore += s;
+      if (classifyWoundPixel(data[idx], data[idx + 1], data[idx + 2])) strict++;
+    } else {
+      outCount++;
+      outScore += s;
+    }
+  }
+
+  const strictFraction = inCount ? strict / inCount : 0;
+  const contrast = (inCount ? inScore / inCount : 0) - (outCount ? outScore / outCount : 0);
+  const coverage = totalPixels ? inCount / totalPixels : 0;
+
+  if (coverage > 0.9) {
+    return { plausible: false, reason: 'The detected region covers almost the entire image, which indicates a failed segmentation rather than a wound. Frame the wound with some surrounding skin visible.', strictFraction, contrast, coverage };
+  }
+  if (strictFraction < 0.45) {
+    return { plausible: false, reason: 'The detected region does not have wound-like colour. Check that the wound is unobscured by dressing, gloves or instruments.', strictFraction, contrast, coverage };
+  }
+  if (contrast < 0.04) {
+    return { plausible: false, reason: 'The detected region does not stand out from the surrounding skin. If a wound is present, improve the lighting and retake the photograph.', strictFraction, contrast, coverage };
+  }
+  return { plausible: true, strictFraction, contrast, coverage };
+}
+
 // ============================================
 // MAIN SERVICE CLASS
 // ============================================
@@ -607,7 +720,15 @@ export class AIWoundMeasurementService {
       }
     }
 
-    if (pixelArea < 20) {
+    // Two independent reasons to report nothing: too small to measure, or
+    // present but not plausibly a wound. The second matters more — the segmenter
+    // will always find *something*, so without this check every photograph
+    // produces a measurement.
+    const evidence = pixelArea >= 20
+      ? assessWoundEvidence(imageData.data, woundMask, w * h)
+      : { plausible: false, reason: 'No wound region detected — check lighting, focus, and that the wound fills the frame.', strictFraction: 0, contrast: 0, coverage: 0 };
+
+    if (!evidence.plausible) {
       const emptyMask = new ImageData(w, h);
       return {
         length: 0, width: 0, area: 0, perimeter: 0, confidence: 0,
@@ -617,7 +738,9 @@ export class AIWoundMeasurementService {
         calibrationMethod: calibration.type,
         centroid: { x: 0, y: 0 }, contourCm: [],
         scaleReliable: false, calibrationConfidence: calibration.confidence,
-        warnings: ['No wound region detected — check lighting, focus, and that the wound fills the frame.'],
+        noWoundDetected: true,
+        tissueSource: 'none',
+        warnings: [evidence.reason || 'No measurable wound detected.'],
       };
     }
 
@@ -656,8 +779,13 @@ export class AIWoundMeasurementService {
       calibration.confidence * 0.4 + fillRatio * 0.25 + (contour.length > 50 ? 0.2 : 0.05) + 0.1 * shapeCoherence
     ) * (scaleReliable ? 1 : 0.7);
 
-    // Tissue composition (uses original colours, not the white-balanced copy).
-    const tissue = computeTissueComposition(imageData.data, woundMask);
+    // Tissue composition is withheld until a validated model exists. The colour
+    // classifier still runs behind the flag so it can be compared against
+    // clinician entries once those accumulate, but its output is not returned
+    // and must not reach the record as a measurement. See TISSUE_MODEL_VALIDATED.
+    const tissue = TISSUE_MODEL_VALIDATED
+      ? computeTissueComposition(imageData.data, woundMask)
+      : undefined;
 
     const maskImageData = new ImageData(w, h);
     for (let i = 0; i < woundMask.length; i++) {
@@ -694,6 +822,7 @@ export class AIWoundMeasurementService {
       scaleReliable,
       calibrationConfidence: parseFloat(calibration.confidence.toFixed(3)),
       tissue,
+      tissueSource: TISSUE_MODEL_VALIDATED && tissue ? 'model' : 'none',
       warnings,
     };
   }

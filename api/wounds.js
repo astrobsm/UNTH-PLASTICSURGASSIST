@@ -81,11 +81,38 @@ async function ensureWoundTables() {
       ai_raw_response JSONB DEFAULT '{}', calibration_type VARCHAR(50) DEFAULT 'none',
       scale_reliable BOOLEAN DEFAULT FALSE, contour_cm JSONB DEFAULT '[]',
       image_url TEXT, overlay_url TEXT, approved_by INTEGER, approved_at TIMESTAMPTZ,
-      notes TEXT, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW()
+      notes TEXT, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW(),
+      -- Provenance. See add-wound-provenance-columns.sql for why each exists.
+      ai_contour_cm JSONB, clinician_contour_cm JSONB, correction_reason TEXT,
+      model_name VARCHAR(80), model_version VARCHAR(40), model_checksum VARCHAR(80),
+      preprocessing_version VARCHAR(40),
+      image_quality_score DECIMAL(4,3), image_quality_flags JSONB DEFAULT '[]',
+      tissue_source VARCHAR(20) DEFAULT 'none',
+      epithelialised_pct DECIMAL(5,2), residual_raw_pct DECIMAL(5,2),
+      no_wound_detected BOOLEAN DEFAULT FALSE
     );
     CREATE INDEX IF NOT EXISTS idx_wound_assessments_wound ON wound_assessments(wound_id);
     CREATE INDEX IF NOT EXISTS idx_wound_assessments_patient ON wound_assessments(patient_id);
     CREATE INDEX IF NOT EXISTS idx_wound_assessments_date ON wound_assessments(assessed_at);
+  `);
+
+  // Existing deployments already have the table, so CREATE TABLE IF NOT EXISTS
+  // above is a no-op for them and would leave the provenance columns missing.
+  await query(`
+    ALTER TABLE wound_assessments
+      ADD COLUMN IF NOT EXISTS ai_contour_cm         JSONB,
+      ADD COLUMN IF NOT EXISTS clinician_contour_cm  JSONB,
+      ADD COLUMN IF NOT EXISTS correction_reason     TEXT,
+      ADD COLUMN IF NOT EXISTS model_name            VARCHAR(80),
+      ADD COLUMN IF NOT EXISTS model_version         VARCHAR(40),
+      ADD COLUMN IF NOT EXISTS model_checksum        VARCHAR(80),
+      ADD COLUMN IF NOT EXISTS preprocessing_version VARCHAR(40),
+      ADD COLUMN IF NOT EXISTS image_quality_score   DECIMAL(4,3),
+      ADD COLUMN IF NOT EXISTS image_quality_flags   JSONB DEFAULT '[]',
+      ADD COLUMN IF NOT EXISTS tissue_source         VARCHAR(20) DEFAULT 'none',
+      ADD COLUMN IF NOT EXISTS epithelialised_pct    DECIMAL(5,2),
+      ADD COLUMN IF NOT EXISTS residual_raw_pct      DECIMAL(5,2),
+      ADD COLUMN IF NOT EXISTS no_wound_detected     BOOLEAN DEFAULT FALSE;
   `);
   schemaReady = true;
 }
@@ -273,9 +300,14 @@ async function addAssessment(body, user, res) {
           exudate_amount, exudate_type, edges, periwound_skin, signs_of_infection, pain_score,
           healing_stage, push_score, bwat_score, clinical_description, ai_confidence,
           ai_raw_response, calibration_type, scale_reliable, contour_cm, image_url, overlay_url,
-          approved_by, approved_at, notes)
+          approved_by, approved_at, notes,
+          ai_contour_cm, clinician_contour_cm, correction_reason,
+          model_name, model_version, model_checksum, preprocessing_version,
+          image_quality_score, image_quality_flags, tissue_source,
+          epithelialised_pct, residual_raw_pct, no_wound_detected)
        VALUES ($1,$2,$3,COALESCE($4, NOW()),$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,
-               $19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33)
+               $19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,
+               $34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46)
        RETURNING *`,
       [
         woundId, patientId, user.id || null, body.assessed_at || null,
@@ -290,6 +322,22 @@ async function addAssessment(body, user, res) {
         body.scale_reliable === true, JSON.stringify(body.contour_cm || []),
         body.image_url || null, body.overlay_url || null,
         body.approved_by || user.id || null, body.approved_at || null, body.notes || null,
+
+        // Provenance. The AI contour and the clinician's correction are kept
+        // apart so an override never destroys what the automated pipeline
+        // actually produced — that pairing is the audit trail, and it is also
+        // the only training data this hospital can generate.
+        JSON.stringify(body.ai_contour_cm || body.contour_cm || []),
+        body.clinician_contour_cm ? JSON.stringify(body.clinician_contour_cm) : null,
+        body.correction_reason || null,
+        body.model_name || null, body.model_version || null,
+        body.model_checksum || null, body.preprocessing_version || null,
+        num(body.image_quality_score), JSON.stringify(body.image_quality_flags || []),
+        // Defaults to 'none': percentages are not a measurement unless something
+        // that has been validated produced them, or a clinician entered them.
+        body.tissue_source || 'none',
+        num(body.epithelialised_pct), num(body.residual_raw_pct),
+        body.no_wound_detected === true,
       ]
     );
 
