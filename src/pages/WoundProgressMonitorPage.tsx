@@ -22,6 +22,16 @@ import {
 } from 'lucide-react';
 import { apiClient } from '../services/apiClient';
 import { aiWoundMeasurement, type WoundProgressEntry } from '../services/aiWoundMeasurement';
+import type { ImageQualityReport } from '../services/woundImageQuality';
+
+/**
+ * Stamped onto every assessment this page writes.
+ *
+ * Bump it whenever the measurement or preprocessing logic changes, so a
+ * historical result stays attributable to the code that produced it rather than
+ * being silently reinterpreted by whatever the pipeline does later.
+ */
+const PIPELINE_VERSION = '2026.08-cv1';
 import {
   listWounds, getWoundTimeline, getMonitorDashboard, createWound, addAssessment,
   computeHealingAnalytics, healingAlerts, HEALING_STATUS_META,
@@ -672,6 +682,10 @@ const CaptureAssessmentModal: React.FC<{ wound: Wound; onClose: () => void; onSa
   const [m, setM] = useState<Partial<WoundAssessment>>({});
   const [scaleReliable, setScaleReliable] = useState(false);
   const [calibType, setCalibType] = useState('reference-card');
+  // Recorded with the assessment so a measurement can be read against the
+  // quality of the photograph that produced it.
+  const [quality, setQuality] = useState<ImageQualityReport | null>(null);
+  const [warnings, setWarnings] = useState<string[]>([]);
 
   /**
    * Re-run the measurement with a scale the clinician set by hand. This is the
@@ -725,6 +739,21 @@ const CaptureAssessmentModal: React.FC<{ wound: Wound; onClose: () => void; onSa
       // ruler tick marks — NOT coins or cards. When it fails, measureFromScale
       // below takes over with an exact, user-supplied scale.
       const result = await aiWoundMeasurement.measureWound(imageData);
+
+      // Quality travels with whatever is saved, so a number can always be read
+      // against the photograph it came from.
+      setQuality(result.imageQuality);
+      setWarnings(result.warnings);
+
+      // The pipeline now refuses unusable photographs and images with no
+      // plausible wound, returning zeros. Those zeros must not reach the form —
+      // a 0 cm² assessment saved on a healing chart reads as a closed wound.
+      if (result.noWoundDetected) {
+        setError(result.warnings.join(' ') || 'No measurable wound found in this photograph.');
+        setMode('manual');
+        return;
+      }
+
       setScaleReliable(Boolean(result.scaleReliable));
       setCalibType(result.calibrationMethod || 'reference-card');
       setM({
@@ -732,10 +761,9 @@ const CaptureAssessmentModal: React.FC<{ wound: Wound; onClose: () => void; onSa
         width_cm: round(result.width),
         area_cm2: round(result.area),
         perimeter_cm: round(result.perimeter),
-        granulation_pct: result.tissue ? round(result.tissue.granulation) : undefined,
-        slough_pct: result.tissue ? round(result.tissue.slough) : undefined,
-        necrotic_pct: result.tissue ? round(result.tissue.necrotic) : undefined,
-        epithelial_pct: result.tissue ? round(result.tissue.epithelial) : undefined,
+        // Tissue percentages are deliberately not prefilled from the analysis.
+        // The colour classifier behind them is unvalidated, so they are the
+        // clinician's to enter. See TISSUE_MODEL_VALIDATED.
         ai_confidence: result.confidence,
         contour_cm: result.contourCm,
       });
@@ -750,10 +778,21 @@ const CaptureAssessmentModal: React.FC<{ wound: Wound; onClose: () => void; onSa
   const save = async () => {
     if (saving) return;
     const area = Number(m.area_cm2);
-    if (!Number.isFinite(area)) { setError('A wound area is required.'); return; }
+    // Zero is finite, so the old check let a refused measurement through as a
+    // 0 cm² assessment — which on a healing chart reads as a closed wound.
+    if (!Number.isFinite(area) || area <= 0) {
+      setError('A wound area greater than zero is required. If the photograph could not be measured, enter the dimensions manually.');
+      return;
+    }
     setSaving(true);
     setError('');
     try {
+      // Tissue percentages here are typed by the clinician, so they are recorded
+      // as such. Nothing in this app may write 'model' until a validated model
+      // exists — see TISSUE_MODEL_VALIDATED.
+      const enteredTissue = [m.granulation_pct, m.slough_pct, m.necrotic_pct, m.epithelial_pct]
+        .some(v => numOrNull(v) != null);
+
       await addAssessment({
         wound_id: wound.id!,
         patient_id: wound.patient_id,
@@ -765,11 +804,20 @@ const CaptureAssessmentModal: React.FC<{ wound: Wound; onClose: () => void; onSa
         slough_pct: numOrNull(m.slough_pct),
         necrotic_pct: numOrNull(m.necrotic_pct),
         epithelial_pct: numOrNull(m.epithelial_pct),
+        tissue_source: enteredTissue ? 'clinician' : 'none',
         clinical_description: m.clinical_description,
         ai_confidence: Number(m.ai_confidence) || 0,
         calibration_type: calibType,
         scale_reliable: scaleReliable,
         contour_cm: m.contour_cm,
+        // The automated contour is kept apart from any correction, so a later
+        // edit cannot destroy what the pipeline actually produced.
+        ai_contour_cm: m.contour_cm,
+        image_quality_score: quality?.score,
+        image_quality_flags: quality?.flags,
+        model_name: 'on-device-cv',
+        model_version: PIPELINE_VERSION,
+        preprocessing_version: PIPELINE_VERSION,
         assessed_at: new Date().toISOString(),
       });
       onSaved();
@@ -847,6 +895,24 @@ const CaptureAssessmentModal: React.FC<{ wound: Wound; onClose: () => void; onSa
               Step-by-step guide
             </a>
           </div>
+
+          {/* Photograph quality. Shown whether or not a measurement resulted, so
+              a clinician whose image was refused sees why, and one whose image
+              merely had glare knows the number is softer than it looks. */}
+          {!analyzing && warnings.length > 0 && (
+            <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-2">
+              <p className="text-xs font-medium text-amber-900 mb-1">Photograph quality</p>
+              <ul className="list-disc pl-4 text-xs text-amber-900 space-y-0.5">
+                {warnings.map((wmsg, i) => <li key={i}>{wmsg}</li>)}
+              </ul>
+              {quality && (
+                <p className="text-[11px] text-amber-800 mt-1">
+                  Quality score {quality.score.toFixed(2)} · sharpness {quality.metrics.sharpness} ·
+                  mean brightness {quality.metrics.meanLuma}
+                </p>
+              )}
+            </div>
+          )}
 
           {!analyzing && m.area_cm2 != null && (
             <div className={`mt-2 rounded-lg border p-2 ${scaleReliable ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-300'}`}>
