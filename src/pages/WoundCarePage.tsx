@@ -37,6 +37,10 @@ import { db } from '../db/database';
 import { syncService } from '../db/syncService';
 import { sanitizeTextForPDF } from '../utils/pdfUtils';
 import { getCurrentUserName } from '../utils/getCurrentUser';
+import { useAuthStore } from '../store/authStore';
+import {
+  isCloudAnalysisEnabled, grantCloudAnalysisConsent, CLOUD_CONSENT_PROMPT,
+} from '../services/woundCloudConsent';
 import { aiWoundMeasurement } from '../services/aiWoundMeasurement';
 import type { WoundMeasurementResult, WoundProgressEntry, CalibrationReference } from '../services/aiWoundMeasurement';
 // Lazy-load chart.js (~200 KB) only when the wound-progress panel actually renders
@@ -248,6 +252,10 @@ const WoundCarePage: React.FC = () => {
   // State
   const [activeTab, setActiveTab] = useState<'phases' | 'assessments' | 'new' | 'details'>('phases');
   const [patients, setPatients] = useState<Patient[]>([]);
+  // Named on the consent record, so an off-site upload is attributable to the
+  // clinician who authorised it rather than to the deployment.
+  const consentingUser = useAuthStore(s => s.user);
+
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [patientSearch, setPatientSearch] = useState('');
   useOnSelectedPatient((p) => { setSelectedPatient(p as unknown as Patient); setActiveTab('new'); });
@@ -463,15 +471,26 @@ const WoundCarePage: React.FC = () => {
   };
 
   // Send the captured photo to the GPT-4o Vision endpoint and merge its qualitative
-  // assessment into the on-device result. Best-effort: silently no-ops when the AI
-  // toggle is off, no patient is selected, or the service is unavailable.
+  // assessment into the on-device result.
+  //
+  // This used to run automatically whenever the device was online, which meant
+  // an identifiable clinical photograph left the hospital without anyone being
+  // asked. It is now a deliberate act: the clinician is told what is about to
+  // happen and consents for this specific patient. Measurements never depend on
+  // it — they are calculated on the device — so declining costs nothing.
   const enrichWithAI = async (result: WoundMeasurementResult, imageDataUrl: string, photoId: string) => {
     if (!useAiAssessment || !selectedPatient?.id || result.area <= 0) return;
+    if (!isCloudAnalysisEnabled()) return;
+    if (!window.confirm(CLOUD_CONSENT_PROMPT)) return;
+
+    const consent = grantCloudAnalysisConsent(consentingUser?.id ?? 'unknown', selectedPatient.id);
+
     setAiEnriching(true);
     try {
       const ai = await aiWoundMeasurement.analyzeWithAI(imageDataUrl, selectedPatient.id, {
         calibrationType: result.calibrationMethod,
         calibrationValue: result.scaleReliable ? `${result.measurements.calibrationFactor.toFixed(1)} px/cm` : undefined,
+        consent,
       });
       if (!ai) return;
       const merged = aiWoundMeasurement.mergeAiAssessment(result, ai);

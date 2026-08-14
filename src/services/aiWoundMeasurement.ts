@@ -14,6 +14,7 @@
  */
 
 import * as tf from '@tensorflow/tfjs';
+import { maySendToCloud, type CloudAnalysisConsent } from './woundCloudConsent';
 
 // ============================================
 // INTERFACES
@@ -838,8 +839,20 @@ export class AIWoundMeasurementService {
   async analyzeWithAI(
     imageBase64: string,
     patientId: string | number,
-    opts?: { woundRecordId?: string; calibrationType?: string; calibrationValue?: string }
+    opts?: {
+      woundRecordId?: string; calibrationType?: string; calibrationValue?: string;
+      /** Required. Without it the photograph is not sent. */
+      consent?: CloudAnalysisConsent;
+    }
   ): Promise<AiWoundAssessment | null> {
+    // The photograph does not leave the institution without both a deployment
+    // that permits it and a clinician who asked for it, for this patient.
+    const gate = maySendToCloud(opts?.consent, patientId);
+    if (!gate.allowed) {
+      console.info('[wound] cloud analysis not sent:', gate.reason);
+      return null;
+    }
+
     try {
       const { apiClient } = await import('./apiClient');
       const resp = await apiClient.request<{ success?: boolean; analysis?: AiWoundAssessment }>(
@@ -871,14 +884,25 @@ export class AIWoundMeasurementService {
   mergeAiAssessment(result: WoundMeasurementResult, ai: AiWoundAssessment | null): WoundMeasurementResult {
     if (!ai) return result;
     const merged: WoundMeasurementResult = { ...result, aiAssessment: ai, warnings: [...result.warnings] };
+
+    // Tissue percentages from the vision model are NOT adopted as measurements.
+    //
+    // A general vision model estimating "granulation 52%" by eye is no more
+    // validated for this than the local colour classifier — arguably less, since
+    // its reasoning cannot be inspected and it will answer confidently whatever
+    // it is shown. Adopting them here would have walked straight around
+    // TISSUE_MODEL_VALIDATED and put the same unfounded numbers back on screen
+    // through a different door.
+    //
+    // The qualitative assessment stays attached under `aiAssessment` for the
+    // clinician to read as a second opinion. It is not promoted to a number in
+    // the record.
     const wb = ai.wound_bed;
     if (wb && (wb.granulation_pct != null || wb.slough_pct != null || wb.necrotic_pct != null)) {
-      merged.tissue = {
-        granulation: Math.round(wb.granulation_pct ?? result.tissue?.granulation ?? 0),
-        slough: Math.round(wb.slough_pct ?? result.tissue?.slough ?? 0),
-        necrotic: Math.round(wb.necrotic_pct ?? result.tissue?.necrotic ?? 0),
-        epithelial: Math.round(wb.epithelialization_pct ?? result.tissue?.epithelial ?? 0),
-      };
+      merged.warnings.push(
+        'The external AI offered wound-bed percentages. They are shown as commentary only and ' +
+        'have not been recorded — automated tissue typing is not validated. Enter your own assessment.'
+      );
     }
     const aiArea = ai.dimensions?.area_cm2;
     if (aiArea && result.area > 0 && result.scaleReliable) {
