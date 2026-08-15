@@ -33,6 +33,11 @@ yarn-error.log*
 *.tsbuildinfo
 .vercel
 .env*.local
+# `vercel env pull` writes real secrets to whatever filename it is given. The
+# patterns above miss anything not ending in .local, so cover the rest.
+.env.vercel*
+.env.*.tmp
+*.env.tmp
 
 # Local admin/DB utility scripts (may contain or read credentials — keep out of VCS)
 db-env.mjs
