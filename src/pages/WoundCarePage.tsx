@@ -39,7 +39,7 @@ import { sanitizeTextForPDF } from '../utils/pdfUtils';
 import { getCurrentUserName } from '../utils/getCurrentUser';
 import { useAuthStore } from '../store/authStore';
 import {
-  isCloudAnalysisEnabled, grantCloudAnalysisConsent, CLOUD_CONSENT_PROMPT,
+  isCloudAnalysisEnabled, setCloudAnalysisEnabled, grantCloudAnalysisConsent, CLOUD_CONSENT_PROMPT,
 } from '../services/woundCloudConsent';
 import { aiWoundMeasurement } from '../services/aiWoundMeasurement';
 import type { WoundMeasurementResult, WoundProgressEntry, CalibrationReference } from '../services/aiWoundMeasurement';
@@ -299,6 +299,12 @@ const WoundCarePage: React.FC = () => {
   // type, healing stage, cross-check). Sends the photo to the server → OpenAI, so
   // staff can toggle it off per session for privacy / offline use.
   const [useAiAssessment, setUseAiAssessment] = useState(true);
+
+  // Whether this device may send photographs at all, and who may change that.
+  const [cloudAiEnabled, setCloudAiEnabled] = useState(() => isCloudAnalysisEnabled());
+  const canAdministerCloudAi = ['admin', 'super_admin', 'consultant'].includes(
+    String(consentingUser?.role || '')
+  );
   const [aiEnriching, setAiEnriching] = useState(false);
 
   // ----- Reference-marker & calibration state -----
@@ -1594,11 +1600,49 @@ const WoundCarePage: React.FC = () => {
               className="rounded border-gray-300"
             />
             <span>
-              AI wound-bed assessment (tissue %, type, healing stage){' '}
-              <span className="text-gray-400">— sends the photo to the secure AI service; turn off for offline/private capture.</span>
+              AI wound-bed assessment (wound type, healing stage, edges, exudate){' '}
+              <span className="text-gray-400">— sends the photo to the AI service; turn off for offline/private capture.</span>
             </span>
             {aiEnriching && <span className="text-indigo-600 animate-pulse">· analysing…</span>}
           </label>
+
+          {/* The deployment-level permission. Separate from the toggle above on
+              purpose: that one is "do I want this now", this one is "is this
+              hospital willing to send wound photographs off-site at all". A
+              clinician can decline per photograph; only an administrator
+              decides whether the option exists. */}
+          {canAdministerCloudAi && (
+            <div className="mt-2 rounded-md border border-gray-200 bg-gray-50 p-2">
+              <label className="flex items-start gap-2 text-xs text-gray-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={cloudAiEnabled}
+                  onChange={e => {
+                    setCloudAnalysisEnabled(e.target.checked);
+                    setCloudAiEnabled(e.target.checked);
+                  }}
+                  className="rounded border-gray-300 mt-0.5"
+                />
+                <span>
+                  <span className="font-medium">Allow AI analysis on this device</span>
+                  <span className="text-gray-500">
+                    {' '}— off by default. Wound photographs are identifiable clinical images; each
+                    one still needs the clinician's confirmation before it is sent. This setting
+                    applies to this device only.
+                  </span>
+                </span>
+              </label>
+            </div>
+          )}
+
+          {useAiAssessment && !cloudAiEnabled && (
+            <p className="mt-2 text-xs text-amber-700">
+              AI wound-bed assessment is switched off for this device, so measurements are being
+              taken on-device only. {canAdministerCloudAi
+                ? 'Enable it above if this hospital permits photographs to be sent.'
+                : 'An administrator can enable it.'}
+            </p>
+          )}
         </div>
 
         {/* Inline trend preview for THIS wound */}
