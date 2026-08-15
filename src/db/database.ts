@@ -1344,6 +1344,21 @@ export class PlasticSurgeonDB extends Dexie {
       clinician_analyses: '++id, serverId, patient_id, overall_severity, analysed_at, synced'
     });
 
+    // Wound photographs.
+    //
+    // These were never persisted anywhere: the pages held object URLs in memory
+    // and the image_url column was written by nothing, so every photograph was
+    // lost when the modal closed. That broke serial photo comparison, and it
+    // meant the clinician-corrected outlines being collected had no image
+    // attached — a contour on its own cannot train a segmentation model, so the
+    // correction loop was producing half of each example.
+    //
+    // The blob lives here first, which also makes capture work with no network.
+    // Rows with no remote_path are the upload queue.
+    this.version(40).stores({
+      wound_images: '++id, ref, assessment_id, wound_id, patient_id, kind, captured_at, remote_path'
+    });
+
 
     // Add hooks to automatically track changes
     this.patients.hook('creating', (primKey, obj, trans) => {

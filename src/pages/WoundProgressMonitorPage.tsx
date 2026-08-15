@@ -23,6 +23,7 @@ import {
 import { apiClient } from '../services/apiClient';
 import { aiWoundMeasurement, type WoundProgressEntry } from '../services/aiWoundMeasurement';
 import type { ImageQualityReport } from '../services/woundImageQuality';
+import { putLocalImage, attachToAssessment } from '../services/woundImageStore';
 
 /**
  * Stamped onto every assessment this page writes.
@@ -697,6 +698,8 @@ const CaptureAssessmentModal: React.FC<{ wound: Wound; onClose: () => void; onSa
   const [correction, setCorrection] = useState<{
     contourCm: Array<{ x: number; y: number }>; reason: string; magnitude: number;
   } | null>(null);
+  /** Ref of the stored photograph, linked to the assessment once it is saved. */
+  const [imageRef, setImageRef] = useState<string | null>(null);
 
   /**
    * Re-run the measurement with a scale the clinician set by hand. This is the
@@ -744,6 +747,26 @@ const CaptureAssessmentModal: React.FC<{ wound: Wound; onClose: () => void; onSa
       // Keep the image: if auto-detection cannot find a marker, the clinician
       // sets the scale by hand against it rather than re-taking the photo.
       setPending({ url: URL.createObjectURL(file), imageData, w: canvas.width, h: canvas.height });
+
+      // Persist the photograph before anything else touches it. Until now these
+      // were held only in memory and lost when the modal closed, which left the
+      // corrected outlines with no image attached — and a contour on its own
+      // cannot train anything. Local first, so this works with no signal.
+      try {
+        const ref = await putLocalImage({
+          blob: file,
+          kind: 'original',
+          width: canvas.width,
+          height: canvas.height,
+          woundId: wound.id != null ? Number(wound.id) : null,
+          patientId: wound.patient_id != null ? Number(wound.patient_id) : null,
+        });
+        setImageRef(ref);
+      } catch (storeErr) {
+        // A failure to store must not block the measurement the clinician came
+        // for; it costs the training pair, not the assessment.
+        console.warn('[wound] could not store photograph locally:', storeErr);
+      }
 
       await aiWoundMeasurement.initialize();
       // Auto-detection only recognises green printed markers, grid paper and
@@ -811,9 +834,13 @@ const CaptureAssessmentModal: React.FC<{ wound: Wound; onClose: () => void; onSa
       const enteredTissue = [m.granulation_pct, m.slough_pct, m.necrotic_pct, m.epithelial_pct]
         .some(v => numOrNull(v) != null);
 
-      await addAssessment({
+      const saved = await addAssessment({
         wound_id: wound.id!,
         patient_id: wound.patient_id,
+        // Points at the stored photograph. Until object storage is configured
+        // the bytes live only on this device, so the reference is what ties the
+        // two together rather than a URL that would not resolve elsewhere.
+        image_url: imageRef ? `local:${imageRef}` : undefined,
         length_cm: numOrNull(m.length_cm),
         width_cm: numOrNull(m.width_cm),
         area_cm2: area,
@@ -845,6 +872,15 @@ const CaptureAssessmentModal: React.FC<{ wound: Wound; onClose: () => void; onSa
         preprocessing_version: PIPELINE_VERSION,
         assessed_at: new Date().toISOString(),
       });
+
+      // Link the photograph to the assessment now that the row exists. Without
+      // this the image is orphaned and the pairing with the corrected outline —
+      // the whole reason for keeping it — is lost.
+      if (imageRef && (saved as any)?.id) {
+        await attachToAssessment([imageRef], Number((saved as any).id), wound.id != null ? Number(wound.id) : undefined)
+          .catch(e => console.warn('[wound] could not link photograph to assessment:', e));
+      }
+
       onSaved();
     } catch (e: any) {
       setError(e?.message || 'Could not save the assessment.');
