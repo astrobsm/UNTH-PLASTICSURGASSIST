@@ -21,6 +21,7 @@ import { performOCR, OCRError } from '../_lib/ocrService.js';
 import { chatCompletion } from '../_lib/openai.js';
 import { OCR_EXTRACTION_PROMPT } from '../_lib/ocrPrompts.js';
 import { cors, authenticateRequest } from '../_lib/auth.js';
+import { processDocument, isDocumentAiConfigured } from '../_lib/documentAi.js';
 
 // Max body size guard — Vercel has a 4.5 MB body limit for serverless;
 // images are base64 so ~33% overhead
@@ -71,6 +72,39 @@ export default async function handler(req, res) {
     const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/tiff', 'application/pdf'];
     if (!allowed.includes(mimeType)) {
       return res.status(400).json({ error: `Unsupported file type: ${mimeType}. Allowed: ${allowed.join(', ')}` });
+    }
+
+    // ─── Google Document AI: the primary engine ───────────────────
+    //
+    // Purpose-built for documents, which is what nearly everything scanned here
+    // is. A general vision model reads a page by describing it, and that is why
+    // it paraphrases and will occasionally produce a plausible number that was
+    // never on the paper. Document AI transcribes.
+    //
+    // It is tried first for everything except explicit handwriting requests,
+    // where GPT-4o still tends to do better on genuinely messy script.
+    const preferVisionForHandwriting = useVisionOCR && documentType === 'handwritten_note';
+
+    if (isDocumentAiConfigured() && !preferVisionForHandwriting) {
+      const docAi = await processDocument(image, mimeType);
+      if (docAi) {
+        return res.status(200).json({
+          success: true,
+          raw_text: docAi.raw_text,
+          structured_blocks: docAi.blocks,
+          confidence: docAi.confidence,
+          pages: docAi.pageCount || 1,
+          language: 'en',
+          documentType: documentType || 'general',
+          processedAt: new Date().toISOString(),
+          aiModel: docAi.engine,
+          documentAi: true,
+        });
+      }
+      // Null means unconfigured or failed; the reason is already logged. Fall
+      // through rather than failing the scan — the point of the chain is that a
+      // clinician still gets text.
+      console.warn('[ocr] Document AI unavailable, falling back');
     }
 
     // ─── GPT-4o Vision Direct OCR (for handwriting) ──────────────

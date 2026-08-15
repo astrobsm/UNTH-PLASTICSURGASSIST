@@ -221,11 +221,13 @@ class OCRService {
   ): Promise<OCRResult> {
     const startTime = Date.now();
 
-    // Try Google Cloud Vision via backend first
+    // Server-side OCR first: Google Document AI, falling back to GPT-4o Vision.
+    // Both need a network; the Tesseract path below is what makes scanning work
+    // on a ward with no signal, and is the reason it has not been removed.
     try {
       onProgress?.({ status: 'Optimizing image...', progress: 0.05 });
       const base64 = await this.prepareUploadImage(imageSource);
-      onProgress?.({ status: 'Sending to Cloud Vision...', progress: 0.15 });
+      onProgress?.({ status: 'Reading document...', progress: 0.15 });
 
       const response = await apiClient.post('/ocr/scan', {
         image: base64,
@@ -234,7 +236,7 @@ class OCRService {
       });
 
       if (response?.success && response.raw_text) {
-        onProgress?.({ status: 'Cloud Vision complete', progress: 1.0 });
+        onProgress?.({ status: 'Document read', progress: 1.0 });
         const processedText = this.postProcessText(response.raw_text, documentType);
         const words: OCRWord[] = (response.structured_blocks || []).map((b: any) => ({
           text: b.text || '',
