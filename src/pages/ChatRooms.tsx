@@ -6,28 +6,81 @@ import {
   MessageSquare,
   Users,
   Video,
-  Phone,
   MoreVertical,
   Send,
   Paperclip,
-  Image,
   Smile,
   ArrowLeft,
   Check,
   CheckCheck,
-  Clock,
   X,
-  UserPlus,
-  Settings,
-  Trash2,
-  Edit3,
   Reply,
-  Forward,
-  Copy
 } from 'lucide-react';
-import chatService, { ChatRoom, ChatMessage, ChatParticipant } from '../services/chatService';
+import chatService, { ChatRoom, ChatMessage } from '../services/chatService';
 import { useAuthStore } from '../store/authStore';
 import Layout from '../components/Layout';
+
+/**
+ * Resolve a message's attachment to something the browser can display.
+ *
+ * A message the server sent back carries a path, not the bytes — the
+ * attachment is stored separately so reading a room's history does not drag
+ * every photograph ever posted along with it. That path needs the bearer token
+ * and answers with JSON, so it cannot be an `<img src>` and has to be fetched.
+ *
+ * A message this device just sent still holds its own data URL in `content`
+ * and is shown straight away; waiting for a round trip to display something
+ * already in memory would make sending look slow.
+ */
+function useAttachmentUrl(message: ChatMessage): string | null {
+  const inlineData = message.content?.startsWith('data:') ? message.content : null;
+  const [url, setUrl] = useState<string | null>(inlineData);
+
+  useEffect(() => {
+    if (inlineData || !message.fileUrl) return;
+    let alive = true;
+    chatService.getAttachmentUrl(message.fileUrl).then(resolved => {
+      if (alive) setUrl(resolved);
+    });
+    return () => { alive = false; };
+  }, [message.fileUrl, inlineData]);
+
+  return url;
+}
+
+const ChatAttachment: React.FC<{ message: ChatMessage }> = ({ message }) => {
+  const url = useAttachmentUrl(message);
+
+  if (!url) {
+    return (
+      <span className="flex items-center gap-2 text-xs opacity-70">
+        <Paperclip className="w-4 h-4" />
+        {message.fileName || 'Attachment'} — loading…
+      </span>
+    );
+  }
+
+  if (message.type === 'image') {
+    return (
+      <img
+        src={url}
+        alt={message.fileName || 'Shared image'}
+        className="max-w-full rounded-lg cursor-pointer"
+        onClick={() => window.open(url, '_blank')}
+      />
+    );
+  }
+
+  return (
+    <a href={url} download={message.fileName} className="flex items-center gap-2 hover:underline">
+      <Paperclip className="w-4 h-4" />
+      <span>{message.fileName}</span>
+      <span className="text-xs opacity-70">
+        ({Math.round((message.fileSize || 0) / 1024)}KB)
+      </span>
+    </a>
+  );
+};
 
 const ChatRooms: React.FC = () => {
   const navigate = useNavigate();
@@ -45,7 +98,6 @@ const ChatRooms: React.FC = () => {
   const [typingUsers, setTypingUsers] = useState<{ [roomId: string]: string[] }>({});
   const [showNewRoomDialog, setShowNewRoomDialog] = useState(false);
   const [showRoomInfo, setShowRoomInfo] = useState(false);
-  const [selectedMessage, setSelectedMessage] = useState<ChatMessage | null>(null);
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   
@@ -99,6 +151,21 @@ const ChatRooms: React.FC = () => {
     }
   }, [roomId, rooms]);
 
+  // Poll the open room for messages other people send.
+  //
+  // Serverless has no socket to push them down, so without this a conversation
+  // only ever showed what this device had typed — the other half of it arrived
+  // solely on a manual reload.
+  useEffect(() => {
+    if (!activeRoom) return;
+    const seen = new Set(messages.map(m => m.id));
+    return chatService.watchRoom(activeRoom.id, seen);
+    // Restarting on every message would reset the poll clock on each keystroke
+    // reply, so this deliberately keys on the room alone; `seen` is seeded once
+    // and then maintained by the watcher.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeRoom?.id]);
+
   // Scroll to bottom on new messages
   useEffect(() => {
     scrollToBottom();
@@ -139,11 +206,11 @@ const ChatRooms: React.FC = () => {
     }));
   };
 
-  const handleUserOnline = (data: { userId: string }) => {
+  const handleUserOnline = (_data: { userId: string }) => {
     // Update participant online status
   };
 
-  const handleUserOffline = (data: { userId: string }) => {
+  const handleUserOffline = (_data: { userId: string }) => {
     // Update participant online status
   };
 
@@ -540,25 +607,8 @@ const ChatRooms: React.FC = () => {
                                 : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white rounded-tl-none'
                             } ${message.type === 'image' ? 'p-1' : ''}`}
                           >
-                            {message.type === 'image' ? (
-                              <img
-                                src={message.content}
-                                alt="Shared image"
-                                className="max-w-full rounded-lg cursor-pointer"
-                                onClick={() => window.open(message.content, '_blank')}
-                              />
-                            ) : message.type === 'file' ? (
-                              <a
-                                href={message.content}
-                                download={message.fileName}
-                                className="flex items-center gap-2 hover:underline"
-                              >
-                                <Paperclip className="w-4 h-4" />
-                                <span>{message.fileName}</span>
-                                <span className="text-xs opacity-70">
-                                  ({Math.round((message.fileSize || 0) / 1024)}KB)
-                                </span>
-                              </a>
+                            {message.type === 'image' || message.type === 'file' ? (
+                              <ChatAttachment message={message} />
                             ) : (
                               <p className="whitespace-pre-wrap break-words">{message.content}</p>
                             )}

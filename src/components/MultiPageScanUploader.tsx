@@ -17,7 +17,7 @@
  *   />
  */
 import React, { useRef, useState, useCallback } from 'react';
-import { Camera, Upload, X, ScanLine, Loader2, ChevronUp, ChevronDown, FileImage } from 'lucide-react';
+import { Camera, Upload, X, ScanLine, Loader2, ChevronUp, ChevronDown, FileImage, FileText } from 'lucide-react';
 import { ocrService } from '../services/ocrService';
 
 export interface ScannedPage {
@@ -80,7 +80,12 @@ export const MultiPageScanUploader: React.FC<Props> = ({
       const list = Array.from(files);
       const next: ScannedPage[] = [];
       for (const f of list) {
-        if (!f.type.startsWith('image/')) continue;
+        // PDFs are kept alongside images. A scanned ward document usually
+        // arrives as one, and both cloud OCR engines read PDFs natively — the
+        // page below renders it as a document tile rather than a thumbnail,
+        // since there is nothing to draw until the server has read it.
+        const isPdf = f.type === 'application/pdf';
+        if (!f.type.startsWith('image/') && !isPdf) continue;
         try {
           const dataUrl = await fileToDataUrl(f);
           next.push({ id: `pg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, dataUrl, name: f.name });
@@ -178,7 +183,7 @@ export const MultiPageScanUploader: React.FC<Props> = ({
             onClick={() => uploadRef.current?.click()}
             disabled={disabled || ocrInProgress}
             className="inline-flex items-center gap-1.5 px-3 py-2 bg-sky-100 text-navy-900 text-sm rounded-lg hover:bg-sky-200 border border-sky-300 disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Upload one or more images"
+            title="Upload one or more images or PDF documents"
           >
             <Upload className="w-4 h-4" /> Upload
           </button>
@@ -199,7 +204,11 @@ export const MultiPageScanUploader: React.FC<Props> = ({
 
       {/* Hidden inputs */}
       <input ref={cameraRef} type="file" accept="image/*" capture="environment" multiple onChange={onCameraChange} className="hidden" />
-      <input ref={uploadRef} type="file" accept="image/*" multiple onChange={onUploadChange} className="hidden" />
+      {/* PDFs are accepted on upload but not on capture: a camera produces
+          images, while a scanned ward document usually arrives as a PDF. The
+          OCR endpoint and both cloud engines have always read PDFs — this
+          filter was the only thing stopping one being selected at all. */}
+      <input ref={uploadRef} type="file" accept="image/*,application/pdf" multiple onChange={onUploadChange} className="hidden" />
 
       {ocrInProgress && (
         <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
@@ -216,14 +225,24 @@ export const MultiPageScanUploader: React.FC<Props> = ({
       {pages.length === 0 ? (
         <div className="border-2 border-dashed border-gray-200 rounded-lg p-6 text-center text-gray-400">
           <FileImage className="w-8 h-8 mx-auto mb-2 opacity-60" />
-          <p className="text-sm">No pages added yet. Use <strong>Capture</strong> for camera or <strong>Upload</strong> to attach files.</p>
+          <p className="text-sm">No pages added yet. Use <strong>Capture</strong> for camera, or <strong>Upload</strong> to attach images or PDFs.</p>
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
           {pages.map((page, idx) => (
             <div key={page.id} className="relative border border-gray-200 rounded-lg overflow-hidden bg-white group">
               <div className="aspect-[3/4] bg-gray-100 relative">
-                <img src={page.dataUrl} alt={page.caption || page.name || `Page ${idx + 1}`} className="w-full h-full object-cover" />
+                {page.dataUrl.startsWith('data:application/pdf') ? (
+                  <div className="w-full h-full flex flex-col items-center justify-center gap-1 px-2 text-gray-500">
+                    <FileText className="w-8 h-8 opacity-70" />
+                    <span className="text-[10px] text-center break-all line-clamp-2">
+                      {page.name || `Document ${idx + 1}`}
+                    </span>
+                    <span className="text-[9px] uppercase tracking-wide text-gray-400">PDF</span>
+                  </div>
+                ) : (
+                  <img src={page.dataUrl} alt={page.caption || page.name || `Page ${idx + 1}`} className="w-full h-full object-cover" />
+                )}
                 <div className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-black/60 text-white text-[10px] font-semibold">
                   {idx + 1}
                 </div>

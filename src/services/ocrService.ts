@@ -14,8 +14,8 @@ import {
   TESSERACT_WORKER_PATH,
   pickTesseractCore,
 } from '../config/ocrAssets';
-import { validateVitals, validateLabValue, assessImageQuality, type ValidatedVitalReading, type VitalAlert } from './medicalValidation';
-import { extractClinicalNotes, type ClinicalNotesExtractionResult } from './clinicalNotesExtraction';
+import { validateVitals, validateLabValue, type ValidatedVitalReading, type VitalAlert } from './medicalValidation';
+import { type ClinicalNotesExtractionResult } from './clinicalNotesExtraction';
 
 export interface OCRResult {
   text: string;
@@ -287,7 +287,7 @@ class OCRService {
       const { data } = await this.worker.recognize(recognizeInput);
 
       // Post-process based on document type
-      let processedText = this.postProcessText(data.text, documentType);
+      const processedText = this.postProcessText(data.text, documentType);
 
       // Extract words from the result (Tesseract.js v5+ structure)
       const wordsData = (data as any).words || [];
@@ -354,6 +354,21 @@ class OCRService {
   ): Promise<string> {
     // Pass-through for already-encoded strings
     if (typeof imageSource === 'string') return imageSource;
+
+    // A PDF is sent exactly as it arrived.
+    //
+    // It cannot be decoded into a canvas, so the resize path below would throw
+    // and drop the scan into the Tesseract fallback, which cannot read a PDF
+    // either. It also does not need to be: Document AI and Cloud Vision both
+    // read PDFs natively and multi-page, and rasterising one here would discard
+    // the text layer a digitally-produced PDF already carries — the cleanest
+    // input the pipeline can get. readAsDataURL keeps the
+    // "data:application/pdf;base64," prefix that the endpoint reads the MIME
+    // type from.
+    if ((imageSource instanceof File || imageSource instanceof Blob) &&
+        imageSource.type === 'application/pdf') {
+      return this.imageToBase64(imageSource);
+    }
 
     // Cheap path only when NOT enhancing: tiny files don't need recompression.
     if (!enhance && (imageSource instanceof File || imageSource instanceof Blob) && imageSource.size < 350 * 1024) {
@@ -796,7 +811,7 @@ class OCRService {
 
   // Format lab report text
   private formatLabReport(text: string): string {
-    let formatted = text;
+    const formatted = text;
 
     // Try to structure lab values
     const lines = formatted.split('\n');
@@ -1023,7 +1038,7 @@ class OCRService {
           if (bestSeries.length > 0) {
             structuredData = { ...(structuredData || {}), vital_signs_series: bestSeries };
           } else if (structuredData && 'vital_signs_series' in structuredData) {
-            const { vital_signs_series: _drop, ...rest } = structuredData;
+            const { ...rest } = structuredData;
             structuredData = rest;
           }
           console.log(`📊 Vitals chart: AI(raw)=${rawAi.length} AI(usable)=${existingSeries.length} rule=${ruleSeries.length} kept=${bestSeries.length}`);
@@ -1172,7 +1187,7 @@ class OCRService {
     let currentDate = '';
 
     // Try to find a header date 
-    const headerDateMatch = text.match(/Date[:\s]*(\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?)/i);
+    const headerDateMatch = text.match(/Date[:\s]*(\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?)/i);
     if (headerDateMatch) currentDate = headerDateMatch[1].replace(/-/g, '/');
 
     for (const line of lines) {
@@ -1180,7 +1195,7 @@ class OCRService {
       if (/^\s*(time|date|temp|pulse|blood|pressure|ward|surname|first|hosp|fluid|drugs|condition|resp|intake|output|urine)/i.test(line)) continue;
 
       // Check if line starts with a date like "7/4/26" or "9/4"
-      const leadingDate = line.match(/^(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?\b/);
+      const leadingDate = line.match(/^(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?\b/);
       if (leadingDate) {
         const d = parseInt(leadingDate[1]), mo = parseInt(leadingDate[2]);
         if (d >= 1 && d <= 31 && mo >= 1 && mo <= 12) {
@@ -1189,7 +1204,7 @@ class OCRService {
       }
 
       // Find ALL BP readings on this line (handles merged OCR lines)
-      const bpRegex = /(\d{2,3})\s*[\/\\]\s*(\d{2,3})/g;
+      const bpRegex = /(\d{2,3})\s*[/\\]\s*(\d{2,3})/g;
       let bpMatch: RegExpExecArray | null;
       let bpFound = false;
 
@@ -1200,7 +1215,7 @@ class OCRService {
         lineTime = lineTimeMatches[0].trim();
       }
       if (!lineTime) {
-        const ltm = line.match(/^(?:\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?\s+)?(\d{1,2}(?:[:.]\d{2})?)\s*(am|pm)?/i);
+        const ltm = line.match(/^(?:\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?\s+)?(\d{1,2}(?:[:.]\d{2})?)\s*(am|pm)?/i);
         if (ltm) lineTime = (ltm[1] + (ltm[2] || '')).trim();
       }
 
@@ -1348,7 +1363,7 @@ class OCRService {
    * Works when OCR doesn't preserve line boundaries well.
    */
   private parseVitalsByBPAnchor(text: string): any[] | null {
-    const bpRegex = /(\d{2,3})\s*[\/\\]\s*(\d{2,3})/g;
+    const bpRegex = /(\d{2,3})\s*[/\\]\s*(\d{2,3})/g;
     const bpMatches: { index: number; systolic: number; diastolic: number; matchLen: number }[] = [];
     let m: RegExpExecArray | null;
     while ((m = bpRegex.exec(text)) !== null) {
@@ -1526,10 +1541,10 @@ class OCRService {
         const nums = line.match(/\d{2,3}\.?\d*/g) || [];
         nums.forEach((n, i) => { if (i < numSlots) { const v = parseFloat(n); if (v >= 34 && v <= 42) temps[i] = v; } });
       } else if (isBP) {
-        const bps = line.match(/\d{2,3}\s*[\/\\]\s*\d{2,3}/g) || [];
+        const bps = line.match(/\d{2,3}\s*[/\\]\s*\d{2,3}/g) || [];
         bps.forEach((bp, i) => {
           if (i < numSlots) {
-            const parts = bp.split(/[\/\\]/);
+            const parts = bp.split(/[/\\]/);
             const sys = parseInt(parts[0].trim()), dia = parseInt(parts[1].trim());
             if (sys >= 50 && sys <= 260 && dia >= 20 && dia <= 160 && sys > dia) {
               bpSys[i] = sys; bpDia[i] = dia;
@@ -1556,7 +1571,7 @@ class OCRService {
     if (!hasAnyData) return null;
 
     // Find header date
-    const headerDateMatch = text.match(/Date[:\s]*(\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?)/i);
+    const headerDateMatch = text.match(/Date[:\s]*(\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?)/i);
     const chartDate = headerDateMatch ? headerDateMatch[1].replace(/-/g, '/') : '';
 
     const readings: any[] = [];
@@ -1582,7 +1597,7 @@ class OCRService {
    * Rule-based fallback extraction for when AI is not available.
    * Extracts vitals, lab values, medications from raw OCR text.
    */
-  private ruleBasedExtraction(text: string, documentType: DocumentType): any {
+  private ruleBasedExtraction(text: string, _documentType: DocumentType): any {
     const result: any = { confidence: 0.4 };
 
     // Extract vitals
