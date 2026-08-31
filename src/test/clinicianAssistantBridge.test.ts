@@ -18,6 +18,52 @@ describe('analyte matching against stored test names', () => {
     expect(matchAnalyte('WBC')?.key).toBe('wbc');
   });
 
+  it('does not match a synonym buried inside a longer word', () => {
+    // These all matched before, because the lookup was a bare includes():
+    // "hb" inside "HbA1c", "k" inside "Ketones", "ck" inside "Sickling test",
+    // "ph" inside "Acid Phosphatase", "ig" inside "Triglycerides"/"Antigen".
+    // An HbA1c of 9.5% became a haemoglobin of 9.5 g/dL and was reported as
+    // anaemia; urine ketones became a potassium in the middle of a DKA workup.
+    expect(matchAnalyte('HbA1c')).toBeNull();
+    expect(matchAnalyte('HbS')).toBeNull();
+    expect(matchAnalyte('Ketones')).toBeNull();
+    expect(matchAnalyte('Sickling test')).toBeNull();
+    expect(matchAnalyte('Acid Phosphatase')).toBeNull();
+    expect(matchAnalyte('Triglycerides')).toBeNull();
+    expect(matchAnalyte('Hepatitis B Surface Antigen')).toBeNull();
+  });
+
+  it('does not file a qualified test under the plain analyte', () => {
+    // Word boundaries alone do not catch these: the name really does contain
+    // the synonym as a word. But a clearance is a rate, a urine electrolyte
+    // has its own range, and glycated haemoglobin is a different analyte.
+    expect(matchAnalyte('Creatinine Clearance')).toBeNull();
+    expect(matchAnalyte('Urine Sodium')).toBeNull();
+    expect(matchAnalyte('Glycated Haemoglobin')).toBeNull();
+    expect(matchAnalyte('Haemoglobin A1c')).toBeNull();
+    expect(matchAnalyte('Vitamin K')).toBeNull();
+  });
+
+  it('still matches synonyms that carry the qualifier themselves', () => {
+    expect(matchAnalyte('Urine pH')?.key).toBe('uPh');
+    expect(matchAnalyte('Albumin:Creatinine Ratio')?.key).toBe('uAcr');
+    expect(matchAnalyte('Protein Creatinine Ratio')?.key).toBe('uPcr');
+  });
+
+  it('still maps the ordinary names the wards actually enter', () => {
+    // The guard above must not cost any of the everyday mappings.
+    const expected: [string, string][] = [
+      ['Hb', 'hb'], ['HGB', 'hb'], ['Haemoglobin', 'hb'],
+      ['PLT', 'plt'], ['LYM', 'lymph'], ['Potassium', 'k'], ['Serum K', 'k'],
+      ['Sodium', 'na'], ['Creatinine', 'creatinine'], ['Urea', 'urea'],
+      ['CRP', 'crp'], ['Alkaline Phosphatase', 'alp'],
+      ['Prothrombin Time', 'pt'], ['Partial Thromboplastin Time', 'aptt'],
+    ];
+    for (const [name, key] of expected) {
+      expect(matchAnalyte(name)?.key, name).toBe(key);
+    }
+  });
+
   it('does NOT treat a differential percentage as an analyte', () => {
     // "LYM%" is a percentage, while the engine's `lymph` is an absolute count.
     // Matching it directly would file a percentage as though it were a cell
@@ -30,6 +76,27 @@ describe('analyte matching against stored test names', () => {
   it('recognises percentages by unit as well as by name', () => {
     expect(isPercentageResult('Neutrophils', '%')).toBe(true);
     expect(isPercentageResult('Neutrophils', 'x10^9/L')).toBe(false);
+  });
+
+  it('recognises a trailing "pct" marker as a percentage', () => {
+    // Both "pct" patterns were written as raw backspace bytes rather than the
+    // \b escape, so they matched nothing: "NEUT PCT 60" was filed as an
+    // absolute neutrophil count of 60 x10^9/L instead of 60% of the white
+    // count. Unit-less rows like these are exactly the ones with no other
+    // signal that they are percentages.
+    expect(isPercentageResult('NEUT PCT', '')).toBe(true);
+    expect(isPercentageResult('Lymphocyte pct', '')).toBe(true);
+    expect(toPercentage('Lymphocyte pct', '32')?.key).toBe('lymph');
+    expect(toPercentage('Lymphocyte pct', '32')?.percent).toBeCloseTo(32, 2);
+  });
+
+  it('does not mistake procalcitonin for a differential percentage', () => {
+    // "PCT" abbreviates both plateletcrit and procalcitonin in the dictionary,
+    // so the marker is only honoured where the `%` marker is — at the end of
+    // the name. Matching "pct" anywhere would route a 0.3 ng/mL procalcitonin
+    // into resolvePercentages to be scaled against the white cell count.
+    expect(isPercentageResult('PCT (procalcitonin)', 'ng/mL')).toBe(false);
+    expect(toAnalyte('PCT (procalcitonin)', '0.3', 'ng/mL').analyte?.key).toBe('procalcitonin');
   });
 
   it('rejects a percentage outside 0-100 rather than passing it on', () => {

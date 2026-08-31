@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom';
-import { expect, afterEach } from 'vitest';
+import { afterEach } from 'vitest';
 import { cleanup } from '@testing-library/react';
 
 // Cleanup after each test
@@ -17,13 +17,13 @@ if (typeof global.crypto === 'undefined') {
       return arr;
     },
     subtle: {
-      digest: async (algorithm: string, data: BufferSource) => {
+      digest: async (_algorithm: string, _data: BufferSource) => {
         return new ArrayBuffer(32);
       },
-      importKey: async (...args: any[]) => ({} as CryptoKey),
-      deriveKey: async (...args: any[]) => ({} as CryptoKey),
-      encrypt: async (...args: any[]) => new ArrayBuffer(64),
-      decrypt: async (...args: any[]) => new ArrayBuffer(32)
+      importKey: async (..._args: any[]) => ({} as CryptoKey),
+      deriveKey: async (..._args: any[]) => ({} as CryptoKey),
+      encrypt: async (..._args: any[]) => new ArrayBuffer(64),
+      decrypt: async (..._args: any[]) => new ArrayBuffer(32)
     }
   } as any;
 }

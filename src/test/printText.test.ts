@@ -72,6 +72,8 @@ describe('toPrintableText — decorative pictographs are removed', () => {
   it('removes multi-codepoint emoji whole, leaving no fragments', () => {
     const out = toPrintableText('👨‍⚕️ Consultant');
     expect(out).toBe('Consultant');
+    // The combined character is deliberate — this asserts the sanitizer handles one.
+    // eslint-disable-next-line no-misleading-character-class
     expect(out).not.toMatch(/[‍️]/);
   });
 
