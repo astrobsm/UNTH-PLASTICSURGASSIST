@@ -12,6 +12,14 @@
   },
   "rewrites": [
     {
+      "source": "/api/consults/process-incoming",
+      "destination": "/api/consults/process-incoming"
+    },
+    {
+      "source": "/api/chat/:path*",
+      "destination": "/api/chat"
+    },
+    {
       "source": "/api/consults/:path*",
       "destination": "/api/consults"
     },

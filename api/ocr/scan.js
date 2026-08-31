@@ -22,6 +22,7 @@ import { chatCompletion } from '../_lib/openai.js';
 import { OCR_EXTRACTION_PROMPT } from '../_lib/ocrPrompts.js';
 import { cors, authenticateRequest } from '../_lib/auth.js';
 import { processDocument, isDocumentAiConfigured } from '../_lib/documentAi.js';
+import { shouldPreferVisionOCR } from '../_lib/ocrRouting.js';
 
 // Max body size guard — Vercel has a 4.5 MB body limit for serverless;
 // images are base64 so ~33% overhead
@@ -81,9 +82,9 @@ export default async function handler(req, res) {
     // it paraphrases and will occasionally produce a plausible number that was
     // never on the paper. Document AI transcribes.
     //
-    // It is tried first for everything except explicit handwriting requests,
-    // where GPT-4o still tends to do better on genuinely messy script.
-    const preferVisionForHandwriting = useVisionOCR && documentType === 'handwritten_note';
+    // It is tried first for everything except the scans that need a structure
+    // Document AI cannot produce. See _lib/ocrRouting.js for why.
+    const preferVisionForHandwriting = shouldPreferVisionOCR(useVisionOCR, documentType);
 
     if (isDocumentAiConfigured() && !preferVisionForHandwriting) {
       const docAi = await processDocument(image, mimeType);
