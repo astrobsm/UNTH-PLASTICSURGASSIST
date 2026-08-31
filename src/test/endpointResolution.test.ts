@@ -13,7 +13,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-  unresolvedEndpoints, staleExemptions, KNOWN_UNIMPLEMENTED,
+  unresolvedEndpoints, staleExemptions, unbranchedSubpaths, KNOWN_UNIMPLEMENTED,
 } from '../../scripts/endpointAudit.mjs';
 
 describe('client endpoints resolve to a server route', () => {
@@ -28,6 +28,24 @@ describe('client endpoints resolve to a server route', () => {
       `These client calls have no server route and will 404 in production:\n${detail}\n\n` +
       'Either add the route, correct the path, or — if the feature is genuinely ' +
       'unbuilt — add it to KNOWN_UNIMPLEMENTED in scripts/endpointAudit.mjs.'
+    ).toEqual([]);
+  });
+
+  it('has no dispatcher subpath the handler never branches on', () => {
+    // Resolving the file is only half of it. vercel.json sends every subpath
+    // under /api/x to one handler, so a subpath that handler never tests for
+    // still "resolves" — and still 404s. api/consults/process-incoming.js was
+    // a complete handler nothing could reach for exactly this reason.
+    const gaps = unbranchedSubpaths();
+    const detail = gaps
+      .map(g => `  ${g.path}\n      ${g.handler} has no branch for "${g.subpath}"`)
+      .join('\n');
+
+    expect(
+      gaps,
+      `These calls reach a dispatcher with no branch for them:\n${detail}\n\n` +
+      'Either add the branch to the handler, or pin the path to its own ' +
+      'function with an exact rewrite placed BEFORE the wildcard in vercel.json.'
     ).toEqual([]);
   });
 

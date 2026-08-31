@@ -17,7 +17,7 @@
  * Usage: node scripts/endpointAudit.mjs
  */
 
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -32,17 +32,16 @@ const ROOT = (() => {
 /**
  * Paths known to have no server implementation.
  *
- * Chat is a built-out UI whose API was never written. The service latches
- * itself off after the first failure, so it degrades to empty rooms rather
- * than breaking the page. Listed here so the audit stays useful for finding
- * NEW breakage instead of reporting a known gap forever — and so that
- * building the chat API means deleting these lines, which is a visible act.
+ * Empty, and worth keeping empty. It held the three chat endpoints for as long
+ * as chat was a built-out interface over an API nobody had written; api/chat.js
+ * now serves them, so the exemptions came out — the visible act this list was
+ * designed to require.
+ *
+ * Anything added here is a feature the interface offers and the server cannot
+ * answer. That should be a deliberate, reviewed decision, not a way to quiet
+ * the audit.
  */
-export const KNOWN_UNIMPLEMENTED = [
-  '/chat/rooms',
-  '/chat/rooms/:v/messages',
-  '/chat/messages/search',
-];
+export const KNOWN_UNIMPLEMENTED = [];
 
 function walk(dir, test, out = []) {
   let entries;
@@ -101,9 +100,18 @@ function clientCalls() {
     while ((m = CALL.exec(src))) {
       let p = m[2];
       if (!p.startsWith('/')) continue;
-      // Template holes become a placeholder segment; the query string does not
-      // affect which file serves the route.
+      // A hole glued to the end of a segment is a suffix, not a segment of its
+      // own — `/x/surgery-queue${qs}` carries a query string the split below
+      // cannot see, because the "?" is inside the variable. Dropping it leaves
+      // the real segment name; treating it as a segment invented
+      // "surgery-queue:v", which matches no branch.
+      p = p.replace(/([^/])\$\{[^}]*\}/g, '$1');
+      // A hole that follows a "/" is a path parameter.
       p = p.replace(/\$\{[^}]*\}/g, ':v').split('?')[0].replace(/\/+$/, '');
+      // A nested template — `/x/y${q ? `?${q}` : ''}` — ends the literal at the
+      // inner backtick, so the hole above never closes and its remains stay
+      // glued to the last real segment. Drop everything from the open hole on.
+      p = p.replace(/\$\{.*$/, '').trimEnd().replace(/\/+$/, '');
       if (!p) continue;
       const rel = file.slice(ROOT.length + 1).replace(/\\/g, '/');
       if (!calls.has(p)) calls.set(p, new Set());
@@ -145,6 +153,55 @@ export function unresolvedEndpoints() {
     .sort((a, b) => a.path.localeCompare(b.path));
 }
 
+/**
+ * Subpaths that reach a dispatcher which has no branch for them.
+ *
+ * Resolving the FILE is not the whole question. vercel.json sends every
+ * subpath under /api/x to one handler, so unresolvedEndpoints() says "served"
+ * for any subpath below a dispatcher — including one the handler never tests
+ * for, which answers 404 or 405 at runtime.
+ *
+ * That is not hypothetical: /api/consults/process-incoming had a complete
+ * 700-line handler in api/consults/process-incoming.js that nothing could
+ * reach, because /api/consults/:path* routed it to the external-system proxy
+ * instead. Three Consults page actions failed against it.
+ *
+ * A subpath pinned by its own exact rewrite is served by its own file and is
+ * not a dispatcher concern. An id segment (:v) is a parameter, not a branch.
+ */
+export function unbranchedSubpaths() {
+  const vercel = JSON.parse(readFileSync(join(ROOT, 'vercel.json'), 'utf8'));
+
+  const dispatchers = [];
+  const pinned = new Set();
+  for (const r of vercel.rewrites ?? []) {
+    const m = /^\/api\/([^/]+)\/:path\*$/.exec(r.source);
+    if (m) dispatchers.push(m[1]);
+    else if (!/[:*(]/.test(r.source)) pinned.add(r.source);
+  }
+
+  const out = [];
+  for (const [p, files] of clientCalls()) {
+    const seg = p.split('/').filter(Boolean);
+    if (seg.length < 2) continue;
+    const [top, sub] = seg;
+    if (!dispatchers.includes(top)) continue;
+    if (sub === ':v') continue;
+    if (pinned.has('/api' + p)) continue;
+
+    const handler = [`api/${top}.js`, `api/${top}/index.js`]
+      .find(c => existsSync(join(ROOT, c)));
+    if (!handler) continue; // a missing file is unresolvedEndpoints()' business
+
+    const src = readFileSync(join(ROOT, handler), 'utf8');
+    const literal = new RegExp(`['"\`]${sub.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['"\`]`);
+    if (!literal.test(src)) {
+      out.push({ path: p, handler, subpath: sub, files: [...files].sort() });
+    }
+  }
+  return out.sort((a, b) => a.path.localeCompare(b.path));
+}
+
 /** Entries in KNOWN_UNIMPLEMENTED that now resolve — the list is stale. */
 export function staleExemptions() {
   const resolves = makeResolver(serverSurface());
@@ -155,6 +212,7 @@ export function staleExemptions() {
 function main() {
   const missing = unresolvedEndpoints();
   const stale = staleExemptions();
+  const unbranched = unbranchedSubpaths();
 
   console.log(`client endpoint paths: ${clientCalls().size}`);
   console.log(`unresolved (excluding known gaps): ${missing.length}\n`);
@@ -162,11 +220,17 @@ function main() {
     console.log(`  ${path}`);
     for (const f of files) console.log(`      ${f}`);
   }
+  console.log(`dispatcher subpaths with no branch: ${unbranched.length}`);
+  for (const { path, handler, subpath, files } of unbranched) {
+    console.log(`  ${path}`);
+    console.log(`      ${handler} has no branch for "${subpath}"`);
+    for (const f of files) console.log(`      ${f}`);
+  }
   if (stale.length) {
     console.log('\nstale exemptions (now served, or no longer called):');
     for (const p of stale) console.log(`  ${p}`);
   }
-  if (missing.length) process.exit(1);
+  if (missing.length || unbranched.length) process.exit(1);
 }
 
 if (process.argv[1] && process.argv[1].endsWith('endpointAudit.mjs')) main();
