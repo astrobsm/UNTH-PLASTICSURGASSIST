@@ -1,5 +1,7 @@
 import { db } from '../db/database';
 import { apiClient } from './apiClient';
+import { syncService } from '../db/syncService';
+import { toWardRoundPayload } from '../db/wardRoundPayload';
 
 // Round types as requested
 export type RoundType = 'house_officers_round' | 'registrars_round' | 'senior_registrars_round' | 'consultants_round';
@@ -102,60 +104,6 @@ export interface WardRoundSummary {
 /**
  * Transform frontend WardRound → server API format
  */
-function toServerFormat(round: Partial<WardRound>): any {
-  const findingsObj = {
-    chief_complaint: round.chief_complaint || '',
-    clinical_notes: round.clinical_notes || '',
-    examination_findings: round.examination_findings || '',
-    assessment_notes: round.assessment_notes || '',
-    doctor_role: round.doctor_role || '',
-    accompanying_team: round.accompanying_team || [],
-    recent_labs_reviewed: round.recent_labs_reviewed || false,
-    lab_notes: round.lab_notes || '',
-    treatment_plan_updated: round.treatment_plan_updated || false,
-    medications_changed: round.medications_changed || false,
-    medication_changes: round.medication_changes || '',
-    progress_status: round.progress_status || 'stable',
-    complications: round.complications || '',
-    discharge_planning: round.discharge_planning || '',
-    wound_assessment_done: round.wound_assessment_done || false,
-    wound_notes: round.wound_notes || '',
-    consultation_requested: round.consultation_requested || false,
-    consultation_specialty: round.consultation_specialty || '',
-    consultation_reason: round.consultation_reason || '',
-    reviewing_doctor: round.reviewing_doctor || '',
-    lmp: round.lmp || '',
-    patient_name: round.patient_name || '',
-    hospital_number: round.hospital_number || '',
-    round_type: round.round_type || 'house_officers_round',
-    round_time: round.round_time || '',
-    clinical_images: round.clinical_images || []
-  };
-
-  const vitalSigns: any = {};
-  if (round.temperature) vitalSigns.temperature = round.temperature;
-  if (round.pulse) vitalSigns.pulse = round.pulse;
-  if (round.bp_systolic) vitalSigns.bp_systolic = round.bp_systolic;
-  if (round.bp_diastolic) vitalSigns.bp_diastolic = round.bp_diastolic;
-  if (round.respiratory_rate) vitalSigns.respiratory_rate = round.respiratory_rate;
-  if (round.spo2) vitalSigns.spo2 = round.spo2;
-
-  return {
-    patientId: round.patient_id,
-    roundDate: round.round_date instanceof Date
-      ? round.round_date.toISOString().split('T')[0]
-      : typeof round.round_date === 'string'
-        ? new Date(round.round_date).toISOString().split('T')[0]
-        : new Date().toISOString().split('T')[0],
-    roundType: round.round_type || 'routine',
-    findings: JSON.stringify(findingsObj),
-    vitalSigns,
-    newOrders: round.new_orders ? [round.new_orders] : [],
-    plan: round.follow_up_plan || round.chief_complaint || '',
-    issues: round.complications ? [round.complications] : [],
-    nursingNotes: round.wound_notes || ''
-  };
-}
 
 /**
  * Transform server API response → frontend WardRound format
@@ -269,7 +217,7 @@ class WardRoundsService {
     // Then try sending to server
     if (navigator.onLine) {
       try {
-        const serverPayload = toServerFormat(round);
+        const serverPayload = toWardRoundPayload(round);
         const serverResult = await apiClient.createWardRound(serverPayload);
         console.log('✅ Ward round saved to server:', serverResult?.id);
 
@@ -286,10 +234,16 @@ class WardRoundsService {
         return serverResult?.id ? String(serverResult.id) : id;
       } catch (error) {
         console.warn('⚠️ Could not save ward round to server, kept locally:', error);
+        // Queue it. Without this the round sat in IndexedDB with synced:false
+        // and nothing ever looked at it again — a round documented on a ward
+        // with no signal never reached the server or any other device.
+        await syncService.queueAction('create', 'ward_rounds', id as any, localRound);
         return id;
       }
     }
 
+    // Offline: same reasoning as the failure branch above.
+    await syncService.queueAction('create', 'ward_rounds', id as any, localRound);
     return id;
   }
 
@@ -309,7 +263,7 @@ class WardRoundsService {
     // Update server
     if (navigator.onLine) {
       try {
-        const serverPayload = toServerFormat(updates);
+        const serverPayload = toWardRoundPayload(updates);
         await apiClient.updateWardRound(id, serverPayload);
       } catch (error) {
         console.warn('Could not update ward round on server:', error);

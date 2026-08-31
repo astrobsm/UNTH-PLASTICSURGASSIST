@@ -1,6 +1,9 @@
-import { db, SyncQueue, Patient, TreatmentPlan, PlanStep } from './database';
+import { db, SyncQueue } from './database';
 import { apiClient } from '../services/apiClient';
 import toast from 'react-hot-toast';
+import { toWoundCarePayload } from './woundCarePayload';
+import { toSurgeryPayload } from './surgeryPayload';
+import { toWardRoundPayload } from './wardRoundPayload';
 
 // Use the actual API client base URL
 const getApiBaseUrl = () => {
@@ -384,13 +387,14 @@ class SyncService {
     }
   }
 
-  private async syncAdmission(action: string, localId: number, data: any): Promise<void> {
+  private async syncAdmission(action: string, localId: number, _data: any): Promise<void> {
     const admission = await db.admissions.get(localId);
     if (!admission) return;
 
     switch (action) {
       case 'create':
         // Transform snake_case to camelCase for backend
+        {
         const backendData = {
           patientId: admission.patient_id,
           admissionDate: admission.admission_date,
@@ -408,6 +412,7 @@ class SyncService {
         });
         console.log('✅ Admission synced to server:', response.admission.id);
         break;
+      }
 
       case 'update':
         if (admission.id) {
@@ -433,12 +438,13 @@ class SyncService {
     }
   }
 
-  private async syncDischarge(action: string, localId: number, data: any): Promise<void> {
+  private async syncDischarge(action: string, localId: number, _data: any): Promise<void> {
     const discharge = await db.discharges.get(localId);
     if (!discharge) return;
 
     switch (action) {
       case 'create':
+        {
         const response = await this.apiCall('POST', '/discharge-summaries', discharge);
         await db.discharges.update(localId, {
           id: response.id,
@@ -446,6 +452,7 @@ class SyncService {
         });
         console.log('✅ Discharge synced to server:', response.id);
         break;
+      }
 
       case 'update':
         if (discharge.id) {
@@ -560,6 +567,7 @@ class SyncService {
 
     switch (action) {
       case 'create':
+        {
         const response = await this.apiCall('POST', '/treatment-plans', {
           patient_id: patientServerId,
           title: plan.title,
@@ -576,6 +584,7 @@ class SyncService {
           synced: true
         });
         break;
+      }
 
       case 'update':
         if (plan.serverId) {
@@ -606,6 +615,7 @@ class SyncService {
 
     switch (action) {
       case 'create':
+        {
         const response = await this.apiCall('POST', '/plan-steps', {
           plan_id: planServerId,
           step_number: step.step_number,
@@ -622,6 +632,7 @@ class SyncService {
           synced: true
         });
         break;
+      }
 
       case 'update':
         if (step.serverId) {
@@ -639,7 +650,7 @@ class SyncService {
     }
   }
 
-  private async syncProgressNote(action: string, localId: number, data: any): Promise<void> {
+  private async syncProgressNote(action: string, localId: number, _data: any): Promise<void> {
     const note = await db.progress_notes?.get(localId);
     if (!note) return;
 
@@ -650,7 +661,7 @@ class SyncService {
     }
   }
 
-  private async syncPrescription(action: string, localId: number, data: any): Promise<void> {
+  private async syncPrescription(action: string, localId: number, _data: any): Promise<void> {
     const prescription = await db.prescriptions?.get(localId);
     if (!prescription) return;
 
@@ -676,16 +687,18 @@ class SyncService {
     }
   }
 
-  private async syncLabInvestigation(action: string, localId: number, data: any): Promise<void> {
+  private async syncLabInvestigation(action: string, localId: number, _data: any): Promise<void> {
     const investigation = await db.lab_investigations?.get(localId);
     if (!investigation) return;
 
     switch (action) {
       case 'create':
+        {
         const response = await this.apiCall('POST', '/lab-orders', investigation);
         await db.lab_investigations.update(localId, { id: response.id, synced: true });
         console.log('✅ Lab investigation synced to server:', response.id);
         break;
+      }
       case 'update':
         if (investigation.id) {
           await this.apiCall('PUT', `/lab-orders/${investigation.id}`, investigation);
@@ -695,7 +708,7 @@ class SyncService {
     }
   }
 
-  private async syncLabResult(action: string, localId: number, data: any): Promise<void> {
+  private async syncLabResult(action: string, localId: number, _data: any): Promise<void> {
     const result = await db.lab_results?.get(localId);
     if (!result) return;
 
@@ -716,7 +729,7 @@ class SyncService {
     const assessmentType = data?.assessment_type || data?.type;
     let assessment: any = null;
     let tableName = 'dvt_assessments';
-    let apiEndpoint = '/risk-assessments';
+    const apiEndpoint = '/risk-assessments';
 
     // Try to find the record in the appropriate table
     if (assessmentType === 'pressure_sore' || assessmentType === 'braden') {
@@ -753,7 +766,7 @@ class SyncService {
     }
   }
 
-  private async syncPreoperativeAssessment(action: string, localId: number, data: any): Promise<void> {
+  private async syncPreoperativeAssessment(action: string, localId: number, _data: any): Promise<void> {
     const assessment = await db.preoperative_assessments?.get(localId);
     if (!assessment) return;
 
@@ -764,66 +777,85 @@ class SyncService {
     }
   }
 
-  private async syncSurgery(action: string, localId: number, data: any): Promise<void> {
+  private async syncSurgery(action: string, localId: number, _data: any): Promise<void> {
     // Note: IndexedDB table is 'surgery_bookings' but sync uses 'surgeries' API
     const surgery = await db.surgery_bookings?.get(localId);
     if (!surgery) return;
 
+    // The handler reads patientId/procedureName/scheduledDate and 400s without
+    // them; the local booking spells all three differently. Posting the raw row
+    // meant a booking made offline could never sync, which is the one case this
+    // retry exists for.
+    const payload = toSurgeryPayload(surgery);
+
     switch (action) {
-      case 'create':
-        const response = await this.apiCall('POST', '/surgeries', surgery);
+      case 'create': {
+        const response = await this.apiCall('POST', '/surgeries', payload);
         await db.surgery_bookings.update(localId, { id: response.id, synced: true });
         console.log('✅ Surgery synced to server:', response.id);
         break;
+      }
       case 'update':
         if (surgery.id) {
-          await this.apiCall('PUT', `/surgeries/${surgery.id}`, surgery);
+          await this.apiCall('PUT', `/surgeries/${surgery.id}`, payload);
           await db.surgery_bookings.update(localId, { synced: true });
         }
         break;
     }
   }
 
-  private async syncWoundCare(action: string, localId: number, data: any): Promise<void> {
+  private async syncWoundCare(action: string, localId: number, _data: any): Promise<void> {
     // Note: IndexedDB table is 'wound_care' but API uses 'wound_care_records'
     const woundCare = await db.wound_care?.get(localId);
     if (!woundCare) return;
 
+    const payload = toWoundCarePayload(woundCare);
+
     switch (action) {
-      case 'create':
-        const response = await this.apiCall('POST', '/wound-care', woundCare);
-        await db.wound_care.update(localId, { id: response.id || response.woundCareRecord?.id, synced: true });
+      case 'create': {
+        const response = await this.apiCall('POST', '/wound-care', payload);
+        await db.wound_care.update(localId, {
+          id: response.id || response.woundCareRecord?.id,
+          synced: true,
+        });
         console.log('✅ Wound care synced to server:', response.id);
         break;
+      }
       case 'update':
         if (woundCare.id) {
-          await this.apiCall('PUT', `/wound-care/${woundCare.id}`, woundCare);
+          await this.apiCall('PUT', `/wound-care/${woundCare.id}`, payload);
           await db.wound_care.update(localId, { synced: true });
         }
         break;
     }
   }
 
-  private async syncWardRound(action: string, localId: number, data: any): Promise<void> {
+  private async syncWardRound(action: string, localId: number, _data: any): Promise<void> {
     const wardRound = await db.ward_rounds?.get(localId);
     if (!wardRound) return;
 
+    // The handler dispatches on ?action and reads camelCase fields, returning
+    // 400 without patientId. Posting the raw local round to the bare path hit
+    // neither, so this retry could never have succeeded.
+    const payload = toWardRoundPayload(wardRound);
+
     switch (action) {
-      case 'create':
-        const response = await this.apiCall('POST', '/ward-rounds', wardRound);
+      case 'create': {
+        const response = await this.apiCall('POST', '/ward-rounds?action=create', payload);
         await db.ward_rounds.update(localId, { id: response.id || response.wardRound?.id, synced: true });
         console.log('✅ Ward round synced to server:', response.id);
         break;
+      }
       case 'update':
         if (wardRound.id) {
-          await this.apiCall('PUT', `/ward-rounds/${wardRound.id}`, wardRound);
+          await this.apiCall('PUT', `/ward-rounds?action=update`, { roundId: wardRound.id, ...payload });
           await db.ward_rounds.update(localId, { synced: true });
         }
         break;
     }
   }
 
-  private async syncPatientTransfer(action: string, localId: number, data: any): Promise<void> {
+  private async syncPatientTransfer(action: string, localId: number, _data: any): Promise<void> {
     const transfer = await (db as any).patient_transfers?.get(localId);
     if (!transfer) return;
 
