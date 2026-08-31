@@ -31,7 +31,7 @@ export interface PercentageResult {
 export function isPercentageResult(testName: string, unit: string): boolean {
   const name = String(testName || '').trim();
   const u = String(unit || '').trim();
-  return name.endsWith('%') || /pct/i.test(name) || u === '%';
+  return name.endsWith('%') || /\bpct\s*$/i.test(name) || u === '%';
 }
 
 // Longest synonyms first: "neutrophil %" must win over "neutrophil".
@@ -46,12 +46,75 @@ export interface UnmappedResult {
   reason: 'no-matching-analyte' | 'non-numeric' | 'implausible';
 }
 
+/** Names are lower-cased before matching, so letters and digits are enough. */
+function isWordChar(c: string | undefined): boolean {
+  return c !== undefined && /[a-z0-9]/.test(c);
+}
+
+/**
+ * True when `needle` occurs in `haystack` as a whole word rather than as a
+ * fragment of a longer one.
+ *
+ * WHY THIS IS NOT `includes()`. Every synonym is a candidate substring of some
+ * unrelated test name, and the short ones collide constantly: "hb" sits inside
+ * "HbA1c", "k" inside "Ketones", "ck" inside "Sickling test", "ph" inside
+ * "Acid Phosphatase", "ig" inside "Triglycerides" and "Antigen". A plain
+ * substring match filed each of those under the wrong analyte, carrying the
+ * wrong unit and the wrong reference range with it — an HbA1c of 9.5% was read
+ * as a haemoglobin of 9.5 g/dL, which the engine then reports as anaemia.
+ *
+ * Boundaries are tested against the neighbouring characters rather than with a
+ * \b regex because synonyms carry punctuation ("pct%", "haemoglobin (hb)",
+ * "albumin:creatinine ratio") that \b does not sit beside predictably.
+ */
+function containsWord(haystack: string, needle: string): boolean {
+  if (!needle) return false;
+  for (let from = 0; ; ) {
+    const i = haystack.indexOf(needle, from);
+    if (i < 0) return false;
+    const startsClean = !isWordChar(needle[0]) || !isWordChar(haystack[i - 1]);
+    const endsClean =
+      !isWordChar(needle[needle.length - 1]) || !isWordChar(haystack[i + needle.length]);
+    if (startsClean && endsClean) return true;
+    from = i + 1;
+  }
+}
+
+/**
+ * Qualifiers that change which quantity, or which specimen, is being reported.
+ *
+ * Word boundaries stop a synonym matching inside a longer word, but not a
+ * synonym matching one word of a longer name: "creatinine clearance" still
+ * contains "creatinine". The clearance is a filtration rate in mL/min and the
+ * synonym stands for a serum concentration in umol/L, so filing one as the
+ * other attaches a reference range that was never meant for it — as it does
+ * for "urine sodium" against serum sodium, and "glycated haemoglobin" against
+ * haemoglobin.
+ *
+ * The rule: a qualifier present in the name but absent from the synonym that
+ * matched means the synonym describes only part of the name. Those are left
+ * unmapped, which puts them in front of the clinician in the `unmapped` list
+ * rather than into the engine under the wrong analyte. A synonym that carries
+ * the qualifier itself ("urine ph", "albumin:creatinine ratio") still matches.
+ */
+const DISQUALIFYING_QUALIFIERS = [
+  'urine', 'urinary', 'csf', 'clearance', 'glycated', 'a1c',
+  'vitamin', 'ratio', 'antigen', 'antibody',
+];
+
+function qualifierMismatch(name: string, synonym: string): boolean {
+  return DISQUALIFYING_QUALIFIERS.some(
+    q => containsWord(name, q) && !containsWord(synonym, q)
+  );
+}
+
 /** Resolve a lab test name to a canonical analyte, or null. */
 export function matchAnalyte(testName: string): AnalyteDef | null {
   const name = String(testName || '').toLowerCase().trim();
   if (!name) return null;
   for (const { synonym, def } of SYNONYM_INDEX) {
-    if (name === synonym || name.includes(synonym)) return def;
+    if (name === synonym) return def;
+    if (containsWord(name, synonym) && !qualifierMismatch(name, synonym)) return def;
   }
   return null;
 }
@@ -62,7 +125,7 @@ export function matchAnalyte(testName: string): AnalyteDef | null {
  */
 export function toPercentage(testName: string, rawValue: string | number): PercentageResult | null {
   // Strip the trailing marker so "LYM%" matches the "lymphocyte" synonyms.
-  const bare = String(testName || '').replace(/\s*%\s*$/, '').replace(/pct/gi, '').trim();
+  const bare = String(testName || '').replace(/\s*%\s*$/, '').replace(/\s*\bpct\s*$/i, '').trim();
   const def = matchAnalyte(bare);
   if (!def) return null;
 

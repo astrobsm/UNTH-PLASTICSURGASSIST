@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { Mic, MicOff, Loader2, Wand2, RotateCcw, Volume2, Check, X, AlertCircle, Camera, Upload, ScanLine } from 'lucide-react';
+import { Mic, MicOff, Loader2, Wand2, RotateCcw, Volume2, Check, AlertCircle, Camera, Upload, ScanLine } from 'lucide-react';
 import { speechToTextService, SpeechRecognitionResult } from '../services/speechToTextService';
 import { aiTextEnhancementService, TextContext } from '../services/aiTextEnhancementService';
 import { ocrService } from '../services/ocrService';

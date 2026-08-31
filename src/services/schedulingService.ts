@@ -1,8 +1,8 @@
 ﻿import { db } from '../db/database';
-import html2canvas from 'html2canvas';
-import { format, addDays, startOfWeek, endOfWeek } from 'date-fns';
+import { format, startOfWeek, endOfWeek } from 'date-fns';
 import { apiClient } from './apiClient';
 import { syncService } from '../db/syncService';
+import { toSurgeryPayload } from '../db/surgeryPayload';
 import {
   createPDF,
   sanitizeTextForPDF,
@@ -364,32 +364,10 @@ class SchedulingService {
       updated_at: now
     };
 
-    // Map fields to camelCase for the server API
-    const apiPayload: Record<string, any> = {
-      patientId: (booking as any).patient_id,
-      procedureName: booking.procedure_name,
-      procedureType: (booking as any).procedure_type || '',
-      scheduledDate: (booking as any).date || new Date().toISOString().split('T')[0],
-      estimatedDuration: (booking as any).estimated_duration_minutes || (booking as any).estimated_duration || 60,
-      surgeonId: (booking as any).surgeon_id || null,
-      anesthesiaType: booking.anaesthesia_type || (booking as any).anesthesia_type || '',
-      operatingRoom: booking.theatre_number || '',
-      preOpNotes: (booking as any).diagnosis || '',
-      requiredEquipment: booking.equipment_needed || [],
-      status: booking.status || 'scheduled',
-      // Extra booking fields
-      diagnosis: (booking as any).diagnosis || '',
-      primarySurgeon: booking.primary_surgeon || '',
-      startTime: booking.start_time || '',
-      caseCategory: (booking as any).case_category || '',
-      ward: (booking as any).proposed_ward || (booking as any).ward || '',
-      patientAgeAtBooking: (booking as any).patient_age_at_booking || null,
-      patientGender: (booking as any).patient_gender || '',
-      needsBloodTransfusion: (booking as any).needs_blood_transfusion || false,
-      bloodUnitsRequested: (booking as any).blood_units_requested || 0,
-      isEmergency: (booking as any).is_emergency || false,
-      isDiabetic: (booking as any).is_diabetic || false,
-    };
+    // Map fields to camelCase for the server API. Shared with the sync service,
+    // which retries this same booking when the request below fails — it used to
+    // send the raw local record, which the handler rejects.
+    const apiPayload = toSurgeryPayload(booking);
 
     // Try to sync to server first
     try {

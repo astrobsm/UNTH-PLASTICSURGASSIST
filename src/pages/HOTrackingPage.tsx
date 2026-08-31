@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Users, Search, CheckCircle, XCircle, Clock, ArrowLeft, RefreshCw,
   Activity, BookOpen, ClipboardCheck, TrendingUp, Award, Target,
-  FileText, FlaskConical, Pill, Eye, ChevronRight, AlertTriangle,
+  FileText, FlaskConical, Pill, ChevronRight, AlertTriangle,
   Calendar, BarChart3, Shield, User, Stethoscope, LogOut,
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';

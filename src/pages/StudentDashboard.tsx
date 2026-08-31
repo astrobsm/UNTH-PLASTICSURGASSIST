@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  GraduationCap, Users, ClipboardList, Activity, Loader2, LogOut, ChevronDown, ChevronUp,
+  GraduationCap, Users, ClipboardList, Activity, Loader2, LogOut, 
   Plus, Save, Send, Eye, X, Calendar, MapPin, Star, Clock, FileText, AlertCircle
 } from 'lucide-react';
 import { apiClient } from '../services/apiClient';

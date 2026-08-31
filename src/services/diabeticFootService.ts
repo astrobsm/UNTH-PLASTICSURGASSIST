@@ -826,7 +826,7 @@ class DiabeticFootService {
     let recommendedIntervention: RecommendedIntervention = 'conservative_management';
     
     // Determine intervention based on score and specific findings
-    const { totalScore, riskCategory } = this.calculateTotalScore(assessment);
+    const { riskCategory } = this.calculateTotalScore(assessment);
     
     // Critical sepsis - urgent intervention needed
     if (assessment.sepsisAssessment?.sepsisLikelihood === 'definite' || 

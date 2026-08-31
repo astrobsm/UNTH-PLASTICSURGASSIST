@@ -11,7 +11,7 @@
  *  • WhatsApp deep-link templates (book / pre-op / reminder / reschedule / cancel)
  */
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Calendar, Search, FileDown, MessageCircle, AlertTriangle, X, Plus, Trash2, RefreshCw, Stethoscope } from 'lucide-react';
+import { Search, FileDown, MessageCircle, AlertTriangle, X, Plus, Trash2, RefreshCw, Stethoscope } from 'lucide-react';
 import jsPDF from 'jspdf';
 import { sanitizePdfDocument } from '../utils/pdfSafeText';
 import autoTable from 'jspdf-autotable';

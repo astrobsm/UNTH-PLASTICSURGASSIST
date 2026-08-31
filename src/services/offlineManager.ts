@@ -5,7 +5,6 @@
 
 import { db } from '../db/database';
 import { syncService } from '../db/syncService';
-import { apiClient } from './apiClient';
 import { logger } from '../utils/logger';
 import toast from 'react-hot-toast';
 

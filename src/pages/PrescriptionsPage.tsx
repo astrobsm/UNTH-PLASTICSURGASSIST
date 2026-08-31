@@ -1,8 +1,8 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Search, Plus, X, AlertTriangle, AlertCircle, Info, ChevronDown, ChevronUp,
   Pill, FileText, Check, Printer, Trash2, Clock, User, ShieldAlert,
-  Baby, Heart, Droplet as KidneyIcon, Activity, ChevronRight, Download, Sparkles
+  Baby, Heart, Droplet as KidneyIcon, ChevronRight, Download, Sparkles
 } from 'lucide-react';
 import PrescriptionRecommendationModal from '../components/PrescriptionRecommendationModal';
 import type { RecommendedDraft } from '../services/prescriptionRecommendationEngine';
@@ -11,7 +11,7 @@ import {
   searchDrugs,
   getDrugCategories,
   getDrugsByCategory,
-  getDrugById,
+  
   getFrequencyLabel,
   getRouteLabel,
   generatePatientWarnings,

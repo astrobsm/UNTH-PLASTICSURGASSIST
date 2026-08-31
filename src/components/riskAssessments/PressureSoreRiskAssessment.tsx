@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { PressureSoreRiskAssessment, PressureInjury, riskAssessmentService, ActionPlanItem } from '../../services/riskAssessmentService';
-import { Shield, AlertTriangle, CheckCircle, Clock, User, Calendar } from 'lucide-react';
+import { Shield, CheckCircle, Clock, User, Calendar } from 'lucide-react';
 import { getCurrentUserName } from '../../utils/getCurrentUser';
 
 interface PressureSoreRiskAssessmentProps {

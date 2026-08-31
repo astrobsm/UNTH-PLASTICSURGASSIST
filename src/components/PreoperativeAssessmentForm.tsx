@@ -10,7 +10,7 @@ import {
   FileCheck,
   Pill,
   Download,
-  Printer,
+  
   Eye
 } from 'lucide-react';
 import { db } from '../db/database';

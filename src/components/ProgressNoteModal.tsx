@@ -7,7 +7,7 @@ import { db } from '../db/database';
 import { DocumentScannerModal } from './DocumentScannerModal';
 import { ScribeRecordingPanel } from './ScribeRecordingPanel';
 import { speechToTextService } from '../services/speechToTextService';
-import { Brain, Camera, ImagePlus, Mic, MicOff, Trash2, Wand2 } from 'lucide-react';
+import { Brain, Camera, ImagePlus, Mic, MicOff, Trash2 } from 'lucide-react';
 import type { StructuredNote, ScribeSession } from '../services/medicalScribeService';
 import MedicalAutocompleteTextarea from './MedicalAutocompleteTextarea';
 

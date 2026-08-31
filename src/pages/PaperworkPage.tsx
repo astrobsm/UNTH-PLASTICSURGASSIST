@@ -1,6 +1,6 @@
 import { sanitizePdfDocument } from '../utils/pdfSafeText';
 import React, { useState, useEffect } from 'react';
-import { FileText, Download, Plus, Send, Edit, Trash2, Printer } from 'lucide-react';
+import { FileText, Download, Plus, Trash2, Printer } from 'lucide-react';
 import { db } from '../db/database';
 import { patientService } from '../services/patientService';
 import { admissionService } from '../services/admissionService';
@@ -22,7 +22,7 @@ import {
   sanitizeTextForPDF,
   PDF_MARGINS,
   PDF_FONT_SIZES,
-  PDF_COLORS,
+  
   addFooter
 } from '../utils/pdfUtils';
 import { useAuthStore } from '../store/authStore';

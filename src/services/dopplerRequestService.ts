@@ -9,12 +9,11 @@ import { jsPDF } from 'jspdf';
 import { format } from 'date-fns';
 import { 
   createPDF, 
-  addPDFHeader, 
+  
   addFooter, 
   PDF_MARGINS, 
-  PDF_FONT_SIZES, 
-  PDF_COLORS,
-  PDF_INSTITUTION 
+  
+  PDF_COLORS 
 } from '../utils/pdfUtils';
 
 export interface DopplerRequestData {

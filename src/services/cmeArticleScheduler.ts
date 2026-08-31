@@ -1,6 +1,4 @@
 import { cmeWACSService } from './cmeWACSService';
-import { notificationService } from './notificationService';
-
 interface ArticleSchedule {
   id: string;
   scheduled_date: Date;

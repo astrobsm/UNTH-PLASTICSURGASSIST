@@ -31,7 +31,6 @@ export interface MorphologyResult {
   stDepressionTerritories: string[];
 }
 
-const has = (input: MorphologyInput, lead: LeadName) => input.leadsAvailable.includes(lead);
 const amp = (input: MorphologyInput, lead: LeadName) => input.amplitudes.get(lead);
 const stOf = (input: MorphologyInput, lead: LeadName) => input.st.find((s) => s.lead === lead);
 

@@ -559,9 +559,11 @@ self.addEventListener('message', async (event) => {
       break;
 
     case 'CLEAR_CACHE':
-      const names = await caches.keys();
+      {
+        const names = await caches.keys();
       await Promise.all(names.map(name => caches.delete(name)));
       break;
+      }
 
     case 'GET_CACHE_STATS':
       try {
@@ -589,11 +591,13 @@ self.addEventListener('message', async (event) => {
       break;
 
     case 'EMERGENCY_UNREGISTER':
-      const allCaches = await caches.keys();
+      {
+        const allCaches = await caches.keys();
       await Promise.all(allCaches.map(name => caches.delete(name)));
       await self.registration.unregister();
       (event.source as WindowClient)?.postMessage({ type: 'UNREGISTERED' });
       break;
+      }
   }
 });
 

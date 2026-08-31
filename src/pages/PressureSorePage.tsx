@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   AlertCircle, AlertTriangle, ArrowRight, Award, BookOpen, Calculator,
-  CheckCircle, ChevronDown, ChevronUp, Clock, ClipboardList,
-  Download, FileText, FlaskConical, Heart, Loader2,
+  CheckCircle, 
+  Download, FileText, Loader2,
   Plus, Printer, Save, Search, Shield,
-  Thermometer, TrendingUp, User, X, Activity,
-  Bed, CircleDot, Eye, List, BarChart3, Utensils, Scissors
-} from 'lucide-react';
+  TrendingUp, User, X, Activity,
+  CircleDot, List, } from 'lucide-react';
 import { patientService } from '../services/patientService';
 import { useAuthStore } from '../store/authStore';
 import { apiClient } from '../services/apiClient';

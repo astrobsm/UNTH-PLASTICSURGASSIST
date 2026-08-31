@@ -21,11 +21,8 @@ import {
   MessageSquare,
   Upload,
   FileCheck,
-  Printer,
   TestTube,
   Camera as CameraIcon,
-  AlertTriangle,
-  Info
 } from 'lucide-react';
 import { DiabeticFootAssessment } from '../../services/diabeticFootService';
 import { patientService } from '../../services/patientService';
@@ -911,7 +908,7 @@ const Step3Comorbidities: React.FC<{ formData: any; setFormData: any }> = ({ for
 // Step 4: Renal Status
 const Step4RenalStatus: React.FC<{ formData: any; setFormData: any }> = ({ formData, setFormData }) => {
   // Calculate eGFR using CKD-EPI equation (2021 formula without race adjustment)
-  const calculateEGFR = (creatinine: number, age: number, gender: 'male' | 'female', weight: number): number => {
+  const calculateEGFR = (creatinine: number, age: number, gender: 'male' | 'female', _weight: number): number => {
     if (creatinine <= 0 || age <= 0) return 0;
     
     // CKD-EPI 2021 equation (without race coefficient)

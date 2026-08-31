@@ -3,7 +3,6 @@ import {
   Flame, 
   Plus, 
   Search, 
-  Filter,
   AlertTriangle,
   Activity,
   Droplets,
@@ -16,7 +15,7 @@ import {
   HeartPulse,
   RefreshCw
 } from 'lucide-react';
-import { BurnPatient, BurnAlert, burnCareService } from '../services/burnCareService';
+import { BurnPatient } from '../services/burnCareService';
 import BurnAdmissionForm from '../components/burnCare/BurnAdmissionForm';
 import BurnMonitoringDashboard from '../components/burnCare/BurnMonitoringDashboard';
 import { db } from '../db/database';

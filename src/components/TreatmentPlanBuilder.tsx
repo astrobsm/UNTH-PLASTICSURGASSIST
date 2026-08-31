@@ -444,7 +444,7 @@ export default function TreatmentPlanBuilder({ planId }: TreatmentPlanBuilderPro
 
             {/* Steps List */}
             <div className="space-y-3">
-              {steps.map((step, index) => (
+              {steps.map((step, _index) => (
                 <div
                   key={step.id}
                   className="flex items-center justify-between p-4 border border-gray-200 rounded-lg"

@@ -15,6 +15,7 @@ import { SessionLockScreen } from './components/SessionLockScreen';
 import { initializeCSRFToken } from './utils/csrf';
 import { logger } from './utils/logger';
 import { startBackgroundTracking, stopBackgroundTracking } from './services/geolocationService';
+import { startWoundImageSync } from './services/woundImageSync';
 
 // Auto-retry dynamic imports: if a chunk fails (stale cache after deploy),
 // clear caches and reload the page once to get fresh assets.
@@ -91,6 +92,7 @@ const TreatmentPlanBuilder = lazyWithRetry(() => import('./components/TreatmentP
 const TreatmentPlanCreator = lazyWithRetry(() => import('./pages/TreatmentPlanCreator'));
 const TreatmentPlanManager = lazyWithRetry(() => import('./pages/TreatmentPlanManager'));
 const BookingRegisterPage = lazyWithRetry(() => import('./pages/BookingRegisterPage'));
+const Procedures = lazyWithRetry(() => import('./pages/Procedures'));
 const PreSurgicalConferencePage = lazyWithRetry(() => import('./pages/PreSurgicalConferencePage'));
 const WoundCarePage = lazyWithRetry(() => import('./pages/WoundCarePage'));
 const WoundProgressMonitorPage = lazyWithRetry(() => import('./pages/WoundProgressMonitorPage'));
@@ -207,6 +209,16 @@ function App() {
       // Stop geolocation tracking when user logs out
       stopBackgroundTracking();
     };
+  }, [user]);
+
+  // ─── Send wound photographs still held only on this device ───
+  // Capture writes to IndexedDB first so a ward with no signal never blocks a
+  // clinician, which leaves an upload queue that something has to drain. Until
+  // this ran, nothing did: photographs stayed on the phone that took them and
+  // were invisible from every other device.
+  useEffect(() => {
+    if (!user) return;
+    return startWoundImageSync();
   }, [user]);
 
   // ─── Check HO responsibilities acknowledgment status ───
@@ -357,6 +369,7 @@ function App() {
               <Route path="/blood-transfusion" element={<BloodTransfusionPage />} />
               <Route path="/ward-rounds" element={<WardRoundsPage />} />
               <Route path="/booking-register" element={<BookingRegisterPage />} />
+              <Route path="/procedures" element={<Procedures />} />
               <Route path="/preoperative-planning" element={<BookingRegisterPage />} />
               <Route path="/pre-surgical-conference" element={<PreSurgicalConferencePage />} />
               <Route path="/labs" element={<Labs />} />

@@ -3,7 +3,6 @@ import { X, Plus, Trash2, AlertTriangle, Info, FileDown, Printer, Search, Chevro
 import MedicalAutocompleteTextarea from './MedicalAutocompleteTextarea';
 import { format } from 'date-fns';
 import { useAuthStore } from '../store/authStore';
-import { db } from '../db/database';
 import {
   PlannedMedication,
   PlannedInvestigation,
@@ -16,8 +15,8 @@ import {
 import { medicationDosingService, GFRDosingRecommendation } from '../services/medicationDosingService';
 import { investigationPdfService } from '../services/investigationPdfService';
 import { medicalTeamService, StaffByRole } from '../services/medicalTeamService';
-import { searchMedications, getMedicationByName, BNFMedication, MEDICATION_CATEGORIES, checkInteractions } from '../data/bnfMedications';
-import { searchInvestigations, getInvestigationByName, Investigation, INVESTIGATION_CATEGORIES, PREOP_PANELS } from '../data/investigationDatabase';
+import { searchMedications, BNFMedication, checkInteractions } from '../data/bnfMedications';
+import { searchInvestigations, getInvestigationByName, Investigation, PREOP_PANELS } from '../data/investigationDatabase';
 
 interface ComprehensiveTreatmentPlanFormProps {
   onClose: () => void;
@@ -421,32 +420,6 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
     : [];
   
   // Auto-fill dosing based on medication name and GFR
-  const handleMedicationChange = (medicationName: string) => {
-    setNewMed({ ...newMed, medication_name: medicationName });
-    
-    if (medicationName && patientGFR && typeof patientGFR === 'number') {
-      const recommendation = medicationDosingService.getDosingRecommendation(
-        medicationName,
-        patientGFR,
-        newMed.dosage,
-        newMed.frequency
-      );
-      setGfrRecommendation(recommendation);
-      
-      // Auto-fill adjusted dose and frequency if available
-      if (recommendation.adjustedDose && !recommendation.contraindicated) {
-        setNewMed(prev => ({
-          ...prev,
-          medication_name: medicationName,
-          dosage: recommendation.adjustedDose,
-          frequency: recommendation.adjustedFrequency,
-          notes: recommendation.notes || prev.notes
-        }));
-      }
-    } else {
-      setGfrRecommendation(null);
-    }
-  };
   
   // Update recommendation when GFR changes
   useEffect(() => {

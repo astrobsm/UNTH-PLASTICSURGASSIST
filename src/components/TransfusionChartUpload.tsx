@@ -143,7 +143,7 @@ export default function TransfusionChartUpload({
     }
   };
 
-  const performOCR = async (chart: UploadedChart): Promise<string> => {
+  const performOCR = async (_chart: UploadedChart): Promise<string> => {
     // Simulated OCR - In production, this would call a real OCR service
     // like Tesseract.js, Google Cloud Vision, or AWS Textract
     

@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Download, Wifi, WifiOff, HardDrive, X, Smartphone } from 'lucide-react';
+import { Download, WifiOff, HardDrive, X, Smartphone } from 'lucide-react';
 
 interface PWAInstallPromptProps {
   prompt: any;

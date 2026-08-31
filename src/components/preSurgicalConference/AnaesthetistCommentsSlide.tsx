@@ -1,5 +1,5 @@
 import { AnaesthetistComment } from '../../services/preSurgicalConferenceService';
-import { Stethoscope, Calendar, User, MessageSquare, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Stethoscope, Calendar, User, MessageSquare, AlertTriangle } from 'lucide-react';
 
 interface Props {
   comments: AnaesthetistComment[];

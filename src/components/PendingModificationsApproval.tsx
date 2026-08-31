@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   CheckCircle, XCircle, Clock, AlertTriangle, 
-  User, Calendar, Pill, TestTube, Activity, 
+  Pill, TestTube, Activity, 
   FileText, ChevronDown, ChevronUp, Filter
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';

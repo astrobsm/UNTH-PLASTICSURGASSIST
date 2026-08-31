@@ -4,9 +4,6 @@ import { useOnSelectedPatient } from '../hooks/useSelectedPatient';
 import {
   Activity,
   Camera,
-  ChevronDown,
-  ChevronUp,
-  Clock,
   Download,
   FileText,
   Loader2,
@@ -16,26 +13,15 @@ import {
   Ruler,
   Save,
   Search,
-  Trash2,
   Upload,
-  User,
   X,
   AlertCircle,
   CheckCircle,
-  Calendar,
-  Droplet,
-  Thermometer,
   TrendingUp,
-  TrendingDown,
-  Minus as TrendingFlat,
-  Scissors,
-  Heart,
-  Eye
-} from 'lucide-react';
+  } from 'lucide-react';
 import { patientService } from '../services/patientService';
 import { db } from '../db/database';
 import { syncService } from '../db/syncService';
-import { sanitizeTextForPDF } from '../utils/pdfUtils';
 import { getCurrentUserName } from '../utils/getCurrentUser';
 import { useAuthStore } from '../store/authStore';
 import {
@@ -43,6 +29,9 @@ import {
 } from '../services/woundCloudConsent';
 import { aiWoundMeasurement } from '../services/aiWoundMeasurement';
 import type { WoundMeasurementResult, WoundProgressEntry, CalibrationReference } from '../services/aiWoundMeasurement';
+import { putLocalImage } from '../services/woundImageStore';
+import { syncPendingWoundImages } from '../services/woundImageSync';
+const WoundImageGallery = lazy(() => import('../components/WoundImageGallery'));
 // Lazy-load chart.js (~200 KB) only when the wound-progress panel actually renders
 const WoundProgressChart = lazy(() => import('../components/WoundProgressChart'));
 const WoundHealingMap = lazy(() => import('../components/WoundHealingMap'));
@@ -64,6 +53,12 @@ interface Patient {
 interface WoundPhoto {
   id: string;
   dataUrl: string;
+  /**
+   * Handle on the copy in woundImageStore, which is what reaches the server and
+   * therefore every other device. The dataUrl above lives only in this
+   * component's state and is gone as soon as the page reloads.
+   */
+  ref?: string;
   timestamp: Date;
   measurements?: {
     length: number;
@@ -261,9 +256,7 @@ const WoundCarePage: React.FC = () => {
   useOnSelectedPatient((p) => { setSelectedPatient(p as unknown as Patient); setActiveTab('new'); });
   const [assessments, setAssessments] = useState<WoundAssessment[]>([]);
   const [selectedAssessment, setSelectedAssessment] = useState<WoundAssessment | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [showPhotoModal, setShowPhotoModal] = useState(false);
   const [capturedPhotos, setCapturedPhotos] = useState<WoundPhoto[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   
@@ -368,6 +361,39 @@ const WoundCarePage: React.FC = () => {
            (p.hospital_number || '').toLowerCase().includes(searchLower);
   });
 
+  /**
+   * Put a captured photograph somewhere it will survive.
+   *
+   * Photographs on this page were held as dataUrls in component state and
+   * nowhere else: closing the page lost them, and nothing was ever sent to the
+   * server, so a wound documented here was invisible from every other device.
+   * The blob goes to IndexedDB immediately — capture must never wait on a
+   * network — and the upload queue carries it onward when there is one.
+   */
+  const persistPhoto = useCallback(async (
+    photoId: string,
+    dataUrl: string,
+    width: number,
+    height: number,
+    patientId: string | number | null | undefined,
+  ) => {
+    try {
+      const blob = await (await fetch(dataUrl)).blob();
+      const ref = await putLocalImage({
+        blob,
+        kind: 'original',
+        width,
+        height,
+        patientId: patientId != null ? Number(patientId) : null,
+      });
+      setCapturedPhotos(prev => prev.map(p => (p.id === photoId ? { ...p, ref } : p)));
+      void syncPendingWoundImages();
+    } catch (err) {
+      // Storing must never cost the clinician the measurement they came for.
+      console.warn('[wound-care] could not store photograph:', err);
+    }
+  }, []);
+
   // --- Camera Functions --------------------------------
   const startCamera = async () => {
     setCameraError('');
@@ -467,6 +493,7 @@ const WoundCarePage: React.FC = () => {
       scaleReliable: result.scaleReliable,
     };
     setCapturedPhotos(prev => [...prev, newPhoto]);
+    void persistPhoto(newPhoto.id, newPhoto.dataUrl, canvas.width, canvas.height, selectedPatient?.id);
     if (capturedPhotos.length === 0 && measurements) {
       setFormData(prev => ({ ...prev, length: measurements.length, width: measurements.width }));
     }
@@ -561,6 +588,7 @@ const WoundCarePage: React.FC = () => {
         };
 
         setCapturedPhotos(prev => [...prev, newPhoto]);
+        void persistPhoto(newPhoto.id, newPhoto.dataUrl, cvs.width, cvs.height, selectedPatient?.id);
         // Hybrid AI enrichment uses the original (un-overlaid) image.
         void enrichWithAI(result, dataUrl, newPhoto.id);
         
@@ -2368,22 +2396,38 @@ const WoundCarePage: React.FC = () => {
           </div>
         )}
 
-        {/* Photos */}
-        {assessment.photos.length > 0 && (
-          <div className="bg-white rounded-xl shadow-sm border p-4">
-            <h4 className="font-semibold mb-3">Wound Photos</h4>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {assessment.photos.map(photo => (
-                <div key={photo.id} className="relative">
-                  <img src={photo.dataUrl} alt="Wound" className="w-full h-32 object-cover rounded-lg" />
-                  <p className="text-xs text-gray-500 mt-1">
-                    {new Date(photo.timestamp).toLocaleString()}
-                  </p>
-                </div>
-              ))}
+        {/* Photos.
+            The gallery is the cross-device view: it lists what the server holds
+            plus anything still queued on this device. The dataUrl grid below it
+            covers assessments captured before photographs were uploadable —
+            those exist only in this browser's storage and have no ref to fetch,
+            so dropping the grid would make them disappear from the record. */}
+        <div className="bg-white rounded-xl shadow-sm border p-4">
+          <Suspense fallback={<div className="h-20 bg-gray-50 rounded animate-pulse" />}>
+            <WoundImageGallery
+              patientId={assessment.patient_id != null ? Number(assessment.patient_id) : null}
+              title="Wound Photos"
+            />
+          </Suspense>
+
+          {assessment.photos.some(p => !p.ref) && (
+            <div className="mt-4 pt-4 border-t">
+              <p className="text-xs text-gray-400 mb-2">
+                Captured on this device before photo sync — visible here only.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {assessment.photos.filter(p => !p.ref).map(photo => (
+                  <div key={photo.id} className="relative">
+                    <img src={photo.dataUrl} alt="Wound" className="w-full h-32 object-cover rounded-lg" />
+                    <p className="text-xs text-gray-500 mt-1">
+                      {new Date(photo.timestamp).toLocaleString()}
+                    </p>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* Wound Healing Progress Chart */}
         {(() => {

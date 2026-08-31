@@ -27,7 +27,7 @@ export default function CMEArticleViewer({ articleId, userId, onClose }: CMEArti
   const [progress, setProgress] = useState<CMEReadingProgress | null>(null);
   const [isLiked, setIsLiked] = useState(false);
   const [isBookmarked, setIsBookmarked] = useState(false);
-  const [readingStartTime, setReadingStartTime] = useState<number>(Date.now());
+  const [readingStartTime] = useState<number>(Date.now());
   const [progressId, setProgressId] = useState<string>('');
 
   useEffect(() => {

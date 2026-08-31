@@ -17,7 +17,7 @@ import {
   Shield,
   Lock
 } from 'lucide-react';
-import { CMETopic, MCQQuestion } from '../../services/medicalTrainingService';
+import { CMETopic } from '../../services/medicalTrainingService';
 
 interface CMEArticleViewerProps {
   topic: CMETopic;
@@ -62,7 +62,6 @@ const CMEArticleViewer: React.FC<CMEArticleViewerProps> = ({
   const [fraudDetected, setFraudDetected] = useState(false);
   const [fraudMessage, setFraudMessage] = useState('');
   const [articleFullyRead, setArticleFullyRead] = useState(false);
-  const [readingLocked, setReadingLocked] = useState(false);
   const lastScrollTime = useRef<number>(Date.now());
   const scrollStartY = useRef<number>(0);
   const articleContainerRef = useRef<HTMLDivElement>(null);
@@ -169,7 +168,7 @@ const CMEArticleViewer: React.FC<CMEArticleViewerProps> = ({
               }),
             }).catch(() => {});
           }
-        } catch {}
+        } catch { /* Value is left as it was when it does not parse. */ }
       }
     }
   }, [readingStartTime, isCompleted, topic.id]);

@@ -1,23 +1,12 @@
 // Investigation Ordering Modal with Result Tracking and Normal Value Checking
-import React, { useState, useEffect } from 'react';
-import { X, Plus, TestTube, AlertTriangle, CheckCircle, Search, Upload, Trash2, TrendingUp, FileText } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, Plus, TestTube, AlertTriangle, CheckCircle, Search, Trash2, FileText } from 'lucide-react';
 import { format } from 'date-fns';
 import { 
   interpretLabResult, 
   getReferenceRange, 
-  ALL_REFERENCE_RANGES,
-  ReferenceRange 
+  
 } from '../data/labReferenceValues';
-import {
-  INVESTIGATIONS,
-  INVESTIGATION_CATEGORIES as INVESTIGATIONS_DB_CATEGORIES,
-  INVESTIGATION_PANELS,
-  searchInvestigations,
-  getInvestigationsByCategory,
-  getNormalRangeForPatient,
-  checkCriticalValue
-} from '../data/investigations';
-
 interface Investigation {
   id: string;
   test_name: string;

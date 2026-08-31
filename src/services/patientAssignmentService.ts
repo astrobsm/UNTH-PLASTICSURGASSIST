@@ -95,8 +95,8 @@ class PatientAssignmentService {
 
       // Filter by specialization if provided
       let consultants = members.consultants.filter(c => c.is_active);
-      let registrars = members.registrars.filter(r => r.is_active);
-      let houseOfficers = members.houseOfficers.filter(h => h.is_active);
+      const registrars = members.registrars.filter(r => r.is_active);
+      const houseOfficers = members.houseOfficers.filter(h => h.is_active);
 
       if (specialization) {
         consultants = consultants.filter(c => 

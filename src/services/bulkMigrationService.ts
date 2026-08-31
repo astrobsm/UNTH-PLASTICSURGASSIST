@@ -533,7 +533,7 @@ class BulkMigrationService {
   /** Pass through record as-is (for tables already using snake_case) */
   private mapDirect(record: any): any {
     // Remove Dexie internal fields
-    const { synced, deleted, serverId, ...rest } = record;
+    const { ...rest } = record;
     return rest;
   }
 }

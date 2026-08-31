@@ -16,7 +16,7 @@ import {
   XCircle,
   Clock,
   TrendingUp,
-  Award,
+  
   ClipboardList,
   AlertTriangle,
   ChevronDown,

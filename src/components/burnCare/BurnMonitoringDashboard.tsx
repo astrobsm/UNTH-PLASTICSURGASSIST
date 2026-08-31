@@ -1,24 +1,24 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
   ArrowLeft,
   Activity,
   Droplets,
-  ThermometerSun,
+  
   Heart,
   AlertTriangle,
-  Clock,
+  
   Plus,
   TrendingUp,
   TrendingDown,
   Minus,
   CheckCircle,
-  XCircle,
-  RefreshCw,
+  
+  
   FileText,
   Syringe,
-  Pill,
+  
   Stethoscope,
-  BarChart3,
+  
   Bell,
   BellOff,
   Brain,
@@ -27,7 +27,7 @@ import {
 import { v4 as uuidv4 } from 'uuid';
 import { 
   BurnPatient,
-  BurnAlert,
+  
   VitalSign,
   UrineOutput,
   FluidInput,
@@ -1056,7 +1056,7 @@ const BurnMonitoringDashboard: React.FC<BurnMonitoringDashboardProps> = ({ patie
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {followUpAssessments.map((assessment, idx) => (
+                  {followUpAssessments.map((assessment, _idx) => (
                     <div key={assessment.id} className="border rounded-lg p-4 hover:bg-gray-50">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">

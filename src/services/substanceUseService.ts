@@ -24,11 +24,10 @@ import type {
   PainContextAssessment,
   AnalgesicRecommendation,
   ComorbidityModification,
-  SubstanceUseAssessment,
-  DetoxMonitoringRecord,
-  DetoxFollowUp,
-  SubstanceUseClinicalSummary,
-  AssessmentStatus,
+  
+  
+  
+  
 } from '../db/substanceUseTypes';
 
 // ==================== SUBSTANCE DEFINITIONS ====================
@@ -295,7 +294,7 @@ export function predictWithdrawalRisk(
 // ==================== PAIN MANAGEMENT DECISION SUPPORT ====================
 
 export function generatePainManagementSupport(
-  painContext: PainContextAssessment, substanceHistory: SubstanceIntake[], comorbidities: string[]
+  painContext: PainContextAssessment, substanceHistory: SubstanceIntake[], _comorbidities: string[]
 ): PainManagementSupport {
   const nonOpioidPrimaryOptions: AnalgesicRecommendation[] = [
     { category: 'primary', recommendation: 'Paracetamol (Acetaminophen)', rationale: 'First-line with favorable safety in SUD', cautions: ['Max 4g/day normal hepatic function', 'Reduce in liver impairment'], requiresClinicianConfirmation: false },

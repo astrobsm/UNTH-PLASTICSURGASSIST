@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { format } from 'date-fns';
-import { adminService } from '../services/adminService';
 import { apiClient } from '../services/apiClient';
 import { patientService } from '../services/patientService';
-import { syncService } from '../db/syncService';
 import { 
   Users, 
   Settings, 
@@ -18,14 +16,14 @@ import {
   UserPlus, 
   Edit3, 
   Eye, 
-  Server, 
+  
   BarChart3, 
   Lock, 
-  Unlock, 
+  
   RefreshCw, 
-  FileText, 
+  
   Calendar, 
-  Clock,
+  
   CheckCircle,
   XCircle,
   Search,
@@ -34,12 +32,12 @@ import {
   Save,
   X,
   Key,
-  Mail,
+  
   Phone,
-  MapPin,
-  Building,
+  
+  
   UserCheck,
-  Globe,
+  
   Wifi,
   WifiOff,
   Copy,
@@ -50,7 +48,6 @@ import {
   LogOut,
   Plane
 } from 'lucide-react';
-import Layout from '../components/Layout';
 import { UserApprovalManager } from '../components/UserApprovalManager';
 import StaffAbsenceDialog from '../components/admin/StaffAbsenceDialog';
 import { getActiveAbsences, type StaffAbsence } from '../services/staffAbsenceService';
@@ -59,7 +56,7 @@ import { userManagementService } from '../services/userManagementService';
 import BulkUserImport from '../components/BulkUserImport';
 import TeamAnalytics from '../components/TeamAnalytics';
 import { medicalTeamService } from '../services/medicalTeamService';
-import { getRecentAuditLogs, AuditLog as AuditLogType } from '../services/auditLoggingService';
+import { getRecentAuditLogs } from '../services/auditLoggingService';
 import { db } from '../db/database';
 import { resetDatabase, fullDatabaseRecovery, triggerEmergencyRecovery } from '../utils/dbReset';
 import toast from 'react-hot-toast';

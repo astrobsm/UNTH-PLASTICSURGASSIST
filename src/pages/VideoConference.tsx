@@ -16,9 +16,9 @@ import {
   Grid,
   LayoutGrid,
   Hand,
-  MoreVertical,
+  
   Copy,
-  Share2,
+  
   X,
   Camera,
   RefreshCw,
@@ -64,7 +64,7 @@ const VideoConference: React.FC = () => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isHandRaised, setIsHandRaised] = useState(false);
   const [showControls, setShowControls] = useState(true);
-  const [activeSpeaker, setActiveSpeaker] = useState<string | null>(null);
+  const [activeSpeaker] = useState<string | null>(null);
 
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([]);

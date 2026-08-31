@@ -601,7 +601,7 @@ class BurnCareService {
 
     // Calculate current rate based on phase
     let currentRate = 0;
-    let remainingVolume = totalVolume24h;
+    const remainingVolume = totalVolume24h;
 
     if (hoursElapsed < 8) {
       // First 8 hours - give first half
@@ -738,7 +738,7 @@ class BurnCareService {
   /**
    * Generate alerts based on current vitals
    */
-  generateVitalAlerts(vitals: VitalSign, patientWeight: number): BurnAlert[] {
+  generateVitalAlerts(vitals: VitalSign, _patientWeight: number): BurnAlert[] {
     const alerts: BurnAlert[] = [];
     const thresholds = BURN_ALERT_THRESHOLDS.vitals;
 

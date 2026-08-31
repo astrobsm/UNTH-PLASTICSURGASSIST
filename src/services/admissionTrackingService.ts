@@ -1,5 +1,5 @@
 import { db } from '../db/database';
-import { differenceInDays, differenceInHours, differenceInMinutes, format } from 'date-fns';
+import { differenceInDays, differenceInHours, differenceInMinutes } from 'date-fns';
 import { apiClient } from './apiClient';
 
 // Helper for authenticated fetch requests

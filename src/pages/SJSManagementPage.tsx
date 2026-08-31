@@ -9,7 +9,7 @@ import { apiClient } from '../services/apiClient';
 import { db } from '../db/database';
 import {
   createPDF, addPDFHeader, addSectionHeader, addBodyText, addBulletList,
-  addSeparator, addFooter, addWarningBox, addInfoBox, addTwoColumnText,
+  addSeparator, addFooter, addWarningBox, addTwoColumnText,
   createPageBreakHandler, PDF_MARGINS, PDF_COLORS, PDF_FONT_SIZES,
   PDF_LINE_HEIGHT, sanitizeTextForPDF
 } from '../utils/pdfUtils';

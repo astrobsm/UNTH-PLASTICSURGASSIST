@@ -61,13 +61,6 @@ export const PostoperativeCareForm: React.FC<PostoperativeCareFormProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [dailyAssessmentDate, setDailyAssessmentDate] = useState('');
 
-  const handleInputChange = (field: string, value: any) => {
-    setCare(prev => ({
-      ...prev,
-      [field]: value
-    }));
-  };
-
   const handleNestedInputChange = (section: string, field: string, value: any) => {
     setCare(prev => ({
       ...prev,

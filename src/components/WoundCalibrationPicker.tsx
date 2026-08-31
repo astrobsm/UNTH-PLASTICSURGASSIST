@@ -83,7 +83,7 @@ export default function WoundCalibrationPicker({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [imageUrl]);
 
-  useEffect(() => { draw(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [start, end, display]);
+  useEffect(() => { draw(); }, [start, end, display]);
 
   const draw = () => {
     const canvas = canvasRef.current;

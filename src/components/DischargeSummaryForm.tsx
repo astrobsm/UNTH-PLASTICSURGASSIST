@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { format } from 'date-fns';
 import { 
   Admission, 
@@ -43,9 +43,9 @@ export default function DischargeSummaryForm({
 
   // Instructions
   const [woundCareInstructions, setWoundCareInstructions] = useState('');
-  const [activityRestrictions, setActivityRestrictions] = useState<string[]>([]);
+  const [activityRestrictions] = useState<string[]>([]);
   const [lifestyleModifications, setLifestyleModifications] = useState<string[]>([]);
-  const [dietaryRecommendations, setDietaryRecommendations] = useState('');
+  const [dietaryRecommendations] = useState('');
   const [warningSigns, setWarningSigns] = useState<string[]>([
     'Fever above 38°C (100.4°F)',
     'Increasing pain not relieved by medication',
@@ -59,8 +59,8 @@ export default function DischargeSummaryForm({
   const [showMealPlan, setShowMealPlan] = useState(false);
 
   // Auto-generated content
-  const [aiSummary, setAiSummary] = useState('');
-  const [aiInstructions, setAiInstructions] = useState('');
+  const [aiSummary] = useState('');
+  const [aiInstructions] = useState('');
 
   // Acknowledgement
   const [patientAcknowledged, setPatientAcknowledged] = useState(false);

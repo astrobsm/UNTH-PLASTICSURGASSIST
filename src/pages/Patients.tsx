@@ -91,7 +91,7 @@ export const Patients: React.FC = () => {
           try {
             const serverData = await apiClient.getAdmissions(undefined, pid);
             if (Array.isArray(serverData) && serverData.length > 0) return serverData;
-          } catch {}
+          } catch { /* Value is left as it was when it does not parse. */ }
           let data = await db.admissions.where('patient_id').equals(pid).toArray();
           if (data.length === 0 && !isNaN(numPid)) {
             data = await db.admissions.where('patient_id').equals(numPid as any).toArray();
@@ -105,28 +105,28 @@ export const Patients: React.FC = () => {
             if (data.length === 0 && !isNaN(numPid)) {
               data = await db.discharges.where('patient_id').equals(numPid as any).toArray();
             }
-          } catch {}
+          } catch { /* Value is left as it was when it does not parse. */ }
           return data;
         }
         case 'prescriptions': {
           try {
             const serverData = await apiClient.getPrescriptions(pid);
             if (Array.isArray(serverData) && serverData.length > 0) return serverData;
-          } catch {}
+          } catch { /* Value is left as it was when it does not parse. */ }
           return await db.prescriptions?.where('patient_id').equals(pid).toArray() || [];
         }
         case 'ward_rounds': {
           try {
             const serverData = await apiClient.getWardRoundsByPatient(pid);
             if (Array.isArray(serverData) && serverData.length > 0) return serverData;
-          } catch {}
+          } catch { /* Value is left as it was when it does not parse. */ }
           return await db.ward_rounds.filter(r => String(r.patient_id) === pid).toArray();
         }
         case 'surgeries': {
           try {
             const serverData = await apiClient.getSurgeries(pid);
             if (Array.isArray(serverData) && serverData.length > 0) return serverData;
-          } catch {}
+          } catch { /* Value is left as it was when it does not parse. */ }
           return await db.surgery_bookings.where('patient_id').equals(pid).toArray();
         }
         case 'procedures': {
@@ -138,14 +138,14 @@ export const Patients: React.FC = () => {
           try {
             const serverData = await apiClient.getLabInvestigations(pid);
             if (Array.isArray(serverData) && serverData.length > 0) return serverData;
-          } catch {}
+          } catch { /* Value is left as it was when it does not parse. */ }
           return await db.lab_investigations.where('patient_id').equals(pid).toArray();
         }
         case 'treatment_plans': {
           try {
             const serverData = await apiClient.getTreatmentPlans(pid);
             if (Array.isArray(serverData) && serverData.length > 0) return serverData;
-          } catch {}
+          } catch { /* Value is left as it was when it does not parse. */ }
           let data = await db.treatment_plans.where('patient_id').equals(pid).toArray();
           if (data.length === 0 && !isNaN(numPid)) {
             data = await db.treatment_plans.where('patient_id').equals(String(numPid)).toArray();
@@ -234,7 +234,7 @@ export const Patients: React.FC = () => {
       
       // Fetch from server API first (includes ALL patients from all users)
       // This also updates local IndexedDB for offline access
-      let patientData = await patientService.getAllPatients();
+      const patientData = await patientService.getAllPatients();
       
       // Filter out deleted patients
       const activePatients = patientData.filter((p: any) => !p.deleted);
@@ -339,7 +339,7 @@ export const Patients: React.FC = () => {
       try {
         const serverData = await apiClient.getPrescriptions(pid);
         if (Array.isArray(serverData) && serverData.length > 0) meds = serverData;
-      } catch {}
+      } catch { /* Value is left as it was when it does not parse. */ }
       if (meds.length === 0) {
         meds = await db.prescriptions?.where('patient_id').equals(pid).toArray() || [];
       }
@@ -347,11 +347,11 @@ export const Patients: React.FC = () => {
       setCurrentMeds(activeMeds);
 
       // Fetch upcoming plans from treatment_plans + surgery_bookings
-      let plans: any[] = [];
+      const plans: any[] = [];
       try {
         const tpData = await apiClient.getTreatmentPlans(pid);
         if (Array.isArray(tpData)) plans.push(...tpData.filter((p: any) => p.status === 'active' || !p.status));
-      } catch {}
+      } catch { /* Value is left as it was when it does not parse. */ }
       try {
         const surgeries = await apiClient.getSurgeries(pid);
         if (Array.isArray(surgeries)) {
@@ -361,7 +361,7 @@ export const Patients: React.FC = () => {
             _type: 'surgery',
           })));
         }
-      } catch {}
+      } catch { /* Value is left as it was when it does not parse. */ }
       setUpcomingPlans(plans);
     } catch (error) {
       console.error('Error fetching meds/plans:', error);

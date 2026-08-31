@@ -6,13 +6,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   performanceService, 
-  PerformanceMetrics, 
+  
   TraineeProfile,
-  ActivityLog,
-  DutyAssignment,
+  
+  
   SIGN_OUT_THRESHOLD,
-  ROTATION_DURATIONS,
-  MINIMUM_REQUIREMENTS
+  ROTATION_DURATIONS
 } from '../../services/performanceService';
 import { TrainingLevel } from '../../services/medicalTrainingService';
 

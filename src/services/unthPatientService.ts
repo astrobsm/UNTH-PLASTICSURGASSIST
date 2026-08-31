@@ -760,7 +760,7 @@ Please review patient file for complete clinical details or retry AI summary gen
     }
   }
 
-  private async generateAIDischargeContent(patientData: any, dischargeType: string) {
+  private async generateAIDischargeContent(_patientData: any, _dischargeType: string) {
     // Simplified discharge content generation
     return {
       finalDiagnosis: ['Primary diagnosis pending'],
@@ -889,7 +889,7 @@ Please review patient file for complete clinical details or retry AI summary gen
     }
   }
 
-  private async updatePatientWard(patientId: string, wardId: string, bedNumber?: string) {
+  private async updatePatientWard(_patientId: string, _wardId: string, _bedNumber?: string) {
     // Update patient ward information
     // This would be implemented with proper database updates
   }
@@ -971,7 +971,7 @@ Please review patient file for complete clinical details or retry AI summary gen
     return `${age} years`;
   }
 
-  private async generateTransferSummary(transfer: PatientTransfer) {
+  private async generateTransferSummary(_transfer: PatientTransfer) {
     // Generate AI transfer summary
   }
 
@@ -986,15 +986,15 @@ Please review patient file for complete clinical details or retry AI summary gen
     }
   }
 
-  private async saveProgressRecord(progress: TreatmentProgress) {
+  private async saveProgressRecord(_progress: TreatmentProgress) {
     // Save progress record to database
   }
 
-  private async analyzeProgressWithAI(progress: TreatmentProgress) {
+  private async analyzeProgressWithAI(_progress: TreatmentProgress) {
     // Analyze progress with AI
   }
 
-  private async saveDischargeDetails(dischargeDetails: DischargeDetails) {
+  private async saveDischargeDetails(_dischargeDetails: DischargeDetails) {
     // Save discharge details to database
   }
 

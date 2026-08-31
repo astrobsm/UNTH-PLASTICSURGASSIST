@@ -666,7 +666,7 @@ function getCriticalActions(testName: string, parameter: string, direction: 'low
 }
 
 // Normal abnormal actions helper
-function getAbnormalActions(testName: string, parameter: string, direction: 'low' | 'high'): string[] {
+function getAbnormalActions(_testName: string, _parameter: string, _direction: 'low' | 'high'): string[] {
   return [
     'Review by treating physician',
     'Repeat test to confirm',

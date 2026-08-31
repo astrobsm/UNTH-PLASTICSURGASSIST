@@ -3,18 +3,18 @@ import DOMPurify from 'dompurify';
 import { 
   BookOpen, 
   Brain, 
-  Award, 
+  
   Clock, 
   Target, 
-  TrendingUp,
+  
   Play,
   CheckCircle,
   XCircle,
-  RotateCcw,
+  
   Upload,
   Calendar,
   Download,
-  Bell,
+  
   AlertCircle,
   ArrowRight,
   ArrowLeft,
@@ -22,7 +22,7 @@ import {
   BarChart,
   Lightbulb,
   Heart,
-  Bookmark,
+  
   Filter
 } from 'lucide-react';
 import { mcqGenerationService, ClinicalTopic, MCQTestSchedule, MCQTestSession, StudyMaterial } from '../services/mcqGenerationService';
@@ -35,7 +35,6 @@ const MCQEducation: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'topics' | 'tests' | 'active-test' | 'results' | 'history' | 'cme-articles'>('topics');
   
   // Topics management (Admin)
-  const [topics, setTopics] = useState<ClinicalTopic[]>([]);
   const [uploadingTopic, setUploadingTopic] = useState(false);
   const [topicForm, setTopicForm] = useState({
     title: '',

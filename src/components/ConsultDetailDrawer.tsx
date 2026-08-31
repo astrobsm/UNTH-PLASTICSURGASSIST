@@ -399,7 +399,7 @@ function AttachmentManager({ consultId, attachments, onChanged, onRecreateChart 
     setUploading(true); setMessage(null); setProgress(null);
     try {
       let ocrText: string | undefined;
-      let ocrStructured: any = undefined;
+      const ocrStructured: any = undefined;
       let dataUrl: string;
 
       if (kind === 'clinical_photo') {

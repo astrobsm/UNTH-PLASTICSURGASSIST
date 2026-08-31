@@ -664,7 +664,7 @@ class ProcedureManagementService {
   /**
    * Generate Aldrete Score for PACU
    */
-  calculateAldreteScore(vitals: any, consciousness: string, movement: string, respiration: string, circulation: string): number {
+  calculateAldreteScore(vitals: any, consciousness: string, movement: string, respiration: string, _circulation: string): number {
     let score = 0;
     
     // Activity (0-2)

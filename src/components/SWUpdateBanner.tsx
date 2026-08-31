@@ -30,23 +30,6 @@ export const SWUpdateBanner: React.FC = () => {
     setTimeout(() => window.location.reload(), 5000);
   };
 
-  const handleCheckForUpdates = async () => {
-    setChecking(true);
-    setCheckResult(null);
-    try {
-      const found = await checkForUpdates();
-      if (!found) {
-        setCheckResult('You are on the latest version.');
-        setTimeout(() => setCheckResult(null), 4000);
-      }
-    } catch {
-      setCheckResult('Check failed. Try again.');
-      setTimeout(() => setCheckResult(null), 4000);
-    } finally {
-      setChecking(false);
-    }
-  };
-
   return (
     <>
       {/* Update banner */}

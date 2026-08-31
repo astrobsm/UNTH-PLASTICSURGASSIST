@@ -4,7 +4,7 @@ import {
   FlaskConical, 
   ClipboardCheck,
   AlertTriangle,
-  TrendingUp,
+  
   Megaphone,
   MapPin,
   Search,
@@ -21,7 +21,7 @@ import {
   Plus,
   Siren,
   X,
-  Edit3,
+  
   Clock
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -30,7 +30,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { db, Patient } from '../db/database';
 import { patientService } from '../services/patientService';
 import { admissionDischargeService, Admission } from '../services/admissionDischargeService';
-import { admissionService } from '../services/admissionService';
 import { schedulingService, SurgeryBooking } from '../services/schedulingService';
 import { warmCache, CacheWarmProgress } from '../services/cacheWarmer';
 import { syncService } from '../db/syncService';
@@ -41,7 +40,7 @@ import { userManagementService, ApprovedUser } from '../services/userManagementS
 import { medicalTeamService } from '../services/medicalTeamService';
 import { checkAndReassignHouseOfficers } from '../services/houseOfficerReassignmentService';
 import { getCurrentUserName } from '../utils/getCurrentUser';
-import { PS_UNITS, getCurrentAssignments, getTodaySchedule, UnitRosterConfig } from '../config/psUnits';
+import { getCurrentAssignments, getTodaySchedule, UnitRosterConfig } from '../config/psUnits';
 import HOResponsibilitiesGuide, { HOResponsibilitiesCard } from '../components/HOResponsibilitiesGuide';
 import { careDuration, careDurationTone, CARE_TONE_CLASSES } from '../utils/careDuration';
 

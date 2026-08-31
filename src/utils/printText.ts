@@ -142,6 +142,10 @@ export function toPrintableText(input: string | null | undefined): string {
 
   // Zero-width and bidirectional formatting characters: invisible on screen,
   // but they survive into PDFs as stray boxes.
+  // Strips zero-width and bidirectional marks, a byte-order mark and a soft
+  // hyphen — none of which a thermal printer renders, and all of which have
+  // to appear here to be removed.
+  // eslint-disable-next-line no-irregular-whitespace
   out = out.replace(/[​-‏‪-‮⁠-⁯﻿­]/g, '');
 
   // Variation selectors and the keycap combiner, which otherwise leave orphans
@@ -162,12 +166,14 @@ export function toPrintableText(input: string | null | undefined): string {
   out = out.replace(/\p{Extended_Pictographic}/gu, '');
 
   // Control characters, keeping the whitespace that carries layout.
+  // Control characters are the subject of this pattern: it removes the ones a PDF or thermal printer cannot render.
+  // eslint-disable-next-line no-control-regex
   out = out.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
 
   // Collapse the runs of spaces left behind by removed glyphs, and tidy the
   // space that a removed leading icon leaves before its label.
   out = out.replace(/[^\S\r\n]{2,}/g, ' ');
-  out = out.replace(/([(\[]) +/g, '$1');
+  out = out.replace(/([([]) +/g, '$1');
   out = out.replace(/ +([),\].:;])/g, '$1');
 
   return out.trim();

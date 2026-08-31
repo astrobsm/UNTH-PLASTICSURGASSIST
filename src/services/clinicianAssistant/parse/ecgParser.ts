@@ -12,7 +12,7 @@ import { detectEcgFeatures } from '../engine/modules/ecgFeatures';
 
 const num = (s: string | undefined): number | null => {
   if (!s) return null;
-  const n = parseFloat(s.replace(/[^\d.\-]/g, ''));
+  const n = parseFloat(s.replace(/[^\d.-]/g, ''));
   return Number.isNaN(n) ? null : n;
 };
 
@@ -31,33 +31,33 @@ export function parseEcg(text: string): EcgData | null {
 
   // ── Measurements ─────────────────────────────────────────────────────
   data.rateBpm =
-    num(/(?:vent(?:ricular)?\.?\s*rate|heart\s*rate|ventricular\s*rate|\bhr\b)\s*[:\-]?\s*(\d{2,3})/i.exec(joined)?.[1]) ??
+    num(/(?:vent(?:ricular)?\.?\s*rate|heart\s*rate|ventricular\s*rate|\bhr\b)\s*[:-]?\s*(\d{2,3})/i.exec(joined)?.[1]) ??
     num(/(\d{2,3})\s*(?:bpm|\/min|beats\/min)/i.exec(joined)?.[1]);
 
   data.prMs =
-    num(/p-?r\s*(?:interval)?\s*[:\-]?\s*(\d{2,3})\s*(?:ms|msec)?/i.exec(joined)?.[1]) ??
-    num(/\bpr\b\s*[:\-]?\s*(\d{2,3})\s*ms/i.exec(joined)?.[1]);
+    num(/p-?r\s*(?:interval)?\s*[:-]?\s*(\d{2,3})\s*(?:ms|msec)?/i.exec(joined)?.[1]) ??
+    num(/\bpr\b\s*[:-]?\s*(\d{2,3})\s*ms/i.exec(joined)?.[1]);
 
   data.qrsMs =
-    num(/qrs\s*(?:duration|interval)?\s*[:\-]?\s*(\d{2,3})\s*(?:ms|msec)?/i.exec(joined)?.[1]);
+    num(/qrs\s*(?:duration|interval)?\s*[:-]?\s*(\d{2,3})\s*(?:ms|msec)?/i.exec(joined)?.[1]);
 
   // "QT/QTc  384/431 ms" is the commonest combined form.
-  const qtPair = /qt\s*\/\s*qtc?[a-z]?\s*[:\-]?\s*(\d{2,3})\s*\/\s*(\d{2,3})/i.exec(joined);
+  const qtPair = /qt\s*\/\s*qtc?[a-z]?\s*[:-]?\s*(\d{2,3})\s*\/\s*(\d{2,3})/i.exec(joined);
   if (qtPair) {
     data.qtMs = num(qtPair[1]);
     data.qtcMs = num(qtPair[2]);
   } else {
-    data.qtMs = num(/\bqt\b\s*(?:interval)?\s*[:\-]?\s*(\d{2,3})\s*(?:ms|msec)?/i.exec(joined)?.[1]);
-    data.qtcMs = num(/\bqtc[bf]?\b\s*(?:interval)?\s*[:\-]?\s*(\d{2,3})\s*(?:ms|msec)?/i.exec(joined)?.[1]);
+    data.qtMs = num(/\bqt\b\s*(?:interval)?\s*[:-]?\s*(\d{2,3})\s*(?:ms|msec)?/i.exec(joined)?.[1]);
+    data.qtcMs = num(/\bqtc[bf]?\b\s*(?:interval)?\s*[:-]?\s*(\d{2,3})\s*(?:ms|msec)?/i.exec(joined)?.[1]);
   }
 
   // "P-R-T axes 52 41 38" — the middle value is the QRS axis.
-  const axes = /p-?\s*r-?\s*t\s*axes\s*[:\-]?\s*(-?\d{1,3})\s+(-?\d{1,3})\s+(-?\d{1,3})/i.exec(joined);
+  const axes = /p-?\s*r-?\s*t\s*axes\s*[:-]?\s*(-?\d{1,3})\s+(-?\d{1,3})\s+(-?\d{1,3})/i.exec(joined);
   if (axes) {
     data.axisDegrees = num(axes[2]);
   } else {
     data.axisDegrees =
-      num(/(?:qrs\s*axis|cardiac\s*axis|axis)\s*[:\-]?\s*(-?\d{1,3})\s*(?:°|deg)?/i.exec(joined)?.[1]);
+      num(/(?:qrs\s*axis|cardiac\s*axis|axis)\s*[:-]?\s*(-?\d{1,3})\s*(?:°|deg)?/i.exec(joined)?.[1]);
   }
   const axisText = /(normal axis|left axis deviation|right axis deviation|extreme axis|north-?west axis|indeterminate axis)/i.exec(joined);
   if (axisText) data.axisText = axisText[1];
@@ -77,7 +77,7 @@ export function parseEcg(text: string): EcgData | null {
     if (line.length < 6 || line.length > 160) continue;
     // Keep anything that reads as a clinical statement.
     if (/[a-z]{4}/i.test(line) && !/^\d/.test(line)) {
-      data.statements.push(line.replace(/^(?:interpretation|conclusion|report|findings|comment|summary)\s*[:\-]?\s*/i, '').trim());
+      data.statements.push(line.replace(/^(?:interpretation|conclusion|report|findings|comment|summary)\s*[:-]?\s*/i, '').trim());
     }
   }
   data.statements = [...new Set(data.statements.filter(Boolean))].slice(0, 24);

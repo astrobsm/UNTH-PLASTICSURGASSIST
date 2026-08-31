@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { patientService, displayArrayField } from '../services/patientService';
 import { useOnSelectedPatient } from '../hooks/useSelectedPatient';
-import { MedicalTextInput } from '../components/MedicalTextInput';
 import MedicalAutocompleteTextarea from '../components/MedicalAutocompleteTextarea';
 import { 
   admissionDischargeService, 
@@ -10,10 +9,10 @@ import {
   Discharge,
   WHODischargeScore,
   DischargeMedication,
-  MDTMedicationReview,
+  
   AdmissionStatistics
 } from '../services/admissionDischargeService';
-import { medicalTeamService, StaffByRole, SuggestedTeam } from '../services/medicalTeamService';
+import { medicalTeamService, StaffByRole } from '../services/medicalTeamService';
 import { preoperativeService, PreoperativeAssessment } from '../services/preoperativeService';
 import WHODischargeAssessment from '../components/WHODischargeAssessment';
 import MDTDischargeMedications from '../components/MDTDischargeMedications';
@@ -32,9 +31,6 @@ import {
   addLabeledField,
   sanitizeTextForPDF,
   formatDateForPDF,
-  PDF_MARGINS,
-  PDF_COLORS,
-  PDF_FONT_SIZES
 } from '../utils/pdfUtils';
 import { getCurrentUserName } from '../utils/getCurrentUser';
 import { captureLocation } from '../services/geolocationService';
@@ -221,7 +217,7 @@ export default function AdmissionDischargePage() {
                   admissions={filteredAdmissions} 
                   searchTerm={searchTerm}
                   setSearchTerm={setSearchTerm}
-                  onDischarge={(admission) => {
+                  onDischarge={(_admission) => {
                     setActiveTab('discharge');
                     // Pass selected admission to discharge tab
                   }}

@@ -159,16 +159,6 @@ export const NutritionalRiskAssessmentForm: React.FC<NutritionalRiskAssessmentPr
     }
   };
 
-  const handleMustScoreChange = (field: string, value: number) => {
-    setAssessment(prev => ({
-      ...prev,
-      must_scores: {
-        ...prev.must_scores!,
-        [field]: value
-      }
-    }));
-  };
-
   const handleDietaryIntakeChange = (field: keyof NutritionalRiskAssessment['dietary_intake'], value: any) => {
     setAssessment(prev => ({
       ...prev,

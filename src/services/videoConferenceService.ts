@@ -3,8 +3,6 @@
  * Handles WebRTC connections, screen sharing, and media management
  */
 
-import { apiClient } from './apiClient';
-
 export interface Participant {
   id: string;
   name: string;
@@ -42,6 +40,14 @@ export interface MediaConstraints {
   audio: boolean | MediaTrackConstraints;
 }
 
+/**
+ * A conference event listener.
+ *
+ * Named rather than `Function`, which accepts class declarations and anything
+ * else callable and so promises nothing about how it may be invoked.
+ */
+type ConferenceEventListener = (data?: any) => void;
+
 class VideoConferenceService {
   private localStream: MediaStream | null = null;
   private screenStream: MediaStream | null = null;
@@ -51,7 +57,7 @@ class VideoConferenceService {
   private currentRoom: ConferenceRoom | null = null;
   private localParticipant: Participant | null = null;
   
-  private eventListeners: Map<string, Set<Function>> = new Map();
+  private eventListeners: Map<string, Set<ConferenceEventListener>> = new Map();
 
   // ICE Servers configuration (STUN/TURN)
   private iceServers: RTCIceServer[] = [
@@ -78,7 +84,7 @@ class VideoConferenceService {
   /**
    * Subscribe to conference events
    */
-  on(event: string, callback: Function): () => void {
+  on(event: string, callback: ConferenceEventListener): () => void {
     if (!this.eventListeners.has(event)) {
       this.eventListeners.set(event, new Set());
     }

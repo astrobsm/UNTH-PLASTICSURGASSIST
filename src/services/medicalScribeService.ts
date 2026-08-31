@@ -855,7 +855,7 @@ class MedicalScribeService {
       ['plan', /(?:^|\n)\s*(?:plan|P:|management|Mx|treatment\s*plan)[\s:]+/im],
     ];
 
-    let remaining = text;
+    const remaining = text;
     const sectionPositions: { section: string; start: number; text: string }[] = [];
 
     for (const [section, pattern] of sectionMarkers) {

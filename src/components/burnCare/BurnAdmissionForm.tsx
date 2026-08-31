@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import MedicalAutocompleteTextarea from '../MedicalAutocompleteTextarea';
 import { 
   ArrowLeft, 
@@ -8,7 +8,7 @@ import {
   Flame,
   User,
   Calculator,
-  Stethoscope,
+  
   Droplets,
   Activity,
   AlertTriangle,
@@ -16,8 +16,7 @@ import {
   Info,
   Clock,
   Search,
-  UserPlus,
-  Brain
+  UserPlus
 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { 

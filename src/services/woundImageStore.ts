@@ -129,6 +129,59 @@ export async function getImageUrl(ref: string): Promise<string | null> {
   return row.remote_path || null;
 }
 
+/** Whether this device already holds the bytes for a ref. */
+export async function hasLocalBlob(ref: string): Promise<boolean> {
+  const row = await db.table('wound_images').where('ref').equals(ref).first();
+  return Boolean(row?.blob);
+}
+
+/**
+ * Keep a photograph this device did not take.
+ *
+ * A clinician opening a wound on their own phone downloads it once; from then
+ * on it behaves exactly like one they captured, including on a ward with no
+ * signal. Marked as already uploaded, because it plainly is — otherwise it
+ * would join the upload queue and be sent straight back to where it came from.
+ */
+export async function cacheRemoteImage(params: {
+  ref: string;
+  blob: Blob;
+  kind: WoundImageKind;
+  width?: number | null;
+  height?: number | null;
+  assessmentId?: number | null;
+  woundId?: number | null;
+  patientId?: number | null;
+  capturedAt?: string | null;
+  remotePath: string;
+}): Promise<void> {
+  const table = db.table('wound_images');
+  const existing = await table.where('ref').equals(params.ref).first();
+  const fields = {
+    blob: params.blob,
+    bytes: params.blob.size,
+    width: params.width ?? 0,
+    height: params.height ?? 0,
+    remote_path: params.remotePath,
+    uploaded_at: new Date().toISOString(),
+    last_error: null,
+  };
+  if (existing) {
+    await table.update(existing.id!, fields);
+    return;
+  }
+  await table.add({
+    ref: params.ref,
+    kind: params.kind,
+    assessment_id: params.assessmentId ?? null,
+    wound_id: params.woundId ?? null,
+    patient_id: params.patientId ?? null,
+    captured_at: params.capturedAt || new Date().toISOString(),
+    attempts: 0,
+    ...fields,
+  } as WoundImageRecord);
+}
+
 /** Every photograph belonging to an assessment, newest first. */
 export async function getImagesForAssessment(assessmentId: number): Promise<WoundImageRecord[]> {
   return db.table('wound_images')

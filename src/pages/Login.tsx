@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useAuthStore } from '../store/authStore';
-import { Stethoscope, UserPlus, LogIn, X, Eye, EyeOff, Phone, Key } from 'lucide-react';
+import { UserPlus, LogIn, X, Eye, EyeOff, Phone, Key } from 'lucide-react';
 import { userManagementService } from '../services/userManagementService';
 import { loginRateLimiter } from '../utils/rateLimiter';
 import { validateEmail, validatePassword } from '../utils/validation';

@@ -47,7 +47,7 @@ async function fetchRecordsForCategory(patientId: string, category: string): Pro
         try {
           const serverData = await apiClient.getAdmissions(undefined, pid);
           if (Array.isArray(serverData) && serverData.length > 0) return serverData;
-        } catch {}
+        } catch { /* Value is left as it was when it does not parse. */ }
         let data = await db.admissions.where('patient_id').equals(pid).toArray();
         if (data.length === 0 && !isNaN(numPid)) {
           data = await db.admissions.where('patient_id').equals(numPid as any).toArray();
@@ -61,42 +61,42 @@ async function fetchRecordsForCategory(patientId: string, category: string): Pro
           if (data.length === 0 && !isNaN(numPid)) {
             data = await db.discharges.where('patient_id').equals(numPid as any).toArray();
           }
-        } catch {}
+        } catch { /* Value is left as it was when it does not parse. */ }
         return data;
       }
       case 'prescriptions': {
         try {
           const serverData = await apiClient.getPrescriptions(pid);
           if (Array.isArray(serverData) && serverData.length > 0) return serverData;
-        } catch {}
+        } catch { /* Value is left as it was when it does not parse. */ }
         return await db.prescriptions?.where('patient_id').equals(pid).toArray() || [];
       }
       case 'ward_rounds': {
         try {
           const serverData = await apiClient.getWardRoundsByPatient(pid);
           if (Array.isArray(serverData) && serverData.length > 0) return serverData;
-        } catch {}
+        } catch { /* Value is left as it was when it does not parse. */ }
         return await db.ward_rounds.filter(r => String(r.patient_id) === pid).toArray();
       }
       case 'surgeries': {
         try {
           const serverData = await apiClient.getSurgeries(pid);
           if (Array.isArray(serverData) && serverData.length > 0) return serverData;
-        } catch {}
+        } catch { /* Value is left as it was when it does not parse. */ }
         return await db.surgery_bookings.where('patient_id').equals(pid).toArray();
       }
       case 'lab_investigations': {
         try {
           const serverData = await apiClient.getLabInvestigations(pid);
           if (Array.isArray(serverData) && serverData.length > 0) return serverData;
-        } catch {}
+        } catch { /* Value is left as it was when it does not parse. */ }
         return await db.lab_investigations.where('patient_id').equals(pid).toArray();
       }
       case 'treatment_plans': {
         try {
           const serverData = await apiClient.getTreatmentPlans(pid);
           if (Array.isArray(serverData) && serverData.length > 0) return serverData;
-        } catch {}
+        } catch { /* Value is left as it was when it does not parse. */ }
         let data = await db.treatment_plans.where('patient_id').equals(pid).toArray();
         if (data.length === 0 && !isNaN(numPid)) {
           data = await db.treatment_plans.where('patient_id').equals(String(numPid)).toArray();
@@ -346,18 +346,18 @@ const PatientActionRecords: React.FC = () => {
       let p: Patient | undefined;
       try {
         p = await db.patients.get(Number(patientId));
-      } catch {}
+      } catch { /* Value is left as it was when it does not parse. */ }
       if (!p) {
         try {
           p = await db.patients.where('id').equals(patientId).first();
-        } catch {}
+        } catch { /* Value is left as it was when it does not parse. */ }
       }
       if (!p) {
         // Try API
         try {
           const serverPatient = await apiClient.getPatient(patientId);
           if (serverPatient) p = serverPatient as any;
-        } catch {}
+        } catch { /* Value is left as it was when it does not parse. */ }
       }
       setPatient(p || null);
 

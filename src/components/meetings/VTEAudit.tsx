@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import {
-  Search,
+  
   RefreshCw,
   ShieldCheck,
-  User,
-  Calendar,
+  
+  
   AlertTriangle,
   CheckCircle,
   FileText,
@@ -104,7 +104,7 @@ export default function VTEAudit() {
         try {
           const allPatients = await patientService.getAllPatients();
           patient = allPatients?.find((p: any) => String(p.id) === patId);
-        } catch {}
+        } catch { /* Value is left as it was when it does not parse. */ }
 
         let dvtAssessment: DVTRiskAssessment | undefined;
         let capriniScore = 0;
@@ -120,7 +120,7 @@ export default function VTEAudit() {
             riskLevel = result.riskLevel;
             interpretation = result.interpretation;
           }
-        } catch {}
+        } catch { /* Value is left as it was when it does not parse. */ }
 
         const daysAdmitted = daysBetween(adm.admission_date, new Date());
 

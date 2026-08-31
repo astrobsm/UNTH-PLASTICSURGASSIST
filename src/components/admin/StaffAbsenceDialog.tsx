@@ -45,7 +45,7 @@ export default function StaffAbsenceDialog({ userId, userName, userRole, onClose
     }
   };
 
-  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [userId]);
+  useEffect(() => { load(); }, [userId]);
 
   const active = absences.find(a => a.status === 'active');
 

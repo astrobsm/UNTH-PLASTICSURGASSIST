@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { CBTTest, CBTAttempt, CBTQuestion, cbtService } from '../../services/cbtService';
+import { CBTTest, CBTAttempt, cbtService } from '../../services/cbtService';
 
 interface CBTExamInterfaceProps {
   test: CBTTest;

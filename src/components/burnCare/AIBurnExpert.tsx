@@ -17,25 +17,25 @@ import {
   CheckCircle,
   AlertTriangle,
   X,
-  Image as ImageIcon,
+  
   Zap,
   ChevronDown,
   ChevronUp,
   Info,
   Target,
   Activity,
-  ThermometerSun,
-  Download,
+  
+  
   Brain
 } from 'lucide-react';
 import { 
   burnExpertAIService, 
   BurnExpertAnalysis, 
   AIImageAnalysisResult,
-  BodyRegionAssessment,
+  
   SeverityLevel
 } from '../../services/burnExpertAIService';
-import { TBSARegion, AnatomicalRegion, BurnDepth } from '../../services/burnCareService';
+import { TBSARegion, BurnDepth } from '../../services/burnCareService';
 
 interface AIBurnExpertProps {
   patientAge: number;

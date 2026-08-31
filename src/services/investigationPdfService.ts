@@ -1,5 +1,5 @@
 import { sanitizePdfDocument } from '../utils/pdfSafeText';
-﻿// Investigation Request Form PDF Service
+// Investigation Request Form PDF Service
 // Generates thermal print PDF for requested investigations
 
 import { createPDF, sanitizeTextForPDF, PDF_COLORS, PDF_FONT_SIZES, PDF_MARGINS } from '../utils/pdfUtils';

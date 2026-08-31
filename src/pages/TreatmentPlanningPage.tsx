@@ -3,29 +3,22 @@ import {
   Calendar, 
   Plus, 
   AlertCircle, 
-  CheckCircle, 
-  Clock, 
+  
+  
   User,
   FileText,
   Activity,
   Pill,
-  Home,
-  ChevronRight
+  Home
 } from 'lucide-react';
-import { db } from '../db/database';
 import { patientService } from '../services/patientService';
 import { 
   treatmentPlanningService, 
   EnhancedTreatmentPlan,
-  TreatmentPlanReview,
-  LabWork,
-  PlannedProcedure,
-  MedicationAdministration,
-  DischargeTimeline
 } from '../services/treatmentPlanningService';
 import { medicalTeamService } from '../services/medicalTeamService';
 import { apiClient } from '../services/apiClient';
-import { format, isPast } from 'date-fns';
+import { format } from 'date-fns';
 import { safeFormatDate } from '../utils/dateUtils';
 import { ComprehensiveTreatmentPlanForm } from '../components/ComprehensiveTreatmentPlanForm';
 

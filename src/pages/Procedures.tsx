@@ -1,10 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { WHOSafetyChecklistForm } from '../components/procedures/WHOSafetyChecklist';
-import { IntraoperativeFindingsForm } from '../components/procedures/IntraoperativeFindings';
-import { PostoperativeCareForm } from '../components/procedures/PostoperativeCare';
-import { WoundCareAssessmentForm } from '../components/procedures/WoundCareAssessment';
-import { SurgicalFitnessScoreForm } from '../components/procedures/SurgicalFitnessScore';
 import { MedicalTextInput } from '../components/MedicalTextInput';
 import { patientService } from '../services/patientService';
 import { schedulingService, SurgeryBooking } from '../services/schedulingService';
@@ -18,7 +13,6 @@ export const Procedures: React.FC = () => {
   const navigate = useNavigate();
   const [activeModule, setActiveModule] = useState('overview');
   const [selectedPatientId, setSelectedPatientId] = useState<string>('');
-  const [selectedProcedureId, setSelectedProcedureId] = useState<string>('');
   const [patients, setPatients] = useState<any[]>([]);
   const [showNewProcedureModal, setShowNewProcedureModal] = useState(false);
   const [modalKey, setModalKey] = useState(0);
@@ -1740,7 +1734,7 @@ const ProcedureOverview: React.FC = () => {
             </div>
           ) : (
             <div className="space-y-3">
-              {procedures.slice(0, 5).map((procedure, index) => (
+              {procedures.slice(0, 5).map((procedure, _index) => (
                 <div key={procedure.id} className="flex items-center space-x-3">
                   <span className={`w-2 h-2 rounded-full ${
                     procedure.status === 'completed' ? 'bg-green-500' :

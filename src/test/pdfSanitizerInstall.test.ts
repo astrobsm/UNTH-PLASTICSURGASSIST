@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { jsPDF } from 'jspdf';
-import { sanitizePdfDocument, toPdfSafeText } from '../utils/pdfSafeText';
+import { sanitizePdfDocument } from '../utils/pdfSafeText';
 
 /**
  * Regression test for a fix that shipped inert.

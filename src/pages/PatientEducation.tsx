@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Download, BookOpen, AlertCircle, Info, FileText, Heart, Activity, User, Search, MessageCircle, Loader2, Printer } from 'lucide-react';
+import { Download, BookOpen, AlertCircle, Info, FileText, Heart, Activity, User, Search, MessageCircle, Printer } from 'lucide-react';
 import jsPDF from 'jspdf';
 import { sanitizePdfDocument } from '../utils/pdfSafeText';
 import {

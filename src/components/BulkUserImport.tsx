@@ -297,7 +297,7 @@ Dr. Mike Johnson,mike.johnson@hospital.com,consultant,Plastic Surgery`;
             </p>
 
             <div className="space-y-3">
-              {manualEntries.map((entry, index) => (
+              {manualEntries.map((entry, _index) => (
                 <div key={entry.id} className="grid grid-cols-1 md:grid-cols-12 gap-3 p-3 bg-gray-50 rounded-lg">
                   <div className="md:col-span-3">
                     <label className="block text-xs font-medium text-gray-600 mb-1">Full Name *</label>

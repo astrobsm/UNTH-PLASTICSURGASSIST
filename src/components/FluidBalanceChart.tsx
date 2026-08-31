@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Droplets, Plus, Trash2, Camera, RefreshCw, ChevronDown, ChevronUp, Download } from 'lucide-react';
+import { Droplets, Plus, Trash2, Camera, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { apiClient } from '../services/apiClient';
 import { ocrService } from '../services/ocrService';

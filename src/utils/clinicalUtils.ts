@@ -44,7 +44,7 @@ export async function lookupUserPhone(userName: string): Promise<string | null> 
  * Ensures Nigerian numbers start with 234.
  */
 function formatPhoneForWhatsApp(phone: string): string {
-  let cleaned = phone.replace(/[\s\-\(\)]/g, '');
+  let cleaned = phone.replace(/[\s\-()]/g, '');
   // Remove leading +
   if (cleaned.startsWith('+')) cleaned = cleaned.substring(1);
   // Convert 0xx to 234xx (Nigerian format)

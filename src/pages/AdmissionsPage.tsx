@@ -4,7 +4,7 @@ import { patientService } from '../services/patientService';
 import { admissionService, Admission, AdmissionStatistics } from '../services/admissionService';
 import { patientAssignmentService } from '../services/patientAssignmentService';
 import { calculateAge, calculateAndFormatAge } from '../utils/dateUtils';
-import { PS_UNITS, getCurrentAssignments, getUnitTeam, UnitRosterConfig } from '../config/psUnits';
+import { PS_UNITS, getUnitTeam, UnitRosterConfig } from '../config/psUnits';
 import { getCurrentUserName } from '../utils/getCurrentUser';
 
 interface Ward {

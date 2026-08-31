@@ -17,7 +17,7 @@
  */
 import React, { useEffect, useRef, useState, lazy, Suspense } from 'react';
 const TransfusionVitalsChart = lazy(() => import('./TransfusionVitalsChart'));
-import { Droplet, Plus, ScanLine, Mic, MicOff, Save, X, AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
+import { Droplet, Plus, ScanLine, Mic, MicOff, Save, AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
 import { ocrService } from '../services/ocrService';
 import { speechToTextService } from '../services/speechToTextService';
 import {
@@ -74,7 +74,7 @@ const parseSeriesDateTime = (date?: string, time?: string, index = 0): Date => {
   const fallback = new Date(Date.now() + index * 60_000);
   let y = fallback.getFullYear(), mo = fallback.getMonth(), d = fallback.getDate();
   if (date && typeof date === 'string') {
-    const parts = date.split(/[\/.\-]/).map(p => parseInt(p, 10));
+    const parts = date.split(/[/.-]/).map(p => parseInt(p, 10));
     if (parts.length >= 3 && parts.every(n => Number.isFinite(n))) {
       d = parts[0]; mo = parts[1] - 1; y = parts[2] < 100 ? 2000 + parts[2] : parts[2];
     }
@@ -273,9 +273,9 @@ const BloodTransfusionTab: React.FC<Props> = ({ patientId, hospitalNumber, patie
       for (const [k, v] of Object.entries(compMap)) {
         if (t.includes(k)) { b.component_type = v; break; }
       }
-      const exp = text.match(/exp(?:iry|ires?)?[:\s]+(\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4})/i);
+      const exp = text.match(/exp(?:iry|ires?)?[:\s]+(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})/i);
       if (exp) { const d = new Date(exp[1]); if (!isNaN(d.getTime())) b.expiry_date = d; }
-      const don = text.match(/(?:collected|donated|donation)[:\s]+(\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4})/i);
+      const don = text.match(/(?:collected|donated|donation)[:\s]+(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})/i);
       if (don) { const d = new Date(don[1]); if (!isNaN(d.getTime())) b.donation_date = d; }
       next[idx] = b;
       setBags(next);

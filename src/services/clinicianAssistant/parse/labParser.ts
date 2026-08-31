@@ -235,7 +235,7 @@ export function parseLabValues(
         continue;
       }
       if (qual.key === 'urinalysis:microscopy') {
-        const tail = line.replace(/^\s*(?:urine\s+)?microscopy\b\s*[:\-]?\s*/i, '').trim();
+        const tail = line.replace(/^\s*(?:urine\s+)?microscopy\b\s*[:-]?\s*/i, '').trim();
         if (tail && !observations.some((o) => o.key === qual.key)) {
           observations.push({ key: qual.key, label: qual.label, value: tail, rawText: line, confidence, edited: false, sourceId });
           continue;
@@ -472,12 +472,12 @@ export function parseDemographics(text: string): ParsedDemographics {
   // colon included, because the trimming below can only recognise a label by
   // its colon. Stopping the capture at the colon would hide the very evidence
   // needed to know where the value ends.
-  const rawName = grab(/(?:patient\s*name|patient|name)\s*[:\-]\s*([A-Za-z][A-Za-z0-9 '`\-,.:#/]{2,80})/i);
+  const rawName = grab(/(?:patient\s*name|patient|name)\s*[:-]\s*([A-Za-z][A-Za-z0-9 '`\-,.:#/]{2,80})/i);
   if (rawName) {
     out.name = rawName
       .split(/\s{2,}/)[0]
       .replace(LABEL_TAIL, '')
-      .replace(/[\s,.\-]+$/, '')
+      .replace(/[\s,.-]+$/, '')
       .trim() || undefined;
   }
   // Report headers pack several fields onto one line separated by column gaps;
@@ -487,26 +487,26 @@ export function parseDemographics(text: string): ParsedDemographics {
     return v
       .split(/\s{2,}/)[0]
       .replace(LABEL_TAIL, '')
-      .replace(/[\s,.:;\-]+$/, '')
+      .replace(/[\s,.:;-]+$/, '')
       .trim() || undefined;
   };
 
-  out.hospitalNumber = trimField(grab(/(?:hospital\s*(?:no|number|#)|hosp\s*no|mrn|nhs\s*(?:no|number)|patient\s*id|unit\s*no|reg\s*no)\s*[:\-]?\s*([A-Za-z0-9\- ]{4,24})/i));
-  out.ward = trimField(grab(/(?:ward|location|clinical location|unit)\s*[:\-]\s*([A-Za-z0-9 '\-/,.:#]{2,60})/i));
-  out.consultant = trimField(grab(/(?:consultant|clinician|requesting (?:doctor|clinician)|referred by)\s*[:\-]\s*([A-Za-z0-9 .'\-,:#]{3,60})/i));
+  out.hospitalNumber = trimField(grab(/(?:hospital\s*(?:no|number|#)|hosp\s*no|mrn|nhs\s*(?:no|number)|patient\s*id|unit\s*no|reg\s*no)\s*[:-]?\s*([A-Za-z0-9\- ]{4,24})/i));
+  out.ward = trimField(grab(/(?:ward|location|clinical location|unit)\s*[:-]\s*([A-Za-z0-9 '\-/,.:#]{2,60})/i));
+  out.consultant = trimField(grab(/(?:consultant|clinician|requesting (?:doctor|clinician)|referred by)\s*[:-]\s*([A-Za-z0-9 .'\-,:#]{3,60})/i));
 
-  const ageStr = grab(/\bage\s*[:\-]?\s*(\d{1,3})\s*(?:y(?:ea)?rs?)?/i) ?? grab(/\b(\d{1,3})\s*(?:y\/?o|yrs?|years?)\b/i);
+  const ageStr = grab(/\bage\s*[:-]?\s*(\d{1,3})\s*(?:y(?:ea)?rs?)?/i) ?? grab(/\b(\d{1,3})\s*(?:y\/?o|yrs?|years?)\b/i);
   if (ageStr) {
     const n = parseInt(ageStr, 10);
     if (n > 0 && n < 130) out.age = n;
   }
 
-  const sexStr = grab(/\b(?:sex|gender)\s*[:\-]?\s*(male|female|m|f)\b/i);
+  const sexStr = grab(/\b(?:sex|gender)\s*[:-]?\s*(male|female|m|f)\b/i);
   if (sexStr) out.sex = /^m/i.test(sexStr) ? 'male' : 'female';
 
   const dateStr =
-    grab(/(?:collect(?:ed|ion)|sample|specimen|taken|drawn)\s*(?:date|date\/time|on)?\s*[:\-]?\s*(\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4}(?:\s+\d{1,2}:\d{2})?)/i) ??
-    grab(/(?:report(?:ed)?|date)\s*[:\-]?\s*(\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4}(?:\s+\d{1,2}:\d{2})?)/i);
+    grab(/(?:collect(?:ed|ion)|sample|specimen|taken|drawn)\s*(?:date|date\/time|on)?\s*[:-]?\s*(\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4}(?:\s+\d{1,2}:\d{2})?)/i) ??
+    grab(/(?:report(?:ed)?|date)\s*[:-]?\s*(\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4}(?:\s+\d{1,2}:\d{2})?)/i);
   if (dateStr) out.collectedAt = dateStr;
 
   return out;

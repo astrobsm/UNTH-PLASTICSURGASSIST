@@ -11,9 +11,9 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronUp,
-  Clock,
+  
   Download,
-  Edit,
+  
   FileText,
   Heart,
   Info,
@@ -25,8 +25,8 @@ import {
   Search,
   Share2,
   Syringe,
-  Trash2,
-  User,
+  
+  
   X,
   Zap
 } from 'lucide-react';
@@ -49,7 +49,7 @@ import {
   KELOID_EDUCATION
 } from '../services/keloidCareService';
 import { keloidPdfService } from '../services/keloidPdfService';
-import { format, addWeeks, isBefore, isAfter, differenceInDays } from 'date-fns';
+import { format, isBefore, differenceInDays } from 'date-fns';
 import toast from 'react-hot-toast';
 
 // ============================================

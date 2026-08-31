@@ -46,6 +46,47 @@ const DEFAULT_DICTATION_SETTINGS: DictationSettings = {
   pushToTalk: false,
 };
 
+export type SpeechErrorKind = 'ignore' | 'transient' | 'recoverable' | 'fatal';
+
+/**
+ * What to do about a SpeechRecognition error.
+ *
+ * The distinction that matters is whether restarting could possibly help.
+ * `no-speech` is a pause in dictation and recovers on its own. `audio-capture`
+ * is a microphone that is absent, in use, or broken, and `not-allowed` is a
+ * refusal — neither improves by trying again, so retrying them just spins
+ * silently while the interface still reads "listening".
+ *
+ * `audio-capture` used to be grouped with `no-speech`. A clinician whose
+ * microphone was unavailable got an endless restart loop, no message, and no
+ * transcript: the failure mode where dictation appears to work and quietly
+ * records nothing.
+ */
+export function classifySpeechError(error: string): SpeechErrorKind {
+  switch (error) {
+    // Raised on every deliberate stop and on each restart cycle.
+    case 'aborted':
+      return 'ignore';
+    // A silence, not a fault. Recognition resumes by itself.
+    case 'no-speech':
+      return 'transient';
+    // Chrome streams audio to a remote recogniser, so this is a dropped
+    // connection rather than a broken setup. Worth telling the clinician —
+    // words spoken during the gap are lost — but it does recover, so the
+    // session is kept running.
+    case 'network':
+      return 'recoverable';
+    case 'audio-capture':
+    case 'not-allowed':
+    case 'service-not-allowed':
+    case 'language-not-supported':
+    case 'bad-grammar':
+      return 'fatal';
+    default:
+      return 'fatal';
+  }
+}
+
 // Medical terminology corrections for common misrecognitions
 const MEDICAL_CORRECTIONS: Record<string, string> = {
   // Surgical terms
@@ -285,14 +326,19 @@ class SpeechToTextService {
 
     rec.onerror = (event: any) => {
       console.warn('Speech recognition error:', event.error);
-      if (event.error === 'no-speech' || event.error === 'audio-capture') {
-        // Non-fatal — will auto-restart
-        return;
-      }
-      if (event.error === 'aborted') {
-        return; // Normal during restart
-      }
+      const kind = classifySpeechError(event.error);
+
+      if (kind === 'ignore' || kind === 'transient') return;
+
+      // Report either way — the clinician needs to know words were lost.
       this.options.onError?.(event.error);
+
+      // Fatal: restarting cannot fix a missing microphone or a refused
+      // permission, so stop rather than spin. Silently retrying one of these
+      // left the interface showing "listening" over a recogniser that would
+      // never produce a word — dictation into a dead microphone, with nothing
+      // to indicate anything was wrong.
+      if (kind === 'fatal') this.stopListening();
     };
 
     rec.onend = () => {
@@ -336,7 +382,7 @@ class SpeechToTextService {
    * Core result handler. Processes event.results and extracts only NEW finalized segments.
    */
   private handleRecognitionResult(event: any): void {
-    let newFinalSegments: string[] = [];
+    const newFinalSegments: string[] = [];
     let currentInterim = '';
 
     for (let i = 0; i < event.results.length; i++) {

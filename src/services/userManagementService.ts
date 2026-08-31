@@ -116,7 +116,7 @@ class UserManagementService {
     }
   }
 
-  async rejectRegistration(userId: string, reason: string): Promise<void> {
+  async rejectRegistration(userId: string, _reason: string): Promise<void> {
     try {
       await apiClient.approveUser(userId, false);
     } catch (error) {

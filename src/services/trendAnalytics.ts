@@ -12,11 +12,10 @@
 
 import {
   validateVitals,
-  validateLabValue,
+  
   VITAL_RANGES_EXPORT,
-  LAB_RANGES_EXPORT,
-  type VitalAlert,
-  type ValidatedVitalReading,
+  
+  
 } from './medicalValidation';
 
 // ────────────────────────────────────────────────────────────

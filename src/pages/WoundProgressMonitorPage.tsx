@@ -24,6 +24,7 @@ import { apiClient } from '../services/apiClient';
 import { aiWoundMeasurement, type WoundProgressEntry } from '../services/aiWoundMeasurement';
 import type { ImageQualityReport } from '../services/woundImageQuality';
 import { putLocalImage, attachToAssessment } from '../services/woundImageStore';
+import { syncPendingWoundImages } from '../services/woundImageSync';
 
 /**
  * Stamped onto every assessment this page writes.
@@ -43,6 +44,7 @@ const WoundHealingMap = lazy(() => import('../components/WoundHealingMap'));
 const WoundCalibrationPicker = lazy(() => import('../components/WoundCalibrationPicker'));
 const WoundContourEditor = lazy(() => import('../components/WoundContourEditor'));
 const WoundProgressChart = lazy(() => import('../components/WoundProgressChart'));
+const WoundImageGallery = lazy(() => import('../components/WoundImageGallery'));
 
 const WOUND_TYPES = [
   'Burn', 'Pressure Injury', 'Venous Ulcer', 'Diabetic Foot Ulcer', 'Surgical Wound',
@@ -495,6 +497,18 @@ const WoundDetailView: React.FC<{ patient: any; wound: Wound; onBack: () => void
         )}
       </div>
 
+      {/* Photographs. Every assessment above was captured against one of these,
+          and until now there was nowhere in the app to look at them. */}
+      <div className="bg-white rounded-xl border p-4">
+        <Suspense fallback={<div className="h-20 bg-gray-50 rounded animate-pulse" />}>
+          <WoundImageGallery
+            woundId={wound.id != null ? Number(wound.id) : null}
+            patientId={wound.patient_id != null ? Number(wound.patient_id) : null}
+            title="Wound photographs"
+          />
+        </Suspense>
+      </div>
+
       {capturing && (
         <CaptureAssessmentModal
           wound={wound}
@@ -837,10 +851,12 @@ const CaptureAssessmentModal: React.FC<{ wound: Wound; onClose: () => void; onSa
       const saved = await addAssessment({
         wound_id: wound.id!,
         patient_id: wound.patient_id,
-        // Points at the stored photograph. Until object storage is configured
-        // the bytes live only on this device, so the reference is what ties the
-        // two together rather than a URL that would not resolve elsewhere.
-        image_url: imageRef ? `local:${imageRef}` : undefined,
+        // Points at the stored photograph. The ref is stable and server-side
+        // storage resolves it for every device, so this is written in the form
+        // any device can follow — "local:<ref>" could only ever be resolved by
+        // the phone that took the photograph, which is why clinicians could not
+        // see their own wound images from a second device.
+        image_url: imageRef ? `/wound-images?ref=${imageRef}` : undefined,
         length_cm: numOrNull(m.length_cm),
         width_cm: numOrNull(m.width_cm),
         area_cm2: area,
@@ -880,6 +896,12 @@ const CaptureAssessmentModal: React.FC<{ wound: Wound; onClose: () => void; onSa
         await attachToAssessment([imageRef], Number((saved as any).id), wound.id != null ? Number(wound.id) : undefined)
           .catch(e => console.warn('[wound] could not link photograph to assessment:', e));
       }
+
+      // Send it on to the server, now that it is linked to a saved assessment.
+      // Deliberately not awaited: the clinician is finished, and on a ward with
+      // no signal this would otherwise hold the dialog open for a request that
+      // was always going to be retried later anyway.
+      void syncPendingWoundImages();
 
       onSaved();
     } catch (e: any) {
