@@ -4,13 +4,13 @@
  */
 
 import { format } from 'date-fns';
-import { BloodTransfusion, BloodBagDetails, TransfusionVitals } from './bloodTransfusionService';
+import { BloodTransfusion, BloodBagDetails } from './bloodTransfusionService';
 import {
   createPDF,
   sanitizeTextForPDF,
   PDF_MARGINS,
   PDF_FONT_SIZES,
-  PDF_COLORS,
+  
   addFooter
 } from '../utils/pdfUtils';
 
@@ -765,7 +765,7 @@ class TransfusionPdfService {
     pdf.setFont('times', 'normal');
     const reactions = ['None', 'Fever', 'Chills', 'Rash', 'Urticaria', 'Dyspnea', 'Chest pain', 'Back pain', 'Hypotension', 'Tachycardia'];
     xPos = 15;
-    reactions.forEach((reaction, idx) => {
+    reactions.forEach((reaction, _idx) => {
       if (xPos > pageWidth - 40) {
         xPos = 15;
         yPos += 6;

@@ -3,8 +3,8 @@
  * and storage usage. Full-bar version and compact navbar pill.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { Wifi, WifiOff, RefreshCw, Cloud, CloudOff, CheckCircle, AlertCircle, HardDrive, Database } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Wifi, WifiOff, RefreshCw, Cloud, CheckCircle, HardDrive, Database } from 'lucide-react';
 import { useOffline } from '../hooks/useOffline';
 
 interface OfflineIndicatorProps {
@@ -191,7 +191,7 @@ export const OfflineIndicator: React.FC<OfflineIndicatorProps> = ({
  * Compact offline indicator for header/navbar
  */
 export const OfflineIndicatorCompact: React.FC<{ className?: string }> = ({ className = '' }) => {
-  const { isOnline, isOffline, isSyncing, pendingCount, sync } = useOffline();
+  const { isOffline, isSyncing, pendingCount, sync } = useOffline();
 
   return (
     <div className={`flex items-center gap-2 ${className}`}>

@@ -10,13 +10,13 @@ import {
   Clock,
   Users,
   FileText,
-  Trash2,
-  Edit,
+  
+  
   Eye,
-  Plus,
+  
   AlertCircle,
   TrendingUp,
-  Archive,
+  
   Globe
 } from 'lucide-react';
 import { 
@@ -167,17 +167,6 @@ export default function TopicManagement() {
       alert('Failed to generate weekly content');
     } finally {
       setGeneratingContent(false);
-    }
-  };
-
-  const handleScheduleTopic = async (topicId: string, scheduledDate: Date) => {
-    try {
-      await topicManagementService.scheduleTopicForWeek(topicId, scheduledDate);
-      await loadData();
-      alert('Topic scheduled successfully!');
-    } catch (error) {
-      console.error('Error scheduling topic:', error);
-      alert('Failed to schedule topic');
     }
   };
 

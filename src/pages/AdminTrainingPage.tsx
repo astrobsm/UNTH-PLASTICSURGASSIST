@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Users, Search, AlertTriangle, CheckCircle, Clock, XCircle,
-  ChevronDown, ChevronUp, Send, Eye, BarChart3, Shield,
-  User, Activity, BookOpen, ClipboardCheck, Calendar, TrendingUp,
-  Bell, ArrowLeft, Filter, RefreshCw, Award, Target, MessageCircle, Phone,
+  Send, Eye, BarChart3, Shield,
+  User, Activity, BookOpen, ClipboardCheck, Calendar, 
+  Bell, ArrowLeft, RefreshCw, Target, MessageCircle, Phone,
 } from 'lucide-react';
 import { apiClient } from '../services/apiClient';
 import { useCrossTabRefresh } from '../utils/crossTabSync';

@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  Activity, AlertCircle, ArrowRight, Bell, Calendar, CheckCircle, ChevronDown, ChevronUp,
-  Clock, ClipboardList, Download, FileText, Heart, Info, Loader2, Minus, Plus, Printer,
-  RefreshCw, Ruler, Save, Search, Share2, Trash2, TrendingDown, TrendingUp, Upload, User, X
+  Activity, AlertCircle, Bell, Calendar, CheckCircle, ChevronDown, ChevronUp,
+  Clock, ClipboardList, Download, FileText, Info, Loader2, Plus, Printer,
+  Ruler, Save, Search, Share2, Trash2, Upload, X
 } from 'lucide-react';
 import { notificationService } from '../services/notificationService';
 import { db } from '../db/database';
@@ -772,7 +772,6 @@ const LymphedemaPage: React.FC = () => {
   useOnSelectedPatient((p) => { setSelectedPatient(p as unknown as Patient); setActiveTab('new'); });
   const [assessments, setAssessments] = useState<LymphedemaAssessment[]>([]);
   const [selectedAssessment, setSelectedAssessment] = useState<LymphedemaAssessment | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
   const [expandedTimeline, setExpandedTimeline] = useState<string | null>(null);

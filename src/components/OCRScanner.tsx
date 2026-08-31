@@ -12,10 +12,10 @@ import {
   Loader2, 
   Check, 
   X, 
-  RotateCcw, 
+  
   ZoomIn, 
   ZoomOut,
-  Maximize,
+  
   Image as ImageIcon,
   AlertCircle,
   RefreshCw

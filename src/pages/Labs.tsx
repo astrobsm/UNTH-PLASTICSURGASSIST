@@ -18,8 +18,7 @@ import {
   Zap,
   Download,
   Loader2,
-  Scan,
-  Camera
+  Scan
 } from 'lucide-react';
 import { 
   labService, 
@@ -33,7 +32,6 @@ import {
   PatientDemographics,
   COMMON_LAB_TESTS
 } from '../services/labService';
-import { db } from '../db/database';
 import { patientService } from '../services/patientService';
 import { useOnSelectedPatient } from '../hooks/useSelectedPatient';
 import { logDataExport } from '../services/auditLoggingService';
@@ -1376,7 +1374,7 @@ const TrendsSection = ({ selectedPatient }: any) => {
   const [selectedTest, setSelectedTest] = useState('');
   const [timeRange, setTimeRange] = useState(6);
   const [exporting, setExporting] = useState(false);
-  const [dateRange, setDateRange] = useState({
+  const [dateRange] = useState({
     start: new Date(Date.now() - 6 * 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     end: new Date().toISOString().split('T')[0]
   });
@@ -2164,15 +2162,6 @@ const GFRSection = ({
       setShowAutoCalculate(false);
     } catch (error) {
       console.error('Error auto-calculating GFR:', error);
-    }
-  };
-
-  const calculateManualGFR = async (creatinine: number, unit: string) => {
-    try {
-      await labService.calculateGFR(patientId, creatinine, unit, demographics);
-      onRefresh();
-    } catch (error) {
-      console.error('Error calculating GFR:', error);
     }
   };
 

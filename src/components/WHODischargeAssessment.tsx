@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Admission, WHODischargeScore, admissionDischargeService } from '../services/admissionDischargeService';
 import { getCurrentUserName } from '../utils/getCurrentUser';
 

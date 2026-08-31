@@ -1,8 +1,8 @@
 import Dexie, { Table } from 'dexie';
-import { CMETopic, CMEQuestion, TestSession, CMEProgress, CMECertificate } from '../services/aiService';
+import { CMETopic, TestSession, CMEProgress, CMECertificate } from '../services/aiService';
 import { WardRound, ClinicSession, SurgeryBooking } from '../services/schedulingService';
 import { LabInvestigation, LabResult, GFRCalculation } from '../services/labService';
-import { BaseRiskAssessment, DVTRiskAssessment, PressureSoreRiskAssessment, NutritionalRiskAssessment } from '../services/riskAssessmentService';
+import { DVTRiskAssessment, PressureSoreRiskAssessment, NutritionalRiskAssessment } from '../services/riskAssessmentService';
 import { ClinicalTopic, GeneratedMCQ, MCQTestSchedule, MCQTestSession, StudyMaterial, NotificationSchedule } from '../services/mcqGenerationService';
 import { EducationalTopic, WeeklyContent, TopicSchedule, UserProgress } from '../services/topicManagementService';
 import { PendingUser, ApprovedUser } from '../services/userManagementService';
@@ -1361,7 +1361,7 @@ export class PlasticSurgeonDB extends Dexie {
 
 
     // Add hooks to automatically track changes
-    this.patients.hook('creating', (primKey, obj, trans) => {
+    this.patients.hook('creating', (primKey, obj, _trans) => {
       obj.created_at = obj.created_at || new Date();
       obj.updated_at = obj.updated_at || new Date();
       // Only default synced to false if not explicitly set (e.g. from server pull)
@@ -1374,9 +1374,9 @@ export class PlasticSurgeonDB extends Dexie {
       }
     });
 
-    this.patients.hook('updating', (modifications, primKey, obj, trans) => {
+    this.patients.hook('updating', (modifications, primKey, obj, _trans) => {
       // Only set updated_at if not explicitly provided
-      if (!modifications.hasOwnProperty('updated_at')) {
+      if (!Object.prototype.hasOwnProperty.call(modifications, 'updated_at')) {
         (modifications as any).updated_at = new Date();
       }
       // Don't auto-reset synced — callers explicitly set synced status
@@ -1387,11 +1387,11 @@ export class PlasticSurgeonDB extends Dexie {
     });
 
     // Add hook to track deletions
-    this.patients.hook('deleting', (primKey, obj, trans) => {
+    this.patients.hook('deleting', (_primKey, _obj, _trans) => {
       // Soft delete logic handled elsewhere
     });
 
-    this.treatment_plans.hook('creating', (primKey, obj, trans) => {
+    this.treatment_plans.hook('creating', (primKey, obj, _trans) => {
       obj.created_at = obj.created_at || new Date();
       obj.updated_at = obj.updated_at || new Date();
       if (obj.synced === undefined || obj.synced === null) {
@@ -1402,8 +1402,8 @@ export class PlasticSurgeonDB extends Dexie {
       }
     });
 
-    this.treatment_plans.hook('updating', (modifications, primKey, obj, trans) => {
-      if (!modifications.hasOwnProperty('updated_at')) {
+    this.treatment_plans.hook('updating', (modifications, primKey, obj, _trans) => {
+      if (!Object.prototype.hasOwnProperty.call(modifications, 'updated_at')) {
         (modifications as any).updated_at = new Date();
       }
       if ((modifications as any).deleted === undefined && obj.deleted === undefined) {
@@ -1411,7 +1411,7 @@ export class PlasticSurgeonDB extends Dexie {
       }
     });
 
-    this.plan_steps.hook('creating', (primKey, obj, trans) => {
+    this.plan_steps.hook('creating', (primKey, obj, _trans) => {
       obj.created_at = obj.created_at || new Date();
       obj.updated_at = obj.updated_at || new Date();
       if (obj.synced === undefined || obj.synced === null) {
@@ -1422,8 +1422,8 @@ export class PlasticSurgeonDB extends Dexie {
       }
     });
 
-    this.plan_steps.hook('updating', (modifications, primKey, obj, trans) => {
-      if (!modifications.hasOwnProperty('updated_at')) {
+    this.plan_steps.hook('updating', (modifications, primKey, obj, _trans) => {
+      if (!Object.prototype.hasOwnProperty.call(modifications, 'updated_at')) {
         (modifications as any).updated_at = new Date();
       }
       if ((modifications as any).deleted === undefined && obj.deleted === undefined) {
@@ -1432,35 +1432,35 @@ export class PlasticSurgeonDB extends Dexie {
     });
 
     // Add hooks for risk assessment tables
-    this.dvt_assessments.hook('creating', (primKey, obj, trans) => {
+    this.dvt_assessments.hook('creating', (primKey, obj, _trans) => {
       obj.created_at = new Date();
       obj.updated_at = new Date();
     });
 
-    this.dvt_assessments.hook('updating', (modifications, primKey, obj, trans) => {
+    this.dvt_assessments.hook('updating', (modifications, _primKey, _obj, _trans) => {
       (modifications as any).updated_at = new Date();
     });
 
-    this.pressure_sore_assessments.hook('creating', (primKey, obj, trans) => {
+    this.pressure_sore_assessments.hook('creating', (primKey, obj, _trans) => {
       obj.created_at = new Date();
       obj.updated_at = new Date();
     });
 
-    this.pressure_sore_assessments.hook('updating', (modifications, primKey, obj, trans) => {
+    this.pressure_sore_assessments.hook('updating', (modifications, _primKey, _obj, _trans) => {
       (modifications as any).updated_at = new Date();
     });
 
-    this.nutritional_assessments.hook('creating', (primKey, obj, trans) => {
+    this.nutritional_assessments.hook('creating', (primKey, obj, _trans) => {
       obj.created_at = new Date();
       obj.updated_at = new Date();
     });
 
-    this.nutritional_assessments.hook('updating', (modifications, primKey, obj, trans) => {
+    this.nutritional_assessments.hook('updating', (modifications, _primKey, _obj, _trans) => {
       (modifications as any).updated_at = new Date();
     });
 
     // Progress notes hooks
-    this.progress_notes.hook('creating', (primKey, obj, trans) => {
+    this.progress_notes.hook('creating', (primKey, obj, _trans) => {
       obj.created_at = obj.created_at || new Date();
       obj.updated_at = obj.updated_at || new Date();
       if (obj.synced === undefined || obj.synced === null) {
@@ -1468,8 +1468,8 @@ export class PlasticSurgeonDB extends Dexie {
       }
     });
 
-    this.progress_notes.hook('updating', (modifications, primKey, obj, trans) => {
-      if (!modifications.hasOwnProperty('updated_at')) {
+    this.progress_notes.hook('updating', (modifications, _primKey, _obj, _trans) => {
+      if (!Object.prototype.hasOwnProperty.call(modifications, 'updated_at')) {
         (modifications as any).updated_at = new Date();
       }
     });
@@ -1481,7 +1481,7 @@ export const db = new PlasticSurgeonDB();
 
 // Handle version changes from other tabs gracefully
 // Don't force-close mid-write — let the user finish their current action
-db.on('versionchange', (event) => {
+db.on('versionchange', (_event) => {
   // Only close if no active transactions are likely in flight.
   // Forcing db.close() while DataSyncService is writing 5000+ items
   // leaves IndexedDB in a half-written state (= corruption).

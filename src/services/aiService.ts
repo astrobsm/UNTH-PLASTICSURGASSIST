@@ -1,4 +1,3 @@
-import OpenAI from 'openai';
 import { apiClient } from './apiClient';
 
 // Helper for authenticated fetch requests
@@ -276,7 +275,7 @@ class AIService {
 
       const questionsData = JSON.parse(response);
       
-      return questionsData.map((q: any, index: number) => ({
+      return questionsData.map((q: any, _index: number) => ({
         id: this.generateId(),
         ...q,
         tags: q.tags || [topic.toLowerCase().replace(/\s+/g, '-')]

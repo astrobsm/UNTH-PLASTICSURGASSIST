@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   FileText, Download, Loader, User, Calendar, Activity, AlertCircle, 
-  TrendingUp, Printer, Clock, Stethoscope, Pill, Scissors, 
+  TrendingUp, Clock, Stethoscope, Pill, Scissors, 
   ClipboardList, Heart, Shield, Eye, ChevronDown, ChevronUp,
   MapPin, Droplet, Flame
 } from 'lucide-react';
@@ -13,7 +13,7 @@ import {
   createPDF,
   sanitizeTextForPDF,
   PDF_MARGINS,
-  PDF_FONT_SIZES,
+  
   addFooter
 } from '../utils/pdfUtils';
 

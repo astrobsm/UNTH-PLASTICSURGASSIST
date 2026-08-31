@@ -1,8 +1,8 @@
 ﻿import React, { useState, useEffect, useMemo, useCallback, useRef, lazy, Suspense } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { patientService } from '../services/patientService';
-import { preoperativeService, PreoperativeAssessment, Medication } from '../services/preoperativeService';
-import { schedulingService, SurgeryBooking } from '../services/schedulingService';
+import { preoperativeService, Medication } from '../services/preoperativeService';
+import { schedulingService } from '../services/schedulingService';
 import { apiClient } from '../services/apiClient';
 import { db } from '../db/database';
 import toast from 'react-hot-toast';
@@ -10,20 +10,19 @@ import { safeFormatDate } from '../utils/dateUtils';
 import {
   ArrowLeft, ClipboardCheck, Users, Search, User, Calendar, Loader2,
   Eye, Plus, CheckCircle, AlertTriangle, FileText, Download, BookOpen,
-  ShoppingCart, Shield, Printer, Filter, ChevronDown, ChevronUp,
-  Image, CreditCard, Clock, MapPin, Stethoscope, ListChecks,
-  Upload, X, CalendarDays, Lock, Unlock, FlaskConical, Ban,
-  ChevronLeft, ChevronRight, AlertOctagon, Baby, Droplets, Bug, Heart,
-  Activity, Utensils, Zap, Save, Edit2, Check, RefreshCw, FileImage,
-  Scissors, Minus, Camera, ScanLine, TestTube
+  ShoppingCart, Shield, Printer, ChevronDown, ChevronUp,
+  CreditCard, Stethoscope, ListChecks,
+  Upload, X, CalendarDays, FlaskConical, 
+  ChevronLeft, ChevronRight, AlertOctagon, Droplets, Heart,
+  Activity, Utensils, Zap, Save, Check, RefreshCw, FileImage,
+  Scissors, Minus, Camera, TestTube
 } from 'lucide-react';
-import { DocumentScannerModal } from '../components/DocumentScannerModal';
 const PreoperativePlanningModule = lazy(() => import('../components/procedures/PreoperativePlanningModule'));
 const PreoperativeAssessmentForm = lazy(() => import('../components/PreoperativeAssessmentForm'));
 import {
-  createPDF, addPDFHeader, addSectionHeader, addBodyText, addBulletList,
+  createPDF, addPDFHeader, addSectionHeader, addBulletList,
   addSeparator, addFooter, addLabeledField, sanitizeTextForPDF, formatDateForPDF,
-  addTwoColumnText, needsNewPage, addSimpleTable, PDF_MARGINS, PDF_FONT_SIZES, PDF_LINE_HEIGHT, PDF_COLORS, PDF_PAGE,
+  addTwoColumnText, needsNewPage, addSimpleTable, PDF_MARGINS, PDF_FONT_SIZES, PDF_LINE_HEIGHT, PDF_PAGE,
 } from '../utils/pdfUtils';
 import jsPDF from 'jspdf';
 import { sanitizePdfDocument } from '../utils/pdfSafeText';
@@ -520,7 +519,6 @@ export default function BookingRegisterPage() {
   const [shoppingSearch, setShoppingSearch] = useState('');
   const [shoppingCategory, setShoppingCategory] = useState('all');
   const [showRiskMedDb, setShowRiskMedDb] = useState(false);
-  const [showInvOCRScanner, setShowInvOCRScanner] = useState(false);
   const [ocrScanning, setOcrScanning] = useState(false);
   const [ocrProgress, setOcrProgress] = useState(0);
   const [ocrProgressText, setOcrProgressText] = useState('');

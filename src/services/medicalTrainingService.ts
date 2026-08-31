@@ -4840,7 +4840,7 @@ const JR_MODULE_4: CMEModule = {
       title: 'Sepsis and Septic Shock Management',
       article: {
         title: 'Sepsis and Septic Shock Management',
-        overview: 'Sepsis is life-threatening organ dysfunction caused by dysregulated host response to infection. Septic shock adds circulatory and cellular/metabolic abnormalities. Early recognition and protocolized treatment (the \"Hour-1 Bundle\") save lives.',
+        overview: 'Sepsis is life-threatening organ dysfunction caused by dysregulated host response to infection. Septic shock adds circulatory and cellular/metabolic abnormalities. Early recognition and protocolized treatment (the "Hour-1 Bundle") save lives.',
         learningObjectives: [
           'Apply Sepsis-3 definitions correctly',
           'Use qSOFA and SOFA for sepsis screening and diagnosis',

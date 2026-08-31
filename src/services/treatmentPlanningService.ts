@@ -558,7 +558,7 @@ class TreatmentPlanningService {
   // Complete review and check for delays
   // Accepts: (planId, reviewId, completedBy, notes, delayReason?)
   async completeReview(planId: string, reviewId: string, completedBy: string, notes: string, delayReason?: string): Promise<void> {
-    let plan = await this.findPlanLocal(planId);
+    const plan = await this.findPlanLocal(planId);
     if (plan && plan.reviews) {
       const reviewIndex = plan.reviews.findIndex((r: any) => r.id === reviewId);
       if (reviewIndex !== -1) {
@@ -1050,7 +1050,7 @@ class TreatmentPlanningService {
     }
   }
 
-  async notifyReviewScheduled(patientName: string, reviewDate: Date, assignedTo: string): Promise<void> {
+  async notifyReviewScheduled(patientName: string, reviewDate: Date, _assignedTo: string): Promise<void> {
     toast.success(`Review scheduled for ${patientName} on ${format(reviewDate, 'MMM dd, yyyy')}`);
     
     try {
@@ -1323,6 +1323,7 @@ class TreatmentPlanningService {
 
     switch (modification.modification_type) {
       case 'medication':
+        {
         const meds = plan.planned_medications || [];
         if (modification.modification_action === 'add') {
           meds.push({ ...modification.proposed_value, id: `med_${Date.now()}` });
@@ -1335,8 +1336,10 @@ class TreatmentPlanningService {
         }
         updates.planned_medications = meds;
         break;
+      }
 
       case 'investigation':
+        {
         const invs = plan.planned_investigations || [];
         if (modification.modification_action === 'add') {
           invs.push({ ...modification.proposed_value, id: `inv_${Date.now()}`, scheduled_dates: [], results: [] });
@@ -1349,8 +1352,10 @@ class TreatmentPlanningService {
         }
         updates.planned_investigations = invs;
         break;
+      }
 
       case 'procedure':
+        {
         const procs = plan.planned_procedures || [];
         if (modification.modification_action === 'add') {
           procs.push({ ...modification.proposed_value, id: `proc_${Date.now()}`, actual_dates: [] });
@@ -1363,6 +1368,7 @@ class TreatmentPlanningService {
         }
         updates.planned_procedures = procs;
         break;
+      }
 
       case 'diagnosis':
         updates.diagnosis = modification.proposed_value;

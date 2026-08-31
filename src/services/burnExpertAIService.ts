@@ -311,7 +311,7 @@ class BurnExpertAIService {
     // Simulate processing delay for realistic UX
     await new Promise(resolve => setTimeout(resolve, 1500));
     
-    const { data, width, height } = imageData;
+    const { data, height } = imageData;
     const totalPixels = (data.length / 4);
     
     // Color analysis for burn detection
@@ -811,7 +811,7 @@ Format as a JSON array of recommendation strings.
     weight: number,
     mechanism: string,
     hasInhalation: boolean,
-    severity: SeverityLevel
+    _severity: SeverityLevel
   ): string[] {
     const recommendations: string[] = [];
     
@@ -1438,7 +1438,7 @@ Format as a JSON array of recommendation strings.
   }
 
   private determineHealingTrajectory(
-    previousAnalysis?: BurnExpertAnalysis
+    _previousAnalysis?: BurnExpertAnalysis
   ): 'ahead_of_schedule' | 'on_track' | 'delayed' | 'stalled' {
     // Simulated logic - in production this would use ML models
     const random = Math.random();

@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
-  User, Search, ChevronRight, ChevronDown, AlertTriangle, CheckCircle, Clock,
-  Calendar, Pill, Activity, FileText, Heart, Shield, Apple, Printer, Download,
-  Bell, X, Edit3, Eye, BarChart3, AlertCircle, Loader2, RefreshCw, Plus, Trash2
+  Search, ChevronRight, AlertTriangle, CheckCircle, 
+  Calendar, Pill, Activity, FileText, Heart, Apple, Printer, Download,
+  X, Edit3, Eye, BarChart3, AlertCircle, Loader2, Plus
 } from 'lucide-react';
-import { format, isPast, differenceInDays, addDays } from 'date-fns';
+import { format, isPast, differenceInDays } from 'date-fns';
 import { useAuthStore } from '../store/authStore';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { db } from '../db/database';

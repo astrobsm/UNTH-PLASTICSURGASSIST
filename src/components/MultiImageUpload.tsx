@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { Camera, Upload, X, Image as ImageIcon, ZoomIn, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Camera, Upload, X, ZoomIn, ChevronLeft, ChevronRight } from 'lucide-react';
 
 export interface ImageFile {
   id: string;

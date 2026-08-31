@@ -4,9 +4,9 @@ import {
   RefreshCw,
   AlertTriangle,
   Calendar,
-  Activity,
+  
   FlaskConical,
-  HeartPulse,
+  
   FileText,
   User,
   Clock,
@@ -88,9 +88,9 @@ export default function MortalityReview() {
       let wardRounds: any[] = [];
       let labs: any[] = [];
 
-      try { admissions = await admissionDischargeService.getPatientAdmissions(Number(selectedPatientId)); } catch {}
-      try { wardRounds = await wardRoundsService.getPatientWardRounds(selectedPatientId); } catch {}
-      try { labs = await labService.getLabInvestigations(selectedPatientId); } catch {}
+      try { admissions = await admissionDischargeService.getPatientAdmissions(Number(selectedPatientId)); } catch { /* Value is left as it was when it does not parse. */ }
+      try { wardRounds = await wardRoundsService.getPatientWardRounds(selectedPatientId); } catch { /* Value is left as it was when it does not parse. */ }
+      try { labs = await labService.getLabInvestigations(selectedPatientId); } catch { /* Value is left as it was when it does not parse. */ }
 
       // Sort chronologically
       wardRounds.sort((a: any, b: any) => new Date(a.created_at || a.date).getTime() - new Date(b.created_at || b.date).getTime());

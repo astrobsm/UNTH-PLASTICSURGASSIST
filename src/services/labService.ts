@@ -2,8 +2,6 @@ import { db } from '../db/database';
 import { aiService } from './aiService';
 import { apiClient } from './apiClient';
 import { syncService } from '../db/syncService';
-import toast from 'react-hot-toast';
-
 // Lab Investigation Interfaces
 export interface LabInvestigation {
   id: string;
@@ -748,7 +746,7 @@ class LabService {
 
   // Search and Filter
   async searchLabResults(query: string, patientId?: string): Promise<LabResult[]> {
-    let results = await this.getLabResults(patientId);
+    const results = await this.getLabResults(patientId);
     
     const searchTerm = query.toLowerCase();
     return results.filter(result => 
@@ -1100,7 +1098,7 @@ class LabService {
   private generateTrendRecommendations(
     direction: string, 
     risk: string, 
-    ckdStage: number
+    _ckdStage: number
   ): string[] {
     const baseRecommendations = [
       'Continue current management',

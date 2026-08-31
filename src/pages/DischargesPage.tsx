@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { MessageCircle } from 'lucide-react';
-import { db } from '../db/database';
 import { patientService } from '../services/patientService';
 import { admissionService, Admission } from '../services/admissionService';
 import { dischargeService, Discharge, DischargeInstructionsData, DischargeMedication } from '../services/dischargeService';

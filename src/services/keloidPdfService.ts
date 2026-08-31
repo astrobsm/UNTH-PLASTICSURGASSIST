@@ -1,5 +1,5 @@
 import { sanitizePdfDocument } from '../utils/pdfSafeText';
-﻿// Keloid Care Plan PDF Generation Service - Standardized with pdfUtils
+// Keloid Care Plan PDF Generation Service - Standardized with pdfUtils
 import { KeloidCarePlan, KELOID_EDUCATION } from './keloidCareService';
 import { format } from 'date-fns';
 import {

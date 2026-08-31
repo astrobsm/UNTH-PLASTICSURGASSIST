@@ -1,8 +1,8 @@
 import { sanitizePdfDocument } from '../utils/pdfSafeText';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { format } from 'date-fns';
 import { createPDF, sanitizeTextForPDF, PDF_MARGINS, PDF_FONT_SIZES, PDF_COLORS, addFooter } from '../utils/pdfUtils';
-import { Discharge, admissionDischargeService } from '../services/admissionDischargeService';
+import { Discharge } from '../services/admissionDischargeService';
 
 interface DischargeDocumentsPreviewProps {
   discharge: Discharge;

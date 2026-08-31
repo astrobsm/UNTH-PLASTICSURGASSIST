@@ -121,7 +121,7 @@ function extractMedicationsRegex(text: string): ExtractedMedication[] {
   const meds: ExtractedMedication[] = [];
 
   // Pattern: (formulation) (drug name) (dose) (route)? (frequency) (duration)?
-  const medRegex = /(?:Tab|Cap|Inj|Syp|Susp|Cr|Oint)\.?\s+([\w\s\-\/]+?)\s+(\d+\.?\d*\s*(?:mg|g|ml|mcg|iu|mmol|units?))\s*(?:(PO|IV|IM|SC|SL|PR|INH|topical|TOP)[\s,]*)?\s*(OD|BD|TDS|QDS|PRN|STAT|nocte|mane|q\d+h?)(?:\s+(?:for|x|×)\s+(\d+\s*(?:days?|weeks?|months?|\/\d+)))?/gi;
+  const medRegex = /(?:Tab|Cap|Inj|Syp|Susp|Cr|Oint)\.?\s+([\w\s\-/]+?)\s+(\d+\.?\d*\s*(?:mg|g|ml|mcg|iu|mmol|units?))\s*(?:(PO|IV|IM|SC|SL|PR|INH|topical|TOP)[\s,]*)?\s*(OD|BD|TDS|QDS|PRN|STAT|nocte|mane|q\d+h?)(?:\s+(?:for|x|×)\s+(\d+\s*(?:days?|weeks?|months?|\/\d+)))?/gi;
 
   let match;
   while ((match = medRegex.exec(text)) !== null) {

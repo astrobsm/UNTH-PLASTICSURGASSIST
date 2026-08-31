@@ -3,7 +3,7 @@ import { DVTRiskAssessment, DVTProphylaxisRecommendation, riskAssessmentService,
 import { patientActivityService } from '../../services/patientActivityService';
 import { useAuthStore } from '../../store/authStore';
 import { isPediatric, calculateAge } from '../../utils/dateUtils';
-import { AlertTriangle, CheckCircle, Clock, User, Calendar, Activity, Baby, Shield, Eye, ChevronDown, ChevronUp } from 'lucide-react';
+import { CheckCircle, Clock, User, Calendar, Activity, Baby, Shield, Eye, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface DVTRiskAssessmentProps {
   patientId: string;

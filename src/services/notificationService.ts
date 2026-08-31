@@ -149,7 +149,7 @@ class NotificationService {
       await this.registration.showNotification(payload.title, options);
     } else {
       // Fallback: local Notification (no actions support)
-      const { actions, ...localOptions } = options as any;
+      const { ...localOptions } = options as any;
       const notification = new Notification(payload.title, localOptions);
       notification.onclick = () => {
         window.focus();

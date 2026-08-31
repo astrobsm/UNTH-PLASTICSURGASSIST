@@ -5,8 +5,8 @@ import {
   CheckCircle, 
   XCircle, 
   Clock, 
-  Shield, 
-  Mail, 
+  
+  
   Phone, 
   Building,
   FileText,
@@ -14,7 +14,7 @@ import {
   AlertCircle,
   Search,
   Filter,
-  UserCheck,
+  
   Users,
   Lock,
   Eye,
@@ -35,7 +35,6 @@ export function UserApprovalManager() {
   const [filterRole, setFilterRole] = useState<string>('all');
   const [selectedUser, setSelectedUser] = useState<PendingUser | ApprovedUser | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [rejectionReason, setRejectionReason] = useState('');
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
   const [passwordError, setPasswordError] = useState('');
@@ -194,21 +193,6 @@ export function UserApprovalManager() {
       house_officer: 'bg-gray-100 text-gray-800'
     };
     return colors[role] || 'bg-gray-100 text-gray-800';
-  };
-
-  const getStatusBadge = (status: string) => {
-    const badges: Record<string, { color: string; icon: JSX.Element }> = {
-      pending: { color: 'bg-yellow-100 text-yellow-800', icon: <Clock className="h-4 w-4" /> },
-      approved: { color: 'bg-green-100 text-green-800', icon: <CheckCircle className="h-4 w-4" /> },
-      rejected: { color: 'bg-red-100 text-red-800', icon: <XCircle className="h-4 w-4" /> }
-    };
-    const badge = badges[status] || badges.pending;
-    return (
-      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${badge.color}`}>
-        {badge.icon}
-        {status.charAt(0).toUpperCase() + status.slice(1)}
-      </span>
-    );
   };
 
   const filteredPending = pendingUsers.filter(user => {

@@ -420,7 +420,7 @@ export default function ClinicianAssistantPage() {
             } as any}
             recordExtraction={recordExtraction}
             onCancel={() => setMode('choose')}
-            onAnalyse={async (extraction, documents) => {
+            onAnalyse={async (extraction, _documents) => {
               setRunning(true);
               try {
                 // Build the patient context from the record so age, sex and

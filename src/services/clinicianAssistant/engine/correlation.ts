@@ -256,7 +256,7 @@ const RULES: CorrelationRule[] = [
     title: 'Sepsis with consumptive coagulopathy',
     modules: ['coagulation', 'fbc', 'microbiology'],
     when: (e) => (e.has('dic') || e.has('consumptive-coagulopathy')) && (e.has('sepsis-pattern') || e.has('culture-positive') || e.ctx.patient.fever || e.ctx.gt('lactate', 2)),
-    build: (e) => ({
+    build: (_e) => ({
       severity: 'life-threatening',
       narrative:
         'Laboratory features of consumptive coagulopathy are present alongside evidence of infection. Sepsis is the commonest cause of disseminated intravascular coagulation, in which simultaneous microvascular thrombosis and consumption of clotting factors produce both organ dysfunction and bleeding. ' +
@@ -625,7 +625,7 @@ const RULES: CorrelationRule[] = [
     title: 'Pancytopenia with evidence of infection — combined infection and bleeding risk',
     modules: ['fbc', 'microbiology'],
     when: (e) => e.has('pancytopenia') && (e.has('culture-positive') || e.has('infection-risk') || e.ctx.patient.fever),
-    build: (e) => ({
+    build: (_e) => ({
       severity: 'life-threatening',
       narrative:
         'Pancytopenia in the presence of infection creates simultaneous and compounding risks: neutropenia removes the primary defence against bacterial and fungal invasion, thrombocytopenia confers bleeding risk that constrains invasive management, and anaemia limits oxygen delivery during a period of high metabolic demand.',

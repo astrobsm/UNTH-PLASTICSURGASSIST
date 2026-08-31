@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Plus, Trash2, Check, X, Clock, AlertTriangle, 
-  Pill, TestTube, Activity, Calendar, FileText, 
-  CheckCircle, XCircle, Edit, Send
+  Pill, TestTube, Activity, FileText, 
+  Edit, Send
 } from 'lucide-react';
 import MedicalAutocompleteTextarea from './MedicalAutocompleteTextarea';
 import { useAuthStore } from '../store/authStore';

@@ -1,5 +1,5 @@
 import { ReactNode, useEffect, useRef, useState } from 'react';
-import { X, ChevronLeft, ChevronRight, Maximize2, Minimize2, Download } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Maximize2, Minimize2 } from 'lucide-react';
 
 interface MeetingSlideWrapperProps {
   title: string;

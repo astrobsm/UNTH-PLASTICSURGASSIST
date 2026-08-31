@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
-  Camera, Upload, X, FileText, Loader2, CheckCircle, AlertTriangle,
-  RotateCw, ZoomIn, ZoomOut, Scan, Brain, Clipboard, Eye
+  Camera, Upload, X, AlertTriangle,
+  RotateCw, Scan, Brain, Clipboard, Eye
 } from 'lucide-react';
 import { ocrService, AIEnhancedOCRResult } from '../services/ocrService';
 import type { DocumentType } from '../services/ocrService';

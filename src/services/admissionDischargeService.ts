@@ -7,16 +7,16 @@ import { logger } from '../utils/logger';
 import { format } from 'date-fns';
 import {
   createPDF,
-  addPDFHeader,
-  addSectionHeader,
-  addBodyText,
-  addBulletList,
-  addWarningBox,
-  addSeparator,
+  
+  
+  
+  
+  
+  
   addFooter,
-  addLabeledField,
+  
   sanitizeTextForPDF,
-  formatDateForPDF,
+  
   PDF_MARGINS,
   PDF_COLORS,
   PDF_FONT_SIZES
@@ -992,7 +992,7 @@ class AdmissionDischargeService {
     return report;
   }
 
-  generateDischargeInstructions(discharge: Discharge, comorbidities: string[]): string {
+  generateDischargeInstructions(discharge: Discharge, _comorbidities: string[]): string {
     let instructions = `DISCHARGE INSTRUCTIONS\n`;
     instructions += `${'='.repeat(50)}\n\n`;
     instructions += `Patient: ${discharge.patient_name}\n`;
@@ -1099,7 +1099,7 @@ class AdmissionDischargeService {
 
   // ============= PDF GENERATION =============
 
-  async generateDischargePDF(discharge: Discharge, admission: Admission, whoScore?: WHODischargeScore): Promise<Blob> {
+  async generateDischargePDF(discharge: Discharge, admission: Admission, _whoScore?: WHODischargeScore): Promise<Blob> {
     const pdf = createPDF();
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();

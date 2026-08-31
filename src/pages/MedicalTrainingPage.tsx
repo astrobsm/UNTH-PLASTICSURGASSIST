@@ -6,25 +6,25 @@ import {
   ChevronDown, 
   Users, 
   Award,
-  FileText,
+  
   CheckCircle,
   Clock,
   Search,
-  ArrowLeft,
+  
   ClipboardCheck,
   TrendingUp,
   Calendar,
   Activity,
   Target,
-  BarChart3,
+  
   AlertTriangle,
   Bell,
-  X,
+  
   BookOpen
 } from 'lucide-react';
 import { 
   medicalTrainingService, 
-  CMEModule, 
+  
   CMETopic, 
   TrainingLevel 
 } from '../services/medicalTrainingService';

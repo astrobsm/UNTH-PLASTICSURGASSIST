@@ -665,6 +665,9 @@ export function sanitizeTextForPDF(text: string): string {
   result = result.replace(/[\uFE00-\uFE0F]/g, '');
   
   // Replace emojis with text equivalents (jsPDF doesn't handle emojis well)
+  // Matches an emoji written as a base glyph plus a variation selector, which
+  // is invisible by design and cannot be written any other way.
+  // eslint-disable-next-line no-irregular-whitespace
   result = result.replace(/âš ï¸/g, '[!]');
   result = result.replace(/ðŸš¨/g, '[!]');
   result = result.replace(/ðŸ“…/g, '');
@@ -714,6 +717,8 @@ export function sanitizeTextForPDF(text: string): string {
   result = result.replace(/\u00B0/g, ' deg ');
   
   // Remove any control characters except newline and tab
+  // Control characters are the subject of this pattern: it removes the ones a PDF or thermal printer cannot render.
+  // eslint-disable-next-line no-control-regex
   result = result.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
   
   // Remove non-breaking spaces that cause issues

@@ -21,7 +21,6 @@ import {
   Scan,
   ShieldAlert
 } from 'lucide-react';
-import { db } from '../db/database';
 import { patientService } from '../services/patientService';
 import { calculateAge } from '../utils/dateUtils';
 import {
@@ -36,7 +35,7 @@ import { transfusionPdfService, TransfusionOrderData, TransfusionMonitoringEntry
 import TransfusionChartUpload from './TransfusionChartUpload';
 import TransfusionVitalsChart from './TransfusionVitalsChart';
 import { DocumentScannerModal } from './DocumentScannerModal';
-import { createPDF, addPDFHeader, addSectionHeader, PDF_FONT_SIZES, PDF_LINE_HEIGHT, PDF_MARGINS, PDF_PAGE, addFooter } from '../utils/pdfUtils';
+import { createPDF, addPDFHeader, PDF_FONT_SIZES, PDF_LINE_HEIGHT, PDF_MARGINS, PDF_PAGE, addFooter } from '../utils/pdfUtils';
 import { format } from 'date-fns';
 import { getCurrentUserName } from '../utils/getCurrentUser';
 

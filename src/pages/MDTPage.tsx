@@ -10,17 +10,16 @@ import {
   Clock,
   UserPlus,
   Trash2,
-  Edit,
+  
   FileText,
   AlertCircle,
   MapPin,
   RefreshCw,
   Scan,
-  FileDown,
+  
   Layers,
   X
 } from 'lucide-react';
-import { db } from '../db/database';
 import { patientService } from '../services/patientService';
 import { useOnSelectedPatient } from '../hooks/useSelectedPatient';
 import { 
@@ -29,8 +28,6 @@ import {
   MDTSpecialty, 
   MDTMeeting,
   MDTContactLog,
-  MDTTeamReview,
-  MDTWeeklyHarmonization
 } from '../services/mdtService';
 import { format } from 'date-fns';
 import { safeFormatDate } from '../utils/dateUtils';

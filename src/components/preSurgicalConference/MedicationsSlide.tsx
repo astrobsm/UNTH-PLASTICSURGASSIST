@@ -1,5 +1,5 @@
 import { Medication } from '../../services/preSurgicalConferenceService';
-import { Pill, Calendar, User, Clock, AlertTriangle } from 'lucide-react';
+import { Pill, Calendar, User, AlertTriangle } from 'lucide-react';
 
 interface Props {
   medications: Medication[];

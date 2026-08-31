@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Droplet, Plus, Eye, FileText, AlertCircle, Activity, Calendar } from 'lucide-react';
+import { Droplet, Plus, Eye, AlertCircle, Activity, Calendar } from 'lucide-react';
 import BloodTransfusionForm from '../components/BloodTransfusionForm';
 import { bloodTransfusionService, BloodTransfusion } from '../services/bloodTransfusionService';
 import { useOnSelectedPatient } from '../hooks/useSelectedPatient';

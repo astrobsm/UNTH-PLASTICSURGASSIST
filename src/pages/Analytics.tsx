@@ -1,17 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  TrendingUp, 
+  
   Users, 
   Activity, 
   Clock, 
   CheckCircle, 
   AlertTriangle,
-  Calendar,
+  
   Award,
   BarChart3,
   User,
-  Search,
-  Filter
+  Search
 } from 'lucide-react';
 import { analyticsService, UserPerformanceMetrics } from '../services/analyticsService';
 import { admissionTrackingService, PatientAdmissionStatus } from '../services/admissionTrackingService';

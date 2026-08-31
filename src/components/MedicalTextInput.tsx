@@ -14,12 +14,8 @@ import {
   Loader2, 
   Volume2, 
   Check, 
-  X, 
   RotateCcw,
-  FileText,
   AlertCircle,
-  Sparkles,
-  Settings
 } from 'lucide-react';
 import { speechToTextService, SpeechRecognitionResult } from '../services/speechToTextService';
 import { aiTextEnhancementService, TextContext } from '../services/aiTextEnhancementService';
@@ -78,7 +74,6 @@ export const MedicalTextInput: React.FC<MedicalTextInputProps> = ({
   
   // OCR state
   const [isScanning, setIsScanning] = useState(false);
-  const [showOCRModal, setShowOCRModal] = useState(false);
   const [ocrImage, setOcrImage] = useState<string | null>(null);
   const [ocrProgress, setOcrProgress] = useState<OCRProgress | null>(null);
   

@@ -25,7 +25,7 @@ const RULES: ClassifierRule[] = [
   {
     module: 'coagulation',
     strong: [/coagulation (?:screen|profile|studies)/i, /clotting screen/i, /\bcoag screen\b/i],
-    weak: [/prothrombin time/i, /\binr\b/i, /\baptt\b/i, /\bpt\b\s*[:\-]/i, /fibrinogen/i, /d-?\s?dimer/i, /thrombin time/i, /anti-?xa/i],
+    weak: [/prothrombin time/i, /\binr\b/i, /\baptt\b/i, /\bpt\b\s*[:-]/i, /fibrinogen/i, /d-?\s?dimer/i, /thrombin time/i, /anti-?xa/i],
   },
   {
     module: 'renal',

@@ -47,7 +47,7 @@ export const authenticatedFetch = async (
   const { 
     timeout = 30000, 
     retries = 0, 
-    cacheKey,
+    
     entityType: providedEntityType,
     entityId: providedEntityId,
     skipCache = false,

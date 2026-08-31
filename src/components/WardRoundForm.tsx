@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Save, User, Calendar, FileText, Activity, AlertCircle, TrendingUp, Pill, Stethoscope, ClipboardList, Users, Edit3, Camera, Image, Upload, Trash2, FileSearch, Loader2, TestTube, Brain, Mic } from 'lucide-react';
+import { X, Save, User, FileText, Activity, TrendingUp, Pill, Stethoscope, ClipboardList, Users, Edit3, Camera, Image, Upload, Trash2, FileSearch, Loader2, TestTube, Brain, Mic } from 'lucide-react';
 import { wardRoundsService, WardRound, ROUND_TYPES, RoundType, ClinicalImage } from '../services/wardRoundsService';
 import { db } from '../db/database';
 import { patientService } from '../services/patientService';
@@ -38,7 +38,6 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
   const { user: authUser } = useAuthStore();
   const [patientTreatmentPlan, setPatientTreatmentPlan] = useState<any>(null);
   const [previousRound, setPreviousRound] = useState<any>(null);
-  const [showTreatmentPlanModification, setShowTreatmentPlanModification] = useState(false);
   
   // Investigation and Medication Ordering Modals
   const [showInvestigationModal, setShowInvestigationModal] = useState(false);

@@ -460,7 +460,7 @@ Format the response as JSON with sections: mainContent, learningObjectives, keyT
   }
 
   // Parse non-JSON AI response
-  private parseNonJSONResponse(response: string, topic: EducationalTopic): any {
+  private parseNonJSONResponse(response: string, _topic: EducationalTopic): any {
     return {
       mainContent: response,
       learningObjectives: this.extractSection(response, 'objectives'),
@@ -502,7 +502,7 @@ Format the response as JSON with sections: mainContent, learningObjectives, keyT
   }
 
   // Extract case studies from text
-  private extractCaseStudies(text: string): CaseStudy[] {
+  private extractCaseStudies(_text: string): CaseStudy[] {
     // Simplified extraction - in production, use more sophisticated NLP
     return [
       {

@@ -1,10 +1,9 @@
 import { sanitizePdfDocument } from '../utils/pdfSafeText';
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { db } from '../db/database';
 import { Patient } from '../db/database';
 import { patientService, normalizeArrayField } from '../services/patientService';
-import { unthPatientService } from '../services/unthPatientService';
 import { PatientSummaryView, QuickSummaryCard } from '../components/PatientSummary';
 import { DischargePlanning } from '../components/DischargePlanning';
 import { PrescriptionModal } from '../components/PrescriptionModal';
@@ -21,11 +20,11 @@ import FluidBalanceChart from '../components/FluidBalanceChart';
 import BloodTransfusionTab from '../components/BloodTransfusionTab';
 import BloodGlucoseTab from '../components/BloodGlucoseTab';
 import { DocumenterLink, ConsultantCommentSection, RecommendationsPanel } from '../components/ClinicalInteractionComponents';
-import { generateVitalSignRecommendations, generateLabRecommendations, type ClinicalRecommendation } from '../utils/clinicalUtils';
+import { generateVitalSignRecommendations, generateLabRecommendations } from '../utils/clinicalUtils';
 import {
-  Activity, Camera, Calendar, Clock, FileText, Plus, TrendingUp,
+  Activity, Camera, Calendar, FileText, Plus, 
   Scissors, ClipboardCheck, Pill, Heart, Image, AlertCircle,
-  ChevronRight, X, Save, Loader2, Thermometer, Droplet,
+  ChevronRight, X, Save, Loader2, 
   Eye, Trash2, Upload, Mic, MicOff, ScanLine, Printer, RefreshCw, Download
 } from 'lucide-react';
 
@@ -315,7 +314,7 @@ export const PatientProfile: React.FC = () => {
         return (
           <DischargePlanning
             patientId={id!}
-            onDischargeComplete={(dischargeId) => {
+            onDischargeComplete={(_dischargeId) => {
               alert('Discharge plan completed successfully!');
             }}
           />
@@ -1068,7 +1067,7 @@ const EncountersTab: React.FC<{ patientId: string; hospitalNumber: string; patie
                       return rawContent.split('\n').map((line: string, idx: number) => {
                         const trimmed = line.trim();
                         if (!trimmed) return <div key={idx} style={{ height: '0.75em' }} />;
-                        const isHeading = headingPatterns.test(trimmed) || /^[A-Z][A-Z\s\/]{3,}:?\s*$/.test(trimmed) || trimmed.endsWith(':') && trimmed.length < 40;
+                        const isHeading = headingPatterns.test(trimmed) || /^[A-Z][A-Z\s/]{3,}:?\s*$/.test(trimmed) || trimmed.endsWith(':') && trimmed.length < 40;
                         if (isHeading) {
                           return <p key={idx} style={{ fontFamily: 'Helvetica, Arial, sans-serif', fontWeight: 700, fontSize: '0.875rem', color: '#1f2937', marginTop: '0.5em', marginBottom: '0.15em' }}>{trimmed}</p>;
                         }
@@ -1312,7 +1311,6 @@ const VitalSignsTab: React.FC<{ patientId: string; hospitalNumber: string; patie
     for (const file of files) {
       // Process pages sequentially so the OCR review modal accumulates entries
       // from every page rather than racing.
-      // eslint-disable-next-line no-await-in-loop
       await handleVitalsScan(file);
     }
   };
@@ -1930,15 +1928,11 @@ const InvestigationsTab: React.FC<{ patientId: string; hospitalNumber: string; p
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState<'requested' | 'results' | 'trends'>('requested');
-  const [showScanForm, setShowScanForm] = useState(false);
-  const [showScanResult, setShowScanResult] = useState(false);
   const [showOCRModal, setShowOCRModal] = useState<'form' | 'result' | null>(null);
   const [uploadingForm, setUploadingForm] = useState(false);
   const [uploadingResult, setUploadingResult] = useState(false);
   const formFileRef = useRef<HTMLInputElement>(null);
   const resultFileRef = useRef<HTMLInputElement>(null);
-  const [scannedFormData, setScannedFormData] = useState<any>(null);
-  const [scannedResultData, setScannedResultData] = useState<any>(null);
   const [viewingUpload, setViewingUpload] = useState<any>(null);
   const [loadingUpload, setLoadingUpload] = useState(false);
 

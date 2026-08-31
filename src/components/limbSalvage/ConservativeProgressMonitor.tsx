@@ -17,7 +17,7 @@ import {
   ArrowRight,
   Scissors
 } from 'lucide-react';
-import { diabeticFootService, DiabeticFootAssessment, RiskCategory } from '../../services/diabeticFootService';
+import { diabeticFootService, DiabeticFootAssessment } from '../../services/diabeticFootService';
 import { patientService } from '../../services/patientService';
 import { db } from '../../db/database';
 
@@ -501,7 +501,7 @@ export const ConservativeProgressMonitor: React.FC<ConservativeProgressMonitorPr
                       <div className="mt-2">
                         <h5 className="text-sm font-semibold text-gray-700 mb-3">Progress Timeline</h5>
                         <div className="space-y-3">
-                          {patient.progressEntries.slice(0, 3).map((entry, index) => (
+                          {patient.progressEntries.slice(0, 3).map((entry, _index) => (
                             <div 
                               key={entry.id} 
                               className={`p-3 rounded-lg border ${

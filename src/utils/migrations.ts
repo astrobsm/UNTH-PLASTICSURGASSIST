@@ -14,20 +14,20 @@ const migrations: Migration[] = [
   {
     version: 1,
     description: 'Initial schema',
-    up: async (db: Dexie) => {
+    up: async (_db: Dexie) => {
       logger.log('Migration 1: Initial schema already created');
     },
-    down: async (db: Dexie) => {
+    down: async (_db: Dexie) => {
       logger.log('Migration 1: Cannot rollback initial schema');
     }
   },
   {
     version: 2,
     description: 'Add audit_logs table',
-    up: async (db: Dexie) => {
+    up: async (_db: Dexie) => {
       logger.log('Migration 2: Audit logs table already exists in v18');
     },
-    down: async (db: Dexie) => {
+    down: async (_db: Dexie) => {
       logger.log('Migration 2: Cannot remove audit_logs');
     }
   },

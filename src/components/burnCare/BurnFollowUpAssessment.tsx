@@ -24,22 +24,21 @@ import {
   Thermometer,
   Droplet,
   Calendar,
-  ChevronDown,
-  ChevronUp,
+  
+  
   RefreshCw,
   X,
   Save,
-  Image as ImageIcon,
+  
   Brain,
   FileText,
   BarChart3,
   AlertCircle,
   ArrowRight,
-  Stethoscope,
+  
   Scissors,
   Heart,
-  Utensils,
-  Users
+  Utensils
 } from 'lucide-react';
 import {
   burnExpertAIService,
@@ -48,14 +47,14 @@ import {
   WoundHealingStatus,
   InfectionStatus,
   GraftStatus,
-  ScarAssessment,
+  
   VancouverScarScale,
   FollowUpAIAnalysis,
-  FollowUpRecommendation,
+  
   FollowUpImage,
   HealingProgressReport
 } from '../../services/burnExpertAIService';
-import { AnatomicalRegion, BurnDepth, TBSARegion } from '../../services/burnCareService';
+import { AnatomicalRegion, TBSARegion } from '../../services/burnCareService';
 
 interface BurnFollowUpAssessmentProps {
   burnPatientId: string;

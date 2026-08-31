@@ -106,7 +106,7 @@ class AITextEnhancementService {
     const { context = 'general', preserveNumbers = true, preserveMedications = true, customInstructions } = options;
 
     // First, apply local improvements
-    let processedText = this.applyLocalImprovements(text);
+    const processedText = this.applyLocalImprovements(text);
 
     // Prepare the prompt
     let systemPrompt = CONTEXT_PROMPTS[context] || CONTEXT_PROMPTS.general;

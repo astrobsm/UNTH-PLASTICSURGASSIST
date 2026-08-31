@@ -1,8 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { userManagementService } from '../services/userManagementService';
 import { apiClient } from '../services/apiClient';
-import { encrypt, decrypt, initializeEncryption, clearEncryption } from '../utils/encryption';
+import { encrypt, initializeEncryption, clearEncryption } from '../utils/encryption';
 import { storeOfflineCredential, verifyOfflineCredential } from '../services/offlineAuthService';
 import { dataSyncService } from '../services/dataSyncService';
 import { db } from '../db/database';

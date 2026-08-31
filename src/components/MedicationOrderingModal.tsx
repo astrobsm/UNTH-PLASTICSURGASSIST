@@ -1,18 +1,8 @@
 // Medication Ordering Modal with Drug Database and Interaction Checking
 import React, { useState, useEffect } from 'react';
-import { X, Plus, Pill, AlertTriangle, Search, Trash2, Info, Ban, RotateCcw } from 'lucide-react';
+import { X, Plus, Pill, AlertTriangle, Search, Trash2, Ban, RotateCcw } from 'lucide-react';
 import { format } from 'date-fns';
 import { db } from '../db/database';
-import {
-  MEDICATIONS,
-  MEDICATION_CATEGORIES,
-  MEDICATION_FREQUENCIES,
-  MEDICATION_ROUTES,
-  searchMedications,
-  getMedicationsByCategory,
-  getMedicationById
-} from '../data/medications';
-
 interface Medication {
   id: string;
   medication_name: string;
@@ -432,8 +422,6 @@ export const MedicationOrderingModal: React.FC<MedicationOrderingModalProps> = (
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [selectedDrug, setSelectedDrug] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [showInteractions, setShowInteractions] = useState(false);
-
   const [newMedication, setNewMedication] = useState({
     medication_name: '',
     generic_name: '',

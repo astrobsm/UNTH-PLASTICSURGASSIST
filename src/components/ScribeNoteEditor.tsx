@@ -11,7 +11,7 @@ import {
   Save,
   Wand2,
   Edit3,
-  CheckCircle,
+  
   AlertTriangle,
   Trash2,
   Plus,

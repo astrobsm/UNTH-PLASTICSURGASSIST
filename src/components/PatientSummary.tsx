@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { unthPatientService, PatientSummary } from '../services/unthPatientService';
+import { PatientSummary } from '../services/unthPatientService';
 import { patientService, normalizeArrayField } from '../services/patientService';
 import { apiClient } from '../services/apiClient';
 import { db } from '../db/database';
@@ -486,8 +486,8 @@ function getAllClinicalText(d: ComprehensiveData): string {
   // Encounters
   d.encounters.forEach(e => {
     let soap = e.soap;
-    if (typeof soap === 'string') try { soap = JSON.parse(soap); } catch {}
-    if (typeof soap === 'string') try { soap = JSON.parse(soap); } catch {}
+    if (typeof soap === 'string') try { soap = JSON.parse(soap); } catch { /* Value is left as it was when it does not parse. */ }
+    if (typeof soap === 'string') try { soap = JSON.parse(soap); } catch { /* Value is left as it was when it does not parse. */ }
     if (typeof soap === 'object' && soap) {
       parts.push(soap.subjective || '', soap.objective || '', soap.assessment || '', soap.plan || '', soap.note || '');
     }
@@ -525,7 +525,7 @@ function parseFindingsObj(round: any): any {
   try {
     if (typeof round.findings === 'string') findings = JSON.parse(round.findings);
     else if (round.findings && typeof round.findings === 'object') findings = round.findings;
-  } catch {}
+  } catch { /* Value is left as it was when it does not parse. */ }
   return findings;
 }
 
@@ -594,7 +594,7 @@ async function fetchWithFallback(serverFn: () => Promise<any>, localFn: () => Pr
     try {
       const result = await serverFn();
       if (result && (Array.isArray(result) ? result.length > 0 : true)) return result;
-    } catch {}
+    } catch { /* Value is left as it was when it does not parse. */ }
   }
   try { return await localFn(); } catch { return []; }
 }
@@ -694,8 +694,8 @@ function generateComprehensiveSummary(data: ComprehensiveData, patientId: string
     sortedEncounters.forEach((enc, idx) => {
       const dateStr = (enc.created_at || enc.date) ? format(new Date(enc.created_at || enc.date), 'dd/MM/yyyy HH:mm') : 'Unknown';
       let soap = enc.soap;
-      if (typeof soap === 'string') try { soap = JSON.parse(soap); } catch {}
-      if (typeof soap === 'string') try { soap = JSON.parse(soap); } catch {}
+      if (typeof soap === 'string') try { soap = JSON.parse(soap); } catch { /* Value is left as it was when it does not parse. */ }
+      if (typeof soap === 'string') try { soap = JSON.parse(soap); } catch { /* Value is left as it was when it does not parse. */ }
       const encType = enc.type || enc._type || (typeof soap === 'object' && soap?.type) || 'progress_note';
       const typeLabel: Record<string, string> = { ward_round: 'Ward Round', consultation: 'Consultation', procedure_note: 'Procedure Note', clinic_visit: 'Clinic Visit', emergency: 'Emergency Review' };
       const label = typeLabel[encType] || 'Progress Note';
@@ -828,7 +828,7 @@ function generateComprehensiveSummary(data: ComprehensiveData, patientId: string
     try {
       const flags = rule.check(data);
       specialtyFlags.push(...flags);
-    } catch {}
+    } catch { /* Value is left as it was when it does not parse. */ }
   });
 
   // ── Build recommendations from specialty flags ──
@@ -986,7 +986,7 @@ export const PatientSummaryView: React.FC<PatientSummaryViewProps> = ({
       const summary = generateComprehensiveSummary(data, patientId);
       setSelectedSummary(summary);
       // Save for future retrieval
-      try { await db.patient_summaries?.add(summary as any); } catch {}
+      try { await db.patient_summaries?.add(summary as any); } catch { /* Value is left as it was when it does not parse. */ }
     } catch (error) {
       console.error('Error loading summary:', error);
       setSelectedSummary(null);
@@ -1001,7 +1001,7 @@ export const PatientSummaryView: React.FC<PatientSummaryViewProps> = ({
       const data = await fetchComprehensivePatientData(patientId);
       const summary = generateComprehensiveSummary(data, patientId);
       setSelectedSummary(summary);
-      try { await db.patient_summaries?.add(summary as any); } catch {}
+      try { await db.patient_summaries?.add(summary as any); } catch { /* Value is left as it was when it does not parse. */ }
     } catch (error) {
       console.error('Failed to generate summary:', error);
       alert('Failed to generate summary. Please try again.');

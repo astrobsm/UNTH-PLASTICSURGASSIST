@@ -31,7 +31,7 @@ function detectSpecimen(text: string): { type: MicrobiologyReport['specimenType'
   if (/\b(?:tissue|biopsy|bone|aspirate|fluid|joint)\b/i.test(t)) {
     return { type: 'tissue', label: pick(/(?:tissue|biopsy|bone|aspirate|joint)[^\n,;]{0,40}/i) ?? 'Tissue specimen' };
   }
-  return { type: 'other', label: pick(/specimen\s*[:\-]\s*[^\n]{2,50}/i) ?? 'Specimen' };
+  return { type: 'other', label: pick(/specimen\s*[:-]\s*[^\n]{2,50}/i) ?? 'Specimen' };
 }
 
 function normaliseResult(raw: string): SusceptibilityResult {
@@ -69,9 +69,9 @@ function parseSusceptibilityRows(block: string): Susceptibility[] {
 function parseSusceptibilityLists(text: string): Susceptibility[] {
   const out: Susceptibility[] = [];
   const patterns: { re: RegExp; result: SusceptibilityResult }[] = [
-    { re: /(?:sensitive|susceptible)\s*(?:to)?\s*[:\-]\s*([^\n]{3,300})/gi, result: 'S' },
-    { re: /intermediate\s*(?:to)?\s*[:\-]\s*([^\n]{3,300})/gi, result: 'I' },
-    { re: /resistant\s*(?:to)?\s*[:\-]\s*([^\n]{3,300})/gi, result: 'R' },
+    { re: /(?:sensitive|susceptible)\s*(?:to)?\s*[:-]\s*([^\n]{3,300})/gi, result: 'S' },
+    { re: /intermediate\s*(?:to)?\s*[:-]\s*([^\n]{3,300})/gi, result: 'I' },
+    { re: /resistant\s*(?:to)?\s*[:-]\s*([^\n]{3,300})/gi, result: 'R' },
   ];
 
   for (const { re, result } of patterns) {
@@ -151,15 +151,15 @@ export function parseMicrobiology(text: string): MicrobiologyReport | null {
   const { type, label } = detectSpecimen(text);
 
   const microscopy =
-    /(?:microscopy|direct (?:microscopy|examination)|wet (?:prep|mount))\s*[:\-]?\s*([^\n]{2,180})/i.exec(text)?.[1]?.trim() ??
+    /(?:microscopy|direct (?:microscopy|examination)|wet (?:prep|mount))\s*[:-]?\s*([^\n]{2,180})/i.exec(text)?.[1]?.trim() ??
     (/(?:pus cells|white cells|leucocytes|epithelial cells|red cells)[^\n]{0,80}/i.exec(text)?.[0]?.trim() ?? '');
 
   const gramStain =
-    /gram\s*(?:stain|film)?\s*[:\-]?\s*([^\n]{2,180})/i.exec(text)?.[1]?.trim() ??
+    /gram\s*(?:stain|film)?\s*[:-]?\s*([^\n]{2,180})/i.exec(text)?.[1]?.trim() ??
     (/gram[\s-]?(?:positive|negative)\s+(?:cocci|bacilli|rods|organisms)[^\n]{0,60}/i.exec(text)?.[0]?.trim() ?? '');
 
   const cultureText =
-    /(?:culture|growth|isolate[ds]?)\s*[:\-]?\s*([^\n]{2,220})/i.exec(text)?.[1]?.trim() ?? '';
+    /(?:culture|growth|isolate[ds]?)\s*[:-]?\s*([^\n]{2,220})/i.exec(text)?.[1]?.trim() ?? '';
 
   // Split the document at organism boundaries so each organism gets its own
   // susceptibility block where several are reported.
@@ -201,7 +201,7 @@ export function parseMicrobiology(text: string): MicrobiologyReport | null {
   }
 
   const collected =
-    /(?:collect(?:ed|ion)|specimen|sample|taken)\s*(?:date|on)?\s*[:\-]?\s*(\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4})/i.exec(text)?.[1];
+    /(?:collect(?:ed|ion)|specimen|sample|taken)\s*(?:date|on)?\s*[:-]?\s*(\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4})/i.exec(text)?.[1];
 
   return {
     specimen: label,

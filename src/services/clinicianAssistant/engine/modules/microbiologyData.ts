@@ -4,7 +4,7 @@
  *
  * Used for decision support only. The application never prescribes.
  */
-import type { GramCategory, Organism } from '../types';
+import type { GramCategory } from '../types';
 
 // ───────────────────────────── ORGANISMS ─────────────────────────────
 

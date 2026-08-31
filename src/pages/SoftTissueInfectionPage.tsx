@@ -1,11 +1,11 @@
 import { sanitizePdfDocument } from '../utils/pdfSafeText';
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   AlertCircle, AlertTriangle, ArrowRight, Award, BookOpen, Calculator,
-  Camera, CheckCircle, ChevronDown, ChevronUp, Clock, ClipboardList,
-  Download, Eye, FileText, FlaskConical, Heart, Loader2, Minus,
-  Plus, Printer, RefreshCw, Save, Search, Shield, Stethoscope,
-  Thermometer, Trash2, TrendingUp, User, X, Activity, Scissors,
+  CheckCircle, ClipboardList,
+  Download, FileText, FlaskConical, Heart, Loader2, 
+  Plus, Printer, RefreshCw, Save, Search, Stethoscope,
+  Thermometer, User, X, Scissors,
   Bug, Syringe, Zap, List
 } from 'lucide-react';
 import { patientService } from '../services/patientService';
@@ -13,8 +13,8 @@ import { useAuthStore } from '../store/authStore';
 import { apiClient } from '../services/apiClient';
 import { useOnSelectedPatient } from '../hooks/useSelectedPatient';
 import {
-  STI_CLASSIFICATIONS, LRINEC_SCORE, LRINEC_INTERPRETATION, QSOFA_CRITERIA,
-  LAB_PANELS, TREATMENT_PROTOCOLS, LOCATION_CONSIDERATIONS, NURSING_PROTOCOLS,
+  STI_CLASSIFICATIONS, LRINEC_SCORE, 
+  TREATMENT_PROTOCOLS, LOCATION_CONSIDERATIONS, NURSING_PROTOCOLS,
   PATIENT_EDUCATION, STI_CME_ARTICLE
 } from '../data/softTissueInfectionProtocol';
 

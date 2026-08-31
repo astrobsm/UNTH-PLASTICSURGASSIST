@@ -23,7 +23,7 @@ import {
 import toast from 'react-hot-toast';
 import {
   getBoard, getCaseDetail, createCase, recordAssessment, stageFromAssessment,
-  buildPlanForCase, savePlan, ratifyPlan, buildLetters, saveReferrals,
+  buildPlanForCase, savePlan, buildLetters, saveReferrals,
   buildSurveillance, saveSurveillance, buildCounselling,
   type TumorBoardCase, type TumorBoardAssessment, type CaseDetail, type BoardSummary,
 } from '../services/tumorBoardService';

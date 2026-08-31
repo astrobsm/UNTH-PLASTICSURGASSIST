@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 
 export default function TreatmentPlans() {
   const navigate = useNavigate();
-  const { id, planId } = useParams();
+  const { planId } = useParams();
   
   useEffect(() => {
     // Redirect to the new Treatment Plan Manager

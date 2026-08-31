@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Calendar, User, Activity, FileText, Plus, Search, TrendingUp, Clock, AlertCircle, ChevronDown, ChevronUp, Thermometer, Heart, Wind, Droplets, Stethoscope, Pill, TestTube, Eye, ClipboardList, ArrowLeft, X, FileDown, FileBarChart } from 'lucide-react';
+import { Calendar, User, Activity, FileText, Plus, Search, TrendingUp, Clock, AlertCircle, ChevronDown, ChevronUp, Thermometer, Stethoscope, Pill, TestTube, Eye, ClipboardList, ArrowLeft, X, FileBarChart } from 'lucide-react';
 import WardRoundForm from '../components/WardRoundForm';
 import { wardRoundsService, WardRound, ROUND_TYPES } from '../services/wardRoundsService';
 import { db } from '../db/database';
 import { patientService } from '../services/patientService';
 import { useOnSelectedPatient } from '../hooks/useSelectedPatient';
-import { format, isWithinInterval, parseISO, startOfDay, endOfDay } from 'date-fns';
+import { format, startOfDay, endOfDay } from 'date-fns';
 import { safeFormatDate } from '../utils/dateUtils';
 
 interface Patient {

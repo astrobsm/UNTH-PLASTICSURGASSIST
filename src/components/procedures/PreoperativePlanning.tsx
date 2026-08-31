@@ -2,7 +2,7 @@ import { sanitizePdfDocument } from '../../utils/pdfSafeText';
 import React, { useState, useEffect } from 'react';
 import { 
   ClipboardList, 
-  AlertTriangle, 
+  
   CheckCircle, 
   FileText, 
   Activity,
@@ -13,11 +13,10 @@ import {
   ShoppingCart,
   ChevronDown,
   ChevronUp,
-  Plus,
-  Loader2,
-  AlertCircle,
-  User,
-  Calendar
+  
+  
+  
+  User
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { patientService } from '../../services/patientService';
@@ -163,7 +162,6 @@ export const PreoperativePlanning: React.FC<PreoperativePlanningProps> = ({
 }) => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'assessment' | 'investigations' | 'summary'>('assessment');
-  const [isLoading, setIsLoading] = useState(false);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [expandedSection, setExpandedSection] = useState<string | null>('cardiovascular');
@@ -171,7 +169,6 @@ export const PreoperativePlanning: React.FC<PreoperativePlanningProps> = ({
   // Form state
   const [patientId, setPatientId] = useState(initialPatientId || '');
   const [procedureType, setProcedureType] = useState(initialProcedureType || '');
-  const [procedureName, setProcedureName] = useState('');
   const [anesthesiaType, setAnesthesiaType] = useState(initialAnesthesiaType || '');
   const [urgency, setUrgency] = useState<'elective' | 'urgent' | 'emergency'>(initialUrgency);
   
@@ -265,8 +262,6 @@ export const PreoperativePlanning: React.FC<PreoperativePlanningProps> = ({
 
   // Investigations
   const [investigations, setInvestigations] = useState<Investigation[]>([]);
-  const [showPrintModal, setShowPrintModal] = useState(false);
-
   // Procedure types
   const procedureTypes = [
     { value: 'minor_skin', label: 'Minor Skin Surgery (< 30 min)' },
@@ -697,8 +692,6 @@ export const PreoperativePlanning: React.FC<PreoperativePlanningProps> = ({
     let yPos = margin;
     
     // Helper to sanitize text for PDF
-    const clean = (text: string) => sanitizeTextForPDF(text || '');
-
     // Set Georgia-like font (Times is similar)
     doc.setFont('times', 'normal');
     

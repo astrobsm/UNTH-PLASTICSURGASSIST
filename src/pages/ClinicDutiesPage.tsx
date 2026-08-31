@@ -10,7 +10,7 @@ import {
   ChevronDown,
   ChevronUp,
   Search,
-  Filter,
+  
   Activity,
   Calendar,
   User,
@@ -40,7 +40,7 @@ import {
 import { useAuthStore } from '../store/authStore';
 import { openPrintWindow } from '../utils/printText';
 import { getAbsentUserIdsOn, ABSENCE_TYPE_LABELS, type StaffAbsence } from '../services/staffAbsenceService';
-import { format, parseISO, startOfWeek, endOfWeek, addWeeks, subWeeks } from 'date-fns';
+import { format, parseISO, startOfWeek, endOfWeek, addWeeks } from 'date-fns';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 

@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
-  User, Search, Plus, Trash2, ChevronRight, ChevronDown, AlertTriangle,
-  CheckCircle, Clock, Calendar, Pill, Activity, FileText, Heart,
-  Shield, Apple, Printer, Download, Bell, X, Info, Loader2, Beaker, Camera, Scan
+  User, Search, Plus, Trash2, ChevronRight, AlertTriangle,
+  CheckCircle, Clock, Pill, Activity, FileText, Heart,
+  Shield, Apple, X, Loader2, Beaker, Scan
 } from 'lucide-react';
 import { format, addDays, addWeeks } from 'date-fns';
 import { useAuthStore } from '../store/authStore';
@@ -12,9 +12,8 @@ import { normalizeArrayField } from '../services/patientService';
 import { apiClient } from '../services/apiClient';
 import { treatmentPlanningService } from '../services/treatmentPlanningService';
 import { medicalTeamService } from '../services/medicalTeamService';
-import { searchMedications, getMedicationByName, BNFMedication } from '../data/bnfMedications';
-import { searchInvestigations, getInvestigationByName } from '../data/investigationDatabase';
-import { medicationDosingService } from '../services/medicationDosingService';
+import { searchMedications, BNFMedication } from '../data/bnfMedications';
+import { searchInvestigations } from '../data/investigationDatabase';
 import { DocumentScannerModal } from '../components/DocumentScannerModal';
 import toast from 'react-hot-toast';
 

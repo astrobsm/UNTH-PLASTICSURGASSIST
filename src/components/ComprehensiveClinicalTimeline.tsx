@@ -1302,7 +1302,7 @@ export const ComprehensiveClinicalTimeline: React.FC<ComprehensiveClinicalTimeli
             {/* Date group headers */}
             {(() => {
               let lastDateLabel = '';
-              return filteredEvents.map((event, index) => {
+              return filteredEvents.map((event, _index) => {
                 const dateLabel = isValid(event.date) && event.date.getTime() > 0
                   ? format(event.date, 'EEEE, MMMM d, yyyy')
                   : 'Date Unknown';

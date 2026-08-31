@@ -2,7 +2,7 @@
 import { 
   Admission, 
   DischargeMedication, 
-  MDTMedicationReview,
+  
   admissionDischargeService 
 } from '../services/admissionDischargeService';
 
@@ -52,10 +52,9 @@ const DURATIONS = ['3 days', '5 days', '7 days', '10 days', '14 days', '21 days'
 const ROUTES = ['Oral', 'IV', 'IM', 'SC', 'Topical', 'Sublingual', 'Rectal', 'Inhaled'];
 
 export default function MDTDischargeMedications({ admission, onComplete, onBack }: MDTDischargeMedicationsProps) {
-  const [medications, setMedications] = useState<DischargeMedication[]>([]);
   const [medicationsBySpecialty, setMedicationsBySpecialty] = useState<Record<string, DischargeMedication[]>>({});
   const [showAddModal, setShowAddModal] = useState(false);
-  const [selectedSpecialty, setSelectedSpecialty] = useState('Plastic Surgery');
+  const [selectedSpecialty] = useState('Plastic Surgery');
   const [showHarmonization, setShowHarmonization] = useState(false);
   const [harmonizationResult, setHarmonizationResult] = useState<{
     harmonizedMedications: DischargeMedication[];

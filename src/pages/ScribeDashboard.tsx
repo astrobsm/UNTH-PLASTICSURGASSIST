@@ -17,12 +17,12 @@ import {
   Filter,
   FileText,
   CheckCircle,
-  AlertCircle,
+  
   Trash2,
   Eye,
-  ChevronDown,
-  ChevronUp,
-  Activity,
+  
+  
+  
   User,
   Calendar,
   BarChart3,
@@ -32,7 +32,7 @@ import {
   Wand2,
   RefreshCw,
 } from 'lucide-react';
-import { format, formatDistanceToNow } from 'date-fns';
+import { format } from 'date-fns';
 import { patientService } from '../services/patientService';
 import { useOnSelectedPatient } from '../hooks/useSelectedPatient';
 import {

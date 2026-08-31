@@ -85,14 +85,6 @@ export interface TraineeAnalytics {
 
 // ============== API HELPERS ==============
 
-const getAuthHeaders = (): HeadersInit => {
-  const token = localStorage.getItem('auth_token');
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-  };
-};
-
 // ============== LOCAL STORAGE KEYS ==============
 
 const STORAGE_KEYS = {

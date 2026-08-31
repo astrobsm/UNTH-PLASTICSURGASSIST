@@ -254,7 +254,7 @@ function labelsInBands(
     const lead = canonicalLead(w.text);
     if (!lead || w.confidence < 40) continue;
     const cy = (w.bbox.y0 + w.bbox.y1) / 2;
-    let bandIdx = bands.findIndex((b) => cy >= b.y0 - slack && cy <= b.y1 + slack);
+    const bandIdx = bands.findIndex((b) => cy >= b.y0 - slack && cy <= b.y1 + slack);
     if (bandIdx < 0) continue;
     if (!out.has(bandIdx)) out.set(bandIdx, []);
     const list = out.get(bandIdx)!;

@@ -12,14 +12,14 @@ import {
   ShoppingCart,
   FileText,
   User,
-  Calendar,
-  Clock,
+  
+  
   ChevronDown,
   ChevronUp,
   Plus,
   Loader2,
   Download,
-  AlertCircle,
+  
   Thermometer,
   Droplet,
   Zap,
@@ -172,7 +172,6 @@ export const PreoperativePlanningModule: React.FC<PreoperativePlanningModuleProp
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
   const [patient, setPatient] = useState<PatientData | null>(null);
-  const [currentStep, setCurrentStep] = useState(1);
   const [expandedSections, setExpandedSections] = useState<string[]>(['basic', 'clinical', 'comorbidities', 'risk', 'investigations']);
   const [showPrintModal, setShowPrintModal] = useState(false);
   
@@ -652,10 +651,8 @@ export const PreoperativePlanningModule: React.FC<PreoperativePlanningModuleProp
     const margin = 3;
     
     // Helper to sanitize text for PDF
-    const clean = (text: string) => sanitizeTextForPDF(text || '');
-
     // Helper function to add patient header on each page
-    const addPatientHeader = (category: string, pageHeight: number) => {
+    const addPatientHeader = (category: string, _pageHeight: number) => {
       let yPos = margin;
       
       // Set Georgia-like font (Times is closest available)

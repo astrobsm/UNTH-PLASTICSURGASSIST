@@ -741,7 +741,7 @@ class MCQGenerationService {
     // 0=Sun, 1=Mon, 2=Tue, 3=Wed, ...
     const day = open.getDay();
     // Days to roll back to this week's Tuesday (could be negative meaning forward)
-    let diff = 2 - day; // Tuesday
+    const diff = 2 - day; // Tuesday
     open.setDate(open.getDate() + diff);
     open.setHours(8, 0, 0, 0);
 
@@ -1307,7 +1307,7 @@ Remember: This is a learning opportunity. With dedicated effort and support, imp
   /**
    * Generate clinical application guidance
    */
-  private generateClinicalApplicationGuidance(category: string): string {
+  private generateClinicalApplicationGuidance(_category: string): string {
     // This would be more sophisticated with real AI
     return `**How to Apply This Knowledge in Clinical Practice:**
 

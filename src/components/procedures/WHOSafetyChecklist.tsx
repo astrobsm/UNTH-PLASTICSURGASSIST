@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { procedureService, WHOSafetyChecklist } from '../../services/procedureService';
 import { getCurrentUserName } from '../../utils/getCurrentUser';
 

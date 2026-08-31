@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, Shield, Scale, Calendar, Clock, Plus, Eye, Edit, Trash2, History, ChevronDown, ChevronUp, TrendingUp, TrendingDown, Minus } from 'lucide-react';
-import { DVTRiskAssessment, PressureSoreRiskAssessment, NutritionalRiskAssessment, BaseRiskAssessment } from '../../services/riskAssessmentService';
+import { AlertTriangle, Shield, Scale, Calendar, Clock, Plus, Eye, Edit, Trash2, History, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { BaseRiskAssessment } from '../../services/riskAssessmentService';
 import { db } from '../../db/database';
 
 interface RiskAssessmentSummaryProps {

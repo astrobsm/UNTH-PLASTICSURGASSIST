@@ -24,6 +24,9 @@ import { jsPDF } from 'jspdf';
 import { toPrintableText } from './printText';
 
 /** Characters jsPDF's standard fonts can actually render (WinAnsi ≈ Latin-1). */
+// The renderable set is defined by listing it, and tab, newline and carriage
+// return belong to that set — so the pattern necessarily contains them.
+// eslint-disable-next-line no-control-regex, no-irregular-whitespace
 const RENDERABLE = /[^\x09\x0A\x0D\x20-\x7E -ÿ€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ]/g;
 
 /**
