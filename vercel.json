@@ -20,6 +20,10 @@
       "destination": "/api/chat"
     },
     {
+      "source": "/api/pre-surgical-brief/:path*",
+      "destination": "/api/pre-surgical-brief"
+    },
+    {
       "source": "/api/consults/:path*",
       "destination": "/api/consults"
     },

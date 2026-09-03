@@ -105,11 +105,12 @@ async function getFullConferenceData(patientId, res) {
   // Fetch all data in parallel
   const [
     labResults,
-    medications, 
+    medications,
     surgeries,
     preOpAssessments,
     wardRounds,
-    shoppingListItems
+    shoppingListItems,
+    latestVitals
   ] = await Promise.all([
     query(`SELECT id, test_type, test_name, results, status, ordered_at, completed_at,
            (SELECT full_name FROM users WHERE id = lo.ordered_by) as ordered_by_name
@@ -134,7 +135,16 @@ async function getFullConferenceData(patientId, res) {
            (SELECT full_name FROM users WHERE id = wr.user_id) as round_by_name,
            (SELECT role FROM users WHERE id = wr.user_id) as round_by_role
            FROM ward_rounds wr WHERE patient_id = $1 ORDER BY round_date DESC`, [patientId]),
-    query(`SELECT * FROM shopping_lists WHERE patient_id = $1`, [patientId]).catch(() => ({ rows: [] }))
+    query(`SELECT * FROM shopping_lists WHERE patient_id = $1`, [patientId]).catch(() => ({ rows: [] })),
+    // Most recent observation set. vital_signs.patient_id is VARCHAR while
+    // patients.id is INTEGER, so the comparison is made on text — without the
+    // cast this raises a type error and takes the whole bundle down with it.
+    query(`SELECT id, temperature, pulse, bp_systolic, bp_diastolic,
+                  respiratory_rate, spo2, weight, recorded_by, date
+             FROM vital_signs
+            WHERE patient_id::varchar = $1::varchar
+            ORDER BY date DESC NULLS LAST, id DESC
+            LIMIT 1`, [String(patientId)]).catch(() => ({ rows: [] }))
   ]);
 
   // Extract comorbidities from medical history
@@ -161,7 +171,11 @@ async function getFullConferenceData(patientId, res) {
     anaesthetistComments,
     plannedProcedures: surgeries.rows,
     shoppingListStatus,
-    preparingTeam
+    preparingTeam,
+    // null when nothing has been recorded. The brief renders that as "not
+    // documented" rather than blanks or zeros — an observation nobody took must
+    // not be presentable as an observation that was normal.
+    vitalSigns: latestVitals.rows[0] || null
   });
 }
 
