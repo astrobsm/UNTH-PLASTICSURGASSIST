@@ -103,6 +103,27 @@ export interface PreparingTeamMember {
   preparation_date: string;
 }
 
+/**
+ * The most recent observation set.
+ *
+ * Every field is nullable and stays null when nothing was recorded. A brief is
+ * read aloud and decided on, so a missing observation has to look missing —
+ * rendering an absent blood pressure as a blank or a zero invites the room to
+ * read it as normal.
+ */
+export interface ConferenceVitalSigns {
+  id: number;
+  temperature: number | null;
+  pulse: number | null;
+  bp_systolic: number | null;
+  bp_diastolic: number | null;
+  respiratory_rate: number | null;
+  spo2: number | null;
+  weight: number | null;
+  recorded_by: string | null;
+  date: string | null;
+}
+
 export interface ConferenceData {
   patient: ConferencePatient;
   comorbidities: Comorbidity[];
@@ -113,6 +134,8 @@ export interface ConferenceData {
   plannedProcedures: PlannedProcedure[];
   shoppingListStatus: ShoppingListStatus;
   preparingTeam: PreparingTeamMember[];
+  /** null when this patient has no recorded observations at all. */
+  vitalSigns: ConferenceVitalSigns | null;
 }
 
 class PreSurgicalConferenceService {
@@ -132,6 +155,10 @@ class PreSurgicalConferenceService {
         plannedProcedures: Array.isArray(response.plannedProcedures) ? response.plannedProcedures : [],
         shoppingListStatus: response.shoppingListStatus || { patient_id: patientId, is_complete: false, total_items: 0, procured_items: 0, pending_items: 0, items: [] },
         preparingTeam: Array.isArray(response.preparingTeam) ? response.preparingTeam : [],
+        // Deliberately not defaulted to an empty object: "no observations
+        // recorded" and "observations recorded but empty" are different facts,
+        // and only the first one is true here.
+        vitalSigns: response.vitalSigns || null,
       };
     } catch (error) {
       console.error('Error fetching conference data:', error);
