@@ -282,7 +282,9 @@ const WoundRow: React.FC<{ wound: Wound & any; onClick: () => void }> = ({ wound
 
 const PatientView: React.FC<{
   patient: any;
-  onBack: () => void;
+  /** Omitted when embedded in the patient record, where there is no dashboard
+   *  to go back to and the button would be a dead end. */
+  onBack?: () => void;
   onOpenWound: (wound: Wound) => void;
 }> = ({ patient, onBack, onOpenWound }) => {
   const [wounds, setWounds] = useState<Wound[]>([]);
@@ -301,9 +303,11 @@ const PatientView: React.FC<{
 
   return (
     <div className="space-y-4">
-      <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700">
-        <ArrowLeft className="w-4 h-4" /> Monitor dashboard
-      </button>
+      {onBack && (
+        <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700">
+          <ArrowLeft className="w-4 h-4" /> Monitor dashboard
+        </button>
+      )}
       <div className="flex items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-gray-900">{name}</h2>
@@ -1131,5 +1135,33 @@ const Modal: React.FC<{ title: string; onClose: () => void; children: React.Reac
 
 function round(v: number): number { return Math.round(v * 10) / 10; }
 function numOrNull(v: any): number | null { const n = Number(v); return Number.isFinite(n) ? n : null; }
+
+/**
+ * The monitor for a single patient, embeddable in their record.
+ *
+ * The encounter record used to carry a separate Wound Assessment section that
+ * recorded a wound afresh each time, with no identity carried between visits —
+ * so a wound could be documented six times and never be recognised as the same
+ * wound. This module already solves that, and reusing it here rather than
+ * maintaining a second wound form means one place to record a wound and one
+ * account of how it is healing.
+ *
+ * Composes the same two views the full page uses, so the record and the monitor
+ * cannot drift apart. No dashboard link: inside a patient's record the patient
+ * is already chosen.
+ */
+export const PatientWoundMonitor: React.FC<{ patient: any }> = ({ patient }) => {
+  const [openWound, setOpenWound] = useState<Wound | null>(null);
+
+  return openWound ? (
+    <WoundDetailView
+      patient={patient}
+      wound={openWound}
+      onBack={() => setOpenWound(null)}
+    />
+  ) : (
+    <PatientView patient={patient} onOpenWound={setOpenWound} />
+  );
+};
 
 export default WoundProgressMonitorPage;
