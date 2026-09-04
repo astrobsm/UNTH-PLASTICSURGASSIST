@@ -10,7 +10,7 @@ import { safeFormatDate } from '../utils/dateUtils';
 import {
   ArrowLeft, ClipboardCheck, Users, Search, User, Calendar, Loader2,
   Eye, Plus, CheckCircle, AlertTriangle, FileText, Download, BookOpen,
-  ShoppingCart, Shield, Printer, ChevronDown, ChevronUp,
+  Shield, Printer, ChevronDown, ChevronUp,
   CreditCard, Stethoscope, ListChecks,
   Upload, X, CalendarDays, FlaskConical, 
   ChevronLeft, ChevronRight, AlertOctagon, Droplets, Heart,
@@ -48,7 +48,7 @@ interface Patient {
 
 type TabKey = 'surgical-planning' | 'booked-cases' | 'theatre-calendar';
 type CaseCategory = 'minor' | 'intermediate' | 'major' | 'super_major';
-type PlanningSection = 'patient' | 'clinical' | 'risk' | 'investigations' | 'shopping' | 'procedure' | 'results' | 'ecg' | 'payment' | 'checklist';
+type PlanningSection = 'patient' | 'clinical' | 'risk' | 'investigations' | 'procedure' | 'results' | 'ecg' | 'payment' | 'checklist';
 type InvestigationFlag = 'normal' | 'borderline' | 'abnormal';
 
 interface InvestigationResult {
@@ -85,7 +85,6 @@ interface ReadinessChecklist {
   comorbidities_documented: boolean;
   medications_reviewed: boolean;
   investigations_complete: boolean;
-  shopping_list_done: boolean;
   procedure_documented: boolean;
   results_reviewed: boolean;
   payment_confirmed: boolean;
@@ -112,8 +111,6 @@ interface PreopPlanningData {
   ordered_investigations: string[];
   investigation_results: InvestigationResult[];
   investigation_docs: Array<{ name: string; dataUrl: string; uploadedAt: string; }>;
-  // Shopping list
-  shopping_items: Array<{ name: string; category: string; quantity: number; }>;
   // Procedure
   procedure_name: string;
   anaesthesia_type: string;
@@ -404,7 +401,7 @@ const CASE_CATEGORY_LABELS: Record<CaseCategory, string> = { minor: 'Minor', int
 
 const DEFAULT_CHECKLIST: ReadinessChecklist = {
   risk_assessed: false, comorbidities_documented: false, medications_reviewed: false,
-  investigations_complete: false, shopping_list_done: false, procedure_documented: false,
+  investigations_complete: false, procedure_documented: false,
   results_reviewed: false, payment_confirmed: false, consent_obtained: false,
   preop_instructions_given: false, blood_available: false, anaesthesia_review_done: false,
 };
@@ -414,7 +411,6 @@ const makeDefaultPlan = (patientId: string, user: string): PreopPlanningData => 
   diagnosis: '', comorbidities: [], current_medications: [], surgical_risk_medications: [],
   ordered_investigations: [...COMPULSORY_INVESTIGATIONS],
   investigation_results: [], investigation_docs: [],
-  shopping_items: [],
   procedure_name: '', anaesthesia_type: '', proposed_ward: '', estimated_duration: 60,
   operating_unit: '', case_category: '', is_multispecialist: false,
   primary_surgeon: user, assistants: [], special_equipment: [],
@@ -493,7 +489,7 @@ export default function BookingRegisterPage() {
   const [planData, setPlanData] = useState<PreopPlanningData | null>(null);
   const [activeSection, setActiveSection] = useState<PlanningSection>('patient');
   const [sectionSaved, setSectionSaved] = useState<Record<PlanningSection, boolean>>({
-    patient: false, clinical: false, risk: false, investigations: false, shopping: false,
+    patient: false, clinical: false, risk: false, investigations: false,
     procedure: false, results: false, ecg: false, payment: false, checklist: false,
   });
 
@@ -516,8 +512,6 @@ export default function BookingRegisterPage() {
   const [invResultEntry, setInvResultEntry] = useState<Partial<InvestigationResult>>({ name: '', value: '', flag: 'normal' });
   const [selectedInvForEntry, setSelectedInvForEntry] = useState('');
   const [paramEntries, setParamEntries] = useState<Record<string, string>>({});
-  const [shoppingSearch, setShoppingSearch] = useState('');
-  const [shoppingCategory, setShoppingCategory] = useState('all');
   const [showRiskMedDb, setShowRiskMedDb] = useState(false);
   const [ocrScanning, setOcrScanning] = useState(false);
   const [ocrProgress, setOcrProgress] = useState(0);
@@ -629,7 +623,6 @@ export default function BookingRegisterPage() {
           clinical: !!(d.diagnosis || d.comorbidities.length || d.current_medications.length),
           risk: !!(d.bleeding_risk || d.dvt_risk || d.cardiovascular_risk || d.pressure_sore_risk || d.nutritional_risk),
           investigations: d.ordered_investigations.length > 0,
-          shopping: d.shopping_items.length > 0,
           procedure: !!d.procedure_name,
           results: d.investigation_results.length > 0,
           ecg: !!d.ecg_image,
@@ -1082,7 +1075,7 @@ export default function BookingRegisterPage() {
         estimated_duration: planData.estimated_duration || CASE_DURATIONS[planData.case_category || 'intermediate'] || 150,
         urgency: 'elective',
         special_requirements: planData.special_equipment || [],
-        equipment_needed: [...(planData.special_equipment || []), ...(planData.shopping_items?.map((i: any) => i.name) || [])],
+        equipment_needed: [...(planData.special_equipment || [])],
         implants_needed: [],
         anaesthetist: '',
         scrub_nurse: '',
@@ -1315,41 +1308,6 @@ export default function BookingRegisterPage() {
     toast.success('Thermal investigation request generated');
   }, [planData, selectedPatient]);
 
-  const generateShoppingListThermal = useCallback(() => {
-    if (!planData || !selectedPatient || planData.shopping_items.length === 0) {
-      toast.error('No items in shopping list'); return;
-    }
-    const doc = sanitizePdfDocument(new jsPDF({ unit: 'mm', format: [80, 200] }));
-    doc.setFont('times', 'normal');
-    let y = 4;
-    doc.setFontSize(9);
-    doc.text('SURGICAL SHOPPING LIST', 40, y, { align: 'center' }); y += 5;
-    doc.setFontSize(7);
-    doc.text('Patient: ' + selectedPatient.full_name, 3, y); y += 4;
-    doc.text('PT#: ' + selectedPatient.hospital_number, 3, y); y += 4;
-    doc.text('Procedure: ' + (planData.procedure_name || '-'), 3, y); y += 4;
-    doc.text('Date: ' + new Date().toLocaleDateString(), 3, y); y += 4;
-    doc.line(3, y, 77, y); y += 4;
-    // Group by category
-    const grouped: Record<string, typeof planData.shopping_items> = {};
-    planData.shopping_items.forEach(item => {
-      if (!grouped[item.category]) grouped[item.category] = [];
-      grouped[item.category].push(item);
-    });
-    Object.entries(grouped).forEach(([cat, items]) => {
-      if (y > 185) { doc.addPage([80, 200]); y = 4; }
-      doc.setFontSize(7);
-      doc.text(cat.toUpperCase(), 3, y); y += 4;
-      doc.setFontSize(6);
-      items.forEach(item => {
-        doc.text('  [ ] ' + item.name + ' x' + item.quantity, 5, y); y += 3.5;
-      });
-      y += 2;
-    });
-    doc.save('Shopping_List_' + selectedPatient.hospital_number + '.pdf');
-    toast.success('Thermal shopping list generated');
-  }, [planData, selectedPatient]);
-
   // --- A4 PDF: Investigation Request ---
   const generateInvestigationRequestPDF = useCallback(() => {
     if (!planData || !selectedPatient) return;
@@ -1399,58 +1357,6 @@ export default function BookingRegisterPage() {
     doc.save('Investigation_Request_' + selectedPatient.hospital_number + '.pdf');
     toast.success('Investigation request PDF downloaded');
   }, [planData, selectedPatient, patientAge]);
-
-  // --- A4 PDF: Shopping List ---
-  const generateShoppingListPDF = useCallback(() => {
-    if (!planData || !selectedPatient || planData.shopping_items.length === 0) {
-      toast.error('No items in shopping list'); return;
-    }
-    const doc = createPDF();
-    let y = addPDFHeader(doc, 'SURGICAL SHOPPING LIST');
-    y += 2;
-    y = addLabeledField(doc, 'Patient Name', selectedPatient.full_name || `${selectedPatient.first_name} ${selectedPatient.last_name}`, y);
-    y = addTwoColumnText(doc, 'Hospital No:', selectedPatient.hospital_number || '-', 'Date:', formatDateForPDF(new Date().toISOString()), y);
-    if (planData.procedure_name) {
-      y = addLabeledField(doc, 'Proposed Procedure', sanitizeTextForPDF(planData.procedure_name), y);
-    }
-    if (planData.anaesthesia_type) {
-      y = addLabeledField(doc, 'Anaesthesia Type', planData.anaesthesia_type, y);
-    }
-    y += 2;
-    addSeparator(doc, y); y += 4;
-
-    // Group by category
-    const grouped: Record<string, typeof planData.shopping_items> = {};
-    planData.shopping_items.forEach(item => {
-      if (!grouped[item.category]) grouped[item.category] = [];
-      grouped[item.category].push(item);
-    });
-
-    Object.entries(grouped).forEach(([cat, items]) => {
-      if (needsNewPage(doc, y, 30)) { doc.addPage(); y = PDF_MARGINS.top; }
-      y = addSectionHeader(doc, cat.toUpperCase(), y);
-      const tableData = items.map((item, idx) => [
-        String(idx + 1),
-        item.name,
-        String(item.quantity),
-        '☐', // checkbox for procurement
-      ]);
-      y = addSimpleTable(doc, ['S/N', 'Item', 'Qty', 'Procured'], tableData, y);
-      y += 4;
-    });
-
-    y += 6;
-    doc.setFontSize(PDF_FONT_SIZES.body);
-    doc.text('Total Items: ' + planData.shopping_items.length, PDF_MARGINS.left, y);
-    y += PDF_LINE_HEIGHT * 2;
-    doc.text('Prepared by: ' + (planData.assessed_by || '-'), PDF_MARGINS.left, y);
-    y += PDF_LINE_HEIGHT;
-    doc.text('Verified by: ____________________________', PDF_MARGINS.left, y);
-
-    addFooter(doc, 'Surgical Shopping List');
-    doc.save('Shopping_List_' + selectedPatient.hospital_number + '.pdf');
-    toast.success('Shopping list PDF downloaded');
-  }, [planData, selectedPatient]);
 
   // --- Informed Consent Form PDF ---
   const generateInformedConsentPDF = useCallback(() => {
@@ -1599,174 +1505,6 @@ export default function BookingRegisterPage() {
   }, [filteredBookedCases]);
 
   // ============================
-  // SHOPPING LIST ITEMS (from ShoppingList constants)
-  // ============================
-  const SHOPPING_ITEMS: Array<{ name: string; category: string; }> = useMemo(() => [
-    // Cannulas
-    { name: 'IV Cannula 14G (Orange)', category: 'Cannulas' },
-    { name: 'IV Cannula 16G (Grey)', category: 'Cannulas' },
-    { name: 'IV Cannula 18G (Green)', category: 'Cannulas' },
-    { name: 'IV Cannula 20G (Pink)', category: 'Cannulas' },
-    { name: 'IV Cannula 22G (Blue)', category: 'Cannulas' },
-    { name: 'IV Cannula 24G (Yellow)', category: 'Cannulas' },
-    // Giving Sets & Syringes
-    { name: 'IV Giving Set (Standard)', category: 'Giving Sets' },
-    { name: 'Blood Giving Set', category: 'Giving Sets' },
-    { name: 'Burette Giving Set', category: 'Giving Sets' },
-    { name: 'Syringe 2ml', category: 'Syringes' },
-    { name: 'Syringe 5ml', category: 'Syringes' },
-    { name: 'Syringe 10ml', category: 'Syringes' },
-    { name: 'Syringe 20ml', category: 'Syringes' },
-    { name: 'Syringe 50ml', category: 'Syringes' },
-    // IV Fluids
-    { name: 'Normal Saline 0.9% 500ml', category: 'IV Fluids' },
-    { name: 'Normal Saline 0.9% 1L', category: 'IV Fluids' },
-    { name: 'Ringer\'s Lactate 500ml', category: 'IV Fluids' },
-    { name: 'Ringer\'s Lactate 1L', category: 'IV Fluids' },
-    { name: 'Dextrose 5% 500ml', category: 'IV Fluids' },
-    { name: 'Dextrose Saline 500ml', category: 'IV Fluids' },
-    { name: 'Dextrose Saline 1L', category: 'IV Fluids' },
-    { name: 'Gelofusine 500ml', category: 'IV Fluids' },
-    { name: 'Haemaccel 500ml', category: 'IV Fluids' },
-    // Gloves
-    { name: 'Surgical Gloves 6.5', category: 'Gloves' },
-    { name: 'Surgical Gloves 7.0', category: 'Gloves' },
-    { name: 'Surgical Gloves 7.5', category: 'Gloves' },
-    { name: 'Surgical Gloves 8.0', category: 'Gloves' },
-    { name: 'Examination Gloves (Medium)', category: 'Gloves' },
-    { name: 'Examination Gloves (Large)', category: 'Gloves' },
-    // Anaesthetics & Injectables
-    { name: 'Lidocaine 1% 20ml', category: 'Anaesthetics' },
-    { name: 'Lidocaine 2% 20ml', category: 'Anaesthetics' },
-    { name: 'Bupivacaine 0.5% 20ml', category: 'Anaesthetics' },
-    { name: 'Lidocaine + Adrenaline 2% 20ml', category: 'Anaesthetics' },
-    { name: 'Ketamine 500mg/10ml', category: 'Anaesthetics' },
-    { name: 'Propofol 200mg/20ml', category: 'Anaesthetics' },
-    { name: 'Atropine 0.6mg/ml', category: 'Injectables' },
-    { name: 'Adrenaline 1mg/ml', category: 'Injectables' },
-    { name: 'Metoclopramide 10mg/2ml', category: 'Injectables' },
-    { name: 'Ondansetron 4mg/2ml', category: 'Injectables' },
-    { name: 'Tramadol 100mg/2ml', category: 'Injectables' },
-    { name: 'Pentazocine 30mg/ml', category: 'Injectables' },
-    { name: 'Diclofenac 75mg/3ml', category: 'Injectables' },
-    { name: 'Paracetamol 1g/100ml IV', category: 'Injectables' },
-    // Antibiotics
-    { name: 'Ceftriaxone 1g (IV)', category: 'Antibiotics' },
-    { name: 'Metronidazole 500mg (IV)', category: 'Antibiotics' },
-    { name: 'Augmentin 1.2g (IV)', category: 'Antibiotics' },
-    { name: 'Ciprofloxacin 200mg (IV)', category: 'Antibiotics' },
-    { name: 'Gentamicin 80mg (IV)', category: 'Antibiotics' },
-    // Sutures
-    { name: 'Vicryl 2-0', category: 'Sutures' },
-    { name: 'Vicryl 3-0', category: 'Sutures' },
-    { name: 'Vicryl 4-0', category: 'Sutures' },
-    { name: 'Vicryl 5-0', category: 'Sutures' },
-    { name: 'Prolene 3-0', category: 'Sutures' },
-    { name: 'Prolene 4-0', category: 'Sutures' },
-    { name: 'Prolene 5-0', category: 'Sutures' },
-    { name: 'Nylon 2-0', category: 'Sutures' },
-    { name: 'Nylon 3-0', category: 'Sutures' },
-    { name: 'Nylon 4-0', category: 'Sutures' },
-    { name: 'Nylon 5-0', category: 'Sutures' },
-    { name: 'PDS 3-0', category: 'Sutures' },
-    { name: 'PDS 4-0', category: 'Sutures' },
-    { name: 'Chromic Catgut 2-0', category: 'Sutures' },
-    { name: 'Silk 2-0', category: 'Sutures' },
-    { name: 'Silk 3-0', category: 'Sutures' },
-    // Dressings & Antiseptics
-    { name: 'Gauze Swabs (pack of 5)', category: 'Dressings' },
-    { name: 'Abdominal Pad', category: 'Dressings' },
-    { name: 'Elastic Adhesive Bandage', category: 'Dressings' },
-    { name: 'Micropore Tape 1 inch', category: 'Dressings' },
-    { name: 'Crepe Bandage 4 inch', category: 'Dressings' },
-    { name: 'Crepe Bandage 6 inch', category: 'Dressings' },
-    { name: 'Cotton Wool Roll', category: 'Dressings' },
-    { name: 'Povidone-Iodine 10% 500ml', category: 'Antiseptics' },
-    { name: 'Chlorhexidine 4% 500ml', category: 'Antiseptics' },
-    { name: 'Hydrogen Peroxide 6% 500ml', category: 'Antiseptics' },
-    { name: 'Methylated Spirit 500ml', category: 'Antiseptics' },
-    { name: 'Normal Saline for Irrigation 1L', category: 'Antiseptics' },
-    // Catheters & Drains
-    { name: 'Foley Catheter 14Fr', category: 'Catheters' },
-    { name: 'Foley Catheter 16Fr', category: 'Catheters' },
-    { name: 'Foley Catheter 18Fr', category: 'Catheters' },
-    { name: 'Urine Bag 2L', category: 'Catheters' },
-    { name: 'Nasogastric Tube 14Fr', category: 'Catheters' },
-    { name: 'Nasogastric Tube 16Fr', category: 'Catheters' },
-    { name: 'Suction Catheter 14Fr', category: 'Catheters' },
-    { name: 'Wound Drain (Redivac)', category: 'Drains' },
-    { name: 'Penrose Drain', category: 'Drains' },
-    { name: 'Chest Drain 28Fr', category: 'Drains' },
-    // Surgical Instruments
-    { name: 'Scalpel Blade No. 10', category: 'Instruments' },
-    { name: 'Scalpel Blade No. 11', category: 'Instruments' },
-    { name: 'Scalpel Blade No. 15', category: 'Instruments' },
-    { name: 'Scalpel Handle No. 3', category: 'Instruments' },
-    { name: 'Scalpel Handle No. 4', category: 'Instruments' },
-    { name: 'Needle Holder', category: 'Instruments' },
-    { name: 'Artery Forceps (curved)', category: 'Instruments' },
-    { name: 'Artery Forceps (straight)', category: 'Instruments' },
-    { name: 'Tissue Forceps', category: 'Instruments' },
-    { name: 'Adson Forceps', category: 'Instruments' },
-    { name: 'Scissors (Mayo)', category: 'Instruments' },
-    { name: 'Scissors (Metzenbaum)', category: 'Instruments' },
-    { name: 'Retractor (Langenbeck)', category: 'Instruments' },
-    { name: 'Retractor (Self-retaining)', category: 'Instruments' },
-    { name: 'Skin Hooks', category: 'Instruments' },
-    { name: 'Diathermy Pencil', category: 'Instruments' },
-    { name: 'Diathermy Pad', category: 'Instruments' },
-    // Splints & Miscellaneous
-    { name: 'POP Bandage 4 inch', category: 'Splints' },
-    { name: 'POP Bandage 6 inch', category: 'Splints' },
-    { name: 'Thermoplastic Splint', category: 'Splints' },
-    { name: 'Finger Splint (Aluminium)', category: 'Splints' },
-    { name: 'Tourniquet', category: 'Miscellaneous' },
-    { name: 'Skin Marker Pen', category: 'Miscellaneous' },
-    { name: 'Specimen Container', category: 'Miscellaneous' },
-    { name: 'Sterile Drape Pack', category: 'Miscellaneous' },
-  ], []);
-
-  const shoppingCategories = useMemo(() => {
-    const cats = [...new Set(SHOPPING_ITEMS.map(i => i.category))];
-    return ['all', ...cats];
-  }, [SHOPPING_ITEMS]);
-
-  const filteredShoppingItems = useMemo(() => {
-    let items = SHOPPING_ITEMS;
-    if (shoppingCategory !== 'all') items = items.filter(i => i.category === shoppingCategory);
-    if (shoppingSearch) items = items.filter(i => i.name.toLowerCase().includes(shoppingSearch.toLowerCase()));
-    return items;
-  }, [SHOPPING_ITEMS, shoppingSearch, shoppingCategory]);
-
-  const addShoppingItem = useCallback((item: { name: string; category: string }) => {
-    if (!planData) return;
-    const existing = planData.shopping_items.find(i => i.name === item.name);
-    if (existing) {
-      updatePlan({
-        shopping_items: planData.shopping_items.map(i =>
-          i.name === item.name ? { ...i, quantity: i.quantity + 1 } : i
-        ),
-      });
-    } else {
-      updatePlan({ shopping_items: [...planData.shopping_items, { ...item, quantity: 1 }] });
-    }
-  }, [planData, updatePlan]);
-
-  const removeShoppingItem = useCallback((name: string) => {
-    if (!planData) return;
-    updatePlan({ shopping_items: planData.shopping_items.filter(i => i.name !== name) });
-  }, [planData, updatePlan]);
-
-  const updateShoppingQuantity = useCallback((name: string, delta: number) => {
-    if (!planData) return;
-    updatePlan({
-      shopping_items: planData.shopping_items.map(i =>
-        i.name === name ? { ...i, quantity: Math.max(1, i.quantity + delta) } : i
-      ),
-    });
-  }, [planData, updatePlan]);
-
-  // ============================
   // Planning section navigation
   // ============================
   const SECTIONS: { key: PlanningSection; label: string; icon: React.ReactNode; }[] = [
@@ -1774,7 +1512,6 @@ export default function BookingRegisterPage() {
     { key: 'clinical', label: 'Clinical Summary', icon: <Stethoscope size={16} /> },
     { key: 'risk', label: 'Risk Assessment', icon: <Shield size={16} /> },
     { key: 'investigations', label: 'Investigations', icon: <FlaskConical size={16} /> },
-    { key: 'shopping', label: 'Shopping List', icon: <ShoppingCart size={16} /> },
     { key: 'procedure', label: 'Procedure', icon: <Scissors size={16} /> },
     { key: 'results', label: 'Results Upload', icon: <Upload size={16} /> },
     { key: 'ecg', label: 'ECG', icon: <Activity size={16} /> },
@@ -2192,88 +1929,6 @@ export default function BookingRegisterPage() {
                       {/* Summary */}
                       <div className="bg-gray-50 rounded-lg p-3">
                         <p className="text-sm text-gray-600"><strong>{planData.ordered_investigations.length}</strong> investigations ordered ({COMPULSORY_INVESTIGATIONS.length} compulsory + {planData.ordered_investigations.length - COMPULSORY_INVESTIGATIONS.length} optional)</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ---- SHOPPING LIST SECTION ---- */}
-                  {activeSection === 'shopping' && planData && (
-                    <div className="bg-white rounded-xl border p-4 space-y-4">
-                      <div className="flex items-center justify-between">
-                        <h3 className="text-lg font-semibold flex items-center gap-2"><ShoppingCart size={20} className="text-green-600" /> Surgical Shopping List</h3>
-                        <div className="flex gap-2">
-                          <button onClick={generateShoppingListPDF} className="flex items-center gap-1 px-3 py-1.5 border rounded-lg text-sm hover:bg-gray-50">
-                            <Download size={14} /> PDF
-                          </button>
-                          <button onClick={generateShoppingListThermal} className="flex items-center gap-1 px-3 py-1.5 border rounded-lg text-sm hover:bg-gray-50">
-                            <Printer size={14} /> Thermal Print
-                          </button>
-                          <button onClick={() => saveSection('shopping')} disabled={saving} className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 disabled:opacity-50">
-                            <Save size={14} /> Save
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Selected items */}
-                      {planData.shopping_items.length > 0 && (
-                        <div className="border rounded-lg p-3">
-                          <h4 className="text-sm font-medium mb-2 text-gray-700">Selected Items ({planData.shopping_items.length})</h4>
-                          <div className="space-y-1 max-h-48 overflow-y-auto">
-                            {planData.shopping_items.map(item => (
-                              <div key={item.name} className="flex items-center gap-2 bg-green-50 rounded-lg px-3 py-1.5 text-sm">
-                                <span className="flex-1">{item.name} <span className="text-xs text-gray-500">({item.category})</span></span>
-                                <div className="flex items-center gap-1">
-                                  <button onClick={() => updateShoppingQuantity(item.name, -1)} className="p-0.5 rounded hover:bg-green-200"><Minus size={12} /></button>
-                                  <span className="w-6 text-center font-medium">{item.quantity}</span>
-                                  <button onClick={() => updateShoppingQuantity(item.name, 1)} className="p-0.5 rounded hover:bg-green-200"><Plus size={12} /></button>
-                                </div>
-                                <button onClick={() => removeShoppingItem(item.name)} className="text-red-500 hover:text-red-700 p-0.5"><X size={14} /></button>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Browse items */}
-                      <div>
-                        <div className="flex gap-2 mb-3">
-                          <div className="relative flex-1">
-                            <Search size={14} className="absolute left-3 top-2.5 text-gray-400" />
-                            <input
-                              type="text"
-                              placeholder="Search items..."
-                              value={shoppingSearch}
-                              onChange={e => setShoppingSearch(e.target.value)}
-                              className="w-full pl-9 pr-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-green-500"
-                            />
-                          </div>
-                        </div>
-                        {/* Category tabs */}
-                        <div className="flex gap-1 flex-wrap mb-3">
-                          {shoppingCategories.map(cat => (
-                            <button
-                              key={cat}
-                              onClick={() => setShoppingCategory(cat)}
-                              className={`px-2.5 py-1 rounded-full text-xs ${shoppingCategory === cat ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-                            >
-                              {cat === 'all' ? 'All' : cat}
-                            </button>
-                          ))}
-                        </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-1 max-h-60 overflow-y-auto border rounded-lg p-2">
-                          {filteredShoppingItems.map(item => {
-                            const isSelected = planData.shopping_items.some(i => i.name === item.name);
-                            return (
-                              <button
-                                key={item.name}
-                                onClick={() => addShoppingItem(item)}
-                                className={`text-left text-xs px-2 py-1.5 rounded transition-colors ${isSelected ? 'bg-green-100 text-green-800' : 'hover:bg-gray-100'}`}
-                              >
-                                {isSelected && <Check size={10} className="inline mr-1" />}{item.name}
-                              </button>
-                            );
-                          })}
-                        </div>
                       </div>
                     </div>
                   )}
@@ -2905,7 +2560,6 @@ export default function BookingRegisterPage() {
                           { key: 'comorbidities_documented' as const, label: 'Comorbidities and medications documented', icon: <Stethoscope size={16} /> },
                           { key: 'medications_reviewed' as const, label: 'Medications reviewed for surgical risk', icon: <AlertTriangle size={16} /> },
                           { key: 'investigations_complete' as const, label: 'All compulsory investigations results available', icon: <FlaskConical size={16} /> },
-                          { key: 'shopping_list_done' as const, label: 'Surgical shopping list complete', icon: <ShoppingCart size={16} /> },
                           { key: 'procedure_documented' as const, label: 'Procedure, anaesthesia & ward documented', icon: <Scissors size={16} /> },
                           { key: 'results_reviewed' as const, label: 'Investigation results reviewed (abnormals addressed)', icon: <Eye size={16} /> },
                           { key: 'payment_confirmed' as const, label: 'Payment / insurance confirmed', icon: <CreditCard size={16} /> },
