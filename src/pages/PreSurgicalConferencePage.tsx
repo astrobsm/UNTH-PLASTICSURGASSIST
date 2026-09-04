@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { 
   Presentation, 
   Play, 
@@ -399,6 +400,23 @@ export default function PreSurgicalConferencePage() {
                 patientId={selectedPatient.id}
                 conferenceData={conferenceData}
               />
+
+              {/* The conference presents this patient from the same bundle the
+                  Pre-Op Workup module reads, so the two cannot disagree. The
+                  link is here because readiness questions — stale bloods, drugs
+                  still to be stopped — are answered there, not in the brief. */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm text-gray-600">
+                  Readiness for theatre — outstanding investigations, medications to stop,
+                  risk assessment — is maintained in the Pre-Op Workup.
+                </p>
+                <Link
+                  to="/preoperative-workup"
+                  className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg border border-sky-300 text-sky-800 bg-sky-50 hover:bg-sky-100"
+                >
+                  Open Pre-Op Workup <ChevronRight className="w-4 h-4" />
+                </Link>
+              </div>
             </>
           ) : null}
         </div>

@@ -70,6 +70,7 @@ const navigation = [
   { name: 'Consults', href: '/consults', icon: Stethoscope },
   { name: 'WoundProgress Monitor', href: '/wound-monitor', icon: Activity },
   { name: 'Tumour Board', href: '/tumor-board', icon: Stethoscope },
+  { name: 'Pre-Op Workup', href: '/preoperative-workup', icon: ClipboardCheck },
   { name: 'Clinician Assistant', href: '/clinician-assistant', icon: Activity },
   { name: 'Notice Board', href: '/notice-board', icon: Megaphone },
   { name: 'Shopping List', href: '/shopping-list', icon: ShoppingCart },
