@@ -19,6 +19,7 @@ import { useOnSelectedPatient } from '../hooks/useSelectedPatient';
 import SlideWrapper from '../components/preSurgicalConference/SlideWrapper';
 import ClinicalSummarySlide from '../components/preSurgicalConference/ClinicalSummarySlide';
 import ComorbiditiesSlide from '../components/preSurgicalConference/ComorbiditiesSlide';
+import VitalSignsSlide from '../components/preSurgicalConference/VitalSignsSlide';
 import ClinicalPhotographsSlide from '../components/preSurgicalConference/ClinicalPhotographsSlide';
 import LabResultsSlide from '../components/preSurgicalConference/LabResultsSlide';
 import MedicationsSlide from '../components/preSurgicalConference/MedicationsSlide';
@@ -26,10 +27,12 @@ import AnaesthetistCommentsSlide from '../components/preSurgicalConference/Anaes
 import PlannedProceduresSlide from '../components/preSurgicalConference/PlannedProceduresSlide';
 import ShoppingListStatusSlide from '../components/preSurgicalConference/ShoppingListStatusSlide';
 import PreparingTeamSlide from '../components/preSurgicalConference/PreparingTeamSlide';
+import BriefOutcomePanel from '../components/preSurgicalConference/BriefOutcomePanel';
 
 const SLIDE_TITLES = [
   { title: 'Clinical Summary', subtitle: 'Patient demographics and medical history' },
   { title: 'Comorbidities', subtitle: 'Co-existing medical conditions' },
+  { title: 'Vital Signs', subtitle: 'Most recent observations' },
   { title: 'Clinical Photographs', subtitle: 'Visual documentation' },
   { title: 'Laboratory Results', subtitle: 'Investigations and tests' },
   { title: 'Current Medications', subtitle: 'Active prescriptions' },
@@ -175,18 +178,20 @@ export default function PreSurgicalConferencePage() {
       case 2:
         return <ComorbiditiesSlide comorbidities={conferenceData.comorbidities} />;
       case 3:
-        return <ClinicalPhotographsSlide photographs={conferenceData.clinicalPhotographs} />;
+        return <VitalSignsSlide vitalSigns={conferenceData.vitalSigns} />;
       case 4:
-        return <LabResultsSlide labResults={conferenceData.labResults} categorizedResults={categorizedLabs} />;
+        return <ClinicalPhotographsSlide photographs={conferenceData.clinicalPhotographs} />;
       case 5:
-        return <MedicationsSlide medications={conferenceData.medications} categorizedMedications={categorizedMeds} />;
+        return <LabResultsSlide labResults={conferenceData.labResults} categorizedResults={categorizedLabs} />;
       case 6:
-        return <AnaesthetistCommentsSlide comments={conferenceData.anaesthetistComments} />;
+        return <MedicationsSlide medications={conferenceData.medications} categorizedMedications={categorizedMeds} />;
       case 7:
-        return <PlannedProceduresSlide procedures={conferenceData.plannedProcedures} />;
+        return <AnaesthetistCommentsSlide comments={conferenceData.anaesthetistComments} />;
       case 8:
-        return <ShoppingListStatusSlide shoppingList={conferenceData.shoppingListStatus} />;
+        return <PlannedProceduresSlide procedures={conferenceData.plannedProcedures} />;
       case 9:
+        return <ShoppingListStatusSlide shoppingList={conferenceData.shoppingListStatus} />;
+      case 10:
         return <PreparingTeamSlide team={conferenceData.preparingTeam} />;
       default:
         return null;
@@ -381,12 +386,19 @@ export default function PreSurgicalConferencePage() {
                   value={conferenceData.plannedProcedures.length} 
                   color="rose" 
                 />
-                <StatCard 
-                  label="Shopping List" 
-                  value={conferenceData.shoppingListStatus.is_complete ? 'Complete' : 'Pending'} 
-                  color={conferenceData.shoppingListStatus.is_complete ? 'green' : 'orange'} 
+                <StatCard
+                  label="Shopping List"
+                  value={conferenceData.shoppingListStatus.is_complete ? 'Complete' : 'Pending'}
+                  color={conferenceData.shoppingListStatus.is_complete ? 'green' : 'orange'}
                 />
               </div>
+
+              {/* What the brief decided, and who is doing it. Sits below the
+                  data so it is filled in after the room has been through it. */}
+              <BriefOutcomePanel
+                patientId={selectedPatient.id}
+                conferenceData={conferenceData}
+              />
             </>
           ) : null}
         </div>

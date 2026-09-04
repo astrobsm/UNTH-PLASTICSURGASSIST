@@ -53,6 +53,7 @@
     "openai": "^6.8.1",
     "pdfjs-dist": "^4.10.38",
     "pg": "^8.11.3",
+    "pptxgenjs": "^4.0.1",
     "react": "^18.2.0",
     "react-chartjs-2": "^5.3.1",
     "react-dom": "^18.2.0",
