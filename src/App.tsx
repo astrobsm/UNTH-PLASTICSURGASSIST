@@ -92,6 +92,7 @@ const TreatmentPlanBuilder = lazyWithRetry(() => import('./components/TreatmentP
 const TreatmentPlanCreator = lazyWithRetry(() => import('./pages/TreatmentPlanCreator'));
 const TreatmentPlanManager = lazyWithRetry(() => import('./pages/TreatmentPlanManager'));
 const BookingRegisterPage = lazyWithRetry(() => import('./pages/BookingRegisterPage'));
+const PreOperativeWorkupPage = lazyWithRetry(() => import('./pages/PreOperativeWorkupPage'));
 const Procedures = lazyWithRetry(() => import('./pages/Procedures'));
 const PreSurgicalConferencePage = lazyWithRetry(() => import('./pages/PreSurgicalConferencePage'));
 const WoundCarePage = lazyWithRetry(() => import('./pages/WoundCarePage'));
@@ -369,6 +370,7 @@ function App() {
               <Route path="/blood-transfusion" element={<BloodTransfusionPage />} />
               <Route path="/ward-rounds" element={<WardRoundsPage />} />
               <Route path="/booking-register" element={<BookingRegisterPage />} />
+              <Route path="/preoperative-workup" element={<PreOperativeWorkupPage />} />
               <Route path="/procedures" element={<Procedures />} />
               <Route path="/preoperative-planning" element={<BookingRegisterPage />} />
               <Route path="/pre-surgical-conference" element={<PreSurgicalConferencePage />} />

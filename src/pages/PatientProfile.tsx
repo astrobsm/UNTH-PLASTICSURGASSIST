@@ -1,5 +1,5 @@
 import { sanitizePdfDocument } from '../utils/pdfSafeText';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { db } from '../db/database';
 import { Patient } from '../db/database';
@@ -17,6 +17,8 @@ import { ocrService } from '../services/ocrService';
 import { DocumentScannerModal } from '../components/DocumentScannerModal';
 import { MultiPageScanUploader, ScannedPage } from '../components/MultiPageScanUploader';
 import FluidBalanceChart from '../components/FluidBalanceChart';
+import type { WoundProgressEntry } from '../services/aiWoundMeasurement';
+const WoundProgressChart = lazy(() => import('../components/WoundProgressChart'));
 import BloodTransfusionTab from '../components/BloodTransfusionTab';
 import BloodGlucoseTab from '../components/BloodGlucoseTab';
 import { DocumenterLink, ConsultantCommentSection, RecommendationsPanel } from '../components/ClinicalInteractionComponents';
@@ -27,6 +29,26 @@ import {
   ChevronRight, X, Save, Loader2, 
   Eye, Trash2, Upload, Mic, MicOff, ScanLine, Printer, RefreshCw, Download
 } from 'lucide-react';
+
+/**
+ * The parts of the record that used to be their own tabs.
+ *
+ * They are sections of the encounter now, in the order a clinician works
+ * through a patient: observations, then results, then what is planned, then the
+ * specific care being given, then discharge.
+ */
+const ENCOUNTER_SECTIONS = [
+  { id: 'vital-signs', name: 'Vital Signs', icon: '💓' },
+  { id: 'investigations', name: 'Investigations', icon: '🔬' },
+  { id: 'treatment-plans', name: 'Treatment Planning', icon: '📅' },
+  { id: 'mdt-care', name: 'MDT Care', icon: '🤝' },
+  { id: 'clinical-photos', name: 'Clinical Photos', icon: '📷' },
+  { id: 'wound-assessment', name: 'Wound Assessment', icon: '🩹' },
+  { id: 'fluid-io', name: 'Fluid I/O', icon: '💧' },
+  { id: 'blood-transfusion', name: 'Blood Transfusion', icon: '🩸' },
+  { id: 'blood-glucose', name: 'Blood Glucose', icon: '🩺' },
+  { id: 'discharge', name: 'Discharge', icon: '🏠' },
+];
 
 export const PatientProfile: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -40,6 +62,9 @@ export const PatientProfile: React.FC = () => {
   const [nameHistory, setNameHistory] = useState<any[]>([]);
   const [showNameHistory, setShowNameHistory] = useState(false);
   const [activeTab, setActiveTab] = useState('encounters');
+  /** Which encounter sections are expanded. Several may be open at once. */
+  const [openSections, setOpenSections] = useState<Set<string>>(new Set());
+  const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [admissionStatus, setAdmissionStatus] = useState<{ isAdmitted: boolean; ward?: string; bed?: string; admissionDate?: string; daysAdmitted?: number; lastSurgery?: { procedure_name: string; date: string; daysPostOp: number }; surgeryCount?: number } | null>(null);
   const [showPrescriptionModal, setShowPrescriptionModal] = useState(false);
   const [medicalTeam, setMedicalTeam] = useState<TeamMember[]>([]);
@@ -271,27 +296,48 @@ export const PatientProfile: React.FC = () => {
   const patientName = `${patient.first_name} ${patient.last_name}`;
   const hospitalNumber = patient.hospital_number || id!;
 
+  // Two tabs, not twelve. Everything else belongs to the encounter record and
+  // is a section of it below — a clinician documenting a patient works down one
+  // page, and a row of a dozen tabs made them hunt for where the last person
+  // filed something.
   const tabs = [
     { id: 'encounters', name: 'Encounters', icon: '📋' },
-    { id: 'summary', name: 'Summary', icon: '📄' },
-    { id: 'vital-signs', name: 'Vital Signs', icon: '💓' },
-    { id: 'investigations', name: 'Investigations', icon: '🔬' },
-    { id: 'treatment-plans', name: 'Treatment Planning', icon: '📅' },
-    { id: 'mdt-care', name: 'MDT Care', icon: '🤝' },
-    { id: 'clinical-photos', name: 'Clinical Photos', icon: '📷' },
-    { id: 'wound-assessment', name: 'Wound Assessment', icon: '🩹' },
-    { id: 'fluid-io', name: 'Fluid I/O', icon: '💧' },
-    { id: 'blood-transfusion', name: 'Blood Transfusion', icon: '🩸' },
-    { id: 'blood-glucose', name: 'Blood Glucose', icon: '🩺' },
-    { id: 'discharge', name: 'Discharge', icon: '🏠' }
+    { id: 'summary', name: 'Summary', icon: '📄' }
   ];
 
-  const renderTabContent = () => {
-    switch (activeTab) {
-      case 'encounters':
-        return <EncountersTab patientId={id!} hospitalNumber={hospitalNumber} patientName={patientName} userName={user?.name || 'Unknown'} />;
-      case 'summary':
-        return <PatientSummaryView patientId={id!} />;
+  const toggleSection = (sectionId: string) => {
+    setOpenSections(prev => {
+      const next = new Set(prev);
+      if (next.has(sectionId)) next.delete(sectionId);
+      else next.add(sectionId);
+      return next;
+    });
+  };
+
+  /**
+   * Open a named section and bring it into view.
+   *
+   * Replaces the old setActiveTab('vital-signs') deep links from the header
+   * chips, which now have no tab to switch to.
+   */
+  const goToSection = (sectionId: string) => {
+    setActiveTab('encounters');
+    setOpenSections(prev => new Set(prev).add(sectionId));
+    // After the section has rendered; it is closed until this runs.
+    setTimeout(() => {
+      sectionRefs.current[sectionId]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 60);
+  };
+
+  /**
+   * The body of one section.
+   *
+   * Called only for sections that are open. Mounting all ten at once would
+   * fire every one of their loaders on page open — ten sets of requests for
+   * data the clinician has not asked to see.
+   */
+  const renderSection = (sectionId: string) => {
+    switch (sectionId) {
       case 'vital-signs':
         return <VitalSignsTab patientId={id!} hospitalNumber={hospitalNumber} patientName={patientName} userName={user?.name || 'Unknown'} />;
       case 'investigations':
@@ -320,8 +366,64 @@ export const PatientProfile: React.FC = () => {
           />
         );
       default:
-        return <div>Tab content not found</div>;
+        return null;
     }
+  };
+
+  const renderTabContent = () => {
+    if (activeTab === 'summary') {
+      return <PatientSummaryView patientId={id!} />;
+    }
+
+    // Encounters is the default and the fallback: an unknown tab id — including
+    // one left in a bookmark from when these were all tabs — lands here rather
+    // than on "Tab content not found".
+    return (
+      <div className="space-y-6">
+        <EncountersTab
+          patientId={id!}
+          hospitalNumber={hospitalNumber}
+          patientName={patientName}
+          userName={user?.name || 'Unknown'}
+        />
+
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide pt-2">
+            Encounter record
+          </h3>
+          {ENCOUNTER_SECTIONS.map(section => {
+            const open = openSections.has(section.id);
+            return (
+              <div
+                key={section.id}
+                ref={el => { sectionRefs.current[section.id] = el; }}
+                className="bg-white rounded-xl border border-gray-200 overflow-hidden scroll-mt-4"
+              >
+                <button
+                  type="button"
+                  onClick={() => toggleSection(section.id)}
+                  aria-expanded={open}
+                  className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-gray-50 text-left"
+                >
+                  <span className="flex items-center gap-2 font-medium text-gray-800">
+                    <span aria-hidden="true">{section.icon}</span>
+                    {section.name}
+                  </span>
+                  <span className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true">
+                    ▾
+                  </span>
+                </button>
+                {open && (
+                  <div className="border-t border-gray-100 p-4">
+                    {renderSection(section.id)}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -375,7 +477,7 @@ export const PatientProfile: React.FC = () => {
                 )}
                 {/* MDT/Primary Patient Badge */}
                 {mdtInfo && mdtInfo.patient_type === 'consult' ? (
-                  <span className="px-2 sm:px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-xs sm:text-sm font-medium flex items-center gap-1 cursor-pointer" onClick={() => setActiveTab('mdt-care')}>
+                  <span className="px-2 sm:px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-xs sm:text-sm font-medium flex items-center gap-1 cursor-pointer" onClick={() => goToSection('mdt-care')}>
                     <Activity className="w-3 h-3" /> Consult/MDT
                     {mdtInfo.consulting_unit && <span className="hidden sm:inline"> • {mdtInfo.consulting_unit}</span>}
                   </span>
@@ -501,7 +603,7 @@ export const PatientProfile: React.FC = () => {
                   <Plus className="w-4 h-4" /> Admit Patient
                 </button>
                 <button 
-                  onClick={() => setActiveTab('vital-signs')}
+                  onClick={() => goToSection('vital-signs')}
                   className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded transition-colors flex items-center gap-2"
                 >
                   <Heart className="w-4 h-4" /> Vital Signs
@@ -513,7 +615,7 @@ export const PatientProfile: React.FC = () => {
                   <Scissors className="w-4 h-4" /> Preop Planning & Surgery Booking
                 </button>
                 <button 
-                  onClick={() => setActiveTab('discharge')}
+                  onClick={() => goToSection('discharge')}
                   className="w-full text-left px-3 py-2 text-sm text-green-600 hover:bg-green-50 rounded transition-colors flex items-center gap-2"
                 >
                   <ClipboardCheck className="w-4 h-4" /> Plan Discharge
@@ -3312,6 +3414,28 @@ interface WoundRecord {
 
 const WoundAssessmentTab: React.FC<{ patientId: string; patientName: string; hospitalNumber: string; navigate: any }> = ({ patientId, patientName, hospitalNumber, navigate }) => {
   const [assessments, setAssessments] = useState<WoundRecord[]>([]);
+  /**
+   * The assessments as points on a healing curve.
+   *
+   * Area is computed from length x width where it was measured. An assessment
+   * with no dimensions is dropped rather than plotted as zero — a wound that
+   * nobody measured is not a wound that had closed, and on a trend line those
+   * two look identical.
+   */
+  const woundTrend = React.useMemo<WoundProgressEntry[]>(
+    () => assessments
+      .filter(a => Number(a.length) > 0 && Number(a.width) > 0 && a.assessed_at)
+      .map(a => ({
+        date: a.assessed_at,
+        length: Number(a.length),
+        width: Number(a.width),
+        area: Number((Number(a.length) * Number(a.width)).toFixed(2)),
+        granulation_percentage: Number(a.granulation_percentage) || undefined,
+        healing_phase: a.healing_phase,
+      }))
+      .sort((x, y) => new Date(x.date).getTime() - new Date(y.date).getTime()),
+    [assessments]
+  );
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<Partial<WoundRecord>>({ wound_nature: 'Acute', tissue_types: [], pain_level: 0, granulation_percentage: 0 });
   // Primary wound photos (with optional reference markers for AI-calibrated sizing)
@@ -3885,6 +4009,18 @@ const WoundAssessmentTab: React.FC<{ patientId: string; patientName: string; hos
         )}
 
         <div className="p-4">
+          {/* Healing trend. A list of assessments tells you what each one said;
+              the plot is the only thing that shows whether the wound is
+              actually closing. Needs two points to be a trend at all. */}
+          {woundTrend.length >= 2 && (
+            <div className="mb-6">
+              <h4 className="text-sm font-semibold text-gray-700 mb-2">Healing trend</h4>
+              <Suspense fallback={<div className="h-48 bg-gray-50 rounded animate-pulse" />}>
+                <WoundProgressChart measurements={woundTrend} />
+              </Suspense>
+            </div>
+          )}
+
           {assessments.length === 0 ? (
             <div className="text-center py-8"><AlertCircle className="w-10 h-10 text-gray-300 mx-auto mb-2" /><p className="text-gray-500">No wound assessments recorded</p></div>
           ) : (
