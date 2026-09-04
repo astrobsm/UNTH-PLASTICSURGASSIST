@@ -70,7 +70,14 @@ const navigation = [
   { name: 'Consults', href: '/consults', icon: Stethoscope },
   { name: 'WoundProgress Monitor', href: '/wound-monitor', icon: Activity },
   { name: 'Tumour Board', href: '/tumor-board', icon: Stethoscope },
+  // The surgical pathway, in the order it happens: book the case, establish the
+  // patient is fit, brief the room. All three were reachable only from the
+  // per-patient menu on the Patients page, which is fine for one patient and no
+  // use at all for "show me the list".
+  { name: 'Booking Register', href: '/booking-register', icon: ClipboardCheck },
   { name: 'Pre-Op Workup', href: '/preoperative-workup', icon: ClipboardCheck },
+  { name: 'Pre-Surgical Conference', href: '/pre-surgical-conference', icon: Presentation },
+  { name: 'Procedures', href: '/procedures', icon: Scissors },
   { name: 'Clinician Assistant', href: '/clinician-assistant', icon: Activity },
   { name: 'Notice Board', href: '/notice-board', icon: Megaphone },
   { name: 'Shopping List', href: '/shopping-list', icon: ShoppingCart },
