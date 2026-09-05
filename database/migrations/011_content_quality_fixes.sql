@@ -9,43 +9,99 @@
 -- ============================================================================
 
 -- ---------------------------------------------------------------------------
--- 1. Duplicate questions within a rotation
+-- 1. Exact duplicate rows
 --
--- A student must never meet the same question twice in one posting. The unique
--- index on (topic_id, md5(question_text)) already stops a repeat within a
--- topic at import time; this catches the rest -- the same stem under two
--- different topics of the *same* category (32 stems, 46 rows).
+-- Removes only rows that are identical in every content column -- the residue
+-- of a seed file replayed against a table with no ON CONFLICT clause. Against
+-- the live CHAMBER database that is 30,997 of 39,960 question rows: the whole
+-- bank imported five times over.
 --
--- Repeats ACROSS categories are deliberately left alone. 251 stems recur
--- between rotations -- "the lethal triad in trauma refers to" is asked in
--- Surgery 1 and again in Surgery 4 -- each with its own distractor set pitched
--- at that level. Removing them would empty holes in the senior rotations'
--- question pools, and no single student sees both.
+-- It deliberately does NOT key on the stem. Measured against the live CHAMBER
+-- data, keying on (category_id, question_text) would leave 7,768 rows where
+-- this leaves 8,963 -- 1,195 rows it would have destroyed. Those break down as:
+--
+--   * the great majority: one question filed under several topics, which is
+--     how the seeds place foundational material in more than one rotation;
+--   * 26 rows (13 stems): genuinely different questions that share a stem.
+--     "A hematoma in a surgical wound:" exists under one topic with two
+--     entirely different distractor sets, from two seed batches.
+--
+-- Neither is a duplicate. The second group is an editorial problem and step 7
+-- records it for review rather than resolving it by deletion.
+--
+-- Repeats ACROSS categories are also left alone. 251 stems recur between
+-- rotations -- the lethal triad is asked in Surgery 1 and again in Surgery 4 --
+-- each with distractors pitched at that level, and no student sees both.
 -- ---------------------------------------------------------------------------
+
+-- An answer already sat by a candidate must not be orphaned when its question
+-- is deduped, so it is repointed at the surviving twin first. The two rows are
+-- byte-identical, so the answer means exactly what it did before.
+--
+-- Guarded: test_answers belongs to CHAMBER's own test engine and is not part
+-- of 010_chamber_content.sql, so it is absent when this runs against a target
+-- that only holds the content tables.
+DO $$
+BEGIN
+  IF to_regclass('test_answers') IS NOT NULL THEN
+    WITH ranked AS (
+      SELECT id,
+             md5(topic_id::text || '|' || category_id::text || '|' || question_text || '|' ||
+                 option_a || '|' || option_b || '|' || option_c || '|' || option_d || '|' ||
+                 COALESCE(option_e, '') || '|' || correct_option || '|' || explanation) AS sig,
+             ROW_NUMBER() OVER (
+               PARTITION BY md5(topic_id::text || '|' || category_id::text || '|' || question_text || '|' ||
+                                option_a || '|' || option_b || '|' || option_c || '|' || option_d || '|' ||
+                                COALESCE(option_e, '') || '|' || correct_option || '|' || explanation)
+               ORDER BY created_at, id
+             ) AS rn
+      FROM questions
+    ),
+    keepers AS (SELECT sig, id FROM ranked WHERE rn = 1)
+    UPDATE test_answers ta
+    SET question_id = k.id
+    FROM ranked r
+    JOIN keepers k ON k.sig = r.sig
+    WHERE ta.question_id = r.id AND r.rn > 1;
+  END IF;
+END $$;
+
 WITH ranked AS (
   SELECT id,
          ROW_NUMBER() OVER (
-           PARTITION BY category_id, md5(lower(regexp_replace(question_text, '[^a-zA-Z0-9]+', ' ', 'g')))
+           PARTITION BY md5(topic_id::text || '|' || category_id::text || '|' || question_text || '|' ||
+                            option_a || '|' || option_b || '|' || option_c || '|' || option_d || '|' ||
+                            COALESCE(option_e, '') || '|' || correct_option || '|' || explanation)
            ORDER BY created_at, id
          ) AS rn
   FROM questions
 )
-DELETE FROM questions q
-USING ranked r
-WHERE q.id = r.id AND r.rn > 1;
+DELETE FROM questions q USING ranked r WHERE q.id = r.id AND r.rn > 1;
 
--- Same rule for an article's own self-assessment set.
+-- Same rule for an article's self-assessment set (6,725 -> 2,940 live).
 WITH ranked AS (
   SELECT id,
          ROW_NUMBER() OVER (
-           PARTITION BY article_id, md5(lower(regexp_replace(question_text, '[^a-zA-Z0-9]+', ' ', 'g')))
+           PARTITION BY md5(article_id::text || '|' || question_text || '|' || option_a || '|' ||
+                            option_b || '|' || option_c || '|' || option_d || '|' ||
+                            COALESCE(option_e, '') || '|' || correct_option)
            ORDER BY question_number, id
          ) AS rn
   FROM article_self_assessments
 )
-DELETE FROM article_self_assessments a
-USING ranked r
-WHERE a.id = r.id AND r.rn > 1;
+DELETE FROM article_self_assessments a USING ranked r WHERE a.id = r.id AND r.rn > 1;
+
+-- And for article sections (2,824 -> 873 live).
+WITH ranked AS (
+  SELECT id,
+         ROW_NUMBER() OVER (
+           PARTITION BY md5(article_id::text || '|' || section_type::text || '|' ||
+                            section_order::text || '|' || content)
+           ORDER BY id
+         ) AS rn
+  FROM article_sections
+)
+DELETE FROM article_sections s USING ranked r WHERE s.id = r.id AND r.rn > 1;
 
 -- ---------------------------------------------------------------------------
 -- 2. Broken distractor set
@@ -159,4 +215,29 @@ SELECT 'empty_topic', t.id,
 FROM topics t
 WHERE NOT EXISTS (SELECT 1 FROM questions q WHERE q.topic_id = t.id)
   AND NOT EXISTS (SELECT 1 FROM cme_articles a WHERE a.topic_id = t.id)
+ON CONFLICT (kind, ref_id) DO NOTHING;
+
+-- ---------------------------------------------------------------------------
+-- 7. Different questions that share a stem
+--
+-- Step 1 removes exact copies only, so these survive: two or more questions
+-- with the same stem under the same topic but different options, key or
+-- explanation. A candidate could meet "A hematoma in a surgical wound:" twice
+-- in one paper with different choices, which is confusing — but which variant
+-- is the right one is an editorial judgement, not something to settle by
+-- deleting whichever happens to be older.
+--
+-- One row per surviving variant, so an editor can see them side by side.
+-- ---------------------------------------------------------------------------
+INSERT INTO content_review_flags (kind, ref_id, detail)
+SELECT 'stem_with_variants', q.id,
+       'stem shared with ' || (g.variants - 1) || ' other question(s) under the same topic: '
+         || left(q.question_text, 160)
+FROM questions q
+JOIN (
+  SELECT topic_id, md5(question_text) AS h, COUNT(*) AS variants
+  FROM questions
+  GROUP BY topic_id, md5(question_text)
+  HAVING COUNT(*) > 1
+) g ON g.topic_id = q.topic_id AND g.h = md5(q.question_text)
 ON CONFLICT (kind, ref_id) DO NOTHING;

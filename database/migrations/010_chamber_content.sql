@@ -88,11 +88,27 @@ CREATE TABLE IF NOT EXISTS questions (
   updated_at           TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
--- The seeds INSERT questions without ON CONFLICT and without ids. This makes
--- the import idempotent: the same question text under the same topic is one
--- row however many times a seed file is replayed.
-CREATE UNIQUE INDEX IF NOT EXISTS uq_questions_topic_text
-  ON questions (topic_id, md5(question_text));
+-- The seeds INSERT questions without ON CONFLICT and without ids, so replaying
+-- a file appends a second copy. This index makes the import idempotent.
+--
+-- It keys on the WHOLE question, not on (topic_id, question_text). The bank
+-- legitimately contains different questions that share a stem -- "A hematoma in
+-- a surgical wound:" appears under one topic with two entirely different
+-- distractor sets, from two different seed batches. A stem-level key would have
+-- rejected the second as a duplicate and thrown away a real question: measured
+-- against the live CHAMBER data, 1,195 genuine variants across 1,176 stems.
+--
+-- Two questions that share a stem but differ in their options are a legitimate
+-- editorial concern, and 011 records them for review. They are not something to
+-- resolve by silently dropping one.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_questions_content
+  ON questions (
+    md5(
+      topic_id::text || '|' || category_id::text || '|' || question_text || '|' ||
+      option_a || '|' || option_b || '|' || option_c || '|' || option_d || '|' ||
+      COALESCE(option_e, '') || '|' || correct_option || '|' || explanation
+    )
+  );
 
 -- -- Content: CME articles ----------------------------------------------------
 CREATE TABLE IF NOT EXISTS cme_articles (
