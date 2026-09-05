@@ -171,8 +171,21 @@ export async function gatherStudentCounts(studentId) {
     scalar(`SELECT COALESCE(AVG(score), 0) FROM student_training_progress
             WHERE student_id = $1 AND kind = 'cbt' AND score IS NOT NULL`, [studentId]),
 
-    scalar(`SELECT COUNT(*) FROM student_patient_assignments
-            WHERE student_id = $1 AND is_active`, [studentId]),
+    // Patients reach a student two ways: assigned to them individually, or to
+    // the posting group they belong to. Counting only the first read as zero
+    // for every student in production, where patients are handed to the five
+    // groups rather than to individuals.
+    scalar(
+      `SELECT COUNT(*) FROM (
+         SELECT patient_id FROM student_patient_assignments
+         WHERE student_id = $1 AND is_active
+         UNION
+         SELECT sgp.patient_id FROM student_group_patients sgp
+         JOIN students s ON s.group_number = sgp.group_number
+         WHERE s.id = $1 AND sgp.is_active
+       ) reachable`,
+      [studentId],
+    ),
 
     scalar(`SELECT COUNT(*) FROM student_clerkings
             WHERE student_id = $1 AND status <> 'draft'`, [studentId]),

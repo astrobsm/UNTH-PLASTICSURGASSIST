@@ -10,6 +10,7 @@ import { broadcastChange } from '../utils/crossTabSync';
 import { medicalTrainingService, CMETopic, TrainingLevel } from '../services/medicalTrainingService';
 import CMEArticleViewer from '../components/training/CMEArticleViewer';
 import CBTPage from '../components/cbt/CBTPage';
+import { MyStatusBanner } from '../components/training/MyStatusBanner';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 interface Patient {
@@ -483,6 +484,10 @@ export default function StudentDashboard() {
                 </div>
               </div>
             )}
+
+            {/* Where this student stands. Students previously had no way to see
+                a score at all, only a count of days left. */}
+            <MyStatusBanner />
 
             {/* Days Left Banner */}
             <div className={`rounded-xl p-4 flex items-center gap-3 ${stats.daysLeft <= 7 ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200'}`}>
