@@ -1,6 +1,8 @@
 // Trainee Rotations API endpoints
 import { query } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
+import { scoreTrainee } from './_lib/traineeScoring.js';
+import { gatherTraineeCounts } from './_lib/traineeCounts.js';
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
@@ -400,65 +402,37 @@ async function handlePut(req, res, userId, userRole) {
   }
 }
 
+/**
+ * Sign-out eligibility for a trainee's rotation.
+ *
+ * Delegates to the shared scorer. This function used to carry a fifth copy of
+ * the per-level requirements, and gated sign-out on the CBT average alone
+ * reaching 70 -- so a trainee could be cleared here while Training Admin,
+ * which weighs six components, still showed them well short.
+ */
 async function checkSignOutEligibility(userId, level) {
-  const userLevel = level || 'house_officer';
-  
-  const requirements = {
-    'house_officer': { cbtTests: 4, patientEntries: 30, duties: 20, loginDays: 25, threshold: 70 },
-    'junior_resident': { cbtTests: 12, patientEntries: 100, duties: 60, loginDays: 75, threshold: 70 },
-    'senior_resident': { cbtTests: 24, patientEntries: 200, duties: 120, loginDays: 150, threshold: 70 }
-  };
-  const reqs = requirements[userLevel];
-  
-  // Check CBT tests
-  const cbtCount = await query(
-    `SELECT COUNT(*) as count, COALESCE(AVG(percentage), 0) as avg_score
-     FROM cbt_attempts WHERE user_id = $1 AND completed = true`,
-    [userId]
-  );
-  
-  // Check patient entries
-  const patientCount = await query(
-    `SELECT COUNT(*) as count FROM activity_logs 
-     WHERE user_id = $1 AND activity_type = 'patient_entry'`,
-    [userId]
-  );
-  
-  // Check duties
-  const dutyCount = await query(
-    `SELECT COUNT(*) as count, COALESCE(AVG(promptness_score), 0) as avg_score
-     FROM duty_assignments WHERE user_id = $1 AND status = 'completed'`,
-    [userId]
-  );
-  
-  // Check login days
-  const loginCount = await query(
-    `SELECT COUNT(DISTINCT DATE(created_at)) as count 
-     FROM activity_logs WHERE user_id = $1 AND activity_type = 'login'`,
-    [userId]
-  );
-  
-  const results = {
-    cbtTests: { current: parseInt(cbtCount.rows[0].count), required: reqs.cbtTests },
-    patientEntries: { current: parseInt(patientCount.rows[0].count), required: reqs.patientEntries },
-    duties: { current: parseInt(dutyCount.rows[0].count), required: reqs.duties },
-    loginDays: { current: parseInt(loginCount.rows[0].count), required: reqs.loginDays },
-    cbtAverage: parseFloat(cbtCount.rows[0].avg_score),
-    dutyPromptness: parseFloat(dutyCount.rows[0].avg_score)
-  };
-  
-  const eligible = 
-    results.cbtTests.current >= results.cbtTests.required &&
-    results.patientEntries.current >= results.patientEntries.required &&
-    results.duties.current >= results.duties.required &&
-    results.loginDays.current >= results.loginDays.required &&
-    results.cbtAverage >= reqs.threshold;
-  
+  const counts = await gatherTraineeCounts(userId);
+  const scored = scoreTrainee({ level, counts });
+  const need = scored.requirements;
+
   return {
-    eligible,
-    level: userLevel,
-    requirements: results,
-    threshold: reqs.threshold
+    eligible: scored.eligibility.eligible,
+    level: scored.level,
+    overallScore: scored.overall,
+    threshold: scored.passThreshold,
+    components: scored.components,
+    weights: scored.weights,
+    met: scored.eligibility.met,
+    notMet: scored.eligibility.notMet,
+    requirements: {
+      cbtTests:      { current: counts.cbtTests,        required: need.cbtTests },
+      patientEntries:{ current: counts.patients,        required: need.patients },
+      duties:        { current: counts.duties,          required: need.duties },
+      loginDays:     { current: counts.loginDays,       required: need.loginDays },
+      cmeArticles:   { current: counts.cmeArticles,     required: need.cmeArticles },
+      selfAssessments:{ current: counts.selfAssessments, required: need.selfAssessments },
+      cbtAverage:    counts.cbtAverage,
+    },
   };
 }
 

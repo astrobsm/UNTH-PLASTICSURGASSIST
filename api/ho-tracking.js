@@ -2,7 +2,7 @@
 // Provides detailed HO documentation logs, patient care metrics, and sign-out eligibility
 import { query } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
-import { getRequirements, pctOf, computeOverall, computeEligibility } from './_lib/traineeScoring.js';
+import { getRequirements, pctOf, computeOverall, computeEligibility, SCORE_WEIGHTS } from './_lib/traineeScoring.js';
 
 const ADMIN_ROLES = ['consultant', 'super_admin', 'admin', 'senior_registrar'];
 
@@ -734,7 +734,7 @@ async function getHOFullMetrics(userId, fullName, username) {
   // HO Tracking is house-officer level; admin-training re-scores per level using
   // the same shared module. Component scores are each 0–100.
   const reqs = getRequirements('house_officer');
-  const cmeScore = pctOf(cmeCount, reqs.cmeTopics);
+  const cmeScore = pctOf(cmeCount, reqs.cmeArticles);
   const patientScore = pctOf(distinctPatientsServed, reqs.patients);
   const dutyScore = pctOf(dutiesCompleted, reqs.duties);
   const attendanceScore = pctOf(loginDays, reqs.loginDays);
@@ -747,7 +747,7 @@ async function getHOFullMetrics(userId, fullName, username) {
     attendance: attendanceScore,
   };
   const counts = {
-    cmeTopics: cmeCount,
+    cmeArticles: cmeCount,
     cbtTests: cbtCompleted,
     selfAssessments: selfAssessmentCount,
     patients: distinctPatientsServed,
@@ -780,14 +780,16 @@ async function getHOFullMetrics(userId, fullName, username) {
       loginDays,
       assignedPatients: parseInt(assignedCount.cnt) || 0,
       overallScore,
-      // Score breakdown for transparency (comprehensive weights)
+      // Score breakdown for transparency. Weights come from the scoring
+      // module rather than being retyped here, so a change to the formula
+      // cannot leave this panel explaining the old one.
       scoreBreakdown: {
-        cme: bd(cmeScore, 0.15),
-        cbt: bd(cbtAvgScore, 0.20),
-        selfAssessment: bd(selfAssessmentAvgScore, 0.15),
-        patientCare: bd(patientScore, 0.30),
-        duties: bd(dutyScore, 0.10),
-        attendance: bd(attendanceScore, 0.10),
+        cme: bd(cmeScore, SCORE_WEIGHTS.cme),
+        cbt: bd(cbtAvgScore, SCORE_WEIGHTS.cbt),
+        selfAssessment: bd(selfAssessmentAvgScore, SCORE_WEIGHTS.selfAssessment),
+        patientCare: bd(patientScore, SCORE_WEIGHTS.clinical),
+        duties: bd(dutyScore, SCORE_WEIGHTS.duties),
+        attendance: bd(attendanceScore, SCORE_WEIGHTS.attendance),
       },
       rotationStart: rotationStart || null,
     },

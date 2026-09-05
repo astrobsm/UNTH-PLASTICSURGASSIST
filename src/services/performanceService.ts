@@ -127,17 +127,51 @@ export const ROTATION_DURATIONS: Record<TrainingLevel, number> = {
   senior_resident: 180  // 6 months in days
 };
 
+// Weights and requirements are NOT defined here. They come from
+// api/_lib/traineeScoring.js — the same module the API scores with.
+//
+// This file used to declare its own (CBT 10 / patient care 70 / duty 10 /
+// attendance 10, with a 6.5% weighted section floor) while the API used
+// CME 15 / CBT 20 / self-assessment 15 / clinical 30 / duties 10 /
+// attendance 10 with a 40% floor on the graded sections. The result was a
+// trainee whose Medical Training page and Training Admin row disagreed, and a
+// participation tracker that read "CBT 0%" beside "3/4 completed".
+//
+// If you need a different weighting, change it in traineeScoring.js.
+import {
+  SCORE_WEIGHTS,
+  PASS_THRESHOLD,
+  MIN_SECTION_SCORE,
+  getRequirements,
+} from '../../api/_lib/traineeScoring.js';
+
+/**
+ * The four legacy component names this file is written around, mapped onto the
+ * shared weights. `clinical` is what used to be called `patientCare`.
+ *
+ * `cme` and `selfAssessment` are deliberately absent from this alias: the
+ * client-side calculation below has no data for them, so it reports a partial
+ * score and the authoritative figure comes from /api/performance. Read
+ * `SCORE_WEIGHTS` directly for anything that displays the full formula.
+ */
 export const PERFORMANCE_WEIGHTS = {
-  cbt: 0.10,           // 10% - CBT tests
-  patientCare: 0.70,   // 70% - Patient care (primary sign-out criteria)
-  dutyPromptness: 0.10, // 10% - Duty promptness
-  attendance: 0.10     // 10% - Attendance
+  cbt: SCORE_WEIGHTS.cbt,
+  patientCare: SCORE_WEIGHTS.clinical,
+  dutyPromptness: SCORE_WEIGHTS.duties,
+  attendance: SCORE_WEIGHTS.attendance,
 };
 
-export const SIGN_OUT_THRESHOLD = 70; // 70% required to sign out
+export { SCORE_WEIGHTS };
 
-// Minimum weighted contribution per section (6.5% of total)
-// Each section's (score × weight) must be ≥ 6.5
+export const SIGN_OUT_THRESHOLD = PASS_THRESHOLD;
+
+/**
+ * Minimum score a graded section must reach on its own, as a percentage of
+ * that section rather than of the total. Shared with the API.
+ */
+export const MINIMUM_SECTION_SCORE = MIN_SECTION_SCORE;
+
+/** Retained for callers that still think in weighted contribution. */
 export const MINIMUM_SECTION_CONTRIBUTION = 6.5;
 
 export const MINIMUM_REQUIREMENTS: Record<TrainingLevel, {
@@ -146,25 +180,21 @@ export const MINIMUM_REQUIREMENTS: Record<TrainingLevel, {
   dutiesCompleted: number;
   loginDays: number;
 }> = {
-  house_officer: {
-    cbtTests: 4,
-    patientEntries: 30,
-    dutiesCompleted: 20,
-    loginDays: 25
-  },
-  junior_resident: {
-    cbtTests: 12,
-    patientEntries: 100,
-    dutiesCompleted: 60,
-    loginDays: 75
-  },
-  senior_resident: {
-    cbtTests: 24,
-    patientEntries: 200,
-    dutiesCompleted: 120,
-    loginDays: 150
-  }
+  house_officer: mapRequirements('house_officer'),
+  junior_resident: mapRequirements('junior_resident'),
+  senior_resident: mapRequirements('senior_resident'),
 };
+
+/** Shared requirement names -> the names this file already uses. */
+function mapRequirements(level: string) {
+  const r = getRequirements(level);
+  return {
+    cbtTests: r.cbtTests,
+    patientEntries: r.patients,
+    dutiesCompleted: r.duties,
+    loginDays: r.loginDays,
+  };
+}
 
 export const ACTIVITY_POINTS: Record<ActivityType, number> = {
   login: 1,
