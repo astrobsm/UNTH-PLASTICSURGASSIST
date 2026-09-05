@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { useLocation } from 'react-router-dom';
 import Layout from './components/Layout';
@@ -67,8 +67,6 @@ const Patients = lazyWithRetry(() => import('./pages/Patients'));
 const PatientProfile = lazyWithRetry(() => import('./pages/PatientProfile'));
 const TreatmentPlans = lazyWithRetry(() => import('./pages/TreatmentPlans'));
 const Labs = lazyWithRetry(() => import('./pages/Labs'));
-const Education = lazyWithRetry(() => import('./pages/Education'));
-const MCQEducation = lazyWithRetry(() => import('./pages/MCQEducation'));
 const TopicManagement = lazyWithRetry(() => import('./pages/TopicManagement'));
 const Admin = lazyWithRetry(() => import('./pages/Admin'));
 const NotificationManager = lazyWithRetry(() => import('./pages/NotificationManager'));
@@ -298,24 +296,28 @@ function App() {
 
   // Student users go directly to their dashboard.
   //
-  // The learning modules are reachable from here too. Until now the catch-all
+  // The training module is reachable from here too. Until now the catch-all
   // below swallowed every other path, so a student following a link to the MCQ
   // bank or the CME articles landed silently back on their dashboard — the
   // material was built and they could not get to it.
   //
-  // Only the two content modules are opened up. Both keep their material in
-  // IndexedDB and treat the server as a top-up, so they work on a student
-  // token; the staff training pages read trainee analytics and rotations and
-  // stay closed. The catch-all still ends at the dashboard, so an unknown path
-  // cannot reach anything else.
+  // /training is the one learning module now, shared with the doctors on
+  // rotation; it reads the viewer's role and skips the staff-only rotation and
+  // analytics calls for a student token. It replaces /education and
+  // /mcq-education, which were two more copies of the same CME and MCQ
+  // material against a different question set. The catch-all still ends at the
+  // dashboard, so an unknown path cannot reach anything else.
   if ((user.role as string) === 'student') {
     return (
       <Suspense fallback={<PageLoader />}>
         <Routes>
           <Route path="/student-dashboard" element={<StudentDashboard />} />
           <Route path="/student-login" element={<StudentLogin />} />
-          <Route path="/mcq-education" element={<MCQEducation />} />
-          <Route path="/education" element={<Education />} />
+          <Route path="/training" element={<MedicalTrainingPage />} />
+          {/* Where the student learning links used to point. */}
+          <Route path="/education" element={<Navigate to="/training" replace />} />
+          <Route path="/mcq-education" element={<Navigate to="/training" replace />} />
+          <Route path="/medical-training" element={<Navigate to="/training" replace />} />
           <Route path="*" element={<StudentDashboard />} />
         </Routes>
       </Suspense>
@@ -407,9 +409,11 @@ function App() {
               <Route path="/soft-tissue-infection" element={<SoftTissueInfectionPage />} />
               <Route path="/pressure-sore" element={<PressureSorePage />} />
               <Route path="/lymphedema" element={<LymphedemaPage />} />
-              <Route path="/medical-training" element={<MedicalTrainingPage />} />
-              <Route path="/education" element={<Education />} />
-              <Route path="/mcq-education" element={<MCQEducation />} />
+              <Route path="/training" element={<MedicalTrainingPage />} />
+              {/* Superseded by /training — kept so existing links still land. */}
+              <Route path="/medical-training" element={<Navigate to="/training" replace />} />
+              <Route path="/education" element={<Navigate to="/training" replace />} />
+              <Route path="/mcq-education" element={<Navigate to="/training" replace />} />
               <Route path="/notifications" element={<NotificationManager />} />
               <Route path="/chat" element={<ChatRooms />} />
               <Route path="/chat/:roomId" element={<ChatRooms />} />
@@ -422,7 +426,9 @@ function App() {
               <Route path="/reports/referrals" element={<ReferralAnalyticsPage />} />
               <Route path="/submit-consult/:token" element={<PublicConsultSubmitPage />} />
               <Route path="/settings" element={<Settings />} />
-              <Route path="/admin-training" element={<ProtectedRoute allowedRoles={['admin', 'consultant']}><AdminTrainingPage /></ProtectedRoute>} />
+              <Route path="/training-admin" element={<ProtectedRoute allowedRoles={['admin', 'consultant', 'senior_registrar']}><AdminTrainingPage /></ProtectedRoute>} />
+              {/* Renamed alongside /training. Old links still land. */}
+              <Route path="/admin-training" element={<Navigate to="/training-admin" replace />} />
               <Route path="/bulk-admit" element={<ProtectedRoute allowedRoles={['admin', 'consultant', 'senior_registrar', 'junior_registrar', 'registrar', 'house_officer']}><BulkAdmitPage /></ProtectedRoute>} />
               <Route path="/ho-tracking" element={<ProtectedRoute allowedRoles={['admin', 'consultant', 'senior_registrar']}><HOTrackingPage /></ProtectedRoute>} />
               <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><Admin /></ProtectedRoute>} />

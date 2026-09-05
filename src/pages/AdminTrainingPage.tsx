@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { apiClient } from '../services/apiClient';
 import { useCrossTabRefresh } from '../utils/crossTabSync';
+import { StudentManagementTab, StudentGroupsPanel } from '../components/training/StudentManagementPanels';
 
 // ── Types ──
 interface TraineeMetrics {
@@ -91,6 +92,14 @@ const LEVEL_COLORS: Record<string, string> = {
   senior_resident: 'purple',
 };
 
+type ConsoleTab = 'trainees' | 'students' | 'groups';
+
+const CONSOLE_TABS: { id: ConsoleTab; label: string; hint: string }[] = [
+  { id: 'trainees', label: 'Trainees',  hint: 'House officers, registrars and senior registrars on rotation' },
+  { id: 'students', label: 'Students',  hint: 'Clinical students on posting' },
+  { id: 'groups',   label: 'Groups',    hint: 'The five posting groups and their activities' },
+];
+
 const AdminTrainingPage: React.FC = () => {
   const [trainees, setTrainees] = useState<Trainee[]>([]);
   const [loading, setLoading] = useState(true);
@@ -106,6 +115,23 @@ const AdminTrainingPage: React.FC = () => {
   const [expandedTrainee, setExpandedTrainee] = useState<number | null>(null);
   const [detailData, setDetailData] = useState<any>(null);
   const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
+
+  // Which cohort this console is looking at. Doctors on rotation and clinical
+  // students are tracked here together: they sit the same CBTs, read the same
+  // articles and are scored by the same engine, so splitting them across two
+  // admin screens meant two places to look and two places to drift.
+  const [consoleTab, setConsoleTab] = useState<ConsoleTab>(() => {
+    const t = new URLSearchParams(window.location.search).get('tab');
+    return t === 'students' || t === 'groups' ? t : 'trainees';
+  });
+
+  // Keep the URL honest so the tab survives a reload or a shared link.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (consoleTab === 'trainees') url.searchParams.delete('tab');
+    else url.searchParams.set('tab', consoleTab);
+    window.history.replaceState({}, '', url);
+  }, [consoleTab]);
   const [whatsAppTarget, setWhatsAppTarget] = useState<Trainee | null>(null);
   const [whatsAppPhone, setWhatsAppPhone] = useState('');
   const [whatsAppMessage, setWhatsAppMessage] = useState('');
@@ -468,8 +494,31 @@ const AdminTrainingPage: React.FC = () => {
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
             <Users className="w-7 h-7 text-green-600" /> Training Management
           </h1>
-          <p className="text-gray-500 mt-1">Monitor trainee progress, send warnings, and manage sign-out eligibility</p>
+          <p className="text-gray-500 mt-1">Monitor progress, send warnings, and manage sign-out eligibility</p>
         </div>
+
+        {/* Cohort tabs */}
+        <div className="flex gap-2 mb-6 overflow-x-auto scrollbar-hide pb-1">
+          {CONSOLE_TABS.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setConsoleTab(tab.id)}
+              title={tab.hint}
+              className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
+                consoleTab === tab.id
+                  ? 'bg-green-600 text-white shadow'
+                  : 'bg-white text-gray-600 border hover:bg-gray-50'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {consoleTab === 'students' && <StudentManagementTab />}
+        {consoleTab === 'groups' && <StudentGroupsPanel />}
+
+        {consoleTab === 'trainees' && (<>
 
         {/* Summary Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -687,6 +736,7 @@ const AdminTrainingPage: React.FC = () => {
             <p className="text-gray-400 text-sm mt-1">There are no registered trainees matching your filters</p>
           </div>
         )}
+        </>)}
       </div>
 
       {/* Warning Modal */}

@@ -62,7 +62,7 @@ const navigation = [
   { name: 'Patients', href: '/patients', icon: Users },
   { name: 'Bulk Register/Admit', href: '/bulk-admit', icon: UserPlus },
   { name: 'Dept. Meetings', href: '/departmental-meetings', icon: Presentation },
-  { name: 'Medical Training', href: '/medical-training', icon: BookOpen },
+  { name: 'Training', href: '/training', icon: BookOpen },
   { name: 'Call Duty Roster', href: '/call-duty', icon: PhoneCall },
   { name: 'Clinic Duties', href: '/clinic-duties', icon: Shield },
   { name: 'Clinic Day Log', href: '/clinic-day-log', icon: ClipboardCheck },
@@ -88,8 +88,7 @@ const navigation = [
   { name: 'Notifications', href: '/notifications', icon: Bell },
   { name: 'Settings', href: '/settings', icon: SettingsIcon },
   { name: 'HO Tracking', href: '/ho-tracking', icon: ClipboardCheck },
-  { name: 'Students', href: '/admin?tab=students', icon: GraduationCap },
-  { name: 'Training Admin', href: '/admin-training', icon: GraduationCap },
+  { name: 'Training Admin', href: '/training-admin', icon: GraduationCap },
   { name: 'Admin', href: '/admin', icon: SettingsIcon },
 ];
 
