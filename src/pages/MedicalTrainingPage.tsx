@@ -41,11 +41,18 @@ import { PerformanceDashboard } from '../components/performance';
 type TabType = 'house_officer' | 'junior_resident' | 'senior_resident';
 
 /**
- * Maps a signed-in user onto the training level whose material they should
- * see. Doctors follow their role; clinical students follow their posting.
+ * Maps a signed-in user onto the training level whose material they should see.
+ *
+ * Role first, training_level only as a fallback. users.training_level was never
+ * populated — every account in production carries the 'house_officer' default,
+ * senior registrars included — so preferring it would hand a senior registrar
+ * the house officer curriculum.
  */
 function levelForUser(user: { role?: string; training_level?: string } | null): TabType {
-  const raw = String(user?.training_level || user?.role || '').toLowerCase();
+  const fromRole = String(user?.role || '').toLowerCase();
+  const isTrainingRole = /house|registrar|resident|intern|officer/.test(fromRole);
+  const raw = isTrainingRole ? fromRole : String(user?.training_level || fromRole).toLowerCase();
+
   if (raw.includes('senior')) return 'senior_resident';
   if (raw.includes('registrar') || raw.includes('resident') || raw.includes('junior')) return 'junior_resident';
   return 'house_officer';

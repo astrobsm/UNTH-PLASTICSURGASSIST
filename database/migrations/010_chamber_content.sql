@@ -111,6 +111,27 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_questions_content
   );
 
 -- -- Content: CME articles ----------------------------------------------------
+--
+-- An earlier `cme_articles` may already be here: the flat, JSONB-shaped table
+-- that cmeWACSService used to fill, with a varchar id and `topic`/`category` as
+-- free text. It is empty in production and its only reader was MCQEducation,
+-- which the training merge removed. CREATE TABLE IF NOT EXISTS would silently
+-- do nothing and leave the imported articles with nowhere to land, so the old
+-- one is moved aside first -- renamed, not dropped, in case it holds rows
+-- somewhere this has not been run.
+DO $$
+BEGIN
+  IF to_regclass('public.cme_articles') IS NOT NULL
+     AND NOT EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'cme_articles'
+         AND column_name = 'estimated_reading_minutes'
+     )
+  THEN
+    EXECUTE 'ALTER TABLE public.cme_articles RENAME TO cme_articles_legacy_wacs';
+  END IF;
+END $$;
+
 CREATE TABLE IF NOT EXISTS cme_articles (
   id                        UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   topic_id                  UUID NOT NULL REFERENCES topics(id),

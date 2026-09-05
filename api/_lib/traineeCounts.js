@@ -29,26 +29,91 @@ async function scalar(sql, params, fallback = 0) {
 }
 
 /**
+ * Where a trainee's clinical documentation actually lives.
+ *
+ * `[table, patientColumn, authorColumn, authorKind]`. authorKind is 'int' when
+ * the column holds users.id, 'name' when it holds a display name or username
+ * as free text -- both conventions are in use.
+ *
+ * Counting patients from activity_logs does not work: reference_type is NULL on
+ * 480 of 487 rows in production, and activity_type 'patient_entry' is never
+ * written at all. The documentation itself is the record.
+ */
+const DOCUMENTATION_SOURCES = [
+  ['prescriptions',            'patient_id', 'prescribed_by',   'int'],
+  ['ward_rounds',              'patient_id', 'user_id',         'int'],
+  ['lab_orders',               'patient_id', 'ordered_by',      'int'],
+  ['discharge_summaries',      'patient_id', 'prepared_by',     'int'],
+  ['wound_care_records',       'patient_id', 'recorded_by',     'int'],
+  ['treatment_plans',          'patient_id', 'created_by',      'int'],
+  ['progress_notes',           'patient_id', 'author',          'name'],
+  ['vital_signs',              'patient_id', 'recorded_by',     'name'],
+  ['fluid_balance',            'patient_id', 'recorded_by',     'name'],
+  ['blood_transfusions',       'patient_id', 'administered_by', 'name'],
+  ['preoperative_assessments', 'patient_id', 'assessed_by',     'name'],
+  ['dvt_assessments',          'patient_id', 'assessed_by',     'name'],
+  ['pressure_sore_assessments','patient_id', 'assessed_by',     'name'],
+  ['nutritional_assessments',  'patient_id', 'assessed_by',     'name'],
+  ['diabetic_foot_assessments','patient_id', 'assessed_by',     'name'],
+];
+
+/**
+ * Distinct patients this trainee has documented, and how many pieces of
+ * documentation they wrote.
+ *
+ * Each table is queried separately and a failure is ignored: which of these
+ * exist varies between deployments, and one absent table must not zero the
+ * whole count.
+ */
+async function gatherDocumentation(userId, identities) {
+  const patients = new Set();
+  let entries = 0;
+
+  for (const [table, patientCol, authorCol, kind] of DOCUMENTATION_SOURCES) {
+    const where = kind === 'int'
+      ? { clause: `"${authorCol}" = $1`, params: [userId] }
+      : { clause: `lower("${authorCol}"::text) = ANY($1)`, params: [identities] };
+    try {
+      const r = await query(
+        `SELECT DISTINCT "${patientCol}"::text AS pid FROM ${table} WHERE ${where.clause}`,
+        where.params,
+      );
+      r.rows.forEach((row) => { if (row.pid) patients.add(row.pid); });
+      entries += r.rowCount || 0;
+    } catch {
+      // Table or column absent in this deployment.
+    }
+  }
+  return { patients: patients.size, entries };
+}
+
+/** The strings a name-typed author column might hold for this user. */
+async function identitiesFor(userId) {
+  const out = [String(userId)];
+  try {
+    const r = await query('SELECT full_name, username, email FROM users WHERE id = $1', [userId]);
+    const u = r.rows[0];
+    if (u) [u.full_name, u.username, u.email].forEach((v) => { if (v) out.push(String(v).toLowerCase()); });
+  } catch { /* users always exists, but never let this be fatal */ }
+  return out;
+}
+
+/**
  * Raw counts for a doctor on rotation, keyed to `users.id`.
  *
  * Feed the result straight to scoreTrainee({ level, counts }).
  */
 export async function gatherTraineeCounts(userId) {
+  const identities = await identitiesFor(userId);
+
   const [
-    cbtTests, cbtAverage, patients, duties, loginDays,
-    cmeArticles, selfAssessments, selfAssessmentAverage,
+    cbtTests, cbtAverage, formalDuties, loginDays,
+    cmeArticles, selfAssessments, selfAssessmentAverage, legacyCme,
+    documentation,
   ] = await Promise.all([
     scalar(`SELECT COUNT(*) FROM cbt_attempts WHERE user_id = $1 AND completed = true`, [userId]),
     scalar(`SELECT COALESCE(AVG(percentage), 0) FROM cbt_attempts
             WHERE user_id = $1 AND completed = true`, [userId]),
-
-    // Distinct patients documented — not rows written, and not activity points.
-    // A trainee who writes six notes on one patient has documented one patient.
-    scalar(`SELECT COUNT(DISTINCT reference_id) FROM activity_logs
-            WHERE user_id = $1 AND reference_type = 'patient'
-              AND activity_type IN ('patient_entry','patient_update','treatment_plan',
-                                    'prescription','wound_care','surgery_booking',
-                                    'lab_order','discharge_summary','ward_round')`, [userId]),
 
     scalar(`SELECT COUNT(*) FROM duty_assignments
             WHERE user_id = $1 AND status = 'completed'`, [userId]),
@@ -64,11 +129,28 @@ export async function gatherTraineeCounts(userId) {
 
     scalar(`SELECT COALESCE(AVG(assessment_score), 0) FROM learner_article_progress
             WHERE learner_kind = 'user' AND learner_id = $1 AND assessment_completed`, [userId]),
+
+    // Reading recorded before learner_article_progress existed. Counted so a
+    // trainee's history does not reset to zero the day the new tracking lands.
+    scalar(`SELECT COUNT(*) FROM training_progress WHERE user_id = $1`, [userId]),
+
+    gatherDocumentation(userId, identities),
   ]);
 
   return {
-    cbtTests, cbtAverage, patients, duties, loginDays,
-    cmeArticles, selfAssessments, selfAssessmentAverage,
+    cbtTests,
+    cbtAverage,
+    patients: documentation.patients,
+    // Documentation written is the trainee's day-to-day work; duty_assignments
+    // is a rota that most deployments never populated (0 rows in production),
+    // so an empty rota must not read as a trainee who did nothing.
+    duties: formalDuties + documentation.entries,
+    dutiesFormal: formalDuties,
+    documentationEntries: documentation.entries,
+    loginDays,
+    cmeArticles: Math.max(cmeArticles, legacyCme),
+    selfAssessments,
+    selfAssessmentAverage,
   };
 }
 
