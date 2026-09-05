@@ -46,6 +46,23 @@ const FORCE = argv.includes('--force');
 
 const LEGACY_SCHEMA = 'chamber_legacy';
 
+/**
+ * Which surgery categories each level is expected to read.
+ *
+ * The starting point only -- admins change it from Training Admin. Without it
+ * level_curriculum is empty and every learner sees an empty reading list.
+ */
+const DEFAULT_CURRICULUM = {
+  student_surgery_1: ['SURG1'],
+  student_surgery_2: ['SURG2'],
+  student_surgery_3: ['SURG3'],
+  student_surgery_4: ['SURG4'],
+  house_officer:     ['SURG1', 'SURG2'],
+  junior_registrar:  ['SURG2', 'SURG3'],
+  registrar:         ['SURG3'],
+  senior_registrar:  ['SURG3', 'SURG4'],
+};
+
 /** Copied into the app's own content tables, parents before children. */
 const CONTENT_TABLES = [
   'rotation_categories',
@@ -164,9 +181,12 @@ async function copyContentTable(src, dst, table, report) {
       });
       return `(${placeholders.join(', ')})`;
     });
-    const conflict = key.length ? `(${key.map((c) => `"${c}"`).join(', ')})` : '';
-    const sql = `INSERT INTO "${table}" (${cols}) VALUES ${tuples.join(', ')}`
-      + (conflict ? ` ON CONFLICT ${conflict} DO NOTHING` : ' ON CONFLICT DO NOTHING');
+    // No conflict target: it has to match a unique index exactly, and these
+    // tables are protected by indexes whose shape differs from the dedupe key.
+    // questions is unique on an md5() of its whole content, and article_sections
+    // on (article_id, section_order) rather than the three columns that identify
+    // a section. Targetless DO NOTHING honours whichever constraint fires.
+    const sql = `INSERT INTO "${table}" (${cols}) VALUES ${tuples.join(', ')} ON CONFLICT DO NOTHING`;
     const r = await dst.query(sql, params);
     inserted += r.rowCount || 0;
   }
@@ -223,17 +243,33 @@ async function copyLegacyTable(src, dst, table, report) {
   const names = cols.rows.map((c) => `"${c.column_name}"`).join(', ');
   const rows = (await src.query(`SELECT ${names} FROM crp."${table}"`)).rows;
   const colNames = cols.rows.map((c) => c.column_name);
+  const jsonCols = new Set(
+    cols.rows.filter((c) => c.data_type === 'json' || c.data_type === 'jsonb').map((c) => c.column_name),
+  );
   let inserted = 0;
   const BATCH = 500;
+
+  /**
+   * A json/jsonb column needs a JSON string, including when the value is an
+   * array -- pg would otherwise serialise a JS array as a Postgres array
+   * literal, `{"a","b"}`, which json refuses. Everything else goes across as
+   * the driver gives it.
+   */
+  const encode = (value, column) => {
+    if (value === null || value === undefined) return value;
+    if (jsonCols.has(column)) return JSON.stringify(value);
+    if (typeof value === 'object' && !(value instanceof Date) && !Array.isArray(value)) {
+      return JSON.stringify(value);
+    }
+    return value;
+  };
 
   for (let i = 0; i < rows.length; i += BATCH) {
     const slice = rows.slice(i, i + BATCH);
     const params = [];
     const tuples = slice.map((row) => {
       const ph = colNames.map((c) => {
-        const v = row[c];
-        params.push(v && typeof v === 'object' && !(v instanceof Date) && !Array.isArray(v)
-          ? JSON.stringify(v) : v);
+        params.push(encode(row[c], c));
         return `$${params.length}`;
       });
       return `(${ph.join(', ')})`;
@@ -293,7 +329,26 @@ async function main() {
     for (const t of rest) await copyLegacyTable(src, dst, t, legacyReport);
     legacyReport.forEach((l) => console.log(l));
 
-    // 4. Quality fixes, then what landed.
+    // 4. Which categories each level is expected to cover. Without this the
+    //    training module has no way to turn "senior registrar" into a reading
+    //    list, and every learner sees an empty curriculum.
+    if (!DRY_RUN) {
+      let mapped = 0;
+      for (const [level, codes] of Object.entries(DEFAULT_CURRICULUM)) {
+        for (const code of codes) {
+          const r = await dst.query(
+            `INSERT INTO level_curriculum (training_level, category_id)
+             SELECT $1, id FROM rotation_categories WHERE code = $2
+             ON CONFLICT (training_level, category_id) DO NOTHING`,
+            [level, code],
+          );
+          mapped += r.rowCount || 0;
+        }
+      }
+      console.log(`\nCurriculum: ${mapped} level-to-category mappings`);
+    }
+
+    // 5. Quality fixes, then what landed.
     if (!DRY_RUN) {
       process.stdout.write('\nApplying 011_content_quality_fixes.sql ... ');
       await dst.query(fs.readFileSync(path.join(ROOT, 'database/migrations/011_content_quality_fixes.sql'), 'utf8'));
