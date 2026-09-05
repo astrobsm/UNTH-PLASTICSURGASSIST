@@ -58,3 +58,6 @@ public/tesseract/manifest.json
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+
+# Regenerable audit output (11MB). Run scripts/audit-question-bank.mjs to rebuild.
+audit/question-bank.json
