@@ -39,6 +39,7 @@ export default async function handler(req, res) {
       if (method === 'PUT' && action === 'treatment-plans') return await updateStudentTreatmentPlan(auth.user.id, pathParts[1], req.body, res);
       // Training participation (CME / CBT / self-assessment) + sign-out summary
       if (method === 'POST' && action === 'training') return await recordStudentTraining(auth.user.id, req.body, res);
+      if (method === 'GET'  && action === 'training') return await getStudentTrainingItems(auth.user.id, url.searchParams, res);
       if (method === 'GET'  && action === 'training-summary') return await getStudentTrainingSummary(auth.user.id, res);
     }
 
@@ -1406,6 +1407,37 @@ async function recordStudentTraining(studentId, body, res) {
     [studentId, kind, refId || `${kind}-${Date.now()}`, title || null, score ?? null, total ?? null]
   );
   return res.status(201).json({ ok: true });
+}
+
+/**
+ * The student's own training records, item by item.
+ *
+ * training-summary aggregates by kind, which tells a student how many articles
+ * they have read but not WHICH ones — so the CME reader could not show what was
+ * already done, and a student moving to another phone started again.
+ *
+ * Scoped to the caller's own id, taken from the token. A student cannot pass
+ * someone else's id here because none is accepted.
+ */
+async function getStudentTrainingItems(studentId, searchParams, res) {
+  await ensureGroupTables();
+
+  const kind = searchParams.get('kind');
+  const args = [studentId];
+  let filter = '';
+  if (['cme', 'cbt', 'self_assessment'].includes(kind)) {
+    args.push(kind);
+    filter = ' AND kind = $2';
+  }
+
+  const r = await query(
+    `SELECT kind, ref_id, title, score, total, created_at
+       FROM student_training_progress
+      WHERE student_id = $1${filter}
+      ORDER BY created_at DESC`,
+    args
+  );
+  return res.status(200).json({ items: r.rows });
 }
 
 // Student's own training + group + eligibility summary.

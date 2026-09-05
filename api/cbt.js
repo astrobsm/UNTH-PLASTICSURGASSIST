@@ -5,8 +5,15 @@ import { cors, authenticateRequest } from './_lib/auth.js';
 export default async function handler(req, res) {
   if (cors(req, res)) return;
 
-  // Verify authentication
-  const authResult = authenticateRequest(req);
+  // Students sit the same tests, so their tokens are accepted here.
+  //
+  // This is the only endpoint outside api/students.js that takes a student
+  // token, and it is safe to because of the line below: userId comes from the
+  // token, never from the request, and every query in this file is scoped by
+  // it — a student reaches their own attempts and nobody else's. The three
+  // tables involved (cbt_tests, cbt_attempts, activity_logs) hold no patient
+  // data, which is exactly why /api/sync was left closed to them.
+  const authResult = authenticateRequest(req, { allowStudents: true });
   if (!authResult.authenticated) {
     return res.status(401).json({ error: 'Unauthorized', message: authResult.error });
   }
