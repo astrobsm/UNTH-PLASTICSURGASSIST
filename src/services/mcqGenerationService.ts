@@ -1731,7 +1731,7 @@ Apply these algorithms systematically in your clinical practice.`
             type: 'mcq_test_reminder',
             test_id: test.id,
             topic_id: test.topicId,
-            url: '/education',
+            url: '/training',
             scheduled_for: test.scheduledFor
           },
           actions: [

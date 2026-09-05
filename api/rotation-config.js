@@ -371,7 +371,7 @@ async function computeTraineeAnalytics(userId) {
     const loginDaysRequired = reqs.loginDays;
 
     // Component scores (0–100) for this trainee's level.
-    const cmeScoreComp = pctOf(cmeTopicsCompleted, reqs.cmeTopics);
+    const cmeScoreComp = pctOf(cmeTopicsCompleted, reqs.cmeArticles);
     const patientCareScore = pctOf(patientEntries, reqs.patients);
     const dutyPromptnessScore = pctOf(dutiesCompleted, reqs.duties);
     const attendanceScore = pctOf(loginDays, reqs.loginDays);
@@ -399,13 +399,13 @@ async function computeTraineeAnalytics(userId) {
     
     // CME progress
     const topicsCompleted = cmeTopicsCompleted;
-    const totalTopics = reqs.cmeTopics;
+    const totalTopics = reqs.cmeArticles;
     const cmeProgress = totalTopics > 0 ? Math.min(100, Math.round((topicsCompleted / totalTopics) * 100)) : 0;
 
     // Sign-out eligibility — comprehensive shared formula (CME + CBT +
     // self-assessment + clinical + duties + attendance, with section minimums).
     const counts = {
-      cmeTopics: topicsCompleted,
+      cmeArticles: topicsCompleted,
       cbtTests: cbtTestsCompleted,
       selfAssessments: selfAssessmentsCompleted,
       patients: patientEntries,

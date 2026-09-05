@@ -3,7 +3,8 @@ import { useAuthStore } from '../store/authStore';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  allowedRoles: string[];
+  // readonly: the lists come from config/routeAccess and are never mutated.
+  allowedRoles: readonly string[];
   fallback?: string;
 }
 

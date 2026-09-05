@@ -1,6 +1,18 @@
 // Performance Tracking API endpoints
+//
+// Scoring lives in _lib/traineeScoring.js, not here. This file used to carry
+// its own weights (CBT 30 / patient 35 / duty 25 / attendance 10) with no CME
+// or self-assessment term, so the performance dashboard and Training Admin
+// disagreed about the same trainee.
 import { query } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
+import { scoreTrainee, getRequirements, SCORE_WEIGHTS, PASS_THRESHOLD } from './_lib/traineeScoring.js';
+import { gatherTraineeCounts } from './_lib/traineeCounts.js';
+
+// Roles that sit a rotation and are therefore scored.
+const TRAINEE_ROLES = ['house_officer', 'junior_registrar', 'registrar', 'senior_registrar'];
+// Roles that may look at somebody else's score.
+const SUPERVISOR_ROLES = ['admin', 'super_admin', 'consultant', 'senior_registrar'];
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
@@ -37,8 +49,8 @@ async function handleGet(req, res, userId, userRole) {
   const { action, targetUserId, level } = req.query;
   
   // Allow supervisors to view other users' performance
-  const effectiveUserId = (userRole === 'consultant' || userRole === 'super_admin') && targetUserId 
-    ? targetUserId 
+  const effectiveUserId = SUPERVISOR_ROLES.includes(userRole) && targetUserId
+    ? targetUserId
     : userId;
 
   switch (action) {
@@ -81,23 +93,37 @@ async function handleGet(req, res, userId, userRole) {
       const eligibility = await checkSignOutEligibility(effectiveUserId, level);
       return res.status(200).json(eligibility);
 
-    case 'all-trainees':
+    case 'all-trainees': {
       // Get all trainees (for supervisors)
-      if (userRole !== 'consultant' && userRole !== 'super_admin') {
+      if (!SUPERVISOR_ROLES.includes(userRole)) {
         return res.status(403).json({ error: 'Access denied' });
       }
-      
+
+      // The role filter used to read ('intern', 'registrar', 'senior_registrar').
+      // This database has no 'intern' and no bare 'registrar' for house officers,
+      // so house officers and junior registrars were missing from the list.
       const traineesResult = await query(
         `SELECT u.id, u.username, u.full_name, u.training_level, u.role,
                 tr.status as rotation_status, tr.start_date, tr.expected_end_date,
                 tr.extension_count
          FROM users u
          LEFT JOIN trainee_rotations tr ON u.id = tr.user_id AND (tr.status = 'active' OR tr.status = 'extended')
-         WHERE u.role IN ('intern', 'registrar', 'senior_registrar')
+         WHERE u.role = ANY($1)
          AND u.is_active = true
-         ORDER BY u.training_level, u.full_name`
+         ORDER BY u.training_level, u.full_name`,
+        [TRAINEE_ROLES]
       );
       return res.status(200).json({ trainees: traineesResult.rows });
+    }
+
+    case 'scoring-config':
+      // The weights, thresholds and per-level requirements the frontend renders.
+      // Served rather than duplicated in the client so the two cannot drift.
+      return res.status(200).json({
+        weights: SCORE_WEIGHTS,
+        passThreshold: PASS_THRESHOLD,
+        requirements: getRequirements(level),
+      });
 
     default:
       // Get summary dashboard data
@@ -262,170 +288,64 @@ async function handlePut(req, res, userId, userRole) {
 }
 
 // Helper functions
+
 async function calculatePerformanceMetrics(userId, level) {
-  const userLevel = level || 'house_officer';
-  
-  // CBT Score - average of completed tests
-  const cbtResult = await query(
-    `SELECT COALESCE(AVG(percentage), 0) as score 
-     FROM cbt_attempts 
-     WHERE user_id = $1 AND completed = true`,
-    [userId]
-  );
-  
-  // Patient Care Score - based on activity points
-  const activityResult = await query(
-    `SELECT COALESCE(SUM(points), 0) as total_points
-     FROM activity_logs 
-     WHERE user_id = $1 
-     AND activity_type IN ('patient_entry', 'patient_update', 'treatment_plan', 
-                           'prescription', 'wound_care', 'surgery_booking', 
-                           'lab_order', 'discharge_summary', 'ward_round')`,
-    [userId]
-  );
-  
-  // Expected points based on level
-  const expectedPoints = {
-    'house_officer': 300,    // 30 entries * 10 points avg
-    'junior_resident': 1000, // 100 entries * 10 points avg
-    'senior_resident': 2000  // 200 entries * 10 points avg
-  };
-  const patientCareScore = Math.min(100, (activityResult.rows[0].total_points / expectedPoints[userLevel]) * 100);
-  
-  // Duty Promptness Score
-  const dutyResult = await query(
-    `SELECT COALESCE(AVG(promptness_score), 0) as score
-     FROM duty_assignments 
-     WHERE user_id = $1 AND status = 'completed' AND promptness_score IS NOT NULL`,
-    [userId]
-  );
-  
-  // Attendance Score - based on login days
-  const loginDays = {
-    'house_officer': 25,
-    'junior_resident': 75,
-    'senior_resident': 150
-  };
-  const attendanceResult = await query(
-    `SELECT COUNT(DISTINCT DATE(created_at)) as login_days
-     FROM activity_logs 
-     WHERE user_id = $1 AND activity_type = 'login'`,
-    [userId]
-  );
-  const attendanceScore = Math.min(100, (attendanceResult.rows[0].login_days / loginDays[userLevel]) * 100);
-  
-  // Calculate weighted overall score
-  const cbtScore = parseFloat(cbtResult.rows[0].score) || 0;
-  const dutyScore = parseFloat(dutyResult.rows[0].score) || 0;
-  
-  const overallScore = 
-    (cbtScore * 0.30) +
-    (patientCareScore * 0.35) +
-    (dutyScore * 0.25) +
-    (attendanceScore * 0.10);
-  
+  const counts = await gatherTraineeCounts(userId);
+  const scored = scoreTrainee({ level, counts });
+  const r1 = (n) => Math.round(n * 10) / 10;
+
   return {
-    cbtScore: Math.round(cbtScore * 10) / 10,
-    patientCareScore: Math.round(patientCareScore * 10) / 10,
-    dutyPromptnessScore: Math.round(dutyScore * 10) / 10,
-    attendanceScore: Math.round(attendanceScore * 10) / 10,
-    overallScore: Math.round(overallScore * 10) / 10
+    cbtScore: r1(scored.components.cbt),
+    cmeScore: r1(scored.components.cme),
+    selfAssessmentScore: r1(scored.components.selfAssessment),
+    patientCareScore: r1(scored.components.clinical),
+    dutyPromptnessScore: r1(scored.components.duties),
+    attendanceScore: r1(scored.components.attendance),
+    overallScore: scored.overall,
+    counts: scored.counts,
+    requirements: scored.requirements,
+    weights: scored.weights,
   };
 }
 
 async function checkSignOutEligibility(userId, level) {
-  const userLevel = level || 'house_officer';
-  const metrics = await calculatePerformanceMetrics(userId, userLevel);
-  
-  const requirements = {
-    'house_officer': { cbtTests: 4, patientEntries: 30, duties: 20, loginDays: 25 },
-    'junior_resident': { cbtTests: 12, patientEntries: 100, duties: 60, loginDays: 75 },
-    'senior_resident': { cbtTests: 24, patientEntries: 200, duties: 120, loginDays: 150 }
-  };
-  const reqs = requirements[userLevel];
-  
-  // Check CBT tests
-  const cbtCount = await query(
-    `SELECT COUNT(*) as count FROM cbt_attempts WHERE user_id = $1 AND completed = true`,
-    [userId]
-  );
-  
-  // Check patient entries
-  const patientCount = await query(
-    `SELECT COUNT(*) as count FROM activity_logs 
-     WHERE user_id = $1 AND activity_type = 'patient_entry'`,
-    [userId]
-  );
-  
-  // Check duties
-  const dutyCount = await query(
-    `SELECT COUNT(*) as count FROM duty_assignments 
-     WHERE user_id = $1 AND status = 'completed'`,
-    [userId]
-  );
-  
-  // Check login days
-  const loginCount = await query(
-    `SELECT COUNT(DISTINCT DATE(created_at)) as count 
-     FROM activity_logs WHERE user_id = $1 AND activity_type = 'login'`,
-    [userId]
-  );
-  
-  // Get rotation info
+  // Counted once and scored once. This function used to hold a second copy of
+  // the per-level requirements and re-query every count itself, so it could
+  // disagree with the metrics shown directly above it on the same page — and
+  // its patient count came from activity_type='patient_entry' alone, ignoring
+  // every other kind of documentation.
+  const counts = await gatherTraineeCounts(userId);
+  const scored = scoreTrainee({ level, counts });
+
   const rotation = await query(
-    `SELECT * FROM trainee_rotations 
+    `SELECT * FROM trainee_rotations
      WHERE user_id = $1 AND (status = 'active' OR status = 'extended')
      ORDER BY created_at DESC LIMIT 1`,
     [userId]
   );
-  
-  const met = [];
-  const notMet = [];
-  
-  // Check each requirement
-  if (parseInt(cbtCount.rows[0].count) >= reqs.cbtTests) {
-    met.push(`CBT tests: ${cbtCount.rows[0].count}/${reqs.cbtTests}`);
-  } else {
-    notMet.push(`CBT tests: ${cbtCount.rows[0].count}/${reqs.cbtTests}`);
-  }
-  
-  if (parseInt(patientCount.rows[0].count) >= reqs.patientEntries) {
-    met.push(`Patient entries: ${patientCount.rows[0].count}/${reqs.patientEntries}`);
-  } else {
-    notMet.push(`Patient entries: ${patientCount.rows[0].count}/${reqs.patientEntries}`);
-  }
-  
-  if (parseInt(dutyCount.rows[0].count) >= reqs.duties) {
-    met.push(`Duties: ${dutyCount.rows[0].count}/${reqs.duties}`);
-  } else {
-    notMet.push(`Duties: ${dutyCount.rows[0].count}/${reqs.duties}`);
-  }
-  
-  if (parseInt(loginCount.rows[0].count) >= reqs.loginDays) {
-    met.push(`Login days: ${loginCount.rows[0].count}/${reqs.loginDays}`);
-  } else {
-    notMet.push(`Login days: ${loginCount.rows[0].count}/${reqs.loginDays}`);
-  }
-  
-  if (metrics.overallScore >= 70) {
-    met.push(`Overall score: ${metrics.overallScore}% (≥70%)`);
-  } else {
-    notMet.push(`Overall score: ${metrics.overallScore}% (need 70%)`);
-  }
-  
-  // Calculate days remaining
+
   let daysRemaining = 0;
   if (rotation.rows[0]) {
     const endDate = new Date(rotation.rows[0].expected_end_date);
     daysRemaining = Math.max(0, Math.ceil((endDate - new Date()) / (24 * 60 * 60 * 1000)));
   }
-  
-  const eligible = notMet.length === 0;
-  
+
+  const r1 = (n) => Math.round(n * 10) / 10;
   return {
-    eligible,
-    metrics,
-    requirements: { met, notMet },
+    eligible: scored.eligibility.eligible,
+    metrics: {
+      cbtScore: r1(scored.components.cbt),
+      cmeScore: r1(scored.components.cme),
+      selfAssessmentScore: r1(scored.components.selfAssessment),
+      patientCareScore: r1(scored.components.clinical),
+      dutyPromptnessScore: r1(scored.components.duties),
+      attendanceScore: r1(scored.components.attendance),
+      overallScore: scored.overall,
+    },
+    counts: scored.counts,
+    requirements: { met: scored.eligibility.met, notMet: scored.eligibility.notMet },
+    levelRequirements: scored.requirements,
+    weights: scored.weights,
     daysRemaining,
     rotation: rotation.rows[0] || null
   };

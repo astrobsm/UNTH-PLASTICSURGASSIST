@@ -42,6 +42,7 @@ import { checkAndReassignHouseOfficers } from '../services/houseOfficerReassignm
 import { getCurrentUserName } from '../utils/getCurrentUser';
 import { getCurrentAssignments, getTodaySchedule, UnitRosterConfig } from '../config/psUnits';
 import HOResponsibilitiesGuide, { HOResponsibilitiesCard } from '../components/HOResponsibilitiesGuide';
+import { MyStatusBanner } from '../components/training/MyStatusBanner';
 import { careDuration, careDurationTone, CARE_TONE_CLASSES } from '../utils/careDuration';
 
 interface DashboardPatient {
@@ -274,6 +275,10 @@ export default function Dashboard() {
   } | null>(null);
 
   const isAdmin = user?.role === 'admin';
+  // Consultants and administrators supervise rather than rotate, so they have
+  // no score of their own to show.
+  const isScoredRole = ['house_officer', 'junior_registrar', 'registrar', 'senior_registrar']
+    .includes(String(user?.role || ''));
 
   const handleWarmCache = useCallback(async () => {
     if (cacheProgress?.status === 'warming') return; // prevent double-click
@@ -1264,6 +1269,10 @@ export default function Dashboard() {
             : "Here's what's happening with your assigned patients today."}
         </p>
       </div>
+
+      {/* Where this trainee stands, on arrival rather than three clicks away.
+          Renders nothing for a consultant or admin, who are not scored. */}
+      {isScoredRole && <MyStatusBanner />}
 
       {/* HO Responsibilities Quick Reference Card — visible to all */}
       <HOResponsibilitiesCard onOpen={() => setShowHOGuide(true)} />

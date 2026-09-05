@@ -18,6 +18,7 @@ import {
   Lock
 } from 'lucide-react';
 import { CMETopic } from '../../services/medicalTrainingService';
+import { learningProgressService, ReadingSession } from '../../services/learningProgressService';
 
 interface CMEArticleViewerProps {
   topic: CMETopic;
@@ -26,6 +27,17 @@ interface CMEArticleViewerProps {
   isCompleted: boolean;
   /** Called when the trainee submits the self-assessment, with their score. */
   onSelfAssessment?: (result: { topicId: string; correct: number; total: number }) => void;
+  /**
+   * The article's id in `cme_articles`, when this topic is one of the imported
+   * ones rather than a locally-defined module.
+   *
+   * Supplying it turns on server-side tracking: a reading session opens with
+   * the article, heartbeats while it stays open, and closes on unmount, so a
+   * supervisor can see who is reading what now instead of only who has
+   * finished. Locally-defined modules have no database row to attach to and
+   * behave exactly as before.
+   */
+  articleId?: string;
 }
 
 type TabType = 'article' | 'keypoints' | 'mcq';
@@ -48,7 +60,8 @@ const CMEArticleViewer: React.FC<CMEArticleViewerProps> = ({
   onBack,
   onComplete,
   isCompleted,
-  onSelfAssessment
+  onSelfAssessment,
+  articleId
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>('article');
   const [expandedSections, setExpandedSections] = useState<Set<number>>(new Set([0]));
@@ -66,6 +79,8 @@ const CMEArticleViewer: React.FC<CMEArticleViewerProps> = ({
   const scrollStartY = useRef<number>(0);
   const articleContainerRef = useRef<HTMLDivElement>(null);
   const readTimeInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+  const session = useRef<ReadingSession | null>(null);
+  const [serverProgress, setServerProgress] = useState<{ percent: number; seconds: number } | null>(null);
 
   const { article } = topic;
 
@@ -173,6 +188,50 @@ const CMEArticleViewer: React.FC<CMEArticleViewerProps> = ({
     }
   }, [readingStartTime, isCompleted, topic.id]);
 
+  // ── Server-side reading session ──
+  //
+  // Opens when the article opens and closes on unmount, so the record survives
+  // a learner who reads three sections and navigates away. Only for articles
+  // that exist in the database; a locally-defined module has nothing to attach
+  // progress to.
+  useEffect(() => {
+    if (!articleId) return;
+    let cancelled = false;
+
+    (async () => {
+      const opened = await learningProgressService.openArticle(articleId);
+      if (cancelled) { void opened.close(); return; }
+      session.current = opened;
+      const existing = await learningProgressService.forArticle(articleId).catch(() => null);
+      if (!cancelled && existing) {
+        setServerProgress({
+          percent: Number(existing.reading_progress_percent) || 0,
+          seconds: Number(existing.time_spent_seconds) || 0,
+        });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      const open = session.current;
+      session.current = null;
+      if (open) void open.close();
+    };
+  }, [articleId]);
+
+  // Keep the session fed with what the viewer knows. The session decides when
+  // to send; this only tells it the current state.
+  useEffect(() => {
+    if (!session.current) return;
+    const read = sectionProgress.filter(sp => sp.sufficientlyRead).length;
+    session.current.report({
+      secondsThisSession: Math.floor(totalReadTimeMs / 1000),
+      sectionsViewed: [],
+      sectionsRead: read,
+      totalSections: article.sections?.length || 0,
+    });
+  }, [sectionProgress, totalReadTimeMs, article.sections]);
+
   // Calculate reading stats for display
   const getReadingStats = () => {
     const totalSections = article.sections?.length || 0;
@@ -221,6 +280,22 @@ const CMEArticleViewer: React.FC<CMEArticleViewerProps> = ({
     const correct = article.selfAssessment?.filter(q => mcqAnswers.get(q.id) === q.correctAnswer).length || 0;
     if (total > 0 && onSelfAssessment) {
       onSelfAssessment({ topicId: String(topic.id), correct, total });
+    }
+
+    // For a database article the server marks the attempt against its own key,
+    // so the score that counts is never the one the browser worked out.
+    if (articleId && total > 0) {
+      const letters = ['A', 'B', 'C', 'D', 'E'];
+      const answers: Record<string, string> = {};
+      article.selfAssessment?.forEach(q => {
+        const chosen = mcqAnswers.get(q.id);
+        if (chosen !== undefined && letters[chosen]) answers[q.id] = letters[chosen];
+      });
+      if (Object.keys(answers).length) {
+        void learningProgressService.submitAssessment(articleId, answers).catch(() => {
+          // The local result still shows; the server copy is retried next time.
+        });
+      }
     }
     // Check if all answers are correct AND article was fully read
     const allCorrect = total > 0 && correct === total;
@@ -344,6 +419,19 @@ const CMEArticleViewer: React.FC<CMEArticleViewerProps> = ({
                     {getReadingStats().totalMinutes}m {getReadingStats().totalSeconds}s
                   </span>
                 </div>
+                {/* What the server already has for this article, so a learner
+                    coming back sees the time they have banked rather than a
+                    tracker that appears to have reset to nothing. */}
+                {serverProgress && serverProgress.seconds > 0 && (
+                  <div className="mb-3 text-xs text-blue-700 bg-white/70 rounded px-2 py-1.5 flex items-center gap-2">
+                    <Clock className="h-3 w-3 shrink-0" />
+                    <span>
+                      Recorded so far: <strong>{Math.round(serverProgress.percent)}%</strong> read
+                      {' · '}
+                      <strong>{Math.floor(serverProgress.seconds / 60)}m {serverProgress.seconds % 60}s</strong> total
+                    </span>
+                  </div>
+                )}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs mb-3">
                   <div className="bg-white rounded px-2 py-1.5">
                     <span className="text-gray-500">Sections Visited</span>

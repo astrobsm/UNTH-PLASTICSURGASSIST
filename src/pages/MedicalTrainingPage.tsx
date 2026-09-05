@@ -34,12 +34,54 @@ import { rotationConfigService, RotationConfig, TraineeAnalytics } from '../serv
 import { apiClient } from '../services/apiClient';
 import CMEArticleViewer from '../components/training/CMEArticleViewer';
 import { CBTPage } from '../components/cbt';
+import { useAuthStore } from '../store/authStore';
+import { SCORE_WEIGHTS, SIGN_OUT_THRESHOLD, MINIMUM_SECTION_SCORE } from '../services/performanceService';
 import { PerformanceDashboard } from '../components/performance';
 
 type TabType = 'house_officer' | 'junior_resident' | 'senior_resident';
 
+/**
+ * Maps a signed-in user onto the training level whose material they should see.
+ *
+ * Role first, training_level only as a fallback. users.training_level was never
+ * populated — every account in production carries the 'house_officer' default,
+ * senior registrars included — so preferring it would hand a senior registrar
+ * the house officer curriculum.
+ */
+function levelForUser(user: { role?: string; training_level?: string } | null): TabType {
+  const fromRole = String(user?.role || '').toLowerCase();
+  const isTrainingRole = /house|registrar|resident|intern|officer/.test(fromRole);
+  const raw = isTrainingRole ? fromRole : String(user?.training_level || fromRole).toLowerCase();
+
+  if (raw.includes('senior')) return 'senior_resident';
+  if (raw.includes('registrar') || raw.includes('resident') || raw.includes('junior')) return 'junior_resident';
+  return 'house_officer';
+}
+
+/** Display names for the scoring components, in the order they are shown. */
+const WEIGHT_LABELS: { key: keyof typeof SCORE_WEIGHTS; label: string; dot: string }[] = [
+  { key: 'clinical',       label: 'Clinical documentation', dot: 'bg-blue-400' },
+  { key: 'cbt',            label: 'CBT tests',              dot: 'bg-purple-400' },
+  { key: 'cme',            label: 'CME reading',            dot: 'bg-sky-400' },
+  { key: 'selfAssessment', label: 'Self-assessment',        dot: 'bg-pink-400' },
+  { key: 'duties',         label: 'Duties',                 dot: 'bg-green-400' },
+  { key: 'attendance',     label: 'Attendance',             dot: 'bg-amber-400' },
+];
+
+/** Roles allowed to browse a level other than their own. */
+const CAN_BROWSE_ALL_LEVELS = ['admin', 'super_admin', 'consultant', 'senior_registrar'];
+
 const MedicalTrainingPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<TabType>('house_officer');
+  const { user } = useAuthStore();
+  const isStudent = String(user?.role || '') === 'student';
+  // Students and trainees now share this module. It used to be staff-only,
+  // with students sent to /education and /mcq-education instead — two more
+  // copies of the same CME and MCQ material, against a different question set.
+  const canBrowseAllLevels = !isStudent && CAN_BROWSE_ALL_LEVELS.includes(String(user?.role || ''));
+
+  // Open on the viewer's own level rather than always on house officer, so a
+  // senior registrar does not land on somebody else's curriculum.
+  const [activeTab, setActiveTab] = useState<TabType>(() => levelForUser(user as never));
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set(['ho-module-1']));
   const [selectedTopic, setSelectedTopic] = useState<CMETopic | null>(null);
@@ -111,6 +153,10 @@ const MedicalTrainingPage: React.FC = () => {
   // Load rotation config and participation data
   useEffect(() => {
     const loadRotationData = async () => {
+      // Rotation configuration and trainee analytics are staff endpoints and
+      // reject a student token. A student's participation comes from their own
+      // posting summary instead, loaded below.
+      if (isStudent) return;
       try {
         // Load active rotation config for current level
         const config = rotationConfigService.getActiveRotationConfig(activeTab as TrainingLevel);
@@ -135,7 +181,23 @@ const MedicalTrainingPage: React.FC = () => {
     };
 
     loadRotationData();
-  }, [activeTab]);
+  }, [activeTab, isStudent]);
+
+  // A student's participation, from the student endpoints.
+  useEffect(() => {
+    if (!isStudent) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const summary = await apiClient.get('/students/training-summary');
+        if (cancelled) return;
+        setMyParticipation(summary as TraineeAnalytics);
+      } catch (error) {
+        console.warn('Failed to load student training summary:', error);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isStudent]);
 
   // Load training warnings
   useEffect(() => {
@@ -681,29 +743,23 @@ const MedicalTrainingPage: React.FC = () => {
               <h3 className="font-bold text-lg">Training & Assessment Instructions</h3>
             </div>
             <div className="space-y-3 text-sm">
-              {/* Sign-out Weights */}
+              {/* Sign-out Weights — read from the scoring module, never retyped.
+                  This panel used to state 70/10/10/10 while the API scored on
+                  six components, so it explained a formula the app had stopped
+                  using. */}
               <div className="bg-white/10 rounded-lg p-3">
                 <p className="font-semibold text-yellow-300 mb-2">Sign-Out Criteria Weights</p>
                 <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full bg-blue-400 inline-block"></span>
-                    <span>Patient Care: <strong>70%</strong> (Primary)</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full bg-purple-400 inline-block"></span>
-                    <span>CBT Tests: <strong>10%</strong></span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full bg-green-400 inline-block"></span>
-                    <span>Duty Promptness: <strong>10%</strong></span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full bg-amber-400 inline-block"></span>
-                    <span>Attendance: <strong>10%</strong></span>
-                  </div>
+                  {WEIGHT_LABELS.map(({ key, label, dot }) => (
+                    <div key={key} className="flex items-center gap-2">
+                      <span className={`w-3 h-3 rounded-full ${dot} inline-block`}></span>
+                      <span>{label}: <strong>{Math.round(SCORE_WEIGHTS[key] * 100)}%</strong></span>
+                    </div>
+                  ))}
                 </div>
                 <p className="text-xs text-red-300 mt-2 font-semibold">
-                  ⚠ Minimum 6.5% weighted contribution required from EACH section for sign-out eligibility.
+                  ⚠ CBT and self-assessment must each reach {MINIMUM_SECTION_SCORE}%, and the overall
+                  score {SIGN_OUT_THRESHOLD}%, for sign-out eligibility.
                 </p>
               </div>
               {/* CBT Instructions */}
@@ -715,7 +771,7 @@ const MedicalTrainingPage: React.FC = () => {
                   <li>• <strong>Pass Mark:</strong> 75% required to pass • Cumulative average tracked</li>
                   <li>• <strong>Anti-Cheating:</strong> Tab switching, screenshots, and screen recording are monitored</li>
                   <li>• <strong>Best Practice:</strong> Study your CME articles thoroughly before attempting</li>
-                  <li>• <strong>Tip:</strong> Focus on patient care (70% of sign-out). CBT tests only count for 10%</li>
+                  <li>• <strong>Tip:</strong> Clinical documentation carries the most weight ({Math.round(SCORE_WEIGHTS.clinical * 100)}%), but CBT ({Math.round(SCORE_WEIGHTS.cbt * 100)}%), CME reading ({Math.round(SCORE_WEIGHTS.cme * 100)}%) and self-assessment ({Math.round(SCORE_WEIGHTS.selfAssessment * 100)}%) together outweigh it</li>
                 </ul>
               </div>
               {/* CME Reading Instructions */}
@@ -748,8 +804,8 @@ const MedicalTrainingPage: React.FC = () => {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-6">
-        {/* Level Tabs */}
-        <div className="flex flex-wrap gap-3 mb-6">
+        {/* Level Tabs — a learner sees their own level only; supervisors browse. */}
+        <div className={`flex flex-wrap gap-3 mb-6 ${canBrowseAllLevels ? '' : 'hidden'}`}>
           {tabs.map(tab => (
             <button
               key={tab.id}

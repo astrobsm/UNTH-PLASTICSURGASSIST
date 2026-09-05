@@ -439,11 +439,19 @@ const CBTExamInterface: React.FC<CBTExamInterfaceProps> = ({ test, attempt, onSu
       {/* Anti-phone-photo moire overlay */}
       <div className="cbt-moire-overlay" />
       
-      {/* Attention monitoring indicator */}
+      {/* Attention monitoring indicator.
+
+          This used to be positioned absolutely at top-16 right-4, which laid it
+          over the Flag-for-review button and, on a phone, over the question
+          navigator -- it obscured controls the candidate needs mid-exam. It is
+          a strip in the normal flow now, so it pushes content down instead of
+          covering it. */}
       {attentionWarnings > 0 && (
-        <div className="absolute top-16 right-4 z-40 flex items-center gap-2 bg-amber-100 border border-amber-300 rounded-full px-3 py-1 text-xs text-amber-800">
-          <span className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
-          Attention alerts: {attentionWarnings}
+        <div className="shrink-0 bg-amber-50 border-b border-amber-200 px-3 sm:px-4 py-1.5">
+          <div className="max-w-7xl mx-auto flex items-center gap-2 text-xs text-amber-800">
+            <span className="w-2 h-2 bg-amber-500 rounded-full animate-pulse shrink-0" />
+            Attention alerts: {attentionWarnings}
+          </div>
         </div>
       )}
       {/* Warning Modal */}
@@ -660,20 +668,23 @@ const CBTExamInterface: React.FC<CBTExamInterfaceProps> = ({ test, attempt, onSu
             {question.clinicalScenario && question.clinicalScenario.trim() && (
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 md:p-8 mb-6">
                 <h3 className="text-sm font-semibold text-blue-800 mb-3 uppercase tracking-wide">Clinical Scenario</h3>
-                <p className="text-blue-900 text-base sm:text-lg md:text-xl leading-relaxed whitespace-pre-wrap break-words">{question.clinicalScenario}</p>
+                <p className="text-blue-900 text-base sm:text-lg md:text-xl leading-relaxed whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{question.clinicalScenario}</p>
               </div>
             )}
             
             {/* Question */}
             <div className="mb-8 bg-gray-50 border border-gray-200 rounded-xl p-5 md:p-8">
               <h3 className="text-sm font-semibold text-gray-500 mb-3 uppercase tracking-wide">Question</h3>
-              <p className="text-xl md:text-2xl font-semibold text-gray-900 leading-relaxed break-words">{question.question}</p>
+              <p className="text-xl md:text-2xl font-semibold text-gray-900 leading-relaxed break-words [overflow-wrap:anywhere] whitespace-pre-wrap">{question.question}</p>
             </div>
             
             {/* Options */}
             <div className="space-y-3">
               {(['A', 'B', 'C', 'D', 'E'] as const).map(option => (
-                question.options[option] ? (
+                // Trimmed, not merely truthy: a whitespace-only option would
+                // otherwise render as an empty but selectable answer. Questions
+                // imported from the CME articles legitimately have four options.
+                question.options[option]?.trim() ? (
                 <button
                   key={option}
                   onClick={() => handleAnswerSelect(question.id, option)}
@@ -691,7 +702,7 @@ const CBTExamInterface: React.FC<CBTExamInterfaceProps> = ({ test, attempt, onSu
                     }`}>
                       {option}
                     </span>
-                    <span className={`flex-1 text-base md:text-lg leading-relaxed break-words ${answers[question.id] === option ? 'text-green-900 font-medium' : 'text-gray-700'}`}>
+                    <span className={`flex-1 min-w-0 text-base md:text-lg leading-relaxed break-words [overflow-wrap:anywhere] ${answers[question.id] === option ? 'text-green-900 font-medium' : 'text-gray-700'}`}>
                       {question.options[option]}
                     </span>
                   </div>

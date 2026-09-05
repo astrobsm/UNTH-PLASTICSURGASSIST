@@ -6,6 +6,7 @@ import { cors, authenticateRequest } from './_lib/auth.js';
 // numbers as the HO Tracking card view (single source of truth).
 import { getHOFullMetrics } from './ho-tracking.js';
 import { getRequirements as sharedRequirements, pctOf, computeOverall, computeEligibility as sharedEligibility } from './_lib/traineeScoring.js';
+import { extendRotation, signOutRotation, evaluateDueRotations, scoreFor, ROTATION_ADMIN_ROLES } from './_lib/rotationLifecycle.js';
 
 const ADMIN_ROLES = ['consultant', 'super_admin', 'admin'];
 let tablesEnsured = false;
@@ -373,48 +374,74 @@ async function handlePost(req, res, adminUser) {
       const { rotationId, reason, days } = body;
       if (!rotationId) return res.status(400).json({ error: 'rotationId is required' });
 
-      const extDays = days || 7;
-      await query(
-        `UPDATE trainee_rotations
-         SET expected_end_date = expected_end_date + INTERVAL '1 day' * $1,
-             extension_count = extension_count + 1,
-             extension_reasons = extension_reasons || $2::jsonb,
-             status = 'extended',
-             updated_at = CURRENT_TIMESTAMP
-         WHERE id = $3`,
-        [extDays, JSON.stringify([reason || 'Admin extension']), rotationId]
-      );
-
-      return res.status(200).json({ message: `Rotation extended by ${extDays} days` });
+      // Extending, signing out and overriding all live in _lib/rotationLifecycle.js.
+      // They were written twice, here and in api/rotations.js, and had drifted:
+      // one recorded the reason as a bare string, the other as an object saying
+      // who and when, so a trainee's history read differently depending on which
+      // screen had touched it.
+      const result = await extendRotation({
+        rotationId, days, reason, byUserId: adminUser.id,
+      });
+      if (!result.ok) return res.status(400).json({ error: result.error });
+      return res.status(200).json({
+        message: `Rotation extended by ${days || 7} days`,
+        rotation: result.rotation,
+      });
     }
 
     case 'approve-signout': {
       const { rotationId, approved, comments, finalScore } = body;
       if (!rotationId) return res.status(400).json({ error: 'rotationId is required' });
 
-      if (approved) {
-        await query(
-          `UPDATE trainee_rotations
-           SET status = 'signed_out', actual_end_date = CURRENT_TIMESTAMP,
-               sign_out_approved = true, sign_out_approved_by = $1,
-               sign_out_approved_at = CURRENT_TIMESTAMP,
-               sign_out_comments = COALESCE(sign_out_comments, '') || ' | Approved: ' || $2,
-               final_score = $3, updated_at = CURRENT_TIMESTAMP
-           WHERE id = $4`,
-          [adminUser.id, comments || 'Approved', finalScore || 0, rotationId]
-        );
-      } else {
+      if (!approved) {
+        // Sending it back is not a sign-out; the rotation simply reopens.
         await query(
           `UPDATE trainee_rotations
            SET status = 'active',
-               sign_out_comments = COALESCE(sign_out_comments, '') || ' | Rejected: ' || $1,
+               sign_out_comments = TRIM(BOTH ' |' FROM COALESCE(sign_out_comments, '') || ' | Returned: ' || $1),
                updated_at = CURRENT_TIMESTAMP
            WHERE id = $2`,
-          [comments || 'Requirements not met', rotationId]
+          [String(comments || 'Requirements not met').trim(), rotationId],
         );
+        return res.status(200).json({ success: true, approved: false });
       }
 
-      return res.status(200).json({ success: true, approved });
+      const out = await signOutRotation({
+        rotationId, mode: 'approved', reason: comments,
+        byUserId: adminUser.id, finalScore,
+      });
+      if (!out.ok) return res.status(400).json({ error: out.error });
+      return res.status(200).json({ success: true, approved: true, rotation: out.rotation });
+    }
+
+    case 'override-signout': {
+      // Signs a trainee out despite a score that does not reach the threshold.
+      // The reason is required and stored as an override, so the record never
+      // reads as though the requirements were met.
+      const { rotationId, userId: targetUserId, level, reason } = body;
+      if (!rotationId) return res.status(400).json({ error: 'rotationId is required' });
+      if (!String(reason || '').trim()) {
+        return res.status(400).json({ error: 'A reason is required to override the score' });
+      }
+
+      let score = null;
+      try { score = (await scoreFor(targetUserId, level)).overall; } catch { /* recorded as unknown */ }
+
+      const out = await signOutRotation({
+        rotationId, mode: 'override', reason, byUserId: adminUser.id, finalScore: score,
+      });
+      if (!out.ok) return res.status(400).json({ error: out.error });
+      return res.status(200).json({ success: true, overridden: true, finalScore: score, rotation: out.rotation });
+    }
+
+    case 'evaluate-rotations': {
+      // Closes every rotation that has run its course and can be closed, and
+      // marks the rest as awaiting a decision.
+      if (!ROTATION_ADMIN_ROLES.includes(adminUser.role)) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+      const result = await evaluateDueRotations();
+      return res.status(200).json(result);
     }
 
     case 'update-phone': {
@@ -494,7 +521,7 @@ async function getTraineeMetrics(userId, level, fullName, username) {
   const cmeCount = m.cmeTopicsCompleted || 0;
 
   // Re-score using level-specific requirements + the shared comprehensive formula.
-  const cmeScore = pctOf(cmeCount, reqs.cmeTopics);
+  const cmeScore = pctOf(cmeCount, reqs.cmeArticles);
   const patientScore = pctOf(patientCount, reqs.patients);
   const dutyScore = pctOf(dutiesCount, reqs.duties);
   const attendanceScore = pctOf(loginDays, reqs.loginDays);
@@ -522,215 +549,6 @@ async function getTraineeMetrics(userId, level, fullName, username) {
   };
 }
 
-// Legacy local metrics implementation retained for reference (not used).
-// Replaced by delegation to getHOFullMetrics above.
-async function _legacyGetTraineeMetrics(userId, level, fullName, username) {
-  const lvl = level || 'house_officer';
-  const uid = String(userId);       // For VARCHAR user_id columns (audit_logs, cme_progress, cme_reading_progress)
-  const uidInt = parseInt(userId);   // For INTEGER user_id columns (cbt_attempts, training_progress, activity_logs)
-
-  // Helper: safely run a query, returns default on error
-  async function safeQuery(sql, params, defaultVal) {
-    try {
-      const r = await query(sql, params);
-      return r.rows[0] || defaultVal;
-    } catch (e) { return defaultVal; }
-  }
-
-  // ── 1. CBT Tests (1 query) ──
-  const cbtRow = await safeQuery(
-    `SELECT COUNT(*) as completed, COALESCE(AVG(
-      CASE WHEN percentage IS NOT NULL AND percentage > 0 THEN percentage
-           WHEN score IS NOT NULL AND total_marks > 0 THEN (score::numeric / total_marks) * 100
-           ELSE 0 END
-    ), 0) as avg_score
-     FROM cbt_attempts WHERE (user_id = $1 OR user_id::text = $2) AND (completed = true OR passed = true)`,
-    [uidInt, uid], { completed: 0, avg_score: 0 }
-  );
-  const cbtCompleted = parseInt(cbtRow.completed) || 0;
-  const cbtAvgScore = parseFloat(cbtRow.avg_score) || 0;
-
-  // ── User matching clause for VARCHAR user columns (audit_logs, etc.) ──
-  const auditUserClause = fullName
-    ? `(user_id = $1 OR LOWER(user_name) = LOWER($2))`
-    : `user_id = $1`;
-  const auditUserParams = fullName ? [uid, fullName] : [uid];
-
-  // Name-match clause for tables that store user as VARCHAR name string
-  // Match by full_name, username, or stringified user id
-  const nameMatchValues = [uid]; // $1 = user id as string
-  let nameMatchClause = `($COL = $1`;
-  let nameParamIdx = 1;
-  if (fullName) {
-    nameParamIdx++;
-    nameMatchValues.push(fullName);
-    nameMatchClause += ` OR LOWER($COL) = LOWER($${nameParamIdx})`;
-  }
-  if (username) {
-    nameParamIdx++;
-    nameMatchValues.push(username);
-    nameMatchClause += ` OR LOWER($COL) = LOWER($${nameParamIdx})`;
-  }
-  nameMatchClause += `)`;
-
-  // ── 2. Patient Care Entries — count from ALL clinical tables ──
-  let patientCount = 0;
-
-  // 2a. Tables with created_by INTEGER
-  for (const tbl of ['patients', 'treatment_plans', 'admissions', 'surgeries']) {
-    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM ${tbl} WHERE created_by = $1`, [uidInt], { cnt: 0 });
-    patientCount += parseInt(r.cnt) || 0;
-  }
-
-  // 2a2. prescriptions uses prescribed_by (not created_by)
-  {
-    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM prescriptions WHERE prescribed_by = $1`, [uidInt], { cnt: 0 });
-    patientCount += parseInt(r.cnt) || 0;
-  }
-
-  // 2a3. ward_rounds uses user_id or created_by
-  {
-    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM ward_rounds WHERE user_id = $1 OR created_by = $1`, [uidInt], { cnt: 0 });
-    patientCount += parseInt(r.cnt) || 0;
-  }
-
-  // 2a4. lab_orders uses ordered_by (not created_by)
-  {
-    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM lab_orders WHERE ordered_by = $1`, [uidInt], { cnt: 0 });
-    patientCount += parseInt(r.cnt) || 0;
-  }
-
-  // 2a5. discharge_summaries uses prepared_by (not created_by)
-  {
-    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM discharge_summaries WHERE prepared_by = $1`, [uidInt], { cnt: 0 });
-    patientCount += parseInt(r.cnt) || 0;
-  }
-
-  // 2b. Tables with recorded_by INTEGER (wound_care_records)
-  const woundRow = await safeQuery(`SELECT COUNT(*) as cnt FROM wound_care_records WHERE recorded_by = $1`, [uidInt], { cnt: 0 });
-  patientCount += parseInt(woundRow.cnt) || 0;
-
-  // 2c. Tables with recorded_by VARCHAR — match by name/id
-  for (const tbl of ['vital_signs', 'fluid_balance']) {
-    const clause = nameMatchClause.replace(/\$COL/g, 'recorded_by');
-    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM ${tbl} WHERE ${clause}`, nameMatchValues, { cnt: 0 });
-    patientCount += parseInt(r.cnt) || 0;
-  }
-
-  // 2d. progress_notes — author VARCHAR
-  {
-    const clause = nameMatchClause.replace(/\$COL/g, 'author');
-    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM progress_notes WHERE ${clause}`, nameMatchValues, { cnt: 0 });
-    patientCount += parseInt(r.cnt) || 0;
-  }
-
-  // 2e. Assessment tables with assessed_by VARCHAR
-  for (const tbl of ['dvt_assessments', 'pressure_sore_assessments', 'nutritional_assessments', 'diabetic_foot_assessments', 'preoperative_assessments']) {
-    const clause = nameMatchClause.replace(/\$COL/g, 'assessed_by');
-    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM ${tbl} WHERE ${clause}`, nameMatchValues, { cnt: 0 });
-    patientCount += parseInt(r.cnt) || 0;
-  }
-
-  // 2f. blood_transfusions — administered_by VARCHAR
-  {
-    const clause = nameMatchClause.replace(/\$COL/g, 'administered_by');
-    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM blood_transfusions WHERE ${clause}`, nameMatchValues, { cnt: 0 });
-    patientCount += parseInt(r.cnt) || 0;
-  }
-
-  // ── 3. Duties — formal assignments + clinic duty logs + call duty roster ──
-  let dutiesCount = 0;
-
-  // 3a. Formal duty assignments completed
-  const formalDutyRow = await safeQuery(
-    `SELECT COUNT(*) as cnt FROM duty_assignments WHERE user_id = $1 AND status = 'completed'`,
-    [uidInt], { cnt: 0 }
-  );
-  dutiesCount += parseInt(formalDutyRow.cnt) || 0;
-
-  // 3b. Clinic duty logs (user_id TEXT)
-  {
-    const clause = nameMatchClause.replace(/\$COL/g, 'user_id');
-    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM clinic_duty_logs WHERE ${clause}`, nameMatchValues, { cnt: 0 });
-    dutiesCount += parseInt(r.cnt) || 0;
-  }
-
-  // 3c. Call duty roster entries where this user was assigned
-  {
-    let callClause = `(senior_registrar_id = $1 OR registrar_id = $1 OR house_officer_id = $1`;
-    const callParams = [uid];
-    let pIdx = 1;
-    if (fullName) {
-      pIdx++;
-      callParams.push(fullName);
-      callClause += ` OR LOWER(senior_registrar_name) = LOWER($${pIdx}) OR LOWER(registrar_name) = LOWER($${pIdx}) OR LOWER(house_officer_name) = LOWER($${pIdx})`;
-    }
-    callClause += `)`;
-    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM call_duty_roster WHERE ${callClause}`, callParams, { cnt: 0 });
-    dutiesCount += parseInt(r.cnt) || 0;
-  }
-
-  // 3d. Clinical entries as duties (each entry in a patient section = a duty performed)
-  // This counts distinct clinical actions across all patient-facing tables
-  const clinicalDutyRow = await safeQuery(
-    `SELECT COUNT(*) as cnt FROM audit_logs WHERE ${auditUserClause} AND UPPER(action) IN ('CREATE', 'UPDATE', 'COMPLETE')
-     AND UPPER(resource_type) IN ('PATIENT', 'TREATMENT_PLAN', 'ADMISSION', 'PRESCRIPTION', 'WARD_ROUND', 'LAB_ORDER', 'PROCEDURE', 'DISCHARGE', 'VITAL_SIGNS', 'WOUND_CARE', 'PROGRESS_NOTE', 'FLUID_BALANCE', 'SURGERY', 'ASSESSMENT', 'BLOOD_TRANSFUSION', 'MDT')`,
-    auditUserParams, { cnt: 0 }
-  );
-  dutiesCount += parseInt(clinicalDutyRow.cnt) || 0;
-
-  // ── 4. Login / Attendance Days (1 query from audit_logs) ──
-  const loginRow = await safeQuery(
-    `SELECT COUNT(DISTINCT DATE(timestamp)) as cnt FROM audit_logs WHERE ${auditUserClause}`,
-    auditUserParams, { cnt: 0 }
-  );
-  let loginDays = parseInt(loginRow.cnt) || 0;
-
-  // Also check activity_logs login events
-  const actLoginRow = await safeQuery(
-    `SELECT COUNT(DISTINCT DATE(created_at)) as cnt FROM activity_logs WHERE user_id = $1 AND activity_type = 'login'`,
-    [uidInt], { cnt: 0 }
-  );
-  loginDays = Math.max(loginDays, parseInt(actLoginRow.cnt) || 0);
-
-  // ── 5. CME / Education Topics (1 combined query + fallbacks) ──
-  let cmeCount = 0;
-  const tpRow = await safeQuery(
-    `SELECT COUNT(*) as cnt FROM training_progress WHERE user_id = $1 OR user_id::text = $2`,
-    [uidInt, uid], { cnt: 0 }
-  );
-  cmeCount += parseInt(tpRow.cnt) || 0;
-
-  const cmeReadRow = await safeQuery(
-    `SELECT COUNT(DISTINCT article_id) as cnt FROM cme_reading_progress WHERE user_id = $1`, [uid], { cnt: 0 }
-  );
-  cmeCount += parseInt(cmeReadRow.cnt) || 0;
-
-  const cmeProgRow = await safeQuery(
-    `SELECT COUNT(*) as cnt FROM cme_progress WHERE user_id = $1 AND completed = true`, [uid], { cnt: 0 }
-  );
-  cmeCount += parseInt(cmeProgRow.cnt) || 0;
-
-  // ── Calculate Scores ──
-  const reqs = getRequirements(lvl);
-  const patientScore = Math.min(100, (patientCount / reqs.patientEntries) * 100);
-  const dutyScore = Math.min(100, (dutiesCount / reqs.duties) * 100);
-  const attendanceScore = Math.min(100, (loginDays / reqs.loginDays) * 100);
-  const overallScore = (cbtAvgScore * 0.30) + (patientScore * 0.35) + (dutyScore * 0.25) + (attendanceScore * 0.10);
-
-  return {
-    cbtTestsCompleted: cbtCompleted,
-    cbtAvgScore: Math.round(cbtAvgScore * 10) / 10,
-    patientEntries: patientCount,
-    patientScore: Math.round(patientScore * 10) / 10,
-    dutiesCompleted: dutiesCount,
-    dutyScore: Math.round(dutyScore * 10) / 10,
-    loginDays,
-    attendanceScore: Math.round(attendanceScore * 10) / 10,
-    cmeTopicsCompleted: cmeCount,
-    overallScore: Math.round(overallScore * 10) / 10,
-  };
-}
 
 async function getActiveRotation(userId) {
   const result = await query(
@@ -764,7 +582,7 @@ async function backfillRotation(userId, level, startDate) {
 
 function computeEligibility(metrics, reqs) {
   const counts = {
-    cmeTopics: metrics.cmeTopicsCompleted || 0,
+    cmeArticles: metrics.cmeTopicsCompleted || 0,
     cbtTests: metrics.cbtTestsCompleted || 0,
     selfAssessments: metrics.selfAssessmentsCompleted || 0,
     patients: metrics.patientEntries || 0,
