@@ -43,7 +43,7 @@ interface Requirements {
   patientEntries: number;
   duties: number;
   loginDays: number;
-  cmeTopics: number;
+  cmeArticles: number;
   overallScore: number;
 }
 
@@ -220,11 +220,13 @@ const AdminTrainingPage: React.FC = () => {
 
   const handleExtendRotation = async (rotationId: number) => {
     const reason = prompt('Reason for extension:');
-    if (!reason) return;
+    if (!reason?.trim()) return;
+    const days = Number(prompt('Extend by how many days?', '14') || 0);
+    if (!days || days < 1) return;
     try {
       await apiClient.request('/admin-training?action=extend-rotation', {
         method: 'POST',
-        body: JSON.stringify({ rotationId, reason }),
+        body: JSON.stringify({ rotationId, reason: reason.trim(), days }),
       });
       fetchTrainees();
       if (selectedTrainee) fetchTraineeDetail(selectedTrainee);
@@ -246,6 +248,67 @@ const AdminTrainingPage: React.FC = () => {
       alert('Failed: ' + err.message);
     }
   };
+
+  /**
+   * Signs a trainee out despite a score short of the threshold.
+   *
+   * Separate from approving a sign-out, and recorded as an override, so the
+   * record never reads as though the requirements were met. The reason is
+   * required by the API as well as here.
+   */
+  const handleOverrideSignout = async (rotationId: number, trainee: Trainee) => {
+    const reason = prompt(
+      `Sign ${trainee.full_name} out despite an incomplete score?
+
+`
+      + 'This is recorded as an override, not as a pass. Give the reason:',
+    );
+    if (!reason?.trim()) return;
+    try {
+      const r = await apiClient.request('/admin-training?action=override-signout', {
+        method: 'POST',
+        body: JSON.stringify({
+          rotationId, userId: trainee.id, level: trainee.level || trainee.role,
+          reason: reason.trim(),
+        }),
+      });
+      alert(`Signed out by override at ${r.finalScore ?? 'an unknown'}%.`);
+      fetchTrainees();
+      if (selectedTrainee) fetchTraineeDetail(selectedTrainee);
+    } catch (err: any) {
+      alert('Failed: ' + err.message);
+    }
+  };
+
+  /**
+   * Closes every rotation that has run its course.
+   *
+   * Anyone who has met the requirements is signed out without being asked;
+   * anyone who has not is moved to "awaiting decision" and appears here for an
+   * extension or an override. Run on load so the board is current, and
+   * available as a button for a supervisor who wants it now.
+   */
+  const runRotationSweep = useCallback(async (announce = false) => {
+    try {
+      const r = await apiClient.request('/admin-training?action=evaluate-rotations', {
+        method: 'POST', body: JSON.stringify({}),
+      });
+      if (announce) {
+        alert(
+          `${r.evaluated} rotation(s) past their end date.
+`
+          + `${r.signedOut.length} signed out automatically.
+`
+          + `${r.pending.length} awaiting a decision.`,
+        );
+      }
+      if (r.signedOut.length || r.pending.length) fetchTrainees();
+    } catch {
+      // A failed sweep must not stop the board loading.
+    }
+  }, [fetchTrainees]);
+
+  useEffect(() => { void runRotationSweep(false); }, [runRotationSweep]);
 
   const filteredTrainees = trainees.filter(t => {
     const matchesSearch = !searchQuery || t.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) || t.username?.toLowerCase().includes(searchQuery.toLowerCase());
@@ -336,7 +399,7 @@ const AdminTrainingPage: React.FC = () => {
             <MetricCard icon={<Activity className="w-5 h-5" />} label="Patients" value={`${m.patientEntries}/${r.patientEntries}`} score={m.patientScore} color="green" />
             <MetricCard icon={<Target className="w-5 h-5" />} label="Duties" value={`${m.dutiesCompleted}/${r.duties}`} score={m.dutyScore} color="purple" />
             <MetricCard icon={<Calendar className="w-5 h-5" />} label="Attendance" value={`${m.loginDays}/${r.loginDays} days`} score={m.attendanceScore} color="amber" />
-            <MetricCard icon={<BookOpen className="w-5 h-5" />} label="CME Topics" value={`${m.cmeTopicsCompleted}/${r.cmeTopics}`} score={Math.min(100, (m.cmeTopicsCompleted / r.cmeTopics) * 100)} color="rose" />
+            <MetricCard icon={<BookOpen className="w-5 h-5" />} label="CME Articles" value={`${m.cmeTopicsCompleted}/${r.cmeArticles}`} score={r.cmeArticles ? Math.min(100, (m.cmeTopicsCompleted / r.cmeArticles) * 100) : 0} color="rose" />
           </div>
 
           {/* Sign-out Eligibility */}
@@ -384,6 +447,15 @@ const AdminTrainingPage: React.FC = () => {
                     <button onClick={() => handleApproveSignout(t.rotation.id, false)} className="px-3 py-1.5 bg-red-100 text-red-700 hover:bg-red-200 rounded text-sm font-medium">Reject</button>
                   </>
                 )}
+                {/* Available whatever the score: the reason is what makes it
+                    defensible, and the record says it was an override. */}
+                <button
+                  onClick={() => handleOverrideSignout(t.rotation.id, selectedTrainee)}
+                  className="px-3 py-1.5 bg-purple-100 text-purple-700 hover:bg-purple-200 rounded text-sm font-medium"
+                  title="Sign out despite an incomplete score, with a reason"
+                >
+                  Override &amp; Sign Out
+                </button>
               </div>
             )}
             {!t.rotation && (
@@ -495,6 +567,18 @@ const AdminTrainingPage: React.FC = () => {
             <Users className="w-7 h-7 text-green-600" /> Training Management
           </h1>
           <p className="text-gray-500 mt-1">Monitor progress, send warnings, and manage sign-out eligibility</p>
+        </div>
+
+        {/* Rotations past their end date are swept on load; this runs it again
+            on demand and says what happened. */}
+        <div className="mb-4">
+          <button
+            onClick={() => runRotationSweep(true)}
+            className="inline-flex items-center gap-2 px-3 py-2 bg-white border rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Check rotations that have ended
+          </button>
         </div>
 
         {/* Cohort tabs */}
@@ -708,7 +792,7 @@ const AdminTrainingPage: React.FC = () => {
                               <MiniMetric label="Patient Care" value={`${Number(t.metrics.patientScore).toFixed(0)}%`} sub={`${t.metrics.patientEntries}/${t.requirements.patientEntries} entries`} />
                               <MiniMetric label="Duties" value={`${Number(t.metrics.dutyScore).toFixed(0)}%`} sub={`${t.metrics.dutiesCompleted}/${t.requirements.duties} done`} />
                               <MiniMetric label="Attendance" value={`${Number(t.metrics.attendanceScore).toFixed(0)}%`} sub={`${t.metrics.loginDays}/${t.requirements.loginDays} days`} />
-                              <MiniMetric label="CME Topics" value={`${t.metrics.cmeTopicsCompleted}`} sub={`of ${t.requirements.cmeTopics} topics`} />
+                              <MiniMetric label="CME Articles" value={`${t.metrics.cmeTopicsCompleted}`} sub={`of ${t.requirements.cmeArticles} articles`} />
                             </div>
                             <div className="mt-3 flex flex-wrap gap-2">
                               {t.eligibility.notMet.map((item, i) => (

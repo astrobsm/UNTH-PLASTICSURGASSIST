@@ -71,7 +71,7 @@ describe('ReadingSession', () => {
 
     const calls = (apiClient.post as never as ReturnType<typeof vi.fn>).mock.calls
       .filter((c) => String(c[0]).includes('heartbeat'));
-    expect(calls.at(-1)?.[1].secondsThisSession).toBe(30);
+    expect(calls[calls.length - 1][1].secondsThisSession).toBe(30);
   });
 
   it('closes once, and stops beating afterwards', async () => {
@@ -102,7 +102,8 @@ describe('ReadingSession', () => {
 describe('assessment submission', () => {
   it('sends letters, and never a score', async () => {
     await learningProgressService.submitAssessment(ARTICLE, { 'q-1': 'B', 'q-2': 'D' });
-    const [, body] = (apiClient.post as never as ReturnType<typeof vi.fn>).mock.calls.at(-1)!;
+    const posted = (apiClient.post as never as ReturnType<typeof vi.fn>).mock.calls;
+    const [, body] = posted[posted.length - 1];
     expect(body).toEqual({ articleId: ARTICLE, answers: { 'q-1': 'B', 'q-2': 'D' } });
     expect(JSON.stringify(body)).not.toMatch(/score|correct/i);
   });

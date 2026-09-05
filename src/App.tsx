@@ -123,7 +123,7 @@ const SJSManagementPage = lazyWithRetry(() => import('./pages/SJSManagementPage'
 const SubstanceDetoxPage = lazyWithRetry(() => import('./pages/SubstanceDetoxPage'));
 const HOTrackingPage = lazyWithRetry(() => import('./pages/HOTrackingPage'));
 const AuditLogViewerPage = lazyWithRetry(() => import('./pages/AuditLogViewerPage'));
-const StudentRegister = lazyWithRetry(() => import('./pages/StudentRegister'));
+const JoinPage = lazyWithRetry(() => import('./pages/JoinPage'));
 const StudentLogin = lazyWithRetry(() => import('./pages/StudentLogin'));
 const StudentDashboard = lazyWithRetry(() => import('./pages/StudentDashboard'));
 
@@ -286,7 +286,9 @@ function App() {
     return (
       <Suspense fallback={<PageLoader />}>
         <Routes>
-          <Route path="/student-register" element={<StudentRegister />} />
+          <Route path="/join" element={<JoinPage />} />
+          {/* Superseded by /join, which takes every role. */}
+          <Route path="/student-register" element={<Navigate to="/join" replace />} />
           <Route path="/student-login" element={<StudentLogin />} />
           <Route path="/submit-consult/:token" element={<PublicConsultSubmitPage />} />
           <Route path="*" element={<Login />} />
@@ -360,7 +362,8 @@ function App() {
 
         {/* Public student pages — reachable even when a staff user is logged in
             (e.g. an admin previewing the shared /student-register link) */}
-        <Route path="/student-register" element={<StudentRegister />} />
+        <Route path="/join" element={<JoinPage />} />
+        <Route path="/student-register" element={<Navigate to="/join" replace />} />
         <Route path="/student-login" element={<StudentLogin />} />
         
         {/* All other routes with Layout */}

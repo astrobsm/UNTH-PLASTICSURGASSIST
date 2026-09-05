@@ -155,7 +155,10 @@ export function StudentManagementTab() {
   const [patientSearch, setPatientSearch] = useState('');
   const [loadingPatients, setLoadingPatients] = useState(false);
 
-  const shareLink = `${window.location.origin}/student-register`;
+  // One joining link for the whole unit. It used to point at a student-only
+  // form; /join takes students, house officers, registrars, senior registrars
+  // and consultants, sets the rotation dates, and offers to install the app.
+  const shareLink = `${window.location.origin}/join`;
 
   const loadData = async () => {
     setLoading(true);
@@ -327,7 +330,7 @@ export function StudentManagementTab() {
           <p className="text-sm text-gray-500">Manage clinical posting students</p>
         </div>
         <div className="flex items-center gap-2">
-          <input readOnly value={shareLink} className="text-xs border border-gray-300 rounded-lg px-3 py-2 w-64 bg-gray-50" onClick={e => (e.target as HTMLInputElement).select()} title="Student registration link" />
+          <input readOnly value={shareLink} className="text-xs border border-gray-300 rounded-lg px-3 py-2 w-64 bg-gray-50" onClick={e => (e.target as HTMLInputElement).select()} title="Profile creation link — students and staff alike" />
           <button onClick={() => { navigator.clipboard.writeText(shareLink); alert('Link copied!'); }}
             className="px-3 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 flex items-center gap-1">
             <Copy className="w-4 h-4" /> Copy Link

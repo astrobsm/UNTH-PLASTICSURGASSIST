@@ -6,6 +6,7 @@ import { cors, authenticateRequest } from './_lib/auth.js';
 // numbers as the HO Tracking card view (single source of truth).
 import { getHOFullMetrics } from './ho-tracking.js';
 import { getRequirements as sharedRequirements, pctOf, computeOverall, computeEligibility as sharedEligibility } from './_lib/traineeScoring.js';
+import { extendRotation, signOutRotation, evaluateDueRotations, scoreFor, ROTATION_ADMIN_ROLES } from './_lib/rotationLifecycle.js';
 
 const ADMIN_ROLES = ['consultant', 'super_admin', 'admin'];
 let tablesEnsured = false;
@@ -373,48 +374,74 @@ async function handlePost(req, res, adminUser) {
       const { rotationId, reason, days } = body;
       if (!rotationId) return res.status(400).json({ error: 'rotationId is required' });
 
-      const extDays = days || 7;
-      await query(
-        `UPDATE trainee_rotations
-         SET expected_end_date = expected_end_date + INTERVAL '1 day' * $1,
-             extension_count = extension_count + 1,
-             extension_reasons = extension_reasons || $2::jsonb,
-             status = 'extended',
-             updated_at = CURRENT_TIMESTAMP
-         WHERE id = $3`,
-        [extDays, JSON.stringify([reason || 'Admin extension']), rotationId]
-      );
-
-      return res.status(200).json({ message: `Rotation extended by ${extDays} days` });
+      // Extending, signing out and overriding all live in _lib/rotationLifecycle.js.
+      // They were written twice, here and in api/rotations.js, and had drifted:
+      // one recorded the reason as a bare string, the other as an object saying
+      // who and when, so a trainee's history read differently depending on which
+      // screen had touched it.
+      const result = await extendRotation({
+        rotationId, days, reason, byUserId: adminUser.id,
+      });
+      if (!result.ok) return res.status(400).json({ error: result.error });
+      return res.status(200).json({
+        message: `Rotation extended by ${days || 7} days`,
+        rotation: result.rotation,
+      });
     }
 
     case 'approve-signout': {
       const { rotationId, approved, comments, finalScore } = body;
       if (!rotationId) return res.status(400).json({ error: 'rotationId is required' });
 
-      if (approved) {
-        await query(
-          `UPDATE trainee_rotations
-           SET status = 'signed_out', actual_end_date = CURRENT_TIMESTAMP,
-               sign_out_approved = true, sign_out_approved_by = $1,
-               sign_out_approved_at = CURRENT_TIMESTAMP,
-               sign_out_comments = COALESCE(sign_out_comments, '') || ' | Approved: ' || $2,
-               final_score = $3, updated_at = CURRENT_TIMESTAMP
-           WHERE id = $4`,
-          [adminUser.id, comments || 'Approved', finalScore || 0, rotationId]
-        );
-      } else {
+      if (!approved) {
+        // Sending it back is not a sign-out; the rotation simply reopens.
         await query(
           `UPDATE trainee_rotations
            SET status = 'active',
-               sign_out_comments = COALESCE(sign_out_comments, '') || ' | Rejected: ' || $1,
+               sign_out_comments = TRIM(BOTH ' |' FROM COALESCE(sign_out_comments, '') || ' | Returned: ' || $1),
                updated_at = CURRENT_TIMESTAMP
            WHERE id = $2`,
-          [comments || 'Requirements not met', rotationId]
+          [String(comments || 'Requirements not met').trim(), rotationId],
         );
+        return res.status(200).json({ success: true, approved: false });
       }
 
-      return res.status(200).json({ success: true, approved });
+      const out = await signOutRotation({
+        rotationId, mode: 'approved', reason: comments,
+        byUserId: adminUser.id, finalScore,
+      });
+      if (!out.ok) return res.status(400).json({ error: out.error });
+      return res.status(200).json({ success: true, approved: true, rotation: out.rotation });
+    }
+
+    case 'override-signout': {
+      // Signs a trainee out despite a score that does not reach the threshold.
+      // The reason is required and stored as an override, so the record never
+      // reads as though the requirements were met.
+      const { rotationId, userId: targetUserId, level, reason } = body;
+      if (!rotationId) return res.status(400).json({ error: 'rotationId is required' });
+      if (!String(reason || '').trim()) {
+        return res.status(400).json({ error: 'A reason is required to override the score' });
+      }
+
+      let score = null;
+      try { score = (await scoreFor(targetUserId, level)).overall; } catch { /* recorded as unknown */ }
+
+      const out = await signOutRotation({
+        rotationId, mode: 'override', reason, byUserId: adminUser.id, finalScore: score,
+      });
+      if (!out.ok) return res.status(400).json({ error: out.error });
+      return res.status(200).json({ success: true, overridden: true, finalScore: score, rotation: out.rotation });
+    }
+
+    case 'evaluate-rotations': {
+      // Closes every rotation that has run its course and can be closed, and
+      // marks the rest as awaiting a decision.
+      if (!ROTATION_ADMIN_ROLES.includes(adminUser.role)) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+      const result = await evaluateDueRotations();
+      return res.status(200).json(result);
     }
 
     case 'update-phone': {
