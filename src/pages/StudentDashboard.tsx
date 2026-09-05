@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   GraduationCap, Users, ClipboardList, Activity, Loader2, LogOut, 
-  Plus, Save, Send, Eye, X, Calendar, MapPin, Star, Clock, FileText, AlertCircle
+  Plus, Save, Send, Eye, X, Calendar, MapPin, Star, Clock, FileText, AlertCircle, BookOpen
 } from 'lucide-react';
 import { apiClient } from '../services/apiClient';
 import { useAuthStore } from '../store/authStore';
@@ -506,6 +506,19 @@ export default function StudentDashboard() {
                 <Plus className="w-6 h-6 text-blue-600 mb-2" />
                 <p className="font-semibold text-gray-900">New Clerking</p>
                 <p className="text-sm text-gray-500">Clerk a patient</p>
+              </button>
+
+              {/* The learning modules. Reachable on a student account now that
+                  the router no longer swallows every path back to here. */}
+              <button onClick={() => navigate('/mcq-education')} className="bg-white border border-gray-200 rounded-xl p-4 hover:bg-purple-50 hover:border-purple-300 text-left transition-colors">
+                <GraduationCap className="w-6 h-6 text-purple-600 mb-2" />
+                <p className="font-semibold text-gray-900">MCQ &amp; Curriculum</p>
+                <p className="text-sm text-gray-500">Practise questions, WACS topics</p>
+              </button>
+              <button onClick={() => navigate('/education')} className="bg-white border border-gray-200 rounded-xl p-4 hover:bg-amber-50 hover:border-amber-300 text-left transition-colors">
+                <BookOpen className="w-6 h-6 text-amber-600 mb-2" />
+                <p className="font-semibold text-gray-900">CME Articles</p>
+                <p className="text-sm text-gray-500">Read and record progress</p>
               </button>
             </div>
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { format } from 'date-fns';
 import { apiClient } from '../services/apiClient';
@@ -2197,6 +2198,50 @@ function StudentManagementTab() {
             className="px-3 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 flex items-center gap-1">
             <Copy className="w-4 h-4" /> Copy Link
           </button>
+        </div>
+      </div>
+
+      {/* Learning material students can reach.
+          These modules keep their content in the browser and treat the server
+          as a top-up, so they work on a student account. The staff training
+          page is not here: it reads trainee analytics and rotations, which are
+          not a student's to see. */}
+      <div className="bg-white rounded-xl border border-gray-200 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+              <GraduationCap className="w-4 h-4 text-green-700" />
+              Learning material
+            </h3>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Open these yourself, or send a student the link — both work on a student login.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {[
+              { href: '/mcq-education', label: 'MCQ bank & WACS curriculum' },
+              { href: '/education', label: 'CME articles' },
+            ].map(link => (
+              <span key={link.href} className="flex items-center gap-1">
+                <Link
+                  to={link.href}
+                  className="px-3 py-2 text-sm rounded-lg border border-green-300 text-green-800 bg-green-50 hover:bg-green-100"
+                >
+                  {link.label}
+                </Link>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(`${window.location.origin}${link.href}`);
+                    alert('Link copied!');
+                  }}
+                  title={`Copy the ${link.label} link`}
+                  className="p-2 rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-50"
+                >
+                  <Copy className="w-4 h-4" />
+                </button>
+              </span>
+            ))}
+          </div>
         </div>
       </div>
 

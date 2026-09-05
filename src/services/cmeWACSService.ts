@@ -484,6 +484,39 @@ Please generate the article in HTML format with proper headings, paragraphs, lis
   }
 
   // Track reading progress
+  /**
+   * Mirror a finished article onto the student's own training record.
+   *
+   * pushToServer goes to /sync, which does not take a student token — it
+   * carries admissions, prescriptions and the rest of the clinical record, so
+   * it stays closed to them. Without this a student's reading lived only in
+   * the browser that did it, and moving to another phone started them again.
+   *
+   * Best-effort by design: it mirrors a write that has already succeeded
+   * locally, and failing must not cost the student their progress.
+   */
+  private async mirrorToStudentRecord(
+    progress: Omit<CMEReadingProgress, 'id' | 'created_at' | 'updated_at'>
+  ): Promise<void> {
+    try {
+      // Only a finished article counts towards the student's record; a part-read
+      // one is still in progress and would overstate what they have covered.
+      if (!progress.completed_at) return;
+
+      const raw = localStorage.getItem('psa-auth');
+      const role = raw ? JSON.parse(raw)?.state?.user?.role : null;
+      if (role !== 'student') return;
+
+      await apiClient.post('/students/training', {
+        kind: 'cme',
+        refId: progress.article_id,
+        title: (progress as { article_title?: string }).article_title || progress.article_id,
+      });
+    } catch {
+      /* Local progress already stands; the mirror is a convenience. */
+    }
+  }
+
   async updateReadingProgress(progress: Omit<CMEReadingProgress, 'id' | 'created_at' | 'updated_at'>): Promise<string> {
     const existing = await db.cme_reading_progress
       .where('[user_id+article_id]')
@@ -491,6 +524,7 @@ Please generate the article in HTML format with proper headings, paragraphs, lis
       .first();
 
     const now = new Date();
+    void this.mirrorToStudentRecord(progress);
 
     if (existing) {
       await db.cme_reading_progress.update(existing.id, {

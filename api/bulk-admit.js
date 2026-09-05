@@ -4,6 +4,7 @@
 // so one bad row never fails the whole batch.
 import { query } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
+import { assignPatientToStudentGroup } from './_lib/studentAssignment.js';
 
 const STAFF_ROLES = ['admin', 'super_admin', 'consultant', 'senior_registrar', 'junior_registrar', 'registrar', 'house_officer'];
 
@@ -105,6 +106,17 @@ export default async function handler(req, res) {
           );
           results.admitted++;
           rowResult.admitted = true;
+
+          // Same allocation as a single admission. A bulk intake is exactly
+          // when the ward most needs splitting between student groups, and
+          // waiting for someone to press the bulk assign afterwards is what
+          // this removes. Never throws.
+          const alloc = await assignPatientToStudentGroup({
+            patientId: patient.id,
+            hospitalNumber: hospital_number,
+            patientName: `${first_name} ${last_name}`.trim(),
+          });
+          if (alloc.assigned) rowResult.studentGroup = alloc.group;
         } catch (admErr) {
           rowResult.admitError = admErr.message;
         }

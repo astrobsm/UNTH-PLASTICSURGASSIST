@@ -1,6 +1,7 @@
 // Admissions API endpoint for Vercel serverless
 import { query } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
+import { assignPatientToStudentGroup } from './_lib/studentAssignment.js';
 import { idempotent, rememberResponse } from './_lib/idempotency.js';
 import { deactivateAssignmentsForPatients } from './_lib/teamAssignment.js';
 import { consultStartJoin, careStartColumns } from './_lib/careDuration.js';
@@ -309,6 +310,18 @@ async function createAdmission(data, user, req, res) {
     'SELECT first_name, last_name, hospital_number FROM patients WHERE id = $1',
     [resolvedPatientId]
   );
+
+  // Put the patient in front of a student group straight away. Previously they
+  // only reached students when an administrator next pressed "Assign Patients
+  // to Groups", so a patient admitted on Monday could stay invisible to the
+  // students on that ward for the rest of the week — and a clinical posting is
+  // time-boxed. Never throws; the admission stands regardless.
+  await assignPatientToStudentGroup({
+    patientId: resolvedPatientId,
+    hospitalNumber: patientResult.rows[0]?.hospital_number || null,
+    patientName: [patientResult.rows[0]?.first_name, patientResult.rows[0]?.last_name]
+      .filter(Boolean).join(' ') || null,
+  });
 
   const admissionWithPatient = {
     ...result.rows[0],

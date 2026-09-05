@@ -296,13 +296,26 @@ function App() {
     );
   }
 
-  // Student users go directly to their dashboard
+  // Student users go directly to their dashboard.
+  //
+  // The learning modules are reachable from here too. Until now the catch-all
+  // below swallowed every other path, so a student following a link to the MCQ
+  // bank or the CME articles landed silently back on their dashboard — the
+  // material was built and they could not get to it.
+  //
+  // Only the two content modules are opened up. Both keep their material in
+  // IndexedDB and treat the server as a top-up, so they work on a student
+  // token; the staff training pages read trainee analytics and rotations and
+  // stay closed. The catch-all still ends at the dashboard, so an unknown path
+  // cannot reach anything else.
   if ((user.role as string) === 'student') {
     return (
       <Suspense fallback={<PageLoader />}>
         <Routes>
           <Route path="/student-dashboard" element={<StudentDashboard />} />
           <Route path="/student-login" element={<StudentLogin />} />
+          <Route path="/mcq-education" element={<MCQEducation />} />
+          <Route path="/education" element={<Education />} />
           <Route path="*" element={<StudentDashboard />} />
         </Routes>
       </Suspense>
