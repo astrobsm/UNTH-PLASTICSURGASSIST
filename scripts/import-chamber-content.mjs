@@ -109,10 +109,13 @@ async function main() {
   if (DRY_RUN) console.log('Mode:     dry run -- nothing will be written\n');
 
   const pool = new pg.Pool({
-    connectionString: process.env.DATABASE_URL,
+    // `sslmode=` in the URL makes pg build its own TLS config, which then wins
+    // over the ssl option below and rejects DigitalOcean's certificate chain
+    // ("self-signed certificate in certificate chain"). Strip it and be explicit.
+    connectionString: process.env.DATABASE_URL.replace(/[?&]sslmode=[^&]*/i, ''),
     ssl: { rejectUnauthorized: false },
     max: 4,
-    connectionTimeoutMillis: 15000,
+    connectionTimeoutMillis: 20000,
   });
   const client = await pool.connect();
 

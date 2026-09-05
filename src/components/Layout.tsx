@@ -1,4 +1,4 @@
-import { ReactNode, useState, useEffect } from 'react';
+import { ReactNode, useState, useEffect, useMemo } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Users, 
@@ -48,6 +48,7 @@ import {
   BarChart3
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
+import { canAccess } from '../config/routeAccess';
 import SyncStatusIndicator from './SyncStatusIndicator';
 import { HeaderCheckForUpdates } from './SWUpdateBanner';
 import { OfflineSearchModal } from './OfflineSearchModal';
@@ -56,7 +57,9 @@ interface LayoutProps {
   children: ReactNode;
 }
 
-// Global navigation items — always visible in the sidebar
+// Every navigation destination. What each role actually sees is filtered
+// through config/routeAccess, the same table the router gates on — so the menu
+// never offers a screen that would bounce the user straight back.
 const navigation = [
   { name: 'Dashboard', href: '/', icon: ClipboardList },
   { name: 'Patients', href: '/patients', icon: Users },
@@ -124,6 +127,11 @@ export default function Layout({ children }: LayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
+  // Recomputed only when the role changes, not on every render.
+  const visibleNavigation = useMemo(
+    () => navigation.filter((item) => canAccess(item.href, user?.role)),
+    [user?.role],
+  );
   const isHomePage = location.pathname === '/';
   
   // Mobile menu state
@@ -308,7 +316,7 @@ export default function Layout({ children }: LayoutProps) {
 
           {/* Mobile navigation links */}
           <div className="overflow-y-auto h-[calc(100vh-140px)] py-2 overscroll-contain">
-            {navigation.map((item) => {
+            {visibleNavigation.map((item) => {
               const isActive = location.pathname === item.href;
               return (
                 <Link
@@ -347,7 +355,7 @@ export default function Layout({ children }: LayoutProps) {
           </button>
 
           <div className={`${isCollapsed ? 'px-2' : 'px-3'} py-6 space-y-1 overflow-y-auto max-h-[calc(100vh-100px)]`}>
-            {navigation.map((item) => {
+            {visibleNavigation.map((item) => {
               const isActive = location.pathname === item.href;
               return (
                 <Link

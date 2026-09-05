@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
+import { ROUTE_ROLES } from './config/routeAccess';
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { useLocation } from 'react-router-dom';
 import Layout from './components/Layout';
@@ -426,14 +427,14 @@ function App() {
               <Route path="/reports/referrals" element={<ReferralAnalyticsPage />} />
               <Route path="/submit-consult/:token" element={<PublicConsultSubmitPage />} />
               <Route path="/settings" element={<Settings />} />
-              <Route path="/training-admin" element={<ProtectedRoute allowedRoles={['admin', 'consultant', 'senior_registrar']}><AdminTrainingPage /></ProtectedRoute>} />
+              <Route path="/training-admin" element={<ProtectedRoute allowedRoles={ROUTE_ROLES['/training-admin']}><AdminTrainingPage /></ProtectedRoute>} />
               {/* Renamed alongside /training. Old links still land. */}
               <Route path="/admin-training" element={<Navigate to="/training-admin" replace />} />
-              <Route path="/bulk-admit" element={<ProtectedRoute allowedRoles={['admin', 'consultant', 'senior_registrar', 'junior_registrar', 'registrar', 'house_officer']}><BulkAdmitPage /></ProtectedRoute>} />
-              <Route path="/ho-tracking" element={<ProtectedRoute allowedRoles={['admin', 'consultant', 'senior_registrar']}><HOTrackingPage /></ProtectedRoute>} />
-              <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><Admin /></ProtectedRoute>} />
-              <Route path="/topic-management" element={<ProtectedRoute allowedRoles={['admin', 'consultant']}><TopicManagement /></ProtectedRoute>} />
-              <Route path="/audit-logs" element={<ProtectedRoute allowedRoles={['admin', 'consultant', 'senior_registrar']}><AuditLogViewerPage /></ProtectedRoute>} />
+              <Route path="/bulk-admit" element={<ProtectedRoute allowedRoles={ROUTE_ROLES['/bulk-admit']}><BulkAdmitPage /></ProtectedRoute>} />
+              <Route path="/ho-tracking" element={<ProtectedRoute allowedRoles={ROUTE_ROLES['/ho-tracking']}><HOTrackingPage /></ProtectedRoute>} />
+              <Route path="/admin" element={<ProtectedRoute allowedRoles={ROUTE_ROLES['/admin']}><Admin /></ProtectedRoute>} />
+              <Route path="/topic-management" element={<ProtectedRoute allowedRoles={ROUTE_ROLES['/topic-management']}><TopicManagement /></ProtectedRoute>} />
+              <Route path="/audit-logs" element={<ProtectedRoute allowedRoles={ROUTE_ROLES['/audit-logs']}><AuditLogViewerPage /></ProtectedRoute>} />
             </Routes>
             
             {deferredPrompt && (
