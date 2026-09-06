@@ -24,6 +24,9 @@ import { apiClient } from '../services/apiClient';
 import { aiWoundMeasurement, type WoundProgressEntry } from '../services/aiWoundMeasurement';
 import type { ImageQualityReport } from '../services/woundImageQuality';
 import { putLocalImage, attachToAssessment } from '../services/woundImageStore';
+import { renderContourOverlay } from '../services/woundOverlayRenderer';
+import CalibrationEvidenceBadge from '../components/wound/CalibrationEvidenceBadge';
+import type { CalibrationEvidence } from '../services/aiWoundMeasurement';
 import { syncPendingWoundImages } from '../services/woundImageSync';
 
 /**
@@ -711,6 +714,17 @@ const CaptureAssessmentModal: React.FC<{ wound: Wound; onClose: () => void; onSa
   // Editable measurement fields (auto-filled by AI, clinician confirms).
   const [m, setM] = useState<Partial<WoundAssessment>>({});
   const [scaleReliable, setScaleReliable] = useState(false);
+  const [calibrated, setCalibrated] = useState(false);
+  const [calibrationEvidence, setCalibrationEvidence] = useState<CalibrationEvidence | undefined>();
+  const [calibrationConfidence, setCalibrationConfidence] = useState(0);
+  /** The photograph with the traced margin drawn on it, shown and stored. */
+  const [overlayUrl, setOverlayUrl] = useState<string | null>(null);
+  const overlayRefRef = useRef<string | null>(null);
+
+  // Object URLs are held by the document until revoked. Without this a
+  // clinician working through a ward round accumulates every overlay they have
+  // looked at for as long as the tab lives.
+  useEffect(() => () => { if (overlayUrl) URL.revokeObjectURL(overlayUrl); }, [overlayUrl]);
   const [calibType, setCalibType] = useState('reference-card');
   // Recorded with the assessment so a measurement can be read against the
   // quality of the photograph that produced it.
@@ -817,7 +831,43 @@ const CaptureAssessmentModal: React.FC<{ wound: Wound; onClose: () => void; onSa
       }
 
       setScaleReliable(Boolean(result.scaleReliable));
+      setCalibrated(Boolean(result.calibrated));
+      setCalibrationEvidence(result.calibrationEvidence);
+      setCalibrationConfidence(result.calibrationConfidence ?? 0);
       setCalibType(result.calibrationMethod || 'reference-card');
+
+      // Draw what was actually traced, over the photograph it was traced from.
+      // This is the evidence that the margin was found — and found in the right
+      // place — so it is shown to the clinician before they save and kept with
+      // the record afterwards. A number whose working cannot be seen is a
+      // number that has to be taken on trust.
+      try {
+        const overlay = await renderContourOverlay(imageData, {
+          contour: result.contourPoints,
+          pixelsPerCm: result.measurements.calibrationFactor,
+          areaCm2: result.area,
+          lengthCm: result.length,
+          widthCm: result.width,
+          calibrated: Boolean(result.calibrated),
+          capturedAt: new Date(),
+        });
+        if (overlay) {
+          setOverlayUrl(URL.createObjectURL(overlay));
+          const overlayRef = await putLocalImage({
+            blob: overlay,
+            kind: 'overlay',
+            width: canvas.width,
+            height: canvas.height,
+            woundId: wound.id != null ? Number(wound.id) : null,
+            patientId: wound.patient_id != null ? Number(wound.patient_id) : null,
+          });
+          overlayRefRef.current = overlayRef;
+        }
+      } catch (overlayErr) {
+        // The evidence image is worth having, but not at the cost of the
+        // measurement the clinician came for.
+        console.warn('[wound] could not render the margin overlay:', overlayErr);
+      }
 
       // Held so the clinician can correct the outline against the photograph.
       setAiContour(result.contourCm);
@@ -906,9 +956,15 @@ const CaptureAssessmentModal: React.FC<{ wound: Wound; onClose: () => void; onSa
       // Link the photograph to the assessment now that the row exists. Without
       // this the image is orphaned and the pairing with the corrected outline —
       // the whole reason for keeping it — is lost.
-      if (imageRef && (saved as any)?.id) {
-        await attachToAssessment([imageRef], Number((saved as any).id), wound.id != null ? Number(wound.id) : undefined)
-          .catch(e => console.warn('[wound] could not link photograph to assessment:', e));
+      if ((saved as any)?.id) {
+        // Both the original and the traced overlay: the first so the
+        // measurement can be re-run or reviewed, the second as the evidence
+        // that the margin was found where the number says it was.
+        const refs = [imageRef, overlayRefRef.current].filter(Boolean) as string[];
+        if (refs.length) {
+          await attachToAssessment(refs, Number((saved as any).id), wound.id != null ? Number(wound.id) : undefined)
+            .catch(e => console.warn('[wound] could not link photographs to assessment:', e));
+        }
       }
 
       // Send it on to the server, now that it is linked to a saved assessment.
@@ -1012,20 +1068,36 @@ const CaptureAssessmentModal: React.FC<{ wound: Wound; onClose: () => void; onSa
           )}
 
           {!analyzing && m.area_cm2 != null && (
-            <div className={`mt-2 rounded-lg border p-2 ${scaleReliable ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-300'}`}>
-              <p className={`text-xs ${scaleReliable ? 'text-green-800' : 'text-amber-900'}`}>
-                {scaleReliable
-                  ? `Calibrated measurement (${calibType.startsWith('manual:') ? calibType.slice(7) : calibType}).`
-                  : 'No marker detected automatically. Automatic detection only recognises green printed markers, grid paper and ruler tick marks — not coins or cards. Set the scale by hand for an accurate size.'}
-              </p>
+            <div className="mt-2 space-y-2">
+              {/* What was traced, over the photograph it was traced from.
+                  Shown before saving so the clinician can see whether the
+                  outline sits on the wound edge — which is the difference
+                  between a measurement they can rely on and one they can only
+                  accept. */}
+              {overlayUrl && (
+                <figure>
+                  <img
+                    src={overlayUrl}
+                    alt="The photograph with the detected wound margin drawn on it"
+                    className="w-full rounded-lg border border-gray-200"
+                  />
+                  <figcaption className="text-[11px] text-gray-500 mt-1">
+                    The traced margin, drawn on the photograph it was measured from.
+                    Check it follows the wound edge before saving. This image is kept
+                    with the assessment.
+                  </figcaption>
+                </figure>
+              )}
+
+              <CalibrationEvidenceBadge
+                calibrated={calibrated}
+                reliable={scaleReliable}
+                evidence={calibrationEvidence}
+                confidence={calibrationConfidence}
+                onSetScale={pending ? () => setShowCalibration(true) : undefined}
+              />
               {pending && (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <button
-                    onClick={() => setShowCalibration(true)}
-                    className="px-3 py-1.5 rounded-md text-xs font-medium bg-primary-600 text-white hover:bg-primary-700 inline-flex items-center gap-1"
-                  >
-                    <Ruler className="w-3.5 h-3.5" /> {scaleReliable ? 'Adjust scale' : 'Set scale from marker'}
-                  </button>
+                <div className="flex flex-wrap gap-2">
                   {aiContour && aiContour.length > 2 && aiCentroidPx && pxPerCm > 0 && (
                     <button
                       onClick={() => setShowEditor(true)}

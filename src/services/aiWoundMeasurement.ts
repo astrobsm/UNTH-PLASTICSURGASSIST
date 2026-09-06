@@ -98,6 +98,13 @@ export interface WoundMeasurementResult {
   contourCm: Array<{ x: number; y: number }>;        // contour in cm, centred on centroid (for the healing map)
   scaleReliable: boolean;                            // true when calibration is trustworthy for absolute cm
   calibrationConfidence: number;                     // 0-1, the scale-detection confidence alone
+  /**
+   * False when no physical reference was found. Every centimetre figure is
+   * then 0 and must not be recorded — there is no scale to have produced them.
+   */
+  calibrated: boolean;
+  /** The proof behind the scale, for the interface to show. */
+  calibrationEvidence?: CalibrationEvidence;
   /** True when nothing measurable was found. All dimensions are 0 and must not be recorded. */
   noWoundDetected?: boolean;
   /**
@@ -116,11 +123,42 @@ export interface WoundMeasurementResult {
 }
 
 export interface CalibrationReference {
-  type: 'ruler' | 'coin' | 'card' | 'manual' | 'grid' | 'green_marker';
+  /**
+   * 'none' means no reference was found and no scale exists. It is a real
+   * state, not a failure to be papered over: without a physical object of
+   * known size in the frame there is nothing to convert pixels into
+   * centimetres, and the pipeline must say so rather than guess.
+   */
+  type: 'ruler' | 'coin' | 'card' | 'manual' | 'grid' | 'green_marker' | 'none';
   knownSizeCm: number;
   pixelSize: number;
-  detectionMethod: 'automatic' | 'manual_selection';
+  detectionMethod: 'automatic' | 'manual_selection' | 'none';
   confidence: number;
+  /** What was actually seen. Absent when nothing was. */
+  evidence?: CalibrationEvidence;
+}
+
+/**
+ * The proof behind a scale, so the claim can be checked rather than believed.
+ *
+ * A clinician can hold this against the photograph: if it says a 10 cm bar
+ * spanned 412 pixels, the bar in the picture either is that long or it is not.
+ * A number with no evidence is a number to distrust, and this is what lets the
+ * interface tell the two apart.
+ */
+export interface CalibrationEvidence {
+  /** Plain description of the reference — "10 cm printed marker". */
+  reference: string;
+  /** Physical size the reference was taken to be. */
+  knownSizeCm: number;
+  /** How many pixels that size spanned in this photograph. */
+  measuredPixels: number;
+  /** The resulting scale. */
+  pixelsPerCm: number;
+  /** Where it was found, so it can be looked for in the image. */
+  locationPx?: { x: number; y: number; width: number; height: number };
+  /** True only when a person identified the reference themselves. */
+  confirmedByPerson: boolean;
 }
 
 export interface WoundProgressEntry {
@@ -350,7 +388,11 @@ function minAreaRect(pts: Array<{ x: number; y: number }>): { length: number; wi
 // ============================================
 
 /** Detect green calibration markers from our printed rulers */
-function detectGreenMarkers(data: Uint8ClampedArray, w: number, h: number): { found: boolean; pixelsPerCm: number; confidence: number } {
+function detectGreenMarkers(data: Uint8ClampedArray, w: number, h: number): {
+  found: boolean; pixelsPerCm: number; confidence: number;
+  knownCm?: number; measuredPixels?: number;
+  locationPx?: { x: number; y: number; width: number; height: number };
+} {
   const greenMask = new Uint8Array(w * h);
   let greenCount = 0;
   for (let i = 0; i < w * h; i++) {
@@ -381,7 +423,17 @@ function detectGreenMarkers(data: Uint8ClampedArray, w: number, h: number): { fo
   const knownCm = aspect > 8 ? 10 : aspect > 3 ? 5 : 1;
   const pxPerCm = longer / knownCm;
   const fill = count / ((mW + 1) * (mH + 1));
-  return { found: true, pixelsPerCm: pxPerCm, confidence: Math.min(0.95, 0.5 + fill * 0.3 + (longer > 100 ? 0.15 : 0)) };
+  return {
+    found: true,
+    pixelsPerCm: pxPerCm,
+    confidence: Math.min(0.95, 0.5 + fill * 0.3 + (longer > 100 ? 0.15 : 0)),
+    knownCm,
+    measuredPixels: longer,
+    // As a fraction of the frame, not pixels: the interface uses this to say
+    // where to look, and "0.82 across" survives any resize that a pixel offset
+    // would not.
+    locationPx: { x: minX / w, y: minY / h, width: mW / w, height: mH / h },
+  };
 }
 
 /** Detect 1cm grid lines via horizontal line frequency analysis */
@@ -673,27 +725,93 @@ export class AIWoundMeasurementService {
 
     const green = detectGreenMarkers(data, w, h);
     if (green.found && green.confidence > 0.5) {
-      return { type: 'green_marker', knownSizeCm: 1, pixelSize: green.pixelsPerCm, detectionMethod: 'automatic', confidence: green.confidence };
+      const knownCm = green.knownCm ?? 1;
+      return {
+        type: 'green_marker', knownSizeCm: knownCm, pixelSize: green.pixelsPerCm,
+        detectionMethod: 'automatic', confidence: green.confidence,
+        evidence: {
+          reference: `${knownCm} cm printed marker`,
+          knownSizeCm: knownCm,
+          measuredPixels: Math.round(green.measuredPixels ?? 0),
+          pixelsPerCm: green.pixelsPerCm,
+          locationPx: green.locationPx,
+          confirmedByPerson: false,
+        },
+      };
     }
     const grid = detectGridLines(gray, w, h);
     if (grid.found && grid.confidence > 0.45) {
-      return { type: 'grid', knownSizeCm: 1, pixelSize: grid.pixelsPerCm, detectionMethod: 'automatic', confidence: grid.confidence };
+      return {
+        type: 'grid', knownSizeCm: 1, pixelSize: grid.pixelsPerCm,
+        detectionMethod: 'automatic', confidence: grid.confidence,
+        evidence: {
+          reference: '1 cm grid paper',
+          knownSizeCm: 1,
+          measuredPixels: Math.round(grid.pixelsPerCm),
+          pixelsPerCm: grid.pixelsPerCm,
+          confirmedByPerson: false,
+        },
+      };
     }
     const ruler = detectRulerMarkings(gray, w, h);
     if (ruler.found && ruler.confidence > 0.4) {
-      return { type: 'ruler', knownSizeCm: 1, pixelSize: ruler.pixelsPerCm, detectionMethod: 'automatic', confidence: ruler.confidence };
+      return {
+        type: 'ruler', knownSizeCm: 1, pixelSize: ruler.pixelsPerCm,
+        detectionMethod: 'automatic', confidence: ruler.confidence,
+        evidence: {
+          reference: 'ruler tick marks, 1 cm apart',
+          knownSizeCm: 1,
+          measuredPixels: Math.round(ruler.pixelsPerCm),
+          pixelsPerCm: ruler.pixelsPerCm,
+          confirmedByPerson: false,
+        },
+      };
     }
-    const estimatedPxPerCm = Math.max(w, h) / 20;
-    return { type: 'manual', knownSizeCm: 1, pixelSize: estimatedPxPerCm, detectionMethod: 'automatic', confidence: 0.2 };
+    // Nothing of known size was found, so there is no scale.
+    //
+    // This used to return `max(w, h) / 20` — an assumption that every
+    // photograph is twenty centimetres across — labelled `type: 'manual'` with
+    // `detectionMethod: 'automatic'`, neither of which was true. A phone
+    // photograph may cover five centimetres or fifty, so that number was a
+    // guess, and every square centimetre computed from it was fiction carried
+    // into the record at two decimal places.
+    //
+    // An absent scale is now reported as absent. The measurement still happens
+    // in pixels, and a person can set the scale by hand against a ruler in the
+    // frame; what cannot happen is a centimetre figure nobody measured.
+    return { type: 'none', knownSizeCm: 0, pixelSize: 0, detectionMethod: 'none', confidence: 0 };
   }
 
   createManualCalibration(pixelLength: number, knownCm: number): CalibrationReference {
-    return { type: 'manual', knownSizeCm: knownCm, pixelSize: pixelLength / knownCm, detectionMethod: 'manual_selection', confidence: 0.95 };
+    // Trusted above any automatic detection: a person looked at the photograph
+    // and said "that is N centimetres". The evidence records that they did.
+    return {
+      type: 'manual', knownSizeCm: knownCm, pixelSize: pixelLength / knownCm,
+      detectionMethod: 'manual_selection', confidence: 0.95,
+      evidence: {
+        reference: `${knownCm} cm, marked by hand on the photograph`,
+        knownSizeCm: knownCm,
+        measuredPixels: Math.round(pixelLength),
+        pixelsPerCm: pixelLength / knownCm,
+        confirmedByPerson: true,
+      },
+    };
   }
 
   createReferenceCalibration(type: 'coin' | 'card', pixelSize: number): CalibrationReference {
     const knownSizes = { coin: 2.4, card: 8.56 };
-    return { type, knownSizeCm: knownSizes[type], pixelSize: pixelSize / knownSizes[type], detectionMethod: 'manual_selection', confidence: 0.85 };
+    const label = { coin: 'coin, 2.4 cm across', card: 'bank card, 8.56 cm wide' };
+    return {
+      type, knownSizeCm: knownSizes[type], pixelSize: pixelSize / knownSizes[type],
+      detectionMethod: 'manual_selection', confidence: 0.85,
+      evidence: {
+        reference: label[type],
+        knownSizeCm: knownSizes[type],
+        measuredPixels: Math.round(pixelSize),
+        pixelsPerCm: pixelSize / knownSizes[type],
+        confirmedByPerson: true,
+      },
+    };
   }
 
   /** Full wound measurement pipeline */
@@ -719,6 +837,7 @@ export class AIWoundMeasurementService {
         calibrationMethod: calibration.type,
         centroid: { x: 0, y: 0 }, contourCm: [],
         scaleReliable: false, calibrationConfidence: calibration.confidence,
+        calibrated: false, calibrationEvidence: calibration.evidence,
         noWoundDetected: true,
         tissueSource: 'none',
         imageQuality,
@@ -769,6 +888,7 @@ export class AIWoundMeasurementService {
         calibrationMethod: calibration.type,
         centroid: { x: 0, y: 0 }, contourCm: [],
         scaleReliable: false, calibrationConfidence: calibration.confidence,
+        calibrated: false, calibrationEvidence: calibration.evidence,
         noWoundDetected: true,
         tissueSource: 'none',
         imageQuality,
@@ -784,10 +904,15 @@ export class AIWoundMeasurementService {
       ? minAreaRect(contour)
       : { length: maxX - minX, width: maxY - minY, cx: (minX + maxX) / 2, cy: (minY + maxY) / 2 };
 
-    const lengthCm = rect.length / pxPerCm;
-    const widthCm = rect.width / pxPerCm;
-    const areaCm2 = pixelArea / (pxPerCm * pxPerCm);
-    const perimeterCm = pixelPerimeter / pxPerCm;
+    // Pixels become centimetres only when a scale exists. Dividing by a
+    // pxPerCm of zero yields Infinity, which would reach the chart as a
+    // measurement; zero says plainly that no centimetre figure was obtained.
+    // The pixel measurements below are unaffected and remain true either way.
+    const hasScale = pxPerCm > 0;
+    const lengthCm = hasScale ? rect.length / pxPerCm : 0;
+    const widthCm = hasScale ? rect.width / pxPerCm : 0;
+    const areaCm2 = hasScale ? pixelArea / (pxPerCm * pxPerCm) : 0;
+    const perimeterCm = hasScale ? pixelPerimeter / pxPerCm : 0;
 
     // --- Sanity checks & scale reliability ---
     // Non-blocking quality findings travel with the measurement. The image was
@@ -800,7 +925,11 @@ export class AIWoundMeasurementService {
     const scalePlausible = pxPerCm > 3 && pxPerCm < 4000;
     const scaleReliable = calibration.confidence >= 0.5 && scalePlausible;
     if (!scaleReliable) {
-      warnings.push('Scale reference weak or missing — dimensions are approximate. Include a ruler or the printed marker for accurate cm.');
+      warnings.push(
+        calibration.type === 'none'
+          ? 'No scale reference found in this photograph. No measurement in centimetres has been made — set the scale against a ruler or the printed marker, or enter the dimensions by hand.'
+          : 'Scale reference weak — dimensions are approximate. Include a ruler or the printed marker for accurate cm.',
+      );
     }
     // Area vs. ellipse(L×W) consistency: a good segmentation is roughly elliptical.
     const ellipseArea = Math.PI * (lengthCm / 2) * (widthCm / 2);
@@ -840,8 +969,8 @@ export class AIWoundMeasurementService {
     const sampledContour = contour.filter((_, i) => i % step === 0);
     // Contour in cm, centred on the centroid — the shape used by the serial healing map.
     const contourCm = sampledContour.map(p => ({
-      x: parseFloat(((p.x - centroid.x) / pxPerCm).toFixed(3)),
-      y: parseFloat(((p.y - centroid.y) / pxPerCm).toFixed(3)),
+      x: parseFloat((hasScale ? (p.x - centroid.x) / pxPerCm : 0).toFixed(3)),
+      y: parseFloat((hasScale ? (p.y - centroid.y) / pxPerCm : 0).toFixed(3)),
     }));
 
     return {
@@ -859,6 +988,11 @@ export class AIWoundMeasurementService {
       centroid,
       contourCm,
       scaleReliable,
+      // A scale exists only if something of known size was actually found or
+      // set. `type: 'none'` means nothing was, and every centimetre below is
+      // therefore zero rather than a figure derived from an assumption.
+      calibrated: calibration.type !== 'none' && pxPerCm > 0,
+      calibrationEvidence: calibration.evidence,
       calibrationConfidence: parseFloat(calibration.confidence.toFixed(3)),
       tissue,
       tissueSource: TISSUE_MODEL_VALIDATED && tissue ? 'model' : 'none',
