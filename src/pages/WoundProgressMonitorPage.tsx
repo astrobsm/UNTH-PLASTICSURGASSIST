@@ -44,7 +44,7 @@ const WoundHealingMap = lazy(() => import('../components/WoundHealingMap'));
 const WoundCalibrationPicker = lazy(() => import('../components/WoundCalibrationPicker'));
 const WoundContourEditor = lazy(() => import('../components/WoundContourEditor'));
 const WoundProgressChart = lazy(() => import('../components/WoundProgressChart'));
-const WoundImageGallery = lazy(() => import('../components/WoundImageGallery'));
+const WoundPhotoHistory = lazy(() => import('../components/wound/WoundPhotoHistory'));
 
 const WOUND_TYPES = [
   'Burn', 'Pressure Injury', 'Venous Ulcer', 'Diabetic Foot Ulcer', 'Surgical Wound',
@@ -501,14 +501,24 @@ const WoundDetailView: React.FC<{ patient: any; wound: Wound; onBack: () => void
         )}
       </div>
 
-      {/* Photographs. Every assessment above was captured against one of these,
-          and until now there was nowhere in the app to look at them. */}
+      {/* Photographs, kept and reviewable.
+          The whole run rather than the latest few: whether a wound is healing
+          is a question about the series, so the photographs are grouped by the
+          day they were taken, carry the size measured from them, and any two
+          can be held against each other. */}
       <div className="bg-white rounded-xl border p-4">
+        <h3 className="text-sm font-semibold text-gray-700 mb-3">Wound photographs</h3>
         <Suspense fallback={<div className="h-20 bg-gray-50 rounded animate-pulse" />}>
-          <WoundImageGallery
+          <WoundPhotoHistory
             woundId={wound.id != null ? Number(wound.id) : null}
             patientId={wound.patient_id != null ? Number(wound.patient_id) : null}
-            title="Wound photographs"
+            assessments={assessments.map(a => ({
+              id: Number(a.id),
+              assessed_at: a.assessed_at,
+              area_cm2: a.area_cm2 ?? null,
+              length_cm: a.length_cm ?? null,
+              width_cm: a.width_cm ?? null,
+            }))}
           />
         </Suspense>
       </div>
