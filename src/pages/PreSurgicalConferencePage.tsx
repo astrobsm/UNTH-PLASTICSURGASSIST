@@ -7,7 +7,8 @@ import {
   Search, 
   ChevronRight,
   Loader2,
-  AlertTriangle
+  AlertTriangle,
+  Video
 } from 'lucide-react';
 import { 
   preSurgicalConferenceService, 
@@ -220,14 +221,26 @@ export default function PreSurgicalConferencePage() {
     <div className="max-w-7xl mx-auto space-y-6">
       {/* Header */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center space-x-4">
-          <div className="w-14 h-14 bg-gradient-to-br from-green-500 to-green-700 rounded-xl flex items-center justify-center">
-            <Presentation className="h-8 w-8 text-white" />
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center space-x-4">
+            <div className="w-14 h-14 bg-gradient-to-br from-green-500 to-green-700 rounded-xl flex items-center justify-center">
+              <Presentation className="h-8 w-8 text-white" />
+            </div>
+            <div>
+              <h1 className="text-lg sm:text-2xl font-bold text-gray-900">Pre-Surgical Conference</h1>
+              <p className="text-gray-600">Review and present patient cases before surgery</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-lg sm:text-2xl font-bold text-gray-900">Pre-Surgical Conference</h1>
-            <p className="text-gray-600">Review and present patient cases before surgery</p>
-          </div>
+
+          {/* The Tuesday conference itself. Opening this joins the meeting and
+              a case can then be put on every participant's screen at once. */}
+          <Link
+            to="/conference"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-green-600 text-white font-medium hover:bg-green-700 transition-colors"
+          >
+            <Video className="h-5 w-5" />
+            Join the conference
+          </Link>
         </div>
       </div>
 

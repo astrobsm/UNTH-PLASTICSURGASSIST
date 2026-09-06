@@ -17,7 +17,7 @@ vi.mock('../services/apiClient', () => ({ apiClient: { get: vi.fn(), post: vi.fn
 import { apiClient } from '../services/apiClient';
 import { myStatusService } from '../services/myStatusService';
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => { vi.clearAllMocks(); });
 
 describe('myStatusService', () => {
   it('asks for a fresh read, because a stale score misleads', async () => {
