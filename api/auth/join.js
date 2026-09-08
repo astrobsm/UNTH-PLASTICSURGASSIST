@@ -112,7 +112,7 @@ async function createProfile(req, res) {
 
 /** A clinical student, with their posting dates. */
 async function createStudent(res, { name, mail, passwordHash, university, matricNumber, start, days }) {
-  const existing = await query('SELECT id FROM students WHERE email = $1', [mail]);
+  const existing = await query('SELECT id FROM students WHERE LOWER(email) = LOWER($1)', [mail]);
   if (existing.rows.length) {
     return res.status(409).json({ error: 'That email is already registered' });
   }
@@ -127,12 +127,16 @@ async function createStudent(res, { name, mail, passwordHash, university, matric
     [name, mail, passwordHash, university || null, matricNumber || null, start, end],
   );
 
+  // Students may sign in straight away: loginStudent approves on first use, and
+  // telling them to wait for an administrator who is not coming is how a whole
+  // posting ends up locked out of a system that would have let them in.
   return res.status(201).json({
     created: true,
     kind: 'student',
     profile: r.rows[0],
-    approved: false,
-    message: 'Profile created. An administrator will approve it before you can sign in.',
+    approved: true,
+    canSignInNow: true,
+    message: 'Profile created. You can sign in now with this email and password.',
   });
 }
 
@@ -143,9 +147,9 @@ async function createStaff(res, { role, name, mail, passwordHash, phone, start, 
   let existing;
   try {
     existing = await query(
-      "SELECT id FROM users WHERE email = $1 AND (app_id = 'psa' OR app_id IS NULL)", [mail]);
+      "SELECT id FROM users WHERE LOWER(email) = LOWER($1) AND (app_id = 'psa' OR app_id IS NULL)", [mail]);
   } catch {
-    existing = await query('SELECT id FROM users WHERE email = $1', [mail]);
+    existing = await query('SELECT id FROM users WHERE LOWER(email) = LOWER($1)', [mail]);
   }
   if (existing.rows.length) {
     return res.status(409).json({ error: 'That email is already registered' });

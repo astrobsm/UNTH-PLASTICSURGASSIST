@@ -34,7 +34,7 @@ async function handleLogin(req, res) {
             role, full_name, 
             COALESCE(is_approved, true) as is_approved, 
             COALESCE(is_active, true) as is_active
-     FROM users WHERE email = $1 AND (app_id = 'psa' OR app_id IS NULL)`,
+     FROM users WHERE LOWER(email) = LOWER($1) AND (app_id = 'psa' OR app_id IS NULL)`,
     [loginId]
   );
 

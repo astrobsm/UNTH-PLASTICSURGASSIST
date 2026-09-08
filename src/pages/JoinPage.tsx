@@ -61,7 +61,9 @@ export default function JoinPage() {
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [done, setDone] = useState<null | { message: string; rotation?: { expected_end_date: string } }>(null);
+  const [done, setDone] = useState<
+    null | { message: string; kind?: string; canSignInNow?: boolean; rotation?: { expected_end_date: string } }
+  >(null);
 
   // The install prompt the browser offers, held until the user asks for it.
   const [installPrompt, setInstallPrompt] = useState<Event | null>(null);
@@ -138,7 +140,7 @@ export default function JoinPage() {
         rotationStart: rotates ? form.rotationStart : undefined,
         rotationDays: rotates ? effectiveDays : undefined,
       });
-      setDone({ message: r.message, rotation: r.rotation });
+      setDone({ message: r.message, kind: r.kind, canSignInNow: r.canSignInNow, rotation: r.rotation });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not create the profile. Please try again.');
     } finally {
@@ -164,7 +166,10 @@ export default function JoinPage() {
 
           <InstallCard installPrompt={installPrompt} installed={installed} onInstall={install} />
 
-          <Link to="/login" className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-navy-700 hover:text-navy-900">
+          <Link
+            to={done.kind === 'student' ? '/student-login' : '/login'}
+            className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-navy-700 hover:text-navy-900"
+          >
             Go to sign in <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
@@ -180,7 +185,9 @@ export default function JoinPage() {
           <div className="flex justify-center mb-3"><UNTHLogo /></div>
           <h1 className="text-2xl font-bold text-white">Join the unit</h1>
           <p className="text-sky-200 text-sm mt-1">
-            Create your profile. An administrator approves it before you can sign in.
+            {role === 'student'
+              ? 'Create your profile and sign in straight away.'
+              : 'Create your profile. An administrator approves it before you can sign in.'}
           </p>
         </div>
 
@@ -362,7 +369,12 @@ export default function JoinPage() {
 
           <p className="text-center text-xs text-gray-500">
             Already have an account?{' '}
-            <Link to="/login" className="text-navy-700 font-medium hover:underline">Sign in</Link>
+            <Link
+              to={role === 'student' ? '/student-login' : '/login'}
+              className="text-navy-700 font-medium hover:underline"
+            >
+              Sign in
+            </Link>
           </p>
         </form>
 

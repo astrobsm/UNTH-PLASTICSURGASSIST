@@ -44,11 +44,11 @@ async function handleRegister(req, res) {
   let existing;
   try {
     existing = await query(
-      "SELECT id FROM users WHERE email = $1 AND (app_id = 'psa' OR app_id IS NULL)",
+      "SELECT id FROM users WHERE LOWER(email) = LOWER($1) AND (app_id = 'psa' OR app_id IS NULL)",
       [email]
     );
   } catch {
-    existing = await query("SELECT id FROM users WHERE email = $1", [email]);
+    existing = await query("SELECT id FROM users WHERE LOWER(email) = LOWER($1)", [email]);
   }
   if (existing.rows.length > 0) {
     return res.status(409).json({ error: 'Email already registered' });

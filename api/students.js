@@ -351,7 +351,9 @@ async function registerStudent(body, res) {
     return res.status(400).json({ error: 'Password must be at least 8 characters' });
   }
 
-  const existing = await query('SELECT id FROM students WHERE email = $1', [email]);
+  // Case-insensitive too, or "A@x.com" and "a@x.com" become two accounts that
+  // then compete for the same login.
+  const existing = await query('SELECT id FROM students WHERE LOWER(email) = LOWER($1)', [email]);
   if (existing.rows.length > 0) {
     return res.status(409).json({ error: 'Email already registered' });
   }
@@ -385,8 +387,13 @@ async function loginStudent(body, res) {
     return res.status(400).json({ error: 'Email and password are required' });
   }
 
+  // Matched case-insensitively. An address is the same address however it is
+  // typed, and the profile link stores it lowercased — so a student who
+  // registered as "Name@Gmail.com" and signed in with the same string was told
+  // their password was wrong, for every account created through that link.
   const result = await query(
-    'SELECT id, full_name, email, password_hash, is_approved, is_active, posting_start, posting_end FROM students WHERE email = $1',
+    `SELECT id, full_name, email, password_hash, is_approved, is_active, posting_start, posting_end
+     FROM students WHERE LOWER(email) = LOWER($1)`,
     [email]
   );
 
