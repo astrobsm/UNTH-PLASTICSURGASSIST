@@ -63,6 +63,7 @@ export default async function handler(req, res) {
       if (method === 'POST' && action === 'assign-group-patients') return await assignGroupPatients(req.body, res);
       if (method === 'POST' && action === 'group-activity') return await logGroupActivity(auth.user, req.body, res);
       if (method === 'PUT'  && action === 'group-topic') return await setGroupTopic(req.body, res);
+      if (method === 'POST' && action === 'sign-out') return await signOutStudents(auth.user, req.body, res);
       if (method === 'GET' && action && action !== 'register' && action !== 'login') {
         return await getStudentDetail(action, res);
       }
@@ -377,6 +378,112 @@ async function registerStudent(body, res) {
     message: `Registration successful. Auto-approved with ${assignResult.assigned} patients assigned.`,
     student: result.rows[0]
   });
+}
+
+/**
+ * Signs students out of their posting, one or many at once.
+ *
+ * Distinct from deactivation. Deactivating closes an account and is also what
+ * happens to somebody who left or was registered by mistake; signing out says
+ * the posting was completed, and records the score, the date and who decided.
+ * A student asking for evidence they completed their posting cannot be answered
+ * with `is_active = false`.
+ *
+ * Each student is scored at the moment they are signed out, by the same engine
+ * that scores everyone else, and the figure is stored rather than recomputed —
+ * activity keeps accruing, and a number produced next term would not be the one
+ * the decision was made on.
+ *
+ * Where the requirements are not met the sign-out still proceeds, but is
+ * recorded as an override with the reason, so the register never reads as
+ * though a posting was passed when it was waved through.
+ */
+async function signOutStudents(adminUser, body, res) {
+  await ensureSignOutColumns();
+
+  const ids = Array.isArray(body?.studentIds) ? body.studentIds.map(Number).filter(Boolean) : [];
+  if (!ids.length) return res.status(400).json({ error: 'Select at least one student to sign out' });
+
+  const notes = String(body?.notes || '').trim();
+  const allowOverride = body?.allowOverride !== false;
+
+  const { scoreTrainee } = await import('./_lib/traineeScoring.js');
+  const { gatherStudentCounts } = await import('./_lib/traineeCounts.js');
+
+  const signedOut = [];
+  const blocked = [];
+
+  for (const id of ids) {
+    const existing = (await query(
+      'SELECT id, full_name, signed_out_at FROM students WHERE id = $1', [id])).rows[0];
+    if (!existing) continue;
+    // Already signed out: left alone rather than re-dated, so the original
+    // decision and its score survive.
+    if (existing.signed_out_at) {
+      blocked.push({ id, name: existing.full_name, reason: 'already signed out' });
+      continue;
+    }
+
+    let score = null;
+    let eligible = false;
+    let notMet = [];
+    try {
+      const scored = scoreTrainee({
+        level: 'student_surgery_1',
+        counts: await gatherStudentCounts(id),
+      });
+      score = scored.overall;
+      eligible = scored.eligibility.eligible;
+      notMet = scored.eligibility.notMet;
+    } catch (e) {
+      console.warn('sign-out scoring failed for student', id, e.message);
+    }
+
+    if (!eligible && !allowOverride) {
+      blocked.push({ id, name: existing.full_name, reason: 'requirements not met', score, notMet });
+      continue;
+    }
+
+    const outcome = eligible ? 'completed' : 'override';
+    await query(
+      `UPDATE students
+       SET signed_out_at = CURRENT_TIMESTAMP,
+           signed_out_by = $1,
+           sign_out_score = $2,
+           sign_out_outcome = $3,
+           sign_out_notes = NULLIF($4, ''),
+           is_active = FALSE,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $5`,
+      [adminUser.id ?? null, score, outcome, notes, id],
+    );
+
+    try { await logStudentActivity(id, 'signed_out', `Signed out of posting (${outcome})`); } catch { /* audit only */ }
+    signedOut.push({ id, name: existing.full_name, score, outcome, notMet: eligible ? [] : notMet });
+  }
+
+  return res.status(200).json({
+    signedOut,
+    blocked,
+    completed: signedOut.filter((s) => s.outcome === 'completed').length,
+    overridden: signedOut.filter((s) => s.outcome === 'override').length,
+  });
+}
+
+/** The sign-out columns, created on first use. Migrations here run by hand. */
+let signOutColumnsReady = false;
+async function ensureSignOutColumns() {
+  if (signOutColumnsReady) return;
+  for (const sql of [
+    'ALTER TABLE students ADD COLUMN IF NOT EXISTS signed_out_at TIMESTAMPTZ',
+    'ALTER TABLE students ADD COLUMN IF NOT EXISTS signed_out_by INTEGER',
+    'ALTER TABLE students ADD COLUMN IF NOT EXISTS sign_out_score NUMERIC(5,2)',
+    'ALTER TABLE students ADD COLUMN IF NOT EXISTS sign_out_notes TEXT',
+    'ALTER TABLE students ADD COLUMN IF NOT EXISTS sign_out_outcome VARCHAR(20)',
+  ]) {
+    try { await query(sql); } catch (e) { console.warn('ensureSignOutColumns:', e.message); }
+  }
+  signOutColumnsReady = true;
 }
 
 async function loginStudent(body, res) {
@@ -755,12 +862,16 @@ async function updateStudentTreatmentPlan(studentId, planId, body, res) {
 // ═══════════════════════════════════════════════════════════════════════════
 async function listStudents(params, res) {
   await ensureTables();
+  // So the roster can show who has been signed out, on a deployment where the
+  // migration has not been applied by hand yet.
+  await ensureSignOutColumns();
 
   // Auto-approve pending students with active postings
   try {
     const pendingActive = await query(`
       SELECT id FROM students
       WHERE is_approved = false AND is_active = true AND posting_end >= NOW()
+        AND signed_out_at IS NULL
     `);
     for (const s of pendingActive.rows) {
       await query('UPDATE students SET is_approved = true, updated_at = NOW() WHERE id = $1', [s.id]);
@@ -773,6 +884,7 @@ async function listStudents(params, res) {
       SELECT s.id FROM students s
       WHERE s.is_approved = true AND s.is_active = true
         AND s.posting_end >= NOW()
+        AND s.signed_out_at IS NULL
         AND (SELECT COUNT(*) FROM student_patient_assignments spa WHERE spa.student_id = s.id AND spa.is_active = true) < 5
     `);
     for (const s of needAssign.rows) {

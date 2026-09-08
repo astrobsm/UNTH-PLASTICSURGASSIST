@@ -196,6 +196,52 @@ export function StudentManagementTab() {
     }
   };
 
+  /**
+   * Signing students out of their posting, in a batch.
+   *
+   * At the end of a posting a whole group finishes at once, and doing that one
+   * student at a time is how some of them get missed. Selection is limited to
+   * those still on the posting: somebody already signed out is left alone
+   * rather than re-dated, so the original decision and its score survive.
+   */
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [signingOut, setSigningOut] = useState(false);
+
+  /** Students still on the posting — the only ones there is anything to do to. */
+  const selectableIds = students.filter(s => !s.signed_out_at).map(s => s.id);
+
+  const signOutSelected = async () => {
+    if (!selectedIds.length) return;
+    const names = students.filter(s => selectedIds.includes(s.id)).map(s => s.full_name);
+    const summary = names.slice(0, 8).join('\n')
+      + (names.length > 8 ? `\n…and ${names.length - 8} more` : '');
+    const notes = window.prompt(
+      `Sign out ${selectedIds.length} student${selectedIds.length === 1 ? '' : 's'}?\n\n${summary}\n\nThis ends their posting and closes their account. Add a note (optional):`,
+      '',
+    );
+    // Cancel returns null; an empty string is a deliberate "no note".
+    if (notes === null) return;
+
+    setSigningOut(true);
+    try {
+      const r = await apiClient.post('/students/sign-out', { studentIds: selectedIds, notes });
+      const done = r.signedOut?.length || 0;
+      const over = r.overridden || 0;
+      const blocked = r.blocked?.length || 0;
+      alert(
+        `${done} signed out${over ? ` — ${over} by override, having not met the requirements` : ''}.`
+        + (blocked ? `
+${blocked} skipped (already signed out).` : ''),
+      );
+      setSelectedIds([]);
+      await loadData();
+    } catch (e: any) {
+      alert('Could not sign out: ' + (e?.message || 'unknown error'));
+    } finally {
+      setSigningOut(false);
+    }
+  };
+
   const deactivateStudent = async (id: number, active: boolean) => {
     try {
       await apiClient.put('/students/deactivate', { studentId: id, active });
@@ -577,10 +623,51 @@ export function StudentManagementTab() {
         </div>
       ) : (
         /* Student List */
-        <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto">
+        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+          {/* Only appears once something is selected, so it does not sit there
+              as a permanently armed destructive control. */}
+          {selectedIds.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 bg-green-50 border-b border-green-200">
+              <span className="text-sm text-green-900 font-medium">
+                {selectedIds.length} student{selectedIds.length === 1 ? '' : 's'} selected
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setSelectedIds([])}
+                  className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 text-gray-600 hover:bg-white"
+                >
+                  Clear
+                </button>
+                <button
+                  onClick={signOutSelected}
+                  disabled={signingOut}
+                  className="px-3 py-1.5 text-sm font-medium rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-60 inline-flex items-center gap-1.5"
+                >
+                  {signingOut
+                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                    : <CheckCircle className="w-4 h-4" />}
+                  {signingOut ? 'Signing out…' : `Sign out ${selectedIds.length}`}
+                </button>
+              </div>
+            </div>
+          )}
+          <div className="overflow-x-auto">
           <table className="w-full text-sm min-w-[700px]">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
+                <th className="px-3 py-3 w-10">
+                  {/* Selects only those still on the posting — signing out
+                      somebody already signed out would re-date a decision that
+                      has already been made. */}
+                  <input
+                    type="checkbox"
+                    aria-label="Select all students still on posting"
+                    className="w-4 h-4 accent-green-600 cursor-pointer"
+                    checked={selectableIds.length > 0 && selectedIds.length === selectableIds.length}
+                    ref={el => { if (el) el.indeterminate = selectedIds.length > 0 && selectedIds.length < selectableIds.length; }}
+                    onChange={e => setSelectedIds(e.target.checked ? selectableIds : [])}
+                  />
+                </th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Name</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">University</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Posting</th>
@@ -596,7 +683,18 @@ export function StudentManagementTab() {
                 const expired = new Date(s.posting_end) < new Date();
                 const avgScore = s.avg_clerking_score ? Math.round(Number(s.avg_clerking_score)) : null;
                 return (
-                  <tr key={s.id} className="hover:bg-gray-50">
+                  <tr key={s.id} className={`hover:bg-gray-50 ${selectedIds.includes(s.id) ? 'bg-green-50/60' : ''}`}>
+                    <td className="px-3 py-3">
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${s.full_name}`}
+                        className="w-4 h-4 accent-green-600 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                        disabled={Boolean(s.signed_out_at)}
+                        checked={selectedIds.includes(s.id)}
+                        onChange={e => setSelectedIds(prev =>
+                          e.target.checked ? [...prev, s.id] : prev.filter(id => id !== s.id))}
+                      />
+                    </td>
                     <td className="px-4 py-3">
                       <p className="font-medium text-gray-900">{s.full_name}</p>
                       <p className="text-xs text-gray-400">{s.email}</p>
@@ -612,7 +710,21 @@ export function StudentManagementTab() {
                       {avgScore != null ? <span className={`font-medium ${avgScore >= 70 ? 'text-green-600' : avgScore >= 50 ? 'text-yellow-600' : 'text-red-600'}`}>{avgScore}%</span> : '—'}
                     </td>
                     <td className="px-4 py-3 text-center">
-                      {!s.is_approved ? (
+                      {s.signed_out_at ? (
+                        <span
+                          className={`px-2 py-0.5 text-xs rounded-full ${
+                            s.sign_out_outcome === 'override'
+                              ? 'bg-purple-100 text-purple-700'
+                              : 'bg-blue-100 text-blue-700'}`}
+                          title={[
+                            `Signed out ${new Date(s.signed_out_at).toLocaleDateString()}`,
+                            s.sign_out_score != null ? `at ${Math.round(Number(s.sign_out_score))}%` : null,
+                            s.sign_out_notes || null,
+                          ].filter(Boolean).join(' · ')}
+                        >
+                          {s.sign_out_outcome === 'override' ? 'Signed out (override)' : 'Signed out'}
+                        </span>
+                      ) : !s.is_approved ? (
                         <span className="px-2 py-0.5 text-xs bg-yellow-100 text-yellow-700 rounded-full">Pending</span>
                       ) : !s.is_active ? (
                         <span className="px-2 py-0.5 text-xs bg-red-100 text-red-700 rounded-full">Inactive</span>
@@ -646,10 +758,11 @@ export function StudentManagementTab() {
                 );
               })}
               {students.length === 0 && (
-                <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">No students registered yet. Share the registration link above.</td></tr>
+                <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400">No students registered yet. Share the registration link above.</td></tr>
               )}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 
