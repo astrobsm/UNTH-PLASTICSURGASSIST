@@ -9,7 +9,8 @@ import { db } from '../db/database';
 import { syncService } from '../db/syncService';
 import { patientService } from '../services/patientService';
 import { getCurrentUserName } from '../utils/getCurrentUser';
-import { useOnSelectedPatient } from '../hooks/useSelectedPatient';
+import { useOnSelectedPatient, useSelectedPatient } from '../hooks/useSelectedPatient';
+import { WoundTrackingPanel } from '../components/wound/WoundTrackingPanel';
 
 // ============================================
 // TYPES & INTERFACES
@@ -769,6 +770,9 @@ const LymphedemaPage: React.FC = () => {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [patientSearch, setPatientSearch] = useState('');
+  // The patient this page is working on, read from the shared selection so the
+  // wound-progress panel below follows whoever the module is showing.
+  const { patient: trackedPatient } = useSelectedPatient();
   useOnSelectedPatient((p) => { setSelectedPatient(p as unknown as Patient); setActiveTab('new'); });
   const [assessments, setAssessments] = useState<LymphedemaAssessment[]>([]);
   const [selectedAssessment, setSelectedAssessment] = useState<LymphedemaAssessment | null>(null);
@@ -1536,6 +1540,16 @@ ul{margin:4px 0;padding-left:18px}li{margin:2px 0;font-size:10pt}
     <div className="space-y-4">
       <h2 className="text-xl font-bold">New Lymphedema Assessment</h2>
 
+
+      {/* Wound progress, the same measurement the monitor keeps.
+          Every wound module used to end at "what does it look like today";
+          serial area lived in a separate page against a separately chosen
+          patient, so nothing here could answer whether it was healing. */}
+      <WoundTrackingPanel
+        patientId={trackedPatient?.id}
+        hospitalNumber={(trackedPatient as any)?.hospital_number}
+        defaultWoundType="Lymphoedema"
+      />
       {/* Patient Selection */}
       <div className="bg-white rounded-xl shadow-sm border p-4">
         <h3 className="font-semibold mb-2">Select Patient</h3>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useOnSelectedPatient } from '../hooks/useSelectedPatient';
+import { useOnSelectedPatient, useSelectedPatient } from '../hooks/useSelectedPatient';
 import {
   Activity,
   AlertCircle,
@@ -51,6 +51,7 @@ import {
 import { keloidPdfService } from '../services/keloidPdfService';
 import { format, isBefore, differenceInDays } from 'date-fns';
 import toast from 'react-hot-toast';
+import { WoundTrackingPanel } from '../components/wound/WoundTrackingPanel';
 
 // ============================================
 // TYPES
@@ -83,6 +84,9 @@ const KeloidCarePage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [initialPatientId, setInitialPatientId] = useState<number | null>(null);
+  // The patient this page is working on, read from the shared selection so the
+  // wound-progress panel below follows whoever the module is showing.
+  const { patient: trackedPatient } = useSelectedPatient();
   useOnSelectedPatient((p) => {
     const idNum = Number(p.id);
     if (!Number.isNaN(idNum)) setInitialPatientId(idNum);
@@ -303,6 +307,16 @@ const KeloidCarePage: React.FC = () => {
         </div>
       </div>
 
+
+      {/* Wound progress, the same measurement the monitor keeps.
+          Every wound module used to end at "what does it look like today";
+          serial area lived in a separate page against a separately chosen
+          patient, so nothing here could answer whether it was healing. */}
+      <WoundTrackingPanel
+        patientId={trackedPatient?.id}
+        hospitalNumber={(trackedPatient as any)?.hospital_number}
+        defaultWoundType="Keloid"
+      />
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 py-6">
         {activeTab === 'plans' && (

@@ -1,6 +1,6 @@
 import { sanitizePdfDocument } from '../utils/pdfSafeText';
 import React, { useState, useEffect, useRef, useCallback, Suspense, lazy } from 'react';
-import { useOnSelectedPatient } from '../hooks/useSelectedPatient';
+import { useOnSelectedPatient, useSelectedPatient } from '../hooks/useSelectedPatient';
 import {
   Activity,
   Camera,
@@ -31,6 +31,7 @@ import { aiWoundMeasurement } from '../services/aiWoundMeasurement';
 import type { WoundMeasurementResult, WoundProgressEntry, CalibrationReference } from '../services/aiWoundMeasurement';
 import { putLocalImage } from '../services/woundImageStore';
 import { syncPendingWoundImages } from '../services/woundImageSync';
+import { WoundTrackingPanel } from '../components/wound/WoundTrackingPanel';
 const WoundImageGallery = lazy(() => import('../components/WoundImageGallery'));
 // Lazy-load chart.js (~200 KB) only when the wound-progress panel actually renders
 const WoundProgressChart = lazy(() => import('../components/WoundProgressChart'));
@@ -253,6 +254,9 @@ const WoundCarePage: React.FC = () => {
 
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [patientSearch, setPatientSearch] = useState('');
+  // The patient this page is working on, read from the shared selection so the
+  // wound-progress panel below follows whoever the module is showing.
+  const { patient: trackedPatient } = useSelectedPatient();
   useOnSelectedPatient((p) => { setSelectedPatient(p as unknown as Patient); setActiveTab('new'); });
   const [assessments, setAssessments] = useState<WoundAssessment[]>([]);
   const [selectedAssessment, setSelectedAssessment] = useState<WoundAssessment | null>(null);
@@ -1421,6 +1425,16 @@ const WoundCarePage: React.FC = () => {
         </button>
       </div>
 
+
+      {/* Wound progress, the same measurement the monitor keeps.
+          Every wound module used to end at "what does it look like today";
+          serial area lived in a separate page against a separately chosen
+          patient, so nothing here could answer whether it was healing. */}
+      <WoundTrackingPanel
+        patientId={trackedPatient?.id}
+        hospitalNumber={(trackedPatient as any)?.hospital_number}
+        defaultWoundType="Wound"
+      />
       {/* Patient Selection */}
       <div className="bg-white rounded-xl shadow-sm border p-4">
         <label className="block text-sm font-medium text-gray-700 mb-2">Patient *</label>

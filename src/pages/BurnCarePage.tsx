@@ -20,7 +20,8 @@ import BurnAdmissionForm from '../components/burnCare/BurnAdmissionForm';
 import BurnMonitoringDashboard from '../components/burnCare/BurnMonitoringDashboard';
 import { db } from '../db/database';
 import { syncService } from '../db/syncService';
-import { useOnSelectedPatient } from '../hooks/useSelectedPatient';
+import { useOnSelectedPatient, useSelectedPatient } from '../hooks/useSelectedPatient';
+import { WoundTrackingPanel } from '../components/wound/WoundTrackingPanel';
 
 interface BurnStats {
   activePatients: number;
@@ -48,6 +49,9 @@ const BurnCarePage: React.FC = () => {
     avgTBSA: 0,
   });
 
+  // The patient this page is working on, read from the shared selection so the
+  // wound-progress panel below follows whoever the module is showing.
+  const { patient: trackedPatient } = useSelectedPatient();
   useOnSelectedPatient((p) => {
     const existing = patients.find(bp => String(bp.patientId || (bp as any).patient_id) === String(p.id));
     if (existing) {
@@ -293,6 +297,16 @@ const BurnCarePage: React.FC = () => {
         </div>
       </div>
 
+
+      {/* Wound progress, the same measurement the monitor keeps.
+          Every wound module used to end at "what does it look like today";
+          serial area lived in a separate page against a separately chosen
+          patient, so nothing here could answer whether it was healing. */}
+      <WoundTrackingPanel
+        patientId={trackedPatient?.id}
+        hospitalNumber={(trackedPatient as any)?.hospital_number}
+        defaultWoundType="Burn"
+      />
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Search and Filter */}

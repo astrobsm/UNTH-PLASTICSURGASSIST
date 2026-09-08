@@ -14,6 +14,7 @@ import { useSelectedPatient } from '../hooks/useSelectedPatient';
 import { useAuthStore } from '../store/authStore';
 import { sickleCellUlcerService, SickleCellUlcerAssessment } from '../services/sickleCellUlcerService';
 import { generateMealPlan, DayPlan } from '../data/nigerianFoods';
+import { WoundTrackingPanel } from '../components/wound/WoundTrackingPanel';
 
 type Band = { label: string; points: number };
 
@@ -271,6 +272,16 @@ export default function SickleCellUlcerPage() {
         {(patient as any).hospital_number && <span className="text-gray-500">· {(patient as any).hospital_number}</span>}
       </div>
 
+
+      {/* Wound progress, the same measurement the monitor keeps.
+          Every wound module used to end at "what does it look like today";
+          serial area lived in a separate page against a separately chosen
+          patient, so nothing here could answer whether it was healing. */}
+      <WoundTrackingPanel
+        patientId={patient?.id}
+        hospitalNumber={(patient as any)?.hospital_number}
+        defaultWoundType="Sickle cell ulcer"
+      />
       {/* Clinical inputs */}
       <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
         <h2 className="font-semibold text-gray-800 flex items-center gap-2"><ClipboardList className="h-4 w-4 text-primary-600" /> WHO-aligned assessment</h2>

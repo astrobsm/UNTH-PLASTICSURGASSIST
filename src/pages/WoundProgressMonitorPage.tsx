@@ -25,6 +25,7 @@ import { aiWoundMeasurement, type WoundProgressEntry } from '../services/aiWound
 import type { ImageQualityReport } from '../services/woundImageQuality';
 import { putLocalImage, attachToAssessment } from '../services/woundImageStore';
 import { renderContourOverlay } from '../services/woundOverlayRenderer';
+import { PatientQuickPicker } from '../components/patients/PatientQuickPicker';
 import CalibrationEvidenceBadge from '../components/wound/CalibrationEvidenceBadge';
 import type { CalibrationEvidence } from '../services/aiWoundMeasurement';
 import { syncPendingWoundImages } from '../services/woundImageSync';
@@ -231,7 +232,7 @@ const DashboardView: React.FC<{
       )}
 
       {showPicker && (
-        <PatientPickerModal
+        <PatientQuickPicker
           onClose={() => setShowPicker(false)}
           onPick={patient => { setShowPicker(false); onPickPatient(patient); }}
         />
@@ -569,60 +570,6 @@ const TissueBar: React.FC<{ latest: WoundAssessment }> = ({ latest }) => {
   );
 };
 
-// ── Patient picker ──────────────────────────────────────────────────────────
-
-const PatientPickerModal: React.FC<{ onClose: () => void; onPick: (p: any) => void }> = ({ onClose, onPick }) => {
-  const [q, setQ] = useState('');
-  const [all, setAll] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const res: any = await apiClient.getPatients();
-        setAll(Array.isArray(res) ? res : res?.patients || []);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
-
-  const filtered = useMemo(() => {
-    const term = q.trim().toLowerCase();
-    if (!term) return all.slice(0, 30);
-    return all.filter(p =>
-      [p.first_name, p.last_name, p.hospital_number].filter(Boolean).join(' ').toLowerCase().includes(term)
-    ).slice(0, 30);
-  }, [q, all]);
-
-  return (
-    <Modal title="Select patient" onClose={onClose}>
-      <div className="relative mb-3">
-        <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-        <input
-          autoFocus value={q} onChange={e => setQ(e.target.value)}
-          placeholder="Search name or hospital number…"
-          className="w-full pl-9 pr-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none"
-        />
-      </div>
-      {loading ? (
-        <div className="h-40 bg-gray-50 rounded animate-pulse" />
-      ) : (
-        <ul className="max-h-72 overflow-y-auto divide-y">
-          {filtered.map(p => (
-            <li key={String(p.id)}>
-              <button onClick={() => onPick(p)} className="w-full text-left px-2 py-2.5 hover:bg-gray-50 rounded flex items-center justify-between">
-                <span className="text-sm text-gray-800">{[p.first_name, p.last_name].filter(Boolean).join(' ') || 'Patient'}</span>
-                <span className="text-xs text-gray-400">{p.hospital_number}</span>
-              </button>
-            </li>
-          ))}
-          {!filtered.length && <li className="py-6 text-center text-sm text-gray-400">No patients found.</li>}
-        </ul>
-      )}
-    </Modal>
-  );
-};
 
 // ── New wound ───────────────────────────────────────────────────────────────
 

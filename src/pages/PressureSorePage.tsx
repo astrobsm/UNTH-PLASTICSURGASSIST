@@ -9,7 +9,8 @@ import {
 import { patientService } from '../services/patientService';
 import { useAuthStore } from '../store/authStore';
 import { apiClient } from '../services/apiClient';
-import { useOnSelectedPatient } from '../hooks/useSelectedPatient';
+import { useOnSelectedPatient, useSelectedPatient } from '../hooks/useSelectedPatient';
+import { WoundTrackingPanel } from '../components/wound/WoundTrackingPanel';
 import {
   PRESSURE_INJURY_STAGES, BRADEN_SCALE, BRADEN_INTERPRETATION,
   TIME_FRAMEWORK, PS_LAB_PANELS, PS_TREATMENT_PROTOCOLS,
@@ -39,6 +40,9 @@ const PressureSorePage: React.FC = () => {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [patientSearch, setPatientSearch] = useState('');
+  // The patient this page is working on, read from the shared selection so the
+  // wound-progress panel below follows whoever the module is showing.
+  const { patient: trackedPatient } = useSelectedPatient();
   useOnSelectedPatient((p) => { setSelectedPatient(p as unknown as Patient); setActiveTab('braden'); });
   const [wounds, setWounds] = useState<any[]>([]);
   const [selectedWound, setSelectedWound] = useState<any>(null);
@@ -607,6 +611,16 @@ const PressureSorePage: React.FC = () => {
               <Plus className="h-5 w-5 text-purple-600" /> Record New Pressure Wound
             </h2>
 
+
+      {/* Wound progress, the same measurement the monitor keeps.
+          Every wound module used to end at "what does it look like today";
+          serial area lived in a separate page against a separately chosen
+          patient, so nothing here could answer whether it was healing. */}
+      <WoundTrackingPanel
+        patientId={trackedPatient?.id}
+        hospitalNumber={(trackedPatient as any)?.hospital_number}
+        defaultWoundType="Pressure sore"
+      />
             {/* Patient Search */}
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">Select Patient</label>
