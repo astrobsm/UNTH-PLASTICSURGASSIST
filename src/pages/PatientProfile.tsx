@@ -9,6 +9,7 @@ import { PrescriptionModal } from '../components/PrescriptionModal';
 import { medicalTeamService, TeamMember } from '../services/medicalTeamService';
 import { logPatientAccess } from '../services/auditLoggingService';
 import { apiClient } from '../services/apiClient';
+import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { speechToTextService } from '../services/speechToTextService';
@@ -20,6 +21,8 @@ import BloodTransfusionTab from '../components/BloodTransfusionTab';
 import BloodGlucoseTab from '../components/BloodGlucoseTab';
 import { DocumenterLink, ConsultantCommentSection, RecommendationsPanel } from '../components/ClinicalInteractionComponents';
 import { generateVitalSignRecommendations, generateLabRecommendations } from '../utils/clinicalUtils';
+import { PrescriptionBuilder } from '../components/prescriptions/PrescriptionBuilder';
+import type { PrescriptionItem } from '../services/prescriptionPrintService';
 import {
   Activity, Camera, Calendar, FileText, Plus, 
   Scissors, ClipboardCheck, Pill, Heart, Image,
@@ -38,6 +41,7 @@ const ENCOUNTER_SECTIONS = [
   { id: 'vital-signs', name: 'Vital Signs', icon: '💓' },
   { id: 'investigations', name: 'Investigations', icon: '🔬' },
   { id: 'treatment-plans', name: 'Treatment Planning', icon: '📅' },
+  { id: 'prescriptions', name: 'Patient Prescriptions', icon: '💊' },
   { id: 'mdt-care', name: 'MDT Care', icon: '🤝' },
   { id: 'clinical-photos', name: 'Clinical Photos', icon: '📷' },
   { id: 'wound-monitor', name: 'WoundProgress Monitor', icon: '🩹' },
@@ -64,6 +68,46 @@ export const PatientProfile: React.FC = () => {
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [admissionStatus, setAdmissionStatus] = useState<{ isAdmitted: boolean; ward?: string; bed?: string; admissionDate?: string; daysAdmitted?: number; lastSurgery?: { procedure_name: string; date: string; daysPostOp: number }; surgeryCount?: number } | null>(null);
   const [showPrescriptionModal, setShowPrescriptionModal] = useState(false);
+
+  /**
+   * Persists a written prescription.
+   *
+   * Sent as a batch, which the API already accepts, so a sheet of six medicines
+   * is one record of one prescribing decision rather than six unrelated rows.
+   * How to take it travels as the instruction, because that is the line the
+   * pharmacy reads back to the patient.
+   */
+  const savePrescription = async (items: PrescriptionItem[], notes: string) => {
+    if (!items.length) return;
+    const { howToTake } = await import('../data/prescribingCatalogue');
+    const { findDrug } = await import('../data/prescribingCatalogue');
+    try {
+      await apiClient.post('/prescriptions', {
+        patientId: id,
+        prescriber: user?.name,
+        prescriber_role: user?.role,
+        prescriptions: items.map(i => {
+          const drug = findDrug(i.drugId);
+          return {
+            medicationName: i.name,
+            dosage: [i.dose, i.strength].filter(Boolean).join(' '),
+            frequency: i.frequency,
+            duration: i.duration || '',
+            route: i.route,
+            instructions: [
+              drug ? howToTake(drug, i.frequency, i.route, i.duration) : '',
+              i.notes,
+              notes,
+            ].filter(Boolean).join(' '),
+          };
+        }),
+      });
+      toast.success(`${items.length} medicine${items.length === 1 ? '' : 's'} prescribed`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not save the prescription');
+      throw e;
+    }
+  };
   const [medicalTeam, setMedicalTeam] = useState<TeamMember[]>([]);
   const [mdtInfo, setMdtInfo] = useState<{ patient_type: string; consulting_unit?: string; referring_hospital?: string; mdt_team?: any } | null>(null);
 
@@ -341,6 +385,29 @@ export const PatientProfile: React.FC = () => {
         return <InvestigationsTab patientId={id!} hospitalNumber={hospitalNumber} patientName={patientName} userName={user?.name || 'Unknown'} />;
       case 'treatment-plans':
         return <TreatmentPlansTab patientId={id!} patientName={patientName} navigate={navigate} />;
+      case 'prescriptions':
+        return (
+          <PrescriptionBuilder
+            patient={{
+              id: id,
+              name: patientName,
+              hospitalNumber,
+              age: patient?.date_of_birth
+                ? Math.floor((Date.now() - new Date(patient.date_of_birth).getTime()) / 31557600000)
+                : undefined,
+              sex: patient?.gender,
+              ward: admissionStatus?.ward,
+              // The allergy line is passed through so the builder can warn
+              // against what is recorded; it is a prompt to look, not a
+              // clearance to prescribe.
+              allergies: Array.isArray(patient?.allergies)
+                ? (patient.allergies as string[]).filter(Boolean).join(', ') || undefined
+                : (patient?.allergies as string | undefined) || undefined,
+            }}
+            prescriber={{ name: user?.name || 'Unknown', role: user?.role?.replace(/_/g, ' ') }}
+            onSave={savePrescription}
+          />
+        );
       case 'mdt-care':
         return <MDTCareTab patientId={id!} patientName={patientName} hospitalNumber={hospitalNumber} userName={user?.name || 'Unknown'} mdtInfo={mdtInfo} onMdtInfoChange={loadMDTInfo} />;
       case 'clinical-photos':
