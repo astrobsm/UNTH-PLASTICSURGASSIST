@@ -34,6 +34,7 @@ import { rotationConfigService, RotationConfig, TraineeAnalytics } from '../serv
 import { apiClient } from '../services/apiClient';
 import CMEArticleViewer from '../components/training/CMEArticleViewer';
 import { CBTPage } from '../components/cbt';
+import { LearningLibrary } from '../components/learning/LearningLibrary';
 import { useAuthStore } from '../store/authStore';
 import { SCORE_WEIGHTS, SIGN_OUT_THRESHOLD, MINIMUM_SECTION_SCORE } from '../services/performanceService';
 import { PerformanceDashboard } from '../components/performance';
@@ -100,6 +101,22 @@ const MedicalTrainingPage: React.FC = () => {
   const [warnings, setWarnings] = useState<any[]>([]);
   const [unreadWarningCount, setUnreadWarningCount] = useState(0);
   const [showWarnings, setShowWarnings] = useState(false);
+
+  /**
+   * Which of the two libraries is showing.
+   *
+   * 'modules' is the hand-written curriculum in medicalTrainingService, written
+   * for the three doctor grades. 'library' is the imported CHAMBER material,
+   * chosen by the viewer's own level — which for a clinical student is their
+   * surgery posting, and the only material that is theirs.
+   *
+   * Students open on the library because the modules are not addressed to them:
+   * levelForUser has no student grade to map onto and would have handed them
+   * the house officer curriculum.
+   */
+  const [source, setSource] = useState<'modules' | 'library'>(
+    isStudent ? 'library' : 'modules',
+  );
 
   // Load CBT status for dashboard display
   useEffect(() => {
@@ -804,6 +821,28 @@ const MedicalTrainingPage: React.FC = () => {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-6">
+        {/* The two libraries. A student has only one, so they are not offered
+            a choice that has a wrong answer in it. */}
+        {!isStudent && (
+          <div className="inline-flex p-1 mb-6 rounded-xl bg-gray-100">
+            {([['modules', 'Unit modules'], ['library', 'CME library']] as const).map(([k, label]) => (
+              <button
+                key={k}
+                onClick={() => setSource(k)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  source === k ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {source === 'library' ? (
+          <LearningLibrary />
+        ) : (
+        <>
         {/* Level Tabs — a learner sees their own level only; supervisors browse. */}
         <div className={`flex flex-wrap gap-3 mb-6 ${canBrowseAllLevels ? '' : 'hidden'}`}>
           {tabs.map(tab => (
@@ -924,6 +963,8 @@ const MedicalTrainingPage: React.FC = () => {
               </div>
             ))}
           </div>
+        )}
+        </>
         )}
       </div>
     </div>

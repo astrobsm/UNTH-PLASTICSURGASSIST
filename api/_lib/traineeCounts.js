@@ -15,6 +15,22 @@
 import { query } from './db.js';
 
 /** Runs a scalar query, returning `fallback` if the table or column is absent. */
+/**
+ * One CBT figure out of two sources.
+ *
+ * Weighted by how many tests each source holds, not the mean of two means:
+ * somebody with nine papers at 50% and one bank test at 90% has averaged 54%,
+ * not 70%.
+ */
+function combineMarks(aCount, aAverage, bCount, bAverage) {
+  const total = aCount + bCount;
+  if (total === 0) return { cbtTests: 0, cbtAverage: 0 };
+  return {
+    cbtTests: total,
+    cbtAverage: (aCount * aAverage + bCount * bAverage) / total,
+  };
+}
+
 async function scalar(sql, params, fallback = 0) {
   try {
     const r = await query(sql, params);
@@ -107,13 +123,27 @@ export async function gatherTraineeCounts(userId) {
   const identities = await identitiesFor(userId);
 
   const [
-    cbtTests, cbtAverage, formalDuties, loginDays,
+    paperTests, paperAverage, poolTests, poolAverage, formalDuties, loginDays,
     cmeArticles, selfAssessments, selfAssessmentAverage, legacyCme,
     documentation,
   ] = await Promise.all([
+    // Two places a test can have been sat: cbt_attempts holds the fixed papers
+    // from cbt_tests, learner_test_attempts holds papers drawn from the
+    // imported question bank. Counting only the first reads as "no tests taken"
+    // for anybody who used the bank, which is where the questions now are.
+    //
+    // Asked separately rather than as one UNION so that a deployment without
+    // the newer table still returns the older count: scalar() turns a missing
+    // table into zero, and a combined query would have taken the real figure
+    // down with it.
     scalar(`SELECT COUNT(*) FROM cbt_attempts WHERE user_id = $1 AND completed = true`, [userId]),
     scalar(`SELECT COALESCE(AVG(percentage), 0) FROM cbt_attempts
             WHERE user_id = $1 AND completed = true`, [userId]),
+
+    scalar(`SELECT COUNT(*) FROM learner_test_attempts
+            WHERE learner_kind = 'user' AND learner_id = $1`, [userId]),
+    scalar(`SELECT COALESCE(AVG(score), 0) FROM learner_test_attempts
+            WHERE learner_kind = 'user' AND learner_id = $1`, [userId]),
 
     scalar(`SELECT COUNT(*) FROM duty_assignments
             WHERE user_id = $1 AND status = 'completed'`, [userId]),
@@ -136,6 +166,10 @@ export async function gatherTraineeCounts(userId) {
 
     gatherDocumentation(userId, identities),
   ]);
+
+  const { cbtTests, cbtAverage } = combineMarks(
+    paperTests, paperAverage, poolTests, poolAverage,
+  );
 
   return {
     cbtTests,
@@ -163,13 +197,21 @@ export async function gatherTraineeCounts(userId) {
  */
 export async function gatherStudentCounts(studentId) {
   const [
-    cbtTests, cbtAverage, patients, clerkings, treatmentPlans, loginDays,
+    paperTests, paperAverage, poolTests, poolAverage,
+    patients, clerkings, treatmentPlans, loginDays,
     cmeArticles, selfAssessments, selfAssessmentAverage, groupActivities,
   ] = await Promise.all([
+    // As for doctors: tests recorded against the old training tracker, plus
+    // papers actually sat against the imported question bank.
     scalar(`SELECT COUNT(*) FROM student_training_progress
             WHERE student_id = $1 AND kind = 'cbt'`, [studentId]),
     scalar(`SELECT COALESCE(AVG(score), 0) FROM student_training_progress
             WHERE student_id = $1 AND kind = 'cbt' AND score IS NOT NULL`, [studentId]),
+
+    scalar(`SELECT COUNT(*) FROM learner_test_attempts
+            WHERE learner_kind = 'student' AND learner_id = $1`, [studentId]),
+    scalar(`SELECT COALESCE(AVG(score), 0) FROM learner_test_attempts
+            WHERE learner_kind = 'student' AND learner_id = $1`, [studentId]),
 
     // Patients reach a student two ways: assigned to them individually, or to
     // the posting group they belong to. Counting only the first read as zero
@@ -211,6 +253,10 @@ export async function gatherStudentCounts(studentId) {
             JOIN students s ON s.group_number = sga.group_number
             WHERE s.id = $1`, [studentId]),
   ]);
+
+  const { cbtTests, cbtAverage } = combineMarks(
+    paperTests, paperAverage, poolTests, poolAverage,
+  );
 
   return {
     cbtTests, cbtAverage,

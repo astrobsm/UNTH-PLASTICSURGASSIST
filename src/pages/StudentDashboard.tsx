@@ -7,10 +7,11 @@ import {
 import { apiClient } from '../services/apiClient';
 import { useAuthStore } from '../store/authStore';
 import { broadcastChange } from '../utils/crossTabSync';
-import { medicalTrainingService, CMETopic, TrainingLevel } from '../services/medicalTrainingService';
-import CMEArticleViewer from '../components/training/CMEArticleViewer';
-import CBTPage from '../components/cbt/CBTPage';
 import { MyStatusBanner } from '../components/training/MyStatusBanner';
+import { SurgeryLevelPrompt } from '../components/student/SurgeryLevelPrompt';
+import { MyGroupPanel } from '../components/student/MyGroupPanel';
+import { LearningLibrary } from '../components/learning/LearningLibrary';
+import { learningContentService } from '../services/learningContentService';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 interface Patient {
@@ -102,13 +103,38 @@ interface StudentMetrics {
 export default function StudentDashboard() {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
+
+  /**
+   * Which posting this student is on.
+   *
+   * It selects their whole curriculum, so it is asked for on arrival when it is
+   * not known. Dismissing it is allowed — somebody who logged in to check a
+   * patient should not be held at a door — but it returns next time, and the
+   * learning module has nothing to show without it.
+   */
+  const [surgeryLevel, setSurgeryLevel] = useState<string | null>(
+    (user as any)?.surgeryLevel ?? null,
+  );
+  const [askingLevel, setAskingLevel] = useState(false);
+  const [levelDismissed, setLevelDismissed] = useState(false);
+
+  useEffect(() => {
+    if (surgeryLevel || levelDismissed) return;
+    let cancelled = false;
+    // Asked of the server rather than trusted from the token: the token was
+    // minted at sign-in and the posting may have been set since.
+    learningContentService.catalogue()
+      .then((c) => {
+        if (cancelled) return;
+        if (c.levelKnown && c.level) setSurgeryLevel(c.level);
+        else if (c.needsLevel) setAskingLevel(true);
+      })
+      .catch(() => { /* the dashboard still works without it */ });
+    return () => { cancelled = true; };
+  }, [surgeryLevel, levelDismissed]);
   const [tab, setTab] = useState<'dashboard' | 'patients' | 'clerking' | 'plans' | 'learning'>('dashboard');
-  // Learning tab: CME / self-assessment / CBT + sign-out summary
-  const [learningLevel, setLearningLevel] = useState<TrainingLevel>('house_officer');
-  const [learningTopic, setLearningTopic] = useState<CMETopic | null>(null);
-  const [showStudentCBT, setShowStudentCBT] = useState(false);
+  // Learning tab: the sign-out summary, and the level-appropriate library.
   const [trainingSummary, setTrainingSummary] = useState<any>(null);
-  const [completedTopics, setCompletedTopics] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [metrics, setMetrics] = useState<StudentMetrics | null>(null);
@@ -197,16 +223,6 @@ export default function StudentDashboard() {
     }
   }, []);
 
-  // Record CME read / self-assessment / CBT participation (counts toward sign-out).
-  const recordTraining = useCallback(async (kind: 'cme' | 'cbt' | 'self_assessment', payload: { refId: string; title?: string; score?: number; total?: number }) => {
-    try {
-      await apiClient.post('/students/training', { kind, ...payload });
-      await loadTrainingSummary();
-      try { broadcastChange('training'); } catch { /* non-fatal */ }
-    } catch (err) {
-      console.warn('Failed to record training (will retry later):', err);
-    }
-  }, [loadTrainingSummary]);
 
   useEffect(() => {
     if (!user || (user.role as string) !== 'student') {
@@ -323,33 +339,6 @@ export default function StudentDashboard() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <Loader2 className="w-8 h-8 animate-spin text-green-600" />
       </div>
-    );
-  }
-
-  // Full-screen CME article + self-assessment (records student participation).
-  if (learningTopic) {
-    return (
-      <CMEArticleViewer
-        topic={learningTopic}
-        onBack={() => setLearningTopic(null)}
-        isCompleted={completedTopics.has(String(learningTopic.id))}
-        onComplete={() => {
-          setCompletedTopics(prev => new Set([...prev, String(learningTopic.id)]));
-          recordTraining('cme', { refId: String(learningTopic.id), title: learningTopic.title });
-        }}
-        onSelfAssessment={(r) => recordTraining('self_assessment', { refId: `sa-${r.topicId}`, title: learningTopic.title, score: r.correct, total: r.total })}
-      />
-    );
-  }
-
-  // Full-screen CBT for students (records participation on submit).
-  if (showStudentCBT) {
-    return (
-      <CBTPage
-        level={learningLevel}
-        onBack={() => { setShowStudentCBT(false); loadTrainingSummary(); }}
-        onResult={(res) => recordTraining('cbt', { refId: `cbt-${res.testNumber}`, title: `CBT ${res.testNumber}`, score: res.score, total: res.total })}
-      />
     );
   }
 
@@ -488,6 +477,29 @@ export default function StudentDashboard() {
             {/* Where this student stands. Students previously had no way to see
                 a score at all, only a count of days left. */}
             <MyStatusBanner />
+
+            {/* The group they work as part of: its patients, its topic, and how
+                far it has got. Their own record showed none of it. */}
+            <MyGroupPanel />
+
+            {/* Which posting they are on, and a way to change it when they
+                move to the next one. */}
+            <div className="bg-white border rounded-xl p-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-gray-800">Your posting</p>
+                <p className="text-xs text-gray-500">
+                  {surgeryLevel
+                    ? `${surgeryLevel.replace('_', ' ').replace(/^./, (c) => c.toUpperCase())} — your articles, self-assessments and CBT come from this.`
+                    : 'Not set. Your reading list and tests depend on it.'}
+                </p>
+              </div>
+              <button
+                onClick={() => setAskingLevel(true)}
+                className="px-3 py-1.5 text-sm rounded-lg border border-green-300 text-green-700 hover:bg-green-50 font-medium"
+              >
+                {surgeryLevel ? 'Change posting' : 'Choose posting'}
+              </button>
+            </div>
 
             {/* Days Left Banner */}
             <div className={`rounded-xl p-4 flex items-center gap-3 ${stats.daysLeft <= 7 ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200'}`}>
@@ -1024,44 +1036,12 @@ export default function StudentDashboard() {
               )}
             </div>
 
-            {/* CBT + level */}
-            <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <h3 className="font-semibold text-gray-900">Computer-Based Test (CBT)</h3>
-                <p className="text-xs text-gray-500">Take the weekly CBT — your score counts toward sign-out.</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <select value={learningLevel} onChange={e => setLearningLevel(e.target.value as TrainingLevel)}
-                  className="text-sm border border-gray-300 rounded-lg px-2 py-1.5 bg-white">
-                  <option value="house_officer">House Officer</option>
-                  <option value="junior_resident">Junior Resident</option>
-                  <option value="senior_resident">Senior Resident</option>
-                </select>
-                <button onClick={() => setShowStudentCBT(true)} className="px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700">Take CBT</button>
-              </div>
-            </div>
-
-            {/* CME articles + self-assessment */}
-            <div className="bg-white border border-gray-200 rounded-xl p-4">
-              <h3 className="font-semibold text-gray-900 mb-1">CME Articles & Self-Assessment</h3>
-              <p className="text-xs text-gray-500 mb-3">Read each article, then take its self-assessment. Both count toward sign-out.</p>
-              <div className="space-y-3">
-                {medicalTrainingService.getModulesByLevel(learningLevel).map(mod => (
-                  <div key={mod.id}>
-                    <p className="text-sm font-semibold text-gray-700 mb-1">{mod.title}</p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                      {mod.topics.map(topic => (
-                        <button key={topic.id} onClick={() => setLearningTopic(topic)}
-                          className="text-left text-xs px-3 py-2 rounded-lg border border-gray-200 hover:bg-green-50 hover:border-green-300 flex items-center justify-between gap-2">
-                          <span className="truncate">{topic.title}</span>
-                          <span className="text-[10px] text-gray-400 flex-shrink-0">{topic.article?.selfAssessment?.length || 0} MCQs{completedTopics.has(String(topic.id)) ? ' ✓' : ''}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+            {/* Everything to read and be tested on, at this student's own
+                posting. What stood here was the house officer curriculum with
+                a dropdown offering two grades a student cannot be, and a CBT
+                from a paper written for doctors: the wrong material, chosen by
+                the wrong level. */}
+            <LearningLibrary />
           </div>
         )}
       </main>
@@ -1181,6 +1161,16 @@ export default function StudentDashboard() {
             ))}
           </div>
         </div>
+      )}
+
+      {/* Asked on arrival when the posting is unknown, because it selects the
+          whole curriculum. Dismissible for this visit, not for good. */}
+      {askingLevel && (
+        <SurgeryLevelPrompt
+          currentLevel={surgeryLevel}
+          onSet={(level) => { setSurgeryLevel(level); setAskingLevel(false); }}
+          onDismiss={() => { setAskingLevel(false); setLevelDismissed(true); }}
+        />
       )}
     </div>
   );

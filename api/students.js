@@ -41,6 +41,8 @@ export default async function handler(req, res) {
       if (method === 'POST' && action === 'training') return await recordStudentTraining(auth.user.id, req.body, res);
       if (method === 'GET'  && action === 'training') return await getStudentTrainingItems(auth.user.id, url.searchParams, res);
       if (method === 'GET'  && action === 'training-summary') return await getStudentTrainingSummary(auth.user.id, res);
+      if (method === 'PUT'  && action === 'surgery-level') return await setSurgeryLevel(auth.user.id, req.body, res);
+      if (method === 'GET'  && action === 'my-group') return await getMyGroup(auth.user.id, res);
     }
 
     // ── Admin endpoints ──
@@ -486,6 +488,189 @@ async function ensureSignOutColumns() {
   signOutColumnsReady = true;
 }
 
+const SURGERY_LEVELS = ['surgery_1', 'surgery_2', 'surgery_3', 'surgery_4'];
+
+/**
+ * Records which surgery posting a student is on.
+ *
+ * This is what selects their curriculum. The CME articles, the self-assessment
+ * questions and the CBT pool are all scoped to a rotation category, and this is
+ * the other half of that join. Until it is set the app shows no material rather
+ * than a guessed one: handing a Surgery 1 student the Surgery 4 reading list is
+ * worse than showing nothing, because nothing prompts and a wrong list does not.
+ *
+ * Setting it also opens their posting, so a student who says "Surgery 2" is on
+ * a Surgery 2 rotation from that moment rather than waiting to be placed.
+ */
+async function setSurgeryLevel(studentId, body, res) {
+  await ensureLevelColumns();
+
+  const level = String((body && (body.surgeryLevel || body.level)) || '').trim();
+  if (!SURGERY_LEVELS.includes(level)) {
+    return res.status(400).json({ error: 'Choose one of Surgery 1 to Surgery 4' });
+  }
+
+  const student = (await query(
+    'SELECT id, surgery_level, posting_start, posting_end, group_number FROM students WHERE id = $1',
+    [studentId])).rows[0];
+  if (!student) return res.status(404).json({ error: 'No such student' });
+
+  await query(
+    'UPDATE students SET surgery_level = $1, surgery_level_set_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+    [level, studentId],
+  );
+
+  const rotation = await openStudentRotation(studentId, level, student);
+  return res.status(200).json({
+    surgeryLevel: level,
+    rotation,
+    changed: student.surgery_level !== level,
+  });
+}
+
+/**
+ * Opens a posting for a student at a level, if one is not already open.
+ *
+ * Mirrors what happens for a doctor when their profile is created. A student
+ * whose account was approved but who is on no rotation has no start date, no
+ * end date and nothing to be scored against, which is how a posting ends with
+ * nobody able to say whether it was completed.
+ */
+async function openStudentRotation(studentId, level, student) {
+  await ensureStudentRotations();
+
+  const open = (await query(
+    "SELECT * FROM student_rotations WHERE student_id = $1 AND status = 'active'",
+    [studentId])).rows[0];
+  if (open && open.surgery_level === level) return open;
+
+  // A change of posting closes the previous one rather than running two.
+  if (open) {
+    await query(
+      "UPDATE student_rotations SET status = 'completed', updated_at = CURRENT_TIMESTAMP WHERE id = $1",
+      [open.id]);
+  }
+
+  const category = (await query(
+    'SELECT id FROM rotation_categories WHERE level::text = $1 LIMIT 1', [level])).rows[0];
+
+  const start = student && student.posting_start
+    ? new Date(student.posting_start).toISOString().slice(0, 10)
+    : new Date().toISOString().slice(0, 10);
+  const end = student && student.posting_end
+    ? new Date(student.posting_end).toISOString().slice(0, 10)
+    : new Date(Date.now() + 56 * 86400000).toISOString().slice(0, 10);
+
+  const created = (await query(
+    `INSERT INTO student_rotations (student_id, surgery_level, category_id, group_number, start_date, end_date, status)
+     VALUES ($1, $2, $3, $4, $5::date, $6::date, 'active')
+     ON CONFLICT (student_id, status, surgery_level) DO UPDATE
+       SET category_id = EXCLUDED.category_id, updated_at = CURRENT_TIMESTAMP
+     RETURNING *`,
+    [studentId, level, (category && category.id) || null,
+     (student && student.group_number) != null ? student.group_number : null, start, end],
+  )).rows[0];
+
+  try {
+    await logStudentActivity(studentId, 'rotation_started', 'Started ' + level.replace('_', ' '));
+  } catch (e) { /* audit only */ }
+  return created;
+}
+
+let studentRotationsReady = false;
+async function ensureStudentRotations() {
+  if (studentRotationsReady) return;
+  try {
+    await query(`CREATE TABLE IF NOT EXISTS student_rotations (
+      id SERIAL PRIMARY KEY,
+      student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+      surgery_level VARCHAR(20) NOT NULL,
+      category_id UUID,
+      group_number INTEGER,
+      start_date DATE NOT NULL,
+      end_date DATE NOT NULL,
+      status VARCHAR(20) NOT NULL DEFAULT 'active',
+      created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT student_rotations_one_open UNIQUE (student_id, status, surgery_level))`);
+  } catch (e) { console.warn('ensureStudentRotations:', e.message); }
+  studentRotationsReady = true;
+}
+
+let levelColumnsReady = false;
+async function ensureLevelColumns() {
+  if (levelColumnsReady) return;
+  const stmts = [
+    'ALTER TABLE students ADD COLUMN IF NOT EXISTS surgery_level VARCHAR(20)',
+    'ALTER TABLE students ADD COLUMN IF NOT EXISTS surgery_level_set_at TIMESTAMPTZ',
+  ];
+  for (const sql of stmts) {
+    try { await query(sql); } catch (e) { console.warn('ensureLevelColumns:', e.message); }
+  }
+  levelColumnsReady = true;
+}
+
+/**
+ * The student's group, and everything assigned to it.
+ *
+ * A student in a posting group works as part of it: the patients belong to the
+ * group, the topic is presented by the group, and the activities are ticked off
+ * by the group. Showing them only their own record hides most of what they are
+ * actually being asked to do.
+ */
+async function getMyGroup(studentId, res) {
+  await ensureGroupTables();
+
+  const me = (await query(
+    `SELECT id, full_name, group_number, surgery_level, posting_start, posting_end
+     FROM students WHERE id = $1`, [studentId])).rows[0];
+  if (!me) return res.status(404).json({ error: 'No such student' });
+  if (me.group_number == null) {
+    return res.status(200).json({ inGroup: false, student: me });
+  }
+
+  const results = await Promise.all([
+    query(`SELECT id, full_name, (id = $2) AS is_me FROM students
+           WHERE group_number = $1 AND is_active AND signed_out_at IS NULL
+           ORDER BY full_name`, [me.group_number, studentId]),
+    query(`SELECT patient_id, hospital_number, patient_name FROM student_group_patients
+           WHERE group_number = $1 AND is_active ORDER BY patient_name`, [me.group_number]),
+    query(`SELECT group_number, topic_title, topic_presented, topic_presented_at, notes
+           FROM student_groups WHERE group_number = $1`, [me.group_number]),
+    query(`SELECT activity_type, title, patient_name, activity_date, recorded_by
+           FROM student_group_activities WHERE group_number = $1
+           ORDER BY activity_date DESC, id DESC LIMIT 50`, [me.group_number]),
+  ]);
+  const members = results[0], patients = results[1], group = results[2], activities = results[3];
+
+  // What the group has done against what it is expected to do. The same four
+  // activities Training Admin tracks, so the two screens cannot disagree.
+  const required = [
+    { type: 'topic_presentation', label: 'Topic presentation', target: 1 },
+    { type: 'patient_clerking', label: 'Clerk & present patient', target: 2 },
+    { type: 'wound_dressing', label: 'Wound dressing (clinic)', target: 1 },
+    { type: 'wound_inspection', label: 'Wound inspection (Tue)', target: 1 },
+  ];
+  const done = activities.rows.reduce(function (acc, a) {
+    acc[a.activity_type] = (acc[a.activity_type] || 0) + 1;
+    return acc;
+  }, {});
+  const progress = required.map(function (r) {
+    return Object.assign({}, r, { done: done[r.type] || 0, met: (done[r.type] || 0) >= r.target });
+  });
+
+  return res.status(200).json({
+    inGroup: true,
+    student: me,
+    group: group.rows[0] || { group_number: me.group_number },
+    members: members.rows,
+    patients: patients.rows,
+    activities: activities.rows,
+    progress: progress,
+    complete: progress.every(function (p) { return p.met; }),
+  });
+}
+
 async function loginStudent(body, res) {
   await ensureTables();
   const { email, password } = body;
@@ -518,9 +703,26 @@ async function loginStudent(body, res) {
     return res.status(403).json({ error: 'Your account has been deactivated' });
   }
 
-  // Auto-approve if not yet approved
+  // Auto-approve if not yet approved.
+  //
+  // Approval used to set a flag and nothing else, so an approved student was on
+  // no rotation: no start date, no end date, and nothing to be scored against.
+  // Where they have already told us their posting, opening it here is what
+  // makes approval mean something.
   if (!student.is_approved) {
     await query('UPDATE students SET is_approved = true, updated_at = NOW() WHERE id = $1', [student.id]);
+  }
+  try {
+    await ensureLevelColumns();
+    const withLevel = (await query(
+      'SELECT id, surgery_level, posting_start, posting_end, group_number FROM students WHERE id = $1',
+      [student.id])).rows[0];
+    if (withLevel && withLevel.surgery_level) {
+      await openStudentRotation(student.id, withLevel.surgery_level, withLevel);
+    }
+  } catch (e) {
+    // A posting that could not be opened must not stop somebody signing in.
+    console.warn('student rotation on login:', e.message);
   }
 
   // Check posting dates
@@ -547,6 +749,15 @@ async function loginStudent(body, res) {
   // Record attendance/engagement for this login day
   await logStudentActivity(student.id, 'login', 'Student logged in');
 
+  // Whether the app should ask which posting they are on. It selects their
+  // whole curriculum, so a student who has not said yet is asked before they
+  // reach material that might be the wrong level's.
+  let surgeryLevel = null;
+  try {
+    surgeryLevel = (await query(
+      'SELECT surgery_level FROM students WHERE id = $1', [student.id])).rows[0]?.surgery_level ?? null;
+  } catch (e) { /* the column may predate this deployment */ }
+
   res.json({
     token,
     user: {
@@ -555,7 +766,9 @@ async function loginStudent(body, res) {
       email: student.email,
       role: 'student',
       postingStart: student.posting_start,
-      postingEnd: student.posting_end
+      postingEnd: student.posting_end,
+      surgeryLevel,
+      needsSurgeryLevel: !surgeryLevel
     }
   });
 }
