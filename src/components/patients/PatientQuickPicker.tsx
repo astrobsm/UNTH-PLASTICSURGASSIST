@@ -20,6 +20,8 @@ import { apiClient } from '../../services/apiClient';
 
 export interface PickedPatient {
   id: number | string;
+  /** The populated one in this database; first/last are not always both set. */
+  full_name?: string;
   first_name?: string;
   last_name?: string;
   hospital_number?: string;
@@ -34,8 +36,12 @@ interface Props {
   allowRegister?: boolean;
 }
 
-const displayName = (p: PickedPatient) =>
-  [p.first_name, p.last_name].filter(Boolean).join(' ') || 'Patient';
+export const displayName = (p: PickedPatient) =>
+  // full_name first: every row in this database has it, while last_name is
+  // sometimes empty and the pair then renders as a lone forename.
+  (p.full_name || '').trim()
+  || [p.first_name, p.last_name].filter(Boolean).join(' ').trim()
+  || 'Patient';
 
 export function PatientQuickPicker({
   onPick, onClose, title = 'Select patient', allowRegister = true,
@@ -65,7 +71,7 @@ export function PatientQuickPicker({
     const term = query.trim().toLowerCase();
     if (!term) return all.slice(0, 30);
     return all
-      .filter((p) => [p.first_name, p.last_name, p.hospital_number]
+      .filter((p) => [p.full_name, p.first_name, p.last_name, p.hospital_number]
         .filter(Boolean).join(' ').toLowerCase().includes(term))
       .slice(0, 30);
   }, [query, all]);

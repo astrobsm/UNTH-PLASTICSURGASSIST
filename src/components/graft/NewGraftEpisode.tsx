@@ -9,7 +9,7 @@
  */
 
 import { useState } from 'react';
-import { Loader2, Plus, X, AlertTriangle, Layers } from 'lucide-react';
+import { Loader2, Plus, X, AlertTriangle, Layers, User } from 'lucide-react';
 import { createWound } from '../../services/woundMonitorService';
 import { skinGraftService, type SiteRole } from '../../services/skinGraftService';
 import { TaxonomySelect } from '../wound/TaxonomySelect';
@@ -17,6 +17,8 @@ import { ANATOMICAL_SITES } from '../../data/woundTaxonomy';
 
 interface Props {
   patientId: number | string;
+  /** Shown in the dialog so an episode cannot be started on the wrong person. */
+  patientName?: string;
   hospitalNumber?: string;
   onClose: () => void;
   onCreated: (episodeId: number) => void;
@@ -35,7 +37,9 @@ const GRAFT_TYPES = [
   { value: 'composite', label: 'Composite' },
 ];
 
-export function NewGraftEpisode({ patientId, hospitalNumber, onClose, onCreated }: Props) {
+export function NewGraftEpisode({
+  patientId, patientName, hospitalNumber, onClose, onCreated,
+}: Props) {
   const [label, setLabel] = useState('');
   const [graftType, setGraftType] = useState('split_thickness');
   const [thickness, setThickness] = useState('');
@@ -123,6 +127,21 @@ export function NewGraftEpisode({ patientId, hospitalNumber, onClose, onCreated 
         </header>
 
         <div className="p-5 space-y-4">
+          {/* Who this is for, stated before anything is entered. The dialog is
+              reached from a unit-wide list, so the patient is not otherwise on
+              screen and an episode on the wrong person would be invisible. */}
+          {(patientName || hospitalNumber) && (
+            <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-teal-50 border border-teal-200">
+              <User className="w-4 h-4 text-teal-700 shrink-0" />
+              <p className="text-sm text-teal-900 min-w-0 truncate">
+                <span className="font-semibold">{patientName || 'Patient'}</span>
+                {hospitalNumber && (
+                  <span className="font-normal text-teal-700"> · {hospitalNumber}</span>
+                )}
+              </p>
+            </div>
+          )}
+
           <label className="block">
             <span className="text-xs font-medium text-gray-600">Label</span>
             <input

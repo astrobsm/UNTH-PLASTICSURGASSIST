@@ -19,6 +19,9 @@ import {
 import { GraftSitePanel } from '../components/graft/GraftSitePanel';
 import { GraftCaptureFlow } from '../components/graft/GraftCaptureFlow';
 import { NewGraftEpisode } from '../components/graft/NewGraftEpisode';
+import {
+  PatientQuickPicker, displayName, type PickedPatient,
+} from '../components/patients/PatientQuickPicker';
 
 export function SkinGraftPage() {
   const { episodeId } = useParams<{ episodeId?: string }>();
@@ -34,10 +37,12 @@ function UnitDashboard() {
   const [episodes, setEpisodes] = useState<GraftEpisode[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  // An episode belongs to a patient, so starting one needs a patient named.
-  // Asked for here rather than assumed, because this dashboard is the unit's
-  // and not any one patient's.
-  const [newFor, setNewFor] = useState<string>('');
+  // An episode belongs to a patient, and this dashboard is the unit's rather
+  // than any one patient's, so one has to be chosen. Chosen from the register
+  // by name or hospital number — a typed id is a number nobody knows and the
+  // wrong one creates an episode on the wrong patient with no way to notice.
+  const [picking, setPicking] = useState(false);
+  const [newFor, setNewFor] = useState<PickedPatient | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -67,10 +72,7 @@ function UnitDashboard() {
             </div>
             <div className="ml-auto flex items-center gap-2">
               <button
-                onClick={() => {
-                  const id = window.prompt('Patient ID to start a graft episode for:');
-                  if (id && id.trim()) setNewFor(id.trim());
-                }}
+                onClick={() => setPicking(true)}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white text-teal-700 text-sm font-semibold hover:bg-teal-50"
               >
                 <Plus className="w-4 h-4" /> New episode
@@ -140,11 +142,21 @@ function UnitDashboard() {
         )}
       </main>
 
+      {picking && (
+        <PatientQuickPicker
+          title="Whose graft episode?"
+          onClose={() => setPicking(false)}
+          onPick={(p) => { setPicking(false); setNewFor(p); }}
+        />
+      )}
+
       {newFor && (
         <NewGraftEpisode
-          patientId={newFor}
-          onClose={() => setNewFor('')}
-          onCreated={(id) => { setNewFor(''); navigate(`/skin-grafts/${id}`); }}
+          patientId={newFor.id}
+          patientName={displayName(newFor)}
+          hospitalNumber={newFor.hospital_number}
+          onClose={() => setNewFor(null)}
+          onCreated={(id) => { setNewFor(null); navigate(`/skin-grafts/${id}`); }}
         />
       )}
     </div>
