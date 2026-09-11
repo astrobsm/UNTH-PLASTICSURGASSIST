@@ -6,6 +6,7 @@ import { describe, it, expect } from 'vitest';
 import {
   polygonAreaPx, polygonPerimeterPx, pxAreaToCm2, calibrationFromLine,
   pointInPolygon, measureTrace, validateTrace, centroid, simplify,
+  measureLayeredTrace, validateLayeredTrace,
   type TracedRegion,
 } from '../services/tracedRegions';
 
@@ -228,5 +229,163 @@ describe('simplify', () => {
     const star = ngon(0, 0, 60, 10);
     const simple = simplify(star, 1);
     expect(polygonAreaPx(simple)).toBeCloseTo(polygonAreaPx(star), 0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Layered tracing: a wound surface is not raw-or-healed.
+// ---------------------------------------------------------------------------
+
+describe('measureLayeredTrace', () => {
+  // A 200x200 px site at 20 px/cm is 100 cm². Every patch below is sized so
+  // its area in cm² is a round number.
+  const site = [rect(0, 0, 200, 200)];
+  const PPC = 20;
+
+  it('infers healed from the open patches, the usual donor-site flow', () => {
+    // 60x60 granulation (9 cm²) + 40x40 slough (4 cm²) = 13 cm² open of 100.
+    const m = measureLayeredTrace(site, {
+      granulation: [rect(10, 10, 60, 60, 'g')],
+      slough: [rect(100, 10, 40, 40, 's')],
+    }, PPC)!;
+    expect(m.totalAreaCm2).toBeCloseTo(100, 2);
+    expect(m.openAreaCm2).toBeCloseTo(13, 2);
+    expect(m.healedAreaCm2).toBeCloseTo(87, 2);
+    expect(m.healedPct).toBeCloseTo(87, 2);
+    expect(m.basis).toBe('inferred-from-open');
+    expect(m.unclassifiedPct).toBe(0);
+  });
+
+  it('adds several patches on one layer, as slough in three places', () => {
+    const m = measureLayeredTrace(site, {
+      slough: [rect(0, 0, 20, 20, 'a'), rect(40, 0, 20, 20, 'b'), rect(80, 0, 20, 20, 'c')],
+    }, PPC)!;
+    // Three 400 px² patches = 1200 px² = 3 cm².
+    expect(m.openAreaCm2).toBeCloseTo(3, 2);
+    expect(m.healedPct).toBeCloseTo(97, 2);
+    const slough = m.layers.find((l) => l.key === 'slough')!;
+    expect(slough.regions).toBe(3);
+    expect(slough.areaCm2).toBeCloseTo(3, 2);
+  });
+
+  it('infers open from the healed islands, the early donor-site flow', () => {
+    // Two 40x40 epithelial islands = 3200 px² = 8 cm² healed of 100.
+    const m = measureLayeredTrace(site, {
+      epithelial: [rect(10, 10, 40, 40, 'e1'), rect(100, 100, 40, 40, 'e2')],
+    }, PPC)!;
+    expect(m.healedAreaCm2).toBeCloseTo(8, 2);
+    expect(m.openAreaCm2).toBeCloseTo(92, 2);
+    expect(m.healedPct).toBeCloseTo(8, 2);
+    expect(m.basis).toBe('inferred-from-healed');
+  });
+
+  it('infers nothing when both sides are drawn, and reports the remainder', () => {
+    // 40 cm² open, 40 cm² healed, 20 cm² neither: unclassified, not assigned.
+    const m = measureLayeredTrace(site, {
+      granulation: [rect(0, 0, 200, 80, 'g')],     // 16000 px² = 40 cm²
+      epithelial: [rect(0, 80, 200, 80, 'e')],     // 16000 px² = 40 cm²
+    }, PPC)!;
+    expect(m.basis).toBe('traced-both');
+    expect(m.openAreaCm2).toBeCloseTo(40, 2);
+    expect(m.healedAreaCm2).toBeCloseTo(40, 2);
+    expect(m.unclassifiedAreaCm2).toBeCloseTo(20, 2);
+    expect(m.unclassifiedPct).toBeCloseTo(20, 2);
+    // The unclassified fifth is not quietly credited to healing.
+    expect(m.healedPct).toBeCloseTo(40, 2);
+  });
+
+  it('counts slough and eschar as open, however different they look', () => {
+    const m = measureLayeredTrace(site, {
+      slough: [rect(0, 0, 100, 100, 's')],        // 25 cm²
+      necrotic: [rect(100, 100, 100, 100, 'n')],  // 25 cm²
+    }, PPC)!;
+    expect(m.openAreaCm2).toBeCloseTo(50, 2);
+    expect(m.healedPct).toBeCloseTo(50, 2);
+  });
+
+  it('refuses to read an unmarked site as healed', () => {
+    // The outline is drawn and nothing inside it marked. Calling that 100%
+    // take would turn an unfinished tracing into a clinical claim.
+    const m = measureLayeredTrace(site, {}, PPC)!;
+    expect(m.basis).toBe('none');
+    expect(m.healedPct).toBe(0);
+    expect(m.openPct).toBe(0);
+  });
+
+  it('reports patches that overrun the site rather than clamping them', () => {
+    const m = measureLayeredTrace(site, {
+      granulation: [rect(0, 0, 190, 190, 'a')],
+      slough: [rect(10, 10, 190, 190, 'b')],
+    }, PPC)!;
+    expect(m.exceedsTotal).toBe(true);
+  });
+
+  it('gives a full composition of the surface', () => {
+    const m = measureLayeredTrace(site, {
+      granulation: [rect(0, 0, 100, 100, 'g')],   // 25 cm²
+      slough: [rect(100, 0, 100, 100, 's')],      // 25 cm²
+    }, PPC)!;
+    const by = Object.fromEntries(m.layers.map((l) => [l.key, l.pct]));
+    expect(by.granulation).toBeCloseTo(25, 2);
+    expect(by.slough).toBeCloseTo(25, 2);
+    expect(by.necrotic).toBe(0);
+    expect(by.epithelial).toBe(0);
+  });
+
+  it('ignores an unfinished patch of one or two taps', () => {
+    const m = measureLayeredTrace(site, {
+      granulation: [rect(0, 0, 100, 100, 'g'), { id: 'tap', points: [{ x: 5, y: 5 }] }],
+    }, PPC)!;
+    expect(m.openAreaCm2).toBeCloseTo(25, 2);
+    expect(m.layers.find((l) => l.key === 'granulation')!.regions).toBe(1);
+  });
+
+  it('refuses without a scale or a site outline', () => {
+    expect(measureLayeredTrace(site, { granulation: [rect(0, 0, 10, 10)] }, 0)).toBeNull();
+    expect(measureLayeredTrace([], { granulation: [rect(0, 0, 10, 10)] }, PPC)).toBeNull();
+  });
+
+  it('agrees with the two-layer measurement it replaced', () => {
+    const raw = [rect(20, 20, 100, 100, 'raw')];
+    const two = measureTrace(site, raw, PPC)!;
+    const layered = measureLayeredTrace(site, { granulation: raw }, PPC)!;
+    expect(layered.healedPct).toBeCloseTo(two.healedPct, 6);
+    expect(layered.openAreaCm2).toBeCloseTo(two.rawAreaCm2, 6);
+  });
+});
+
+describe('validateLayeredTrace', () => {
+  const site = [rect(0, 0, 200, 200)];
+
+  it('accepts a well-formed layered tracing', () => {
+    const v = validateLayeredTrace(site, { granulation: [rect(10, 10, 50, 50, 'g')] }, 20);
+    expect(v.ok).toBe(true);
+  });
+
+  it('names the layer a stray patch was drawn on', () => {
+    const v = validateLayeredTrace(site, { slough: [rect(900, 900, 20, 20, 'x')] }, 20);
+    expect(v.ok).toBe(false);
+    expect(v.problems.join(' ')).toMatch(/slough/i);
+    expect(v.problems.join(' ')).toMatch(/outside the site outline/);
+  });
+
+  it('asks for at least one patch before recording a percentage', () => {
+    const v = validateLayeredTrace(site, {}, 20);
+    expect(v.ok).toBe(false);
+    expect(v.problems.join(' ')).toMatch(/Mark at least one patch/);
+  });
+
+  it('still insists on a scale and a site outline', () => {
+    expect(validateLayeredTrace(site, { granulation: [rect(1, 1, 5, 5)] }, null).ok).toBe(false);
+    expect(validateLayeredTrace([], { granulation: [rect(1, 1, 5, 5)] }, 20).ok).toBe(false);
+  });
+
+  it('catches overlapping patches across different layers', () => {
+    const v = validateLayeredTrace(site, {
+      granulation: [rect(0, 0, 190, 190, 'a')],
+      slough: [rect(10, 10, 190, 190, 'b')],
+    }, 20);
+    expect(v.ok).toBe(false);
+    expect(v.problems.join(' ')).toMatch(/more than the whole site/);
   });
 });

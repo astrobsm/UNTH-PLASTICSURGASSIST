@@ -109,6 +109,177 @@ export function pointInPolygon(p: Point, poly: Point[]): boolean {
 }
 
 /**
+ * The tissue layers a wound surface can be divided into.
+ *
+ * A wound is not raw-or-healed. Inside one outline there are usually separate
+ * patches — granulating tissue here, a plaque of slough there, islands of new
+ * epithelium between them — and each is traced on its own layer, patch by
+ * patch, before anything is totalled.
+ *
+ * `healed` is what separates the two kinds: granulation, slough and eschar are
+ * all open surface however different they look clinically, and only epithelium
+ * has closed. That distinction, not the colour, is what drives take and
+ * re-epithelialization.
+ */
+export type TissueLayerKey = 'granulation' | 'slough' | 'necrotic' | 'epithelial';
+
+export interface TissueLayerMeta {
+  key: TissueLayerKey;
+  label: string;
+  /** Wording for a graft recipient, where the same tissue reads differently. */
+  recipientLabel: string;
+  colour: string;
+  /** False means open surface; true means closed. */
+  healed: boolean;
+}
+
+export const TISSUE_LAYERS: TissueLayerMeta[] = [
+  { key: 'granulation', label: 'Raw / granulating', recipientLabel: 'Raw / not taken',
+    colour: '#ef4444', healed: false },
+  { key: 'slough',      label: 'Slough / fibrin',   recipientLabel: 'Slough / fibrin',
+    colour: '#eab308', healed: false },
+  { key: 'necrotic',    label: 'Necrotic / eschar', recipientLabel: 'Non-viable graft',
+    colour: '#57534e', healed: false },
+  { key: 'epithelial',  label: 'Epithelialized',    recipientLabel: 'Graft taken',
+    colour: '#22c55e', healed: true },
+];
+
+export const LAYER_META: Record<TissueLayerKey, TissueLayerMeta> =
+  Object.fromEntries(TISSUE_LAYERS.map((l) => [l.key, l])) as Record<TissueLayerKey, TissueLayerMeta>;
+
+export type LayerRegions = Partial<Record<TissueLayerKey, TracedRegion[]>>;
+
+export interface LayerBreakdown {
+  key: TissueLayerKey;
+  areaCm2: number;
+  /** Of the whole site. */
+  pct: number;
+  regions: number;
+  healed: boolean;
+}
+
+export interface LayeredMeasurement {
+  totalAreaCm2: number;
+  openAreaCm2: number;
+  healedAreaCm2: number;
+  /** Healed as a percentage of the whole site — take, or re-epithelialization. */
+  healedPct: number;
+  openPct: number;
+  /**
+   * Traced area belonging to no layer.
+   *
+   * Only meaningful once BOTH an open and a healed layer have been drawn: up
+   * to that point the untraced remainder is inferred, not unclassified.
+   */
+  unclassifiedAreaCm2: number;
+  unclassifiedPct: number;
+  /** How the healed figure was arrived at, because the two differ in strength. */
+  basis: 'inferred-from-open' | 'inferred-from-healed' | 'traced-both' | 'none';
+  layers: LayerBreakdown[];
+  /** The patches sum to more than the site they sit in. */
+  exceedsTotal: boolean;
+  totalRegionCount: number;
+}
+
+/**
+ * Measures a site that has been divided into tissue layers.
+ *
+ * Three ways a clinician works, all supported:
+ *
+ *   - Mark only what is still open. Everything else in the outline has healed,
+ *     so healed = total − open. This is the usual flow on a donor site.
+ *   - Mark only the healed islands. Then open = total − healed, which is
+ *     easier early on when there are three specks of epithelium in a raw bed.
+ *   - Mark both. Then neither is inferred, and whatever is left over is
+ *     reported as unclassified rather than being quietly assigned to one side.
+ *
+ * Nothing is totalled until this is called, so patches can be added in any
+ * order and in as many steps as the clinician wants.
+ */
+export function measureLayeredTrace(
+  totalRegions: TracedRegion[],
+  layers: LayerRegions,
+  pixelsPerCm: number,
+): LayeredMeasurement | null {
+  if (!(pixelsPerCm > 0)) return null;
+
+  const totalPx = (totalRegions || []).reduce((sum, r) => sum + polygonAreaPx(r.points), 0);
+  if (!(totalPx > 0)) return null;
+
+  const perLayerPx: Record<string, number> = {};
+  const perLayerCount: Record<string, number> = {};
+  for (const meta of TISSUE_LAYERS) {
+    const regions = (layers[meta.key] || []).filter((r) => r.points.length >= 3);
+    perLayerPx[meta.key] = regions.reduce((sum, r) => sum + polygonAreaPx(r.points), 0);
+    perLayerCount[meta.key] = regions.length;
+  }
+
+  const openPx = TISSUE_LAYERS.filter((l) => !l.healed)
+    .reduce((sum, l) => sum + perLayerPx[l.key], 0);
+  const healedTracedPx = TISSUE_LAYERS.filter((l) => l.healed)
+    .reduce((sum, l) => sum + perLayerPx[l.key], 0);
+
+  const anyOpen = openPx > 0;
+  const anyHealed = healedTracedPx > 0;
+
+  // Which side was drawn decides which side is inferred. Inferring both would
+  // mean inventing the division rather than measuring it.
+  let basis: LayeredMeasurement['basis'];
+  let resolvedOpenPx: number;
+  let resolvedHealedPx: number;
+  if (anyOpen && anyHealed) {
+    basis = 'traced-both';
+    resolvedOpenPx = openPx;
+    resolvedHealedPx = healedTracedPx;
+  } else if (anyOpen) {
+    basis = 'inferred-from-open';
+    resolvedOpenPx = openPx;
+    resolvedHealedPx = Math.max(0, totalPx - openPx);
+  } else if (anyHealed) {
+    basis = 'inferred-from-healed';
+    resolvedHealedPx = healedTracedPx;
+    resolvedOpenPx = Math.max(0, totalPx - healedTracedPx);
+  } else {
+    // The site is outlined and nothing within it marked. Reading that as
+    // "fully healed" would turn an unfinished tracing into a clinical claim.
+    basis = 'none';
+    resolvedOpenPx = 0;
+    resolvedHealedPx = 0;
+  }
+
+  const accountedPx = openPx + healedTracedPx;
+  const unclassifiedPx = basis === 'traced-both' ? Math.max(0, totalPx - accountedPx) : 0;
+
+  const toCm2 = (px: number) => round2(pxAreaToCm2(px, pixelsPerCm));
+  const pct = (px: number) => round2((px / totalPx) * 100);
+
+  return {
+    totalAreaCm2: toCm2(totalPx),
+    openAreaCm2: toCm2(resolvedOpenPx),
+    healedAreaCm2: toCm2(resolvedHealedPx),
+    healedPct: basis === 'none' ? 0 : Math.min(100, pct(resolvedHealedPx)),
+    openPct: basis === 'none' ? 0 : Math.min(100, pct(resolvedOpenPx)),
+    unclassifiedAreaCm2: toCm2(unclassifiedPx),
+    unclassifiedPct: pct(unclassifiedPx),
+    basis,
+    layers: TISSUE_LAYERS.map((meta) => ({
+      key: meta.key,
+      areaCm2: toCm2(perLayerPx[meta.key]),
+      pct: pct(perLayerPx[meta.key]),
+      regions: perLayerCount[meta.key],
+      healed: meta.healed,
+    })),
+    exceedsTotal: accountedPx > totalPx,
+    totalRegionCount: (totalRegions || []).filter((r) => r.points.length >= 3).length,
+  };
+}
+
+/** Every traced patch, across every layer — for counting and for validation. */
+export function allLayerRegions(layers: LayerRegions): TracedRegion[] {
+  return TISSUE_LAYERS.flatMap((l) => layers[l.key] || []);
+}
+
+/**
  * What the two sets of outlines measure.
  *
  * Several outlines are allowed on each side — a donor site can be photographed
@@ -123,25 +294,22 @@ export function measureTrace(
   rawRegions: TracedRegion[],
   pixelsPerCm: number,
 ): TraceMeasurement | null {
-  if (!(pixelsPerCm > 0)) return null;
-
-  const totalPx = (totalRegions || []).reduce((s, r) => s + polygonAreaPx(r.points), 0);
-  if (!(totalPx > 0)) return null;
+  // The two-layer case of the layered measurement, so there is one
+  // implementation of the arithmetic rather than two that can drift.
+  const m = measureLayeredTrace(totalRegions, { granulation: rawRegions || [] }, pixelsPerCm);
+  if (!m) return null;
 
   const rawPx = (rawRegions || []).reduce((s, r) => s + polygonAreaPx(r.points), 0);
-
-  const totalAreaCm2 = pxAreaToCm2(totalPx, pixelsPerCm);
-  const rawAreaCm2 = pxAreaToCm2(rawPx, pixelsPerCm);
-  const rawExceedsTotal = rawPx > totalPx;
-
-  const healedPx = Math.max(0, totalPx - rawPx);
+  const anyRaw = rawPx > 0;
 
   return {
-    totalAreaCm2: round2(totalAreaCm2),
-    rawAreaCm2: round2(rawAreaCm2),
-    healedAreaCm2: round2(pxAreaToCm2(healedPx, pixelsPerCm)),
-    healedPct: round2((healedPx / totalPx) * 100),
-    rawExceedsTotal,
+    totalAreaCm2: m.totalAreaCm2,
+    rawAreaCm2: m.openAreaCm2,
+    // With nothing marked raw the site reads as closed, which is what the
+    // two-layer caller has always meant by an empty raw layer.
+    healedAreaCm2: anyRaw ? m.healedAreaCm2 : m.totalAreaCm2,
+    healedPct: anyRaw ? m.healedPct : 100,
+    rawExceedsTotal: m.exceedsTotal,
     regionCount: { total: (totalRegions || []).length, raw: (rawRegions || []).length },
   };
 }
@@ -185,6 +353,62 @@ export function validateTrace(
     : null;
   if (m?.rawExceedsTotal) {
     problems.push('The raw areas add up to more than the whole site — they may be overlapping.');
+  }
+
+  return { ok: problems.length === 0, problems };
+}
+
+/**
+ * Whether a layered tracing is fit to record.
+ *
+ * Every patch on every layer is checked against the site outline, because a
+ * stray tap on the slough layer inflates the open area exactly as one on the
+ * raw layer does.
+ */
+export function validateLayeredTrace(
+  totalRegions: TracedRegion[],
+  layers: LayerRegions,
+  pixelsPerCm: number | null,
+): { ok: boolean; problems: string[] } {
+  const problems: string[] = [];
+
+  if (!pixelsPerCm || pixelsPerCm <= 0) {
+    problems.push('No scale: detect the calibration marker or draw along it before tracing.');
+  }
+
+  const usableTotal = (totalRegions || []).filter((r) => r.points.length >= 3);
+  if (!usableTotal.length) {
+    problems.push('Trace the outline of the whole site first.');
+  }
+
+  if (usableTotal.length) {
+    const strays = new Set<string>();
+    for (const meta of TISSUE_LAYERS) {
+      for (const r of layers[meta.key] || []) {
+        if (r.points.length < 3) continue;
+        const c = centroid(r.points);
+        if (!usableTotal.some((t) => pointInPolygon(c, t.points))) {
+          strays.add(meta.label.toLowerCase());
+        }
+      }
+    }
+    if (strays.size) {
+      problems.push(
+        `A patch on the ${[...strays].join(' and ')} layer lies outside the site outline. `
+        + 'Remove or redraw it.',
+      );
+    }
+  }
+
+  const m = usableTotal.length && pixelsPerCm
+    ? measureLayeredTrace(usableTotal, layers, pixelsPerCm)
+    : null;
+
+  if (m?.exceedsTotal) {
+    problems.push('The traced patches add up to more than the whole site — they may be overlapping.');
+  }
+  if (m && m.basis === 'none') {
+    problems.push('Mark at least one patch — what is still open, or what has healed.');
   }
 
   return { ok: problems.length === 0, problems };

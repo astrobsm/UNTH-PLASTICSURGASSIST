@@ -37,6 +37,7 @@ import { putLocalImage } from '../../services/woundImageStore';
 import { addAssessment } from '../../services/woundMonitorService';
 import { skinGraftService, type GraftSite } from '../../services/skinGraftService';
 import { RegionTracer, type TraceResult } from '../wound/RegionTracer';
+import { LAYER_META } from '../../services/tracedRegions';
 
 const PIPELINE_VERSION = '2026.08-cv1';
 
@@ -274,9 +275,17 @@ export function GraftCaptureFlow({ site, patientId, onClose, onSaved }: Props) {
         perimeter_cm: measurement.perimeterCm,
         length_cm: measurement.lengthCm,
         width_cm: measurement.widthCm,
-        // Tissue percentages are not written. The classifier behind them is
-        // unvalidated — see TISSUE_MODEL_VALIDATED.
-        tissue_source: 'none',
+        // Tissue percentages, where the clinician traced them. These columns
+        // have existed since the wound module shipped and nothing has ever
+        // been allowed to fill them: the colour classifier behind the obvious
+        // candidate is unvalidated (TISSUE_MODEL_VALIDATED). A tracing is a
+        // clinician's own division of the surface, measured against the
+        // calibration marker, so it is recorded as such.
+        granulation_pct: trace?.composition.granulation,
+        slough_pct: trace?.composition.slough,
+        necrotic_pct: trace?.composition.necrotic,
+        epithelial_pct: trace?.composition.epithelial,
+        tissue_source: trace ? 'clinician' : 'none',
         ai_confidence: measurement.confidence,
         calibration_type: measurement.calibrationType,
         scale_reliable: measurement.scaleReliable,
@@ -491,11 +500,43 @@ export function GraftCaptureFlow({ site, patientId, onClose, onSaved }: Props) {
                 </div>
                 <div className="grid grid-cols-3 gap-2.5">
                   <Cell label="Whole site" value={`${trace.totalAreaCm2.toFixed(1)} cm²`} />
-                  <Cell label={isDonor ? 'Still raw' : 'Open / non-viable'}
+                  <Cell label={isDonor ? 'Still open' : 'Open / non-viable'}
                         value={`${trace.rawAreaCm2.toFixed(1)} cm²`} />
                   <Cell label={isDonor ? 'Epithelialized' : 'Taken'}
                         value={`${trace.healedPct.toFixed(1)}%`} />
                 </div>
+
+                {/* The surface broken down, since a wound is rarely one thing. */}
+                {trace.measurement.layers.some((l) => l.regions > 0) && (
+                  <ul className="mt-2.5 space-y-1">
+                    {trace.measurement.layers.filter((l) => l.regions > 0).map((l) => (
+                      <li key={l.key} className="flex items-center gap-2 text-xs text-teal-900">
+                        <span className="w-2.5 h-2.5 rounded-sm shrink-0"
+                              style={{ background: LAYER_META[l.key].colour }} />
+                        <span className="flex-1 truncate">
+                          {isDonor ? LAYER_META[l.key].label : LAYER_META[l.key].recipientLabel}
+                          {l.regions > 1 ? ` (${l.regions} patches)` : ''}
+                        </span>
+                        <span className="tabular-nums">{l.areaCm2.toFixed(1)} cm²</span>
+                        <span className="tabular-nums font-semibold w-12 text-right">
+                          {l.pct.toFixed(1)}%
+                        </span>
+                      </li>
+                    ))}
+                    {trace.measurement.unclassifiedPct > 0.5 && (
+                      <li className="flex items-center gap-2 text-xs text-amber-800">
+                        <span className="w-2.5 h-2.5 rounded-sm shrink-0 bg-amber-300" />
+                        <span className="flex-1">Unclassified</span>
+                        <span className="tabular-nums">
+                          {trace.measurement.unclassifiedAreaCm2.toFixed(1)} cm²
+                        </span>
+                        <span className="tabular-nums font-semibold w-12 text-right">
+                          {trace.measurement.unclassifiedPct.toFixed(1)}%
+                        </span>
+                      </li>
+                    )}
+                  </ul>
+                )}
                 <p className="text-[11px] text-teal-800 mt-2">
                   Measured from your two outlines against the calibration marker
                   ({trace.pixelsPerCm.toFixed(1)} px/cm, {trace.calibrationSource}). Recorded as a
@@ -508,7 +549,7 @@ export function GraftCaptureFlow({ site, patientId, onClose, onSaved }: Props) {
                 className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-dashed border-teal-300 text-teal-700 text-sm font-medium hover:bg-teal-50"
               >
                 <Pencil className="w-4 h-4" />
-                Trace the site and the raw area to measure {isDonor ? 're-epithelialization' : 'graft take'}
+                Trace the site and its patches to measure {isDonor ? 're-epithelialization' : 'graft take'}
               </button>
             )}
 

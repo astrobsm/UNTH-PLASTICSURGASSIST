@@ -1,60 +1,64 @@
 /**
- * Trace the site, trace what is still raw, and let the app measure both.
+ * Trace the site, trace what is on it, and let the app measure everything.
  *
- * The clinician marks *where* the boundaries are — a judgement that needs the
- * patient in front of you, not a photograph — and everything numeric follows
- * from the calibration marker. Nobody types a length or a percentage.
+ * A wound surface is not raw-or-healed. Inside one outline there is usually
+ * granulating tissue here, a plaque of slough there, islands of new epithelium
+ * between them. Each is traced on its own layer, patch by patch, in as many
+ * steps as it takes — nothing is totalled until the clinician confirms.
  *
- * Shared between the wound and graft modules on purpose: a donor site, a
+ * The clinician marks *where* the boundaries are, which is a judgement that
+ * needs the patient in front of you. Everything numeric follows from the
+ * calibration marker: nobody types a length, an area or a percentage.
+ *
+ * Shared between the wound and graft modules on purpose. A donor site, a
  * grafted bed and an ordinary wound are the same problem, and two tracers
  * would be two definitions of an area.
  *
- * Coordinates are stored in image pixels throughout, never in screen pixels,
- * so zooming and panning cannot change a measurement, and an outline drawn on
- * a phone reopens correctly on a desktop.
+ * Coordinates are stored in image pixels, never screen pixels, so zooming and
+ * panning cannot change a measurement and an outline drawn on a phone reopens
+ * correctly on a desktop.
  */
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   Ruler, Undo2, Trash2, Check, X, Loader2, AlertTriangle, Hand,
-  Maximize2, Info, Pencil,
+  Maximize2, Info, Pencil, Layers as LayersIcon,
 } from 'lucide-react';
 import {
-  measureTrace, validateTrace, calibrationFromLine, simplify, polygonAreaPx,
-  pxAreaToCm2, type TracedRegion, type Point,
+  measureLayeredTrace, validateLayeredTrace, calibrationFromLine, simplify,
+  polygonAreaPx, pxAreaToCm2, TISSUE_LAYERS, LAYER_META,
+  type TracedRegion, type Point, type TissueLayerKey, type LayerRegions,
+  type LayeredMeasurement,
 } from '../../services/tracedRegions';
 
-type Mode = 'calibrate' | 'total' | 'raw' | 'pan';
+type Mode = 'calibrate' | 'pan' | 'total' | TissueLayerKey;
+
+const TOTAL_COLOUR = '#0ea5e9';
+const CAL_COLOUR = '#3b82f6';
 
 export interface TraceResult {
   totalRegions: TracedRegion[];
-  rawRegions: TracedRegion[];
+  layers: LayerRegions;
   pixelsPerCm: number;
   calibrationSource: 'detected' | 'traced';
+  measurement: LayeredMeasurement;
+  /** Convenience mirrors of the figures the caller stores. */
   totalAreaCm2: number;
   rawAreaCm2: number;
   healedAreaCm2: number;
   healedPct: number;
+  /** Percentages of the whole site, by tissue type. */
+  composition: Record<TissueLayerKey, number>;
 }
 
 interface Props {
-  /** The photograph, already captured. */
   imageUrl: string;
-  /** From automatic marker detection, when it succeeded. */
   detectedPixelsPerCm?: number | null;
-  /** 'donor' phrases the raw area as not-yet-epithelialized. */
   siteRole: 'donor' | 'recipient';
-  /** Known length of the calibration marker in the photograph. */
   markerCm?: number;
   onCancel: () => void;
   onConfirm: (result: TraceResult) => void;
 }
-
-const COLOURS = {
-  total: '#22c55e',
-  raw: '#ef4444',
-  calibrate: '#3b82f6',
-};
 
 export function RegionTracer({
   imageUrl, detectedPixelsPerCm, siteRole, markerCm = 5, onCancel, onConfirm,
@@ -66,16 +70,16 @@ export function RegionTracer({
   const [loaded, setLoaded] = useState(false);
   const [mode, setMode] = useState<Mode>(detectedPixelsPerCm ? 'total' : 'calibrate');
   const [totalRegions, setTotalRegions] = useState<TracedRegion[]>([]);
-  const [rawRegions, setRawRegions] = useState<TracedRegion[]>([]);
+  const [layers, setLayers] = useState<LayerRegions>({});
   const [draft, setDraft] = useState<Point[]>([]);
   const [calLine, setCalLine] = useState<[Point, Point] | null>(null);
   const [tracedPxPerCm, setTracedPxPerCm] = useState<number | null>(null);
   const [knownCm, setKnownCm] = useState(String(markerCm));
+  const [showPatches, setShowPatches] = useState(false);
 
-  // View transform, in image pixels per screen pixel.
   const view = useRef({ scale: 1, ox: 0, oy: 0 });
-  const [, forceRedraw] = useState(0);
-  const redraw = useCallback(() => forceRedraw((n) => n + 1), []);
+  const [, bump] = useState(0);
+  const redraw = useCallback(() => bump((n) => n + 1), []);
 
   const pointers = useRef<Map<number, Point>>(new Map());
   const pinch = useRef<{ dist: number; scale: number; mid: Point } | null>(null);
@@ -83,39 +87,37 @@ export function RegionTracer({
 
   const pixelsPerCm = tracedPxPerCm ?? detectedPixelsPerCm ?? null;
   const calibrationSource: 'detected' | 'traced' = tracedPxPerCm ? 'traced' : 'detected';
+  const isRecipient = siteRole === 'recipient';
+  const labelFor = (k: TissueLayerKey) =>
+    isRecipient ? LAYER_META[k].recipientLabel : LAYER_META[k].label;
 
   // ---- image ---------------------------------------------------------------
+
+  const fit = useCallback(() => {
+    const img = imgRef.current;
+    const wrap = wrapRef.current;
+    if (!img || !wrap) return;
+    const s = Math.min(wrap.clientWidth / img.width, wrap.clientHeight / img.height);
+    view.current = {
+      scale: s,
+      ox: (wrap.clientWidth - img.width * s) / 2,
+      oy: (wrap.clientHeight - img.height * s) / 2,
+    };
+    redraw();
+  }, [redraw]);
 
   useEffect(() => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => { imgRef.current = img; setLoaded(true); fit(); };
     img.src = imageUrl;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [imageUrl]);
-
-  const fit = useCallback(() => {
-    const img = imgRef.current;
-    const wrap = wrapRef.current;
-    if (!img || !wrap) return;
-    const cw = wrap.clientWidth;
-    const ch = wrap.clientHeight;
-    const s = Math.min(cw / img.width, ch / img.height);
-    view.current = {
-      scale: s,
-      ox: (cw - img.width * s) / 2,
-      oy: (ch - img.height * s) / 2,
-    };
-    redraw();
-  }, [redraw]);
+  }, [imageUrl, fit]);
 
   useEffect(() => {
     const onResize = () => fit();
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, [fit]);
-
-  // ---- coordinates ---------------------------------------------------------
 
   const toImage = useCallback((clientX: number, clientY: number): Point => {
     const r = canvasRef.current!.getBoundingClientRect();
@@ -148,18 +150,14 @@ export function RegionTracer({
     ctx.drawImage(img, 0, 0);
 
     const lw = 2 / scale;
-
     const paint = (pts: Point[], colour: string, fill: boolean, closed: boolean) => {
       if (pts.length < 2) return;
       ctx.beginPath();
       ctx.moveTo(pts[0].x, pts[0].y);
       for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
       if (closed) ctx.closePath();
-      if (fill && closed) {
-        ctx.fillStyle = `${colour}33`;
-        ctx.fill();
-      }
-      // A dark under-stroke, so the outline reads on pale skin and on slough
+      if (fill && closed) { ctx.fillStyle = `${colour}40`; ctx.fill(); }
+      // A dark under-stroke so the outline reads on pale skin and on slough
       // alike — the same reason the measurement overlay does it.
       ctx.lineWidth = lw * 2;
       ctx.strokeStyle = 'rgba(0,0,0,0.55)';
@@ -169,32 +167,36 @@ export function RegionTracer({
       ctx.stroke();
     };
 
-    for (const r of totalRegions) paint(r.points, COLOURS.total, true, true);
-    for (const r of rawRegions) paint(r.points, COLOURS.raw, true, true);
+    for (const r of totalRegions) paint(r.points, TOTAL_COLOUR, false, true);
+    for (const meta of TISSUE_LAYERS) {
+      for (const r of layers[meta.key] || []) paint(r.points, meta.colour, true, true);
+    }
     if (draft.length > 1) {
-      paint(draft, mode === 'raw' ? COLOURS.raw : COLOURS.total, false, false);
+      const colour = mode === 'total' ? TOTAL_COLOUR
+        : (LAYER_META as Record<string, { colour: string }>)[mode]?.colour ?? TOTAL_COLOUR;
+      paint(draft, colour, false, false);
     }
     if (calLine) {
-      paint([calLine[0], calLine[1]], COLOURS.calibrate, false, false);
+      paint([calLine[0], calLine[1]], CAL_COLOUR, false, false);
       for (const p of calLine) {
         ctx.beginPath();
         ctx.arc(p.x, p.y, lw * 3, 0, Math.PI * 2);
-        ctx.fillStyle = COLOURS.calibrate;
+        ctx.fillStyle = CAL_COLOUR;
         ctx.fill();
       }
     }
     ctx.restore();
   });
 
-  // ---- pointer handling ----------------------------------------------------
+  // ---- pointers ------------------------------------------------------------
 
   const onPointerDown = (e: React.PointerEvent) => {
     (e.target as Element).setPointerCapture?.(e.pointerId);
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
     if (pointers.current.size === 2) {
-      // Two fingers always means zoom and pan, whatever the mode — otherwise
-      // a clinician cannot get close enough to trace accurately.
+      // Two fingers always zoom and pan, whatever the mode — a clinician
+      // cannot trace a fine margin without getting close to it.
       drawing.current = false;
       setDraft([]);
       const [a, b] = [...pointers.current.values()];
@@ -205,16 +207,11 @@ export function RegionTracer({
       };
       return;
     }
-
     if (mode === 'pan') return;
 
     const p = toImage(e.clientX, e.clientY);
-    if (mode === 'calibrate') {
-      setCalLine([p, p]);
-      drawing.current = true;
-      return;
-    }
     drawing.current = true;
+    if (mode === 'calibrate') { setCalLine([p, p]); return; }
     setDraft([p]);
   };
 
@@ -228,7 +225,6 @@ export function RegionTracer({
       const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
       const next = Math.max(0.05, Math.min(20, pinch.current.scale * (dist / pinch.current.dist)));
       const r = canvasRef.current!.getBoundingClientRect();
-      // Keep the point under the fingers fixed while the scale changes.
       const before = {
         x: (pinch.current.mid.x - r.left - view.current.ox) / view.current.scale,
         y: (pinch.current.mid.y - r.top - view.current.oy) / view.current.scale,
@@ -249,11 +245,7 @@ export function RegionTracer({
 
     if (!drawing.current) return;
     const p = toImage(e.clientX, e.clientY);
-    if (mode === 'calibrate') {
-      setCalLine((l) => (l ? [l[0], p] : [p, p]));
-      return;
-    }
-    // Thin as we go: a dragged finger emits points a pixel apart.
+    if (mode === 'calibrate') { setCalLine((l) => (l ? [l[0], p] : [p, p])); return; }
     setDraft((d) => {
       const last = d[d.length - 1];
       if (last && Math.hypot(p.x - last.x, p.y - last.y) < 2 / view.current.scale) return d;
@@ -266,7 +258,6 @@ export function RegionTracer({
     if (pointers.current.size < 2) pinch.current = null;
     if (!drawing.current) return;
     drawing.current = false;
-
     if (mode === 'calibrate') return;
 
     const pts = simplify(draft, 2 / view.current.scale);
@@ -275,7 +266,7 @@ export function RegionTracer({
 
     const region: TracedRegion = { id: `${mode}-${Date.now()}`, points: pts };
     if (mode === 'total') setTotalRegions((r) => [...r, region]);
-    else setRawRegions((r) => [...r, region]);
+    else setLayers((l) => ({ ...l, [mode]: [...(l[mode as TissueLayerKey] || []), region] }));
   };
 
   const onWheel = (e: React.WheelEvent) => {
@@ -292,37 +283,48 @@ export function RegionTracer({
 
   const applyCalibration = () => {
     if (!calLine) return;
-    const cm = Number(knownCm);
-    const s = calibrationFromLine(calLine[0], calLine[1], cm);
+    const s = calibrationFromLine(calLine[0], calLine[1], Number(knownCm));
     if (s) { setTracedPxPerCm(s); setMode('total'); }
   };
 
   const measurement = useMemo(
-    () => (pixelsPerCm ? measureTrace(totalRegions, rawRegions, pixelsPerCm) : null),
-    [totalRegions, rawRegions, pixelsPerCm],
+    () => (pixelsPerCm ? measureLayeredTrace(totalRegions, layers, pixelsPerCm) : null),
+    [totalRegions, layers, pixelsPerCm],
   );
   const validation = useMemo(
-    () => validateTrace(totalRegions, rawRegions, pixelsPerCm),
-    [totalRegions, rawRegions, pixelsPerCm],
+    () => validateLayeredTrace(totalRegions, layers, pixelsPerCm),
+    [totalRegions, layers, pixelsPerCm],
   );
 
-  const undo = () => {
-    if (mode === 'raw' && rawRegions.length) setRawRegions((r) => r.slice(0, -1));
-    else if (totalRegions.length) setTotalRegions((r) => r.slice(0, -1));
-    else if (rawRegions.length) setRawRegions((r) => r.slice(0, -1));
+  const removeRegion = (layerKey: 'total' | TissueLayerKey, id: string) => {
+    if (layerKey === 'total') setTotalRegions((r) => r.filter((x) => x.id !== id));
+    else setLayers((l) => ({ ...l, [layerKey]: (l[layerKey] || []).filter((x) => x.id !== id) }));
   };
 
-  const rawLabel = siteRole === 'donor' ? 'Raw (not yet epithelialized)' : 'Open / non-viable graft';
-  const healedLabel = siteRole === 'donor' ? 'Re-epithelialization' : 'Graft take';
+  const undo = () => {
+    if (mode !== 'total' && mode !== 'pan' && mode !== 'calibrate') {
+      const cur = layers[mode as TissueLayerKey] || [];
+      if (cur.length) { setLayers((l) => ({ ...l, [mode]: cur.slice(0, -1) })); return; }
+    }
+    // Fall back to the most recently added patch anywhere.
+    for (const meta of [...TISSUE_LAYERS].reverse()) {
+      const cur = layers[meta.key] || [];
+      if (cur.length) { setLayers((l) => ({ ...l, [meta.key]: cur.slice(0, -1) })); return; }
+    }
+    if (totalRegions.length) setTotalRegions((r) => r.slice(0, -1));
+  };
+
+  const healedLabel = isRecipient ? 'Graft take' : 'Re-epithelialization';
+  const patchCount = TISSUE_LAYERS.reduce((n, m) => n + (layers[m.key]?.length ?? 0), 0);
 
   return (
     <div className="fixed inset-0 z-50 bg-gray-900 flex flex-col">
       <header className="flex items-center gap-3 px-4 py-2.5 bg-gray-800 text-white shrink-0">
         <Pencil className="w-5 h-5 text-teal-400 shrink-0" />
         <div className="min-w-0 flex-1">
-          <h2 className="font-semibold text-sm truncate">Trace the site</h2>
-          <p className="text-[11px] text-gray-400">
-            Outline the whole {siteRole === 'donor' ? 'donor site' : 'graft'}, then outline what is still raw
+          <h2 className="font-semibold text-sm truncate">Trace the surface</h2>
+          <p className="text-[11px] text-gray-400 truncate">
+            Outline the whole {isRecipient ? 'graft' : 'donor site'}, then mark each patch on it
           </p>
         </div>
         <button onClick={onCancel} className="p-1.5 rounded hover:bg-white/10" aria-label="Cancel">
@@ -330,8 +332,6 @@ export function RegionTracer({
         </button>
       </header>
 
-      {/* The canvas. touch-none so the browser does not scroll the page
-          out from under a trace. */}
       <div ref={wrapRef} className="relative flex-1 min-h-0 bg-black">
         {!loaded && (
           <div className="absolute inset-0 flex items-center justify-center">
@@ -349,15 +349,19 @@ export function RegionTracer({
           onWheel={onWheel}
         />
 
-        {/* Live readout, over the image so the clinician sees the number
-            change as they trace. */}
-        {measurement && (
-          <div className="absolute top-2 left-2 rounded-lg bg-black/70 text-white px-3 py-2 text-xs space-y-0.5 pointer-events-none">
-            <p>Total <strong className="tabular-nums">{measurement.totalAreaCm2.toFixed(1)} cm²</strong></p>
-            <p>Raw <strong className="tabular-nums">{measurement.rawAreaCm2.toFixed(1)} cm²</strong></p>
+        {/* The running total, over the image, so the number moves as they trace. */}
+        {measurement && measurement.basis !== 'none' && (
+          <div className="absolute top-2 left-2 rounded-lg bg-black/75 text-white px-3 py-2 text-xs space-y-0.5 pointer-events-none">
+            <p>Site <strong className="tabular-nums">{measurement.totalAreaCm2.toFixed(1)} cm²</strong></p>
+            <p>Open <strong className="tabular-nums">{measurement.openAreaCm2.toFixed(1)} cm²</strong></p>
             <p className="text-teal-300">
               {healedLabel} <strong className="tabular-nums">{measurement.healedPct.toFixed(1)}%</strong>
             </p>
+            {measurement.unclassifiedPct > 0.5 && (
+              <p className="text-amber-300">
+                Unclassified <strong className="tabular-nums">{measurement.unclassifiedPct.toFixed(1)}%</strong>
+              </p>
+            )}
           </div>
         )}
 
@@ -368,8 +372,7 @@ export function RegionTracer({
         )}
       </div>
 
-      {/* Controls */}
-      <div className="bg-gray-800 text-white px-3 py-3 space-y-3 shrink-0">
+      <div className="bg-gray-800 text-white px-3 py-3 space-y-3 shrink-0 max-h-[52vh] overflow-y-auto">
         {/* Scale first: nothing can be measured without it. */}
         <div className="flex flex-wrap items-center gap-2">
           <span className="flex items-center gap-1.5 text-xs shrink-0">
@@ -381,10 +384,10 @@ export function RegionTracer({
           </span>
           {mode === 'calibrate' ? (
             <div className="flex items-center gap-2 ml-auto">
-              <label className="text-xs text-gray-300">Marker length</label>
               <input
                 type="number" step="0.1" min="0.1" value={knownCm}
                 onChange={(e) => setKnownCm(e.target.value)}
+                aria-label="Marker length in centimetres"
                 className="w-20 px-2 py-1 rounded bg-gray-700 text-white text-sm"
               />
               <span className="text-xs text-gray-400">cm</span>
@@ -397,22 +400,18 @@ export function RegionTracer({
               </button>
             </div>
           ) : (
-            <button
-              onClick={() => setMode('calibrate')}
-              className="ml-auto text-xs underline text-gray-300 hover:text-white"
-            >
+            <button onClick={() => setMode('calibrate')} className="ml-auto text-xs underline text-gray-300 hover:text-white">
               {pixelsPerCm ? 'Re-set the scale by hand' : 'Set the scale by hand'}
             </button>
           )}
         </div>
 
-        {/* What is being drawn. */}
-        <div className="grid grid-cols-4 gap-1.5">
-          <ModeButton active={mode === 'total'} onClick={() => setMode('total')}
-                      colour={COLOURS.total} label="Whole site" count={totalRegions.length} />
-          <ModeButton active={mode === 'raw'} onClick={() => setMode('raw')}
-                      colour={COLOURS.raw} label={siteRole === 'donor' ? 'Raw area' : 'Open area'}
-                      count={rawRegions.length} />
+        {/* The site outline, then the tissue layers. */}
+        <div className="grid grid-cols-3 gap-1.5">
+          <LayerButton
+            active={mode === 'total'} onClick={() => setMode('total')}
+            colour={TOTAL_COLOUR} label="Whole site" count={totalRegions.length} outlineOnly
+          />
           <button
             onClick={() => setMode('pan')}
             className={`flex flex-col items-center gap-0.5 py-2 rounded-lg text-[11px] ${
@@ -426,13 +425,86 @@ export function RegionTracer({
           </button>
         </div>
 
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+          {TISSUE_LAYERS.map((meta) => (
+            <LayerButton
+              key={meta.key}
+              active={mode === meta.key}
+              onClick={() => setMode(meta.key)}
+              colour={meta.colour}
+              label={labelFor(meta.key)}
+              count={layers[meta.key]?.length ?? 0}
+            />
+          ))}
+        </div>
+
+        {/* Composition, once anything has been marked. */}
+        {measurement && measurement.basis !== 'none' && (
+          <div className="rounded-lg bg-gray-700/60 p-2.5 space-y-1">
+            <p className="text-[11px] font-semibold text-gray-300 uppercase tracking-wide">
+              Surface composition
+            </p>
+            {measurement.layers.filter((l) => l.regions > 0).map((l) => (
+              <div key={l.key} className="flex items-center gap-2 text-[11px]">
+                <span className="w-3 h-3 rounded-sm shrink-0" style={{ background: LAYER_META[l.key].colour }} />
+                <span className="flex-1 truncate">{labelFor(l.key)}</span>
+                <span className="tabular-nums text-gray-300">{l.areaCm2.toFixed(1)} cm²</span>
+                <span className="tabular-nums font-semibold w-12 text-right">{l.pct.toFixed(1)}%</span>
+              </div>
+            ))}
+            <p className="text-[11px] text-gray-400 pt-1 border-t border-gray-600">
+              {measurement.basis === 'inferred-from-open'
+                && 'Everything inside the outline that is not marked open is counted as healed.'}
+              {measurement.basis === 'inferred-from-healed'
+                && 'Everything inside the outline that is not marked healed is counted as open.'}
+              {measurement.basis === 'traced-both'
+                && 'Both sides traced, so nothing is inferred; any remainder is left unclassified.'}
+            </p>
+          </div>
+        )}
+
+        {/* Every patch, so one can be removed without undoing the rest. */}
+        {patchCount > 0 && (
+          <div>
+            <button
+              onClick={() => setShowPatches((v) => !v)}
+              className="flex items-center gap-1.5 text-[11px] text-gray-300 hover:text-white"
+              aria-expanded={showPatches}
+            >
+              <LayersIcon className="w-3.5 h-3.5" />
+              {showPatches ? 'Hide' : 'Show'} the {patchCount} patch{patchCount === 1 ? '' : 'es'}
+            </button>
+            {showPatches && (
+              <ul className="mt-1.5 space-y-1 max-h-32 overflow-y-auto">
+                {TISSUE_LAYERS.flatMap((meta) =>
+                  (layers[meta.key] || []).map((r, i) => (
+                    <li key={r.id} className="flex items-center gap-2 text-[11px] bg-gray-700/50 rounded px-2 py-1">
+                      <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: meta.colour }} />
+                      <span className="flex-1 truncate">{labelFor(meta.key)} #{i + 1}</span>
+                      <span className="tabular-nums text-gray-300">
+                        {pixelsPerCm
+                          ? `${pxAreaToCm2(polygonAreaPx(r.points), pixelsPerCm).toFixed(1)} cm²`
+                          : '—'}
+                      </span>
+                      <button
+                        onClick={() => removeRegion(meta.key, r.id)}
+                        className="p-0.5 rounded hover:bg-white/10 shrink-0"
+                        aria-label={`Remove ${labelFor(meta.key)} patch ${i + 1}`}
+                      >
+                        <X className="w-3.5 h-3.5 text-gray-400" />
+                      </button>
+                    </li>
+                  )))}
+              </ul>
+            )}
+          </div>
+        )}
+
         <p className="text-[11px] text-gray-400 flex items-start gap-1.5">
           <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
           Drag to draw; the outline closes itself. Pinch or scroll to zoom in before tracing a
-          fine margin. Several patches can be drawn on each layer.
-          {siteRole === 'donor'
-            ? ' Leave the raw layer empty once the donor site has fully epithelialized.'
-            : ' Leave the open layer empty once the graft has fully taken.'}
+          fine margin. Add as many patches to each layer as the surface has — nothing is
+          totalled until you confirm.
         </p>
 
         {!validation.ok && validation.problems.length > 0 && (
@@ -448,14 +520,14 @@ export function RegionTracer({
         <div className="flex gap-2">
           <button
             onClick={undo}
-            disabled={!totalRegions.length && !rawRegions.length}
+            disabled={!totalRegions.length && !patchCount}
             className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-gray-700 text-sm font-medium disabled:opacity-40"
           >
             <Undo2 className="w-4 h-4" /> Undo
           </button>
           <button
-            onClick={() => { setTotalRegions([]); setRawRegions([]); setDraft([]); }}
-            disabled={!totalRegions.length && !rawRegions.length}
+            onClick={() => { setTotalRegions([]); setLayers({}); setDraft([]); }}
+            disabled={!totalRegions.length && !patchCount}
             className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-gray-700 text-sm font-medium disabled:opacity-40"
           >
             <Trash2 className="w-4 h-4" /> Clear
@@ -463,19 +535,25 @@ export function RegionTracer({
           <button
             onClick={() => {
               if (!measurement || !pixelsPerCm) return;
+              const composition = Object.fromEntries(
+                measurement.layers.map((l) => [l.key, l.pct]),
+              ) as Record<TissueLayerKey, number>;
               onConfirm({
-                totalRegions, rawRegions, pixelsPerCm, calibrationSource,
+                totalRegions, layers, pixelsPerCm, calibrationSource, measurement,
                 totalAreaCm2: measurement.totalAreaCm2,
-                rawAreaCm2: measurement.rawAreaCm2,
+                rawAreaCm2: measurement.openAreaCm2,
                 healedAreaCm2: measurement.healedAreaCm2,
                 healedPct: measurement.healedPct,
+                composition,
               });
             }}
             disabled={!validation.ok || !measurement}
             className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-teal-600 font-semibold disabled:opacity-40"
           >
             <Check className="w-4 h-4" />
-            {measurement ? `Use ${measurement.healedPct.toFixed(1)}% ${healedLabel.toLowerCase()}` : 'Confirm'}
+            {measurement && measurement.basis !== 'none'
+              ? `Use ${measurement.healedPct.toFixed(1)}% ${healedLabel.toLowerCase()}`
+              : 'Confirm'}
           </button>
         </div>
       </div>
@@ -483,22 +561,24 @@ export function RegionTracer({
   );
 }
 
-function ModeButton({ active, onClick, colour, label, count }: {
-  active: boolean; onClick: () => void; colour: string; label: string; count: number;
+function LayerButton({ active, onClick, colour, label, count, outlineOnly }: {
+  active: boolean; onClick: () => void; colour: string; label: string;
+  count: number; outlineOnly?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
-      className={`flex flex-col items-center gap-0.5 py-2 rounded-lg text-[11px] ${
+      className={`flex flex-col items-center gap-0.5 py-2 px-1 rounded-lg text-[11px] leading-tight ${
         active ? 'bg-white text-gray-900 font-semibold' : 'bg-gray-700 text-white'
       }`}
     >
-      <span className="w-4 h-4 rounded-sm border-2" style={{ borderColor: colour, background: `${colour}44` }} />
-      {label}{count > 0 ? ` (${count})` : ''}
+      <span
+        className="w-4 h-4 rounded-sm border-2 shrink-0"
+        style={{ borderColor: colour, background: outlineOnly ? 'transparent' : `${colour}55` }}
+      />
+      <span className="text-center">{label}{count > 0 ? ` (${count})` : ''}</span>
     </button>
   );
 }
 
-/** Re-exported so callers need one import for the tracer and its geometry. */
-export { polygonAreaPx, pxAreaToCm2 };
 export default RegionTracer;
