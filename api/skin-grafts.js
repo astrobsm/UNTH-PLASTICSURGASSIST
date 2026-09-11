@@ -25,6 +25,9 @@ import {
   classifyTrend, predictCompletion, assessComparability, deriveAlerts,
   overdueFollowUp,
 } from './_lib/graftAnalysis.js';
+import {
+  recommendationsFor, GENERAL_HEALING_MEASURES,
+} from './_lib/woundRecommendations.js';
 
 const WRITE_ROLES = ['admin', 'consultant', 'senior_registrar', 'registrar', 'house_officer', 'nurse'];
 
@@ -159,18 +162,42 @@ async function getEpisode(id, res) {
     const kind = site.site_role === 'recipient' ? 'recipient' : 'donor';
     site.rate = healingRate(points, num(site.baseline_area_cm2));
     site.trend = classifyTrend(points, { kind });
-    // A graft is not expected to "complete"; only a donor site closes.
-    site.prediction = kind === 'donor' ? predictCompletion(points) : null;
+    // Both kinds get a projection now. A donor site closes by epithelializing;
+    // a recipient bed closes as the unhealed part of the graft takes or is
+    // covered by advancing epithelium. Either way the clinician wants to know
+    // when this wound will be finished with.
+    site.prediction = predictCompletion(points);
 
     const last = site.series[site.series.length - 1];
     site.overdue = last ? overdueFollowUp(last.capturedAt, new Date().toISOString()) : null;
+
+    // What the measurements suggest doing. Advisory, and each item carries the
+    // measurement behind it — see woundRecommendations.
+    const daysSince = last
+      ? Math.floor((Date.now() - new Date(last.capturedAt).getTime()) / 86400000)
+      : null;
+    site.recommendations = recommendationsFor({
+      siteRole: site.site_role,
+      postoperativeDay: last ? last.day : null,
+      closurePct: last ? last.closurePct : null,
+      composition: last ? last.composition : null,
+      trend: site.trend,
+      rate: site.rate,
+      prediction: site.prediction,
+      exceededBaseline: last ? !!last.exceededBaseline : false,
+      daysSinceLastPhotograph: daysSince,
+      imageQualityScore: last ? last.imageQualityScore : null,
+      scaleReliable: last ? !!last.scaleReliable : true,
+    });
   }
 
   const alerts = (await query(
     `SELECT * FROM graft_alerts WHERE episode_id = $1 ORDER BY created_at DESC LIMIT 100`, [id],
   )).rows;
 
-  return res.status(200).json({ episode, sites, alerts });
+  return res.status(200).json({
+    episode, sites, alerts, generalMeasures: GENERAL_HEALING_MEASURES,
+  });
 }
 
 /**
@@ -187,7 +214,9 @@ async function seriesFor(site, episode) {
             a.ai_confidence, a.model_name, a.model_version,
             g.id AS analysis_id, g.postoperative_day, g.measured_area_cm2,
             g.areal_take_pct, g.open_area_cm2, g.viability_pct, g.epithelialized_pct,
-            g.tissue_status, g.tissue_reason, g.comparable, g.comparability_reason
+            g.tissue_status, g.tissue_reason, g.comparable, g.comparability_reason,
+            a.granulation_pct, a.slough_pct, a.necrotic_pct, a.epithelial_pct,
+            a.tissue_source
      FROM wound_assessments a
      LEFT JOIN graft_site_analyses g ON g.assessment_id = a.id AND g.site_id = $2
      WHERE a.wound_id = $1
@@ -220,6 +249,21 @@ async function seriesFor(site, episode) {
     epithelializedPct: num(r.epithelialized_pct),
     comparable: r.comparable,
     comparabilityReason: r.comparability_reason,
+    // The traced surface composition, where the clinician drew one. Null
+    // throughout when they did not, which the recommendation rules treat as
+    // "not known" rather than "none present".
+    composition: r.tissue_source === 'clinician' ? {
+      granulation: num(r.granulation_pct),
+      slough: num(r.slough_pct),
+      necrotic: num(r.necrotic_pct),
+      epithelial: num(r.epithelial_pct),
+    } : null,
+    tissueSource: r.tissue_source || 'none',
+    // Breakdown past the original margin. Derived here rather than stored,
+    // because it is a comparison against the site's locked baseline and that
+    // baseline can be re-locked.
+    exceededBaseline: num(site.baseline_area_cm2) > 0
+      && num(r.open_area_cm2 ?? r.area_cm2) > num(site.baseline_area_cm2),
   }));
 }
 

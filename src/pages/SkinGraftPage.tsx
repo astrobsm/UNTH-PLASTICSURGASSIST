@@ -14,9 +14,12 @@ import {
   RefreshCw, Info, ChevronRight, Plus,
 } from 'lucide-react';
 import {
-  skinGraftService, type GraftEpisode, type GraftSite, type GraftAlert, type GraftPlan,
+  skinGraftService, type GraftEpisode, type GraftSite, type GraftAlert,
+  type GraftPlan, type GeneralMeasure,
 } from '../services/skinGraftService';
 import { GraftSitePanel } from '../components/graft/GraftSitePanel';
+import { GraftProgressChart } from '../components/graft/GraftProgressChart';
+import { HealingRecommendations } from '../components/graft/HealingRecommendations';
 import { GraftCaptureFlow } from '../components/graft/GraftCaptureFlow';
 import { NewGraftEpisode } from '../components/graft/NewGraftEpisode';
 import {
@@ -172,6 +175,7 @@ function EpisodeView({ id }: { id: string }) {
   const [episode, setEpisode] = useState<GraftEpisode | null>(null);
   const [sites, setSites] = useState<GraftSite[]>([]);
   const [alerts, setAlerts] = useState<GraftAlert[]>([]);
+  const [generalMeasures, setGeneralMeasures] = useState<GeneralMeasure[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -185,6 +189,7 @@ function EpisodeView({ id }: { id: string }) {
       setEpisode(r.episode);
       setSites(r.sites);
       setAlerts(r.alerts);
+      setGeneralMeasures(r.generalMeasures ?? []);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load this graft episode.');
     } finally {
@@ -299,12 +304,26 @@ function EpisodeView({ id }: { id: string }) {
           </section>
         )}
 
-        {recipients.map((s) => (
-          <GraftSitePanel key={s.id} site={s} onLockBaseline={lockBaseline} onCapture={setCapturing} />
+        {/* The whole episode on one time axis, before the per-site detail —
+            a patient with a graft and its donor site is one healing story. */}
+        {sites.length > 0 && <GraftProgressChart sites={sites} />}
+
+        {[...recipients, ...donors].map((s) => (
+          <div key={s.id} className="space-y-3">
+            <GraftSitePanel site={s} onLockBaseline={lockBaseline} onCapture={setCapturing} />
+            {(s.recommendations?.length ?? 0) > 0 && (
+              <HealingRecommendations
+                recommendations={s.recommendations}
+                siteLabel={s.site_label || (s.site_role === 'donor' ? 'Donor site' : 'Recipient site')}
+              />
+            )}
+          </div>
         ))}
-        {donors.map((s) => (
-          <GraftSitePanel key={s.id} site={s} onLockBaseline={lockBaseline} onCapture={setCapturing} />
-        ))}
+
+        {/* Standing measures once, at the end, rather than repeated per site. */}
+        {generalMeasures.length > 0 && sites.length > 0 && (
+          <HealingRecommendations recommendations={[]} generalMeasures={generalMeasures} />
+        )}
 
         {sites.length === 0 && (
           <div className="bg-white border rounded-2xl p-8 text-center text-sm text-gray-500">

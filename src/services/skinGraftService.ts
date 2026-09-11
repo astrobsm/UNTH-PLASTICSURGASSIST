@@ -34,6 +34,13 @@ export interface SeriesPoint {
   day: number | null;
   openAreaCm2: number | null;
   closurePct: number | null;
+  /** Traced surface composition, null when the clinician did not trace one. */
+  composition: {
+    granulation: number | null; slough: number | null;
+    necrotic: number | null; epithelial: number | null;
+  } | null;
+  tissueSource?: 'none' | 'clinician' | 'model';
+  exceededBaseline?: boolean;
   imageUrl?: string | null;
   overlayUrl?: string | null;
   imageQualityScore: number | null;
@@ -71,6 +78,15 @@ export interface Prediction {
   basis?: string;
 }
 
+export interface Recommendation {
+  priority: 'urgent' | 'high' | 'routine' | 'information';
+  code: string;
+  text: string;
+  basis: string;
+}
+
+export interface GeneralMeasure { area: string; text: string }
+
 export interface GraftSite {
   id: number;
   episode_id: number;
@@ -90,6 +106,7 @@ export interface GraftSite {
   trend: Trend;
   prediction: Prediction | null;
   overdue: { severity: string; message: string; days: number } | null;
+  recommendations: Recommendation[];
 }
 
 export interface GraftAlert {
@@ -119,7 +136,10 @@ export const skinGraftService = {
     return apiClient.get(`/skin-grafts?patientId=${encodeURIComponent(String(patientId))}`);
   },
 
-  episode(id: number | string): Promise<{ episode: GraftEpisode; sites: GraftSite[]; alerts: GraftAlert[] }> {
+  episode(id: number | string): Promise<{
+    episode: GraftEpisode; sites: GraftSite[]; alerts: GraftAlert[];
+    generalMeasures?: GeneralMeasure[];
+  }> {
     return apiClient.get(`/skin-grafts/episode/${encodeURIComponent(String(id))}`);
   },
 
