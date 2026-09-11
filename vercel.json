@@ -68,6 +68,10 @@
       "destination": "/api/students"
     },
     {
+      "source": "/api/skin-grafts/:path*",
+      "destination": "/api/skin-grafts"
+    },
+    {
       "source": "/api/mdt/:path*",
       "destination": "/api/mdt"
     },

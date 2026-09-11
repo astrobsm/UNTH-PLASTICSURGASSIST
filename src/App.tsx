@@ -96,6 +96,7 @@ const Procedures = lazyWithRetry(() => import('./pages/Procedures'));
 const PreSurgicalConferencePage = lazyWithRetry(() => import('./pages/PreSurgicalConferencePage'));
 const WoundCarePage = lazyWithRetry(() => import('./pages/WoundCarePage'));
 const WoundProgressMonitorPage = lazyWithRetry(() => import('./pages/WoundProgressMonitorPage'));
+const SkinGraftPage = lazyWithRetry(() => import('./pages/SkinGraftPage'));
 const TumorBoardPage = lazyWithRetry(() => import('./pages/TumorBoardPage'));
 const ClinicianAssistantPage = lazyWithRetry(() => import('./pages/ClinicianAssistantPage'));
 const KeloidCarePage = lazyWithRetry(() => import('./pages/KeloidCarePage'));
@@ -406,6 +407,10 @@ function App() {
               <Route path="/substance-detox" element={<SubstanceDetoxPage />} />
               <Route path="/wound-care" element={<WoundCarePage />} />
               <Route path="/wound-monitor" element={<WoundProgressMonitorPage />} />
+              {/* Photographic skin graft monitoring. The episode id selects
+                  one episode; without it the unit's active grafts are listed. */}
+              <Route path="/skin-grafts" element={<SkinGraftPage />} />
+              <Route path="/skin-grafts/:episodeId" element={<SkinGraftPage />} />
               <Route path="/tumor-board" element={<TumorBoardPage />} />
               <Route path="/clinician-assistant" element={<ClinicianAssistantPage />} />
               <Route path="/keloid-care" element={<KeloidCarePage />} />
