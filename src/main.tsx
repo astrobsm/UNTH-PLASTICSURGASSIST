@@ -365,6 +365,21 @@ setTimeout(async () => {
     console.error('Error initializing WACS/MCQ services:', error);
   }
 
+  // ── Tissue-classification model, if this deployment has declared one ──
+  //
+  // Registers nothing unless VITE_TISSUE_MODEL_URL and its declaration are
+  // set. With nothing configured the null provider stands and graft viability
+  // is reported as unavailable rather than guessed — see
+  // docs/TISSUE_MODEL_EVIDENCE.md for why that is the state today.
+  try {
+    const { initTissueModelFromEnv } = await import('./services/tissueModelProvider');
+    if (initTissueModelFromEnv()) console.log('Tissue segmentation model registered');
+  } catch (error) {
+    // A model that will not load must not stop the app; the areal
+    // measurements, which are what the clinician relies on, are unaffected.
+    console.error('Error registering the tissue model:', error);
+  }
+
   // ── Cross-device sync: Start background pull/push every 2 min ──
   try {
     const { dataSyncService } = await import('./services/dataSyncService');

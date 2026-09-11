@@ -23,6 +23,7 @@ import { DocumenterLink, ConsultantCommentSection, RecommendationsPanel } from '
 import { generateVitalSignRecommendations, generateLabRecommendations } from '../utils/clinicalUtils';
 import { PrescriptionBuilder } from '../components/prescriptions/PrescriptionBuilder';
 import type { PrescriptionItem } from '../services/prescriptionPrintService';
+import { PatientGraftEpisodes } from '../components/graft/PatientGraftEpisodes';
 import {
   Activity, Camera, Calendar, FileText, Plus, 
   Scissors, ClipboardCheck, Pill, Heart, Image,
@@ -45,6 +46,7 @@ const ENCOUNTER_SECTIONS = [
   { id: 'mdt-care', name: 'MDT Care', icon: '🤝' },
   { id: 'clinical-photos', name: 'Clinical Photos', icon: '📷' },
   { id: 'wound-monitor', name: 'WoundProgress Monitor', icon: '🩹' },
+  { id: 'skin-grafts', name: 'Skin Graft Monitoring', icon: '🧬' },
   { id: 'fluid-io', name: 'Fluid I/O', icon: '💧' },
   { id: 'blood-transfusion', name: 'Blood Transfusion', icon: '🩸' },
   { id: 'blood-glucose', name: 'Blood Glucose', icon: '🩺' },
@@ -385,6 +387,8 @@ export const PatientProfile: React.FC = () => {
         return <InvestigationsTab patientId={id!} hospitalNumber={hospitalNumber} patientName={patientName} userName={user?.name || 'Unknown'} />;
       case 'treatment-plans':
         return <TreatmentPlansTab patientId={id!} patientName={patientName} navigate={navigate} />;
+      case 'skin-grafts':
+        return <PatientGraftEpisodes patientId={id!} hospitalNumber={hospitalNumber} />;
       case 'prescriptions':
         return (
           <PrescriptionBuilder

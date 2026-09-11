@@ -11,12 +11,14 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Layers, Loader2, AlertTriangle, ArrowLeft, Calculator, Bell, Check,
-  RefreshCw, Info, ChevronRight,
+  RefreshCw, Info, ChevronRight, Plus,
 } from 'lucide-react';
 import {
   skinGraftService, type GraftEpisode, type GraftSite, type GraftAlert, type GraftPlan,
 } from '../services/skinGraftService';
 import { GraftSitePanel } from '../components/graft/GraftSitePanel';
+import { GraftCaptureFlow } from '../components/graft/GraftCaptureFlow';
+import { NewGraftEpisode } from '../components/graft/NewGraftEpisode';
 
 export function SkinGraftPage() {
   const { episodeId } = useParams<{ episodeId?: string }>();
@@ -32,6 +34,10 @@ function UnitDashboard() {
   const [episodes, setEpisodes] = useState<GraftEpisode[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  // An episode belongs to a patient, so starting one needs a patient named.
+  // Asked for here rather than assumed, because this dashboard is the unit's
+  // and not any one patient's.
+  const [newFor, setNewFor] = useState<string>('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -59,13 +65,24 @@ function UnitDashboard() {
                 Graft take and donor healing, measured from standardized photographs
               </p>
             </div>
-            <button
-              onClick={() => void load()}
-              className="ml-auto p-2 rounded-lg bg-white/10 hover:bg-white/20"
-              aria-label="Reload"
-            >
-              <RefreshCw className="w-4 h-4" />
-            </button>
+            <div className="ml-auto flex items-center gap-2">
+              <button
+                onClick={() => {
+                  const id = window.prompt('Patient ID to start a graft episode for:');
+                  if (id && id.trim()) setNewFor(id.trim());
+                }}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white text-teal-700 text-sm font-semibold hover:bg-teal-50"
+              >
+                <Plus className="w-4 h-4" /> New episode
+              </button>
+              <button
+                onClick={() => void load()}
+                className="p-2 rounded-lg bg-white/10 hover:bg-white/20"
+                aria-label="Reload"
+              >
+                <RefreshCw className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -122,6 +139,14 @@ function UnitDashboard() {
           </ul>
         )}
       </main>
+
+      {newFor && (
+        <NewGraftEpisode
+          patientId={newFor}
+          onClose={() => setNewFor('')}
+          onCreated={(id) => { setNewFor(''); navigate(`/skin-grafts/${id}`); }}
+        />
+      )}
     </div>
   );
 }
@@ -138,6 +163,7 @@ function EpisodeView({ id }: { id: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [capturing, setCapturing] = useState<GraftSite | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -262,10 +288,10 @@ function EpisodeView({ id }: { id: string }) {
         )}
 
         {recipients.map((s) => (
-          <GraftSitePanel key={s.id} site={s} onLockBaseline={lockBaseline} />
+          <GraftSitePanel key={s.id} site={s} onLockBaseline={lockBaseline} onCapture={setCapturing} />
         ))}
         {donors.map((s) => (
-          <GraftSitePanel key={s.id} site={s} onLockBaseline={lockBaseline} />
+          <GraftSitePanel key={s.id} site={s} onLockBaseline={lockBaseline} onCapture={setCapturing} />
         ))}
 
         {sites.length === 0 && (
@@ -285,6 +311,15 @@ function EpisodeView({ id }: { id: string }) {
           replaces clinical examination.
         </p>
       </main>
+
+      {capturing && episode && (
+        <GraftCaptureFlow
+          site={capturing}
+          patientId={episode.patient_id}
+          onClose={() => setCapturing(null)}
+          onSaved={() => { void load(); }}
+        />
+      )}
     </div>
   );
 }
