@@ -153,19 +153,46 @@ export function GraftSitePanel({ site, onCapture, onLockBaseline, className = ''
                 {latest.tissueReason
                   || 'No validated tissue-classification model is registered on this deployment.'}{' '}
                 The areas and {closureLabel.toLowerCase()} above are measured from the photograph
-                and are unaffected; the character of the remaining open area is a clinical judgement.
+                and are unaffected. To measure {isDonor ? 're-epithelialization' : 'graft take'} directly,
+                trace the whole site and the raw area within it when photographing — the app then
+                measures both against the calibration marker.
               </Note>
+            ) : latest.tissueStatus === 'clinician' ? (
+              /* Traced by the clinician against the calibration marker. Both
+                 outlines come from this one photograph, so the proportion
+                 stands on its own and does not depend on the baseline. */
+              <div className="rounded-xl border border-teal-200 bg-teal-50 p-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <Metric
+                    label={isDonor ? 'Epithelialized (traced)' : 'Graft taken (traced)'}
+                    value={
+                      (isDonor ? latest.epithelializedPct : latest.viabilityPct) != null
+                        ? `${(isDonor ? latest.epithelializedPct : latest.viabilityPct)!.toFixed(1)}%`
+                        : '—'
+                    }
+                    emphasis
+                  />
+                  <Metric
+                    label={isDonor ? 'Still raw' : 'Open / non-viable'}
+                    value={latest.openAreaCm2 != null ? `${latest.openAreaCm2.toFixed(1)} cm²` : '—'}
+                  />
+                </div>
+                <p className="text-[11px] text-teal-800 mt-2">
+                  {latest.tissueReason
+                    || 'Outlines drawn by the clinician; areas measured against the calibration marker.'}
+                </p>
+              </div>
             ) : (
               <div className="grid grid-cols-2 gap-3">
                 <Metric
                   label="AI-estimated viable"
                   value={latest.viabilityPct != null ? `${latest.viabilityPct.toFixed(1)}%` : '—'}
-                  hint="AI estimate"
+                  hint="AI estimate — not clinically validated"
                 />
                 <Metric
                   label="AI-estimated epithelialized"
                   value={latest.epithelializedPct != null ? `${latest.epithelializedPct.toFixed(1)}%` : '—'}
-                  hint="AI estimate"
+                  hint="AI estimate — not clinically validated"
                 />
               </div>
             )}

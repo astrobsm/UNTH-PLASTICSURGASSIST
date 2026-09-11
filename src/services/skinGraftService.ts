@@ -158,6 +158,13 @@ export const skinGraftService = {
     siteId: number; assessmentId: number;
     pixelsPerCm?: number; previousPixelsPerCm?: number;
     tissueStatus?: string; tissueReason?: string;
+    /**
+     * A clinician's tracing of the whole site and the raw area within it.
+     * When present the server derives the proportion from these two areas
+     * rather than from the locked baseline, because both come from the same
+     * photograph.
+     */
+    tracedTotalAreaCm2?: number; tracedRawAreaCm2?: number; tracedHealedPct?: number;
   }): Promise<{
     analysis: any; closure: any; comparability: { comparable: boolean; reason: string };
     trend: Trend; prediction: Prediction | null; alerts: GraftAlert[]; day: number | null;

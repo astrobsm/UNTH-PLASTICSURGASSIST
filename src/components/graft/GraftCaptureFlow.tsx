@@ -28,7 +28,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Camera, X, Loader2, CheckCircle2, AlertTriangle, RefreshCw, Ruler,
-  Upload, Save, ShieldAlert, Info,
+  Upload, Save, ShieldAlert, Info, Pencil,
 } from 'lucide-react';
 import { aiWoundMeasurement } from '../../services/aiWoundMeasurement';
 import { assessImageQuality, type ImageQualityReport } from '../../services/woundImageQuality';
@@ -36,6 +36,7 @@ import { renderContourOverlay } from '../../services/woundOverlayRenderer';
 import { putLocalImage } from '../../services/woundImageStore';
 import { addAssessment } from '../../services/woundMonitorService';
 import { skinGraftService, type GraftSite } from '../../services/skinGraftService';
+import { RegionTracer, type TraceResult } from '../wound/RegionTracer';
 
 const PIPELINE_VERSION = '2026.08-cv1';
 
@@ -51,7 +52,7 @@ interface Props {
   onSaved: () => void;
 }
 
-type Stage = 'capture' | 'analysing' | 'review' | 'saving';
+type Stage = 'capture' | 'analysing' | 'review' | 'tracing' | 'saving';
 
 export function GraftCaptureFlow({ site, patientId, onClose, onSaved }: Props) {
   const [stage, setStage] = useState<Stage>('capture');
@@ -74,6 +75,9 @@ export function GraftCaptureFlow({ site, patientId, onClose, onSaved }: Props) {
     pixelsPerCm: number; confidence: number; contourCm: unknown;
   } | null>(null);
   const imageRefRef = useRef<string | null>(null);
+  // What the clinician traced, when they did. It supersedes the automated
+  // proportion because both of its outlines come from this one photograph.
+  const [trace, setTrace] = useState<TraceResult | null>(null);
   const overlayRefRef = useRef<string | null>(null);
 
   const isDonor = site.site_role === 'donor';
@@ -292,7 +296,10 @@ export function GraftCaptureFlow({ site, patientId, onClose, onSaved }: Props) {
         await skinGraftService.analyse({
           siteId: site.id,
           assessmentId,
-          pixelsPerCm: measurement.pixelsPerCm,
+          pixelsPerCm: trace?.pixelsPerCm ?? measurement.pixelsPerCm,
+          tracedTotalAreaCm2: trace?.totalAreaCm2,
+          tracedRawAreaCm2: trace?.rawAreaCm2,
+          tracedHealedPct: trace?.healedPct,
         }).catch((e) => {
           // The assessment is saved either way; only the derived numbers are
           // missing, and re-running the analysis later recovers them.
@@ -443,6 +450,16 @@ export function GraftCaptureFlow({ site, patientId, onClose, onSaved }: Props) {
         )}
 
         {/* ---- review (§37, §59) ---- */}
+        {stage === 'tracing' && measurement && (
+          <RegionTracer
+            imageUrl={previewUrl}
+            detectedPixelsPerCm={measurement.scaleReliable ? measurement.pixelsPerCm : null}
+            siteRole={isDonor ? 'donor' : 'recipient'}
+            onCancel={() => setStage('review')}
+            onConfirm={(r) => { setTrace(r); setStage('review'); }}
+          />
+        )}
+
         {(stage === 'review' || stage === 'saving') && measurement && (
           <div className="p-4 space-y-4">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
@@ -456,6 +473,44 @@ export function GraftCaptureFlow({ site, patientId, onClose, onSaved }: Props) {
                     value={`${measurement.areaCm2.toFixed(1)} cm²`} />
               <Cell label="Perimeter" value={`${measurement.perimeterCm.toFixed(1)} cm`} />
             </div>
+
+            {/* The clinician's own division of the site, which is the figure
+                the record leads with when it exists. */}
+            {trace ? (
+              <div className="rounded-xl border border-teal-200 bg-teal-50 p-3.5">
+                <div className="flex items-center justify-between gap-3 mb-2">
+                  <p className="text-sm font-semibold text-teal-900">
+                    {isDonor ? 'Re-epithelialization' : 'Graft take'}, traced
+                  </p>
+                  <button
+                    onClick={() => setStage('tracing')}
+                    className="text-xs font-medium text-teal-700 underline hover:no-underline"
+                  >
+                    Edit tracing
+                  </button>
+                </div>
+                <div className="grid grid-cols-3 gap-2.5">
+                  <Cell label="Whole site" value={`${trace.totalAreaCm2.toFixed(1)} cm²`} />
+                  <Cell label={isDonor ? 'Still raw' : 'Open / non-viable'}
+                        value={`${trace.rawAreaCm2.toFixed(1)} cm²`} />
+                  <Cell label={isDonor ? 'Epithelialized' : 'Taken'}
+                        value={`${trace.healedPct.toFixed(1)}%`} />
+                </div>
+                <p className="text-[11px] text-teal-800 mt-2">
+                  Measured from your two outlines against the calibration marker
+                  ({trace.pixelsPerCm.toFixed(1)} px/cm, {trace.calibrationSource}). Recorded as a
+                  clinician assessment, not a model output.
+                </p>
+              </div>
+            ) : (
+              <button
+                onClick={() => setStage('tracing')}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-dashed border-teal-300 text-teal-700 text-sm font-medium hover:bg-teal-50"
+              >
+                <Pencil className="w-4 h-4" />
+                Trace the site and the raw area to measure {isDonor ? 're-epithelialization' : 'graft take'}
+              </button>
+            )}
 
             {!measurement.scaleReliable && (
               <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-900">

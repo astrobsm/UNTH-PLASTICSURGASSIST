@@ -93,6 +93,7 @@ async function ensureSchema() {
 }
 
 const num = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
+const round2 = (v) => (v == null ? null : Math.round(v * 100) / 100);
 
 // ---------------------------------------------------------------------------
 // Episodes
@@ -352,32 +353,76 @@ async function analyseAssessment(body, user, res) {
     } : null,
   );
 
-  const openArea = Number(a.area_cm2);
   const day = postoperativeDay(site.operation_date, a.assessed_at);
 
-  // Take, against the locked baseline. Without one there is a measurement but
-  // no proportion — said so, rather than inventing a denominator.
+  // A tracing, where the clinician drew one. Both outlines come from the same
+  // photograph, so the proportion it gives needs no baseline at all — which
+  // makes it the better of the two figures whenever it exists, and the only
+  // one available for a site whose day-zero photograph was never taken.
+  const traced = num(b.tracedTotalAreaCm2) > 0 && num(b.tracedRawAreaCm2) !== null
+    ? {
+      totalAreaCm2: num(b.tracedTotalAreaCm2),
+      rawAreaCm2: num(b.tracedRawAreaCm2),
+      healedPct: num(b.tracedHealedPct),
+    }
+    : null;
+
+  // The open area: what the clinician traced as raw, or failing that what the
+  // segmenter measured. The traced figure wins because it is adjudicated.
+  const openArea = traced ? traced.rawAreaCm2 : Number(a.area_cm2);
+
+  // Take against the locked baseline. Kept even when a tracing exists, so the
+  // two methods can be compared and the automated one audited against the
+  // clinician's. Without a baseline there is a measurement but no proportion.
   const closure = closureFromBaseline(num(site.baseline_area_cm2), openArea);
+
+  // Which proportion the record should lead with.
+  const closurePct = traced ? traced.healedPct : (closure.ok ? closure.closurePct : null);
+
+  // A tracing is the clinician's own adjudication, so it is recorded as
+  // 'clinician' — the same provenance the wound module uses for a corrected
+  // outline, and never 'model', which stays reserved for a validated
+  // classifier that does not yet exist.
+  const tissueStatus = traced ? 'clinician' : (b.tissueStatus || 'unavailable');
+  const tissueReason = traced
+    ? `Traced by the clinician against the calibration marker: `
+      + `${traced.totalAreaCm2} cm² total, ${traced.rawAreaCm2} cm² raw.`
+    : (b.tissueReason
+       || 'No validated tissue-classification model is registered on this deployment.');
 
   const saved = (await query(
     `INSERT INTO graft_site_analyses
        (site_id, assessment_id, postoperative_day, measured_area_cm2, areal_take_pct,
-        open_area_cm2, tissue_status, tissue_reason, comparable, comparability_reason,
-        model_name, model_version, confidence)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+        open_area_cm2, viable_area_cm2, nonviable_area_cm2, viability_pct,
+        epithelialized_pct, tissue_status, tissue_reason, comparable,
+        comparability_reason, model_name, model_version, confidence)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
      ON CONFLICT (site_id, assessment_id) DO UPDATE SET
        postoperative_day = EXCLUDED.postoperative_day,
        measured_area_cm2 = EXCLUDED.measured_area_cm2,
        areal_take_pct = EXCLUDED.areal_take_pct,
        open_area_cm2 = EXCLUDED.open_area_cm2,
+       viable_area_cm2 = EXCLUDED.viable_area_cm2,
+       nonviable_area_cm2 = EXCLUDED.nonviable_area_cm2,
+       viability_pct = EXCLUDED.viability_pct,
+       epithelialized_pct = EXCLUDED.epithelialized_pct,
        tissue_status = EXCLUDED.tissue_status,
        tissue_reason = EXCLUDED.tissue_reason,
        comparable = EXCLUDED.comparable,
        comparability_reason = EXCLUDED.comparability_reason
      RETURNING *`,
-    [site.id, a.id, day, openArea, closure.ok ? closure.closurePct : null, openArea,
-     b.tissueStatus || 'unavailable',
-     b.tissueReason || 'No validated tissue-classification model is registered on this deployment.',
+    [site.id, a.id, day,
+     traced ? traced.totalAreaCm2 : Number(a.area_cm2),
+     closurePct,
+     openArea,
+     // A recipient site's healed fraction is viable graft; a donor site's is
+     // epithelialized skin. Only the column that means something is filled.
+     traced && site.site_role === 'recipient'
+       ? round2(traced.totalAreaCm2 - traced.rawAreaCm2) : null,
+     traced && site.site_role === 'recipient' ? traced.rawAreaCm2 : null,
+     traced && site.site_role === 'recipient' ? traced.healedPct : null,
+     traced && site.site_role === 'donor' ? traced.healedPct : null,
+     tissueStatus, tissueReason,
      comparability.comparable, comparability.reason,
      a.model_name, a.model_version, num(a.ai_confidence)],
   )).rows[0];
@@ -397,7 +442,7 @@ async function analyseAssessment(body, user, res) {
   const alerts = deriveAlerts({
     siteRole: site.site_role,
     analysis: {
-      closurePct: closure.ok ? closure.closurePct : null,
+      closurePct,
       day,
       exceededBaseline: closure.ok ? closure.exceededBaseline : false,
       comparable: comparability.comparable,
@@ -421,6 +466,8 @@ async function analyseAssessment(body, user, res) {
 
   return res.status(200).json({
     analysis: saved,
+    traced,
+    closurePct,
     closure,
     comparability,
     trend,
