@@ -29,6 +29,10 @@ import { PatientQuickPicker } from '../components/patients/PatientQuickPicker';
 import CalibrationEvidenceBadge from '../components/wound/CalibrationEvidenceBadge';
 import type { CalibrationEvidence } from '../services/aiWoundMeasurement';
 import { syncPendingWoundImages } from '../services/woundImageSync';
+import { TaxonomySelect } from '../components/wound/TaxonomySelect';
+import {
+  ANATOMICAL_SITES, WOUND_ETIOLOGIES, WOUND_TYPES, BODY_SIDES,
+} from '../data/woundTaxonomy';
 
 /**
  * Stamped onto every assessment this page writes.
@@ -50,11 +54,7 @@ const WoundContourEditor = lazy(() => import('../components/WoundContourEditor')
 const WoundProgressChart = lazy(() => import('../components/WoundProgressChart'));
 const WoundPhotoHistory = lazy(() => import('../components/wound/WoundPhotoHistory'));
 
-const WOUND_TYPES = [
-  'Burn', 'Pressure Injury', 'Venous Ulcer', 'Diabetic Foot Ulcer', 'Surgical Wound',
-  'Traumatic Wound', 'Skin Graft Donor Site', 'Flap', 'Necrotizing Fasciitis', "Fournier's Gangrene",
-];
-const BODY_SIDES = ['Left', 'Right', 'Midline', 'Bilateral'];
+
 
 type View =
   | { kind: 'dashboard' }
@@ -618,7 +618,14 @@ const NewWoundModal: React.FC<{ patient: any; onClose: () => void; onCreated: (w
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Anatomical location *">
-            <input value={form.anatomical_location || ''} onChange={e => set({ anatomical_location: e.target.value })} placeholder="e.g. Left heel" className="w-full border rounded-lg px-3 py-2 text-sm" />
+            <TaxonomySelect
+              groups={ANATOMICAL_SITES}
+              value={form.anatomical_location || ''}
+              onChange={v => set({ anatomical_location: v })}
+              placeholder="Select the site…"
+              otherPlaceholder="Describe the site"
+              required
+            />
           </Field>
           <Field label="Body side">
             <select value={form.body_side} onChange={e => set({ body_side: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm">
@@ -631,7 +638,21 @@ const NewWoundModal: React.FC<{ patient: any; onClose: () => void; onCreated: (w
           <Field label="Date of injury"><input type="date" value={form.date_of_injury || ''} onChange={e => set({ date_of_injury: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm" /></Field>
         </div>
         <Field label="Etiology / cause">
-          <input value={form.cause || ''} onChange={e => set({ cause: e.target.value })} placeholder="e.g. Prolonged pressure, immobility" className="w-full border rounded-lg px-3 py-2 text-sm" />
+          <TaxonomySelect
+            groups={WOUND_ETIOLOGIES}
+            value={form.etiology || ''}
+            onChange={v => set({ etiology: v })}
+            placeholder="Select the cause…"
+            otherPlaceholder="Describe the cause"
+          />
+        </Field>
+        <Field label="Further detail on the cause">
+          <input
+            value={form.cause || ''}
+            onChange={e => set({ cause: e.target.value })}
+            placeholder="Optional — circumstances, agent, time since injury"
+            className="w-full border rounded-lg px-3 py-2 text-sm"
+          />
         </Field>
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex gap-2 pt-1">

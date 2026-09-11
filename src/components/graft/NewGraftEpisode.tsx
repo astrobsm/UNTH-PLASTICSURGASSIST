@@ -12,6 +12,8 @@ import { useState } from 'react';
 import { Loader2, Plus, X, AlertTriangle, Layers } from 'lucide-react';
 import { createWound } from '../../services/woundMonitorService';
 import { skinGraftService, type SiteRole } from '../../services/skinGraftService';
+import { TaxonomySelect } from '../wound/TaxonomySelect';
+import { ANATOMICAL_SITES } from '../../data/woundTaxonomy';
 
 interface Props {
   patientId: number | string;
@@ -178,11 +180,13 @@ export function NewGraftEpisode({ patientId, hospitalNumber, onClose, onCreated 
                   }`}>
                     {s.role === 'recipient' ? 'Recipient' : 'Donor'}
                   </span>
-                  <input
+                  <TaxonomySelect
+                    groups={ANATOMICAL_SITES}
                     value={s.location}
-                    onChange={(e) => update(s.key, { location: e.target.value })}
-                    placeholder="Anatomical location, e.g. Left anterolateral thigh"
-                    className="flex-1 min-w-0 px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:outline-none"
+                    onChange={(v) => update(s.key, { location: v })}
+                    placeholder={s.role === 'donor' ? 'Donor site…' : 'Recipient site…'}
+                    otherPlaceholder="Describe the site"
+                    className="flex-1 min-w-0"
                   />
                   {sites.length > 1 && (
                     <button onClick={() => remove(s.key)} className="p-1.5 rounded hover:bg-gray-100 shrink-0" aria-label="Remove this site">
