@@ -6,7 +6,8 @@ A production build must have **no runtime CDN calls**, or "offline" only works
 for the pages the clinician happened to visit while online.
 
 `npm run build` runs `scripts/prepare-offline-assets.mjs` first (via `prebuild`;
-`vercel-build` chains it explicitly). It materialises into `public/`:
+`prebuild` chains it automatically, for local and Vercel builds alike). It
+materialises into `public/`:
 
 | Asset | Was fetched from | Now |
 |---|---|---|
