@@ -72,6 +72,10 @@
       "destination": "/api/skin-grafts"
     },
     {
+      "source": "/api/scars/:path*",
+      "destination": "/api/scars"
+    },
+    {
       "source": "/api/mdt/:path*",
       "destination": "/api/mdt"
     },
