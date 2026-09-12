@@ -101,8 +101,25 @@ async function createScar(body, user, res) {
 }
 
 async function listScars(params, res) {
+  // Either a patient's scars, or the scars attached to one keloid care plan —
+  // the plan view asks the second way.
+  const planId = params.get('planId');
+  if (planId) {
+    const r = await query(
+      `SELECT s.*, w.label AS wound_label,
+              (SELECT COUNT(*) FROM scar_assessments a WHERE a.scar_id = s.id)::int AS assessment_count,
+              (SELECT COUNT(*) FROM scar_alerts al
+                WHERE al.scar_id = s.id AND al.acknowledged_at IS NULL)::int AS open_alerts,
+              (SELECT MAX(a.assessed_at) FROM scar_assessments a WHERE a.scar_id = s.id) AS last_assessed_at
+       FROM scar_cases s LEFT JOIN wounds w ON w.id = s.wound_id
+       WHERE s.keloid_plan_id = $1 ORDER BY s.created_at DESC`,
+      [planId],
+    );
+    return res.status(200).json({ scars: r.rows });
+  }
+
   const patientId = params.get('patientId');
-  if (!patientId) return res.status(400).json({ error: 'patientId is required' });
+  if (!patientId) return res.status(400).json({ error: 'patientId or planId is required' });
   const r = await query(
     `SELECT s.*, w.label AS wound_label,
             (SELECT COUNT(*) FROM scar_assessments a WHERE a.scar_id = s.id)::int AS assessment_count,
@@ -241,6 +258,23 @@ async function getCase(id, res) {
     `SELECT * FROM scar_alerts WHERE scar_id = $1 ORDER BY created_at DESC LIMIT 100`, [id],
   )).rows;
 
+  // Treatment, from the existing keloid plan rather than a second table.
+  // Overlaid on the trend charts so a clinician can see whether a change
+  // followed an injection or preceded it — which is the whole question when
+  // judging response (§54).
+  let treatments = [];
+  if (scar.keloid_plan_id) {
+    treatments = (await query(
+      `SELECT 'injection' AS kind, injection_number, injection_phase,
+              COALESCE(actual_date, scheduled_date) AS event_date,
+              dose_mg, concentration, volume_ml, status, adverse_effects
+       FROM keloid_injections
+       WHERE keloid_plan_id = $1 AND COALESCE(actual_date, scheduled_date) IS NOT NULL
+       ORDER BY event_date`,
+      [scar.keloid_plan_id],
+    )).rows.map((t) => ({ ...t, day: dayOf(t.event_date) }));
+  }
+
   return res.status(200).json({
     scar,
     visits: visits.map((v) => ({ ...v, day: dayOf(v.assessed_at) })),
@@ -250,6 +284,7 @@ async function getCase(id, res) {
     eligibility: predictionEligibility(observations),
     methodConsistency: methodConsistency(observations),
     alerts,
+    treatments,
     // §23: 3D is not available on this deployment, and says so rather than
     // returning zeros.
     threeD: {

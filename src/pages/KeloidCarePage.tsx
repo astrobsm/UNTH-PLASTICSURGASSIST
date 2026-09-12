@@ -52,6 +52,7 @@ import { keloidPdfService } from '../services/keloidPdfService';
 import { format, isBefore, differenceInDays } from 'date-fns';
 import toast from 'react-hot-toast';
 import { WoundTrackingPanel } from '../components/wound/WoundTrackingPanel';
+import { ScarMonitoringPanel } from '../components/scar/ScarMonitoringPanel';
 
 // ============================================
 // TYPES
@@ -67,7 +68,8 @@ interface Patient {
 }
 
 type TabType = 'plans' | 'education' | 'create';
-type PlanViewTab = 'overview' | 'tests' | 'injections' | 'surgery' | 'adjunct' | 'radiotherapy';
+type PlanViewTab = 'overview' | 'tests' | 'injections' | 'monitoring'
+                 | 'surgery' | 'adjunct' | 'radiotherapy';
 
 // ============================================
 // MAIN COMPONENT
@@ -510,6 +512,7 @@ const PlanDetails: React.FC<PlanDetailsProps> = ({
     { id: 'overview', label: 'Overview', icon: FileText },
     { id: 'tests', label: 'Pre-Treatment Tests', icon: Activity },
     { id: 'injections', label: 'Injections', icon: Syringe },
+    { id: 'monitoring', label: 'Scar Monitoring', icon: Activity },
     { id: 'surgery', label: 'Surgery', icon: Heart },
     { id: 'adjunct', label: 'Adjunct Therapy', icon: Zap },
     { id: 'radiotherapy', label: 'Radiotherapy', icon: AlertTriangle }
@@ -659,6 +662,13 @@ const PlanDetails: React.FC<PlanDetailsProps> = ({
         {activeTab === 'tests' && <TestsTab plan={plan} onRefresh={onRefresh} />}
         {activeTab === 'injections' && (
           <InjectionsTab plan={plan} onRecordInjection={onRecordInjection} />
+        )}
+        {activeTab === 'monitoring' && (
+          <ScarMonitoringPanel
+            patientId={plan.patient_id}
+            planId={plan.id}
+            hospitalNumber={plan.hospital_number}
+          />
         )}
         {activeTab === 'surgery' && <SurgeryTab plan={plan} />}
         {activeTab === 'adjunct' && <AdjunctTherapyTab plan={plan} />}
