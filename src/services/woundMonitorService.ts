@@ -352,18 +352,43 @@ export async function getWoundTimeline(woundId: number | string): Promise<WoundA
   }
 }
 
+/**
+ * Creates a wound and returns the wound.
+ *
+ * The endpoint replies `{ wound: {...} }`, and this used to return that
+ * envelope while declaring `Promise<Wound>`. The type was a lie, so every
+ * caller that trusted it read `undefined` from `.id`: the graft episode and
+ * scar dialogs failed outright, and the one caller that worked did so only
+ * because it cast to `any` and wrote `res?.wound || res`.
+ *
+ * Unwrapping here makes the declared type true. `res?.wound || res` in the
+ * older caller still resolves correctly, because `.wound` is now absent and it
+ * falls through to the wound itself.
+ */
 export async function createWound(wound: Wound): Promise<Wound> {
-  return apiClient.request('/wounds', {
+  const res = await apiClient.request<{ wound?: Wound } | Wound>('/wounds', {
     method: 'POST',
     body: JSON.stringify(wound),
   });
+  return ((res as { wound?: Wound })?.wound ?? res) as Wound;
 }
 
+/**
+ * Records an assessment and returns the assessment.
+ *
+ * Same defect as createWound, with a quieter symptom: the endpoint replies
+ * `{ assessment: {...} }`, so callers reading `.id` got undefined and silently
+ * skipped the work that depends on it. The photograph-to-assessment link in
+ * the wound monitor and the graft analysis call after a capture were both
+ * being skipped without an error — which is worse than failing loudly, because
+ * nothing showed that anything was missing.
+ */
 export async function addAssessment(assessment: WoundAssessment): Promise<WoundAssessment> {
-  return apiClient.request('/wounds?action=assess', {
-    method: 'POST',
-    body: JSON.stringify(assessment),
-  });
+  const res = await apiClient.request<{ assessment?: WoundAssessment } | WoundAssessment>(
+    '/wounds?action=assess',
+    { method: 'POST', body: JSON.stringify(assessment) },
+  );
+  return ((res as { assessment?: WoundAssessment })?.assessment ?? res) as WoundAssessment;
 }
 
 /** Label for a healing status, for badges. */
