@@ -73,6 +73,7 @@ const navigation = [
   { name: 'Consults', href: '/consults', icon: Stethoscope },
   { name: 'WoundProgress Monitor', href: '/wound-monitor', icon: Activity },
   { name: 'Skin Graft Monitoring', href: '/skin-grafts', icon: Activity },
+  { name: 'Scar & Keloid Monitor', href: '/scar-monitor', icon: Activity },
   { name: 'Tumour Board', href: '/tumor-board', icon: Stethoscope },
   // The surgical pathway, in the order it happens: book the case, establish the
   // patient is fit, brief the room. All three were reachable only from the

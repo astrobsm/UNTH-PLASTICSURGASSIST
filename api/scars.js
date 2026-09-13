@@ -47,6 +47,7 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'GET') {
+      if (action === 'dashboard') return await getDashboard(res);
       if (action === 'case') return await getCase(parts[1], res);
       if (action === 'scales') return res.status(200).json({ scales: SCALES });
       return await listScars(url.searchParams, res);
@@ -136,6 +137,82 @@ async function listScars(params, res) {
     [patientId],
   );
   return res.status(200).json({ scars: r.rows });
+}
+
+/**
+ * Every scar the unit is following, worst first.
+ *
+ * Sorted by what needs attention: possible recurrence, then progression, then
+ * lesions that are stable but still active. A quiescent keloid is at the
+ * bottom, which is where it belongs.
+ */
+async function getDashboard(res) {
+  const rows = (await query(
+    `SELECT s.id, s.label, s.anatomical_site, s.scar_type, s.patient_id,
+            s.keloid_plan_id,
+            p.full_name AS patient_name, p.hospital_number,
+            (SELECT COUNT(*) FROM scar_alerts a
+              WHERE a.scar_id = s.id AND a.acknowledged_at IS NULL)::int AS open_alerts,
+            (SELECT COUNT(*) FROM scar_assessments a WHERE a.scar_id = s.id)::int AS assessment_count,
+            (SELECT MAX(a.assessed_at) FROM scar_assessments a WHERE a.scar_id = s.id) AS last_assessed_at
+     FROM scar_cases s
+     LEFT JOIN patients p ON p.id = s.patient_id
+     WHERE s.status = 'active'
+     LIMIT 200`,
+  )).rows;
+
+  // The area series for every one of them, in a single pass rather than a
+  // query per lesion.
+  const ids = rows.map((r) => r.id);
+  const seriesRows = ids.length ? (await query(
+    `SELECT a.scar_id, a.assessed_at, wa.area_cm2,
+            e.pliability, pr.pain_0_10, pr.itch_0_10, c.erythema_index
+     FROM scar_assessments a
+     LEFT JOIN wound_assessments wa ON wa.id = a.wound_assessment_id
+     LEFT JOIN scar_physical_exams e ON e.assessment_id = a.id
+     LEFT JOIN scar_patient_reported pr ON pr.assessment_id = a.id
+     LEFT JOIN scar_colour_analysis c ON c.assessment_id = a.id
+     WHERE a.scar_id = ANY($1::int[]) AND a.superseded_by IS NULL
+     ORDER BY a.scar_id, a.assessed_at`,
+    [ids],
+  )).rows : [];
+
+  const byScar = new Map();
+  for (const r of seriesRows) {
+    if (!byScar.has(r.scar_id)) byScar.set(r.scar_id, []);
+    byScar.get(r.scar_id).push(r);
+  }
+
+  const ORDER = {
+    possible_recurrence: 0, progressive: 1, stable_active: 2,
+    stable: 3, insufficient: 4, regressing: 5, quiescent: 6,
+  };
+
+  const scars = rows.map((r) => {
+    const rowsFor = byScar.get(r.id) || [];
+    const origin = rowsFor.length ? new Date(rowsFor[0].assessed_at).getTime() : null;
+    const series = rowsFor
+      .filter((x) => x.area_cm2 != null)
+      .map((x) => ({
+        day: Math.round((new Date(x.assessed_at).getTime() - origin) / 86400000),
+        value: Number(x.area_cm2),
+      }));
+    const last = rowsFor.length ? rowsFor[rowsFor.length - 1] : null;
+    const growth = growthProfile(series);
+    const activity = activityAssessment({
+      erythemaIndex: num(last?.erythema_index),
+      pain: num(last?.pain_0_10),
+      itch: num(last?.itch_0_10),
+      pliability: last?.pliability,
+    });
+    const status = keloidStatus({ growth, activity });
+    return { ...r, growth, activity, status };
+  }).sort((a, b) => {
+    const d = (ORDER[a.status.status] ?? 9) - (ORDER[b.status.status] ?? 9);
+    return d !== 0 ? d : (b.open_alerts - a.open_alerts);
+  });
+
+  return res.status(200).json({ scars });
 }
 
 /**

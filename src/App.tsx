@@ -97,6 +97,7 @@ const PreSurgicalConferencePage = lazyWithRetry(() => import('./pages/PreSurgica
 const WoundCarePage = lazyWithRetry(() => import('./pages/WoundCarePage'));
 const WoundProgressMonitorPage = lazyWithRetry(() => import('./pages/WoundProgressMonitorPage'));
 const SkinGraftPage = lazyWithRetry(() => import('./pages/SkinGraftPage'));
+const ScarKeloidMonitorPage = lazyWithRetry(() => import('./pages/ScarKeloidMonitorPage'));
 const TumorBoardPage = lazyWithRetry(() => import('./pages/TumorBoardPage'));
 const ClinicianAssistantPage = lazyWithRetry(() => import('./pages/ClinicianAssistantPage'));
 const KeloidCarePage = lazyWithRetry(() => import('./pages/KeloidCarePage'));
@@ -411,6 +412,10 @@ function App() {
                   one episode; without it the unit's active grafts are listed. */}
               <Route path="/skin-grafts" element={<SkinGraftPage />} />
               <Route path="/skin-grafts/:episodeId" element={<SkinGraftPage />} />
+              {/* Keloids and scars are followed here, not in the wound monitor:
+                  they do not epithelialize and do not close, so healing
+                  metrics are meaningless for them. */}
+              <Route path="/scar-monitor" element={<ScarKeloidMonitorPage />} />
               <Route path="/tumor-board" element={<TumorBoardPage />} />
               <Route path="/clinician-assistant" element={<ClinicianAssistantPage />} />
               <Route path="/keloid-care" element={<KeloidCarePage />} />
