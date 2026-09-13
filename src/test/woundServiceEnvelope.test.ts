@@ -81,7 +81,7 @@ describe('addAssessment', () => {
 });
 
 describe('the callers that depend on this', () => {
-  beforeEach(() => vi.restoreAllMocks());
+  beforeEach(() => { vi.restoreAllMocks(); });
 
   it('a wound id survives the round trip into Number()', async () => {
     // Exactly the expression the scar and graft dialogs use.

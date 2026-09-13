@@ -889,6 +889,12 @@ const CaptureAssessmentModal: React.FC<{ wound: Wound; onClose: () => void; onSa
         // the phone that took the photograph, which is why clinicians could not
         // see their own wound images from a second device.
         image_url: imageRef ? `/wound-images?ref=${imageRef}` : undefined,
+        // The traced-margin overlay was rendered and stored but nothing ever
+        // pointed at it, so the evidence for a measurement could not be
+        // reopened from the record. Migration 019 repaired the rows already
+        // written; this stops new ones losing it.
+        overlay_url: overlayRefRef.current
+          ? `/wound-images?ref=${overlayRefRef.current}` : undefined,
         length_cm: numOrNull(m.length_cm),
         width_cm: numOrNull(m.width_cm),
         area_cm2: area,
