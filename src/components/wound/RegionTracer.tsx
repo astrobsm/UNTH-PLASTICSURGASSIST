@@ -22,7 +22,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   Ruler, Undo2, Trash2, Check, X, Loader2, AlertTriangle, Hand,
-  Maximize2, Info, Pencil, Layers as LayersIcon,
+  Maximize2, Info, Pencil, Layers as LayersIcon, Crop, RotateCcw,
 } from 'lucide-react';
 import {
   measureLayeredTrace, validateLayeredTrace, calibrationFromLine, simplify,
@@ -31,7 +31,7 @@ import {
   type LayeredMeasurement,
 } from '../../services/tracedRegions';
 
-type Mode = 'calibrate' | 'pan' | 'total' | TissueLayerKey;
+type Mode = 'calibrate' | 'pan' | 'crop' | 'total' | TissueLayerKey;
 
 const TOTAL_COLOUR = '#0ea5e9';
 const CAL_COLOUR = '#3b82f6';
@@ -77,6 +77,25 @@ export function RegionTracer({
   const [knownCm, setKnownCm] = useState(String(markerCm));
   const [showPatches, setShowPatches] = useState(false);
 
+  /**
+   * The crop, when the clinician has zoomed the working image onto the lesion.
+   *
+   * An earlobe keloid photographed with the whole head in frame occupies a few
+   * hundred pixels; tracing its margin and reading its height from that is
+   * guesswork. Cropping to it puts every available pixel on the lesion.
+   *
+   * The crop is a pure pixel extraction with NO resampling, which is what makes
+   * it safe: pixels-per-centimetre is unchanged by cutting a window out of an
+   * image, so the calibration carries over exactly. Scaling the crop up would
+   * break that silently, which is why it is not done.
+   *
+   * Coordinates are traced in the cropped frame and mapped back by the offset
+   * on confirm, so what is stored is always in the original photograph's frame.
+   */
+  const [crop, setCrop] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const [cropDraft, setCropDraft] = useState<{ a: Point; b: Point } | null>(null);
+  const originalRef = useRef<HTMLImageElement | null>(null);
+
   const view = useRef({ scale: 1, ox: 0, oy: 0 });
   const [, bump] = useState(0);
   const redraw = useCallback(() => bump((n) => n + 1), []);
@@ -109,7 +128,13 @@ export function RegionTracer({
   useEffect(() => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    img.onload = () => { imgRef.current = img; setLoaded(true); fit(); };
+    img.onload = () => {
+      imgRef.current = img;
+      // Kept so a crop can be undone without re-fetching the photograph.
+      if (!originalRef.current) originalRef.current = img;
+      setLoaded(true);
+      fit();
+    };
     img.src = imageUrl;
   }, [imageUrl, fit]);
 
@@ -176,6 +201,25 @@ export function RegionTracer({
         : (LAYER_META as Record<string, { colour: string }>)[mode]?.colour ?? TOTAL_COLOUR;
       paint(draft, colour, false, false);
     }
+    if (cropDraft) {
+      const x0 = Math.min(cropDraft.a.x, cropDraft.b.x);
+      const y0 = Math.min(cropDraft.a.y, cropDraft.b.y);
+      const w = Math.abs(cropDraft.b.x - cropDraft.a.x);
+      const h = Math.abs(cropDraft.b.y - cropDraft.a.y);
+      // Dim everything outside the rectangle, so what will be kept is obvious.
+      ctx.save();
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      ctx.beginPath();
+      ctx.rect(0, 0, img.width, img.height);
+      ctx.rect(x0, y0, w, h);
+      ctx.fill('evenodd');
+      ctx.restore();
+      ctx.lineWidth = lw;
+      ctx.strokeStyle = '#f59e0b';
+      ctx.setLineDash([6 / scale, 4 / scale]);
+      ctx.strokeRect(x0, y0, w, h);
+      ctx.setLineDash([]);
+    }
     if (calLine) {
       paint([calLine[0], calLine[1]], CAL_COLOUR, false, false);
       for (const p of calLine) {
@@ -212,6 +256,7 @@ export function RegionTracer({
     const p = toImage(e.clientX, e.clientY);
     drawing.current = true;
     if (mode === 'calibrate') { setCalLine([p, p]); return; }
+    if (mode === 'crop') { setCropDraft({ a: p, b: p }); return; }
     setDraft([p]);
   };
 
@@ -246,6 +291,7 @@ export function RegionTracer({
     if (!drawing.current) return;
     const p = toImage(e.clientX, e.clientY);
     if (mode === 'calibrate') { setCalLine((l) => (l ? [l[0], p] : [p, p])); return; }
+    if (mode === 'crop') { setCropDraft((c) => (c ? { a: c.a, b: p } : { a: p, b: p })); return; }
     setDraft((d) => {
       const last = d[d.length - 1];
       if (last && Math.hypot(p.x - last.x, p.y - last.y) < 2 / view.current.scale) return d;
@@ -258,7 +304,7 @@ export function RegionTracer({
     if (pointers.current.size < 2) pinch.current = null;
     if (!drawing.current) return;
     drawing.current = false;
-    if (mode === 'calibrate') return;
+    if (mode === 'calibrate' || mode === 'crop') return;
 
     const pts = simplify(draft, 2 / view.current.scale);
     setDraft([]);
@@ -280,6 +326,56 @@ export function RegionTracer({
   };
 
   // ---- derived -------------------------------------------------------------
+
+  /**
+   * Cuts the working image down to the dragged rectangle.
+   *
+   * drawImage with matching source and destination sizes copies pixels
+   * one-for-one; no interpolation happens, so the scale is untouched.
+   */
+  const applyCrop = useCallback(() => {
+    const img = imgRef.current;
+    if (!img || !cropDraft) return;
+
+    const x0 = Math.max(0, Math.min(cropDraft.a.x, cropDraft.b.x));
+    const y0 = Math.max(0, Math.min(cropDraft.a.y, cropDraft.b.y));
+    const x1 = Math.min(img.width, Math.max(cropDraft.a.x, cropDraft.b.x));
+    const y1 = Math.min(img.height, Math.max(cropDraft.a.y, cropDraft.b.y));
+    const w = Math.round(x1 - x0);
+    const h = Math.round(y1 - y0);
+    // A tiny crop is a mis-drag, and cropping to it would lose the lesion.
+    if (w < 32 || h < 32) { setCropDraft(null); return; }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.drawImage(img, Math.round(x0), Math.round(y0), w, h, 0, 0, w, h);
+
+    const next = new Image();
+    next.onload = () => {
+      imgRef.current = next;
+      // Offsets accumulate, so cropping twice still maps back correctly.
+      setCrop((c) => ({ x: (c?.x ?? 0) + Math.round(x0), y: (c?.y ?? 0) + Math.round(y0), w, h }));
+      setCropDraft(null);
+      setMode('total');
+      fit();
+    };
+    next.src = canvas.toDataURL('image/png');
+  }, [cropDraft, fit]);
+
+  const undoCrop = useCallback(() => {
+    if (!originalRef.current) return;
+    imgRef.current = originalRef.current;
+    setCrop(null);
+    setCropDraft(null);
+    // Outlines were traced in the cropped frame; keeping them would place them
+    // wrongly on the full photograph.
+    setTotalRegions([]);
+    setLayers({});
+    fit();
+  }, [fit]);
 
   const applyCalibration = () => {
     if (!calLine) return;
@@ -406,8 +502,37 @@ export function RegionTracer({
           )}
         </div>
 
+        {/* Cropping to the lesion. Said plainly, because a clinician has every
+            reason to distrust an app that changes their photograph. */}
+        {(mode === 'crop' || crop) && (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg bg-gray-700/60 p-2.5">
+            <Crop className="w-4 h-4 text-amber-400 shrink-0" />
+            <span className="text-[11px] text-gray-300 flex-1 min-w-0">
+              {crop
+                ? `Cropped to ${crop.w}x${crop.h} px. The scale is unchanged — cropping cuts pixels out, it does not resize them.`
+                : 'Drag a box around the lesion. Cropping keeps every pixel at its original size, so the calibration still holds.'}
+            </span>
+            {mode === 'crop' && cropDraft && (
+              <button
+                onClick={applyCrop}
+                className="px-3 py-1.5 rounded-lg bg-amber-500 text-gray-900 text-sm font-semibold shrink-0"
+              >
+                Crop to this
+              </button>
+            )}
+            {crop && (
+              <button
+                onClick={undoCrop}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-gray-600 text-xs shrink-0"
+              >
+                <RotateCcw className="w-3.5 h-3.5" /> Whole photo
+              </button>
+            )}
+          </div>
+        )}
+
         {/* The site outline, then the tissue layers. */}
-        <div className="grid grid-cols-3 gap-1.5">
+        <div className="grid grid-cols-4 gap-1.5">
           <LayerButton
             active={mode === 'total'} onClick={() => setMode('total')}
             colour={TOTAL_COLOUR} label="Whole site" count={totalRegions.length} outlineOnly
@@ -419,6 +544,14 @@ export function RegionTracer({
             }`}
           >
             <Hand className="w-4 h-4" /> Move
+          </button>
+          <button
+            onClick={() => setMode('crop')}
+            className={`flex flex-col items-center gap-0.5 py-2 rounded-lg text-[11px] ${
+              mode === 'crop' ? 'bg-white text-gray-900 font-semibold' : 'bg-gray-700'
+            }`}
+          >
+            <Crop className="w-4 h-4" /> Crop
           </button>
           <button onClick={fit} className="flex flex-col items-center gap-0.5 py-2 rounded-lg bg-gray-700 text-[11px]">
             <Maximize2 className="w-4 h-4" /> Fit
@@ -538,8 +671,22 @@ export function RegionTracer({
               const composition = Object.fromEntries(
                 measurement.layers.map((l) => [l.key, l.pct]),
               ) as Record<TissueLayerKey, number>;
+              // Traced in the cropped frame; stored in the original
+              // photograph's frame, so an outline still lands correctly when
+              // redrawn over the full image later.
+              const shift = (rs: TracedRegion[]) => (crop
+                ? rs.map((r) => ({
+                  ...r,
+                  points: r.points.map((pt) => ({ x: pt.x + crop.x, y: pt.y + crop.y })),
+                }))
+                : rs);
+              const shiftedLayers: LayerRegions = {};
+              for (const meta of TISSUE_LAYERS) {
+                if (layers[meta.key]?.length) shiftedLayers[meta.key] = shift(layers[meta.key]!);
+              }
               onConfirm({
-                totalRegions, layers, pixelsPerCm, calibrationSource, measurement,
+                totalRegions: shift(totalRegions), layers: shiftedLayers,
+                pixelsPerCm, calibrationSource, measurement,
                 totalAreaCm2: measurement.totalAreaCm2,
                 rawAreaCm2: measurement.openAreaCm2,
                 healedAreaCm2: measurement.healedAreaCm2,

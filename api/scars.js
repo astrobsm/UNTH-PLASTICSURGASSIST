@@ -29,6 +29,7 @@ import {
   growthProfile, growthAcceleration as keloidAcceleration, activityAssessment,
   keloidStatus, treatmentResponse,
 } from './_lib/keloidProgress.js';
+import { measureProfile, estimateVolume, profileQuality } from './_lib/keloidElevation.js';
 
 const WRITE_ROLES = ['admin', 'consultant', 'senior_registrar', 'registrar', 'house_officer', 'nurse'];
 const num = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
@@ -68,6 +69,7 @@ export default async function handler(req, res) {
       if (action === 'exam') return await putExam(req.body, auth.user, res);
       if (action === 'patient-reported') return await putPatientReported(req.body, auth.user, res);
       if (action === 'colour') return await putColour(req.body, res);
+      if (action === 'elevation') return await putElevation(req.body, res);
       if (action === 'alert') return await ackAlert(req.body, auth.user, res);
     }
 
@@ -542,6 +544,50 @@ async function putPatientReported(body, user, res) {
      num(b.treatmentSatisfaction), b.freeText || null, user.id],
   );
   return res.status(200).json({ patientReported: r.rows[0] });
+}
+
+/**
+ * Height and volume from a traced profile view.
+ *
+ * This is the third dimension obtained the way a surgeon already obtains it —
+ * a lateral photograph with the marker in the plane of the lesion — not a
+ * photogrammetric reconstruction. The row records which it was, so nothing
+ * downstream can mistake an estimate from two calibrated views for a surface
+ * model.
+ */
+async function putElevation(body, res) {
+  const b = body || {};
+  if (!b.assessmentId) return res.status(400).json({ error: 'assessmentId is required' });
+
+  const profile = measureProfile(b.profilePx, b.baselinePx, num(b.pixelsPerCm));
+  if (!profile.ok) return res.status(400).json({ error: profile.reason });
+
+  const quality = profileQuality(profile);
+  const volume = estimateVolume(num(b.areaCm2), profile, { shape: b.shape || 'unknown' });
+
+  const r = await query(
+    `INSERT INTO scar_3d_models
+       (assessment_id, status, status_reason, image_count,
+        reconstruction_backend, backend_version,
+        max_elevation_mm, mean_elevation_mm, volume_cm3, reference_plane_method)
+     VALUES ($1,$2,$3,2,'calibrated-profile-view','1.0',$4,$5,$6,$7)
+     ON CONFLICT (assessment_id) DO UPDATE SET
+       status = EXCLUDED.status, status_reason = EXCLUDED.status_reason,
+       max_elevation_mm = EXCLUDED.max_elevation_mm,
+       mean_elevation_mm = EXCLUDED.mean_elevation_mm,
+       volume_cm3 = EXCLUDED.volume_cm3,
+       reconstruction_backend = EXCLUDED.reconstruction_backend,
+       reference_plane_method = EXCLUDED.reference_plane_method
+     RETURNING *`,
+    [b.assessmentId, quality.grade,
+     `${quality.reason} Height from a calibrated lateral view against the traced skin line; `
+     + 'not a photogrammetric reconstruction.',
+     profile.maxElevationCm * 10, profile.meanElevationCm * 10,
+     volume.ok ? volume.volumeCm3 : null,
+     'traced skin baseline in the profile photograph'],
+  );
+
+  return res.status(200).json({ elevation: r.rows[0], profile, volume, quality });
 }
 
 async function putColour(body, res) {
