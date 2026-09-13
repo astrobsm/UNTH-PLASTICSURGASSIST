@@ -104,10 +104,17 @@ export function ScarCaptureFlow({ scar, onClose, onSaved }: Props) {
       try {
         await aiWoundMeasurement.initialize();
         const cal = await aiWoundMeasurement.detectCalibration(data);
-        // type 'none' is a real answer meaning nothing of known size was seen;
-        // it must not be turned into a scale. Pixels per centimetre is the
-        // marker's measured pixel length over its known length.
-        if (cal && cal.type !== 'none' && cal.knownSizeCm > 0 && cal.pixelSize > 0) {
+        // Only a found green marker is applied automatically. type 'none'
+        // means nothing of known size was seen, and requiresConfirmation
+        // means a texture-based detector *guessed* — on a face with no marker
+        // the ruler detector reported 30 px/cm, which would have made every
+        // area wrong by an unknown factor while looking precise.
+        //
+        // A suggestion is discarded here rather than shown: the clinician
+        // calibrates against their own marker in the tracer, which is a
+        // measurement rather than a guess.
+        if (cal && cal.type !== 'none' && !cal.requiresConfirmation
+            && cal.knownSizeCm > 0 && cal.pixelSize > 0) {
           ppc = cal.pixelSize / cal.knownSizeCm;
         }
       } catch { /* the tracer's manual calibration covers this */ }
@@ -149,12 +156,11 @@ export function ScarCaptureFlow({ scar, onClose, onSaved }: Props) {
         patient_id: Number(scar.patient_id),
         image_url: topRef.current ? `/wound-images?ref=${topRef.current}` : undefined,
         area_cm2: trace.totalAreaCm2,
-        // The lesion's own outline; there is no "open area" on a scar.
-        granulation_pct: trace.composition.granulation,
-        slough_pct: trace.composition.slough,
-        necrotic_pct: trace.composition.necrotic,
-        epithelial_pct: trace.composition.epithelial,
-        tissue_source: 'clinician',
+        // No wound-bed composition. A keloid has no granulation, slough,
+        // eschar or epithelialising edge — writing zeros for them would put
+        // four measurements in the record that nobody made and that mean
+        // nothing for this lesion.
+        tissue_source: 'none',
         calibration_type: trace.calibrationSource === 'traced' ? 'manual:marker' : 'auto:marker',
         scale_reliable: true,
         contour_cm: trace.totalRegions as never,
@@ -202,7 +208,7 @@ export function ScarCaptureFlow({ scar, onClose, onSaved }: Props) {
         imageUrl={topUrl}
         detectedPixelsPerCm={topPxPerCm}
         siteRole="donor"
-        purpose="area"
+        purpose="lesion"
         onCancel={() => setStep('capture-top')}
         onConfirm={(r) => { setTrace(r); setStep('review'); }}
       />

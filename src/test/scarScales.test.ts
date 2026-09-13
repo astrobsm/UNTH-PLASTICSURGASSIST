@@ -353,3 +353,46 @@ describe('analyseScarColour', () => {
     expect(text).toMatch(/just-noticeable/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Calibration must never be invented
+// ---------------------------------------------------------------------------
+
+describe('a scale is measured, never guessed', () => {
+  /** The rule the capture flows apply before trusting a detected scale. */
+  const usable = (cal: {
+    type: string; knownSizeCm: number; pixelSize: number; requiresConfirmation?: boolean;
+  }) => cal.type !== 'none' && !cal.requiresConfirmation
+    && cal.knownSizeCm > 0 && cal.pixelSize > 0;
+
+  it('accepts a found green marker, which is a specific printed object', () => {
+    expect(usable({
+      type: 'green_marker', knownSizeCm: 5, pixelSize: 150,
+    })).toBe(true);
+  });
+
+  it('refuses a grid "detection", which fires on any periodic texture', () => {
+    // On a photograph of a face with no marker in it, the texture detectors
+    // reported 30 px/cm. Every area computed from that would be wrong by an
+    // unknown factor while looking precise.
+    expect(usable({
+      type: 'grid', knownSizeCm: 1, pixelSize: 30, requiresConfirmation: true,
+    })).toBe(false);
+  });
+
+  it('refuses a ruler "detection" for the same reason', () => {
+    expect(usable({
+      type: 'ruler', knownSizeCm: 1, pixelSize: 30, requiresConfirmation: true,
+    })).toBe(false);
+  });
+
+  it('refuses the explicit no-scale answer', () => {
+    expect(usable({ type: 'none', knownSizeCm: 0, pixelSize: 0 })).toBe(false);
+  });
+
+  it('derives px/cm as measured pixels over the known length', () => {
+    // Not cal.pixelsPerCm, which CalibrationReference does not have.
+    const cal = { type: 'green_marker', knownSizeCm: 5, pixelSize: 191 };
+    expect(cal.pixelSize / cal.knownSizeCm).toBeCloseTo(38.2, 6);
+  });
+});

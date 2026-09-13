@@ -136,6 +136,21 @@ export interface CalibrationReference {
   confidence: number;
   /** What was actually seen. Absent when nothing was. */
   evidence?: CalibrationEvidence;
+  /**
+   * True when the detection is a SUGGESTION that a person must confirm.
+   *
+   * The green marker is a specific printed object — one hue, one aspect ratio
+   * — and finding it is strong evidence. The grid and ruler detectors are not:
+   * they look for periodic structure, and skin pores, hair, fabric weave, a
+   * tattoo and JPEG blocking are all periodic. On a photograph of a face with
+   * no marker in it at all, the ruler detector reported 30 px/cm.
+   *
+   * A scale invented from skin texture is the worst kind of error this app can
+   * make, because every area computed from it is wrong by an unknown factor
+   * and looks precise. So those two detectors now hand back a suggestion,
+   * flagged, and callers must not apply it without a person agreeing.
+   */
+  requiresConfirmation?: boolean;
 }
 
 /**
@@ -744,6 +759,7 @@ export class AIWoundMeasurementService {
       return {
         type: 'grid', knownSizeCm: 1, pixelSize: grid.pixelsPerCm,
         detectionMethod: 'automatic', confidence: grid.confidence,
+        requiresConfirmation: true,
         evidence: {
           reference: '1 cm grid paper',
           knownSizeCm: 1,
@@ -758,6 +774,7 @@ export class AIWoundMeasurementService {
       return {
         type: 'ruler', knownSizeCm: 1, pixelSize: ruler.pixelsPerCm,
         detectionMethod: 'automatic', confidence: ruler.confidence,
+        requiresConfirmation: true,
         evidence: {
           reference: 'ruler tick marks, 1 cm apart',
           knownSizeCm: 1,

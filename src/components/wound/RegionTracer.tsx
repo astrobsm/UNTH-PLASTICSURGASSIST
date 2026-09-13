@@ -75,12 +75,17 @@ interface Props {
   /**
    * What is being traced.
    *
-   * 'area' is the top-down outline and its tissue layers. 'elevation' is the
-   * lateral view: the skin baseline and the lesion's profile above it, which
-   * is where height and volume come from. Both share the crop, the
-   * calibration and the pan/zoom, because those are the same problem.
+   * 'area'      an open wound bed: its outline and the tissue layers on it.
+   * 'lesion'    a scar or keloid: its margin, and nothing else. A keloid has
+   *             no granulation, no slough, no eschar and no epithelialising
+   *             edge — it is not an open wound, and offering those layers
+   *             invites a clinician to record tissue that is not there.
+   * 'elevation' the lateral view: skin baseline and profile, for height.
+   *
+   * All three share the crop, the calibration and the pan/zoom, because those
+   * are the same problem whatever is being traced.
    */
-  purpose?: 'area' | 'elevation';
+  purpose?: 'area' | 'lesion' | 'elevation';
   onCancel: () => void;
   onConfirm?: (result: TraceResult) => void;
   onConfirmElevation?: (result: ElevationResult) => void;
@@ -97,6 +102,7 @@ export function RegionTracer({
   const [loaded, setLoaded] = useState(false);
   const [mode, setMode] = useState<Mode>(
     detectedPixelsPerCm ? (purpose === 'elevation' ? 'baseline' : 'total') : 'calibrate');
+  const isLesion = purpose === 'lesion';
   const [totalRegions, setTotalRegions] = useState<TracedRegion[]>([]);
   const [layers, setLayers] = useState<LayerRegions>({});
   const [draft, setDraft] = useState<Point[]>([]);
@@ -443,10 +449,25 @@ export function RegionTracer({
     () => (pixelsPerCm ? measureLayeredTrace(totalRegions, layers, pixelsPerCm) : null),
     [totalRegions, layers, pixelsPerCm],
   );
-  const validation = useMemo(
-    () => validateLayeredTrace(totalRegions, layers, pixelsPerCm),
-    [totalRegions, layers, pixelsPerCm],
-  );
+
+  /**
+   * A lesion needs only its margin.
+   *
+   * The layered validator insists on at least one tissue patch, which is right
+   * for a wound bed and wrong for a keloid — there are no patches to mark, and
+   * demanding one would block the measurement entirely.
+   */
+  const validation = useMemo(() => {
+    if (!isLesion) return validateLayeredTrace(totalRegions, layers, pixelsPerCm);
+    const problems: string[] = [];
+    if (!pixelsPerCm || pixelsPerCm <= 0) {
+      problems.push('No scale: calibrate against the marker before tracing.');
+    }
+    if (!totalRegions.filter((r) => r.points.length >= 3).length) {
+      problems.push('Trace the outline of the lesion.');
+    }
+    return { ok: problems.length === 0, problems };
+  }, [isLesion, totalRegions, layers, pixelsPerCm]);
 
   const removeRegion = (layerKey: 'total' | TissueLayerKey, id: string) => {
     if (layerKey === 'total') setTotalRegions((r) => r.filter((x) => x.id !== id));
@@ -474,9 +495,16 @@ export function RegionTracer({
       <header className="flex items-center gap-3 px-4 py-2.5 bg-gray-800 text-white shrink-0">
         <Pencil className="w-5 h-5 text-teal-400 shrink-0" />
         <div className="min-w-0 flex-1">
-          <h2 className="font-semibold text-sm truncate">{purpose === 'elevation' ? 'Trace the profile' : 'Trace the surface'}</h2>
+          <h2 className="font-semibold text-sm truncate">
+            {purpose === 'elevation' ? 'Trace the profile'
+              : isLesion ? 'Trace the lesion' : 'Trace the surface'}
+          </h2>
           <p className="text-[11px] text-gray-400 truncate">
-            Outline the whole {isRecipient ? 'graft' : 'donor site'}, then mark each patch on it
+            {purpose === 'elevation'
+              ? 'Skin line first, then the profile of the lesion above it'
+              : isLesion
+                ? 'Outline the margin of the keloid or scar'
+                : `Outline the whole ${isRecipient ? 'graft' : 'donor site'}, then mark each patch on it`}
           </p>
         </div>
         <button onClick={onCancel} className="p-1.5 rounded hover:bg-white/10" aria-label="Cancel">
@@ -502,6 +530,12 @@ export function RegionTracer({
         />
 
         {/* The running total, over the image, so the number moves as they trace. */}
+        {isLesion && measurement && totalRegions.length > 0 && (
+          <div className="absolute top-2 left-2 rounded-lg bg-black/75 text-white px-3 py-2 text-xs pointer-events-none">
+            <p>Lesion area <strong className="tabular-nums">{measurement.totalAreaCm2.toFixed(2)} cm²</strong></p>
+            <p className="text-gray-300">{totalRegions.length} outline{totalRegions.length === 1 ? '' : 's'}</p>
+          </div>
+        )}
         {purpose === 'area' && measurement && measurement.basis !== 'none' && (
           <div className="absolute top-2 left-2 rounded-lg bg-black/75 text-white px-3 py-2 text-xs space-y-0.5 pointer-events-none">
             <p>Site <strong className="tabular-nums">{measurement.totalAreaCm2.toFixed(1)} cm²</strong></p>
@@ -591,7 +625,9 @@ export function RegionTracer({
         <div className="grid grid-cols-4 gap-1.5">
           <LayerButton
             active={mode === 'total'} onClick={() => setMode('total')}
-            colour={TOTAL_COLOUR} label="Whole site" count={totalRegions.length} outlineOnly
+            colour={TOTAL_COLOUR}
+            label={isLesion ? 'Lesion margin' : 'Whole site'}
+            count={totalRegions.length} outlineOnly
           />
           <button
             onClick={() => setMode('pan')}
@@ -614,7 +650,7 @@ export function RegionTracer({
           </button>
         </div>
 
-        {purpose === 'elevation' ? (
+        {isLesion ? null : purpose === 'elevation' ? (
           <div className="grid grid-cols-2 gap-1.5">
             <LayerButton
               active={mode === 'baseline'} onClick={() => setMode('baseline')}
@@ -710,7 +746,15 @@ export function RegionTracer({
             perpendicular to the skin line, so it does not matter how the head was held.
           </p>
         )}
-        <p className={`text-[11px] text-gray-400 items-start gap-1.5 ${purpose === 'elevation' ? 'hidden' : 'flex'}`}>
+        {isLesion && (
+          <p className="text-[11px] text-gray-400 flex items-start gap-1.5">
+            <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+            Drag round the margin of the lesion; the outline closes itself. Pinch or scroll to
+            zoom in first, and crop to the lesion if it is small in the frame. Trace each
+            separate nodule as its own outline — their areas are added.
+          </p>
+        )}
+        <p className={`text-[11px] text-gray-400 items-start gap-1.5 ${purpose === 'area' ? 'flex' : 'hidden'}`}>
           <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
           Drag to draw; the outline closes itself. Pinch or scroll to zoom in before tracing a
           fine margin. Add as many patches to each layer as the surface has — nothing is
@@ -791,9 +835,12 @@ export function RegionTracer({
             <Check className="w-4 h-4" />
             {purpose === 'elevation'
               ? 'Use this profile'
-              : measurement && measurement.basis !== 'none'
-                ? `Use ${measurement.healedPct.toFixed(1)}% ${healedLabel.toLowerCase()}`
-                : 'Confirm'}
+              : isLesion
+                ? (measurement && totalRegions.length
+                  ? `Use ${measurement.totalAreaCm2.toFixed(2)} cm²` : 'Confirm')
+                : measurement && measurement.basis !== 'none'
+                  ? `Use ${measurement.healedPct.toFixed(1)}% ${healedLabel.toLowerCase()}`
+                  : 'Confirm'}
           </button>
         </div>
       </div>
