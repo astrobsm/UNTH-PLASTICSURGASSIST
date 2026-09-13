@@ -396,3 +396,30 @@ describe('a scale is measured, never guessed', () => {
     expect(cal.pixelSize / cal.knownSizeCm).toBeCloseTo(38.2, 6);
   });
 });
+
+describe('the wound pipeline inherits the same rule', () => {
+  /** measureWound's reliability rule, as it now stands. */
+  const reliable = (cal: { confidence: number; requiresConfirmation?: boolean }, pxPerCm: number) =>
+    cal.confidence >= 0.5 && pxPerCm > 3 && pxPerCm < 4000
+    && cal.requiresConfirmation !== true;
+
+  it('no longer calls a confident texture guess reliable', () => {
+    // The exact case: a ruler "detected" at 30 px/cm on a face, confidence
+    // above the old 0.5 bar and comfortably inside the plausible range. This
+    // used to produce cm² marked reliable and send them to a healing chart.
+    expect(reliable({ confidence: 0.62, requiresConfirmation: true }, 30)).toBe(false);
+  });
+
+  it('still accepts a confidently found printed marker', () => {
+    expect(reliable({ confidence: 0.8 }, 38.2)).toBe(true);
+  });
+
+  it('still rejects an implausible scale however confident', () => {
+    expect(reliable({ confidence: 0.95 }, 1)).toBe(false);
+    expect(reliable({ confidence: 0.95 }, 9000)).toBe(false);
+  });
+
+  it('still rejects a weak detection', () => {
+    expect(reliable({ confidence: 0.3 }, 38)).toBe(false);
+  });
+});

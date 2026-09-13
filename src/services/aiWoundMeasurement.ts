@@ -940,12 +940,30 @@ export class AIWoundMeasurementService {
       .map(f => f.message);
 
     const scalePlausible = pxPerCm > 3 && pxPerCm < 4000;
-    const scaleReliable = calibration.confidence >= 0.5 && scalePlausible;
+
+    // A suggestion nobody confirmed is not a calibration.
+    //
+    // The grid and ruler detectors look for periodic structure, and skin
+    // pores, hair, fabric weave and JPEG blocking are all periodic. On a
+    // photograph of a face with no marker in it, the ruler detector returned
+    // 30 px/cm — comfortably inside `scalePlausible`, and above the 0.5
+    // confidence that used to make a scale "reliable". Every square centimetre
+    // computed from that would have been wrong by an unknown factor while
+    // looking precise, and would have gone on to a healing chart as fact.
+    //
+    // Only a detection that does not require confirmation, or one a person
+    // supplied by hand, can make the scale reliable. The measurement still
+    // happens in pixels either way.
+    const unconfirmedGuess = calibration.requiresConfirmation === true;
+    const scaleReliable = calibration.confidence >= 0.5 && scalePlausible && !unconfirmedGuess;
+
     if (!scaleReliable) {
       warnings.push(
         calibration.type === 'none'
           ? 'No scale reference found in this photograph. No measurement in centimetres has been made — set the scale against a ruler or the printed marker, or enter the dimensions by hand.'
-          : 'Scale reference weak — dimensions are approximate. Include a ruler or the printed marker for accurate cm.',
+          : unconfirmedGuess
+            ? `A possible ${calibration.type} was detected at ${pxPerCm.toFixed(1)} px/cm, but that detector also fires on skin texture and fabric. It has not been applied — set the scale by hand against the marker to measure in centimetres.`
+            : 'Scale reference weak — dimensions are approximate. Include a ruler or the printed marker for accurate cm.',
       );
     }
     // Area vs. ellipse(L×W) consistency: a good segmentation is roughly elliptical.
@@ -1008,7 +1026,10 @@ export class AIWoundMeasurementService {
       // A scale exists only if something of known size was actually found or
       // set. `type: 'none'` means nothing was, and every centimetre below is
       // therefore zero rather than a figure derived from an assumption.
-      calibrated: calibration.type !== 'none' && pxPerCm > 0,
+      // An unconfirmed texture guess is not a calibration either: `calibrated`
+      // drives the scale bar burned onto the overlay, and a scale bar drawn
+      // from skin texture is a measurement claim on the photograph itself.
+      calibrated: calibration.type !== 'none' && pxPerCm > 0 && !unconfirmedGuess,
       calibrationEvidence: calibration.evidence,
       calibrationConfidence: parseFloat(calibration.confidence.toFixed(3)),
       tissue,
