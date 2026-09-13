@@ -219,6 +219,32 @@ export const scarService = {
     return apiClient.put('/scars/colour', body);
   },
 
+  /** Stores height and volume from a traced lateral view. */
+  putElevation(body: {
+    assessmentId: number;
+    profilePx: { x: number; y: number }[];
+    baselinePx: { x: number; y: number }[];
+    pixelsPerCm: number;
+    areaCm2?: number;
+    shape?: 'dome' | 'plateau' | 'unknown';
+  }): Promise<any> {
+    return apiClient.put('/scars/elevation', body);
+  },
+
+  /**
+   * The same measurement without storing it, so the numbers can be shown
+   * before the assessment is committed. One implementation of the arithmetic,
+   * on the server, rather than a second copy in the client.
+   */
+  previewElevation(body: {
+    profilePx: { x: number; y: number }[];
+    baselinePx: { x: number; y: number }[];
+    pixelsPerCm: number;
+    areaCm2?: number;
+  }): Promise<any> {
+    return apiClient.put('/scars/elevation', { ...body, preview: true });
+  },
+
   finalize(assessmentId: number): Promise<any> {
     return apiClient.post('/scars/finalize', { assessmentId });
   },

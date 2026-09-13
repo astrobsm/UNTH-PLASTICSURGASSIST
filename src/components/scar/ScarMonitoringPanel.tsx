@@ -25,6 +25,7 @@ import { ANATOMICAL_SITES } from '../../data/woundTaxonomy';
 import { ScarTrendChart } from './ScarTrendChart';
 import { ScarAssessmentForm } from './ScarAssessmentForm';
 import { KeloidStatusPanel } from './KeloidStatusPanel';
+import { ScarCaptureFlow } from './ScarCaptureFlow';
 
 const VERDICT: Record<string, { cls: string; label: string }> = {
   consistent_progression: { cls: 'bg-red-50 border-red-200 text-red-900', label: 'Possible progression' },
@@ -174,20 +175,11 @@ function ScarDetail({ id, onBack }: { id: number; onBack: () => void }) {
 
   useEffect(() => { void load(); }, [load]);
 
-  const startVisit = async () => {
-    if (busy) return;
-    setBusy(true);
-    setError('');
-    try {
-      const r = await scarService.openAssessment({ scarId: id, measurementMethod: 'clinician_traced' });
-      setAssessing(r.assessment.id);
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not open an assessment.');
-    } finally {
-      setBusy(false);
-    }
-  };
+  // A new assessment starts with a photograph. Opening an empty row and
+  // showing the scales form — which is what this used to do — left every
+  // lesion at "Not enough data" however many assessments were opened, because
+  // nothing had been measured.
+  const [capturing, setCapturing] = useState(false);
 
   if (loading) {
     return <div className="flex items-center gap-2 text-sm text-gray-500 py-8">
@@ -216,7 +208,7 @@ function ScarDetail({ id, onBack }: { id: number; onBack: () => void }) {
           </p>
         </div>
         <button
-          onClick={() => void startVisit()}
+          onClick={() => setCapturing(true)}
           disabled={busy}
           className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-purple-600 text-white text-sm font-medium hover:bg-purple-700 disabled:opacity-60"
         >
@@ -321,6 +313,14 @@ function ScarDetail({ id, onBack }: { id: number; onBack: () => void }) {
           <span><strong className="text-gray-700">3D elevation and volume: not reliably measurable.</strong>{' '}
           {data.threeD.reason}</span>
         </p>
+      )}
+
+      {capturing && (
+        <ScarCaptureFlow
+          scar={data.scar}
+          onClose={() => setCapturing(false)}
+          onSaved={() => { setCapturing(false); void load(); }}
+        />
       )}
 
       {/* The visits. */}

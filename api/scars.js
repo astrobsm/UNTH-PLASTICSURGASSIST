@@ -557,13 +557,19 @@ async function putPatientReported(body, user, res) {
  */
 async function putElevation(body, res) {
   const b = body || {};
-  if (!b.assessmentId) return res.status(400).json({ error: 'assessmentId is required' });
 
   const profile = measureProfile(b.profilePx, b.baselinePx, num(b.pixelsPerCm));
   if (!profile.ok) return res.status(400).json({ error: profile.reason });
 
   const quality = profileQuality(profile);
   const volume = estimateVolume(num(b.areaCm2), profile, { shape: b.shape || 'unknown' });
+
+  // A preview measures without storing, so the clinician sees the height
+  // before committing the assessment. One implementation of the arithmetic
+  // rather than a second copy in the client.
+  if (b.preview) return res.status(200).json({ profile, volume, quality });
+
+  if (!b.assessmentId) return res.status(400).json({ error: 'assessmentId is required' });
 
   const r = await query(
     `INSERT INTO scar_3d_models

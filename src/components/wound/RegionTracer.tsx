@@ -31,10 +31,26 @@ import {
   type LayeredMeasurement,
 } from '../../services/tracedRegions';
 
-type Mode = 'calibrate' | 'pan' | 'crop' | 'total' | TissueLayerKey;
+type Mode = 'calibrate' | 'pan' | 'crop' | 'baseline' | 'profile' | 'total' | TissueLayerKey;
 
 const TOTAL_COLOUR = '#0ea5e9';
+const BASELINE_COLOUR = '#f97316';
+const PROFILE_COLOUR = '#a855f7';
 const CAL_COLOUR = '#3b82f6';
+
+/**
+ * A traced elevation profile, from a lateral view.
+ *
+ * Returned in the original photograph's pixel frame, with the scale that was
+ * in force. keloidElevation turns it into height in centimetres by measuring
+ * perpendicular to the baseline, so the camera angle does not matter.
+ */
+export interface ElevationResult {
+  baselinePx: [Point, Point];
+  profilePx: Point[];
+  pixelsPerCm: number;
+  calibrationSource: 'detected' | 'traced';
+}
 
 export interface TraceResult {
   totalRegions: TracedRegion[];
@@ -56,19 +72,31 @@ interface Props {
   detectedPixelsPerCm?: number | null;
   siteRole: 'donor' | 'recipient';
   markerCm?: number;
+  /**
+   * What is being traced.
+   *
+   * 'area' is the top-down outline and its tissue layers. 'elevation' is the
+   * lateral view: the skin baseline and the lesion's profile above it, which
+   * is where height and volume come from. Both share the crop, the
+   * calibration and the pan/zoom, because those are the same problem.
+   */
+  purpose?: 'area' | 'elevation';
   onCancel: () => void;
-  onConfirm: (result: TraceResult) => void;
+  onConfirm?: (result: TraceResult) => void;
+  onConfirmElevation?: (result: ElevationResult) => void;
 }
 
 export function RegionTracer({
-  imageUrl, detectedPixelsPerCm, siteRole, markerCm = 5, onCancel, onConfirm,
+  imageUrl, detectedPixelsPerCm, siteRole, markerCm = 5,
+  purpose = 'area', onCancel, onConfirm, onConfirmElevation,
 }: Props) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
 
   const [loaded, setLoaded] = useState(false);
-  const [mode, setMode] = useState<Mode>(detectedPixelsPerCm ? 'total' : 'calibrate');
+  const [mode, setMode] = useState<Mode>(
+    detectedPixelsPerCm ? (purpose === 'elevation' ? 'baseline' : 'total') : 'calibrate');
   const [totalRegions, setTotalRegions] = useState<TracedRegion[]>([]);
   const [layers, setLayers] = useState<LayerRegions>({});
   const [draft, setDraft] = useState<Point[]>([]);
@@ -94,6 +122,11 @@ export function RegionTracer({
    */
   const [crop, setCrop] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const [cropDraft, setCropDraft] = useState<{ a: Point; b: Point } | null>(null);
+
+  // Elevation tracing: the line of the surrounding skin, and the lesion's
+  // outline above it. Height is measured perpendicular to the first.
+  const [baseline, setBaseline] = useState<[Point, Point] | null>(null);
+  const [profile, setProfile] = useState<Point[]>([]);
   const originalRef = useRef<HTMLImageElement | null>(null);
 
   const view = useRef({ scale: 1, ox: 0, oy: 0 });
@@ -196,8 +229,20 @@ export function RegionTracer({
     for (const meta of TISSUE_LAYERS) {
       for (const r of layers[meta.key] || []) paint(r.points, meta.colour, true, true);
     }
+    if (baseline) {
+      paint([baseline[0], baseline[1]], BASELINE_COLOUR, false, false);
+      for (const pt of baseline) {
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, lw * 3, 0, Math.PI * 2);
+        ctx.fillStyle = BASELINE_COLOUR;
+        ctx.fill();
+      }
+    }
+    if (profile.length > 1) paint(profile, PROFILE_COLOUR, false, false);
+
     if (draft.length > 1) {
       const colour = mode === 'total' ? TOTAL_COLOUR
+        : mode === 'profile' ? PROFILE_COLOUR
         : (LAYER_META as Record<string, { colour: string }>)[mode]?.colour ?? TOTAL_COLOUR;
       paint(draft, colour, false, false);
     }
@@ -257,6 +302,7 @@ export function RegionTracer({
     drawing.current = true;
     if (mode === 'calibrate') { setCalLine([p, p]); return; }
     if (mode === 'crop') { setCropDraft({ a: p, b: p }); return; }
+    if (mode === 'baseline') { setBaseline([p, p]); return; }
     setDraft([p]);
   };
 
@@ -292,6 +338,7 @@ export function RegionTracer({
     const p = toImage(e.clientX, e.clientY);
     if (mode === 'calibrate') { setCalLine((l) => (l ? [l[0], p] : [p, p])); return; }
     if (mode === 'crop') { setCropDraft((c) => (c ? { a: c.a, b: p } : { a: p, b: p })); return; }
+    if (mode === 'baseline') { setBaseline((l) => (l ? [l[0], p] : [p, p])); return; }
     setDraft((d) => {
       const last = d[d.length - 1];
       if (last && Math.hypot(p.x - last.x, p.y - last.y) < 2 / view.current.scale) return d;
@@ -304,10 +351,19 @@ export function RegionTracer({
     if (pointers.current.size < 2) pinch.current = null;
     if (!drawing.current) return;
     drawing.current = false;
-    if (mode === 'calibrate' || mode === 'crop') return;
+    if (mode === 'calibrate' || mode === 'crop' || mode === 'baseline') return;
 
     const pts = simplify(draft, 2 / view.current.scale);
     setDraft([]);
+
+    // The profile is an open line along the top of the lesion, not a closed
+    // outline: it is a cross-section, and closing it would add a floor that
+    // was never traced.
+    if (mode === 'profile') {
+      if (pts.length >= 2) setProfile(pts);
+      return;
+    }
+
     if (pts.length < 3) return;   // a tap, not an outline
 
     const region: TracedRegion = { id: `${mode}-${Date.now()}`, points: pts };
@@ -418,7 +474,7 @@ export function RegionTracer({
       <header className="flex items-center gap-3 px-4 py-2.5 bg-gray-800 text-white shrink-0">
         <Pencil className="w-5 h-5 text-teal-400 shrink-0" />
         <div className="min-w-0 flex-1">
-          <h2 className="font-semibold text-sm truncate">Trace the surface</h2>
+          <h2 className="font-semibold text-sm truncate">{purpose === 'elevation' ? 'Trace the profile' : 'Trace the surface'}</h2>
           <p className="text-[11px] text-gray-400 truncate">
             Outline the whole {isRecipient ? 'graft' : 'donor site'}, then mark each patch on it
           </p>
@@ -446,7 +502,7 @@ export function RegionTracer({
         />
 
         {/* The running total, over the image, so the number moves as they trace. */}
-        {measurement && measurement.basis !== 'none' && (
+        {purpose === 'area' && measurement && measurement.basis !== 'none' && (
           <div className="absolute top-2 left-2 rounded-lg bg-black/75 text-white px-3 py-2 text-xs space-y-0.5 pointer-events-none">
             <p>Site <strong className="tabular-nums">{measurement.totalAreaCm2.toFixed(1)} cm²</strong></p>
             <p>Open <strong className="tabular-nums">{measurement.openAreaCm2.toFixed(1)} cm²</strong></p>
@@ -558,6 +614,18 @@ export function RegionTracer({
           </button>
         </div>
 
+        {purpose === 'elevation' ? (
+          <div className="grid grid-cols-2 gap-1.5">
+            <LayerButton
+              active={mode === 'baseline'} onClick={() => setMode('baseline')}
+              colour={BASELINE_COLOUR} label="Skin line" count={baseline ? 1 : 0} outlineOnly
+            />
+            <LayerButton
+              active={mode === 'profile'} onClick={() => setMode('profile')}
+              colour={PROFILE_COLOUR} label="Lesion profile" count={profile.length ? 1 : 0} outlineOnly
+            />
+          </div>
+        ) : (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
           {TISSUE_LAYERS.map((meta) => (
             <LayerButton
@@ -570,9 +638,10 @@ export function RegionTracer({
             />
           ))}
         </div>
+        )}
 
         {/* Composition, once anything has been marked. */}
-        {measurement && measurement.basis !== 'none' && (
+        {purpose === 'area' && measurement && measurement.basis !== 'none' && (
           <div className="rounded-lg bg-gray-700/60 p-2.5 space-y-1">
             <p className="text-[11px] font-semibold text-gray-300 uppercase tracking-wide">
               Surface composition
@@ -597,7 +666,7 @@ export function RegionTracer({
         )}
 
         {/* Every patch, so one can be removed without undoing the rest. */}
-        {patchCount > 0 && (
+        {purpose === 'area' && patchCount > 0 && (
           <div>
             <button
               onClick={() => setShowPatches((v) => !v)}
@@ -633,14 +702,22 @@ export function RegionTracer({
           </div>
         )}
 
-        <p className="text-[11px] text-gray-400 flex items-start gap-1.5">
+        {purpose === 'elevation' && (
+          <p className="text-[11px] text-gray-400 flex items-start gap-1.5">
+            <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+            On the lateral photograph: drag the skin line across the normal skin either side
+            of the lesion, then trace along the top of the lesion. Height is measured
+            perpendicular to the skin line, so it does not matter how the head was held.
+          </p>
+        )}
+        <p className={`text-[11px] text-gray-400 items-start gap-1.5 ${purpose === 'elevation' ? 'hidden' : 'flex'}`}>
           <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
           Drag to draw; the outline closes itself. Pinch or scroll to zoom in before tracing a
           fine margin. Add as many patches to each layer as the surface has — nothing is
           totalled until you confirm.
         </p>
 
-        {!validation.ok && validation.problems.length > 0 && (
+        {purpose === 'area' && !validation.ok && validation.problems.length > 0 && (
           <ul className="space-y-1">
             {validation.problems.map((p) => (
               <li key={p} className="flex items-start gap-1.5 text-[11px] text-amber-300">
@@ -659,14 +736,26 @@ export function RegionTracer({
             <Undo2 className="w-4 h-4" /> Undo
           </button>
           <button
-            onClick={() => { setTotalRegions([]); setLayers({}); setDraft([]); }}
-            disabled={!totalRegions.length && !patchCount}
+            onClick={() => { setTotalRegions([]); setLayers({}); setDraft([]); setBaseline(null); setProfile([]); }}
+            disabled={!totalRegions.length && !patchCount && !baseline && !profile.length}
             className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-gray-700 text-sm font-medium disabled:opacity-40"
           >
             <Trash2 className="w-4 h-4" /> Clear
           </button>
           <button
             onClick={() => {
+              if (purpose === 'elevation') {
+                if (!baseline || profile.length < 4 || !pixelsPerCm) return;
+                const shift = (pt: Point) => (crop
+                  ? { x: pt.x + crop.x, y: pt.y + crop.y } : pt);
+                onConfirmElevation?.({
+                  baselinePx: [shift(baseline[0]), shift(baseline[1])],
+                  profilePx: profile.map(shift),
+                  pixelsPerCm,
+                  calibrationSource,
+                });
+                return;
+              }
               if (!measurement || !pixelsPerCm) return;
               const composition = Object.fromEntries(
                 measurement.layers.map((l) => [l.key, l.pct]),
@@ -684,7 +773,7 @@ export function RegionTracer({
               for (const meta of TISSUE_LAYERS) {
                 if (layers[meta.key]?.length) shiftedLayers[meta.key] = shift(layers[meta.key]!);
               }
-              onConfirm({
+              onConfirm?.({
                 totalRegions: shift(totalRegions), layers: shiftedLayers,
                 pixelsPerCm, calibrationSource, measurement,
                 totalAreaCm2: measurement.totalAreaCm2,
@@ -694,13 +783,17 @@ export function RegionTracer({
                 composition,
               });
             }}
-            disabled={!validation.ok || !measurement}
+            disabled={purpose === 'elevation'
+              ? (!baseline || profile.length < 4 || !pixelsPerCm)
+              : (!validation.ok || !measurement)}
             className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-teal-600 font-semibold disabled:opacity-40"
           >
             <Check className="w-4 h-4" />
-            {measurement && measurement.basis !== 'none'
-              ? `Use ${measurement.healedPct.toFixed(1)}% ${healedLabel.toLowerCase()}`
-              : 'Confirm'}
+            {purpose === 'elevation'
+              ? 'Use this profile'
+              : measurement && measurement.basis !== 'none'
+                ? `Use ${measurement.healedPct.toFixed(1)}% ${healedLabel.toLowerCase()}`
+                : 'Confirm'}
           </button>
         </div>
       </div>
