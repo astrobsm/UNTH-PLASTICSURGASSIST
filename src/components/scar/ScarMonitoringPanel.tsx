@@ -24,6 +24,7 @@ import { TaxonomySelect } from '../wound/TaxonomySelect';
 import { ANATOMICAL_SITES } from '../../data/woundTaxonomy';
 import { ScarTrendChart } from './ScarTrendChart';
 import { ScarAssessmentForm } from './ScarAssessmentForm';
+import { KeloidStatusPanel } from './KeloidStatusPanel';
 
 const VERDICT: Record<string, { cls: string; label: string }> = {
   consistent_progression: { cls: 'bg-red-50 border-red-200 text-red-900', label: 'Possible progression' },
@@ -241,6 +242,11 @@ function ScarDetail({ id, onBack }: { id: number; onBack: () => void }) {
           ))}
         </ul>
       )}
+
+      {/* The keloid questions, first: growing, active, responding, recurrent.
+          Not "area reduction", not "healing velocity", not a closure date —
+          a keloid has none of those. */}
+      {data.keloid && <KeloidStatusPanel keloid={data.keloid} />}
 
       {/* §35/§36 — what the modalities say together. */}
       <div className={`rounded-xl border p-3.5 ${v.cls}`}>

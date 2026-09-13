@@ -25,6 +25,10 @@ import {
   changeBetween, rateOfChange, growthAcceleration, classifyDomainTrend,
   multimodalAssessment, predictionEligibility, methodConsistency,
 } from './_lib/scarLongitudinal.js';
+import {
+  growthProfile, growthAcceleration as keloidAcceleration, activityAssessment,
+  keloidStatus, treatmentResponse,
+} from './_lib/keloidProgress.js';
 
 const WRITE_ROLES = ['admin', 'consultant', 'senior_registrar', 'registrar', 'house_officer', 'nurse'];
 const num = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
@@ -263,6 +267,13 @@ async function getCase(id, res) {
   // followed an injection or preceded it — which is the whole question when
   // judging response (§54).
   let treatments = [];
+  let excisionDay = null;
+  if (scar.keloid_plan_id) {
+    const plan = (await query(
+      'SELECT surgery_date, surgery_planned FROM keloid_care_plans WHERE id = $1',
+      [scar.keloid_plan_id])).rows[0];
+    if (plan?.surgery_date) excisionDay = dayOf(plan.surgery_date);
+  }
   if (scar.keloid_plan_id) {
     treatments = (await query(
       `SELECT 'injection' AS kind, injection_number, injection_phase,
@@ -275,8 +286,46 @@ async function getCase(id, res) {
     )).rows.map((t) => ({ ...t, day: dayOf(t.event_date) }));
   }
 
+  // -- The keloid questions ------------------------------------------------
+  //
+  // Deliberately not the wound ones. A keloid does not epithelialize and does
+  // not close, so area reduction, healing velocity and a projected closure
+  // date are category errors for it. What a clinician needs to know is whether
+  // it is growing, whether it is still active, whether it responded to the
+  // injections, and whether post-excision growth is recurrence.
+  const areaSeries = seriesFor((v) => v.area_cm2);
+  const latest = visits.length ? visits[visits.length - 1] : null;
+
+  const growth = growthProfile(areaSeries);
+  const activity = activityAssessment({
+    erythemaIndex: num(latest?.erythema_index),
+    pain: num(latest?.pain_0_10),
+    itch: num(latest?.itch_0_10),
+    tenderness: null,
+    pliability: latest?.pliability,
+  });
+
+  const treatmentDays = treatments
+    .filter((t) => t.day != null && t.status !== 'scheduled')
+    .map((t) => t.day);
+
+  const keloid = {
+    growth,
+    acceleration: keloidAcceleration(areaSeries),
+    activity,
+    status: keloidStatus({
+      growth,
+      activity,
+      // Excision day, when the plan records one inside this scar's timeline.
+      excisionDayOffset: excisionDay,
+      currentDay: latest ? dayOf(latest.assessed_at) : null,
+    }),
+    treatmentResponse: treatmentResponse(areaSeries, treatmentDays),
+  };
+
   return res.status(200).json({
     scar,
+    keloid,
     visits: visits.map((v) => ({ ...v, day: dayOf(v.assessed_at) })),
     domains,
     scales: scaleTrends,

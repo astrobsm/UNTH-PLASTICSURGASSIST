@@ -182,8 +182,17 @@ async function listWounds(searchParams, res) {
   const pid = parseInt(patientId, 10);
   if (Number.isNaN(pid)) return res.status(400).json({ error: 'Invalid patientId' });
 
+  // Scars and keloids are excluded. They are stored as wounds so that they can
+  // reuse the photography, calibration and tracing pipeline, but they are NOT
+  // wounds clinically: a keloid does not epithelialize and does not close, so
+  // area reduction, healing velocity and a projected closure date are
+  // meaningless for it. They are followed in the scar & keloid monitor, which
+  // asks the keloid questions instead — growing, active, responding, recurrent.
   const result = await query(
-    `SELECT * FROM wounds WHERE patient_id = $1 ORDER BY status = 'active' DESC, updated_at DESC`,
+    `SELECT * FROM wounds w
+     WHERE w.patient_id = $1
+       AND NOT EXISTS (SELECT 1 FROM scar_cases s WHERE s.wound_id = w.id)
+     ORDER BY status = 'active' DESC, updated_at DESC`,
     [pid]
   );
   return res.status(200).json({ wounds: result.rows });
@@ -210,6 +219,9 @@ async function getMonitor(res) {
      FROM wounds w
      LEFT JOIN patients p ON p.id = w.patient_id
      WHERE w.status = 'active'
+       -- Keloids and scars belong in the scar monitor, not here: healing
+       -- status is not a question a keloid answers.
+       AND NOT EXISTS (SELECT 1 FROM scar_cases s WHERE s.wound_id = w.id)
      ORDER BY
        CASE w.healing_status
          WHEN 'worsening' THEN 0

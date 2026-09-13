@@ -129,6 +129,8 @@ export interface TreatmentEvent {
 
 export interface ScarCaseDetail {
   scar: ScarCase;
+  /** Keloid-specific: growth, activity, response, recurrence. Never healing. */
+  keloid: import('../components/scar/KeloidStatusPanel').KeloidAnalytics;
   visits: ScarVisit[];
   domains: ScarDomain[];
   scales: ScaleTrend[];

@@ -226,12 +226,21 @@ export const WOUND_ETIOLOGIES: TaxonomyGroup[] = [
 // ---------------------------------------------------------------------------
 
 /** Wound types, kept beside the taxonomy so all three lists live together. */
+/**
+ * Wound types for the wound monitor.
+ *
+ * Keloid and hypertrophic scar are deliberately absent. They are followed in
+ * the scar & keloid monitor, which measures growth, activity, treatment
+ * response and recurrence — not area reduction, healing velocity and a
+ * projected closure date, none of which a keloid has. Offering "Keloid" here
+ * invites a clinician to register one as a wound and then be shown a healing
+ * map it will never complete.
+ */
 export const WOUND_TYPES = [
   'Burn', 'Pressure injury', 'Venous ulcer', 'Arterial ulcer',
   'Diabetic foot ulcer', 'Sickle cell ulcer', 'Surgical wound',
   'Traumatic wound', 'Skin graft donor site', 'Skin graft recipient site',
   'Flap', 'Necrotising fasciitis', "Fournier's gangrene", 'Malignant wound',
-  'Keloid / scar', 'Contracture',
 ];
 
 /** Flat list of every option in a taxonomy, for validation and search. */
