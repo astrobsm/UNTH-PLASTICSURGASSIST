@@ -36,6 +36,10 @@ import { syncService } from '../db/syncService';
 import toast from 'react-hot-toast';
 import UnitRosterWidget from '../components/UnitRosterWidget';
 import OnCallTeamCard from '../components/OnCallTeamCard';
+import MyOnCallConsultsCard from '../components/MyOnCallConsultsCard';
+import { callDutyService, unitsForUser, currentUnits, type UnitCallConfig } from '../services/callDutyService';
+import UnitsTodayCard from '../components/UnitsTodayCard';
+import MorningRoundCard from '../components/MorningRoundCard';
 import { userManagementService, ApprovedUser } from '../services/userManagementService';
 import { medicalTeamService } from '../services/medicalTeamService';
 import { checkAndReassignHouseOfficers } from '../services/houseOfficerReassignmentService';
@@ -184,6 +188,12 @@ export default function Dashboard() {
     type: string;
   }>>([]);
   const [dashboardPatients, setDashboardPatients] = useState<DashboardPatient[]>([]);
+  // Every admitted patient, whoever they are assigned to — the source for the
+  // per-unit list. dashboardPatients stays the user's own (or all, for admin).
+  const [admittedPatients, setAdmittedPatients] = useState<DashboardPatient[]>([]);
+  const [unitConfig, setUnitConfig] = useState<UnitCallConfig | null>(null);
+  // Which unit's admitted patients are open; null = list hidden.
+  const [openUnitKey, setOpenUnitKey] = useState<string | null>(null);
   const [patientSearch, setPatientSearch] = useState('');
   const [wardFilter, setWardFilter] = useState('all');
   const [availableWards, setAvailableWards] = useState<string[]>([]);
@@ -347,7 +357,13 @@ export default function Dashboard() {
       }
       // Auto-assign HOs to any newly admitted patients on startup. Fill-only:
       // a patient who already has a house officer is never touched.
-      try {
+      //
+      // Not once units are configured: this picks from every house officer in
+      // the department, and would hand a unit's patient to the other unit's HO.
+      // The server assigns within the unit (teamAssignment.pickForUnit).
+      const units = await callDutyService.serverGetUnitConfig().catch(() => null);
+      setUnitConfig(units);
+      if (!units) try {
         const result = await medicalTeamService.autoAssignAdmittedPatientsToHouseOfficers();
         if (result.assigned > 0) {
           // Reload to reflect new assignments
@@ -402,6 +418,7 @@ export default function Dashboard() {
       const userName = user?.name || '';
       const userId = user?.id || '';
       const dPatients: DashboardPatient[] = [];
+      const allAdmitted: DashboardPatient[] = [];
 
       for (const p of activePatientsList) {
         const pid = String(p.id || p.serverId || '');
@@ -430,8 +447,7 @@ export default function Dashboard() {
           adm?.created_by === userId ||
           (!!team && [team.consultant_id, team.sr_id, team.reg_id, team.ho_id].includes(myId));
 
-        if (isAdmin || isAssigned) {
-          dPatients.push({
+        const row: DashboardPatient = {
             id: p.id || p.serverId || '',
             name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.full_name || 'Unknown',
             hospital_number: p.hospital_number || '',
@@ -455,8 +471,9 @@ export default function Dashboard() {
             sr_id: team?.sr_id ?? null,
             reg_id: team?.reg_id ?? null,
             ho_id: team?.ho_id ?? null,
-          });
-        }
+          };
+        if (admStatus === 'active') allAdmitted.push(row);
+        if (isAdmin || isAssigned) dPatients.push(row);
       }
 
       // Backfill: include any active admissions whose patient record is missing
@@ -486,9 +503,7 @@ export default function Dashboard() {
           (adm.admitting_consultant || '').toLowerCase().includes(userName.toLowerCase()) ||
           adm.created_by === user?.id ||
           (!!team && [team.consultant_id, team.sr_id, team.reg_id, team.ho_id].includes(myId));
-        if (!isAdmin && !isAssigned) continue;
-
-        dPatients.push({
+        const row: DashboardPatient = {
           id: adm.patient_id || adm.id || '',
           name: adm.patient_name || `Hosp ${adm.hospital_number || ''}` || 'Unknown',
           hospital_number: adm.hospital_number || '',
@@ -509,12 +524,15 @@ export default function Dashboard() {
           sr_id: team?.sr_id ?? null,
           reg_id: team?.reg_id ?? null,
           ho_id: team?.ho_id ?? null,
-        });
+        };
+        allAdmitted.push(row);
+        if (isAdmin || isAssigned) dPatients.push(row);
         if (admPid) includedIds.add(admPid);
         if (admHn) includedHns.add(admHn);
       }
 
       setDashboardPatients(dPatients);
+      setAdmittedPatients(allAdmitted);
 
       // Collect unique wards
       const wards = [...new Set(dPatients.map(p => p.ward).filter(Boolean))].sort();
@@ -906,6 +924,24 @@ export default function Dashboard() {
    * it used to fire automatically on every dashboard load, which is why teams
    * appeared to change on their own.
    */
+  // Units run their own patients; this re-checks every junior team against
+  // today's unit membership (the server also does it on each rotation date).
+  const handleApplyUnits = async () => {
+    setAutoAssigning(true);
+    setAutoAssignResult(null);
+    try {
+      const r = await callDutyService.serverApplyUnits();
+      setAutoAssignResult(r
+        ? `Checked ${r.checked} unit patients — ${r.reassigned} handed to their unit's doctors (SR ${r.byGrade.senior_registrar}, Reg ${r.byGrade.registrar}, HO ${r.byGrade.house_officer}).`
+        : 'Units are not configured.');
+      await loadDashboardData();
+    } catch (e: any) {
+      setAutoAssignResult(`Failed: ${e?.message || 'unknown error'}`);
+    } finally {
+      setAutoAssigning(false);
+    }
+  };
+
   const handleRotateHOTours = async () => {
     if (!window.confirm(
       'Apply house-officer rotation now?\n\nPatients whose house officer\'s roster tour has ended will be moved to the house officer currently covering that unit. Everyone else is left unchanged.'
@@ -1205,10 +1241,25 @@ export default function Dashboard() {
     }
   };
 
-  // Filter patients by search, ward, and admission status (admitted only for admin)
-  const filteredPatients = dashboardPatients.filter(p => {
-    // Only show admitted patients
-    if (p.admission_status !== 'active') return false;
+  // ── Patients admitted under a unit ───────────────────────────────────────
+  // A patient belongs to the unit of their consultant (consultants are fixed
+  // per unit in the call-duty unit configuration).
+  const unitOfConsultant = new Map<string, string>();
+  for (const u of currentUnits(unitConfig)) for (const id of u.consultant_ids) unitOfConsultant.set(String(id), u.key);
+  const NO_UNIT = '__none__';
+  const unitKeyOf = (p: DashboardPatient) => (p.consultant_id && unitOfConsultant.get(String(p.consultant_id))) || NO_UNIT;
+  const myUnits = unitsForUser(unitConfig, user?.id);
+  // Everyone sees their own unit(s); an administrator can open any unit, plus
+  // the patients whose consultant is not in a unit.
+  const visibleUnits = isAdmin ? currentUnits(unitConfig) : myUnits;
+  const unitCounts = new Map<string, number>();
+  for (const p of admittedPatients) unitCounts.set(unitKeyOf(p), (unitCounts.get(unitKeyOf(p)) || 0) + 1);
+  const openUnitName = openUnitKey === NO_UNIT
+    ? 'Not under a unit'
+    : currentUnits(unitConfig).find(u => u.key === openUnitKey)?.name || '';
+
+  // Filter the open unit's patients by search and ward
+  const filteredPatients = (openUnitKey ? admittedPatients.filter(p => unitKeyOf(p) === openUnitKey) : []).filter(p => {
     const matchesSearch = !patientSearch || 
       p.name.toLowerCase().includes(patientSearch.toLowerCase()) ||
       p.hospital_number.toLowerCase().includes(patientSearch.toLowerCase()) ||
@@ -1265,7 +1316,7 @@ export default function Dashboard() {
         </h1>
         <p className="page-subtitle">
           {isAdmin 
-            ? "Admin overview — all patients and their assigned team members."
+            ? "Admin overview — open a unit below to see the patients admitted under it."
             : "Here's what's happening with your assigned patients today."}
         </p>
       </div>
@@ -1299,8 +1350,8 @@ export default function Dashboard() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <h3 className="text-base sm:text-lg font-semibold text-clinical-dark flex items-center gap-2">
             <UserCheck className="h-5 w-5 text-primary-600" />
-            {isAdmin ? 'Admitted Patients & Assignments' : 'My Assigned Patients'}
-            <span className="text-sm font-normal text-gray-500">({filteredPatients.length})</span>
+            {openUnitKey ? `Admitted under ${openUnitName}` : 'Admitted Patients by Unit'}
+            {openUnitKey && <span className="text-sm font-normal text-gray-500">({filteredPatients.length})</span>}
           </h3>
           <div className="flex flex-col sm:flex-row gap-2">
             {isAdmin && (
@@ -1320,6 +1371,16 @@ export default function Dashboard() {
                 >
                   {autoAssigning ? 'Working...' : 'Rebalance Teams'}
                 </button>
+                {unitConfig ? (
+                  <button
+                    onClick={handleApplyUnits}
+                    disabled={autoAssigning}
+                    className="px-3 py-1.5 text-xs font-medium rounded-lg bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
+                    title="Hand any patient whose senior registrar, registrar or house officer is no longer in the patient's unit to that unit's doctor. Runs automatically on rotation dates."
+                  >
+                    {autoAssigning ? 'Working...' : 'Apply units now'}
+                  </button>
+                ) : (<>
                 <button
                   onClick={handleAutoAssignHO}
                   disabled={autoAssigning}
@@ -1345,6 +1406,7 @@ export default function Dashboard() {
                 >
                   {autoAssigning ? 'Working...' : 'Apply HO Rotation'}
                 </button>
+                </>)}
                 <button
                   onClick={handleForceDischargeSelected}
                   disabled={forceDischarging || selectedForDischarge.size === 0}
@@ -1367,6 +1429,7 @@ export default function Dashboard() {
               </>
             )}
             {/* Search */}
+            {openUnitKey && (<>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <input
@@ -1390,7 +1453,47 @@ export default function Dashboard() {
                 ))}
               </select>
             )}
+            </>)}
           </div>
+        </div>
+
+        {/* One button per unit the user may open; the list shows only after a click. */}
+        <div className="flex flex-wrap gap-2 mb-4">
+          {visibleUnits.map(u => {
+            const mine = myUnits.some(m => m.key === u.key);
+            const active = openUnitKey === u.key;
+            return (
+              <button
+                key={u.key}
+                onClick={() => { setOpenUnitKey(active ? null : u.key); setSelectedForDischarge(new Set()); }}
+                className={`px-4 py-2 rounded-lg text-sm font-medium border flex items-center gap-2 ${active ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-primary-700 border-primary-300 hover:bg-primary-50'}`}
+              >
+                <Building2 className="h-4 w-4" />
+                {active ? 'Hide' : mine ? 'My unit:' : 'View'} {u.name}
+                <span className={`px-1.5 rounded-full text-xs ${active ? 'bg-white/20' : 'bg-primary-50'}`}>{unitCounts.get(u.key) || 0}</span>
+              </button>
+            );
+          })}
+          {isAdmin && (unitCounts.get(NO_UNIT) || 0) > 0 && (
+            <button
+              onClick={() => { setOpenUnitKey(openUnitKey === NO_UNIT ? null : NO_UNIT); setSelectedForDischarge(new Set()); }}
+              className={`px-4 py-2 rounded-lg text-sm font-medium border flex items-center gap-2 ${openUnitKey === NO_UNIT ? 'bg-gray-700 text-white border-gray-700' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+              title="Admitted patients whose consultant is not listed in a unit"
+            >
+              {openUnitKey === NO_UNIT ? 'Hide' : 'Not under a unit'}
+              <span className="px-1.5 rounded-full text-xs bg-gray-100 text-gray-700">{unitCounts.get(NO_UNIT)}</span>
+            </button>
+          )}
+          {!unitConfig && (
+            <p className="text-sm text-gray-500">
+              Units have not been set up yet. {isAdmin || ['consultant', 'senior_registrar'].includes(user?.role || '')
+                ? <>Configure them on the <Link to="/call-duty" className="text-primary-700 underline">Call Duty Roster</Link> page (Units).</>
+                : 'Ask a consultant or administrator to configure them on the Call Duty Roster page.'}
+            </p>
+          )}
+          {unitConfig && visibleUnits.length === 0 && (
+            <p className="text-sm text-gray-500">You are not listed in a unit. Ask a consultant or administrator to add you on the Call Duty Roster page (Units).</p>
+          )}
         </div>
 
         {autoAssignResult && (
@@ -1399,7 +1502,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {filteredPatients.length > 0 ? (
+        {!openUnitKey ? null : filteredPatients.length > 0 ? (
           <>
             {/* Desktop Table */}
             <div className="hidden md:block overflow-x-auto">
@@ -1567,11 +1670,9 @@ export default function Dashboard() {
           <div className="text-center py-8 text-gray-500">
             <Users className="h-10 w-10 mx-auto mb-2 text-gray-300" />
             <p className="text-sm">
-              {patientSearch || wardFilter !== 'all' 
-                ? 'No patients match your search criteria.' 
-                : isAdmin 
-                  ? 'No patients registered yet.'
-                  : 'No patients assigned to you yet.'}
+              {patientSearch || wardFilter !== 'all'
+                ? 'No patients match your search criteria.'
+                : `No patients are currently admitted under ${openUnitName}.`}
             </p>
           </div>
         )}
@@ -1791,8 +1892,14 @@ export default function Dashboard() {
       {/* On-Call Team (today) — visible to everyone */}
       <OnCallTeamCard />
 
+      {/* House officers' 07:00–09:00 round */}
+      <MorningRoundCard />
+
+      {/* Consults routed to this user while on call */}
+      <MyOnCallConsultsCard />
+
       {/* PS Unit Roster & Schedule */}
-      <UnitRosterWidget />
+      {unitConfig ? <UnitsTodayCard config={unitConfig} /> : <UnitRosterWidget />}
 
       {/* HO Duty Section — Today's Assignments */}
       {hoDutyData && hoDutyData.todaySchedule.length > 0 && (

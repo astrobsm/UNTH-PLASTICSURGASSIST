@@ -321,6 +321,30 @@ IMPORTANT:
 - If handwriting is unclear, provide best estimate with a note
 - Include running totals if visible on chart`;
 
+const CONSULT_REVIEW_PROMPT = `You are transcribing a plastic surgery team's handwritten REVIEW of a patient referred to them by another unit (a consult). The page is usually a ward-round style note: findings on review, an impression, and a plan, sometimes with a consultant's comments and later what was done.
+
+Transcribe faithfully, then place each part of the note into the field it belongs to. Copy the doctor's wording — do not summarise, paraphrase, or add any clinical content that is not on the page. Mark words you cannot read with [?].
+
+Respond with ONLY valid JSON in this format:
+{
+  "raw_text": "complete transcription of the page, preserving line breaks",
+  "confidence": 0.0 to 1.0,
+  "handwriting_detected": true/false,
+  "structured": {
+    "review_notes": "findings on review: history, examination, assessment/impression, immediate concerns — or null",
+    "proposed_plan": "the management plan as written (numbered items kept on their own lines) — or null",
+    "plan_approval_notes": "consultant approval / comments on the plan — or null",
+    "implementation_notes": "what was done and the outcome — or null",
+    "diagnosis": "working diagnosis if stated — or null",
+    "reviewer": "name and grade of the reviewing doctor if visible — or null",
+    "review_datetime": "date/time of the review if visible — or null",
+    "notes": "anything else relevant not fitting above — or null",
+    "confidence": 0.0 to 1.0
+  }
+}
+
+Typical headings: "Seen by", "Hx", "O/E", "Impression", "Imp", "Dx", "Plan", "P:", "Cons comment", "Approved", "Done", "Procedure". Text under "Plan"/"P:" goes to proposed_plan; text under O/E, Hx, Impression goes to review_notes. A note with no headings goes entirely into review_notes.`;
+
 async function runGPT4oVisionOCR(base64Image, mimeType, documentType, patientContext, apiKey) {
   // Strip data URI prefix if present, then re-add for the API
   const cleanBase64 = base64Image.replace(/^data:[^;]+;base64,/, '');
@@ -329,12 +353,18 @@ async function runGPT4oVisionOCR(base64Image, mimeType, documentType, patientCon
   // Use specialized prompt for vital signs charts or fluid charts
   const isVitalSignsChart = documentType === 'vital_signs_chart';
   const isFluidChart = documentType === 'fluid_chart';
-  const systemPrompt = isVitalSignsChart ? VITAL_SIGNS_CHART_PROMPT : isFluidChart ? FLUID_CHART_PROMPT : VISION_OCR_SYSTEM_PROMPT;
+  const isConsultReview = documentType === 'consult_review';
+  const systemPrompt = isVitalSignsChart ? VITAL_SIGNS_CHART_PROMPT
+    : isFluidChart ? FLUID_CHART_PROMPT
+    : isConsultReview ? CONSULT_REVIEW_PROMPT
+    : VISION_OCR_SYSTEM_PROMPT;
 
   let userMessage = isVitalSignsChart
     ? 'Please read this vital signs monitoring chart and extract ALL vital sign readings with their dates and times.'
     : isFluidChart
     ? 'Please read this fluid balance/intake-output chart and extract ALL fluid entries with times, types, routes, and volumes.'
+    : isConsultReview
+    ? 'Please transcribe this handwritten consult review and place each part into the review fields.'
     : `Please read and transcribe all text from this medical document image. Document type hint: ${documentType || 'general'}.`;
 
   if (patientContext) {
@@ -384,7 +414,8 @@ async function runGPT4oVisionOCR(base64Image, mimeType, documentType, patientCon
     raw_text: parsed.raw_text || '',
     structured: parsed.structured || null,
     confidence: parsed.confidence || 0.85,
-    documentType: parsed.document_type || documentType,
+    // A consult review keeps its type: the client maps structured fields by it.
+    documentType: isConsultReview ? 'consult_review' : (parsed.document_type || documentType),
     handwritingDetected: parsed.handwriting_detected || false,
     model: 'gpt-4o-vision',
   };

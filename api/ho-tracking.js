@@ -2,7 +2,8 @@
 // Provides detailed HO documentation logs, patient care metrics, and sign-out eligibility
 import { query } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
-import { getRequirements, pctOf, computeOverall, computeEligibility, SCORE_WEIGHTS } from './_lib/traineeScoring.js';
+import { getRequirements, pctOf, computeOverall, computeEligibility, weightsFor, morningRoundsComponent } from './_lib/traineeScoring.js';
+import { morningCompliance } from './_lib/morningRounds.js';
 
 const ADMIN_ROLES = ['consultant', 'super_admin', 'admin', 'senior_registrar'];
 
@@ -746,6 +747,21 @@ async function getHOFullMetrics(userId, fullName, username) {
     duties: dutyScore,
     attendance: attendanceScore,
   };
+  // House officers' 07:00–09:00 round, over this rotation: patient-mornings
+  // documented in the app on time with the folder confirmed.
+  let morning = { expected: 0, done: 0, pct: null, days: [] };
+  try {
+    morning = await morningCompliance(uid, {
+      since: rotationStart ? new Date(rotationStart).toISOString().slice(0, 10) : null,
+    });
+  } catch (e) {
+    console.warn(`[HO-Metrics] morning rounds for ${uid}:`, e.message);
+  }
+  const morningScore = morningRoundsComponent(
+    { morningRoundsExpected: morning.expected, morningRoundsDone: morning.done }, 'house_officer'
+  );
+  if (morningScore !== null) components.morningRounds = morningScore;
+  const W = weightsFor(components);
   const counts = {
     cmeArticles: cmeCount,
     cbtTests: cbtCompleted,
@@ -784,12 +800,21 @@ async function getHOFullMetrics(userId, fullName, username) {
       // module rather than being retyped here, so a change to the formula
       // cannot leave this panel explaining the old one.
       scoreBreakdown: {
-        cme: bd(cmeScore, SCORE_WEIGHTS.cme),
-        cbt: bd(cbtAvgScore, SCORE_WEIGHTS.cbt),
-        selfAssessment: bd(selfAssessmentAvgScore, SCORE_WEIGHTS.selfAssessment),
-        patientCare: bd(patientScore, SCORE_WEIGHTS.clinical),
-        duties: bd(dutyScore, SCORE_WEIGHTS.duties),
-        attendance: bd(attendanceScore, SCORE_WEIGHTS.attendance),
+        cme: bd(cmeScore, W.cme),
+        cbt: bd(cbtAvgScore, W.cbt),
+        selfAssessment: bd(selfAssessmentAvgScore, W.selfAssessment),
+        patientCare: bd(patientScore, W.clinical),
+        ...(morningScore !== null ? { morningRounds: bd(morningScore, W.morningRounds) } : {}),
+        duties: bd(dutyScore, W.duties),
+        attendance: bd(attendanceScore, W.attendance),
+      },
+      // 07:00–09:00 house officers' round: patient-mornings expected / done
+      // (on time + folder confirmed) this rotation, and the last 14 days.
+      morningRounds: {
+        expected: morning.expected,
+        done: morning.done,
+        pct: morning.pct,
+        recentDays: morning.days.slice(-14),
       },
       rotationStart: rotationStart || null,
     },

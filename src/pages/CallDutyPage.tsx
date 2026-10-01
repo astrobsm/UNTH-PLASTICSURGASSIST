@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { openPrintWindow } from '../utils/printText';
 import DutyAssignmentPanel from '../components/DutyAssignmentPanel';
+import UnitCallSetupPanel from '../components/UnitCallSetupPanel';
 import {
   callDutyService,
   CallDutyShift,
@@ -44,6 +45,7 @@ import {
   rosterKey,
   parseRosterKey,
   formatRosterLabel,
+  CALL_BLOCK_LABELS,
 } from '../services/callDutyService';
 import { useAuthStore } from '../store/authStore';
 import { format, parseISO, isSameDay } from 'date-fns';
@@ -95,7 +97,7 @@ export default function CallDutyPage() {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [viewMode, setViewMode] = useState<'table' | 'calendar' | 'assign' | 'handover' | 'tasks'>('table');
+  const [viewMode, setViewMode] = useState<'table' | 'calendar' | 'assign' | 'handover' | 'tasks' | 'units'>('table');
   const [editingShiftId, setEditingShiftId] = useState<number | null>(null);
   const [showSummary, setShowSummary] = useState(false);
 
@@ -401,7 +403,7 @@ export default function CallDutyPage() {
       return `
         <tr>
           <td style="border:1px solid #333;padding:8px;text-align:center;font-weight:600;">${s.shift_number}</td>
-          <td style="border:1px solid #333;padding:8px;">${format(start, 'EEE, dd MMM yyyy')} 08:00</td>
+          <td style="border:1px solid #333;padding:8px;">${format(start, 'EEE, dd MMM yyyy')} 08:00${s.unit_name ? '<br/><span style="font-size:11px;color:#065f46;font-weight:600;">' + s.unit_name + '</span>' : ''}</td>
           <td style="border:1px solid #333;padding:8px;">${format(end, 'EEE, dd MMM yyyy')} 08:00</td>
           <td style="border:1px solid #333;padding:8px;font-weight:500;">${s.consultant_name || 'TBD'}${s.consultant_phone ? '<br/><span style="font-size:11px;color:#555;">Tel: ' + s.consultant_phone + '</span>' : ''}</td>
           <td style="border:1px solid #333;padding:8px;font-weight:500;">${s.senior_registrar_name}</td>
@@ -528,7 +530,9 @@ export default function CallDutyPage() {
             Call Duty Roster
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            48-hour call shifts — Senior Registrar, Registrar &amp; House Officers (Ward / Emergency / Off rotation)
+            {shifts.some(s => s.unit_key)
+              ? 'Unit call — units alternate Mon–Tue / Wed–Thu / Fri–Sun; daily 08:00 → 08:00 shifts'
+              : '48-hour call shifts — Senior Registrar, Registrar & House Officers (Ward / Emergency / Off rotation)'}
           </p>
         </div>
 
@@ -546,6 +550,13 @@ export default function CallDutyPage() {
           >
             <Calendar className="w-4 h-4" />
             Calendar
+          </button>
+          <button
+            onClick={() => { setViewMode('units'); loadStaff(); }}
+            className={`px-3 py-2 text-sm rounded-lg flex items-center gap-1 ${viewMode === 'units' ? 'bg-green-100 text-green-800' : 'bg-gray-100 hover:bg-gray-200'}`}
+          >
+            <Building2 className="w-4 h-4" />
+            Units
           </button>
           {/* Manual duty assignment. Works on a phone, unlike the inline editor
               in the desktop table. */}
@@ -940,6 +951,25 @@ export default function CallDutyPage() {
       )}
 
       {/* ─── Assign Duties View ────────────────────────────────────────── */}
+      {viewMode === 'units' && (
+        staffLoaded ? (
+          <UnitCallSetupPanel
+            staff={{ consultants, seniorRegs, registrars, houseOfficers }}
+            canEdit={['admin', 'super_admin', 'consultant', 'senior_registrar'].includes(user?.role || '')}
+            onApplied={(start, end) => {
+              setDurationPreset('custom');
+              setStartDate(start);
+              setEndDate(end);
+              loadSavedKeys();
+            }}
+          />
+        ) : (
+          <div className="bg-white rounded-xl shadow-sm border p-8 text-center text-gray-500">
+            <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" /> Loading staff…
+          </div>
+        )
+      )}
+
       {!loading && viewMode === 'assign' && (
         <DutyAssignmentPanel
           shifts={shifts}
@@ -1340,6 +1370,11 @@ function ShiftRow({
           <div>
             <div className="font-medium">{format(startDate, 'EEE, dd MMM yyyy')}</div>
             <div className="text-xs text-gray-400">08:00 hrs</div>
+            {shift.unit_name && (
+              <div className="mt-0.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px]">
+                <Building2 className="w-3 h-3" /> {shift.unit_name}{shift.call_block ? ` · ${CALL_BLOCK_LABELS[shift.call_block] || shift.call_block}` : ''}
+              </div>
+            )}
           </div>
         </div>
       </td>

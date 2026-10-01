@@ -2,6 +2,8 @@
 import { query } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
 import { idempotent, rememberResponse } from './_lib/idempotency.js';
+import { ensureMorningSnapshot, morningChecklist, morningCompliance } from './_lib/morningRounds.js';
+import { currentUnitMembership } from './_lib/teamAssignment.js';
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
@@ -43,6 +45,48 @@ async function handleGet(req, res, userId, userRole) {
   const { action, roundId, patientId, admissionId, date, startDate, endDate } = req.query;
 
   switch (action) {
+    // ── House officers' morning round (07:00–09:00) ──
+    // ?action=morning-checklist[&hoId=][&date=YYYY-MM-DD] — one HO's patients and status
+    case 'morning-checklist': {
+      const hoId = req.query.hoId || userId;
+      if (String(hoId) !== String(userId) && !MORNING_VIEW_ROLES.includes(userRole)) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+      return res.status(200).json(await morningChecklist(hoId, req.query.date || null));
+    }
+    // ?action=morning-compliance[&hoId=][&since=YYYY-MM-DD] — on-time + folder rate
+    case 'morning-compliance': {
+      const hoId = req.query.hoId || userId;
+      if (String(hoId) !== String(userId) && !MORNING_VIEW_ROLES.includes(userRole)) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+      return res.status(200).json(await morningCompliance(hoId, { since: req.query.since || null }));
+    }
+    // ?action=morning-units[&date=] — every unit's house officers and today's tally,
+    // for the consultants and residents supervising them.
+    case 'morning-units': {
+      if (!MORNING_VIEW_ROLES.includes(userRole)) return res.status(403).json({ error: 'Access denied' });
+      const membership = await currentUnitMembership();
+      const units = membership ? membership.units : [];
+      const hoIds = new Set(units.flatMap(u => u.house_officer_ids || []).map(String));
+      // House officers with patients but outside any unit still need supervising.
+      const assigned = (await query(
+        `SELECT DISTINCT house_officer_id::text AS id FROM patient_assignments
+          WHERE is_active = TRUE AND house_officer_id IS NOT NULL AND house_officer_id::text <> ''`
+      )).rows.map(r => r.id);
+      assigned.forEach(id => hoIds.add(id));
+      const names = new Map((await query(
+        `SELECT id::text AS id, full_name FROM users WHERE id::text = ANY($1::text[])`, [[...hoIds]]
+      )).rows.map(r => [r.id, r.full_name]));
+      const out = [];
+      for (const id of hoIds) {
+        const c = await morningChecklist(id, req.query.date || null);
+        const unit = units.find(u => (u.house_officer_ids || []).map(String).includes(id));
+        out.push({ ho_id: id, name: names.get(id) || `User ${id}`, unit_key: unit?.key || null, unit_name: unit?.name || null, window: c.window, summary: c.summary });
+      }
+      return res.status(200).json({ house_officers: out });
+    }
+
     case 'detail':
       if (!roundId) {
         return res.status(400).json({ error: 'Round ID required' });
@@ -193,7 +237,9 @@ async function handlePost(req, res, userId, userRole, authUser) {
         consultantInstructions,
         plan,
         issues,
-        nursingNotes
+        nursingNotes,
+        documentedAt,
+        folderUpdated
       } = body;
       
       if (!patientId) {
@@ -204,8 +250,8 @@ async function handlePost(req, res, userId, userRole, authUser) {
         `INSERT INTO ward_rounds 
          (patient_id, admission_id, user_id, round_date, round_type, findings,
           vital_signs, current_medications, new_orders, consultant_instructions,
-          plan, issues, nursing_notes)
-         VALUES ($1, $2, $3, $4::date, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+          plan, issues, nursing_notes, documented_at, folder_updated)
+         VALUES ($1, $2, $3, $4::date, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
          RETURNING *`,
         [
           patientId, admissionId, userId, 
@@ -217,9 +263,18 @@ async function handlePost(req, res, userId, userRole, authUser) {
           consultantInstructions,
           plan, 
           JSON.stringify(issues || []),
-          nursingNotes
+          nursingNotes,
+          // When the round was written, stamped by the app at save time — the
+          // morning round is judged on this, not on when an offline round
+          // reached the server. Never later than now, never more than two days
+          // before it.
+          clampDocumentedAt(documentedAt),
+          folderUpdated === true
         ]
       );
+      if (roundType === 'house_officers_round') {
+        try { await ensureMorningSnapshot(); } catch (e) { console.warn('morning snapshot:', e.message); }
+      }
       
       // Log activity
       await logActivity(userId, 'ward_round', `Documented ward round for patient`, { patientId, roundId: newRound.rows[0].id });
@@ -310,6 +365,7 @@ async function handlePut(req, res, userId, userRole) {
              consultant_instructions = COALESCE($5, consultant_instructions),
              new_orders = COALESCE($6, new_orders),
              nursing_notes = COALESCE($7, nursing_notes),
+             folder_updated = COALESCE($9, folder_updated),
              updated_at = CURRENT_TIMESTAMP
          WHERE id = $8
          RETURNING *`,
@@ -321,7 +377,8 @@ async function handlePut(req, res, userId, userRole) {
           updateData.consultantInstructions,
           updateData.newOrders ? JSON.stringify(updateData.newOrders) : null,
           updateData.nursingNotes,
-          roundId
+          roundId,
+          typeof updateData.folderUpdated === 'boolean' ? updateData.folderUpdated : null
         ]
       );
       
@@ -436,8 +493,20 @@ async function ensureWardRoundColumns() {
     await query(`ALTER TABLE ward_rounds ADD COLUMN IF NOT EXISTS user_id INTEGER`).catch(() => {});
     await query(`ALTER TABLE ward_rounds ADD COLUMN IF NOT EXISTS admission_id INTEGER`).catch(() => {});
     await query(`ALTER TABLE ward_rounds ADD COLUMN IF NOT EXISTS created_by INTEGER`).catch(() => {});
+    await query(`ALTER TABLE ward_rounds ADD COLUMN IF NOT EXISTS documented_at TIMESTAMPTZ`).catch(() => {});
+    await query(`ALTER TABLE ward_rounds ADD COLUMN IF NOT EXISTS folder_updated BOOLEAN DEFAULT FALSE`).catch(() => {});
     columnsEnsured = true;
   } catch (e) {
     console.error('ensureWardRoundColumns error:', e.message);
   }
+}
+
+// Who may see another house officer's morning round.
+const MORNING_VIEW_ROLES = ['admin', 'super_admin', 'consultant', 'senior_registrar', 'registrar', 'junior_registrar'];
+
+function clampDocumentedAt(v) {
+  const now = Date.now();
+  const t = v ? new Date(v).getTime() : NaN;
+  if (!Number.isFinite(t) || t > now + 5 * 60000 || t < now - 2 * 86400000) return new Date(now);
+  return new Date(t);
 }

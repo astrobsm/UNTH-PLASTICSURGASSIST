@@ -64,6 +64,10 @@ export function toWardRoundPayload(round: any): Record<string, any> {
     newOrders: round.new_orders ? [round.new_orders] : [],
     plan: round.follow_up_plan || round.chief_complaint || '',
     issues: round.complications ? [round.complications] : [],
-    nursingNotes: round.wound_notes || ''
+    nursingNotes: round.wound_notes || '',
+    documentedAt: round.documented_at ? new Date(round.documented_at).toISOString() : undefined,
+    // Only sent when known: an update that does not mention the folder must
+    // not clear a confirmation already recorded.
+    ...(typeof round.folder_updated === 'boolean' ? { folderUpdated: round.folder_updated } : {}),
   };
 }

@@ -17,6 +17,7 @@ import { medicalScribeService, StructuredNote, ScribeSession } from '../services
 import { DocumentScannerModal } from './DocumentScannerModal';
 import { searchDrugs, BNFDrug } from '../data/bnfDrugDatabase';
 import { ocrService } from '../services/ocrService';
+import { HO_ROUND_WINDOW } from '../config/psUnits';
 
 interface WardRoundFormProps {
   patientId?: string;
@@ -77,6 +78,8 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
     
     // Round Type - NEW
     round_type: 'house_officers_round' as RoundType,
+    // Written in the patient's paper folder as well (house officers' round).
+    folder_updated: false,
     doctor_role: 'house_officer' as 'consultant' | 'senior_registrar' | 'registrar' | 'house_officer',
     accompanying_team: [] as string[],
     
@@ -326,6 +329,7 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
         round_date: new Date(formData.round_date),
         round_time: formData.round_time,
         round_type: formData.round_type,
+        folder_updated: !!formData.folder_updated,
         reviewing_doctor: formData.reviewing_doctor || authUser?.name || currentUser?.name || 'Unknown',
         doctor_role: formData.doctor_role,
         accompanying_team: formData.accompanying_team,
@@ -805,6 +809,36 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
                     />
                   </div>
                 </div>
+
+                {/* House officers' morning round: 07:00–09:00, app + folder */}
+                {formData.round_type === 'house_officers_round' && (() => {
+                  const h = new Date().getHours();
+                  const inWindow = h >= HO_ROUND_WINDOW.startHour && h < HO_ROUND_WINDOW.endHour;
+                  return (
+                    <div className={`border rounded-lg p-4 ${formData.folder_updated ? 'bg-green-50 border-green-300' : 'bg-amber-50 border-amber-300'}`}>
+                      <label className="flex items-start gap-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={!!formData.folder_updated}
+                          onChange={(e) => setFormData({ ...formData, folder_updated: e.target.checked })}
+                          className="mt-1 h-5 w-5"
+                        />
+                        <span className="text-sm">
+                          <span className="font-semibold text-gray-900">I have also documented this round in the patient's folder</span>
+                          <span className="block text-gray-600 mt-0.5">
+                            House officers' rounds run {HO_ROUND_WINDOW.startTime} – {HO_ROUND_WINDOW.endTime} daily. A round counts towards your
+                            performance when it is documented here within that window and in the folder.
+                          </span>
+                        </span>
+                      </label>
+                      {!inWindow && !wardRoundId && (
+                        <p className="mt-2 text-xs text-amber-800">
+                          It is now outside {HO_ROUND_WINDOW.startTime} – {HO_ROUND_WINDOW.endTime}: this round will be recorded as late for the morning round.
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {/* Round Type Selection */}
                 <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">

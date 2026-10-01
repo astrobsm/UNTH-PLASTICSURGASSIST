@@ -5,7 +5,7 @@ import { cors, authenticateRequest } from './_lib/auth.js';
 // Reuse the unified metrics function so the admin table view shows the SAME
 // numbers as the HO Tracking card view (single source of truth).
 import { getHOFullMetrics } from './ho-tracking.js';
-import { getRequirements as sharedRequirements, pctOf, computeOverall, computeEligibility as sharedEligibility } from './_lib/traineeScoring.js';
+import { getRequirements as sharedRequirements, pctOf, computeOverall, morningRoundsComponent, computeEligibility as sharedEligibility } from './_lib/traineeScoring.js';
 import { extendRotation, signOutRotation, evaluateDueRotations, scoreFor, ROTATION_ADMIN_ROLES } from './_lib/rotationLifecycle.js';
 
 const ADMIN_ROLES = ['consultant', 'super_admin', 'admin'];
@@ -529,6 +529,11 @@ async function getTraineeMetrics(userId, level, fullName, username) {
     cme: cmeScore, cbt: cbtAvgScore, selfAssessment: selfAssessmentAvg,
     clinical: patientScore, duties: dutyScore, attendance: attendanceScore,
   };
+  // House officers' 07:00–09:00 round (only scored for house officers with tracked mornings).
+  const morning = morningRoundsComponent(
+    { morningRoundsExpected: m.morningRounds?.expected, morningRoundsDone: m.morningRounds?.done }, lvl
+  );
+  if (morning !== null) components.morningRounds = morning;
   const overallScore = computeOverall(components);
 
   return {

@@ -122,6 +122,20 @@ For "imaging_report" documents, use this schema:
   "confidence": 0.0 to 1.0
 }
 
+For "consult_review" documents (a plastic surgery team's handwritten review of a patient referred from another unit), use:
+{
+  "review_notes": "clinical findings on review — history, examination, assessment/impression, immediate concerns",
+  "proposed_plan": "the proposed management plan, as written",
+  "plan_approval_notes": "consultant's approval or comments on the plan, if written",
+  "implementation_notes": "procedures/actions done and outcomes, if written",
+  "diagnosis": "working diagnosis if stated",
+  "reviewer": "name and grade of the reviewing doctor if visible",
+  "review_datetime": "date/time of review if visible",
+  "notes": "anything else relevant not fitting above",
+  "confidence": 0.0 to 1.0
+}
+Copy the doctor's wording; do not summarise, reword or add clinical content that is not on the page.
+
 For "general" or "referral" documents, use:
 {
   "document_type": "best guess of document type",

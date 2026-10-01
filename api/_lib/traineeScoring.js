@@ -30,6 +30,32 @@ export const SCORE_WEIGHTS = {
   attendance: 0.10,     // Login-day attendance
 };
 
+/**
+ * House officers are also scored on the daily 07:00–09:00 morning round (see
+ * _lib/morningRounds.js): the share of their patient-mornings documented in the
+ * app inside the window with the folder entry confirmed. It takes 15%, made
+ * room for by halving patient care, which the morning round largely is.
+ *
+ * Used only when a morning-round figure exists (componentsFrom sets
+ * `morningRounds` for a house officer with at least one tracked morning), so
+ * every other grade, and house officers before tracking began, score exactly
+ * as before.
+ */
+export const HO_SCORE_WEIGHTS = {
+  cme: 0.15,
+  cbt: 0.20,
+  selfAssessment: 0.15,
+  clinical: 0.15,
+  morningRounds: 0.15,
+  duties: 0.10,
+  attendance: 0.10,
+};
+
+/** The weights that apply to a set of components. */
+export function weightsFor(components) {
+  return components && typeof components.morningRounds === 'number' ? HO_SCORE_WEIGHTS : SCORE_WEIGHTS;
+}
+
 export const PASS_THRESHOLD = 70;      // overall % needed to be sign-out eligible
 export const MIN_SECTION_SCORE = 40;   // each graded knowledge section must reach this
 
@@ -102,13 +128,14 @@ export function allRequirements() {
 
 /** Weighted overall score (0–100) from component scores (each 0–100). */
 export function computeOverall(components) {
-  const w = SCORE_WEIGHTS;
+  const w = weightsFor(components);
   const v = (x) => Math.max(0, Math.min(100, Number(x) || 0));
   const overall =
     v(components.cme) * w.cme +
     v(components.cbt) * w.cbt +
     v(components.selfAssessment) * w.selfAssessment +
     v(components.clinical) * w.clinical +
+    v(components.morningRounds) * (w.morningRounds || 0) +
     v(components.duties) * w.duties +
     v(components.attendance) * w.attendance;
   return Math.round(overall * 10) / 10;
@@ -131,7 +158,7 @@ export function pctOf(count, required) {
 export function componentsFrom(counts, level) {
   const reqs = getRequirements(level);
   const clamp = (x) => Math.max(0, Math.min(100, Number(x) || 0));
-  return {
+  const components = {
     cme: pctOf(counts.cmeArticles, reqs.cmeArticles),
     cbt: clamp(counts.cbtAverage),
     selfAssessment: clamp(counts.selfAssessmentAverage),
@@ -139,6 +166,20 @@ export function componentsFrom(counts, level) {
     duties: pctOf(counts.duties, reqs.duties),
     attendance: pctOf(counts.loginDays, reqs.loginDays),
   };
+  const mr = morningRoundsComponent(counts, level);
+  if (mr !== null) components.morningRounds = mr;
+  return components;
+}
+
+/**
+ * Morning-round score (0–100) for a house officer with tracked mornings, else
+ * null. `counts.morningRoundsExpected` / `morningRoundsDone` are patient-mornings.
+ */
+export function morningRoundsComponent(counts, level) {
+  if (normalizeLevel(level) !== 'house_officer') return null;
+  const expected = Number(counts?.morningRoundsExpected) || 0;
+  if (expected <= 0) return null;
+  return pctOf(counts.morningRoundsDone, expected);
 }
 
 /**
@@ -194,7 +235,7 @@ export function scoreTrainee({ level, counts }) {
     overall,
     eligibility,
     requirements: reqs,
-    weights: SCORE_WEIGHTS,
+    weights: weightsFor(components),
     passThreshold: PASS_THRESHOLD,
     minSectionScore: MIN_SECTION_SCORE,
   };

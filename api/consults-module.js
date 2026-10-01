@@ -31,6 +31,8 @@ import crypto from 'crypto';
 import { query } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
 import { autoAdmitFromConsult } from './_lib/teamAssignment.js';
+import { onCallTeamAt } from './_lib/callRoster.js';
+import { notifyUsers } from './_lib/notify.js';
 
 // Status workflow definitions
 const RECEIVED_STATUSES   = ['received', 'acknowledged', 'reviewed', 'plan_approved', 'plan_implemented', 'closed', 'cancelled'];
@@ -156,6 +158,17 @@ async function ensureTables() {
     `CREATE INDEX IF NOT EXISTS idx_received_consults_department ON received_consults(referring_department)`,
     `CREATE INDEX IF NOT EXISTS idx_received_consults_ref_unit   ON received_consults(referring_unit)`,
     `CREATE INDEX IF NOT EXISTS idx_received_consults_priority   ON received_consults(referral_priority)`,
+    // On-call routing — the team on call when the consult arrived. The id
+    // columns are what "my consults" filters on; oncall_team keeps the names,
+    // phones, unit and shift for display.
+    `ALTER TABLE received_consults ADD COLUMN IF NOT EXISTS oncall_consultant_id       TEXT`,
+    `ALTER TABLE received_consults ADD COLUMN IF NOT EXISTS oncall_senior_registrar_id TEXT`,
+    `ALTER TABLE received_consults ADD COLUMN IF NOT EXISTS oncall_registrar_id        TEXT`,
+    `ALTER TABLE received_consults ADD COLUMN IF NOT EXISTS oncall_house_officer_id    TEXT`,
+    `ALTER TABLE received_consults ADD COLUMN IF NOT EXISTS oncall_ho_ward_id          TEXT`,
+    `ALTER TABLE received_consults ADD COLUMN IF NOT EXISTS oncall_team                JSONB`,
+    `ALTER TABLE received_consults ADD COLUMN IF NOT EXISTS oncall_assigned_at         TIMESTAMPTZ`,
+    `CREATE INDEX IF NOT EXISTS idx_received_consults_oncall_cons ON received_consults(oncall_consultant_id)`,
   ];
   for (const s of alters) { try { await query(s); } catch (e) { console.warn('consults ensureTables alter skipped:', e.message); } }
 
@@ -228,6 +241,79 @@ async function recordHistory(kind, id, fromStatus, toStatus, notes, user) {
   );
 }
 
+// ── On-call routing ───────────────────────────────────────────────────────
+// Every received consult belongs to the team on call when it ARRIVED (call days
+// run 08:00 → 08:00, so a consult at 03:00 is the previous day's call). The
+// team is written onto the consult once, so it does not drift as the roster
+// moves on, and it is what the submitter is told and whose dashboards show it.
+async function writeOnCallTeam(id, team) {
+  const r = await query(
+    `UPDATE received_consults
+        SET oncall_consultant_id=$1, oncall_senior_registrar_id=$2, oncall_registrar_id=$3,
+            oncall_house_officer_id=$4, oncall_ho_ward_id=$5, oncall_team=$6, oncall_assigned_at=CURRENT_TIMESTAMP
+      WHERE id=$7 AND oncall_assigned_at IS NULL RETURNING *`,
+    [team.consultant.id, team.senior_registrar.id, team.registrar.id, team.house_officer.id,
+     team.ho_ward.id, JSON.stringify(team), id]
+  );
+  return r.rows[0] || null;
+}
+
+/** Record the on-call team on a newly created consult; returns the updated row. */
+async function assignOnCallTeam(consult) {
+  let team = null;
+  try { team = await onCallTeamAt(consult.created_at || new Date()); }
+  catch (e) { console.error('on-call lookup failed:', e.message); }
+  if (!team) return consult;
+  return (await writeOnCallTeam(consult.id, team)) || consult;
+}
+
+/** What the submitter is told: the responsible consultant and unit, no phones. */
+function responsibleSummary(consult) {
+  const t = consult?.oncall_team;
+  const team = typeof t === 'string' ? (() => { try { return JSON.parse(t); } catch { return null; } })() : t;
+  if (!team || !team.consultant?.name) return null;
+  return {
+    consultant_name: team.consultant.name,
+    unit_name: team.unit_name || null,
+    call_day: team.call_day || null,
+  };
+}
+
+async function notifyOnCallTeam(consult) {
+  const ids = [consult.oncall_consultant_id, consult.oncall_senior_registrar_id,
+    consult.oncall_registrar_id, consult.oncall_house_officer_id].filter(Boolean);
+  if (!ids.length) return;
+  const urgency = (consult.urgency || 'routine').toUpperCase();
+  await notifyUsers(ids, {
+    title: `${urgency} consult — you are on call`,
+    body: `${consult.patient_name} from ${consult.referring_unit}: ${String(consult.indication || '').slice(0, 120)}`,
+    url: '/consults',
+    tag: `consult-${consult.consult_ref}`,
+    data: { consultId: consult.id },
+  });
+}
+
+// Consults that predate on-call routing get the team that was on call when they
+// arrived, so they appear on those dashboards too. Open consults only, and only
+// from an existing roster: a historical date must not trigger auto-generation.
+let backfilled = false;
+async function backfillOnCallTeams() {
+  if (backfilled) return;
+  backfilled = true;
+  try {
+    const rows = (await query(
+      `SELECT * FROM received_consults
+        WHERE oncall_assigned_at IS NULL AND status NOT IN ('closed','cancelled')
+        ORDER BY created_at DESC LIMIT 200`
+    )).rows;
+    for (const c of rows) {
+      const team = await onCallTeamAt(c.created_at, { autoGenerate: false }).catch(() => null);
+      if (team) await writeOnCallTeam(c.id, team);
+    }
+  } catch (e) {
+    console.warn('on-call backfill skipped:', e.message);
+  }
+}
 // SMS provider stub. Replace with Termii/Twilio/etc. by reading envs and calling provider HTTP API.
 // Always logs the message to consult_feedback_log so the workflow is observable.
 async function sendSms({ toPhone, toName, message }) {
@@ -328,7 +414,7 @@ export default async function handler(req, res) {
     // /received
     if (parts[0] === 'received') {
       // /received
-      if (parts.length === 1 && method === 'GET')  return listReceived(req, res);
+      if (parts.length === 1 && method === 'GET')  return listReceived(req, res, user);
       if (parts.length === 1 && method === 'POST') return createReceivedByStaff(req.body || {}, user, res);
       // /received/analytics — referral reporting aggregates (must precede the :id parse)
       if (parts.length === 2 && parts[1] === 'analytics' && method === 'GET') return receivedAnalytics(req, res);
@@ -411,24 +497,39 @@ async function submitPublicConsult(token, body, res) {
   );
   await query(`UPDATE consult_submission_links SET submission_count = submission_count + 1, last_used_at = CURRENT_TIMESTAMP WHERE id=$1`, [link.id]);
   await recordHistory('received', r.rows[0].id, null, 'received', `Submitted via public link (${link.unit_label})`, null);
+  const consult = await assignOnCallTeam(r.rows[0]);
   // Auto-admit + assign a full team for every received consult, on receipt.
-  try { await autoAdmitFromConsult(r.rows[0], null); }
+  try { await autoAdmitFromConsult(consult, null); }
   catch (e) { console.error('auto-admit (public submit) failed:', e.message); }
+  await notifyOnCallTeam(consult);
+  const responsible = responsibleSummary(consult);
   return res.status(201).json({
     success: true,
-    consult_ref: r.rows[0].consult_ref,
-    created_at: r.rows[0].created_at,
-    message: 'Consult submitted to plastic surgery unit. You will receive feedback at the phone number provided.',
+    consult_ref: consult.consult_ref,
+    created_at: consult.created_at,
+    responsible,
+    message: responsible
+      ? `Consult submitted to the plastic surgery unit. ${responsible.consultant_name}${responsible.unit_name ? ` (${responsible.unit_name})` : ''} is the consultant on call and responsible for this consult. You will receive feedback at the phone number provided.`
+      : 'Consult submitted to plastic surgery unit. You will receive feedback at the phone number provided.',
   });
 }
 
 // ── Received: list/create/detail/status ──────────────────────────────────
-async function listReceived(req, res) {
+async function listReceived(req, res, user) {
   const {
     status, urgency, search, page = '1', per_page = '20',
     referring_department, referring_unit, referring_consultant, ward, priority, date_from, date_to,
+    mine, open,
   } = req.query;
   const where = []; const args = [];
+  if (mine === '1' || mine === 'true') {
+    await backfillOnCallTeams();
+    // Consults routed to the requesting user as part of the on-call team.
+    args.push(String(user?.id ?? ''));
+    const p = `$${args.length}`;
+    where.push(`(oncall_consultant_id=${p} OR oncall_senior_registrar_id=${p} OR oncall_registrar_id=${p} OR oncall_house_officer_id=${p} OR oncall_ho_ward_id=${p})`);
+  }
+  if (open === '1' || open === 'true') where.push(`status NOT IN ('closed','cancelled')`);
   if (status)   { args.push(status);   where.push(`status=$${args.length}`); }
   if (urgency)  { args.push(urgency);  where.push(`urgency=$${args.length}`); }
   if (priority) { args.push(priority); where.push(`COALESCE(referral_priority, urgency)=$${args.length}`); }
@@ -554,10 +655,12 @@ async function createReceivedByStaff(body, user, res) {
     vals
   );
   await recordHistory('received', r.rows[0].id, null, 'received', body.notes || 'Created by staff', user);
+  const consult = await assignOnCallTeam(r.rows[0]);
   // Staff-entered consults are trusted → auto-admit + assign a full team immediately.
-  try { await autoAdmitFromConsult(r.rows[0], user); }
+  try { await autoAdmitFromConsult(consult, user); }
   catch (e) { console.error('auto-admit (staff entry) failed:', e.message); }
-  return res.status(201).json(r.rows[0]);
+  await notifyOnCallTeam(consult);
+  return res.status(201).json({ ...consult, responsible: responsibleSummary(consult) });
 }
 
 async function getReceivedDetail(id, res) {
@@ -594,7 +697,9 @@ async function updateReceivedStatus(id, body, user, res) {
   const setText = (col, val) => { if (val === undefined) return; args.push(val || null); sets.push(`${col}=$${args.length}`); };
 
   if (to === 'acknowledged')      { stamp('acknowledged_at');      actor('acknowledged_by'); }
-  if (to === 'reviewed')          { stamp('reviewed_at');          actor('reviewed_by');          setText('review_notes', body.review_notes); }
+  // The reviewing resident writes findings and a proposed plan in one note, so
+  // the plan is captured here and carried into plan approval.
+  if (to === 'reviewed')          { stamp('reviewed_at');          actor('reviewed_by');          setText('review_notes', body.review_notes); setText('proposed_plan', body.proposed_plan); }
   if (to === 'plan_approved')     { stamp('plan_approved_at');     actor('plan_approved_by');     setText('proposed_plan', body.proposed_plan); setText('plan_approval_notes', body.plan_approval_notes); }
   if (to === 'plan_implemented')  { stamp('plan_implemented_at');  actor('plan_implemented_by');  setText('implementation_notes', body.implementation_notes); }
   if (to === 'closed')            { stamp('closed_at'); }

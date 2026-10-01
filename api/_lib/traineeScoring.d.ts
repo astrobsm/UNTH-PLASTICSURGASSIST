@@ -9,6 +9,8 @@ export interface ScoreWeights {
   cbt: number;
   selfAssessment: number;
   clinical: number;
+  /** House officers with tracked morning rounds only. */
+  morningRounds?: number;
   duties: number;
   attendance: number;
 }
@@ -27,6 +29,8 @@ export interface ScoreComponents {
   cbt: number;
   selfAssessment: number;
   clinical: number;
+  /** House officers with tracked morning rounds only. */
+  morningRounds?: number;
   duties: number;
   attendance: number;
 }
@@ -63,6 +67,9 @@ export interface ScoreResult {
 }
 
 export declare const SCORE_WEIGHTS: ScoreWeights;
+export declare const HO_SCORE_WEIGHTS: ScoreWeights;
+export declare function weightsFor(components: Partial<ScoreComponents>): ScoreWeights;
+export declare function morningRoundsComponent(counts: LearnerCounts, level: string): number | null;
 export declare const PASS_THRESHOLD: number;
 export declare const MIN_SECTION_SCORE: number;
 export declare const STUDENT_LEVELS: string[];

@@ -20,11 +20,35 @@
 // time-, date- and geo-location-stamped — see services/auditService and
 // services/locationService for tracking.
 
+export interface PSUnitScheduleSlot { day: string; startTime?: string; endTime?: string }
+
+/**
+ * A unit's fixed weekly timetable. Each unit runs its own week; on top of it,
+ * the house officers round on their patients EVERY day 07:00–09:00
+ * (HO_ROUND_WINDOW), which is tracked as part of their performance.
+ */
 export interface PSUnitSchedule {
-  clinic: { day: string; startTime?: string; endTime?: string };
-  theatre: { day: string; startTime?: string; endTime?: string };
-  wardRounds: { day: string; startTime?: string; endTime?: string };
+  /** Consultants' ward round */
+  wardRounds: PSUnitScheduleSlot;
+  clinic: PSUnitScheduleSlot;
+  theatre: PSUnitScheduleSlot;
+  /** Post-operative ward round (the day after theatre) */
+  postOpRounds: PSUnitScheduleSlot;
+  /** Senior registrars' and registrars' round */
+  residentsRound: PSUnitScheduleSlot;
 }
+
+/** Daily house officers' round, every day of the week, both units. */
+export const HO_ROUND_WINDOW = { startTime: '7:00 AM', endTime: '9:00 AM', startHour: 7, endHour: 9 } as const;
+
+/** Display order and labels for a unit's weekly activities. */
+export const UNIT_ACTIVITY_LABELS: { key: keyof PSUnitSchedule; label: string }[] = [
+  { key: 'wardRounds', label: "Consultants' ward round" },
+  { key: 'clinic', label: 'Clinic' },
+  { key: 'theatre', label: 'Theatre' },
+  { key: 'postOpRounds', label: 'Post-op ward round' },
+  { key: 'residentsRound', label: 'Senior registrar & registrar round' },
+];
 
 export interface PSUnit {
   id: 'PS-UNIT-1' | 'PS-UNIT-2';
@@ -79,9 +103,11 @@ export const PS_UNITS: PSUnit[] = [
     name: 'PS-UNIT 1',
     consultants: ['Dr Okwesili', 'Dr Nnadi'],
     schedule: {
+      wardRounds: { day: 'Monday' },
       clinic: { day: 'Tuesday' },
       theatre: { day: 'Wednesday' },
-      wardRounds: { day: 'Monday' },
+      postOpRounds: { day: 'Thursday' },
+      residentsRound: { day: 'Friday' },
     },
   },
   {
@@ -89,9 +115,11 @@ export const PS_UNITS: PSUnit[] = [
     name: 'PS-UNIT 2',
     consultants: ['Dr Okwesili', 'Dr Eze C. B'],
     schedule: {
+      wardRounds: { day: 'Tuesday' },
       clinic: { day: 'Wednesday', startTime: '10:00 AM', endTime: '4:00 PM' },
       theatre: { day: 'Thursday' },
-      wardRounds: { day: 'Wednesday', startTime: '8:30 AM', endTime: '10:00 AM' },
+      postOpRounds: { day: 'Friday' },
+      residentsRound: { day: 'Monday' },
     },
   },
 ];
@@ -231,7 +259,8 @@ export function getUnitTeam(
 }
 
 /**
- * Get today's schedule items across both units.
+ * Get today's schedule items across both units: each unit's weekly activity
+ * for the day, plus the house officers' 07:00–09:00 round, which runs daily.
  */
 export function getTodaySchedule(asOfDate?: Date): Array<{ unit: string; activity: string; time?: string }> {
   const now = asOfDate || new Date();
@@ -239,27 +268,23 @@ export function getTodaySchedule(asOfDate?: Date): Array<{ unit: string; activit
   const items: Array<{ unit: string; activity: string; time?: string }> = [];
 
   for (const unit of PS_UNITS) {
-    const s = unit.schedule;
-    if (s.wardRounds.day === dayName) {
-      const time = s.wardRounds.startTime && s.wardRounds.endTime
-        ? `${s.wardRounds.startTime} – ${s.wardRounds.endTime}`
-        : undefined;
-      items.push({ unit: unit.name, activity: 'Ward Rounds', time });
-    }
-    if (s.clinic.day === dayName) {
-      const time = s.clinic.startTime && s.clinic.endTime
-        ? `${s.clinic.startTime} – ${s.clinic.endTime}`
-        : undefined;
-      items.push({ unit: unit.name, activity: 'Clinic', time });
-    }
-    if (s.theatre.day === dayName) {
-      const time = s.theatre.startTime && s.theatre.endTime
-        ? `${s.theatre.startTime} – ${s.theatre.endTime}`
-        : undefined;
-      items.push({ unit: unit.name, activity: 'Theatre', time });
+    items.push({ unit: unit.name, activity: "House officers' round", time: `${HO_ROUND_WINDOW.startTime} – ${HO_ROUND_WINDOW.endTime}` });
+    for (const { key, label } of UNIT_ACTIVITY_LABELS) {
+      const slot = unit.schedule[key];
+      if (!slot || slot.day !== dayName) continue;
+      const time = slot.startTime && slot.endTime ? `${slot.startTime} – ${slot.endTime}` : undefined;
+      items.push({ unit: unit.name, activity: label, time });
     }
   }
   return items;
+}
+
+/** A unit's week, Monday first: the activities on each day. */
+export function unitWeek(unit: PSUnit): Array<{ day: string; activities: string[] }> {
+  return ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(day => ({
+    day,
+    activities: UNIT_ACTIVITY_LABELS.filter(({ key }) => unit.schedule[key]?.day === day).map(({ label }) => label),
+  }));
 }
 
 /**

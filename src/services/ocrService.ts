@@ -40,7 +40,7 @@ export interface OCRProgress {
   progress: number;
 }
 
-export type DocumentType = 'lab_report' | 'imaging_report' | 'prescription' | 'handwritten_note' | 'general' | 'clinical_note' | 'consultation' | 'fluid_chart' | 'vital_signs_chart';
+export type DocumentType = 'lab_report' | 'imaging_report' | 'prescription' | 'handwritten_note' | 'general' | 'clinical_note' | 'consultation' | 'fluid_chart' | 'vital_signs_chart' | 'consult_review';
 
 // Medical lab value patterns for extraction
 const LAB_VALUE_PATTERNS: Record<string, RegExp> = {
@@ -962,7 +962,7 @@ class OCRService {
 
     // ── Attempt 1: Unified backend (Cloud Vision + AI in one call) ──
     // If handwritingMode, use GPT-4o Vision for direct image-to-text+structured
-    const useVisionOCR = options?.handwritingMode ?? (documentType === 'handwritten_note' || documentType === 'fluid_chart' || documentType === 'vital_signs_chart');
+    const useVisionOCR = options?.handwritingMode ?? (documentType === 'handwritten_note' || documentType === 'fluid_chart' || documentType === 'vital_signs_chart' || documentType === 'consult_review');
     try {
       onProgress?.({ status: 'Optimizing image...', progress: 0.05 });
       // Handwriting Vision benefits from a slightly larger long-edge for legibility

@@ -7,6 +7,7 @@ import { patientService } from '../services/patientService';
 import { useOnSelectedPatient } from '../hooks/useSelectedPatient';
 import { format, startOfDay, endOfDay } from 'date-fns';
 import { safeFormatDate } from '../utils/dateUtils';
+import { useSearchParams } from 'react-router-dom';
 
 interface Patient {
   id: string;
@@ -27,6 +28,19 @@ export default function WardRounds() {
   // Patient-focused documentation preview
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   useOnSelectedPatient((p) => { setSelectedPatientId(String(p.id)); setShowForm(true); });
+  // ?patient=<id> opens the form for that patient — the house officers'
+  // morning-round checklist links here.
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const pid = searchParams.get('patient');
+    if (!pid) return;
+    setSelectedRound(null);
+    setSelectedPatientId(pid);
+    setShowForm(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete('patient');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [expandedRoundIds, setExpandedRoundIds] = useState<Set<string>>(new Set());

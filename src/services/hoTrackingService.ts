@@ -23,10 +23,20 @@ export interface HOMetrics {
   assignedPatients: number;
   overallScore: number;
   scoreBreakdown?: {
+    cme?: { score: number; weight: number; contribution: number };
     cbt: { score: number; weight: number; contribution: number };
+    selfAssessment?: { score: number; weight: number; contribution: number };
     patientCare: { score: number; weight: number; contribution: number };
+    /** 07:00–09:00 house officers' round — present once mornings are tracked. */
+    morningRounds?: { score: number; weight: number; contribution: number };
     duties: { score: number; weight: number; contribution: number };
     attendance: { score: number; weight: number; contribution: number };
+  };
+  morningRounds?: {
+    expected: number;
+    done: number;
+    pct: number | null;
+    recentDays: Array<{ day: string; expected: number; done: number; no_folder: number; late: number; missed: number }>;
   };
   rotationStart?: string | null;
 }

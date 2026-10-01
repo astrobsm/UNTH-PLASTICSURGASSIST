@@ -2,7 +2,7 @@
 // Manages admin rotation settings, responsibilities, and analytics
 import { query } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
-import { getRequirements as sharedRequirements, pctOf, computeOverall, computeEligibility } from './_lib/traineeScoring.js';
+import { getRequirements as sharedRequirements, pctOf, computeOverall, morningRoundsComponent, computeEligibility } from './_lib/traineeScoring.js';
 import { getHOFullMetrics } from './ho-tracking.js';
 
 export default async function handler(req, res) {
@@ -379,6 +379,11 @@ async function computeTraineeAnalytics(userId) {
       cme: cmeScoreComp, cbt: cbtScore, selfAssessment: selfAssessmentScore,
       clinical: patientCareScore, duties: dutyPromptnessScore, attendance: attendanceScore,
     };
+    // House officers' 07:00–09:00 round (only scored for house officers with tracked mornings).
+    const morning = morningRoundsComponent(
+      { morningRoundsExpected: hoMetrics.morningRounds?.expected, morningRoundsDone: hoMetrics.morningRounds?.done }, level
+    );
+    if (morning !== null) components.morningRounds = morning;
     const overallScore = Math.round(computeOverall(components));
 
     // Responsibilities

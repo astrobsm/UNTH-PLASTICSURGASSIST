@@ -77,6 +77,80 @@ export interface CallDutyShift {
   ho_ward_inactive?: boolean;
   ho_emergency_inactive?: boolean;
   ho_off_inactive?: boolean;
+
+  // ── Unit call pattern (daily shifts; absent on legacy 48-hour shifts) ──
+  unit_key?: string | null;
+  unit_name?: string | null;
+  /** 'mon_tue' | 'wed_thu' | 'weekend' */
+  call_block?: string | null;
+}
+
+/** One unit's members, by user id. Order matters: it is the rotation order. */
+export interface CallUnit {
+  key: string;
+  name: string;
+  consultant_ids: string[];
+  senior_registrar_ids: string[];
+  registrar_ids: string[];
+  house_officer_ids: string[];
+}
+
+/**
+ * The unit call pattern: units alternate Mon–Tue / Wed–Thu / Fri–Sun, with the
+ * following week starting on the other unit. `anchor_date` is a Monday on which
+ * units[0] takes Mon–Tue. Must match api/_lib/unitCallPattern.js.
+ */
+export type RotatingGrade = 'senior_registrar' | 'registrar' | 'house_officer';
+
+/**
+ * Juniors rotate between the units: every `weeks[grade]` weeks (0 = fixed) the
+ * two units exchange that grade's doctors, counted from `start_date`.
+ */
+export interface UnitRotation {
+  enabled: boolean;
+  start_date: string;
+  weeks: Record<RotatingGrade, number>;
+}
+
+export interface UnitCallConfig {
+  anchor_date: string;
+  rotation?: UnitRotation;
+  /** Stored base lists (first block of the rotation cycle). */
+  units: CallUnit[];
+  /** Who is in each unit TODAY, after rotation — what screens show and edit. */
+  current_units?: CallUnit[];
+  /** Next date each rotating grade changes units (null = does not rotate). */
+  next_rotation?: Record<RotatingGrade, string | null>;
+  updated_by?: string | null;
+  updated_at?: string | null;
+}
+
+export const DEFAULT_ROTATION_WEEKS: Record<RotatingGrade, number> = { senior_registrar: 0, registrar: 6, house_officer: 2 };
+
+export interface UnitApplyResult {
+  checked: number;
+  reassigned: number;
+  byGrade: Record<RotatingGrade, number>;
+}
+
+export const CALL_BLOCK_LABELS: Record<string, string> = {
+  mon_tue: 'Mon–Tue',
+  wed_thu: 'Wed–Thu',
+  weekend: 'Weekend',
+};
+
+/** Who is in each unit today (falls back to the stored lists on an old server). */
+export function currentUnits(config: UnitCallConfig | null): CallUnit[] {
+  if (!config) return [];
+  return config.current_units && config.current_units.length ? config.current_units : config.units;
+}
+
+/** Units the user belongs to (any grade). */
+export function unitsForUser(config: UnitCallConfig | null, userId: string | number | undefined | null): CallUnit[] {
+  if (!config || userId == null || userId === '') return [];
+  const id = String(userId);
+  return currentUnits(config).filter(u =>
+    [...u.consultant_ids, ...u.senior_registrar_ids, ...u.registrar_ids, ...u.house_officer_ids].map(String).includes(id));
 }
 
 export interface StaffMember {
@@ -523,6 +597,39 @@ class CallDutyService {
     const shifts = (r?.shifts as CallDutyShift[]) || [];
     if (shifts.length) { try { await this.cacheShifts(shifts); } catch { /* best effort */ } }
     return shifts;
+  }
+
+  /** The unit call-pattern configuration, or null (legacy 48-hour roster). Cached for offline. */
+  async serverGetUnitConfig(): Promise<UnitCallConfig | null> {
+    const CACHE_KEY = 'call_duty_unit_config';
+    try {
+      const r: any = await apiClient.get('/call-duty-roster?action=unit-config', { freshRead: true });
+      const cfg = (r?.config as UnitCallConfig) || null;
+      try { localStorage.setItem(CACHE_KEY, JSON.stringify(cfg)); } catch { /* storage unavailable */ }
+      return cfg;
+    } catch {
+      try { return JSON.parse(localStorage.getItem(CACHE_KEY) || 'null'); } catch { return null; }
+    }
+  }
+
+  /**
+   * Save the units. `units` are the lists as they stand TODAY. Returns the
+   * saved config and how many patients were handed to their unit's doctors.
+   */
+  async serverSaveUnitConfig(config: Pick<UnitCallConfig, 'anchor_date' | 'units' | 'rotation'>): Promise<{ config: UnitCallConfig | null; applied: UnitApplyResult | null }> {
+    const r: any = await apiClient.put('/call-duty-roster?action=unit-config', config);
+    return { config: (r?.config as UnitCallConfig) || null, applied: r?.applied || null };
+  }
+
+  /** Re-check every patient's junior team against today's units now. */
+  async serverApplyUnits(): Promise<UnitApplyResult | null> {
+    const r: any = await apiClient.post('/call-duty-roster?action=apply-units', {});
+    return r?.applied || null;
+  }
+
+  /** Switch back to the legacy 48-hour round-robin. */
+  async serverClearUnitConfig(): Promise<void> {
+    await apiClient.delete('/call-duty-roster?action=unit-config');
   }
 
   /** Admin edit of one shift on the server. */

@@ -547,12 +547,16 @@ function SummaryTab({ ho, metrics: m, requirements: r, progressBar }: {
             <BarChart3 className="h-4 w-4 text-primary-600" /> Overall Score Breakdown
           </h4>
           <div className="space-y-2">
-            {[
-              { label: 'CBT (30%)', ...m.scoreBreakdown.cbt },
-              { label: 'Patient Care (35%)', ...m.scoreBreakdown.patientCare },
-              { label: 'Duties (25%)', ...m.scoreBreakdown.duties },
-              { label: 'Attendance (10%)', ...m.scoreBreakdown.attendance },
-            ].map(item => (
+            {/* Labels carry the weight the server actually scored with. */}
+            {([
+              ['CME', m.scoreBreakdown.cme],
+              ['CBT', m.scoreBreakdown.cbt],
+              ['Self-assessment', m.scoreBreakdown.selfAssessment],
+              ['Patient Care', m.scoreBreakdown.patientCare],
+              ['Morning rounds', m.scoreBreakdown.morningRounds],
+              ['Duties', m.scoreBreakdown.duties],
+              ['Attendance', m.scoreBreakdown.attendance],
+            ] as const).filter(([, b]) => !!b).map(([name, b]) => ({ label: `${name} (${Math.round(b!.weight * 100)}%)`, ...b! })).map(item => (
               <div key={item.label} className="flex items-center gap-3 text-sm">
                 <span className="w-36 text-gray-600">{item.label}</span>
                 <div className="flex-1 bg-gray-200 rounded-full h-2">
@@ -567,6 +571,28 @@ function SummaryTab({ ho, metrics: m, requirements: r, progressBar }: {
               <span className={m.overallScore >= 70 ? 'text-green-600' : 'text-amber-600'}>{m.overallScore}%</span>
             </div>
           </div>
+          {m.morningRounds && (
+            <div className="mt-3 border-t pt-3">
+              <div className="text-sm font-medium text-gray-700">
+                Morning rounds (7–9 AM, app + folder):{' '}
+                {m.morningRounds.pct === null ? <span className="text-gray-500 font-normal">not tracked yet</span>
+                  : <span>{m.morningRounds.done}/{m.morningRounds.expected} patient-mornings ({m.morningRounds.pct}%)</span>}
+              </div>
+              {m.morningRounds.recentDays.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {m.morningRounds.recentDays.map(d => {
+                    const pct = d.expected ? d.done / d.expected : 0;
+                    return (
+                      <span key={d.day} title={`${d.day}: ${d.done}/${d.expected} done · ${d.no_folder} no folder · ${d.late} late · ${d.missed} missed`}
+                        className={`text-[10px] px-1.5 py-0.5 rounded ${pct >= 0.9 ? 'bg-green-100 text-green-800' : pct >= 0.5 ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'}`}>
+                        {d.day.slice(8)}/{d.day.slice(5, 7)} {d.done}/{d.expected}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
           {m.rotationStart && (
             <p className="text-[10px] text-gray-400 mt-2">
               Metrics scoped to current rotation starting {new Date(m.rotationStart).toLocaleDateString()}

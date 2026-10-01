@@ -58,9 +58,11 @@ function present({ kind, level, scored, rotation, extras = {} }) {
   const contributions = Object.entries(scored.components).map(([key, value]) => ({
     key,
     score: pct(value),
-    weight: SCORE_WEIGHTS[key],
-    contribution: pct(value * SCORE_WEIGHTS[key]),
-    available: pct(SCORE_WEIGHTS[key] * 100),
+    // The weights actually used — a house officer with tracked morning
+    // rounds is scored on HO_SCORE_WEIGHTS.
+    weight: scored.weights[key],
+    contribution: pct(value * scored.weights[key]),
+    available: pct(scored.weights[key] * 100),
   })).sort((a, b) => (b.available - b.contribution) - (a.available - a.contribution));
 
   return {

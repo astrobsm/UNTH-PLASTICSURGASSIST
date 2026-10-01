@@ -9,8 +9,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { ClipboardCheck, AlertTriangle, CheckCircle2, Phone, Loader2 } from 'lucide-react';
-import { publicVerifyLink, publicSubmitConsult, REFERRING_DEPARTMENTS, REFERRING_UNITS, type Urgency } from '../services/consultsModuleService';
+import { ClipboardCheck, AlertTriangle, CheckCircle2, Phone, Loader2, Stethoscope } from 'lucide-react';
+import { publicVerifyLink, publicSubmitConsult, REFERRING_DEPARTMENTS, REFERRING_UNITS, type Urgency, type ResponsibleConsultant } from '../services/consultsModuleService';
 
 interface FormState {
   patient_name: string;
@@ -70,7 +70,7 @@ export default function PublicConsultSubmitPage() {
 
   const [form, setForm] = useState<FormState>(EMPTY);
   const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState<{ ref: string; message: string } | null>(null);
+  const [submitted, setSubmitted] = useState<{ ref: string; message: string; responsible?: ResponsibleConsultant | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -110,7 +110,7 @@ export default function PublicConsultSubmitPage() {
         referral_datetime: new Date().toISOString(),
       };
       const r = await publicSubmitConsult(token, payload);
-      setSubmitted({ ref: r.consult_ref, message: r.message });
+      setSubmitted({ ref: r.consult_ref, message: r.message, responsible: r.responsible });
       setForm(EMPTY);
     } catch (err: any) {
       setError(err.message || 'Submission failed. Please try again.');
@@ -146,7 +146,23 @@ export default function PublicConsultSubmitPage() {
         <div className="max-w-md bg-white border border-green-200 rounded-lg p-6 shadow-sm text-center">
           <CheckCircle2 className="w-12 h-12 text-green-500 mx-auto mb-3" />
           <h1 className="text-xl font-bold text-gray-900 mb-1">Consult submitted</h1>
-          <p className="text-sm text-gray-600 mb-3">{submitted.message}</p>
+          <p className="text-sm text-gray-600 mb-3">
+            {submitted.responsible
+              ? 'Your consult has been sent to the plastic surgery team on call. You will receive feedback at the phone number you provided.'
+              : submitted.message}
+          </p>
+          {submitted.responsible ? (
+            <div className="bg-green-50 border border-green-200 rounded p-3 text-sm mb-3 text-left flex items-start gap-3">
+              <Stethoscope className="w-5 h-5 text-green-700 flex-shrink-0 mt-0.5" />
+              <div>
+                <div className="text-gray-500">Responsible consultant (on call)</div>
+                <div className="font-semibold text-gray-900 text-base">{submitted.responsible.consultant_name}</div>
+                {submitted.responsible.unit_name && <div className="text-gray-600">{submitted.responsible.unit_name}</div>}
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-gray-500 mb-3">The on-call consultant will be assigned by the plastic surgery unit.</p>
+          )}
           <div className="bg-gray-50 rounded p-3 text-sm">
             <div className="text-gray-500">Reference number</div>
             <div className="font-mono font-semibold text-green-700 text-lg">{submitted.ref}</div>

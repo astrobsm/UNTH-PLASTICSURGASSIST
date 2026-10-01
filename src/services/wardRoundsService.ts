@@ -73,6 +73,12 @@ export interface WardRound {
   
   // LMP for female patients
   lmp?: string;
+
+  // House officers' morning round (07:00–09:00): the round was also written in
+  // the patient's paper folder, and when the round was actually documented
+  // (stamped at save — an offline round reaches the server later).
+  folder_updated?: boolean;
+  documented_at?: string;
   
   // Timestamps
   created_at?: Date;
@@ -178,6 +184,8 @@ function fromServerFormat(row: any): WardRound {
     consultation_specialty: findingsObj.consultation_specialty || '',
     consultation_reason: findingsObj.consultation_reason || '',
     lmp: findingsObj.lmp || '',
+    folder_updated: !!row.folder_updated,
+    documented_at: row.documented_at || undefined,
     clinical_images: findingsObj.clinical_images || row.clinical_images || [],
     plan_changes: [],
     created_at: row.created_at ? new Date(row.created_at) : undefined,
@@ -197,6 +205,11 @@ class WardRoundsService {
     const roundDate = round.round_date instanceof Date
       ? round.round_date
       : new Date(round.round_date || Date.now());
+
+    // Stamp when the round was written. The morning round is judged on this,
+    // so a round documented at 07:30 on a ward with no signal still counts
+    // when it syncs at noon.
+    round = { ...round, documented_at: round.documented_at || now.toISOString() };
 
     const localRound = {
       ...round,

@@ -23,6 +23,10 @@ export const VISION_STRUCTURED_TYPES = Object.freeze([
   'handwritten_note',
   'vital_signs_chart',
   'fluid_chart',
+  // A handwritten consult review is split into the workflow's fields (review
+  // notes, plan, approval, implementation) — a structure only the vision
+  // prompt produces.
+  'consult_review',
 ]);
 
 /**

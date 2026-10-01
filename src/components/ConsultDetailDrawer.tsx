@@ -9,7 +9,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   X, Send, Camera, FileText, Activity, Image as ImageIcon, Loader2, ChevronRight,
-  CheckCircle2, AlertCircle, Trash2, MessageSquare, History, Users, ClipboardList, UserPlus,
+  CheckCircle2, AlertCircle, Trash2, MessageSquare, History, Users, ClipboardList, UserPlus, Stethoscope,
 } from 'lucide-react';
 import {
   getReceivedDetail, updateReceivedStatus, addAttachment, deleteAttachment, sendConsultFeedback,
@@ -19,6 +19,7 @@ import {
 import { mdtService } from '../services/mdtService';
 import { ocrService } from '../services/ocrService';
 import ConsultChartRecreator from './ConsultChartRecreator';
+import ConsultReviewForm, { downscaleToDataUrl } from './ConsultReviewForm';
 import PhoneActions from './PhoneActions';
 
 interface Props {
@@ -108,6 +109,26 @@ export const ConsultDetailDrawer: React.FC<Props> = ({ consultId, onClose, onCha
       </div>
 
       <div className="px-5 py-4 space-y-5">
+        {/* Responsible on-call team */}
+        <Block icon={<Stethoscope className="w-4 h-4 text-green-700" />} title="Responsible team (on call when received)">
+          {c.oncall_team?.consultant?.name ? (
+            <>
+              {c.oncall_team.unit_name && (
+                <div className="text-sm"><span className="text-gray-500">Unit:</span> <span className="font-medium">{c.oncall_team.unit_name}</span>
+                  {c.oncall_team.call_day && <span className="text-gray-400"> · call day {c.oncall_team.call_day}</span>}</div>
+              )}
+              <div className="divide-y divide-gray-100 border-t border-gray-100">
+                <TeamRow role="Consultant"       name={c.oncall_team.consultant?.name} phone={c.oncall_team.consultant?.phone} />
+                <TeamRow role="Senior Registrar" name={c.oncall_team.senior_registrar?.name} phone={c.oncall_team.senior_registrar?.phone} />
+                <TeamRow role="Registrar"        name={c.oncall_team.registrar?.name} phone={c.oncall_team.registrar?.phone} />
+                <TeamRow role="House Officer"    name={c.oncall_team.house_officer?.name} phone={c.oncall_team.house_officer?.phone} />
+              </div>
+            </>
+          ) : (
+            <p className="text-xs text-gray-500">No call-duty roster covered the time this consult arrived, so no on-call team was recorded.</p>
+          )}
+        </Block>
+
         {/* Referring team */}
         <Block icon={<Users className="w-4 h-4 text-blue-600" />} title="Referring team">
           <div className="text-sm space-y-1">
@@ -154,8 +175,9 @@ export const ConsultDetailDrawer: React.FC<Props> = ({ consultId, onClose, onCha
         <Block icon={<ChevronRight className="w-4 h-4 text-green-600" />} title="Status workflow">
           <StatusTimeline current={c.status} consult={c} />
           {next && (
-            <StatusAdvanceForm
-              currentStatus={c.status}
+            <ConsultReviewForm
+              key={next}
+              consult={c}
               nextStatus={next}
               busy={busy}
               onSubmit={async (payload) => {
@@ -315,67 +337,6 @@ function StatusTimeline({ current, consult }: { current: ReceivedConsultStatus; 
   );
 }
 
-function StatusAdvanceForm({ currentStatus, nextStatus, busy, onSubmit }: {
-  currentStatus: ReceivedConsultStatus;
-  nextStatus: ReceivedConsultStatus;
-  busy: boolean;
-  onSubmit: (p: any) => Promise<void>;
-}) {
-  const [notes, setNotes] = useState('');
-  const [reviewNotes, setReviewNotes] = useState('');
-  const [proposedPlan, setProposedPlan] = useState('');
-  const [planApprovalNotes, setPlanApprovalNotes] = useState('');
-  const [implementationNotes, setImplementationNotes] = useState('');
-
-  const fieldsByNext: Partial<Record<ReceivedConsultStatus, React.ReactNode>> = {
-    reviewed: (
-      <textarea value={reviewNotes} onChange={(e) => setReviewNotes(e.target.value)} rows={2}
-        placeholder="Review notes (clinical findings, immediate concerns)…"
-        className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" />
-    ),
-    plan_approved: (
-      <>
-        <textarea value={proposedPlan} onChange={(e) => setProposedPlan(e.target.value)} rows={3}
-          placeholder="Proposed management plan…"
-          className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" />
-        <textarea value={planApprovalNotes} onChange={(e) => setPlanApprovalNotes(e.target.value)} rows={2}
-          placeholder="Approval notes (consultant comments)…"
-          className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" />
-      </>
-    ),
-    plan_implemented: (
-      <textarea value={implementationNotes} onChange={(e) => setImplementationNotes(e.target.value)} rows={2}
-        placeholder="Implementation notes (procedures done, outcomes)…"
-        className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" />
-    ),
-  };
-  const meta = STATUS_META[nextStatus];
-
-  return (
-    <div className="mt-3 space-y-2 bg-gray-50 border border-gray-200 rounded p-2">
-      <div className="text-xs text-gray-600">From <b>{STATUS_META[currentStatus].label}</b> → <b className="text-green-700">{meta.label}</b></div>
-      {fieldsByNext[nextStatus]}
-      <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={1}
-        placeholder="Optional comment for audit log…"
-        className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" />
-      <button
-        disabled={busy}
-        onClick={() => onSubmit({
-          to_status: nextStatus,
-          notes: notes || undefined,
-          review_notes: reviewNotes || undefined,
-          proposed_plan: proposedPlan || undefined,
-          plan_approval_notes: planApprovalNotes || undefined,
-          implementation_notes: implementationNotes || undefined,
-        })}
-        className="px-3 py-1.5 bg-green-600 text-white rounded text-xs font-medium hover:bg-green-700 disabled:bg-gray-300"
-      >
-        {busy ? 'Updating…' : `Mark as ${meta.label}`}
-      </button>
-    </div>
-  );
-}
-
 // ── Attachments manager (photos + OCR) ──────────────────────────────────
 const KIND_LABEL: Record<AttachmentKind, string> = {
   clinical_photo: 'Clinical photo',
@@ -450,7 +411,7 @@ function AttachmentManager({ consultId, attachments, onChanged, onRecreateChart 
             <li key={a.id} className="bg-gray-50 border border-gray-200 rounded p-2 flex items-start gap-2">
               <div className="flex-1 min-w-0">
                 <div className="text-xs font-medium text-gray-800 flex items-center gap-2">
-                  <span className="inline-flex items-center px-1.5 py-0.5 bg-white border border-gray-200 rounded text-[10px] text-gray-600">{KIND_LABEL[a.kind]}</span>
+                  <span className="inline-flex items-center px-1.5 py-0.5 bg-white border border-gray-200 rounded text-[10px] text-gray-600">{a.metadata?.source === 'consult_review_scan' ? `Review scan · ${STATUS_META[a.metadata.stage as ReceivedConsultStatus]?.label || a.metadata.stage}` : KIND_LABEL[a.kind]}</span>
                   <span className="truncate">{a.file_name || '—'}</span>
                 </div>
                 {a.ocr_text && (
@@ -488,26 +449,6 @@ function UploadButton({ label, icon, onPick }: { label: string; icon: React.Reac
         onChange={(e) => { const f = e.target.files?.[0]; if (f) onPick(f); e.target.value = ''; }} />
     </>
   );
-}
-
-async function downscaleToDataUrl(file: File, maxDim: number, quality: number): Promise<string> {
-  const url = URL.createObjectURL(file);
-  try {
-    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const i = new Image();
-      i.onload = () => resolve(i); i.onerror = () => reject(new Error('decode failed'));
-      i.src = url;
-    });
-    const long = Math.max(img.naturalWidth, img.naturalHeight);
-    const scale = long > maxDim ? maxDim / long : 1;
-    const w = Math.round(img.naturalWidth * scale);
-    const h = Math.round(img.naturalHeight * scale);
-    const canvas = document.createElement('canvas');
-    canvas.width = w; canvas.height = h;
-    const ctx = canvas.getContext('2d')!;
-    ctx.drawImage(img, 0, 0, w, h);
-    return canvas.toDataURL('image/jpeg', quality);
-  } finally { URL.revokeObjectURL(url); }
 }
 
 // ── Feedback panel ──────────────────────────────────────────────────────

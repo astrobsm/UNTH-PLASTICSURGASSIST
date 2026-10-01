@@ -86,6 +86,49 @@ export interface ReceivedConsult {
   created_at: string;
   updated_at?: string | null;
   last_feedback_sent_at?: string | null;
+  // On-call routing — the team on call when the consult arrived.
+  oncall_consultant_id?: string | null;
+  oncall_senior_registrar_id?: string | null;
+  oncall_registrar_id?: string | null;
+  oncall_house_officer_id?: string | null;
+  oncall_ho_ward_id?: string | null;
+  oncall_team?: OnCallTeam | null;
+  oncall_assigned_at?: string | null;
+  /** Returned on create only. */
+  responsible?: ResponsibleConsultant | null;
+}
+
+export interface OnCallMember { id: string | null; name: string | null; phone?: string }
+export interface OnCallTeam {
+  shift_id?: number;
+  call_day?: string;
+  shift_start?: string;
+  shift_end?: string;
+  unit_key?: string | null;
+  unit_name?: string | null;
+  call_block?: string | null;
+  consultant: OnCallMember;
+  senior_registrar: OnCallMember;
+  registrar: OnCallMember;
+  house_officer: OnCallMember;
+  ho_ward?: OnCallMember;
+}
+/** What a submitter is told about who is responsible for their consult. */
+export interface ResponsibleConsultant {
+  consultant_name: string;
+  unit_name?: string | null;
+  call_day?: string | null;
+}
+
+/** "Dr X (PS Unit 1)" — or null when no on-call consultant was recorded. */
+export function responsibleLabel(r?: ResponsibleConsultant | null): string | null {
+  if (!r?.consultant_name) return null;
+  return r.unit_name ? `${r.consultant_name} (${r.unit_name})` : r.consultant_name;
+}
+export function responsibleFromConsult(c: Pick<ReceivedConsult, 'oncall_team'>): ResponsibleConsultant | null {
+  const t = c.oncall_team;
+  if (!t?.consultant?.name) return null;
+  return { consultant_name: t.consultant.name, unit_name: t.unit_name, call_day: t.call_day };
 }
 
 export interface DeliveredConsult {
@@ -280,8 +323,14 @@ export async function listReceived(opts: {
   status?: ReceivedConsultStatus | ''; urgency?: Urgency | ''; search?: string; page?: number; per_page?: number;
   referring_department?: string; referring_unit?: string; referring_consultant?: string;
   ward?: string; priority?: string; date_from?: string; date_to?: string;
+  /** Only consults routed to the signed-in user as part of the on-call team. */
+  mine?: boolean;
+  /** Exclude closed and cancelled consults. */
+  open?: boolean;
 } = {}) {
   const p = new URLSearchParams();
+  if (opts.mine) p.set('mine', '1');
+  if (opts.open) p.set('open', '1');
   if (opts.status) p.set('status', opts.status);
   if (opts.urgency) p.set('urgency', opts.urgency);
   if (opts.search) p.set('search', opts.search);
@@ -365,7 +414,7 @@ export async function publicVerifyLink(token: string): Promise<{ token: string; 
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Link invalid');
   return r.json();
 }
-export async function publicSubmitConsult(token: string, payload: Record<string, any>): Promise<{ success: boolean; consult_ref: string; created_at: string; message: string }> {
+export async function publicSubmitConsult(token: string, payload: Record<string, any>): Promise<{ success: boolean; consult_ref: string; created_at: string; message: string; responsible?: ResponsibleConsultant | null }> {
   const r = await fetch(`${apiBase}${BASE}/public/submit/${encodeURIComponent(token)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

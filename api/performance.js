@@ -6,7 +6,7 @@
 // disagreed about the same trainee.
 import { query } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
-import { scoreTrainee, getRequirements, SCORE_WEIGHTS, PASS_THRESHOLD } from './_lib/traineeScoring.js';
+import { scoreTrainee, getRequirements, SCORE_WEIGHTS, HO_SCORE_WEIGHTS, PASS_THRESHOLD } from './_lib/traineeScoring.js';
 import { gatherTraineeCounts } from './_lib/traineeCounts.js';
 
 // Roles that sit a rotation and are therefore scored.
@@ -121,6 +121,8 @@ async function handleGet(req, res, userId, userRole) {
       // Served rather than duplicated in the client so the two cannot drift.
       return res.status(200).json({
         weights: SCORE_WEIGHTS,
+        // House officers with tracked 07:00–09:00 morning rounds.
+        houseOfficerWeights: HO_SCORE_WEIGHTS,
         passThreshold: PASS_THRESHOLD,
         requirements: getRequirements(level),
       });

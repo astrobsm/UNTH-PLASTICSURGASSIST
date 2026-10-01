@@ -13,6 +13,7 @@
 // ============================================================================
 
 import { query } from './db.js';
+import { morningCompliance } from './morningRounds.js';
 
 /** Runs a scalar query, returning `fallback` if the table or column is absent. */
 /**
@@ -167,6 +168,13 @@ export async function gatherTraineeCounts(userId) {
     gatherDocumentation(userId, identities),
   ]);
 
+  // House officers' 07:00–09:00 round: patient-mornings expected and done
+  // (on time, folder confirmed). Zero for anyone never snapshotted as a house
+  // officer, which leaves their score on the standard weights.
+  let morning = { expected: 0, done: 0 };
+  try { morning = await morningCompliance(userId); }
+  catch { /* tracking tables absent — not tracked yet */ }
+
   const { cbtTests, cbtAverage } = combineMarks(
     paperTests, paperAverage, poolTests, poolAverage,
   );
@@ -185,6 +193,8 @@ export async function gatherTraineeCounts(userId) {
     cmeArticles: Math.max(cmeArticles, legacyCme),
     selfAssessments,
     selfAssessmentAverage,
+    morningRoundsExpected: morning.expected,
+    morningRoundsDone: morning.done,
   };
 }
 
