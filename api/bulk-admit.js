@@ -2,6 +2,7 @@
 // Accepts an array of rows; for each row it registers the patient and (unless
 // disabled) immediately admits them, in a single submit. Per-row error isolation
 // so one bad row never fails the whole batch.
+import { unitIndexFromId, UNIT_IDS } from './_lib/teamAssignment.js';
 import { query } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
 import { assignPatientToStudentGroup } from './_lib/studentAssignment.js';
@@ -85,8 +86,8 @@ export default async function handler(req, res) {
                patient_id, admission_date, ward, bed_number,
                admitting_diagnosis, reasons_for_admission, provisional_diagnosis,
                presenting_complaint, notes, status, created_by,
-               patient_name, hospital_number, gender, admitting_consultant, admitting_doctor
-             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'active',$10,$11,$12,$13,$14,$15)`,
+               patient_name, hospital_number, gender, admitting_consultant, admitting_doctor, assigned_unit
+             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'active',$10,$11,$12,$13,$14,$15,$16)`,
             [
               patient.id, admissionDate,
               row.ward || row.ward_location || null,
@@ -102,6 +103,7 @@ export default async function handler(req, res) {
               row.gender || row.sex || null,
               row.consultant || row.admitting_consultant || row.admittingConsultant || null,
               row.admitting_doctor || row.admittingDoctor || (auth.user.fullName || null),
+              admittingUnitOf(row),
             ]
           );
           results.admitted++;
@@ -133,4 +135,11 @@ export default async function handler(req, res) {
     message: `Registered ${results.registered}, admitted ${results.admitted}, failed ${results.failed.length}.`,
     ...results,
   });
+}
+
+/** Admitting unit for a row ('PS-UNIT-1' / 'PS-UNIT-2'), or null to take the consultant's unit later. */
+function admittingUnitOf(row) {
+  const raw = row.admitting_unit || row.admittingUnit || row.unit || row.assigned_unit || null;
+  const ui = unitIndexFromId(raw);
+  return ui === undefined ? (raw || null) : UNIT_IDS[ui];
 }

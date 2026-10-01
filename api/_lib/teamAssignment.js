@@ -115,11 +115,35 @@ export async function pickLeastLoadedByRole(roleKey, excludeUserId = null) {
 }
 
 // ── Units ───────────────────────────────────────────────────────────────────
-// With the unit call pattern configured, each unit runs its own patients: a
-// patient belongs to the unit of their CONSULTANT (consultants do not rotate),
-// and the patient's senior registrar, registrar and house officer are drawn
-// from that unit's doctors as they stand today. When juniors rotate, the
-// patients stay with the unit and pass to the incoming doctors.
+// With the unit call pattern configured, each unit runs its own patients, and
+// the patient's senior registrar, registrar and house officer are drawn from
+// that unit's doctors as they stand today. When juniors rotate, the patients
+// stay with the unit and pass to the incoming doctors.
+//
+// A patient's unit is the ADMITTING UNIT on their open admission
+// (admissions.assigned_unit — 'PS-UNIT-1' / 'PS-UNIT-2', the first and second
+// configured unit). It is chosen at admission, and set automatically from the
+// call-duty roster for a patient admitted through a consult. An admission
+// without one (patients admitted before units existed) falls back to the unit
+// of the patient's consultant, and is stamped with it so it stays put.
+
+/** Admitting-unit ids stored on admissions, by configured unit position. */
+export const UNIT_IDS = ['PS-UNIT-1', 'PS-UNIT-2'];
+
+/**
+ * Unit position (0/1) for whatever identifies a unit — 'PS-UNIT-1', 'unit1',
+ * a configured key or name — or undefined.
+ */
+export function unitIndexFromId(value, units = null) {
+  const v = String(value ?? '').trim();
+  if (!v) return undefined;
+  if (units) {
+    const i = units.findIndex(u => u.key === v || String(u.name || '').toLowerCase() === v.toLowerCase());
+    if (i >= 0) return i;
+  }
+  const m = /unit[\s_-]*([12])\b/i.exec(v);
+  return m ? Number(m[1]) - 1 : undefined;
+}
 
 const UNIT_GRADE_KEY = {
   senior_registrar: 'senior_registrar_ids',
@@ -137,6 +161,86 @@ export async function currentUnitMembership() {
   const unitOfConsultant = new Map();
   units.forEach((u, i) => (u.consultant_ids || []).forEach(id => unitOfConsultant.set(String(id), i)));
   return { units, unitOfConsultant };
+}
+
+/** Admitting unit of each patient with an open admission: Map<patientId, unitIndex>. */
+async function admittingUnits(units) {
+  const out = new Map();
+  try {
+    const r = await query(
+      `SELECT patient_id::text AS pid, assigned_unit FROM admissions
+        WHERE status IN ('active','admitted') AND patient_id IS NOT NULL`
+    );
+    for (const row of r.rows) {
+      const ui = unitIndexFromId(row.assigned_unit, units);
+      if (ui !== undefined) out.set(row.pid, ui);
+    }
+  } catch (e) {
+    console.warn('admittingUnits:', e.message);
+  }
+  return out;
+}
+
+/** A patient's unit: their admitting unit, else their consultant's unit. */
+async function unitIndexForPatient(patientId, consultantId, m) {
+  if (!m) return undefined;
+  try {
+    const r = await query(
+      `SELECT assigned_unit FROM admissions
+        WHERE patient_id::text = $1 AND status IN ('active','admitted')
+        ORDER BY admission_date DESC NULLS LAST LIMIT 1`,
+      [String(patientId)]
+    );
+    const ui = unitIndexFromId(r.rows[0]?.assigned_unit, m.units);
+    if (ui !== undefined) return ui;
+  } catch { /* no admissions table — fall through */ }
+  return consultantId == null ? undefined : m.unitOfConsultant.get(String(consultantId));
+}
+
+/**
+ * Stamp the admitting unit on a patient's open admission when it has none.
+ * Never overwrites a unit someone chose.
+ */
+export async function setAdmittingUnitIfMissing(patientId, unitIndex) {
+  if (unitIndex === undefined || unitIndex === null || !UNIT_IDS[unitIndex]) return;
+  try {
+    await query(
+      `UPDATE admissions SET assigned_unit = $2
+        WHERE patient_id::text = $1 AND status IN ('active','admitted')
+          AND (assigned_unit IS NULL OR TRIM(assigned_unit) = '')`,
+      [String(patientId), UNIT_IDS[unitIndex]]
+    );
+  } catch (e) {
+    console.warn('setAdmittingUnitIfMissing:', e.message);
+  }
+}
+
+/**
+ * Keep the patients already admitted in the units they are in: give every
+ * open admission without an admitting unit the unit of its patient's
+ * consultant. Patients whose consultant is in no unit are left without one.
+ */
+export async function backfillAdmittingUnits(membership = null) {
+  const m = membership || await currentUnitMembership();
+  if (!m) return 0;
+  let stamped = 0;
+  try {
+    const rows = (await query(
+      `SELECT a.id, pa.consultant_id::text AS consultant_id
+         FROM admissions a
+         JOIN patient_assignments pa ON pa.patient_id::text = a.patient_id::text AND pa.is_active = TRUE
+        WHERE a.status IN ('active','admitted') AND (a.assigned_unit IS NULL OR TRIM(a.assigned_unit) = '')`
+    )).rows;
+    for (const r of rows) {
+      const ui = r.consultant_id ? m.unitOfConsultant.get(r.consultant_id) : undefined;
+      if (ui === undefined) continue;
+      await query(`UPDATE admissions SET assigned_unit = $1 WHERE id = $2`, [UNIT_IDS[ui], r.id]);
+      stamped++;
+    }
+  } catch (e) {
+    console.warn('backfillAdmittingUnits:', e.message);
+  }
+  return stamped;
 }
 
 /** Least-loaded active, present member among `ids` for a grade, or null. */
@@ -163,18 +267,17 @@ async function pickLeastLoadedAmong(roleKey, ids) {
   return r.rows[0] ? String(r.rows[0].id) : null;
 }
 
+const UNIT_LIST_KEY = { consultant: 'consultant_ids', ...UNIT_GRADE_KEY };
+
 /**
- * A junior for a patient of `consultantId`: from that consultant's unit when
- * units are configured, otherwise (or if the unit has nobody of the grade)
- * the least-loaded of the grade overall.
+ * Someone of `roleKey` for a patient of unit `unitIndex`: the least-loaded of
+ * that unit's members, or (no unit, or nobody of the grade in it) the
+ * least-loaded of the grade overall.
  */
-export async function pickForUnit(roleKey, consultantId, membership) {
-  if (membership && consultantId != null && UNIT_GRADE_KEY[roleKey]) {
-    const ui = membership.unitOfConsultant.get(String(consultantId));
-    if (ui !== undefined) {
-      const id = await pickLeastLoadedAmong(roleKey, membership.units[ui][UNIT_GRADE_KEY[roleKey]]);
-      if (id) return id;
-    }
+export async function pickForUnit(roleKey, unitIndex, membership) {
+  if (membership && unitIndex !== undefined && unitIndex !== null && UNIT_LIST_KEY[roleKey]) {
+    const id = await pickLeastLoadedAmong(roleKey, membership.units[unitIndex]?.[UNIT_LIST_KEY[roleKey]] || []);
+    if (id) return id;
   }
   return pickLeastLoadedByRole(roleKey);
 }
@@ -191,24 +294,31 @@ export async function pickForUnit(roleKey, consultantId, membership) {
  *
  * @returns {{checked:number, reassigned:number, byGrade:Record<string,number>}}
  */
-export async function applyUnitMembership(membership = null) {
+export async function applyUnitMembership(membership = null, { patientIds = null } = {}) {
   await ensureColumns();
   const m = membership || await currentUnitMembership();
   const result = { checked: 0, reassigned: 0, byGrade: { senior_registrar: 0, registrar: 0, house_officer: 0 } };
   if (!m) return result;
+  await backfillAdmittingUnits(m);
 
-  const rows = (await query(
+  const allRows = (await query(
     `SELECT id, patient_id, consultant_id, senior_registrar_id, registrar_id, house_officer_id
        FROM patient_assignments WHERE is_active = TRUE`
   )).rows;
+  // Load is counted over everyone; only the requested patients are changed.
+  const only = patientIds ? new Set(patientIds.map(String)) : null;
 
+  const unitOf = await admittingUnits(m.units);
   const absent = new Set((await absentUserIds()).map(String));
   const load = new Map(); // `${grade}:${id}` -> active patient count
   const bump = (grade, id, by = 1) => { const k = `${grade}:${id}`; load.set(k, (load.get(k) || 0) + by); };
-  for (const r of rows) for (const g of JUNIOR_GRADES) if (r[ROLE_COLUMN[g]]) bump(g, String(r[ROLE_COLUMN[g]]));
+  for (const r of allRows) for (const g of JUNIOR_GRADES) if (r[ROLE_COLUMN[g]]) bump(g, String(r[ROLE_COLUMN[g]]));
 
-  for (const r of rows) {
-    const ui = r.consultant_id == null ? undefined : m.unitOfConsultant.get(String(r.consultant_id));
+  for (const r of allRows) {
+    if (only && !only.has(String(r.patient_id))) continue;
+    const ui = unitOf.has(String(r.patient_id))
+      ? unitOf.get(String(r.patient_id))
+      : (r.consultant_id == null ? undefined : m.unitOfConsultant.get(String(r.consultant_id)));
     if (ui === undefined) continue;
     result.checked++;
     const updates = {};
@@ -241,6 +351,31 @@ export async function applyUnitMembership(membership = null) {
   return result;
 }
 
+/**
+ * Bring NEW admissions (the last 24 hours) into their admitting unit: any
+ * junior on them who is not in the unit is replaced by the unit's
+ * least-loaded doctor of that grade. Admission screens can still assign a team
+ * from the whole department after the admission is saved, so this runs right
+ * after an admission and again on the heartbeat. Older admissions — the
+ * patients already in the units — are not touched here.
+ */
+export async function alignRecentAdmissions(patientIds = null) {
+  const m = await currentUnitMembership();
+  if (!m) return null;
+  let ids = patientIds;
+  if (!ids) {
+    try {
+      ids = (await query(
+        `SELECT DISTINCT patient_id::text AS pid FROM admissions
+          WHERE status IN ('active','admitted') AND assigned_unit IS NOT NULL
+            AND created_at >= NOW() - INTERVAL '1 day'`
+      )).rows.map(r => r.pid);
+    } catch { ids = []; }
+  }
+  if (!ids.length) { await backfillAdmittingUnits(m); return null; }
+  return applyUnitMembership(m, { patientIds: ids });
+}
+
 // Membership changes on rotation dates without anyone touching the
 // configuration, and there is no scheduler. So the on-call read path (polled by
 // every open dashboard) calls this: it applies the units once whenever today's
@@ -256,7 +391,14 @@ export async function applyUnitMembershipIfChanged() {
       id INTEGER PRIMARY KEY, signature TEXT, applied_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP)`);
     const r = await query(`SELECT signature FROM unit_membership_state WHERE id = 1`);
     if (r.rows[0]?.signature === signature) { lastSignatureSeen = signature; return null; }
-    const res = await applyUnitMembership(m);
+    // Patients already admitted keep their unit (stamped from their
+    // consultant's unit) and, the first time units are applied, keep their
+    // team too: that first pass only records the baseline. Handover happens on
+    // later changes — a rotation date, or someone moved between units.
+    const stamped = await backfillAdmittingUnits(m);
+    const res = r.rows[0]
+      ? { ...(await applyUnitMembership(m)), stamped }
+      : { checked: 0, reassigned: 0, byGrade: { senior_registrar: 0, registrar: 0, house_officer: 0 }, stamped, baseline: true };
     await query(
       `INSERT INTO unit_membership_state (id, signature, applied_at) VALUES (1, $1, CURRENT_TIMESTAMP)
        ON CONFLICT (id) DO UPDATE SET signature = EXCLUDED.signature, applied_at = CURRENT_TIMESTAMP`,
@@ -300,19 +442,38 @@ export async function findOrCreatePatient(consult) {
 
 /** Create an active admission for the patient if none exists. Returns admissions.id. */
 export async function ensureActiveAdmission(patientId, consult, createdBy) {
+  // A consult is admitted under the unit that was on call when it arrived.
+  const unit = await consultUnitIndex(consult);
   const existing = await query(
     `SELECT id FROM admissions WHERE patient_id=$1 AND status IN ('active','admitted') LIMIT 1`, [patientId]
   );
-  if (existing.rows[0]) return existing.rows[0].id;
+  if (existing.rows[0]) {
+    await setAdmittingUnitIfMissing(patientId, unit);
+    return existing.rows[0].id;
+  }
+  try { await query(`ALTER TABLE admissions ADD COLUMN IF NOT EXISTS assigned_unit VARCHAR(50)`); } catch { /* exists */ }
   const r = await query(
-    `INSERT INTO admissions (patient_id, admission_date, ward, bed_number, admitting_diagnosis, status, notes, created_by, patient_name, hospital_number)
-     VALUES ($1, CURRENT_TIMESTAMP, $2, $3, $4, 'active', $5, $6, $7, $8) RETURNING id`,
+    `INSERT INTO admissions (patient_id, admission_date, ward, bed_number, admitting_diagnosis, status, notes, created_by, patient_name, hospital_number, assigned_unit)
+     VALUES ($1, CURRENT_TIMESTAMP, $2, $3, $4, 'active', $5, $6, $7, $8, $9) RETURNING id`,
     [patientId, consult.ward || null, consult.bed_number || null,
      consult.primary_diagnosis || consult.indication || null,
      `Auto-admitted from consult ${consult.consult_ref}`, createdBy || null,
-     consult.patient_name || null, consult.hospital_number || null]
+     consult.patient_name || null, consult.hospital_number || null,
+     unit === undefined ? null : UNIT_IDS[unit]]
   );
   return r.rows[0].id;
+}
+
+/** Unit position of the unit on call when a consult arrived, or undefined. */
+export async function consultUnitIndex(consult) {
+  let team = consult?.oncall_team;
+  if (typeof team === 'string') { try { team = JSON.parse(team); } catch { team = null; } }
+  const m = await currentUnitMembership();
+  if (!m) return undefined;
+  const fromKey = unitIndexFromId(team?.unit_key, m.units);
+  if (fromKey !== undefined) return fromKey;
+  const cons = team?.consultant?.id || consult?.oncall_consultant_id;
+  return cons ? m.unitOfConsultant.get(String(cons)) : undefined;
 }
 
 /** Evenly assign a full team; only fills role slots that are currently empty. */
@@ -322,11 +483,16 @@ export async function assignFullTeam(patientId, hospitalNumber) {
   const existing = (await query(
     `SELECT consultant_id FROM patient_assignments WHERE patient_id = $1`, [String(patientId)]
   )).rows[0];
-  const consultant = existing?.consultant_id ? String(existing.consultant_id) : await pickLeastLoadedByRole('consultant');
   const membership = await currentUnitMembership();
-  const sr = await pickForUnit('senior_registrar', consultant, membership);
-  const reg = await pickForUnit('registrar', consultant, membership);
-  const ho = await pickForUnit('house_officer', consultant, membership);
+  // The admitting unit decides the team; a patient with none takes the unit of
+  // their consultant (and keeps it).
+  let unit = await unitIndexForPatient(patientId, existing?.consultant_id, membership);
+  const consultant = existing?.consultant_id ? String(existing.consultant_id) : await pickForUnit('consultant', unit, membership);
+  if (unit === undefined && membership && consultant) unit = membership.unitOfConsultant.get(String(consultant));
+  await setAdmittingUnitIfMissing(patientId, unit);
+  const sr = await pickForUnit('senior_registrar', unit, membership);
+  const reg = await pickForUnit('registrar', unit, membership);
+  const ho = await pickForUnit('house_officer', unit, membership);
   await query(
     `INSERT INTO patient_assignments
        (patient_id, hospital_number, consultant_id, senior_registrar_id, registrar_id, house_officer_id, assigned_at, is_active, updated_at)
@@ -385,11 +551,14 @@ export async function assignOnCallTeamFromConsult(patientId, hospitalNumber, con
     house_officer_id: consult.oncall_ho_ward_id || consult.oncall_house_officer_id || null,
   } : null;
   const onCall = recorded || await getOnCallTeam(at);
-  const consultant = onCall.consultant_id || await pickLeastLoadedByRole('consultant');
   const membership = await currentUnitMembership();
-  const sr = onCall.senior_registrar_id || await pickForUnit('senior_registrar', consultant, membership);
-  const reg = onCall.registrar_id || await pickForUnit('registrar', consultant, membership);
-  const ho = onCall.house_officer_id || await pickForUnit('house_officer', consultant, membership);
+  // The unit on call when the consult arrived is the admitting unit; gaps in
+  // the on-call team are filled from that unit.
+  const unit = await unitIndexForPatient(patientId, onCall.consultant_id, membership);
+  const consultant = onCall.consultant_id || await pickForUnit('consultant', unit, membership);
+  const sr = onCall.senior_registrar_id || await pickForUnit('senior_registrar', unit, membership);
+  const reg = onCall.registrar_id || await pickForUnit('registrar', unit, membership);
+  const ho = onCall.house_officer_id || await pickForUnit('house_officer', unit, membership);
   await query(
     `INSERT INTO patient_assignments
        (patient_id, hospital_number, consultant_id, senior_registrar_id, registrar_id, house_officer_id, assigned_at, is_active, updated_at)
@@ -479,6 +648,7 @@ export async function rebalanceAllTeams() {
     return v;
   };
   const consultantOf = new Map();
+  const admittedUnit = membership ? await admittingUnits(membership.units) : new Map();
   if (membership) {
     const rows = (await query(`SELECT patient_id, consultant_id FROM patient_assignments WHERE is_active = TRUE`)).rows;
     for (const r of rows) consultantOf.set(String(r.patient_id), r.consultant_id == null ? null : String(r.consultant_id));
@@ -495,7 +665,9 @@ export async function rebalanceAllTeams() {
   let processed = 0;
   for (const a of adms) {
     const cons = consultantOf.get(String(a.patient_id));
-    const ui = membership && cons ? membership.unitOfConsultant.get(cons) : undefined;
+    const ui = admittedUnit.has(String(a.patient_id))
+      ? admittedUnit.get(String(a.patient_id))
+      : (membership && cons ? membership.unitOfConsultant.get(cons) : undefined);
     const choose = (roleKey) => (ui === undefined ? pick(roleKey) : pickInUnit(ui, roleKey));
     const sr = choose('senior_registrar');
     const reg = choose('registrar');

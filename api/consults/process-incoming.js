@@ -2,6 +2,8 @@
 import { query } from '../_lib/db.js';
 import { cors, authenticateRequest } from '../_lib/auth.js';
 import webpush from 'web-push';
+import { onCallTeamAt } from '../_lib/callRoster.js';
+import { currentUnitMembership, unitIndexFromId, setAdmittingUnitIfMissing, UNIT_IDS } from '../_lib/teamAssignment.js';
 
 const EXTERNAL_BASE = process.env.PS_CONSULT_EXTERNAL_BASE || 'https://ps-consult-unth.vercel.app/api';
 const DOCTOR_CODE = process.env.PS_CONSULT_CODE;
@@ -154,6 +156,22 @@ async function processIncomingConsults(currentUser, res) {
     }
   }
 
+  // Units: a consult is admitted under the unit on call when it was sent, and
+  // its house officer comes from that unit.
+  let membership = null;
+  try { membership = await currentUnitMembership(); } catch { membership = null; }
+  const onCallUnitIndex = async (consult) => {
+    if (!membership) return undefined;
+    try {
+      const team = await onCallTeamAt(consult.created_at || consult.date_of_admission || new Date());
+      const ui = unitIndexFromId(team?.unit_key, membership.units);
+      if (ui !== undefined) return ui;
+      return team?.consultant?.id ? membership.unitOfConsultant.get(String(team.consultant.id)) : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+
   // 3. Process each consult
   const newConsultsForNotification = [];
 
@@ -271,6 +289,7 @@ async function processIncomingConsults(currentUser, res) {
 
       // B) Create admission (if patient exists and no active admission)
       let admissionId = null;
+      const unitIdx = await onCallUnitIndex(consult);
       if (patientId) {
         const activeAdmission = await query(
           `SELECT id FROM admissions WHERE patient_id = $1 AND status = 'active'`,
@@ -278,14 +297,15 @@ async function processIncomingConsults(currentUser, res) {
         );
         if (activeAdmission.rows.length > 0) {
           admissionId = activeAdmission.rows[0].id;
+          await setAdmittingUnitIfMissing(patientId, unitIdx);
         } else {
           const admResult = await query(
             `INSERT INTO admissions (
               patient_id, admission_date, ward, bed_number, status,
               patient_name, hospital_number, age, gender,
               route_of_admission, referring_specialty, referring_doctor,
-              reasons_for_admission, provisional_diagnosis, created_by
-            ) VALUES ($1, $2, $3, $4, 'active', $5, $6, $7, $8, 'referral', $9, $10, $11, $12, $13)
+              reasons_for_admission, provisional_diagnosis, created_by, assigned_unit
+            ) VALUES ($1, $2, $3, $4, 'active', $5, $6, $7, $8, 'referral', $9, $10, $11, $12, $13, $14)
             RETURNING id`,
             [
               patientId,
@@ -296,7 +316,8 @@ async function processIncomingConsults(currentUser, res) {
               consult.inviting_unit, consult.requesting_doctor,
               consult.indication || consult.primary_diagnosis,
               consult.primary_diagnosis,
-              'system-auto'
+              'system-auto',
+              unitIdx === undefined ? null : UNIT_IDS[unitIdx]
             ]
           );
           admissionId = admResult.rows[0].id;
@@ -305,10 +326,14 @@ async function processIncomingConsults(currentUser, res) {
 
       // C) Auto-assign to least-loaded House Officer
       let assignedHo = null;
-      if (houseOfficers.length > 0) {
+      // The on-call unit's house officers when units are configured.
+      const unitHoIds = unitIdx === undefined ? [] : (membership.units[unitIdx].house_officer_ids || []).map(String);
+      const candidates = houseOfficers.filter(ho => unitHoIds.includes(String(ho.id)));
+      const hoPool = candidates.length ? candidates : houseOfficers;
+      if (hoPool.length > 0) {
         // Pick the HO with least pending assignments
         let minLoad = Infinity;
-        for (const ho of houseOfficers) {
+        for (const ho of hoPool) {
           const load = hoLoadMap[ho.id] || 0;
           if (load < minLoad) {
             minLoad = load;

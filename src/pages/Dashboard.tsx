@@ -37,7 +37,7 @@ import toast from 'react-hot-toast';
 import UnitRosterWidget from '../components/UnitRosterWidget';
 import OnCallTeamCard from '../components/OnCallTeamCard';
 import MyOnCallConsultsCard from '../components/MyOnCallConsultsCard';
-import { callDutyService, unitsForUser, currentUnits, type UnitCallConfig } from '../services/callDutyService';
+import { callDutyService, unitsForUser, currentUnits, admittingUnitIndex, admittingUnitOptions, type UnitCallConfig } from '../services/callDutyService';
 import UnitsTodayCard from '../components/UnitsTodayCard';
 import MorningRoundCard from '../components/MorningRoundCard';
 import { userManagementService, ApprovedUser } from '../services/userManagementService';
@@ -73,6 +73,8 @@ interface DashboardPatient {
   sr_id?: string | null;
   reg_id?: string | null;
   ho_id?: string | null;
+  /** Admitting unit on the open admission ('PS-UNIT-1' / 'PS-UNIT-2'). */
+  admitting_unit?: string | null;
 }
 
 // Resolved team for one patient (ids as strings, names ready to display).
@@ -229,6 +231,7 @@ export default function Dashboard() {
   const [faBed, setFaBed] = useState('');
   const [faDiagnosis, setFaDiagnosis] = useState('');
   const [faConsultant, setFaConsultant] = useState('');
+  const [faUnit, setFaUnit] = useState('');
   const [faReason, setFaReason] = useState('');
 
   // Emergency Surgery Booking modal state
@@ -471,6 +474,7 @@ export default function Dashboard() {
             sr_id: team?.sr_id ?? null,
             reg_id: team?.reg_id ?? null,
             ho_id: team?.ho_id ?? null,
+            admitting_unit: adm?.assigned_unit || null,
           };
         if (admStatus === 'active') allAdmitted.push(row);
         if (isAdmin || isAssigned) dPatients.push(row);
@@ -524,6 +528,7 @@ export default function Dashboard() {
           sr_id: team?.sr_id ?? null,
           reg_id: team?.reg_id ?? null,
           ho_id: team?.ho_id ?? null,
+          admitting_unit: adm.assigned_unit || null,
         };
         allAdmitted.push(row);
         if (isAdmin || isAssigned) dPatients.push(row);
@@ -1133,6 +1138,7 @@ export default function Dashboard() {
     if (!faSelectedPatient) { toast.error('Select a patient'); return; }
     if (!faWard.trim()) { toast.error('Ward is required'); return; }
     if (!faDiagnosis.trim()) { toast.error('Provisional diagnosis is required'); return; }
+    if (unitConfig && !faUnit) { toast.error('Admitting unit is required'); return; }
 
     setForceAdmitting(true);
     try {
@@ -1151,6 +1157,8 @@ export default function Dashboard() {
         provisional_diagnosis: faDiagnosis.trim(),
         admitting_doctor: getCurrentUserName(),
         admitting_consultant: faConsultant || undefined,
+        // The unit the patient is admitted under — decides their team.
+        assigned_unit: faUnit || undefined,
         status: 'active',
         created_by: getCurrentUserName(),
       };
@@ -1247,7 +1255,13 @@ export default function Dashboard() {
   const unitOfConsultant = new Map<string, string>();
   for (const u of currentUnits(unitConfig)) for (const id of u.consultant_ids) unitOfConsultant.set(String(id), u.key);
   const NO_UNIT = '__none__';
-  const unitKeyOf = (p: DashboardPatient) => (p.consultant_id && unitOfConsultant.get(String(p.consultant_id))) || NO_UNIT;
+  // A patient is under their ADMITTING unit; admissions from before units were
+  // set up fall back to their consultant's unit.
+  const unitKeyOf = (p: DashboardPatient) => {
+    const idx = admittingUnitIndex(p.admitting_unit, unitConfig);
+    const byAdmission = idx !== undefined ? currentUnits(unitConfig)[idx]?.key : undefined;
+    return byAdmission || (p.consultant_id && unitOfConsultant.get(String(p.consultant_id))) || NO_UNIT;
+  };
   const myUnits = unitsForUser(unitConfig, user?.id);
   // Everyone sees their own unit(s); an administrator can open any unit, plus
   // the patients whose consultant is not in a unit.
@@ -2293,6 +2307,22 @@ export default function Dashboard() {
                 />
               </div>
 
+              {/* Admitting Unit */}
+              {unitConfig && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Admitting Unit <span className="text-red-500">*</span></label>
+                  <select
+                    value={faUnit}
+                    onChange={(e) => { setFaUnit(e.target.value); setFaConsultant(''); }}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                  >
+                    <option value="">Select Unit</option>
+                    {admittingUnitOptions(unitConfig).map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">The patient's senior registrar, registrar and house officer come from this unit.</p>
+                </div>
+              )}
+
               {/* Admitting Consultant */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Admitting Consultant</label>
@@ -2304,6 +2334,11 @@ export default function Dashboard() {
                   <option value="">Select Consultant</option>
                   {staffList
                     .filter(s => s.role === 'consultant')
+                    // Only the admitting unit's consultants once a unit is chosen.
+                    .filter(s => {
+                      const u = admittingUnitOptions(unitConfig).find(x => x.id === faUnit);
+                      return !u || u.consultant_ids.map(String).includes(String(s.id));
+                    })
                     .map(s => (
                       <option key={s.id} value={s.full_name}>{s.full_name}</option>
                     ))}

@@ -13,6 +13,7 @@ import {
   AdmissionStatistics
 } from '../services/admissionDischargeService';
 import { medicalTeamService, StaffByRole } from '../services/medicalTeamService';
+import { callDutyService, admittingUnitOptions, type UnitCallConfig } from '../services/callDutyService';
 import { preoperativeService, PreoperativeAssessment } from '../services/preoperativeService';
 import WHODischargeAssessment from '../components/WHODischargeAssessment';
 import MDTDischargeMedications from '../components/MDTDischargeMedications';
@@ -917,6 +918,10 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
   const [selectedRegistrar, setSelectedRegistrar] = useState<number | null>(null);
   const [selectedHouseOfficer, setSelectedHouseOfficer] = useState<number | null>(null);
   const [loadingTeam, setLoadingTeam] = useState(false);
+  // Configured units (Call Duty > Units). When present they are the admitting
+  // units, and the team is chosen from the admitting unit's own doctors.
+  const [unitConfig, setUnitConfig] = useState<UnitCallConfig | null>(null);
+  const [consultantStaff, setConsultantStaff] = useState<StaffByRole[]>([]);
   
   // Vitals
   const [temperature, setTemperature] = useState('');
@@ -936,7 +941,43 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
   // Load medical team on mount
   useEffect(() => {
     loadMedicalTeam();
+    callDutyService.serverGetUnitConfig().then(setUnitConfig).catch(() => setUnitConfig(null));
+    medicalTeamService.getStaffByRole('consultant').then(setConsultantStaff).catch(() => setConsultantStaff([]));
   }, []);
+
+  const configuredUnits = admittingUnitOptions(unitConfig);
+  const unitChoices = configuredUnits.length
+    ? configuredUnits.map(u => ({ id: u.id, name: u.name }))
+    : ADMITTING_UNITS.map(u => ({ id: u.id, name: u.name }));
+  const chosenUnit = configuredUnits.find(u => u.id === admittingUnit) || null;
+  const nameOfConsultant = (id: string) => consultantStaff.find(c => String(c.id) === String(id))?.full_name || '';
+  const consultantChoices = chosenUnit
+    ? chosenUnit.consultant_ids.map(nameOfConsultant).filter(Boolean)
+    : admittingUnit
+      ? (ADMITTING_UNITS.find(u => u.id === admittingUnit)?.consultants || CONSULTANTS)
+      : (consultantStaff.length ? consultantStaff.map(c => c.full_name) : CONSULTANTS);
+  // The admitting unit's members for a grade (all staff of the grade when the
+  // unit has none listed, or units are not configured).
+  const inUnit = (list: StaffByRole[], ids: string[] | undefined) => {
+    if (!chosenUnit || !ids || !ids.length) return list;
+    const inside = list.filter(s => ids.map(String).includes(String(s.id)));
+    return inside.length ? inside : list;
+  };
+  const unitSeniorRegistrars = inUnit(seniorRegistrars, chosenUnit?.senior_registrar_ids);
+  const unitRegistrars = inUnit(registrars, chosenUnit?.registrar_ids);
+  const unitHouseOfficers = inUnit(houseOfficers, chosenUnit?.house_officer_ids);
+
+  // When the unit changes, keep a chosen doctor only if they are in it;
+  // otherwise suggest that unit's least-loaded doctor.
+  useEffect(() => {
+    if (!chosenUnit) return;
+    const leastLoaded = (list: StaffByRole[]) => list.slice().sort((a, b) => (a.current_patients || 0) - (b.current_patients || 0))[0]?.id ?? null;
+    const keep = (sel: number | null, list: StaffByRole[]) => (sel != null && list.some(s => s.id === sel) ? sel : leastLoaded(list));
+    setSelectedSeniorRegistrar(sel => keep(sel, unitSeniorRegistrars));
+    setSelectedRegistrar(sel => keep(sel, unitRegistrars));
+    setSelectedHouseOfficer(sel => keep(sel, unitHouseOfficers));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [admittingUnit, unitConfig, seniorRegistrars, registrars, houseOfficers]);
 
   const loadMedicalTeam = async () => {
     setLoadingTeam(true);
@@ -1185,7 +1226,7 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
               required
             >
               <option value="">-- Select Unit --</option>
-              {ADMITTING_UNITS.map((u) => (
+              {unitChoices.map((u) => (
                 <option key={u.id} value={u.id}>{u.name}</option>
               ))}
             </select>
@@ -1201,10 +1242,7 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
               required
             >
               <option value="">-- Select Consultant --</option>
-              {(admittingUnit
-                ? (ADMITTING_UNITS.find(u => u.id === admittingUnit)?.consultants || CONSULTANTS)
-                : CONSULTANTS
-              ).map((c) => (
+              {consultantChoices.map((c) => (
                 <option key={c} value={c}>{c}</option>
               ))}
             </select>
@@ -1240,7 +1278,7 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-purple-500 focus:border-purple-500"
             >
               <option value="">-- Select Senior Registrar --</option>
-              {seniorRegistrars.map((staff) => (
+              {unitSeniorRegistrars.map((staff) => (
                 <option key={staff.id} value={staff.id}>
                   {staff.full_name} ({staff.current_patients} patients)
                 </option>
@@ -1262,7 +1300,7 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-purple-500 focus:border-purple-500"
             >
               <option value="">-- Select Registrar --</option>
-              {registrars.map((staff) => (
+              {unitRegistrars.map((staff) => (
                 <option key={staff.id} value={staff.id}>
                   {staff.full_name} ({staff.current_patients} patients)
                 </option>
@@ -1285,7 +1323,7 @@ function NewAdmissionTab({ patients, onSuccess }: NewAdmissionTabProps) {
               required
             >
               <option value="">-- Select House Officer --</option>
-              {houseOfficers.map((staff) => (
+              {unitHouseOfficers.map((staff) => (
                 <option key={staff.id} value={staff.id}>
                   {staff.full_name} ({staff.current_patients} patients)
                 </option>

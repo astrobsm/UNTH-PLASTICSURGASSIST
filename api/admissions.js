@@ -1,6 +1,7 @@
 // Admissions API endpoint for Vercel serverless
 import { query } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
+import { unitIndexFromId, UNIT_IDS, assignFullTeam, alignRecentAdmissions } from './_lib/teamAssignment.js';
 import { assignPatientToStudentGroup } from './_lib/studentAssignment.js';
 import { idempotent, rememberResponse } from './_lib/idempotency.js';
 import { deactivateAssignmentsForPatients } from './_lib/teamAssignment.js';
@@ -209,7 +210,8 @@ async function createAdmission(data, user, req, res) {
     past_surgical_history, social_history, family_history,
     examination_findings, initial_management_plan,
     assigned_house_officer, assigned_house_officer_id, assigned_unit,
-    admission_lat, admission_lng, admission_accuracy_m, admission_address, admission_geofence
+    admission_lat, admission_lng, admission_accuracy_m, admission_address, admission_geofence,
+    admittingUnit, admitting_unit, ps_unit, psUnit
   } = data;
 
   // Resolve values: prefer camelCase, fall back to snake_case
@@ -228,7 +230,12 @@ async function createAdmission(data, user, req, res) {
   const resolvedComorbidities = comorbidities;
   const resolvedAssignedHo = assignedHouseOfficer || assigned_house_officer || null;
   const resolvedAssignedHoId = assignedHouseOfficerId || assigned_house_officer_id || null;
-  const resolvedAssignedUnit = assignedUnit || assigned_unit || null;
+  // The admitting unit — which unit the patient is admitted under. Stored as
+  // 'PS-UNIT-1' / 'PS-UNIT-2' (the first / second unit on Call Duty > Units);
+  // it decides the patient's team and moves with them through rotations.
+  const rawUnit = assignedUnit || assigned_unit || admittingUnit || admitting_unit || ps_unit || psUnit || null;
+  const unitIdx = unitIndexFromId(rawUnit);
+  const resolvedAssignedUnit = unitIdx === undefined ? rawUnit : UNIT_IDS[unitIdx];
   const resolvedAdmLat = admissionLat ?? admission_lat ?? null;
   const resolvedAdmLng = admissionLng ?? admission_lng ?? null;
   const resolvedAdmAccuracy = admissionAccuracyM ?? admission_accuracy_m ?? null;
@@ -304,6 +311,17 @@ async function createAdmission(data, user, req, res) {
       resolvedAdmGeofence
     ]
   );
+
+  // Give the patient a team from their admitting unit (fills empty slots and
+  // replaces anyone outside the unit). Never fails the admission.
+  if (resolvedAssignedUnit) {
+    try {
+      await assignFullTeam(resolvedPatientId, hospitalNumber || hospital_number || null);
+      await alignRecentAdmissions([String(resolvedPatientId)]);
+    } catch (e) {
+      console.warn('admission unit team:', e.message);
+    }
+  }
 
   // Get patient info for name fallback
   const patientResult = await query(
@@ -391,6 +409,10 @@ async function updateAdmission(id, data, res) {
     examination_findings: 'examination_findings',
     initialManagementPlan: 'initial_management_plan',
     initial_management_plan: 'initial_management_plan',
+    assignedUnit: 'assigned_unit',
+    assigned_unit: 'assigned_unit',
+    admittingUnit: 'assigned_unit',
+    admitting_unit: 'assigned_unit',
   };
 
   // Handle JSONB fields separately
@@ -400,10 +422,18 @@ async function updateAdmission(id, data, res) {
     comorbidities: 'comorbidities',
   };
 
+  const setCols = new Set();
   for (const [key, dbField] of Object.entries(fieldMap)) {
-    if (data[key] !== undefined) {
+    // Several spellings map to one column; setting it twice is a SQL error.
+    if (data[key] !== undefined && !setCols.has(dbField)) {
+      setCols.add(dbField);
+      let value = data[key];
+      if (dbField === 'assigned_unit') {
+        const ui = unitIndexFromId(value);
+        if (ui !== undefined) value = UNIT_IDS[ui];
+      }
       fields.push(`${dbField} = $${paramCount}`);
-      values.push(data[key]);
+      values.push(value);
       paramCount++;
     }
   }

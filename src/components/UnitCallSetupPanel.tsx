@@ -142,7 +142,7 @@ export default function UnitCallSetupPanel({ staff, canEdit, onApplied }: {
 
   async function save(apply: boolean) {
     if (!draft) return;
-    if (!confirm('Each unit runs its own patients. Saving hands any admitted patient whose senior registrar, registrar or house officer is not in the patient\'s unit (by consultant) to that unit\'s doctor of the same grade. Continue?')) return;
+    if (!confirm('Each unit runs its own patients. Patients already admitted stay in their units with their current teams. From now on, patients are admitted under an admitting unit (consults: the unit on call), and when a doctor rotates out or is moved, their unit patients pass to the incoming doctor of the same grade. Continue?')) return;
     setBusy(true); setError(''); setSuccess('');
     try {
       const { config: cfg, applied } = await callDutyService.serverSaveUnitConfig(draft);

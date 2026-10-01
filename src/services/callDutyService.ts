@@ -145,6 +145,29 @@ export function currentUnits(config: UnitCallConfig | null): CallUnit[] {
   return config.current_units && config.current_units.length ? config.current_units : config.units;
 }
 
+/**
+ * Admitting-unit ids stored on admissions (admissions.assigned_unit), by unit
+ * position: the first unit on Call Duty > Units is PS-UNIT-1. Must match
+ * UNIT_IDS in api/_lib/teamAssignment.js.
+ */
+export const ADMITTING_UNIT_IDS = ['PS-UNIT-1', 'PS-UNIT-2'] as const;
+
+/** Unit position (0/1) for 'PS-UNIT-1', 'unit1', a unit key or name; undefined if none. */
+export function admittingUnitIndex(value: string | null | undefined, config: UnitCallConfig | null = null): number | undefined {
+  const v = String(value ?? '').trim();
+  if (!v) return undefined;
+  const units = currentUnits(config);
+  const i = units.findIndex(u => u.key === v || u.name.toLowerCase() === v.toLowerCase());
+  if (i >= 0) return i;
+  const m = /unit[\s_-]*([12])\b/i.exec(v);
+  return m ? Number(m[1]) - 1 : undefined;
+}
+
+/** The configured units as admitting-unit choices: id + today's members. */
+export function admittingUnitOptions(config: UnitCallConfig | null): Array<CallUnit & { id: string }> {
+  return currentUnits(config).slice(0, 2).map((u, i) => ({ ...u, id: ADMITTING_UNIT_IDS[i] }));
+}
+
 /** Units the user belongs to (any grade). */
 export function unitsForUser(config: UnitCallConfig | null, userId: string | number | undefined | null): CallUnit[] {
   if (!config || userId == null || userId === '') return [];

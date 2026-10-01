@@ -17,7 +17,7 @@
 // which the consults module shares to route each consult to the team on call.
 import { query } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
-import { coverRosterVacancies, applyUnitMembershipIfChanged, applyUnitMembership } from './_lib/teamAssignment.js';
+import { coverRosterVacancies, applyUnitMembershipIfChanged, applyUnitMembership, alignRecentAdmissions } from './_lib/teamAssignment.js';
 import { ensureMorningSnapshot } from './_lib/morningRounds.js';
 import {
   ensureRosterColumns, rosterKey, generateShifts, persistRoster, hydrateShifts, findShiftAt,
@@ -144,6 +144,9 @@ async function getOnCall(params, res) {
   if (shouldRunMembership()) {
     try { await applyUnitMembershipIfChanged(); }
     catch (e) { console.warn('getOnCall: unit membership skipped:', e.message); }
+    // New admissions join their admitting unit's team.
+    try { await alignRecentAdmissions(); }
+    catch (e) { console.warn('getOnCall: admission alignment skipped:', e.message); }
     // Then freeze today's morning-round list (after any rotation, so it names
     // the incoming house officers).
     try { await ensureMorningSnapshot(); }
