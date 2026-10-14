@@ -3,6 +3,20 @@
 Based on `CLINICAL_DOCUMENTATION_AUDIT.md` (findings S1–S10 and §1–21) and `CLINICAL_DATA_MODEL_PROPOSAL.md`.
 Safety requirements are in `CLINICAL_SAFETY_AND_VALIDATION_PLAN.md`.
 
+## Status (2026-10-14)
+
+| Item | State |
+|---|---|
+| Phase 0 — S1–S10 safety fixes | **Done** on branch `feature/clinical-phase0` (commits 4db031b … f1bf007); full suite 1,121 tests passing |
+| D1–D7 decisions | **Selectable** on Clinical Governance → Decisions; every change kept with who/when/why |
+| D5 external AI | **Decided by the unit:** OpenAI permitted. Default `enabled_deidentified`; identifiers removed server-side; every call audited |
+| D3 monitoring protocols | Ten **draft** protocols from published guidance, editable and versioned on Clinical Governance → Monitoring protocols; approval by D1 approvers; guidance only (no alerts yet) |
+| Phase 1 onwards | Not started |
+
+Implementation notes for Phase 0 beyond the audit:
+- **Patient creation used the wrong endpoint.** `POST /sync/patients` was the full-sync handler: it created nothing and returned every table. Offline registrations therefore never reached the server, and the push path overwrote an existing patient's identity when a hospital number was reused. Both are fixed (S10).
+- **Clinical deletes are now "entered in error".** They are kept, with who, when and why. New server table `clinical_audit_events` (migration 021).
+
 ## Principles
 
 1. **Fix what is unsafe before adding features.** Phase 0 ships before any new clinical module.
