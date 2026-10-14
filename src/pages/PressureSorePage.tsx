@@ -51,11 +51,12 @@ const PressureSorePage: React.FC = () => {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Braden Scale State
-  const [bradenInputs, setBradenInputs] = useState<Record<string, number>>({
-    'Sensory Perception': 3, 'Moisture': 3, 'Activity': 3,
-    'Mobility': 3, 'Nutrition': 3, 'Friction & Shear': 2
-  });
-  const [bradenTotal, setBradenTotal] = useState(0);
+  // Every item starts unscored (S8). They used to start at 3,3,3,3,3,2 —
+  // a "mild risk" 17 for a patient nobody had assessed yet.
+  const BRADEN_ITEMS = ['Sensory Perception', 'Moisture', 'Activity', 'Mobility', 'Nutrition', 'Friction & Shear'];
+  const [bradenInputs, setBradenInputs] = useState<Record<string, number>>({});
+  // null until all six items are scored.
+  const [bradenTotal, setBradenTotal] = useState<number | null>(null);
   const [bradenRisk, setBradenRisk] = useState('');
 
   // Wound Form
@@ -139,7 +140,12 @@ const PressureSorePage: React.FC = () => {
   // BRADEN SCALE CALCULATOR
   // ============================================
   const calculateBraden = () => {
-    const total = Object.values(bradenInputs).reduce((sum, v) => sum + v, 0);
+    if (!BRADEN_ITEMS.every(item => typeof bradenInputs[item] === 'number')) {
+      setBradenTotal(null);
+      setBradenRisk('');
+      return;
+    }
+    const total = BRADEN_ITEMS.reduce((sum, item) => sum + bradenInputs[item], 0);
     setBradenTotal(total);
 
     let risk = '';
@@ -555,6 +561,15 @@ const PressureSorePage: React.FC = () => {
             </div>
 
             {/* Result */}
+            {bradenTotal === null ? (
+              <div className="mt-6 p-4 rounded-lg border-2 border-gray-300 bg-gray-50">
+                <p className="text-lg font-bold text-gray-700">Braden Score: incomplete</p>
+                <p className="text-sm text-gray-600">
+                  {BRADEN_ITEMS.filter(i => typeof bradenInputs[i] === 'number').length} of 6 items scored.
+                  Not scored: {BRADEN_ITEMS.filter(i => typeof bradenInputs[i] !== 'number').join(', ')}.
+                </p>
+              </div>
+            ) : (
             <div className={`mt-6 p-4 rounded-lg border-2 ${
               bradenTotal <= 9 ? 'border-red-500 bg-red-50' :
               bradenTotal <= 12 ? 'border-orange-500 bg-orange-50' :
@@ -578,6 +593,7 @@ const PressureSorePage: React.FC = () => {
                 }`} />
               </div>
             </div>
+            )}
 
             {/* Interpretation table */}
             <div className="mt-4">

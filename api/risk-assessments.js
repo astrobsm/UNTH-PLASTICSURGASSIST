@@ -106,46 +106,27 @@ export default async function handler(req, res) {
           return res.status(400).json({ error: 'patient_id and assessment_type are required' });
         }
 
-        // Upsert: replace existing assessment of same type for same patient
-        const existing = await query(
-          'SELECT id FROM risk_assessments WHERE patient_id = $1 AND assessment_type = $2',
-          [patient_id, assessment_type]
+        // Append, never replace (S8). This used to UPDATE the patient's
+        // previous assessment of the same type, so each new score erased the
+        // last one and there was no history to see a trend. GET already returns
+        // newest first, so screens that show "the current assessment" read the
+        // first row.
+        const result = await query(
+          `INSERT INTO risk_assessments (patient_id, assessment_type, assessment_data, total_score, risk_level, recommendations, assessed_by)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           RETURNING *`,
+          [
+            patient_id,
+            assessment_type,
+            JSON.stringify(assessment_data || {}),
+            // A score of 0 is a score; only "not scored" is NULL.
+            total_score === undefined || total_score === null || total_score === '' ? null : total_score,
+            risk_level || null,
+            recommendations || null,
+            // Assessor from the session, not the request body.
+            auth.user.full_name || auth.user.name || assessed_by || null
+          ]
         );
-
-        let result;
-        if (existing.rows.length > 0) {
-          result = await query(
-            `UPDATE risk_assessments SET 
-              assessment_data = $1, total_score = $2, risk_level = $3, 
-              recommendations = $4, assessed_by = $5, updated_at = NOW()
-             WHERE patient_id = $6 AND assessment_type = $7
-             RETURNING *`,
-            [
-              JSON.stringify(assessment_data || {}),
-              total_score || null,
-              risk_level || null,
-              recommendations || null,
-              assessed_by || auth.user.name || null,
-              patient_id,
-              assessment_type
-            ]
-          );
-        } else {
-          result = await query(
-            `INSERT INTO risk_assessments (patient_id, assessment_type, assessment_data, total_score, risk_level, recommendations, assessed_by)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)
-             RETURNING *`,
-            [
-              patient_id,
-              assessment_type,
-              JSON.stringify(assessment_data || {}),
-              total_score || null,
-              risk_level || null,
-              recommendations || null,
-              assessed_by || auth.user.name || null
-            ]
-          );
-        }
 
         return res.status(201).json({ assessment: transformAssessment(result.rows[0]) });
       }
