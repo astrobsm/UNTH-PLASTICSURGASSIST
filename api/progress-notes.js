@@ -1,5 +1,7 @@
 // Progress Notes API endpoint for Vercel serverless
 import { query } from './_lib/db.js';
+import { ensureRecordStatus, markEnteredInError, notInError, reasonFrom, auditClinical } from './_lib/clinicalRecords.js';
+
 import { cors, authenticateRequest } from './_lib/auth.js';
 import { idempotent, rememberResponse } from './_lib/idempotency.js';
 
@@ -39,7 +41,7 @@ export default async function handler(req, res) {
         if (!noteId) {
           return res.status(400).json({ error: 'Note ID required' });
         }
-        return await deleteProgressNote(noteId, res);
+        return await deleteProgressNote(noteId, res, req, auth.user);
       default:
         res.status(405).json({ error: 'Method not allowed' });
     }
@@ -95,7 +97,8 @@ async function getAllProgressNotes(searchParams, res) {
   const patientId = searchParams.get('patientId');
   const since = searchParams.get('since');
 
-  let queryStr = `SELECT * FROM progress_notes WHERE 1=1`;
+  await ensureRecordStatus('progress_notes');
+  let queryStr = `SELECT * FROM progress_notes WHERE ${notInError()}`;
   const params = [];
   let paramCount = 1;
 
@@ -166,6 +169,7 @@ async function createProgressNote(body, user, req, res) {
 
   console.log(`Progress note created for patient ${patient_id} by ${authorName}`);
   const responseBody = { note: result.rows[0] };
+  await auditClinical(user, { action: 'create', entity: 'progress_notes', entityId: result.rows[0].id, patientId: patient_id });
   await rememberResponse(req, user, 201, responseBody);
   res.status(201).json(responseBody);
 }
@@ -198,10 +202,22 @@ async function updateProgressNote(id, body, res) {
   res.status(200).json({ note: result.rows[0] });
 }
 
-async function deleteProgressNote(id, res) {
-  const result = await query('DELETE FROM progress_notes WHERE id = $1 RETURNING id', [parseInt(id, 10)]);
-  if (result.rows.length === 0) {
+// Anyone could delete any note, with no record that it had existed. Now only
+// the author or a senior clinician can, and the note is marked
+// entered-in-error rather than removed.
+const NOTE_CORRECTION_ROLES = ['consultant', 'senior_registrar', 'admin', 'super_admin'];
+async function deleteProgressNote(id, res, req, user) {
+  await ensureRecordStatus('progress_notes');
+  const found = await query('SELECT id, author FROM progress_notes WHERE id = $1', [parseInt(id, 10)]);
+  if (found.rows.length === 0) {
     return res.status(404).json({ error: 'Progress note not found' });
   }
-  res.status(200).json({ success: true, id: result.rows[0].id });
+  const author = String(found.rows[0].author || '').trim().toLowerCase();
+  const me = [user?.full_name, user?.name, user?.username].filter(Boolean).map(v => String(v).trim().toLowerCase());
+  if (!NOTE_CORRECTION_ROLES.includes(user?.role) && !(author && me.includes(author))) {
+    return res.status(403).json({ error: 'Only the author or a senior clinician can correct this note' });
+  }
+  const row = await markEnteredInError('progress_notes', id, user, reasonFrom(req));
+  if (!row) return res.status(404).json({ error: 'Progress note not found' });
+  res.status(200).json({ success: true, id: row.id, status: 'entered_in_error' });
 }

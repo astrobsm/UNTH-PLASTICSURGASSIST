@@ -154,16 +154,21 @@ async function createAuditLog(req, res, user) {
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
      RETURNING *`,
     [
-      user_id || user.id?.toString(),
-      user_name || user.name,
-      user_role || user.role,
+      // Always the verified session user. The body's user_id / user_name /
+      // user_role used to be stored as given, so any signed-in user could
+      // write an audit entry in someone else's name.
+      user.id?.toString(),
+      user.full_name || user.name || user.username || null,
+      user.role || null,
       action,
       resource_type,
       resource_id,
       resource_identifier || null,
       detailsStr,
       ip_address || req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || 'unknown',
-      timestamp || new Date().toISOString(),
+      // Event time from the device (offline events are logged late) but never
+      // in the future.
+      clampEventTime(timestamp),
       latitude ?? null,
       longitude ?? null,
       accuracy_meters ?? null,
@@ -174,4 +179,10 @@ async function createAuditLog(req, res, user) {
   );
 
   return res.status(201).json({ data: result.rows[0] });
+}
+
+function clampEventTime(ts) {
+  const now = Date.now();
+  const t = ts ? new Date(ts).getTime() : NaN;
+  return new Date(Number.isFinite(t) && t <= now + 5 * 60000 ? t : now).toISOString();
 }

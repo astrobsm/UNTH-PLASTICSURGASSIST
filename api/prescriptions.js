@@ -1,5 +1,7 @@
 // Prescriptions API endpoint for Vercel serverless
 import { query } from './_lib/db.js';
+import { ensureRecordStatus, markEnteredInError, notInError, reasonFrom, auditClinical } from './_lib/clinicalRecords.js';
+
 import { cors, authenticateRequest } from './_lib/auth.js';
 import { idempotent, rememberResponse } from './_lib/idempotency.js';
 
@@ -38,6 +40,7 @@ export default async function handler(req, res) {
 
   try {
     await ensureTable();
+    await ensureRecordStatus('prescriptions');
 
     switch (method) {
       case 'GET':
@@ -58,7 +61,7 @@ export default async function handler(req, res) {
         if (!prescriptionId) {
           return res.status(400).json({ error: 'Prescription ID required' });
         }
-        return await deletePrescription(prescriptionId, res);
+        return await deletePrescription(prescriptionId, res, req, auth.user);
       default:
         res.status(405).json({ error: 'Method not allowed' });
     }
@@ -81,7 +84,7 @@ async function getAllPrescriptions(searchParams, res) {
     SELECT pr.*, p.first_name, p.last_name, p.hospital_number
     FROM prescriptions pr
     LEFT JOIN patients p ON pr.patient_id = p.id
-    WHERE pr.patient_id = $1
+    WHERE pr.patient_id = $1 AND ${notInError('pr')}
   `;
   const params = [patientId];
   let paramCount = 2;
@@ -171,6 +174,9 @@ async function createPrescription(data, user, req, res) {
       prescriptions: results,
       id: results[0]?.id
     };
+    for (const r of results) {
+      await auditClinical(user, { action: 'create', entity: 'prescriptions', entityId: r?.id, patientId: r?.patient_id });
+    }
     await rememberResponse(req, user, 201, responseBody);
     return res.status(201).json(responseBody);
   }
@@ -195,6 +201,7 @@ async function createPrescription(data, user, req, res) {
   );
 
   const responseBody = { prescription: result.rows[0], id: result.rows[0].id };
+  await auditClinical(user, { action: 'create', entity: 'prescriptions', entityId: result.rows[0].id, patientId });
   await rememberResponse(req, user, 201, responseBody);
   res.status(201).json(responseBody);
 }
@@ -241,8 +248,11 @@ async function updatePrescription(id, data, res) {
   res.status(200).json({ prescription: result.rows[0] });
 }
 
-async function deletePrescription(id, res) {
-  const result = await query('DELETE FROM prescriptions WHERE id = $1 RETURNING id', [id]);
+// Marked entered-in-error, not deleted: a prescription that existed is part of
+// the medication history even when it was a mistake.
+async function deletePrescription(id, res, req, user) {
+  const marked = await markEnteredInError('prescriptions', id, user, reasonFrom(req));
+  const result = { rows: marked ? [marked] : [] };
 
   if (result.rows.length === 0) {
     return res.status(404).json({ error: 'Prescription not found' });

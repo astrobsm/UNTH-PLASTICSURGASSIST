@@ -1,5 +1,7 @@
 // Ward Rounds API endpoints
 import { query } from './_lib/db.js';
+import { ensureRecordStatus, markEnteredInError, notInError, reasonFrom, auditClinical } from './_lib/clinicalRecords.js';
+
 import { cors, authenticateRequest } from './_lib/auth.js';
 import { idempotent, rememberResponse } from './_lib/idempotency.js';
 import { ensureMorningSnapshot, morningChecklist, morningCompliance } from './_lib/morningRounds.js';
@@ -113,7 +115,7 @@ async function handleGet(req, res, userId, userRole) {
         `SELECT wr.*, u.full_name as documented_by_name
          FROM ward_rounds wr
          LEFT JOIN users u ON wr.user_id = u.id
-         WHERE wr.patient_id = $1
+         WHERE wr.patient_id = $1 AND ${notInError('wr')}
          ORDER BY wr.round_date DESC, wr.created_at DESC`,
         [patientId]
       );
@@ -128,7 +130,7 @@ async function handleGet(req, res, userId, userRole) {
          FROM ward_rounds wr
          LEFT JOIN patients p ON wr.patient_id = p.id
          LEFT JOIN users u ON wr.user_id = u.id
-         WHERE wr.admission_id = $1
+         WHERE wr.admission_id = $1 AND ${notInError('wr')}
          ORDER BY wr.round_date DESC, wr.created_at DESC`,
         [admissionId]
       );
@@ -142,7 +144,7 @@ async function handleGet(req, res, userId, userRole) {
          FROM ward_rounds wr
          LEFT JOIN patients p ON wr.patient_id = p.id
          LEFT JOIN users u ON wr.user_id = u.id
-         WHERE wr.round_date = $1::date
+         WHERE wr.round_date = $1::date AND ${notInError('wr')}
          ORDER BY p.ward, p.bed_number, wr.created_at`,
         [targetDate]
       );
@@ -154,7 +156,7 @@ async function handleGet(req, res, userId, userRole) {
         `SELECT wr.*, p.full_name as patient_name, p.hospital_number
          FROM ward_rounds wr
          LEFT JOIN patients p ON wr.patient_id = p.id
-         WHERE wr.user_id = $1
+         WHERE wr.user_id = $1 AND ${notInError('wr')}
          ORDER BY wr.round_date DESC, wr.created_at DESC
          LIMIT 50`,
         [userId]
@@ -169,7 +171,7 @@ async function handleGet(req, res, userId, userRole) {
          FROM ward_rounds wr
          LEFT JOIN patients p ON wr.patient_id = p.id
          LEFT JOIN users u ON wr.user_id = u.id
-         WHERE wr.consultant_reviewed = false
+         WHERE wr.consultant_reviewed = false AND ${notInError('wr')}
          ORDER BY wr.round_date DESC, wr.created_at DESC`
       );
       return res.status(200).json({ wardRounds: pendingResult.rows });
@@ -183,7 +185,7 @@ async function handleGet(req, res, userId, userRole) {
            COUNT(DISTINCT round_date) as days_with_rounds,
            COUNT(*) FILTER (WHERE consultant_reviewed = true) as reviewed_rounds
          FROM ward_rounds 
-         WHERE user_id = $1 
+         WHERE user_id = $1 AND ${notInError()} 
          AND created_at >= CURRENT_DATE - INTERVAL '30 days'`,
         [userId]
       );
@@ -199,7 +201,7 @@ async function handleGet(req, res, userId, userRole) {
         FROM ward_rounds wr
         LEFT JOIN patients p ON wr.patient_id = p.id
         LEFT JOIN users u ON wr.user_id = u.id
-        WHERE 1=1
+        WHERE ${notInError('wr')}
       `;
       const listParams = [];
       
@@ -281,6 +283,10 @@ async function handlePost(req, res, userId, userRole, authUser) {
       
       {
         const responseBody = { wardRound: newRound.rows[0] };
+        await auditClinical(authUser || { id: userId, role: userRole }, {
+          action: 'create', entity: 'ward_rounds', entityId: newRound.rows[0].id, patientId,
+          detail: { round_type: roundType },
+        });
         await rememberResponse(req, authUser || { id: userId }, 201, responseBody);
         return res.status(201).json(responseBody);
       }
@@ -317,6 +323,11 @@ async function handlePost(req, res, userId, userRole, authUser) {
       
       {
         const responseBody = { wardRounds: createdRounds, count: createdRounds.length };
+        for (const r of createdRounds) {
+          await auditClinical(authUser || { id: userId, role: userRole }, {
+            action: 'create', entity: 'ward_rounds', entityId: r.id, patientId: r.patient_id,
+          });
+        }
         await rememberResponse(req, authUser || { id: userId }, 201, responseBody);
         return res.status(201).json(responseBody);
       }
@@ -382,6 +393,12 @@ async function handlePut(req, res, userId, userRole) {
         ]
       );
       
+      if (updateResult.rows[0]) {
+        await auditClinical({ id: userId, role: userRole }, {
+          action: 'update', entity: 'ward_rounds', entityId: roundId, patientId: updateResult.rows[0].patient_id,
+          detail: { folderUpdated: typeof updateData.folderUpdated === 'boolean' ? updateData.folderUpdated : undefined },
+        });
+      }
       return res.status(200).json({ wardRound: updateResult.rows[0] });
 
     case 'consultant-review':
@@ -453,9 +470,10 @@ async function handleDelete(req, res, userId, userRole) {
     return res.status(403).json({ error: 'Ward rounds can only be deleted within 24 hours of creation' });
   }
   
-  await query(`DELETE FROM ward_rounds WHERE id = $1`, [roundId]);
-  
-  return res.status(200).json({ success: true, message: 'Ward round deleted' });
+  // Marked entered-in-error, not deleted: the record and who wrote it stay.
+  await markEnteredInError('ward_rounds', roundId, { id: userId, role: userRole }, reasonFrom(req));
+
+  return res.status(200).json({ success: true, message: 'Ward round marked as entered in error' });
 }
 
 async function logActivity(userId, activityType, description, metadata = {}) {
@@ -493,6 +511,7 @@ async function ensureWardRoundColumns() {
     await query(`ALTER TABLE ward_rounds ADD COLUMN IF NOT EXISTS user_id INTEGER`).catch(() => {});
     await query(`ALTER TABLE ward_rounds ADD COLUMN IF NOT EXISTS admission_id INTEGER`).catch(() => {});
     await query(`ALTER TABLE ward_rounds ADD COLUMN IF NOT EXISTS created_by INTEGER`).catch(() => {});
+    await ensureRecordStatus('ward_rounds');
     await query(`ALTER TABLE ward_rounds ADD COLUMN IF NOT EXISTS documented_at TIMESTAMPTZ`).catch(() => {});
     await query(`ALTER TABLE ward_rounds ADD COLUMN IF NOT EXISTS folder_updated BOOLEAN DEFAULT FALSE`).catch(() => {});
     columnsEnsured = true;
