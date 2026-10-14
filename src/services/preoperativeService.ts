@@ -433,11 +433,9 @@ class PreoperativeService {
    * Generate AI-powered comprehensive pre-operative summary
    */
   async generateComprehensiveSummary(data: ComprehensiveSummaryData): Promise<string> {
-    const apiKey = localStorage.getItem('openai_api_key');
-    if (!apiKey || apiKey === '••••••••••••••••') {
-      // Return a structured summary without AI
-      return this.generateStructuredSummary(data);
-    }
+    // The server decides whether AI is available (key + unit decision D5);
+    // when it is not, the request fails and the structured version below is
+    // returned. No key is held in the browser.
 
     try {
       const prompt = this.buildComprehensiveSummaryPrompt(data);
@@ -573,10 +571,9 @@ Date: ${new Date().toLocaleDateString()}
    * Generate personalized pre-operative instructions
    */
   async generatePreOpInstructions(data: ComprehensiveSummaryData): Promise<string> {
-    const apiKey = localStorage.getItem('openai_api_key');
-    if (!apiKey || apiKey === '••••••••••••••••') {
-      return this.generateStructuredInstructions(data);
-    }
+    // The server decides whether AI is available (key + unit decision D5);
+    // when it is not, the request fails and the structured version below is
+    // returned. No key is held in the browser.
 
     try {
       const prompt = this.buildInstructionsPrompt(data);

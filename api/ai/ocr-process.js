@@ -7,6 +7,7 @@
  * Implements ABBYY FineReader-level intelligent field extraction via AI layering.
  */
 
+import { externalAiAllowed } from '../_lib/governance.js';
 import { chatJSON, getOpenAIKey, OpenAIError } from '../_lib/openai.js';
 import { OCR_EXTRACTION_PROMPT } from '../_lib/ocrPrompts.js';
 import { cors, authenticateRequest } from '../_lib/auth.js';
@@ -61,7 +62,7 @@ export default async function handler(req, res) {
     // Trim excessively long OCR text to avoid token limits
     const trimmedText = cleanedText.length > 15000 ? cleanedText.substring(0, 15000) + '\n[...truncated]' : cleanedText;
 
-    if (!getOpenAIKey()) {
+    if (!getOpenAIKey() || !(await externalAiAllowed())) {
       return res.status(501).json({ error: 'AI not configured', fallback: true, message: 'No OPENAI_API_KEY — use client-side rule-based extraction' });
     }
 
@@ -71,7 +72,9 @@ export default async function handler(req, res) {
     let userMessage = `Document type: ${docType}\n\nRaw OCR Text:\n---\n${trimmedText}\n---`;
 
     if (patientContext) {
-      userMessage += `\n\nPatient Context:\n- Name: ${patientContext.name || 'Unknown'}\n- Hospital Number: ${patientContext.hospitalNumber || 'Unknown'}\n- Ward: ${patientContext.ward || 'Unknown'}\n- Diagnosis: ${patientContext.diagnosis || 'Unknown'}`;
+      // Ward and diagnosis help reading the page; name and hospital number are
+      // not sent (D5: identifiers removed).
+      userMessage += `\n\nPatient Context:\n- Ward: ${patientContext.ward || 'Unknown'}\n- Diagnosis: ${patientContext.diagnosis || 'Unknown'}`;
     }
 
     userMessage += '\n\nPlease extract and structure ALL medical data from this OCR text into the appropriate JSON schema for this document type. Correct obvious OCR errors in medical terminology.';

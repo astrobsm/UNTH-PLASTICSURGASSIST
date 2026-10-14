@@ -1,281 +1,119 @@
-import React, { useState, useEffect } from 'react';
-import {
-  Server,
-  Save,
-  RefreshCw,
-  Eye,
-  Lock,
-  Activity,
-  CheckCircle,
-  XCircle,
-  AlertTriangle
-} from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Server, RefreshCw, Activity, CheckCircle, XCircle, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { apiClient } from '../services/apiClient';
 
+interface AIStatus {
+  enabled: boolean;
+  hasOpenAI: boolean;
+  governanceAllows: boolean;
+  model?: string;
+  message?: string;
+}
+
+/**
+ * AI status for administrators.
+ *
+ * The OpenAI key is configured on the server (OPENAI_API_KEY in Vercel) and is
+ * never shown to, entered in, or stored by the browser. This panel used to save
+ * the key in localStorage, where any script on the page could read it. Whether
+ * clinical text may be sent to OpenAI at all is decision D5 on the Clinical
+ * Governance page.
+ */
 export function AISettingsPanel() {
-  const [apiKey, setApiKey] = useState('');
-  const [showKey, setShowKey] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isTestingAI, setIsTestingAI] = useState(false);
-  const [testResult, setTestResult] = useState<{status: 'success' | 'error', message: string} | null>(null);
-  const [aiStatus, setAiStatus] = useState<'configured' | 'not-configured' | 'loading'>('loading');
+  const [status, setStatus] = useState<AIStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
 
-  useEffect(() => {
-    loadAISettings();
-  }, []);
-
-  const loadAISettings = async () => {
+  const load = async () => {
+    setLoading(true);
+    try { localStorage.removeItem('openai_api_key'); } catch { /* storage unavailable */ }
     try {
-      // Check if API key exists in localStorage first
-      const storedKey = localStorage.getItem('openai_api_key');
-      if (storedKey) {
-        setApiKey('••••••••••••••••'); // Show masked key
-        setAiStatus('configured');
-        return;
-      }
-
-      // Otherwise check server
-      const response = await fetch('/api/ai/settings/full', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.openai_api_key) {
-          localStorage.setItem('openai_api_key', data.openai_api_key);
-          setApiKey('••••••••••••••••'); // Show masked key
-          setAiStatus('configured');
-        } else {
-          setAiStatus('not-configured');
-        }
-      } else {
-        setAiStatus('not-configured');
-      }
-    } catch (error) {
-      console.error('Error loading AI settings:', error);
-      setAiStatus('not-configured');
-    }
-  };
-
-  const handleSaveSettings = async () => {
-    if (!apiKey.trim() || apiKey === '••••••••••••••••') {
-      alert('Please enter a valid OpenAI API key');
-      return;
-    }
-
-    setIsSaving(true);
-    try {
-      const response = await fetch('/api/ai/settings', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-        },
-        body: JSON.stringify({
-          openai_api_key: apiKey
-        })
-      });
-
-      if (response.ok) {
-        // Store in localStorage for AI functionality
-        localStorage.setItem('openai_api_key', apiKey);
-        // Mask the key in the UI
-        setApiKey('••••••••••••••••');
-        setAiStatus('configured');
-        alert('AI settings saved successfully!');
-      } else {
-        const error = await response.json();
-        alert(`Failed to save settings: ${error.error}`);
-      }
-    } catch (error) {
-      console.error('Error saving AI settings:', error);
-      alert('Failed to save AI settings');
+      setStatus(await apiClient.get('/ai/settings', { freshRead: true }) as AIStatus);
+    } catch {
+      setStatus(null);
     } finally {
-      setIsSaving(false);
+      setLoading(false);
     }
   };
 
-  const handleTestAI = async () => {
-    setIsTestingAI(true);
+  useEffect(() => { load(); }, []);
+
+  const test = async () => {
+    setTesting(true);
     setTestResult(null);
-
     try {
-      const response = await fetch('/api/ai/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-        },
-        body: JSON.stringify({
-          messages: [
-            { role: 'system', content: 'You are a helpful medical assistant.' },
-            { role: 'user', content: 'Say "AI integration working!" in one sentence.' }
-          ],
-          model: 'gpt-4',
-          max_tokens: 50
-        })
+      const r: any = await apiClient.post('/ai/chat', {
+        purpose: 'connection_test', model: 'gpt-4o-mini', max_tokens: 20,
+        messages: [{ role: 'user', content: 'Reply with the single word: ready' }],
       });
-
-      if (response.ok) {
-        const data = await response.json();
-        setTestResult({
-          status: 'success',
-          message: data.choices[0].message.content
-        });
-      } else {
-        const error = await response.json();
-        setTestResult({
-          status: 'error',
-          message: error.error || 'AI test failed'
-        });
-      }
-    } catch (error) {
-      setTestResult({
-        status: 'error',
-        message: 'Failed to test AI connection'
-      });
+      setTestResult({ ok: true, message: `Connected (${r?.model || 'model'}): "${String(r?.response || '').trim()}"` });
+    } catch (e: any) {
+      setTestResult({ ok: false, message: e?.message || 'AI test failed' });
     } finally {
-      setIsTestingAI(false);
+      setTesting(false);
     }
   };
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-6">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h3 className="text-lg font-medium text-gray-900 flex items-center space-x-2">
-            <Server className="h-5 w-5 text-blue-600" />
-            <span>Clinical Assistant Configuration</span>
-          </h3>
-          <p className="text-sm text-gray-600 mt-1">
-            Configure OpenAI integration for patient summaries, CME generation, and clinical insights
-          </p>
-        </div>
-        <div className="flex items-center space-x-2">
-          {aiStatus === 'configured' && (
-            <span className="flex items-center space-x-1 text-green-600 text-sm">
-              <CheckCircle className="h-4 w-4" />
-              <span>Configured</span>
-            </span>
-          )}
-          {aiStatus === 'not-configured' && (
-            <span className="flex items-center space-x-1 text-amber-600 text-sm">
-              <AlertTriangle className="h-4 w-4" />
-              <span>Not Configured</span>
-            </span>
-          )}
-        </div>
+    <div className="bg-white rounded-xl shadow-sm border p-4 sm:p-6 space-y-4">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+          <Server className="h-5 w-5 text-primary-600" /> AI configuration
+        </h3>
+        <button onClick={load} className="text-sm text-gray-600 hover:text-gray-900 flex items-center gap-1">
+          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
+        </button>
       </div>
 
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            OpenAI API Key
-          </label>
-          <div className="flex space-x-2">
-            <div className="flex-1 relative">
-              <input
-                type={showKey ? 'text' : 'password'}
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="sk-..."
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 pr-10"
-              />
-              <button
-                onClick={() => setShowKey(!showKey)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-              >
-                {showKey ? <Eye className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
-              </button>
-            </div>
-            <button
-              onClick={handleSaveSettings}
-              disabled={isSaving}
-              className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center space-x-2"
-            >
-              {isSaving ? (
-                <>
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                  <span>Saving...</span>
-                </>
-              ) : (
-                <>
-                  <Save className="h-4 w-4" />
-                  <span>Save</span>
-                </>
-              )}
-            </button>
+      {loading ? (
+        <p className="text-sm text-gray-500">Checking…</p>
+      ) : !status ? (
+        <p className="text-sm text-red-600 flex items-center gap-1"><XCircle className="h-4 w-4" /> Could not reach the server.</p>
+      ) : (
+        <div className="space-y-2 text-sm">
+          <Row ok={status.hasOpenAI} label="Server key (OPENAI_API_KEY)" okText="Configured" badText="Not set — add it in Vercel project settings" />
+          <Row ok={status.governanceAllows} label="Unit decision D5 (external AI)" okText="Allowed, identifiers removed" badText="Switched off" />
+          <div className={`flex items-start gap-2 p-3 rounded-lg ${status.enabled ? 'bg-green-50 text-green-800' : 'bg-amber-50 text-amber-800'}`}>
+            {status.enabled ? <CheckCircle className="h-4 w-4 mt-0.5" /> : <AlertTriangle className="h-4 w-4 mt-0.5" />}
+            <span>{status.message}</span>
           </div>
-          <p className="text-xs text-gray-500 mt-1">
-            Get your API key from <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">OpenAI Platform</a>
-          </p>
         </div>
+      )}
 
-        {aiStatus === 'configured' && (
-          <div className="pt-4 border-t border-gray-200">
-            <button
-              onClick={handleTestAI}
-              disabled={isTestingAI}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center space-x-2"
-            >
-              {isTestingAI ? (
-                <>
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                  <span>Testing Connection...</span>
-                </>
-              ) : (
-                <>
-                  <Activity className="h-4 w-4" />
-                  <span>Test Connection</span>
-                </>
-              )}
-            </button>
-
-            {testResult && (
-              <div className={`mt-4 p-4 rounded-lg ${testResult.status === 'success' ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
-                <div className="flex items-start space-x-2">
-                  {testResult.status === 'success' ? (
-                    <CheckCircle className="h-5 w-5 text-green-600 mt-0.5" />
-                  ) : (
-                    <XCircle className="h-5 w-5 text-red-600 mt-0.5" />
-                  )}
-                  <div className="flex-1">
-                    <p className={`font-medium ${testResult.status === 'success' ? 'text-green-900' : 'text-red-900'}`}>
-                      {testResult.status === 'success' ? 'Connection Successful' : 'Connection Failed'}
-                    </p>
-                    <p className={`text-sm mt-1 ${testResult.status === 'success' ? 'text-green-700' : 'text-red-700'}`}>
-                      {testResult.message}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        <div className="pt-4 border-t border-gray-200">
-          <h4 className="text-sm font-medium text-gray-900 mb-2">Clinical Features</h4>
-          <ul className="space-y-2 text-sm text-gray-600">
-            <li className="flex items-center space-x-2">
-              <CheckCircle className="h-4 w-4 text-green-600" />
-              <span>Patient summaries (admission, progress, discharge)</span>
-            </li>
-            <li className="flex items-center space-x-2">
-              <CheckCircle className="h-4 w-4 text-green-600" />
-              <span>Weekly CME topic generation from clinical data</span>
-            </li>
-            <li className="flex items-center space-x-2">
-              <CheckCircle className="h-4 w-4 text-green-600" />
-              <span>Clinical decision support and recommendations</span>
-            </li>
-            <li className="flex items-center space-x-2">
-              <CheckCircle className="h-4 w-4 text-green-600" />
-              <span>Treatment progress analysis</span>
-            </li>
-          </ul>
-        </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          onClick={test}
+          disabled={testing || !status?.enabled}
+          className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2"
+        >
+          <Activity className="h-4 w-4" /> {testing ? 'Testing…' : 'Test connection'}
+        </button>
+        <Link to="/clinical-governance" className="text-sm text-primary-700 hover:underline flex items-center gap-1">
+          <ShieldCheck className="h-4 w-4" /> Clinical Governance (D1–D7)
+        </Link>
       </div>
+      {testResult && (
+        <p className={`text-sm ${testResult.ok ? 'text-green-700' : 'text-red-600'}`}>{testResult.message}</p>
+      )}
+      <p className="text-xs text-gray-500">
+        Patient names, hospital numbers, phone numbers and emails are removed on the server before any text is sent to
+        OpenAI, and every AI request is recorded in the clinical audit log (model and purpose, not content).
+      </p>
     </div>
   );
 }
+
+function Row({ ok, label, okText, badText }: { ok: boolean; label: string; okText: string; badText: string }) {
+  return (
+    <div className="flex items-center justify-between gap-2 border-b border-gray-100 pb-2">
+      <span className="text-gray-600">{label}</span>
+      <span className={`flex items-center gap-1 font-medium ${ok ? 'text-green-700' : 'text-red-600'}`}>
+        {ok ? <CheckCircle className="h-4 w-4" /> : <XCircle className="h-4 w-4" />} {ok ? okText : badText}
+      </span>
+    </div>
+  );
+}
+
+export default AISettingsPanel;

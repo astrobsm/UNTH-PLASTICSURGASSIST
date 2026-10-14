@@ -4,6 +4,7 @@
  * Enhances medical text using AI for better documentation
  */
 
+import { externalAiAllowed } from '../_lib/governance.js';
 import { chatCompletion, getOpenAIKey } from '../_lib/openai.js';
 import { cors, authenticateRequest } from '../_lib/auth.js';
 
@@ -95,7 +96,7 @@ export default async function handler(req, res) {
     systemPrompt += '\n\nIMPORTANT: Preserve all numbers, measurements, vital signs, and medication names exactly as provided.';
 
     // Check if OpenAI API key is configured
-    if (!getOpenAIKey()) {
+    if (!getOpenAIKey() || !(await externalAiAllowed())) {
       // Fallback to basic local enhancement
       const enhancedText = enhanceTextLocally(text, context);
       return res.status(200).json({

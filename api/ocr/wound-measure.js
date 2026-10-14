@@ -1,5 +1,6 @@
 // Wound Measurement API endpoint - GPT-4o Vision analysis + trending
 // Handles server-side wound image analysis and stores measurement history
+import { externalAiAllowed } from '../_lib/governance.js';
 import { query } from '../_lib/db.js';
 import { cors, authenticateRequest } from '../_lib/auth.js';
 import { chatCompletion, getOpenAIKey } from '../_lib/openai.js';
@@ -102,7 +103,7 @@ async function analyzeWound(body, user, res) {
     return res.status(400).json({ error: 'Image too large. Maximum 15MB.' });
   }
 
-  if (!getOpenAIKey()) {
+  if (!getOpenAIKey() || !(await externalAiAllowed())) {
     return res.status(500).json({ error: 'OpenAI API key not configured' });
   }
 

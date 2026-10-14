@@ -1,5 +1,7 @@
 // AI Settings endpoint - placeholder for AI configuration
 import { cors, authenticateRequest } from '../_lib/auth.js';
+import { getOpenAIKey } from '../_lib/openai.js';
+import { externalAiAllowed } from '../_lib/governance.js';
 
 export default async function handler(req, res) {
   try {
@@ -16,17 +18,22 @@ export default async function handler(req, res) {
     const { method } = req;
 
   if (method === 'GET') {
-    // Return default AI settings
+    // The real state: a server key exists AND the unit allows external AI
+    // (Clinical Governance, D5). The key itself never leaves the server.
+    const hasKey = !!getOpenAIKey();
+    const allowed = await externalAiAllowed();
+    const enabled = hasKey && allowed;
     return res.status(200).json({
-      enabled: false,
+      enabled,
+      configured: enabled,
+      hasOpenAI: hasKey,
+      governanceAllows: allowed,
       provider: 'openai',
-      model: 'gpt-4',
-      features: {
-        cmeGeneration: false,
-        woundAnalysis: false,
-        diagnosisAssist: false
-      },
-      message: 'AI features require VITE_OPENAI_API_KEY environment variable'
+      model: 'gpt-4o',
+      deidentified: true,
+      message: !hasKey ? 'OPENAI_API_KEY is not set on the server.'
+        : !allowed ? 'External AI is switched off in Clinical Governance (D5).'
+        : 'AI enabled. Patient identifiers are removed before text is sent.',
     });
   }
 

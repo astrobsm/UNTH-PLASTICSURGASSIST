@@ -6,6 +6,7 @@
  * with extracted vitals, medications, orders, and wound assessments.
  */
 
+import { externalAiAllowed } from '../_lib/governance.js';
 import { chatJSON, getOpenAIKey } from '../_lib/openai.js';
 import { cors, authenticateRequest } from '../_lib/auth.js';
 
@@ -102,7 +103,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Transcript is too short to process' });
     }
 
-    if (!getOpenAIKey()) {
+    if (!getOpenAIKey() || !(await externalAiAllowed())) {
       // Return a flag so the client knows to use local extraction
       return res.status(200).json({
         structuredNote: null,
@@ -113,8 +114,8 @@ export default async function handler(req, res) {
 
     // Build the user message
     let userMessage = '';
-    if (patientName) userMessage += `Patient: ${patientName}`;
-    if (hospitalNumber) userMessage += ` (${hospitalNumber})`;
+    // The patient's name and hospital number are not sent to the model (D5:
+    // identifiers removed). It structures the dictation without them.
     if (roundType) userMessage += ` | Round: ${roundType}`;
     userMessage += '\n\n';
 
@@ -179,7 +180,7 @@ export default async function handler(req, res) {
       confidence: typeof structuredNote.confidence === 'number' ? structuredNote.confidence : 0.85,
       raw_transcript: transcript,
       processed_at: new Date().toISOString(),
-      ai_model: 'gpt-4o-mini'
+      ai_model: 'gpt-4o'
     };
 
     return res.status(200).json({

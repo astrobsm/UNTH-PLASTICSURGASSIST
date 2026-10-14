@@ -23,6 +23,7 @@ import { OCR_EXTRACTION_PROMPT } from '../_lib/ocrPrompts.js';
 import { cors, authenticateRequest } from '../_lib/auth.js';
 import { processDocument, isDocumentAiConfigured } from '../_lib/documentAi.js';
 import { shouldPreferVisionOCR } from '../_lib/ocrRouting.js';
+import { externalAiAllowed } from '../_lib/governance.js';
 
 // Max body size guard — Vercel has a 4.5 MB body limit for serverless;
 // images are base64 so ~33% overhead
@@ -109,7 +110,9 @@ export default async function handler(req, res) {
     }
 
     // ─── GPT-4o Vision Direct OCR (for handwriting) ──────────────
-    const openaiApiKey = process.env.OPENAI_API_KEY;
+    // No key at all when the unit has switched external AI off (D5): the
+    // Document AI / Cloud Vision transcription still runs.
+    const openaiApiKey = (await externalAiAllowed()) ? process.env.OPENAI_API_KEY : null;
     if (useVisionOCR && openaiApiKey) {
       try {
         const visionResult = await runGPT4oVisionOCR(image, mimeType, documentType || 'handwritten_note', patientContext, openaiApiKey);
@@ -368,7 +371,8 @@ async function runGPT4oVisionOCR(base64Image, mimeType, documentType, patientCon
     : `Please read and transcribe all text from this medical document image. Document type hint: ${documentType || 'general'}.`;
 
   if (patientContext) {
-    userMessage += `\n\nPatient context: ${patientContext.name || 'Unknown'}, Hospital# ${patientContext.hospitalNumber || 'Unknown'}, Ward: ${patientContext.ward || 'Unknown'}, Diagnosis: ${patientContext.diagnosis || 'Unknown'}`;
+    // Name and hospital number are not sent (D5: identifiers removed).
+    userMessage += `\n\nPatient context: Ward: ${patientContext.ward || 'Unknown'}, Diagnosis: ${patientContext.diagnosis || 'Unknown'}`;
   }
 
   if (!isVitalSignsChart) {
@@ -430,7 +434,8 @@ async function runAIPostProcessing(rawText, documentType, patientContext, apiKey
   let userMessage = `Document type: ${documentType}\n\nRaw OCR Text:\n---\n${trimmedText}\n---`;
 
   if (patientContext) {
-    userMessage += `\n\nPatient Context:\n- Name: ${patientContext.name || 'Unknown'}\n- Hospital Number: ${patientContext.hospitalNumber || 'Unknown'}\n- Ward: ${patientContext.ward || 'Unknown'}\n- Diagnosis: ${patientContext.diagnosis || 'Unknown'}`;
+    // Name and hospital number are not sent (D5: identifiers removed).
+    userMessage += `\n\nPatient Context:\n- Ward: ${patientContext.ward || 'Unknown'}\n- Diagnosis: ${patientContext.diagnosis || 'Unknown'}`;
   }
 
   userMessage += '\n\nPlease extract and structure ALL medical data from this OCR text into the appropriate JSON schema for this document type. Correct obvious OCR errors in medical terminology.';

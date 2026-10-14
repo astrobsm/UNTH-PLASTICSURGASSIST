@@ -106,14 +106,9 @@ class AIService {
 
   private async checkBackendConfiguration() {
     try {
-      // First check localStorage
-      const localKey = localStorage.getItem('openai_api_key');
-      if (localKey && localKey !== '••••••••••••••••') {
-        this.isConfigured = true;
-        return;
-      }
-
-      // Otherwise check backend
+      // The key lives only on the server; ask it whether AI is available
+      // (key configured AND allowed by the unit's decision D5).
+      try { localStorage.removeItem('openai_api_key'); } catch { /* storage unavailable */ }
       const response = await authenticatedFetch('/api/ai/settings');
       
       if (response.ok) {

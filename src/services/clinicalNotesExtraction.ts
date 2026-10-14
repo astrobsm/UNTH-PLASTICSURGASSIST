@@ -1,3 +1,4 @@
+import { apiClient } from './apiClient';
 /**
  * Clinical Notes NLP Extraction Service
  *
@@ -378,40 +379,31 @@ RULES:
 - Fix obvious OCR errors in drug names (e.g., "Augmentn" → "Augmentin", "Metronidazo1e" → "Metronidazole")
 - Include ICD-10 hints for diagnoses where confident
 - Preserve original date formats (D/M/YYYY Nigerian format)
-- If text says NKDA or NKA, return empty allergies array
+- If text says NKDA or NKA, return allergies as [{"substance": "No known drug allergies", "nkda": true}] — an empty array means allergies were not mentioned, which is not the same thing
 - Plastic surgery context: SSG, FTSG, Z-plasty, NPWT/VAC, flap types, graft take assessment`;
 
 export async function extractClinicalNotesWithAI(
   text: string,
-  apiKey?: string
+  _apiKey?: string
 ): Promise<ClinicalNotesExtractionResult | null> {
-  const key = apiKey || (typeof import.meta !== 'undefined' ? (import.meta as any).env?.VITE_OPENAI_API_KEY : undefined);
-  if (!key) return null;
-
+  // Through the server (/api/ai/chat), never straight to OpenAI from the
+  // browser: that needed an OpenAI key in the client bundle
+  // (VITE_OPENAI_API_KEY), readable by anyone with the app. The server holds
+  // the key, applies the unit's AI decision (D5) and removes identifiers.
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o',
-        messages: [
-          { role: 'system', content: CLINICAL_NOTES_AI_PROMPT },
-          { role: 'user', content: `Extract structured clinical data from these notes:\n\n${text.substring(0, 8000)}` },
-        ],
-        temperature: 0.1,
-        max_tokens: 4096,
-        response_format: { type: 'json_object' },
-      }),
+    const result: any = await apiClient.post('/ai/chat', {
+      model: 'gpt-4o',
+      purpose: 'clinical_notes_extraction',
+      max_tokens: 4000,
+      temperature: 0.1,
+      messages: [
+        { role: 'system', content: CLINICAL_NOTES_AI_PROMPT + '\n\nRespond with ONLY valid JSON.' },
+        { role: 'user', content: `Extract structured clinical data from these notes:\n\n${text.substring(0, 8000)}` },
+      ],
     });
-
-    if (!response.ok) return null;
-
-    const result = await response.json();
-    const content = result.choices?.[0]?.message?.content;
-    if (!content) return null;
+    const raw = String(result?.response || '').trim();
+    if (!raw) return null;
+    const content = raw.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
 
     const parsed = JSON.parse(content);
     return {
