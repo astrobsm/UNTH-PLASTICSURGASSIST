@@ -79,12 +79,14 @@ function buildGlobalModules(): ModuleGroup[] {
       endpoints: ['/surgeries', `/surgeries?date=${today}`],
     },
     { module: 'Preoperative Assessments', endpoints: ['/preoperative-assessments'] },
-    { module: 'Pre-Surgical Conference', endpoints: ['/pre-surgical-conference'] },
+    { module: 'Pre-Surgical Conference', endpoints: ['/pre-surgical-conference/scheduled-patients'] },
     { module: 'Blood Transfusion', endpoints: ['/sync/blood-transfusions'] },
 
     // ── Wound & condition-specific protocols ──
     { module: 'Wound Progress Monitor', endpoints: ['/wounds?action=monitor'] },
-    { module: 'Keloid Care', endpoints: ['/keloid-care', '/keloid-care/scheduled-patients'] },
+    // keloid-care has no scheduled-patients route (that belongs to pre-surgical-conference);
+    // the warm request was read as plan id 'scheduled-patients' and 500'd on every login.
+    { module: 'Keloid Care', endpoints: ['/keloid-care'] },
     { module: 'Pressure Sores', endpoints: ['/pressure-sore-protocol'] },
     { module: 'Soft Tissue Infection', endpoints: ['/sti-protocol'] },
     { module: 'SJS/TEN Assessments', endpoints: ['/sjs-assessments'] },
@@ -116,7 +118,8 @@ function buildGlobalModules(): ModuleGroup[] {
     { module: 'Duties & Reminders', endpoints: ['/duties', '/duty-reminders?action=status'] },
     { module: 'Rotations', endpoints: ['/rotations', '/rotation-config?action=all-responsibilities'] },
     { module: 'HO Tracking', endpoints: ['/ho-tracking?action=all-house-officers'] },
-    { module: 'Attendance', endpoints: ['/attendance'] },
+    // /attendance requires an action; the bare path was a 400 on every login.
+    { module: 'Attendance', endpoints: ['/attendance?action=my-records'] },
 
     // ── MDT & consults ──
     {

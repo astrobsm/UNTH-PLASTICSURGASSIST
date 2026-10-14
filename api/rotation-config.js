@@ -63,8 +63,8 @@ async function handleGet(req, res, userId, userRole) {
       const result = await query(
         `SELECT r.*, u.full_name as user_name, a.full_name as assigned_by_name
          FROM assigned_responsibilities r
-         LEFT JOIN users u ON r.user_id = u.id
-         LEFT JOIN users a ON r.assigned_by = a.id
+         LEFT JOIN users u ON r.user_id = u.id::text
+         LEFT JOIN users a ON r.assigned_by = a.id::text
          WHERE r.user_id = $1
          ORDER BY r.assigned_at DESC`,
         [effectiveUserId]
@@ -79,8 +79,8 @@ async function handleGet(req, res, userId, userRole) {
       const result = await query(
         `SELECT r.*, u.full_name as user_name, a.full_name as assigned_by_name
          FROM assigned_responsibilities r
-         LEFT JOIN users u ON r.user_id = u.id
-         LEFT JOIN users a ON r.assigned_by = a.id
+         LEFT JOIN users u ON r.user_id = u.id::text
+         LEFT JOIN users a ON r.assigned_by = a.id::text
          ORDER BY r.assigned_at DESC
          LIMIT 200`
       );

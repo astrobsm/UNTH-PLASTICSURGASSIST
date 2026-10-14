@@ -123,6 +123,13 @@ export default async function handler(req, res) {
       cachedToken = null;
       tokenExpiry = 0;
     }
-    return res.status(502).json({ error: 'Failed to reach consult system' });
+    // Say which step failed (never the access code), so an outage can be told
+    // apart from a rejected login without server logs.
+    const reason = error.message?.includes('External auth failed')
+      ? `the external consult system rejected the login (${error.message.replace(/^.*?(\d{3}).*$/, 'HTTP $1')}) — check PS_CONSULT_CODE in Vercel`
+      : (error.name === 'AbortError' || /fetch failed|ENOTFOUND|ECONNREFUSED|ETIMEDOUT/i.test(String(error.message))
+        ? 'the external consult system (ps-consult-unth.vercel.app) could not be reached'
+        : 'the external consult system returned an unexpected response');
+    return res.status(502).json({ error: 'Failed to reach consult system', reason });
   }
 }

@@ -104,7 +104,11 @@ function assignDoctor(dayOfWeek) {
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
-  await ensureTable();
+  // The live clinic_appointments table was created by clinic-appointments.js
+  // with appointment_date, not date, so ensureTable's index on (date) throws.
+  // Outside the try that crashed every request — including action=dates,
+  // which needs no table at all. Best-effort now.
+  try { await ensureTable(); } catch (e) { console.warn('appointments ensureTable skipped:', e.message); }
 
   try {
     // PUBLIC ENDPOINTS (no auth required)
