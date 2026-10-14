@@ -478,7 +478,10 @@ class SyncService {
     switch (action) {
       case 'create':
         try {
-          const createResponse = await this.apiCall('POST', '/sync/patients', {
+          // /patients creates the record (409 on a duplicate hospital number).
+          // POST /sync/patients was the full-sync handler: it created nothing,
+          // so a patient registered offline never reached the server.
+          const createResponse = await this.apiCall('POST', '/patients', {
             hospital_number: patient.hospital_number,
             first_name: patient.first_name,
             last_name: patient.last_name,
@@ -497,29 +500,29 @@ class SyncService {
             synced: true
           });
         } catch (error: any) {
-          // Handle 409 conflict - patient already exists on server
+          // 409: the hospital number already belongs to a patient on the
+          // server. This used to link this local patient to THAT record — two
+          // different people merged into one chart if the number was reused.
+          // Now it is linked only when the identity matches; otherwise it is
+          // left unsynced and flagged for a clinician to resolve.
           if (error.message?.includes('already exists') || error.message?.includes('409')) {
-            console.log(`Patient ${patient.hospital_number} already exists on server, resolving conflict...`);
+            let serverPatient: any = null;
             try {
-              // Fetch existing patient from server to get server ID
               const existingResponse = await this.apiCall('GET', `/sync/patients?hospital_number=${encodeURIComponent(patient.hospital_number)}`);
-              const serverPatient = existingResponse.patients?.find(
+              serverPatient = existingResponse.patients?.find(
                 (p: any) => p.hospital_number === patient.hospital_number
-              ) || existingResponse.patient;
-              if (serverPatient) {
-                await db.patients.update(localId, {
-                  serverId: serverPatient.id,
-                  synced: true
-                });
-                console.log(`✅ Conflict resolved for patient ${patient.hospital_number}`);
-              } else {
-                // Mark as synced anyway to prevent retry loops
-                await db.patients.update(localId, { synced: true });
-              }
+              ) || existingResponse.patient || null;
             } catch (fetchError) {
-              // Mark as synced to prevent infinite retry loop
-              await db.patients.update(localId, { synced: true });
-              console.warn('Could not fetch existing patient, marking as synced:', fetchError);
+              console.warn('Could not fetch existing patient for conflict check:', fetchError);
+            }
+            if (serverPatient && samePatientIdentity(patient, serverPatient)) {
+              await db.patients.update(localId, { serverId: serverPatient.id, synced: true, sync_conflict: null } as any);
+            } else {
+              await db.patients.update(localId, {
+                synced: false,
+                sync_conflict: 'hospital_number_in_use',
+              } as any);
+              console.warn(`Patient ${patient.hospital_number}: hospital number belongs to a different patient on the server — not merged.`);
             }
           } else {
             throw error; // Re-throw non-conflict errors
@@ -1195,3 +1198,18 @@ class SyncService {
 
 // Export singleton instance
 export const syncService = new SyncService();
+/**
+ * Whether a local patient and a server patient are the same person: surname
+ * matches, and first name or date of birth matches. Used before linking a local
+ * registration to an existing server record that has the same hospital number.
+ */
+export function samePatientIdentity(local: any, server: any): boolean {
+  const norm = (v: any) => String(v ?? '').toLowerCase().replace(/[^a-z]/g, '');
+  const dob = (v: any) => (v ? String(v).slice(0, 10) : '');
+  if (!norm(local.last_name) || norm(local.last_name) !== norm(server.last_name)) return false;
+  const firstMatch = !!norm(local.first_name) && norm(local.first_name) === norm(server.first_name);
+  const localDob = dob(local.dob || local.date_of_birth);
+  const serverDob = dob(server.date_of_birth || server.dob);
+  const dobMatch = !!localDob && localDob === serverDob;
+  return firstMatch || dobMatch;
+}

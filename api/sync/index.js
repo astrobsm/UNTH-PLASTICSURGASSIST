@@ -555,7 +555,21 @@ async function handlePush(data, user, res) {
           const effectiveHospitalNumber = hospital_number || 
             `AUTO-${resolvedFirst.substring(0,3).toUpperCase()}${resolvedLast.substring(0,3).toUpperCase()}-${Date.now().toString(36)}`;
           
-          const existing = await query('SELECT id FROM patients WHERE hospital_number = $1', [effectiveHospitalNumber]);
+          const existing = await query(
+            'SELECT id, first_name, last_name, date_of_birth FROM patients WHERE hospital_number = $1',
+            [effectiveHospitalNumber]
+          );
+          // The hospital number is already someone's. Updating that row with
+          // this payload overwrote another patient's name and date of birth —
+          // a different person registered with a reused number took over their
+          // chart. Only update when it is the same person.
+          if (existing.rows.length > 0 && !sameIdentity(existing.rows[0], resolvedFirst, resolvedLast, date_of_birth)) {
+            results.push({
+              entityId, status: 'conflict', code: 'hospital_number_in_use',
+              message: `Hospital number ${effectiveHospitalNumber} belongs to a different patient`,
+            });
+            continue;
+          }
           if (existing.rows.length > 0) {
             await query(
               `UPDATE patients SET first_name = COALESCE($1, first_name), last_name = COALESCE($2, last_name), 
@@ -1067,4 +1081,15 @@ async function processChanges(changes, user) {
     }
   }
   return { processed };
+}
+
+/** Same person: surname matches, and first name or date of birth matches. */
+function sameIdentity(row, first, last, dob) {
+  const norm = (v) => String(v ?? '').toLowerCase().replace(/[^a-z]/g, '');
+  const day = (v) => (v ? new Date(v).toISOString().slice(0, 10) : '');
+  if (!norm(last) || norm(last) !== norm(row.last_name)) return false;
+  const firstMatch = !!norm(first) && norm(first) === norm(row.first_name);
+  let dobMatch = false;
+  try { dobMatch = !!dob && day(dob) === day(row.date_of_birth); } catch { dobMatch = false; }
+  return firstMatch || dobMatch;
 }

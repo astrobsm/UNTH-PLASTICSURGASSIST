@@ -925,10 +925,15 @@ class ApiClient {
   }
 
   async createPatient(patientData: any) {
-    const data = await this.request('/sync/patients', {
+    // /patients, not /sync/patients: a POST to /sync/patients is the full-sync
+    // handler, which creates nothing and returns every table. /patients
+    // inserts, answers 409 on a duplicate hospital number, and is idempotent.
+    const data = await this.request('/patients', {
       method: 'POST',
       body: JSON.stringify(patientData)
     });
+    await this.invalidateCacheByPrefix('/sync/patients');
+    await this.invalidateCacheByPrefix('/patients');
     return data.patient;
   }
 

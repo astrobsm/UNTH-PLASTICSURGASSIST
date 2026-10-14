@@ -2331,14 +2331,22 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     setIsSubmitting(true);
 
     try {
-      // Add clinical information to the form data
+      // Add clinical information to the form data.
+      //
+      // The risk-assessment step is not shown, so its clinical lists are always
+      // empty. Spreading them over the form used to replace whatever the form
+      // held with [] — a patient's allergies were wiped at registration and an
+      // empty list then read as "no allergies". Only take a list that actually
+      // has entries; otherwise leave the field undocumented.
+      const filled = <T,>(list: T[] | undefined, fallback: T[] | undefined) =>
+        (list && list.length ? list : fallback && fallback.length ? fallback : undefined);
       const updatedFormData = {
         ...formData,
-        primary_diagnosis: riskAssessmentData.clinical.primary_diagnosis,
-        secondary_diagnoses: riskAssessmentData.clinical.secondary_diagnoses,
-        comorbidities: riskAssessmentData.clinical.comorbidities,
-        current_medications: riskAssessmentData.clinical.current_medications,
-        allergies: riskAssessmentData.clinical.allergies,
+        primary_diagnosis: riskAssessmentData.clinical.primary_diagnosis || (formData as any).primary_diagnosis,
+        secondary_diagnoses: filled(riskAssessmentData.clinical.secondary_diagnoses, (formData as any).secondary_diagnoses),
+        comorbidities: filled(riskAssessmentData.clinical.comorbidities, (formData as any).comorbidities),
+        current_medications: filled(riskAssessmentData.clinical.current_medications, (formData as any).current_medications),
+        allergies: filled(riskAssessmentData.clinical.allergies, (formData as any).allergies),
         // Include consult documents if referral
         ...(formData.admission_type === 'referral' && consultDocuments.length > 0
           ? { consult_documents: consultDocuments }

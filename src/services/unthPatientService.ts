@@ -593,9 +593,12 @@ class UNTHPatientService {
 
   // Private helper methods
   private async generateHospitalNumber(): Promise<string> {
+    // Only used when the form has no hospital number. Four random digits
+    // collided (1 in 10,000 per pair); time + random base-36 does not.
     const year = new Date().getFullYear();
-    const sequence = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-    return `UNTH/${year}/${sequence}`;
+    const stamp = Date.now().toString(36).toUpperCase();
+    const rand = Math.random().toString(36).slice(2, 5).toUpperCase();
+    return `UNTH/${year}/P${stamp}${rand}`;
   }
 
   private async generateAISummary(patientData: any, summaryType: string, additionalContext?: string) {
@@ -623,8 +626,8 @@ class UNTHPatientService {
     PAST MEDICAL HISTORY:
     - Medical History: ${patientData.past_medical_history || 'Not provided'}
     - Surgical History: ${patientData.past_surgical_history || 'Not provided'}
-    - Allergies: ${patientData.allergies?.join(', ') || 'None known'}
-    - Current Medications: ${patientData.current_medications?.join(', ') || 'None'}
+    - Allergies: ${patientData.allergies?.length ? patientData.allergies.join(', ') : 'Allergy status not documented'}
+    - Current Medications: ${patientData.current_medications?.length ? patientData.current_medications.join(', ') : 'Not documented'}
     
     EXAMINATION FINDINGS:
     - General Examination: ${patientData.general_examination || 'Not provided'}
@@ -829,9 +832,11 @@ Please review patient file for complete clinical details or retry AI summary gen
         emergency_contact_relationship: registrationData.next_of_kin?.relationship || '',
         blood_group: registrationData.blood_group || null,
         genotype: registrationData.genotype || null,
-        allergies: registrationData.allergies?.join(', ') || '',
-        chronic_conditions: registrationData.medical_history?.join(', ') || '',
-        current_medications: registrationData.drug_history?.join(', ') || '',
+        // null = not documented. An empty string used to stand for "none",
+        // "unknown" and "not asked" alike.
+        allergies: registrationData.allergies?.length ? registrationData.allergies.join(', ') : null,
+        chronic_conditions: registrationData.medical_history?.length ? registrationData.medical_history.join(', ') : null,
+        current_medications: registrationData.drug_history?.length ? registrationData.drug_history.join(', ') : null,
         synced: true
       };
 
@@ -862,8 +867,22 @@ Please review patient file for complete clinical details or retry AI summary gen
           fullPatientRecord.id = savedPatient.id;
           fullPatientRecord.synced = true;
         }
-      } catch (apiError) {
-        // If offline or no auth, save locally and queue for sync
+      } catch (apiError: any) {
+        const status = Number(apiError?.status) || 0;
+        // The server REFUSED the registration (duplicate hospital number,
+        // invalid data). Saving it locally anyway hid the refusal: the patient
+        // looked registered on this device and never reached the server.
+        if (status === 409) {
+          throw new Error(
+            `Hospital number ${registrationData.hospital_number} is already registered to another patient. ` +
+            'Search for the existing record instead of registering again.'
+          );
+        }
+        if (status >= 400 && status < 500 && status !== 401 && status !== 403 && status !== 408 && status !== 429) {
+          throw new Error(apiError?.message || 'The server rejected this registration');
+        }
+        // Offline, timed out, signed out or a server error: save locally and
+        // queue for sync.
         console.warn('Unable to save to server, saving locally:', apiError);
         fullPatientRecord.synced = false;
       }

@@ -176,7 +176,8 @@ async function createPatient(data, user, req, res) {
     email: email || '',
     address: address || '',
     blood_group: bloodGroup || blood_group || '',
-    allergies: Array.isArray(allergies) ? allergies.join(', ') : (allergies || ''),
+    // NULL = not documented. '' used to mean none / unknown / not asked alike.
+    allergies: Array.isArray(allergies) ? (allergies.length ? allergies.join(', ') : null) : (allergies || null),
     medical_history: Array.isArray(medicalHistory || medical_history || chronic_conditions) 
       ? (medicalHistory || medical_history || chronic_conditions).join(', ') 
       : (medicalHistory || medical_history || chronic_conditions || ''),
