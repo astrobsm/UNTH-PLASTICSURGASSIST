@@ -600,6 +600,48 @@ async function handlePush(data, user, res) {
         }
       }
 
+      // Team assignments: one row per patient (UNIQUE patient_id). The generic
+      // path below did a plain INSERT, which failed whenever the server had
+      // already assigned that patient a team — and the server does that itself
+      // (on admission, on consult acknowledgement, on the admin backfill). The
+      // push then answered 502 and, on the client, the change was discarded.
+      //
+      // A device's assignment now only FILLS empty slots. The server's
+      // assignment stands: it is the one that follows the admitting unit and
+      // rotations, and a device that could not load the team offline must not
+      // overwrite it with its own guess.
+      if (entityType === 'patient_assignments' && payload && action !== 'delete') {
+        try {
+          const g = (a, b) => (payload[a] ?? payload[b] ?? null);
+          const pid = g('patient_id', 'patientId');
+          if (pid === null || pid === undefined || String(pid).trim() === '') {
+            results.push({ entityId, status: 'rejected', message: 'patient_assignments requires patient_id' });
+            continue;
+          }
+          const str = (v) => (v === null || v === undefined || String(v).trim() === '' ? null : String(v));
+          await query(
+            `INSERT INTO patient_assignments
+               (patient_id, hospital_number, consultant_id, senior_registrar_id, registrar_id, house_officer_id, is_active, assigned_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+             ON CONFLICT (patient_id) DO UPDATE SET
+               hospital_number     = COALESCE(patient_assignments.hospital_number, EXCLUDED.hospital_number),
+               consultant_id       = COALESCE(patient_assignments.consultant_id, EXCLUDED.consultant_id),
+               senior_registrar_id = COALESCE(patient_assignments.senior_registrar_id, EXCLUDED.senior_registrar_id),
+               registrar_id        = COALESCE(patient_assignments.registrar_id, EXCLUDED.registrar_id),
+               house_officer_id    = COALESCE(patient_assignments.house_officer_id, EXCLUDED.house_officer_id),
+               updated_at = CURRENT_TIMESTAMP`,
+            [String(pid), str(g('hospital_number', 'hospitalNumber')), str(g('consultant_id', 'consultantId')),
+             str(g('senior_registrar_id', 'seniorRegistrarId')), str(g('registrar_id', 'registrarId')),
+             str(g('house_officer_id', 'houseOfficerId'))]
+          );
+          results.push({ entityId, status: 'synced' });
+        } catch (err) {
+          console.error('Error syncing patient_assignments:', err.message);
+          results.push({ entityId, status: 'error', message: err.message });
+        }
+        continue;
+      }
+
       // Map client-side IndexedDB table names to server PostgreSQL table names
       const tableNameMap = {
         'wound_care': 'wound_care_records',

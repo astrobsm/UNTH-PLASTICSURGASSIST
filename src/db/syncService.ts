@@ -371,19 +371,24 @@ class SyncService {
         break;
 
       default:
-        // For any table that exists in the database, attempt generic sync
-        try {
-          const tableRef = (db as any).table(table);
-          if (tableRef) {
-            console.log(`⚡ Attempting generic sync for unregistered table: ${table}`);
-            await this.syncGenericEntity(action, table, local_id, data);
-          } else {
-            console.warn(`⚠️ Unknown table "${table}" — removing item from queue`);
+        // For any table that exists in the local database, attempt generic sync.
+        //
+        // Only a missing LOCAL table is a reason to drop the item. The sync
+        // call used to sit inside the same try, so a server failure (a 502
+        // because every change in the push failed) was caught here, logged as
+        // "table not found", and the queued change was deleted — clinical
+        // data lost on a transient error. Server failures now propagate so
+        // the caller retries and, eventually, dead-letters the item for review.
+        {
+          let tableRef: any = null;
+          try { tableRef = (db as any).table(table); } catch { tableRef = null; }
+          if (!tableRef) {
+            console.warn(`⚠️ Table "${table}" not found in the local database — removing item from queue`);
+            break;
           }
-        } catch {
-          console.warn(`⚠️ Table "${table}" not found in database — removing item from queue`);
+          console.log(`⚡ Attempting generic sync for unregistered table: ${table}`);
+          await this.syncGenericEntity(action, table, local_id, data);
         }
-        // Item will be deleted by the caller since we don't throw
     }
   }
 
@@ -944,6 +949,13 @@ class SyncService {
 
   // Replay a raw queued request from apiClient
   private async replayRawRequest(data: { url: string; method: string; body?: any; headers?: Record<string, string> }): Promise<void> {
+    // Server-side actions queued by older builds (e.g. the admin team backfill
+    // that timed out) are dropped rather than replayed: they are not clinical
+    // edits, and replaying them hours later only loads the server.
+    if (/\/api\/(medical-team\/(backfill|rebalance|assign)|call-duty-roster|clinical-governance|ai\/|ocr\/)/.test(String(data?.url || ''))) {
+      console.warn(`Dropping queued server action instead of replaying it: ${data.method} ${data.url}`);
+      return;
+    }
     const token = apiClient.getToken();
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',

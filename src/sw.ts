@@ -232,6 +232,14 @@ const REALTIME_POST_PREFIXES = [
   '/api/students/register', // Student self-registration — needs immediate response
   '/api/students/login',    // Student login — needs immediate auth response
   '/api/init-db',    // DB initialization — needs confirmation
+  // Server-side actions, not clinical edits (see NON_QUEUEABLE_PREFIXES in
+  // apiClient): the admin team backfill was queued here on a timeout and
+  // replayed repeatedly against the server.
+  '/api/medical-team/backfill',
+  '/api/medical-team/rebalance',
+  '/api/medical-team/assign',
+  '/api/call-duty-roster',
+  '/api/clinical-governance',
 ];
 
 const isRealtimeEndpoint = (pathname: string) =>

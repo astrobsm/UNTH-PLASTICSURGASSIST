@@ -78,6 +78,12 @@ interface SyncState {
 }
 
 // API Client with enhanced cross-device sync support
+/** Mutations that are actions on the server, never queued for offline replay. */
+const NON_QUEUEABLE_PREFIXES = [
+  '/medical-team/backfill', '/medical-team/rebalance', '/medical-team/assign',
+  '/call-duty-roster', '/clinical-governance', '/ai/', '/ocr/',
+];
+
 class ApiClient {
   private baseURL: string;
   private token: string | null;
@@ -225,6 +231,11 @@ class ApiClient {
     // for 30-90s before the browser gives up — users see a frozen UI.
     // Login/auth gets a tighter 8s budget so the offline fallback kicks in fast.
     const isAuthEndpoint = endpoint.startsWith('/auth') || endpoint.startsWith('/health') || endpoint.startsWith('/students/login');
+    // Server-side actions, not clinical edits: run now or fail now. Queued and
+    // replayed later they do harm — the admin team backfill timed out, was
+    // queued, replayed five times against the server and dead-lettered; an AI
+    // or OCR call replayed hours later has no one waiting for its answer.
+    const isNonQueueable = NON_QUEUEABLE_PREFIXES.some(p => endpoint.startsWith(p));
     const requestTimeoutMs = (options as any).timeout
       ?? (isAuthEndpoint ? 8000 : (isGet ? 12000 : 20000));
     const abortController = new AbortController();
@@ -278,7 +289,7 @@ class ApiClient {
 
     // ─── Offline: queue mutations immediately ───
     // Auth is never queued — see the queueing guard in the catch block.
-    if (!navigator.onLine && !isGet && !isAuthEndpoint) {
+    if (!navigator.onLine && !isGet && !isAuthEndpoint && !isNonQueueable) {
       return this.queueOfflineMutation<T>(endpoint, method, options, token, entityInfo);
     }
 
@@ -417,7 +428,7 @@ class ApiClient {
       // and later replayed as a stray unauthenticated POST. Let the timeout
       // propagate instead — authStore.login() already falls back to the offline
       // credential path on a thrown error.
-      if (!isGet && isPoorNetworkFailure && !isAuthEndpoint) {
+      if (!isGet && isPoorNetworkFailure && !isAuthEndpoint && !isNonQueueable) {
         console.log(`📥 ${isAbort ? 'Timeout' : 'Network error'}: queueing ${method} ${endpoint} for background sync`);
         return this.queueOfflineMutation<T>(endpoint, method, options, token, entityInfo);
       }

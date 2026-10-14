@@ -477,13 +477,15 @@ export async function consultUnitIndex(consult) {
 }
 
 /** Evenly assign a full team; only fills role slots that are currently empty. */
-export async function assignFullTeam(patientId, hospitalNumber) {
+export async function assignFullTeam(patientId, hospitalNumber, membershipIn = undefined) {
   // Juniors come from the unit of the patient's consultant — the one already
   // assigned if there is one (the COALESCE below keeps it), else the new pick.
   const existing = (await query(
     `SELECT consultant_id FROM patient_assignments WHERE patient_id = $1`, [String(patientId)]
   )).rows[0];
-  const membership = await currentUnitMembership();
+  // Callers looping over many patients pass the membership in, so the unit
+  // configuration is read once rather than once per patient.
+  const membership = membershipIn === undefined ? await currentUnitMembership() : membershipIn;
   // The admitting unit decides the team; a patient with none takes the unit of
   // their consultant (and keeps it).
   let unit = await unitIndexForPatient(patientId, existing?.consultant_id, membership);
@@ -591,8 +593,9 @@ export async function autoAdmitFromConsult(consult, user) {
  * empty role slots (least-loaded staff). Skips patients already complete, so
  * it's cheap to run repeatedly (e.g. on dashboard load).
  */
-export async function backfillActiveAdmissions() {
+export async function backfillActiveAdmissions({ budgetMs = 8000 } = {}) {
   await ensureColumns();
+  const started = Date.now();
   const adms = (await query(
     `SELECT DISTINCT patient_id FROM admissions
       WHERE status IN ('active','admitted') AND patient_id IS NOT NULL`
@@ -602,16 +605,23 @@ export async function backfillActiveAdmissions() {
        FROM patient_assignments WHERE is_active = TRUE`
   )).rows;
   const byPid = new Map(existing.map(r => [String(r.patient_id), r]));
-  let processed = 0;
-  for (const a of adms) {
-    const pid = String(a.patient_id);
+  const incomplete = adms.map(a => String(a.patient_id)).filter(pid => {
     const e = byPid.get(pid);
-    const complete = e && e.consultant_id && e.senior_registrar_id && e.registrar_id && e.house_officer_id;
-    if (complete) continue;
-    await assignFullTeam(pid, null); // COALESCE fills only the empty slots
+    return !(e && e.consultant_id && e.senior_registrar_id && e.registrar_id && e.house_officer_id);
+  });
+  // Unit configuration once for the whole run (it was read per patient), and
+  // a time budget: the dashboard calls this on load, and a run over a long
+  // list used to exceed the client's 15 s timeout — the request was then
+  // queued as an "offline change" and replayed again and again. Whatever is
+  // left is picked up by the next call; it is idempotent.
+  const membership = await currentUnitMembership();
+  let processed = 0;
+  for (const pid of incomplete) {
+    if (Date.now() - started > budgetMs) break;
+    await assignFullTeam(pid, null, membership); // COALESCE fills only the empty slots
     processed++;
   }
-  return { total: adms.length, processed };
+  return { total: adms.length, processed, remaining: incomplete.length - processed };
 }
 
 /**
