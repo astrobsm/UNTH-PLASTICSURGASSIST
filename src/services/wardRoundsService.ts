@@ -79,6 +79,26 @@ export interface WardRound {
   // (stamped at save — an offline round reaches the server later).
   folder_updated?: boolean;
   documented_at?: string;
+
+  // Subjective, examination and orders detail. null / '' = not recorded.
+  pain_score?: number | null;
+  sleep_quality?: string | null;
+  appetite?: string | null;
+  bowel_movement?: string | null;
+  general_appearance?: string | null;
+  drain_output?: string | null;
+  mobility_status?: string | null;
+  clinical_impression?: string | null;
+  continue_medications?: string[];
+  stop_medications?: string[];
+  new_medications?: Array<{ name: string; dose: string; frequency: string; route: string }>;
+  investigations_ordered?: string[];
+  procedures_planned?: string[];
+  treatment_plan_changes?: string | null;
+  dietary_modifications?: string | null;
+  activity_orders?: string | null;
+  nursing_instructions?: string | null;
+  consultant_notified?: boolean;
   
   // Timestamps
   created_at?: Date;
@@ -114,7 +134,7 @@ export interface WardRoundSummary {
 /**
  * Transform server API response → frontend WardRound format
  */
-function fromServerFormat(row: any): WardRound {
+export function fromServerFormat(row: any): WardRound {
   let findingsObj: any = {};
   try {
     if (typeof row.findings === 'string') {
@@ -158,7 +178,9 @@ function fromServerFormat(row: any): WardRound {
     reviewed_by: reviewingDoctor,
     doctor_role: findingsObj.doctor_role || 'house_officer',
     accompanying_team: findingsObj.accompanying_team || [],
-    chief_complaint: findingsObj.chief_complaint || row.findings || '',
+    chief_complaint: typeof row.findings === 'string' && !row.findings.trim().startsWith('{')
+      ? (findingsObj.chief_complaint || row.findings || '')
+      : (findingsObj.chief_complaint || ''),
     clinical_notes: findingsObj.clinical_notes || '',
     examination_findings: findingsObj.examination_findings || '',
     assessment_notes: findingsObj.assessment_notes || findingsObj.clinical_notes || '',
@@ -185,6 +207,24 @@ function fromServerFormat(row: any): WardRound {
     consultation_reason: findingsObj.consultation_reason || '',
     lmp: findingsObj.lmp || '',
     folder_updated: !!row.folder_updated,
+    pain_score: typeof findingsObj.pain_score === 'number' ? findingsObj.pain_score : null,
+    sleep_quality: findingsObj.sleep_quality ?? null,
+    appetite: findingsObj.appetite ?? null,
+    bowel_movement: findingsObj.bowel_movement ?? null,
+    general_appearance: findingsObj.general_appearance ?? null,
+    drain_output: findingsObj.drain_output ?? null,
+    mobility_status: findingsObj.mobility_status ?? null,
+    clinical_impression: findingsObj.clinical_impression ?? null,
+    continue_medications: findingsObj.continue_medications || [],
+    stop_medications: findingsObj.stop_medications || [],
+    new_medications: findingsObj.new_medications || [],
+    investigations_ordered: findingsObj.investigations_ordered || [],
+    procedures_planned: findingsObj.procedures_planned || [],
+    treatment_plan_changes: findingsObj.treatment_plan_changes ?? null,
+    dietary_modifications: findingsObj.dietary_modifications ?? null,
+    activity_orders: findingsObj.activity_orders ?? null,
+    nursing_instructions: findingsObj.nursing_instructions ?? null,
+    consultant_notified: !!findingsObj.consultant_notified,
     documented_at: row.documented_at || undefined,
     clinical_images: findingsObj.clinical_images || row.clinical_images || [],
     plan_changes: [],

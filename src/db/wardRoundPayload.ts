@@ -40,7 +40,26 @@ export function toWardRoundPayload(round: any): Record<string, any> {
     hospital_number: round.hospital_number || '',
     round_type: round.round_type || 'house_officers_round',
     round_time: round.round_time || '',
-    clinical_images: round.clinical_images || []
+    clinical_images: round.clinical_images || [],
+    // Collected by the form and previously dropped here (S3). null = not recorded.
+    pain_score: typeof round.pain_score === 'number' ? round.pain_score : null,
+    sleep_quality: round.sleep_quality || null,
+    appetite: round.appetite || null,
+    bowel_movement: round.bowel_movement || null,
+    general_appearance: round.general_appearance || null,
+    drain_output: round.drain_output || null,
+    mobility_status: round.mobility_status || null,
+    clinical_impression: round.clinical_impression || null,
+    continue_medications: round.continue_medications || [],
+    stop_medications: round.stop_medications || [],
+    new_medications: round.new_medications || [],
+    investigations_ordered: round.investigations_ordered || [],
+    procedures_planned: round.procedures_planned || [],
+    treatment_plan_changes: round.treatment_plan_changes || null,
+    dietary_modifications: round.dietary_modifications || null,
+    activity_orders: round.activity_orders || null,
+    nursing_instructions: round.nursing_instructions || null,
+    consultant_notified: !!round.consultant_notified,
   };
 
   const vitalSigns: any = {};

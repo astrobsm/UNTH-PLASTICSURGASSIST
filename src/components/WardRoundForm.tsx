@@ -90,10 +90,13 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
     
     // Subjective Assessment
     subjective_complaints: '',
-    pain_score: 0,
-    sleep_quality: 'good',
-    appetite: 'good',
-    bowel_movement: 'normal',
+    // Unrecorded until the clinician records it (S4): '' means "not recorded".
+    // These used to start at 0 / good / good / normal, so an untouched field
+    // was saved as a reassuring finding.
+    pain_score: '' as number | '',
+    sleep_quality: '',
+    appetite: '',
+    bowel_movement: '',
     
     // Objective Assessment
     temperature: '',
@@ -335,9 +338,12 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
         accompanying_team: formData.accompanying_team,
         
         // Required clinical fields
-        chief_complaint: formData.chief_complaint || formData.subjective_complaints || 'No complaints',
-        clinical_notes: formData.clinical_notes || formData.clinical_impression || 'No additional notes',
-        examination_findings: formData.examination_findings || formData.general_appearance || 'No specific findings',
+        // Empty stays empty (S4). "No complaints" / "No specific findings" used
+        // to be written whenever a field was left blank, so missing
+        // documentation read as a negative finding.
+        chief_complaint: formData.chief_complaint || formData.subjective_complaints || '',
+        clinical_notes: formData.clinical_notes || formData.clinical_impression || '',
+        examination_findings: formData.examination_findings || formData.general_appearance || '',
         
         // Vitals
         temperature: formData.temperature ? parseFloat(formData.temperature) : undefined,
@@ -357,7 +363,7 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
         // Progress and planning
         progress_status: formData.progress_status,
         complications: formData.complications,
-        follow_up_plan: formData.follow_up_plan || formData.discharge_plan || 'Continue current management',
+        follow_up_plan: formData.follow_up_plan || formData.discharge_plan || '',
         next_review_date: formData.next_review_date ? new Date(formData.next_review_date) : undefined,
         discharge_planning: formData.discharge_plan,
         
@@ -384,8 +390,28 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
           : undefined,
         
         // LMP for female patients
-        lmp: formData.lmp || undefined
-      };
+        lmp: formData.lmp || undefined,
+
+        // Collected by the form but previously dropped on save (S3).
+        pain_score: formData.pain_score === '' ? null : formData.pain_score,
+        sleep_quality: formData.sleep_quality || null,
+        appetite: formData.appetite || null,
+        bowel_movement: formData.bowel_movement || null,
+        general_appearance: formData.general_appearance || null,
+        drain_output: formData.drain_output || null,
+        mobility_status: formData.mobility_status || null,
+        clinical_impression: formData.clinical_impression || null,
+        continue_medications: formData.continue_medications,
+        stop_medications: formData.stop_medications,
+        new_medications: formData.new_medications,
+        investigations_ordered: formData.investigations_ordered,
+        procedures_planned: formData.procedures_planned,
+        treatment_plan_changes: formData.treatment_plan_changes || null,
+        dietary_modifications: formData.dietary_modifications || null,
+        activity_orders: formData.activity_orders || null,
+        nursing_instructions: formData.nursing_instructions || null,
+        consultant_notified: !!formData.consultant_notified,
+      } as Partial<WardRound>;
 
       console.log('Submitting ward round data:', wardRoundData);
 
@@ -955,11 +981,17 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
                       type="number"
                       min="0"
                       max="10"
-                      value={formData.pain_score}
-                      onChange={(e) => setFormData({ ...formData, pain_score: parseInt(e.target.value) })}
+                      value={formData.pain_score === '' || formData.pain_score === null || formData.pain_score === undefined ? '' : formData.pain_score}
+                      placeholder="Not recorded"
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        const n = parseInt(v, 10);
+                        setFormData({ ...formData, pain_score: v === '' || Number.isNaN(n) ? '' : Math.max(0, Math.min(10, n)) });
+                      }}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
                     />
                     <div className="mt-1 text-xs text-gray-500">
+                      {formData.pain_score === '' && "Not recorded"}
                       {formData.pain_score === 0 && "No pain"}
                       {formData.pain_score > 0 && formData.pain_score <= 3 && "Mild pain"}
                       {formData.pain_score > 3 && formData.pain_score <= 6 && "Moderate pain"}
@@ -972,10 +1004,11 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
                       Sleep Quality
                     </label>
                     <select
-                      value={formData.sleep_quality}
+                      value={formData.sleep_quality || ''}
                       onChange={(e) => setFormData({ ...formData, sleep_quality: e.target.value })}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
                     >
+                      <option value="">Not recorded</option>
                       <option value="good">Good</option>
                       <option value="fair">Fair</option>
                       <option value="poor">Poor</option>
@@ -988,10 +1021,11 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
                       Appetite
                     </label>
                     <select
-                      value={formData.appetite}
+                      value={formData.appetite || ''}
                       onChange={(e) => setFormData({ ...formData, appetite: e.target.value })}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
                     >
+                      <option value="">Not recorded</option>
                       <option value="good">Good</option>
                       <option value="fair">Fair</option>
                       <option value="poor">Poor</option>
@@ -1004,10 +1038,11 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
                       Bowel Movement
                     </label>
                     <select
-                      value={formData.bowel_movement}
+                      value={formData.bowel_movement || ''}
                       onChange={(e) => setFormData({ ...formData, bowel_movement: e.target.value })}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
                     >
+                      <option value="">Not recorded</option>
                       <option value="normal">Normal</option>
                       <option value="constipated">Constipated</option>
                       <option value="diarrhea">Diarrhea</option>
