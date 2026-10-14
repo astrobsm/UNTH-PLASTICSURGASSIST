@@ -125,6 +125,7 @@ const SJSManagementPage = lazyWithRetry(() => import('./pages/SJSManagementPage'
 const SubstanceDetoxPage = lazyWithRetry(() => import('./pages/SubstanceDetoxPage'));
 const HOTrackingPage = lazyWithRetry(() => import('./pages/HOTrackingPage'));
 const AuditLogViewerPage = lazyWithRetry(() => import('./pages/AuditLogViewerPage'));
+const ClinicalGovernancePage = lazyWithRetry(() => import('./pages/ClinicalGovernancePage'));
 const JoinPage = lazyWithRetry(() => import('./pages/JoinPage'));
 const StudentLogin = lazyWithRetry(() => import('./pages/StudentLogin'));
 const StudentDashboard = lazyWithRetry(() => import('./pages/StudentDashboard'));
@@ -448,6 +449,8 @@ function App() {
               <Route path="/admin" element={<ProtectedRoute allowedRoles={ROUTE_ROLES['/admin']}><Admin /></ProtectedRoute>} />
               <Route path="/topic-management" element={<ProtectedRoute allowedRoles={ROUTE_ROLES['/topic-management']}><TopicManagement /></ProtectedRoute>} />
               <Route path="/audit-logs" element={<ProtectedRoute allowedRoles={ROUTE_ROLES['/audit-logs']}><AuditLogViewerPage /></ProtectedRoute>} />
+              {/* Open to all staff (protocols are read as guidance); edits and approvals are enforced by the server. */}
+              <Route path="/clinical-governance" element={<ClinicalGovernancePage />} />
             </Routes>
             
             {deferredPrompt && (

@@ -84,6 +84,7 @@ const navigation = [
   { name: 'Pre-Surgical Conference', href: '/pre-surgical-conference', icon: Presentation },
   { name: 'Procedures', href: '/procedures', icon: Scissors },
   { name: 'Clinician Assistant', href: '/clinician-assistant', icon: Activity },
+  { name: 'Clinical Governance', href: '/clinical-governance', icon: Shield },
   { name: 'Notice Board', href: '/notice-board', icon: Megaphone },
   { name: 'Shopping List', href: '/shopping-list', icon: ShoppingCart },
   { name: 'Lymphedema', href: '/lymphedema', icon: Waves },
