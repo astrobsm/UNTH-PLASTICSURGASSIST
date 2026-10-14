@@ -154,6 +154,10 @@ const BurnFollowUpAssessment: React.FC<BurnFollowUpAssessmentProps> = ({
     abilityToPerformADL: 'independent' as 'independent' | 'needs_assistance' | 'dependent'
   });
   const [vancouverScore, setVancouverScore] = useState<VancouverScarScale | null>(null);
+  // Vancouver Scar Scale items, each null until the clinician scores it.
+  const [vss, setVss] = useState<{ vascularity: number | null; pigmentation: number | null; pliability: number | null; height: number | null }>({
+    vascularity: null, pigmentation: null, pliability: null, height: null,
+  });
   const [notes, setNotes] = useState('');
   
   // Images
@@ -302,11 +306,18 @@ const BurnFollowUpAssessment: React.FC<BurnFollowUpAssessmentProps> = ({
     ));
   };
 
-  // Calculate Vancouver Scar Score
-  const calculateVancouverScore = () => {
-    // This would be filled in by user input - using defaults for demo
-    const score = burnExpertAIService.calculateVancouverScarScore(1, 1, 2, 1);
-    setVancouverScore(score);
+  // Vancouver Scar Scale — scored only from the four items the clinician
+  // entered. This used to compute a fixed (1, 1, 2, 1) "for demo" whatever the
+  // scar looked like, and that score was saved with the assessment.
+  const setVssItem = (item: keyof typeof vss, value: string) => {
+    const next = { ...vss, [item]: value === '' ? null : Number(value) };
+    setVss(next);
+    const complete = next.vascularity !== null && next.pigmentation !== null && next.pliability !== null && next.height !== null;
+    setVancouverScore(complete
+      ? burnExpertAIService.calculateVancouverScarScore(
+          next.vascularity as 0 | 1 | 2 | 3, next.pigmentation as 0 | 1 | 2,
+          next.pliability as 0 | 1 | 2 | 3 | 4 | 5, next.height as 0 | 1 | 2 | 3)
+      : null);
   };
 
   // Run AI Analysis
@@ -652,13 +663,31 @@ const BurnFollowUpAssessment: React.FC<BurnFollowUpAssessmentProps> = ({
             {daysSinceInjury > 14 && (
               <div>
                 <h3 className="font-semibold text-gray-900 mb-3">Vancouver Scar Scale</h3>
-                <button
-                  onClick={calculateVancouverScore}
-                  className="flex items-center gap-2 px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200"
-                >
-                  <BarChart3 className="h-4 w-4" />
-                  Calculate Scar Score
-                </button>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {([
+                    ['vascularity', 'Vascularity', ['0 Normal', '1 Pink', '2 Red', '3 Purple']],
+                    ['pigmentation', 'Pigmentation', ['0 Normal', '1 Hypopigmentation', '2 Hyperpigmentation']],
+                    ['pliability', 'Pliability', ['0 Normal', '1 Supple', '2 Yielding', '3 Firm', '4 Banding', '5 Contracture']],
+                    ['height', 'Height', ['0 Flat', '1 < 2 mm', '2 2–5 mm', '3 > 5 mm']],
+                  ] as const).map(([key, label, options]) => (
+                    <label key={key} className="text-sm text-gray-600">
+                      {label}
+                      <select
+                        value={vss[key] === null ? '' : String(vss[key])}
+                        onChange={(e) => setVssItem(key, e.target.value)}
+                        className="w-full border rounded-lg px-3 py-2 mt-1"
+                      >
+                        <option value="">Not scored</option>
+                        {options.map((o, i) => <option key={i} value={i}>{o}</option>)}
+                      </select>
+                    </label>
+                  ))}
+                </div>
+                {!vancouverScore && (
+                  <p className="mt-2 text-xs text-gray-500 flex items-center gap-1">
+                    <BarChart3 className="h-3.5 w-3.5" /> Score all four items to calculate the total.
+                  </p>
+                )}
                 
                 {vancouverScore && (
                   <div className="mt-3 p-4 bg-purple-50 border border-purple-200 rounded-lg">
