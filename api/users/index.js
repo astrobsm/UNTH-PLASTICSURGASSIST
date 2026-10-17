@@ -1,6 +1,8 @@
+import crypto from 'crypto';
 // Users/Admin API endpoint for Vercel serverless
 import bcrypt from 'bcryptjs';
 import { query } from '../_lib/db.js';
+import { ensurePresenceColumn } from '../_lib/presence.js';
 import { cors, authenticateRequest } from '../_lib/auth.js';
 
 // Ensure phone column exists on users table
@@ -14,19 +16,22 @@ async function ensurePhoneColumn() {
 
 // Generate a random password with at least one of each type
 function generatePassword(length = 12) {
-  const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%';
-  let password = '';
-  // Ensure at least one of each type
-  password += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[Math.floor(Math.random() * 26)];
-  password += 'abcdefghijklmnopqrstuvwxyz'[Math.floor(Math.random() * 26)];
-  password += '0123456789'[Math.floor(Math.random() * 10)];
-  password += '!@#$%'[Math.floor(Math.random() * 5)];
-  
-  for (let i = password.length; i < length; i++) {
-    password += charset[Math.floor(Math.random() * charset.length)];
+  // CSPRNG, not Math.random(): these are the temporary passwords for new
+  // accounts and admin resets, and Math.random() output is predictable from
+  // observed values. Same alphabet rules as api/users/reset-password.js.
+  const upper = 'ABCDEFGHIJKLMNPQRSTUVWXYZ';
+  const lower = 'abcdefghijkmnpqrstuvwxyz';
+  const digits = '23456789';
+  const symbols = '!@#$%';
+  const charset = upper + lower + digits + symbols;
+  const pick = (set) => set[crypto.randomInt(0, set.length)];
+  const chars = [pick(upper), pick(lower), pick(digits), pick(symbols)];
+  while (chars.length < length) chars.push(pick(charset));
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = crypto.randomInt(0, i + 1);
+    [chars[i], chars[j]] = [chars[j], chars[i]];
   }
-  // Shuffle the password
-  return password.split('').sort(() => Math.random() - 0.5).join('');
+  return chars.join('');
 }
 
 /**
@@ -510,10 +515,11 @@ async function getAllUsers(currentUser, res, req) {
   const activeOnly = url.searchParams.get('active_only') === 'true';
 
   const sqlQuery = activeOnly
-    ? `SELECT id, username, email, full_name, role, phone, is_approved, is_active, created_at, last_login
+    ? `SELECT id, username, email, full_name, role, phone, is_approved, is_active, created_at, last_login, last_seen_at
        FROM users WHERE (app_id = 'psa' OR app_id IS NULL) AND is_active = true AND is_approved = true ORDER BY created_at DESC`
-    : `SELECT id, username, email, full_name, role, phone, is_approved, is_active, created_at, last_login
+    : `SELECT id, username, email, full_name, role, phone, is_approved, is_active, created_at, last_login, last_seen_at
        FROM users WHERE (app_id = 'psa' OR app_id IS NULL) ORDER BY created_at DESC`;
+  await ensurePresenceColumn();
 
   const result = await query(sqlQuery);
 

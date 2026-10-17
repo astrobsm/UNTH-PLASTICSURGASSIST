@@ -82,6 +82,8 @@ interface SyncState {
 const NON_QUEUEABLE_PREFIXES = [
   '/medical-team/backfill', '/medical-team/rebalance', '/medical-team/assign',
   '/call-duty-roster', '/clinical-governance', '/ai/', '/ocr/',
+  // A reset replayed later would issue a temporary password nobody sees.
+  '/users/reset-password',
 ];
 
 class ApiClient {

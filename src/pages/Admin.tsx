@@ -81,6 +81,8 @@ interface User {
   department: string;
   status: 'active' | 'inactive' | 'suspended';
   lastLogin: Date | null;
+  /** Most recent authenticated request (sign-ins are rare: 30-day sessions, offline sign-in). */
+  lastSeen?: Date | null;
   permissions: string[];
   createdAt: Date;
   updatedAt: Date;
@@ -210,6 +212,7 @@ export default function Admin() {
         department: u.department || 'Plastic Surgery',
         status: u.is_active ? 'active' : 'inactive',
         lastLogin: u.last_login ? new Date(u.last_login) : null,
+        lastSeen: u.last_seen_at ? new Date(u.last_seen_at) : null,
         permissions: u.role === 'admin' ? ['all'] : ['patient_read'],
         createdAt: u.created_at ? new Date(u.created_at) : new Date(),
         updatedAt: u.updated_at ? new Date(u.updated_at) : new Date()
@@ -280,6 +283,24 @@ export default function Admin() {
   const handleEditUser = (user: User) => {
     setSelectedUser(user);
     setShowUserModal(true);
+  };
+
+  // Admin password reset: the server issues a temporary password (shown once,
+  // here) and forces a change at the next sign-in. Any pending "forgot
+  // password" request from that user is closed at the same time.
+  const [resetResult, setResetResult] = useState<{ name: string; login: string; password: string } | null>(null);
+  const [resetCopied, setResetCopied] = useState(false);
+  const handleResetPassword = async (user: User) => {
+    if (!user.id) { alert('This user has no server id yet. Refresh the page and try again.'); return; }
+    if (!confirm(`Reset the password for ${user.name}?\n\nA temporary password will be shown once. They must change it when they next sign in.`)) return;
+    try {
+      const r: any = await apiClient.post('/users/reset-password', { userId: user.id });
+      if (r?._queued) { alert('You are offline. A password reset needs a connection — try again when online.'); return; }
+      setResetCopied(false);
+      setResetResult({ name: user.name, login: r?.user?.username || r?.user?.email || user.username || user.email, password: r?.temporaryPassword || '' });
+    } catch (e: any) {
+      alert(`Password reset failed: ${e?.message || 'unknown error'}`);
+    }
   };
 
   const handleDeleteUser = async (userId: string) => {
@@ -790,8 +811,8 @@ export default function Admin() {
                         <div className="flex items-center space-x-2">
                           <Key className="h-4 w-4 text-gray-400" />
                           <div>
-                            <div className="text-sm font-mono text-gray-900">{user.username || 'N/A'}</div>
-                            <div className="text-xs text-gray-500">Username</div>
+                            <div className="text-sm font-mono text-gray-900">{user.username || user.email || 'N/A'}</div>
+                            <div className="text-xs text-gray-500">{user.username ? 'Username (or email)' : 'Signs in with email'}</div>
                           </div>
                         </div>
                       </td>
@@ -810,22 +831,13 @@ export default function Admin() {
                           }`}>
                             {user.status}
                           </span>
-                          <button
-                            onClick={() => handleDeactivateUser(user.id)}
-                            className={`px-3 py-1.5 rounded-md transition text-xs font-medium flex items-center gap-1 ${
-                              user.status === 'active'
-                                ? 'bg-red-100 text-red-700 hover:bg-red-200 border border-red-300'
-                                : 'bg-green-100 text-green-700 hover:bg-green-200 border border-green-300'
-                            }`}
-                            title={user.status === 'active' ? 'Deactivate User' : 'Activate User'}
-                          >
-                            <Lock className="h-3.5 w-3.5" />
-                            {user.status === 'active' ? 'Deactivate' : 'Activate'}
-                          </button>
                         </div>
                       </td>
                       <td className="px-2 sm:px-4 py-2 sm:py-4 whitespace-nowrap text-sm text-gray-500">
-                        {user.lastLogin ? format(new Date(user.lastLogin), 'MMM d, yyyy HH:mm') : 'Never'}
+                        <div>{user.lastSeen ? `Active ${format(new Date(user.lastSeen), 'MMM d, yyyy HH:mm')}` : 'Not seen since tracking began'}</div>
+                        <div className="text-xs text-gray-400">
+                          {user.lastLogin ? `Signed in ${format(new Date(user.lastLogin), 'MMM d, yyyy HH:mm')}` : 'No sign-in recorded'}
+                        </div>
                       </td>
                       <td className="px-2 sm:px-4 py-2 sm:py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex items-center gap-2">
@@ -834,6 +846,14 @@ export default function Admin() {
                             className="text-blue-600 hover:text-blue-900" title="Edit"
                           >
                             <Edit3 className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleResetPassword(user)}
+                            className="px-3 py-1.5 rounded-md transition text-xs font-medium flex items-center gap-1 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200"
+                            title="Issue a temporary password; they must change it at next sign-in"
+                          >
+                            <Key className="h-3.5 w-3.5" />
+                            Reset password
                           </button>
                           <button
                             onClick={() => handleDeactivateUser(user.id)}
@@ -1416,6 +1436,27 @@ export default function Admin() {
             }
           }}
         />
+      )}
+
+      {/* Password reset result — the temporary password is shown only here */}
+      {resetResult && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-4">
+            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2"><Key className="h-5 w-5 text-blue-600" /> Password reset</h3>
+            <p className="text-sm text-gray-600">Give these to <b>{resetResult.name}</b> privately. The temporary password is shown only once and must be changed at the next sign-in.</p>
+            <div className="bg-gray-50 border rounded-lg p-3 font-mono text-sm space-y-1">
+              <div><span className="text-gray-500">Sign in with:</span> {resetResult.login}</div>
+              <div><span className="text-gray-500">Temporary password:</span> <b>{resetResult.password}</b></div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => { navigator.clipboard?.writeText(`Sign in with: ${resetResult.login}\nTemporary password: ${resetResult.password}`); setResetCopied(true); }}
+                className="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50"
+              >{resetCopied ? 'Copied' : 'Copy'}</button>
+              <button onClick={() => setResetResult(null)} className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700">Done</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Backup Modal */}

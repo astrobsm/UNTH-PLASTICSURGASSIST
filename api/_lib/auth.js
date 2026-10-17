@@ -2,6 +2,7 @@
 
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import { touchLastSeen } from './presence.js';
 
 if (!process.env.JWT_SECRET) {
   if (process.env.NODE_ENV === 'production' || process.env.VERCEL) {
@@ -68,6 +69,9 @@ export function authenticateRequest(req, options = {}) {
       error: 'This endpoint is not available to student accounts',
     };
   }
+
+  // "Last active" for the Admin page (throttled, never awaited). Staff only.
+  if (!(decoded.sub_type === 'student' || decoded.role === 'student')) touchLastSeen(decoded.id);
 
   return { authenticated: true, user: decoded };
 }

@@ -34,8 +34,16 @@ async function handleLogin(req, res) {
             role, full_name, 
             COALESCE(is_approved, true) as is_approved, 
             COALESCE(is_active, true) as is_active
-     FROM users WHERE LOWER(email) = LOWER($1) AND (app_id = 'psa' OR app_id IS NULL)`,
-    [loginId]
+     FROM users
+     WHERE (LOWER(email) = LOWER($1) OR LOWER(username) = LOWER($1))
+       AND (app_id = 'psa' OR app_id IS NULL)
+     -- An exact email match wins over a username that happens to look the same.
+     ORDER BY (LOWER(email) = LOWER($1)) DESC
+     LIMIT 1`,
+    // The comment above said "username or email" but only email was matched,
+    // so staff signing in with the username the Admin page gave them were
+    // refused.
+    [String(loginId).trim()]
   );
 
   if (result.rows.length === 0) {
@@ -86,11 +94,13 @@ async function handleLogin(req, res) {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
 
-  // Update last login
+  // Record the sign-in. This only touched updated_at, so users.last_login —
+  // what the Admin page shows — was never set and almost everyone read "Never".
   try {
-    await query('UPDATE users SET updated_at = NOW() WHERE id = $1', [user.id]);
+    await query('UPDATE users SET last_login = NOW(), last_seen_at = NOW() WHERE id = $1', [user.id]);
   } catch (e) {
-    // Ignore
+    try { await query('UPDATE users SET last_login = NOW() WHERE id = $1', [user.id]); }
+    catch (e2) { console.warn('Could not record last_login:', e2.message); }
   }
 
   // Build full name from available fields

@@ -240,6 +240,7 @@ const REALTIME_POST_PREFIXES = [
   '/api/medical-team/assign',
   '/api/call-duty-roster',
   '/api/clinical-governance',
+  '/api/users/reset-password',
 ];
 
 const isRealtimeEndpoint = (pathname: string) =>
