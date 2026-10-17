@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { UserPlus, LogIn, X, Eye, EyeOff, Phone, Key } from 'lucide-react';
 import { userManagementService } from '../services/userManagementService';
@@ -16,6 +16,14 @@ export default function Login() {
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const { login } = useAuthStore();
+
+  // Wake the API and its database while the user is still typing. After a
+  // quiet spell both start cold, and the first sign-in used to time out.
+  useEffect(() => {
+    const base = (import.meta as any).env?.VITE_API_BASE_URL
+      || ((import.meta as any).env?.PROD ? '/api' : 'http://localhost:3005/api');
+    if (navigator.onLine) fetch(`${base}/health`, { cache: 'no-store' }).catch(() => {});
+  }, []);
 
   // Forgot-password (self-service reset request) state
   const [showForgot, setShowForgot] = useState(false);
@@ -69,7 +77,8 @@ export default function Login() {
     }
     
     // Check rate limit before attempting login
-    const rateLimitKey = email.toLowerCase();
+    const loginId = email.trim();
+    const rateLimitKey = loginId.toLowerCase();
     if (loginRateLimiter.isRateLimited(rateLimitKey)) {
       const resetTime = loginRateLimiter.getResetTimeFormatted(rateLimitKey);
       setError(`Too many login attempts. Please try again in ${resetTime}.`);
@@ -78,20 +87,26 @@ export default function Login() {
     }
     
     try {
-      // Record attempt
-      loginRateLimiter.attempt(rateLimitKey);
-      
-      await login(email, password);
-      
+      await login(loginId, password);
+
       // Clear rate limit on successful login
       loginRateLimiter.clear(rateLimitKey);
     } catch (error: any) {
-      // Show remaining attempts
-      const remaining = loginRateLimiter.getRemainingAttempts(rateLimitKey);
-      const attemptText = remaining > 0 
-        ? ` (${remaining} attempt${remaining === 1 ? '' : 's'} remaining)` 
-        : '';
-      setError((error.message || 'Login failed. Please check your credentials.') + attemptText);
+      const raw = String(error?.message || '').replace(/^\[HTTP \d+\]\s*/, '');
+      const wrongPassword = /invalid credentials/i.test(raw);
+      if (wrongPassword) {
+        // Only a refused password counts towards the limit — a timeout or a
+        // dropped connection is not the user's mistake.
+        loginRateLimiter.attempt(rateLimitKey);
+        const remaining = loginRateLimiter.getRemainingAttempts(rateLimitKey);
+        setError('Incorrect username/email or password.'
+          + (remaining > 0 ? ` (${remaining} attempt${remaining === 1 ? '' : 's'} remaining)` : '')
+          + ' If an administrator reset your password, type it in rather than pasting it, or ask them to reset it again.');
+      } else if (error?.code === 'TIMEOUT' || /timed out/i.test(raw)) {
+        setError('The server took too long to respond — it may have been waking up. Please tap Sign in again.');
+      } else {
+        setError(raw || 'Login failed. Please check your credentials.');
+      }
     } finally {
       setLoading(false);
     }
@@ -197,6 +212,10 @@ export default function Login() {
                 required
                 className="form-input"
                 placeholder="admin or doctor@hospital.com"
+                autoComplete="username"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
@@ -214,6 +233,10 @@ export default function Login() {
                   required
                   className="form-input pr-10"
                   placeholder="Enter password"
+                  autoComplete="current-password"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />

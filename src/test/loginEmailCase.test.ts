@@ -20,8 +20,7 @@ const read = (p: string) => fs.readFileSync(path.join(ROOT, p), 'utf8');
 
 const LOOKUPS: Array<[string, string]> = [
   ['api/students.js', 'student login'],
-  ['api/auth/login.js', 'staff login'],
-  ['api/auth/index.js', 'staff login (combined route)'],
+  ['api/auth/index.js', 'staff login (also served at /api/auth/login)'],
   ['api/auth/join.js', 'profile creation'],
   ['api/auth/register.js', 'staff registration'],
 ];
@@ -39,15 +38,15 @@ describe('every email lookup is case-insensitive', () => {
     expect(src).toMatch(/FROM students WHERE LOWER\(email\) = LOWER\(\$1\)/);
   });
 
-  it('the staff logins match on LOWER(email)', () => {
-    for (const file of ['api/auth/login.js', 'api/auth/index.js']) {
-      expect(read(file), file).toContain('LOWER(email) = LOWER($1)');
-    }
+  it('the staff login matches on LOWER(TRIM(email)) and /api/auth/login is the same handler', () => {
+    expect(read('api/auth/index.js')).toContain('LOWER(TRIM(email)) = LOWER($1)');
+    // login.js was a stale copy that never learned username sign-in.
+    expect(read('api/auth/login.js')).toMatch(/export \{ default \} from '\.\/index\.js'/);
   });
 
   it('the staff login used by the app also accepts the username, case-insensitively', () => {
     // Admin issues usernames; the login used to match email only.
-    expect(read('api/auth/index.js')).toMatch(/LOWER\(email\) = LOWER\(\$1\) OR LOWER\(username\) = LOWER\(\$1\)/);
+    expect(read('api/auth/index.js')).toMatch(/LOWER\(TRIM\(email\)\) = LOWER\(\$1\) OR LOWER\(TRIM\(username\)\) = LOWER\(\$1\)/);
   });
 
   it('a duplicate cannot be created by changing the case', () => {

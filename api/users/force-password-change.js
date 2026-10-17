@@ -2,6 +2,7 @@
 import bcrypt from 'bcryptjs';
 import { query } from '../_lib/db.js';
 import { cors, authenticateRequest } from '../_lib/auth.js';
+import { verifyPassword } from '../_lib/passwordCheck.js';
 
 export default async function handler(req, res) {
   try {
@@ -40,7 +41,9 @@ export default async function handler(req, res) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const validPassword = await bcrypt.compare(currentPassword, userResult.rows[0].password_hash);
+    // Same comparison as sign-in, so a temporary password that signed in
+    // (copied with an invisible trailing character) is accepted here too.
+    const { ok: validPassword } = await verifyPassword(currentPassword, userResult.rows[0].password_hash);
     if (!validPassword) {
       return res.status(401).json({ error: 'Current password is incorrect' });
     }

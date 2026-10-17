@@ -240,8 +240,12 @@ class ApiClient {
     // queued, replayed five times against the server and dead-lettered; an AI
     // or OCR call replayed hours later has no one waiting for its answer.
     const isNonQueueable = NON_QUEUEABLE_PREFIXES.some(p => endpoint.startsWith(p));
+    // Sign-in itself gets longer: after a quiet spell the serverless function
+    // and the database both wake from cold, and 8 s refused people whose login
+    // would have succeeded a few seconds later.
+    const isSignIn = !isGet && (endpoint === '/auth' || endpoint.startsWith('/auth/login') || endpoint.startsWith('/students/login'));
     const requestTimeoutMs = (options as any).timeout
-      ?? (isAuthEndpoint ? 8000 : (isGet ? 12000 : 20000));
+      ?? (isSignIn ? 25000 : isAuthEndpoint ? 8000 : (isGet ? 12000 : 20000));
     const abortController = new AbortController();
     const externalSignal = (options as any).signal as AbortSignal | undefined;
     if (externalSignal) {
