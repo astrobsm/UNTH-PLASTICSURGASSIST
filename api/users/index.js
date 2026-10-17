@@ -665,11 +665,21 @@ async function updateUser(id, data, currentUser, res) {
 
   values.push(id);
 
-  const result = await query(
-    `UPDATE users SET ${fields.join(', ')} WHERE id = $${paramCount}
-     RETURNING id, username, email, full_name, role, phone, is_approved, is_active`,
-    values
-  );
+  let result;
+  try {
+    result = await query(
+      `UPDATE users SET ${fields.join(', ')} WHERE id = $${paramCount}
+       RETURNING id, username, email, full_name, role, phone, is_approved, is_active`,
+      values
+    );
+  } catch (e) {
+    // The email (or username) already belongs to another account: say so
+    // instead of a bare 500.
+    if (e?.code === '23505') {
+      return res.status(409).json({ error: 'That email address is already used by another account' });
+    }
+    throw e;
+  }
 
   if (result.rows.length === 0) {
     return res.status(404).json({ error: 'User not found' });
