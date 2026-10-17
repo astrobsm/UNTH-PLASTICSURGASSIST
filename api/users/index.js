@@ -265,6 +265,14 @@ export default async function handler(req, res) {
     const userId = pathParts[0];
     const action = pathParts[1];
 
+    // A numeric path segment must be a real users.id (a Postgres integer).
+    // Older admin screens could send a client-side Date.now() stand-in, e.g.
+    // /api/users/1792266502800, which overflowed the integer cast and came
+    // back as a 500. Answer 404 instead.
+    if (userId && /^\d+$/.test(userId) && Number(userId) > 2147483647) {
+      return res.status(404).json({ error: 'User not found — refresh the user list and try again' });
+    }
+
     switch (method) {
       case 'GET':
         if (userId === 'reset-requests') {

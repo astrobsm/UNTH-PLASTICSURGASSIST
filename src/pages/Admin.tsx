@@ -1466,6 +1466,8 @@ const UserModal = ({
     fullName: string;
     role: string;
     mustChangePassword: boolean;
+    /** The new user's real database id, from the create response. */
+    userId?: string;
   } | null>(null);
   const [copied, setCopied] = useState(false);
   // Roles come from the registry (Admin ▸ Roles) so a role added there is
@@ -1515,11 +1517,13 @@ const UserModal = ({
         });
 
         if (response.credentials) {
-          setCreatedCredentials(response.credentials);
+          setCreatedCredentials({ ...response.credentials, userId: response.user?.id != null ? String(response.user.id) : undefined });
         } else {
           // User created but no credentials returned
           const userData: User = {
-            id: response.user?.id?.toString() || Date.now().toString(),
+            // The real id only. A Date.now() stand-in was later sent as
+            // /api/users/<timestamp> on edit, delete or status change (500).
+            id: response.user?.id?.toString() || '',
             name: formData.name,
             email: formData.email,
             role: formData.role as User['role'],
@@ -1552,7 +1556,10 @@ const UserModal = ({
   const handleDone = () => {
     if (createdCredentials) {
       const userData: User = {
-        id: Date.now().toString(),
+        // The server's id for the new user. This was Date.now(), so editing,
+        // deactivating or deleting the user straight after creating them sent
+        // /api/users/<timestamp> and failed with a 500.
+        id: createdCredentials.userId || '',
         name: createdCredentials.fullName,
         email: createdCredentials.email,
         role: createdCredentials.role as User['role'],

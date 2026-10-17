@@ -32,7 +32,7 @@
  * failure this codebase has already had more than once.
  */
 
-import { query } from './_lib/db.js';
+import { query, getPool } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
 
 /** Attachments are base64 on the wire; keep one message inside the body limit. */
@@ -45,6 +45,7 @@ let ready = false;
 
 async function ensureTables() {
   if (ready) return;
+  await retireLegacyChatTables();
   await query(`
     CREATE TABLE IF NOT EXISTS chat_rooms (
       id            VARCHAR(64) PRIMARY KEY,
@@ -95,6 +96,48 @@ async function ensureTables() {
     CREATE INDEX IF NOT EXISTS idx_chat_participants_user ON chat_participants(user_id);
   `);
   ready = true;
+}
+
+/**
+ * init-db.js once created chat_rooms / chat_messages with INTEGER (SERIAL)
+ * ids. This module uses text ids, and CREATE TABLE IF NOT EXISTS left the old
+ * tables in place — so every room list failed comparing text with integer,
+ * and no room could be created (500 on /api/chat/rooms).
+ *
+ * When the old shape is found, the old tables are RENAMED to *_legacy (their
+ * rows are kept, and anything that referenced them, such as
+ * video_conferences, follows the rename) and this module's tables are
+ * created. One transaction, so the database is never left half-renamed.
+ */
+async function retireLegacyChatTables() {
+  const col = async (table, column) => (await query(
+    `SELECT data_type FROM information_schema.columns
+      WHERE table_schema = current_schema() AND table_name = $1 AND column_name = $2`,
+    [table, column]
+  )).rows[0]?.data_type || null;
+  const roomsLegacy = (await col('chat_rooms', 'id')) === 'integer';
+  const messagesLegacy = (await col('chat_messages', 'room_id')) === 'integer'
+    || (await col('chat_messages', 'id')) === 'integer';
+  if (!roomsLegacy && !messagesLegacy) return;
+
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
+    if (messagesLegacy) {
+      await client.query('ALTER TABLE chat_messages RENAME TO chat_messages_legacy');
+      await client.query('ALTER INDEX IF EXISTS idx_chat_messages_room RENAME TO idx_chat_messages_room_legacy');
+    }
+    if (roomsLegacy) {
+      await client.query('ALTER TABLE chat_rooms RENAME TO chat_rooms_legacy');
+    }
+    await client.query('COMMIT');
+    console.warn(`chat: legacy integer-id tables renamed (rooms: ${roomsLegacy}, messages: ${messagesLegacy})`);
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
 }
 
 // ── Row → the client's camelCase shapes ─────────────────────────────────────
