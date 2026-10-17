@@ -397,6 +397,19 @@ export default function Admin() {
       if (isSignOut && result?.rosterSlotsBlanked) {
         msg += ` Cleared ${result.rosterSlotsBlanked} call-duty slot(s).`;
       }
+      const rel = result?.release;
+      if (isSignOut && rel) {
+        const d = rel.duties || {};
+        const cancelled = (d.dutyAssignments || 0) + (d.responsibilities || 0) + (d.clinicDuties || 0) + (d.reminders || 0);
+        const parts = [
+          rel.units?.removed ? 'removed from the unit lists' : '',
+          rel.psUnitRoster?.removed ? 'removed from the PS unit roster' : '',
+          cancelled ? `${cancelled} pending dut${cancelled === 1 ? 'y' : 'ies'} cancelled` : '',
+          rel.rotation?.closed?.length ? 'rotation closed' : '',
+        ].filter(Boolean);
+        if (parts.length) msg += ` Also ${parts.join(', ')}.`;
+        if (rel.patients?.outsideUnit) msg += ` ${rel.patients.outsideUnit} patient(s) went outside their unit because it has nobody of that grade.`;
+      }
       toast.success(msg);
       await loadUsers();
     } catch (error: any) {
@@ -745,16 +758,17 @@ export default function Admin() {
                       ? `AWAY TO ${activeAbsences[String(user.id)].end_date}`
                       : 'LEAVE / POSTING'}
                   </button>
-                  {/* Official sign-out — only meaningful for an account that is
-                      still active and never for the admin's own account. */}
-                  {user.status === 'active' && user.id !== currentUserId && (
+                  {/* Official sign-out — also for an account that is already
+                      inactive: deactivating alone never took them off their
+                      patients, units and duties. Never on your own account. */}
+                  {user.id !== currentUserId && (
                     <button
                       onClick={() => handleSignOutUser(user.id)}
                       className="w-full px-3 py-2.5 text-sm rounded-lg font-bold flex items-center justify-center gap-1 bg-orange-600 text-white hover:bg-orange-700"
                       title="End their sessions on all devices and deactivate the account"
                     >
                       <LogOut className="h-4 w-4" />
-                      SIGN OUT &amp; DEACTIVATE
+                      {user.status === 'active' ? <>SIGN OUT &amp; DEACTIVATE</> : 'RELEASE FROM UNIT'}
                     </button>
                   )}
                 </div>
@@ -868,15 +882,18 @@ export default function Admin() {
                             {user.status === 'active' ? 'Deactivate' : 'Activate'}
                           </button>
                           {/* Official sign-out — ends their sessions on every
-                              device, then deactivates. Hidden on your own row. */}
-                          {user.status === 'active' && user.id !== currentUserId && (
+                              device, deactivates, and releases them from the
+                              unit. Shown on inactive accounts too ("Release
+                              from unit"), since deactivating alone left their
+                              patients and duties in place. Hidden on your own row. */}
+                          {user.id !== currentUserId && (
                             <button
                               onClick={() => handleSignOutUser(user.id)}
                               className="px-3 py-1.5 rounded-md transition text-xs font-medium flex items-center gap-1 bg-orange-50 text-orange-700 hover:bg-orange-100 border border-orange-200"
                               title="Sign out of all devices and deactivate the account"
                             >
                               <LogOut className="h-3.5 w-3.5" />
-                              Sign Out
+                              {user.status === 'active' ? 'Sign Out' : 'Release from unit'}
                             </button>
                           )}
                           {/* Leave / outside posting. Distinct from Deactivate:
@@ -936,7 +953,7 @@ export default function Admin() {
               <div>
                 <h3 className="text-lg font-bold text-gray-900">
                   {deactivateTarget.mode === 'signout'
-                    ? 'Sign Out & Deactivate'
+                    ? (deactivateTarget.currentStatus === 'active' ? 'Sign Out & Deactivate' : 'Release from the unit')
                     : `${deactivateTarget.currentStatus === 'active' ? 'Deactivate' : 'Activate'} User`}
                 </h3>
                 <p className="text-sm text-gray-500">{deactivateTarget.name}</p>
@@ -948,10 +965,11 @@ export default function Admin() {
                   <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
                     <p className="text-sm text-orange-800"><strong>This officially ends their posting.</strong> It will:</p>
                     <ul className="text-xs text-orange-700 mt-1 ml-4 list-disc space-y-0.5">
-                      <li>Sign them out of the app on <strong>every device</strong> they are logged in on</li>
-                      <li>Deactivate the account so they cannot log back in</li>
-                      <li>Hand their patients to the least-loaded remaining staff of the same role</li>
-                      <li>Clear them from current &amp; future call-duty shifts</li>
+                      <li>Sign them out of the app on <strong>every device</strong> and keep the account deactivated</li>
+                      <li>Hand each of their patients to a doctor of the same grade <strong>in that patient's unit</strong></li>
+                      <li>Remove them from both units, the PS unit roster and current &amp; future call-duty shifts</li>
+                      <li>Cancel their pending duties and reminders and drop them from the morning round</li>
+                      <li>Close their training rotation — everything they documented stays credited to them</li>
                     </ul>
                     <p className="text-[11px] text-orange-600 mt-2">
                       A device that is currently offline is signed out as soon as it reconnects.

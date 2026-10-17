@@ -56,6 +56,32 @@ export async function removeFromPsUnitRoster(fullName) {
   return { removed };
 }
 
+/**
+ * Heartbeat clean-up: names of deactivated staff come off the PS unit roster
+ * (which stores names, not ids). A name shared with an active account is left.
+ */
+export async function pruneInactiveFromPsUnitRoster() {
+  const r = await query(`SELECT * FROM ps_unit_rosters WHERE is_active = TRUE`);
+  const names = new Set();
+  for (const row of r.rows) {
+    for (const key of PS_ROSTER_LISTS) {
+      let list = row[key];
+      if (typeof list === 'string') { try { list = JSON.parse(list); } catch { continue; } }
+      if (Array.isArray(list)) list.forEach(x => names.add(String(typeof x === 'object' && x ? (x.name || x.full_name || '') : x).trim().toLowerCase()));
+    }
+  }
+  names.delete('');
+  if (!names.size) return { removed: 0 };
+  const gone = (await query(
+    `SELECT LOWER(TRIM(full_name)) AS n FROM users WHERE LOWER(TRIM(full_name)) = ANY($1::text[])
+      GROUP BY LOWER(TRIM(full_name)) HAVING BOOL_AND(NOT COALESCE(is_active, TRUE))`,
+    [[...names]]
+  )).rows.map(x => x.n);
+  let removed = 0;
+  for (const n of gone) removed += (await removeFromPsUnitRoster(n)).removed;
+  return { removed };
+}
+
 export async function releaseFromUnit({ userId, byUser = null, reason = '' }) {
   const uid = String(userId);
   const report = {};

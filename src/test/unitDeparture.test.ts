@@ -12,6 +12,7 @@ const calls: Array<{ sql: string; params: any[] }> = [];
 let assignments: any[] = [];
 let psRoster: any[] = [];
 let savedUnits: any = null;
+let inactiveNames: string[] = [];
 
 vi.mock('../../api/_lib/db.js', () => ({
   query: vi.fn(async (sql: string, params: any[] = []) => {
@@ -23,6 +24,7 @@ vi.mock('../../api/_lib/db.js', () => ({
     if (/FROM admissions/.test(sql)) return { rows: [{ pid: 'p1', assigned_unit: 'PS-UNIT-1' }, { pid: 'p2', assigned_unit: 'PS-UNIT-2' }] };
     if (/u\.id::text = ANY\(\$1::text\[\]\)/.test(sql)) return { rows: params[0].length ? [{ id: params[0][0] }] : [] };
     if (/FROM ps_unit_rosters/.test(sql)) return { rows: psRoster };
+    if (/HAVING BOOL_AND/.test(sql)) return { rows: params[0].filter((n: string) => inactiveNames.includes(n)).map((n: string) => ({ n })) };
     return { rows: [], rowCount: 0 };
   }),
 }));
@@ -40,7 +42,7 @@ vi.mock('../../api/_lib/callRoster.js', () => ({
 vi.mock('../../api/_lib/staffAbsence.js', () => ({ getAbsentUserIds: async () => [] }));
 
 import { reassignDeactivatedUser, removeFromUnits } from '../../api/_lib/teamAssignment.js';
-import { removeFromPsUnitRoster } from '../../api/_lib/unitDeparture.js';
+import { removeFromPsUnitRoster, pruneInactiveFromPsUnitRoster } from '../../api/_lib/unitDeparture.js';
 
 beforeEach(() => { calls.length = 0; assignments = []; psRoster = []; savedUnits = null; });
 
@@ -74,8 +76,23 @@ describe('a house officer leaves', () => {
   });
 });
 
+describe('heartbeat clean-up', () => {
+  it('drops deactivated staff from the PS unit roster by name', async () => {
+    psRoster = [{ id: 7, is_active: true, house_officers: ['AZODO STELLAMARIS', 'Nnolum Chioma'], senior_registrars: [] }];
+    inactiveNames = ['azodo stellamaris'];
+    expect(await pruneInactiveFromPsUnitRoster()).toEqual({ removed: 1 });
+    inactiveNames = [];
+  });
+});
+
+const read = (p: string) => fs.readFileSync(path.resolve(__dirname, '..', '..', p), 'utf8');
+
 describe('wiring', () => {
-  const read = (p: string) => fs.readFileSync(path.resolve(__dirname, '..', '..', p), 'utf8');
+  it('the admin page offers sign-out on inactive accounts as "Release from unit"', () => {
+    const admin = read('src/pages/Admin.tsx');
+    expect(admin).toMatch(/'Release from unit'/);
+    expect(admin).not.toMatch(/user\.status === 'active' && user\.id !== currentUserId && \(/);
+  });
   it('sign-out releases the doctor from everything; the heartbeat cleans up anyone deactivated by hand', () => {
     expect(read('api/users/sign-out.js')).toMatch(/releaseFromUnit\(/);
     expect(read('api/call-duty-roster.js')).toMatch(/reconcileInactiveStaff\(\)/);
