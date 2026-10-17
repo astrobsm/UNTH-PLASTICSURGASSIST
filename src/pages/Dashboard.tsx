@@ -47,6 +47,7 @@ import { getCurrentUserName } from '../utils/getCurrentUser';
 import { getCurrentAssignments, getTodaySchedule, UnitRosterConfig } from '../config/psUnits';
 import HOResponsibilitiesGuide, { HOResponsibilitiesCard } from '../components/HOResponsibilitiesGuide';
 import { MyStatusBanner } from '../components/training/MyStatusBanner';
+import { CatchUpBanner } from '../components/onboarding/CatchUpBanner';
 import { careDuration, careDurationTone, CARE_TONE_CLASSES } from '../utils/careDuration';
 
 interface DashboardPatient {
@@ -1337,6 +1338,7 @@ export default function Dashboard() {
 
       {/* Where this trainee stands, on arrival rather than three clicks away.
           Renders nothing for a consultant or admin, who are not scored. */}
+      {isScoredRole && <CatchUpBanner />}
       {isScoredRole && <MyStatusBanner />}
 
       {/* HO Responsibilities Quick Reference Card — visible to all */}

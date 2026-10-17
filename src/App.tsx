@@ -8,6 +8,8 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { patientService } from './services/patientService';
 import ForcePasswordChange from './components/ForcePasswordChange';
 import HOResponsibilitiesGuide from './components/HOResponsibilitiesGuide';
+import PostingOnboarding from './components/onboarding/PostingOnboarding';
+import { postingOnboardingService, onboardingCache, type OnboardingStatus } from './services/postingOnboardingService';
 import { useAuthStore } from './store/authStore';
 import { PWAInstallPrompt } from './components/PWAInstallPrompt';
 import { OfflineIndicator } from './components/OfflineIndicator';
@@ -142,6 +144,9 @@ function App() {
   const { user, loading, initializeAuth, clearMustChangePassword, logout } = useAuthStore();
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [hoAcknowledged, setHoAcknowledged] = useState<boolean | null>(null); // null = loading
+  // Posting onboarding (house officers and residents): 'checking' briefly
+  // after sign-in, then the status — or null when not needed / unknown.
+  const [onboarding, setOnboarding] = useState<OnboardingStatus | 'checking' | null>(null);
 
   // Initialize auth ONCE on mount — NOT when user changes
   useEffect(() => {
@@ -256,6 +261,26 @@ function App() {
     checkAck();
   }, [user]);
 
+  // ─── Posting onboarding: dates, unit, expectations and sign-out rules ───
+  // Asked of house officers and residents once per posting. Never blocks
+  // offline or when the server is slow: after 4 s the app opens, and the
+  // onboarding appears as soon as the answer arrives.
+  useEffect(() => {
+    if (!user || ['student', 'admin', 'super_admin', 'consultant'].includes(user.role)) { setOnboarding(null); return; }
+    let live = true;
+    setOnboarding(onboardingCache.isDone(user.id) ? null : 'checking');
+    const giveUp = setTimeout(() => { if (live) setOnboarding(o => (o === 'checking' ? null : o)); }, 4000);
+    postingOnboardingService.status()
+      .then(s => {
+        if (!live) return;
+        if (s?.applicable && s.required) { onboardingCache.clear(user.id); setOnboarding(s); }
+        else { if (s?.applicable) onboardingCache.markDone(user.id); setOnboarding(null); }
+      })
+      .catch(() => { if (live) setOnboarding(o => (o === 'checking' ? null : o)); })
+      .finally(() => clearTimeout(giveUp));
+    return () => { live = false; clearTimeout(giveUp); };
+  }, [user?.id, user?.role]);
+
   const handleHOAcknowledge = async () => {
     if (!user) return;
     // Save to server
@@ -340,6 +365,25 @@ function App() {
           clearMustChangePassword();
         }}
         onLogout={logout}
+      />
+    );
+  }
+
+  // Gate: house officers and residents register their posting and accept the
+  // expectations and sign-out rules before first use.
+  if (onboarding === 'checking') return <PageLoader />;
+  if (onboarding && onboarding.required) {
+    return (
+      <PostingOnboarding
+        status={onboarding}
+        userName={user.name || ''}
+        onLogout={logout}
+        onDone={() => {
+          onboardingCache.markDone(user.id);
+          // Accepting the onboarding covers the house-officer acknowledgment.
+          if (user.role === 'house_officer') { localStorage.setItem(`ho_ack_${user.id}`, 'true'); setHoAcknowledged(true); }
+          setOnboarding(null);
+        }}
       />
     );
   }

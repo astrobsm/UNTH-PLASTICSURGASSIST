@@ -84,6 +84,8 @@ const NON_QUEUEABLE_PREFIXES = [
   '/call-duty-roster', '/clinical-governance', '/ai/', '/ocr/',
   // Versioned clerking saves: a stale replay would hit a 409; the draft lives on the device instead.
   '/clinical-encounters',
+  // Starting a rotation must happen now, with the dates the trainee sees.
+  '/posting-onboarding',
   // A reset replayed later would issue a temporary password nobody sees.
   '/users/reset-password',
 ];

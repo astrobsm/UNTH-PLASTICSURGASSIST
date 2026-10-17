@@ -141,7 +141,7 @@ async function surgeryLevels() {
  * — a level nobody has configured — the category matching the level's own name
  * is used, so a new posting is not silently empty.
  */
-async function categoriesFor(level) {
+export async function categoriesFor(level) {
   const configured = (await query(
     `SELECT c.id, c.name, c.code, c.level::text AS level
      FROM level_curriculum lc
@@ -161,7 +161,7 @@ async function categoriesFor(level) {
 }
 
 /** How much material exists at this level, for the progress denominators. */
-async function countsFor(categories) {
+export async function countsFor(categories) {
   const ids = categories.map((c) => c.id);
   if (!ids.length) return { articles: 0, questions: 0, selfAssessments: 0 };
 

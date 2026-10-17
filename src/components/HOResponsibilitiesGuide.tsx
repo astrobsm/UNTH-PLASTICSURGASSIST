@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 
 // ─── HO Responsibilities & App Usage Guide Content ───
-const RESPONSIBILITIES_SECTIONS = [
+export const RESPONSIBILITIES_SECTIONS = [
   {
     title: '1. Patient Documentation & Clerking',
     icon: FileText,
@@ -178,7 +178,7 @@ const RESPONSIBILITIES_SECTIONS = [
   },
 ];
 
-const SIGNOUT_CRITERIA = [
+export const SIGNOUT_CRITERIA = [
   'All assigned patients must be documented daily with updated encounter notes.',
   'Vital signs must be recorded at least twice daily for admitted patients.',
   'All investigation results must be reviewed and documented.',

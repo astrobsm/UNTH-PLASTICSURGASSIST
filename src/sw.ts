@@ -241,6 +241,7 @@ const REALTIME_POST_PREFIXES = [
   '/api/call-duty-roster',
   '/api/clinical-governance',
   '/api/clinical-encounters',
+  '/api/posting-onboarding',
   '/api/users/reset-password',
 ];
 
