@@ -77,11 +77,13 @@ async function handleGet(req, res, userId, userRole) {
           WHERE is_active = TRUE AND house_officer_id IS NOT NULL AND house_officer_id::text <> ''`
       )).rows.map(r => r.id);
       assigned.forEach(id => hoIds.add(id));
+      // Active accounts only — anyone signed out is no longer on the round.
       const names = new Map((await query(
-        `SELECT id::text AS id, full_name FROM users WHERE id::text = ANY($1::text[])`, [[...hoIds]]
+        `SELECT id::text AS id, full_name FROM users WHERE id::text = ANY($1::text[]) AND is_active = TRUE`, [[...hoIds]]
       )).rows.map(r => [r.id, r.full_name]));
       const out = [];
       for (const id of hoIds) {
+        if (!names.has(id)) continue;
         const c = await morningChecklist(id, req.query.date || null);
         const unit = units.find(u => (u.house_officer_ids || []).map(String).includes(id));
         out.push({ ho_id: id, name: names.get(id) || `User ${id}`, unit_key: unit?.key || null, unit_name: unit?.name || null, window: c.window, summary: c.summary });

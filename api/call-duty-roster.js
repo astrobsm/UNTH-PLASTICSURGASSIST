@@ -17,7 +17,7 @@
 // which the consults module shares to route each consult to the team on call.
 import { query } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
-import { coverRosterVacancies, applyUnitMembershipIfChanged, applyUnitMembership, alignRecentAdmissions } from './_lib/teamAssignment.js';
+import { coverRosterVacancies, applyUnitMembershipIfChanged, applyUnitMembership, alignRecentAdmissions, reconcileInactiveStaff } from './_lib/teamAssignment.js';
 import { ensureMorningSnapshot } from './_lib/morningRounds.js';
 import {
   ensureRosterColumns, rosterKey, generateShifts, persistRoster, hydrateShifts, findShiftAt,
@@ -142,6 +142,10 @@ async function getOnCall(params, res) {
   // scheduler — every open dashboard polls this, so it is the daily heartbeat
   // that moves patients to the incoming unit doctors after a rotation.
   if (shouldRunMembership()) {
+    // Anyone deactivated (signed out, or switched off by hand) comes off the
+    // units and their patients before today's units are applied.
+    try { await reconcileInactiveStaff(); }
+    catch (e) { console.warn('getOnCall: inactive-staff reconcile skipped:', e.message); }
     try { await applyUnitMembershipIfChanged(); }
     catch (e) { console.warn('getOnCall: unit membership skipped:', e.message); }
     // New admissions join their admitting unit's team.

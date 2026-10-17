@@ -15,7 +15,7 @@
 
 import { query } from './db.js';
 import { rolesForGrade } from './roles.js';
-import { onCallTeamAt, getUnitConfig } from './callRoster.js';
+import { onCallTeamAt, getUnitConfig, saveUnitConfig } from './callRoster.js';
 
 const ROLE_COLUMN = {
   consultant: 'consultant_id',
@@ -908,30 +908,105 @@ export async function deactivateAssignmentsWithoutOpenAdmission() {
 }
 
 /**
- * Reassign every active patient held by a now-deactivated user to the
- * least-loaded remaining active staff of that role. If none exists, the role
- * slot is cleared (left empty) and recorded for follow-up.
+ * Reassign every active patient held by a now-deactivated user. Each patient
+ * goes to the least-loaded doctor of the same grade IN THE PATIENT'S UNIT
+ * (admitting unit, else the consultant's unit); only when the unit has nobody
+ * of that grade does it fall back to the least-loaded of the grade overall,
+ * and that is counted as `outsideUnit`. With nobody at all the slot is
+ * cleared and counted as `cleared`.
+ *
+ * This used to pick from the whole department, so a Unit 1 patient could be
+ * handed to a Unit 2 house officer.
  */
 export async function reassignDeactivatedUser(userId) {
   await ensureColumns();
   const uid = String(userId);
-  let reassigned = 0, cleared = 0;
+  const m = await currentUnitMembership();
+  const unitOf = m ? await admittingUnits(m.units) : new Map();
+  let reassigned = 0, cleared = 0, outsideUnit = 0;
   for (const roleKey of ROLES) {
     const col = ROLE_COLUMN[roleKey];
     const rows = (await query(
-      `SELECT id FROM patient_assignments WHERE is_active = TRUE AND ${col} = $1`, [uid]
+      `SELECT id, patient_id, consultant_id FROM patient_assignments WHERE is_active = TRUE AND ${col} = $1`, [uid]
     )).rows;
     for (const row of rows) {
-      const replacement = await pickLeastLoadedByRole(roleKey, uid);
+      const ui = unitOf.has(String(row.patient_id))
+        ? unitOf.get(String(row.patient_id))
+        : (m && row.consultant_id != null && roleKey !== 'consultant' ? m.unitOfConsultant.get(String(row.consultant_id)) : undefined);
+      let replacement = null;
+      if (m && ui !== undefined && UNIT_LIST_KEY[roleKey]) {
+        const members = (m.units[ui]?.[UNIT_LIST_KEY[roleKey]] || []).map(String).filter(id => id !== uid);
+        replacement = await pickLeastLoadedAmong(roleKey, members);
+      }
+      if (!replacement) {
+        replacement = await pickLeastLoadedByRole(roleKey, uid);
+        if (replacement && ui !== undefined) outsideUnit++;
+      }
       await query(
         `UPDATE patient_assignments
             SET ${col} = $1, reassigned_at = CURRENT_TIMESTAMP,
                 reassigned_reason = $2, updated_at = CURRENT_TIMESTAMP
           WHERE id = $3`,
-        [replacement, `Auto-reassigned: ${roleKey} deactivated (user ${uid})`, row.id]
+        [replacement, `Auto-reassigned: ${roleKey} left the unit (user ${uid})`, row.id]
       );
       if (replacement) reassigned++; else cleared++;
     }
   }
-  return { reassigned, cleared };
+  return { reassigned, cleared, outsideUnit };
+}
+
+/**
+ * Take users out of every unit's lists on the call-roster configuration, so
+ * no future roster, rotation or unit placement uses them.
+ */
+export async function removeFromUnits(userIds, byUserId = null) {
+  const ids = new Set((Array.isArray(userIds) ? userIds : [userIds]).map(String));
+  let cfg = null;
+  try { cfg = await getUnitConfig(); } catch { cfg = null; }
+  if (!cfg || !Array.isArray(cfg.current_units) || cfg.current_units.length !== 2) return { removed: 0 };
+  let removed = 0;
+  const units = cfg.current_units.map(u => {
+    const out = { ...u };
+    for (const key of Object.values(UNIT_LIST_KEY)) {
+      const before = (u[key] || []).map(String);
+      out[key] = before.filter(id => !ids.has(id));
+      removed += before.length - out[key].length;
+    }
+    return out;
+  });
+  if (!removed) return { removed: 0 };
+  const r = await saveUnitConfig({ anchor_date: cfg.anchor_date, rotation: cfg.rotation, units }, byUserId);
+  return r.error ? { removed: 0, error: r.error } : { removed };
+}
+
+/**
+ * Self-healing, run on the dashboard heartbeat: anyone whose account is no
+ * longer active is taken out of the units and off every patient they still
+ * hold — whether they were signed out properly, deactivated by hand, or left
+ * before this check existed.
+ */
+export async function reconcileInactiveStaff() {
+  await ensureColumns();
+  const cols = ROLES.map(r => ROLE_COLUMN[r]);
+  const holders = (await query(
+    `SELECT DISTINCT u.id::text AS id FROM users u
+       JOIN patient_assignments pa ON pa.is_active = TRUE AND (${cols.map(c => `pa.${c}::text = u.id::text`).join(' OR ')})
+      WHERE u.is_active = FALSE`
+  )).rows.map(r => r.id);
+
+  let inUnits = [];
+  try {
+    const cfg = await getUnitConfig();
+    const listed = [...new Set((cfg?.current_units || []).flatMap(u => Object.values(UNIT_LIST_KEY).flatMap(k => u[k] || [])).map(String))];
+    if (listed.length) {
+      inUnits = (await query(
+        `SELECT id::text AS id FROM users WHERE id::text = ANY($1::text[]) AND is_active = FALSE`, [listed]
+      )).rows.map(r => r.id);
+    }
+  } catch { /* units not configured */ }
+
+  const units = inUnits.length ? await removeFromUnits(inUnits) : { removed: 0 };
+  let reassigned = 0;
+  for (const id of holders) reassigned += (await reassignDeactivatedUser(id)).reassigned;
+  return { usersReleased: new Set([...holders, ...inUnits]).size, unitSlotsRemoved: units.removed, patientsReassigned: reassigned };
 }

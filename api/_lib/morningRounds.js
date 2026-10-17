@@ -96,9 +96,12 @@ export async function ensureMorningSnapshot(now = new Date()) {
   const marker = await query(`SELECT 1 FROM ho_morning_round_days WHERE ho_id = '*' AND day = $1`, [day]);
   if (marker.rows.length) { lastSnapshotDay = dayNum; return; }
   const rows = (await query(
-    `SELECT house_officer_id::text AS ho, patient_id::text AS pid
-       FROM patient_assignments
-      WHERE is_active = TRUE AND house_officer_id IS NOT NULL AND house_officer_id::text <> ''`
+    // Only house officers whose accounts are active: someone signed out is not
+    // expected on the round, and their patients belong to whoever took them.
+    `SELECT pa.house_officer_id::text AS ho, pa.patient_id::text AS pid
+       FROM patient_assignments pa
+       JOIN users u ON u.id::text = pa.house_officer_id::text AND u.is_active = TRUE
+      WHERE pa.is_active = TRUE AND pa.house_officer_id IS NOT NULL AND pa.house_officer_id::text <> ''`
   )).rows;
   const byHo = new Map();
   for (const r of rows) {

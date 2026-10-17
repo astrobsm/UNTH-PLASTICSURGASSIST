@@ -47,8 +47,11 @@ export default function MorningRoundCard() {
   useEffect(() => {
     if (!isHO && !isSupervisor) { setLoading(false); return; }
     load();
-    const t = setInterval(load, 120000);
-    return () => clearInterval(t);
+    // Every minute, and whenever the tab comes back into view, so the tally is live.
+    const t = setInterval(load, 60000);
+    const onVisible = () => { if (document.visibilityState === 'visible') load(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', onVisible); };
   }, [load, isHO, isSupervisor]);
 
   if (!isHO && !isSupervisor) return null;

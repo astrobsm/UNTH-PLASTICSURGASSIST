@@ -2,8 +2,10 @@
 //
 // One auditable admin action for "this person has left the unit": it ends every
 // session they have open (on every device), deactivates the account so they
-// cannot log back in, hands their patients to the least-loaded remaining staff of
-// the same role, and clears them out of current/future call-duty shifts.
+// cannot log back in, and releases them from the unit (_lib/unitDeparture.js):
+// out of both units' lists and the PS unit roster, patients handed to doctors
+// of the same grade in each patient's unit, call shifts covered, pending duties
+// cancelled, morning-round expectations dropped and their rotation closed.
 //
 // Deactivating alone was not enough to sign someone out: tokens are stateless
 // JWTs with a 30-day life, so an already-running session kept working until it
@@ -13,7 +15,7 @@
 import { query } from '../_lib/db.js';
 import { cors, authenticateRequest } from '../_lib/auth.js';
 import { ensureSessionColumn } from '../_lib/session.js';
-import { reassignDeactivatedUser, coverRosterVacancies } from '../_lib/teamAssignment.js';
+import { releaseFromUnit } from '../_lib/unitDeparture.js';
 
 const ALLOWED_ROLES = ['admin', 'super_admin'];
 
@@ -65,23 +67,13 @@ export default async function handler(req, res) {
     }
     const user = result.rows[0];
 
-    // Hand over their work. Both are best-effort: the sign-out itself has already
-    // committed, and a failure here must not report the account as still active.
-    let reassignment = null;
-    let rosterCover = { covered: 0, cleared: 0, shiftsTouched: 0 };
-    try {
-      reassignment = await reassignDeactivatedUser(userId);
-    } catch (e) {
-      console.error('sign-out: reassignDeactivatedUser failed:', e.message);
-    }
-    try {
-      // Their call duties pass to active colleagues of the same grade; nobody
-      // else's shifts move.
-      rosterCover = await coverRosterVacancies({ replacing: userId });
-    } catch (e) {
-      console.error('sign-out: coverRosterVacancies failed:', e.message);
-    }
-    const rosterSlotsBlanked = rosterCover.covered + rosterCover.cleared;
+    // Release them from the unit. Every step is best-effort and reported: the
+    // sign-out itself has already committed, and a failure here must not report
+    // the account as still active.
+    const release = await releaseFromUnit({ userId, byUser: auth.user, reason });
+    const reassignment = release.patients?.error ? null : release.patients;
+    const rosterCover = release.callRoster?.error ? { covered: 0, cleared: 0, shiftsTouched: 0 } : release.callRoster;
+    const rosterSlotsBlanked = (rosterCover.covered || 0) + (rosterCover.cleared || 0);
 
     try {
       await query(
@@ -101,6 +93,7 @@ export default async function handler(req, res) {
             patientsLeftUnassigned: reassignment?.cleared ?? 0,
             rosterSlotsCovered: rosterCover.covered,
             rosterSlotsCleared: rosterCover.cleared,
+            release,
           }),
           req.headers['x-forwarded-for'] || req.socket?.remoteAddress || null,
         ]
@@ -117,6 +110,7 @@ export default async function handler(req, res) {
       reassignment,
       rosterSlotsBlanked,
       rosterCover,
+      release,
       message: `${user.full_name || user.email} has been signed out of all devices and deactivated`,
     });
   } catch (error) {
