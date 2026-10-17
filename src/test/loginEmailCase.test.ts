@@ -41,8 +41,13 @@ describe('every email lookup is case-insensitive', () => {
 
   it('the staff logins match on LOWER(email)', () => {
     for (const file of ['api/auth/login.js', 'api/auth/index.js']) {
-      expect(read(file), file).toContain('WHERE LOWER(email) = LOWER($1)');
+      expect(read(file), file).toContain('LOWER(email) = LOWER($1)');
     }
+  });
+
+  it('the staff login used by the app also accepts the username, case-insensitively', () => {
+    // Admin issues usernames; the login used to match email only.
+    expect(read('api/auth/index.js')).toMatch(/LOWER\(email\) = LOWER\(\$1\) OR LOWER\(username\) = LOWER\(\$1\)/);
   });
 
   it('a duplicate cannot be created by changing the case', () => {
