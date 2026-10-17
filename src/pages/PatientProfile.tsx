@@ -4,6 +4,7 @@ import { db } from '../db/database';
 import { Patient } from '../db/database';
 import { patientService, normalizeArrayField } from '../services/patientService';
 import { PatientSummaryView, QuickSummaryCard } from '../components/PatientSummary';
+import { StructuredEncountersPanel, ClinicalOutcomesSummary } from '../components/clinical/clerking/StructuredEncounters';
 import { DischargePlanning } from '../components/DischargePlanning';
 import { PrescriptionModal } from '../components/PrescriptionModal';
 import { medicalTeamService, TeamMember } from '../services/medicalTeamService';
@@ -451,7 +452,12 @@ export const PatientProfile: React.FC = () => {
 
   const renderTabContent = () => {
     if (activeTab === 'summary') {
-      return <PatientSummaryView patientId={id!} />;
+      return (
+        <>
+          <ClinicalOutcomesSummary patientId={id!} />
+          <PatientSummaryView patientId={id!} />
+        </>
+      );
     }
 
     // Encounters is the default and the fallback: an unknown tab id — including
@@ -459,6 +465,16 @@ export const PatientProfile: React.FC = () => {
     // than on "Tab content not found".
     return (
       <div className="space-y-6">
+        <StructuredEncountersPanel
+          patientId={id!}
+          patientLabel={`${patientName} · ${hospitalNumber}`}
+          ctx={{
+            ageYears: calculateAge(patient.dob || patient.date_of_birth),
+            sex: patient.sex || patient.gender || null,
+          }}
+          userName={user?.name || 'Unknown'}
+        />
+
         <EncountersTab
           patientId={id!}
           hospitalNumber={hospitalNumber}
