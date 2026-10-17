@@ -11,10 +11,9 @@
  *       exam.<section>.<question>
  *       pmh.<comorbidity>       'Yes' / 'No' / 'Unknown'
  *       social.<question>, gyn.<question>
- *       d.<flag>                derived from vitals / demographics
- *                               (fever, tachycardia, hypotension, hypoxia,
- *                                female_reproductive, age_over_40, age_under_16,
- *                                hyperglycaemia)
+ *       d.<flag>                derived from vitals / demographics (see
+ *                               derivedFlags in engine.ts)
+ *       complaint.<id>, ros.<symptom>, hx.drug_high_risk  (see differentialsMore.ts)
  *
  * Content reflects standard surgical teaching (e.g. Bailey & Love, ATLS,
  * IWGDF diabetic-foot, NPIAP pressure-injury, ISBI burns guidance). It is
@@ -22,6 +21,7 @@
  * clinician to consider, without patient-specific drug doses.
  */
 import type { DifferentialRule } from './types';
+import { MORE_DIFFERENTIALS } from './differentialsMore';
 
 const r = (rule: DifferentialRule) => rule;
 
@@ -504,4 +504,5 @@ export const DIFFERENTIALS: Record<string, DifferentialRule> = Object.fromEntrie
     supports: [{ key: 'c.wound_discharge', any: ['Purulent (pus)', 'Foul-smelling'], weight: 2, reason: 'Infection under the graft' }],
     investigations: ['Swab', 'Assess bed for haematoma / seroma / shear'],
     management: ['Treat cause; regraft when bed healthy'] }),
+  ...MORE_DIFFERENTIALS,
 ].map(rule => [rule.id, rule]));

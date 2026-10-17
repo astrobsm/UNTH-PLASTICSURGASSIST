@@ -58,7 +58,8 @@ const num = (v: any): number | null => {
 /** Flags derived from vitals and demographics (used by the rules). */
 export function derivedFlags(data: ClerkingData, ctx: PatientContext): Record<string, boolean> {
   const v = data.vitals || {};
-  const t = num(v.temperature), p = num(v.pulse), sbp = num(v.bp_systolic), rr = num(v.respiratory_rate), sp = num(v.spo2), g = num(v.glucose);
+  const t = num(v.temperature), p = num(v.pulse), sbp = num(v.bp_systolic), dbp = num(v.bp_diastolic), rr = num(v.respiratory_rate), sp = num(v.spo2), g = num(v.glucose);
+  const sex = (ctx.sex || '').toLowerCase();
   const consciousness = String(v.consciousness || '');
   const gcs = String(data.exam?.general?.consciousness || '');
   return {
@@ -68,10 +69,19 @@ export function derivedFlags(data: ClerkingData, ctx: PatientContext): Record<st
     tachypnoea: rr != null && rr >= 22,
     hypoxia: sp != null && sp < 94,
     hyperglycaemia: g != null && g >= 11.1,
+    very_high_glucose: g != null && g >= 14,
+    hypoglycaemia: g != null && g < 4,
+    bradycardia: p != null && p < 50,
+    severe_hypertension: (sbp != null && sbp >= 180) || (dbp != null && dbp >= 120),
     altered_mentation: (!!consciousness && consciousness !== 'Alert') || ['Confused', 'Drowsy', 'Responds to pain only', 'Unresponsive'].includes(gcs),
     female_reproductive: showGynaecology(ctx) && !!ctx.sex,
     age_over_40: ctx.ageYears != null && ctx.ageYears > 40,
     age_under_16: ctx.ageYears != null && ctx.ageYears < 16,
+    age_under_40: ctx.ageYears != null && ctx.ageYears < 40,
+    age_over_50: ctx.ageYears != null && ctx.ageYears > 50,
+    age_over_60: ctx.ageYears != null && ctx.ageYears > 60,
+    male: sex.startsWith('m'),
+    female: sex.startsWith('f'),
   };
 }
 
@@ -87,6 +97,9 @@ export function valuesForKey(key: string, data: ClerkingData, flags: Record<stri
     case 'gyn': return asList(h.gyn?.[rest[0]]);
     case 'psh': return asList(h.psh?.[rest[0]]);
     case 'd': return flags[rest[0]] ? ['yes'] : [];
+    case 'complaint': return data.complaints.some(c => c.complaintId === rest[0]) ? ['yes'] : [];
+    case 'ros': return asList(h.ros?.[rest.join('.')]);
+    case 'hx': return asList(h[rest[0]]);
     default: return [];
   }
 }
@@ -133,7 +146,7 @@ export function rankDifferentials(data: ClerkingData, ctx: PatientContext): Rank
     for (const s of rule.supports) {
       const vals = valuesForKey(s.key, data, flags);
       if (matches(vals, s.any)) { score += s.weight; if (!reasons.includes(s.reason)) reasons.push(s.reason); }
-      else if (vals.length === 0 && !s.key.startsWith('d.') && !undocumented.includes(s.reason)) undocumented.push(s.reason);
+      else if (vals.length === 0 && !/^(d|complaint)\./.test(s.key) && !undocumented.includes(s.reason)) undocumented.push(s.reason);
     }
     for (const a of rule.against || []) {
       if (matches(valuesForKey(a.key, data, flags), a.any)) { score -= a.weight; against.push(a.reason); }

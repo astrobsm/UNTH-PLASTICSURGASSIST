@@ -2,14 +2,15 @@ import { describe, it, expect } from 'vitest';
 import { COMPLAINTS, COMPLAINT_BY_ID, searchComplaints, normaliseTerm } from '../clinical/clerking/complaints';
 import { MODULES } from '../clinical/clerking/modules';
 import { EXAM_SECTIONS } from '../clinical/clerking/examination';
-import { COMORBIDITIES, SOCIAL_QUESTIONS, GYN_QUESTIONS, PSH_QUESTIONS } from '../clinical/clerking/history';
+import { COMORBIDITIES, SOCIAL_QUESTIONS, GYN_QUESTIONS, PSH_QUESTIONS, ROS, HIGH_RISK_DRUG_CLASSES } from '../clinical/clerking/history';
 import { DIFFERENTIALS } from '../clinical/clerking/differentials';
 import {
   completeness, emptyClerking, generateNarrative, mergeSuggestions, rankDifferentials, redFlags, riskFactors, ruleSuggestions, showGynaecology,
 } from '../clinical/clerking/engine';
 import type { ClerkingData, Question } from '../clinical/clerking/types';
 
-const DERIVED = ['fever', 'tachycardia', 'hypotension', 'tachypnoea', 'hypoxia', 'hyperglycaemia', 'altered_mentation', 'female_reproductive', 'age_over_40', 'age_under_16'];
+const DERIVED = ['fever', 'tachycardia', 'hypotension', 'tachypnoea', 'hypoxia', 'hyperglycaemia', 'very_high_glucose', 'hypoglycaemia', 'bradycardia',
+  'severe_hypertension', 'altered_mentation', 'female_reproductive', 'age_over_40', 'age_under_16', 'age_under_40', 'age_over_50', 'age_over_60', 'male', 'female'];
 
 function questionForKey(key: string): Question | 'derived' | undefined {
   const [scope, a, b] = key.split('.');
@@ -20,6 +21,9 @@ function questionForKey(key: string): Question | 'derived' | undefined {
   if (scope === 'social') return SOCIAL_QUESTIONS.find(q => q.id === a);
   if (scope === 'gyn') return GYN_QUESTIONS.find(q => q.id === a);
   if (scope === 'psh') return PSH_QUESTIONS.find(q => q.id === a);
+  if (scope === 'complaint') return COMPLAINT_BY_ID[a] ? { id: a, label: a, type: 'select', options: ['yes'] } : undefined;
+  if (scope === 'ros') return ROS.some(r => r.symptoms.includes(a)) ? { id: a, label: a, type: 'select', options: ['present', 'absent'] } : undefined;
+  if (scope === 'hx' && a === 'drug_high_risk') return { id: a, label: a, type: 'multiselect', options: [...HIGH_RISK_DRUG_CLASSES, 'None of these'] };
   return undefined;
 }
 
@@ -36,6 +40,16 @@ describe('clerking knowledge base integrity', () => {
       }
     }
     expect(problems).toEqual([]);
+  });
+
+  it('every linked differential has a rule, and rules have reasons and a plan', () => {
+    const missing = [...new Set(COMPLAINTS.flatMap(c => c.differentials || []))].filter(id => !DIFFERENTIALS[id]);
+    expect(missing).toEqual([]);
+    for (const r of Object.values(DIFFERENTIALS)) {
+      expect(r.supports.length, r.id).toBeGreaterThan(0);
+      expect(r.supports.every(x => x.reason && x.weight > 0), r.id).toBe(true);
+      expect(r.investigations.length + r.management.length, r.id).toBeGreaterThan(0);
+    }
   });
 
   it('complaints reference real modules and exam sections, and ids are unique', () => {
@@ -134,5 +148,38 @@ describe('missing data is never normal', () => {
     expect(r).toMatch(/Diabetes mellitus \(poor control\)/);
     expect(r).toMatch(/Current smoker/);
     expect(r).toMatch(/Warfarin — bleeding risk/);
+  });
+});
+
+describe('general medical rules', () => {
+  it('crushing chest pain with sweating ranks ACS first and flags it', () => {
+    const d = emptyClerking();
+    d.complaints = [{ uid: '1', complaintId: 'chest_pain', label: 'Chest pain', duration: { value: 2, unit: 'hours' },
+      answers: { pain_character: 'Tight / pressing / crushing', pain_radiation: 'To the arm', cvs_sweating: 'Yes' } }];
+    const ranked = rankDifferentials(d, { ageYears: 58, sex: 'Male' });
+    expect(ranked[0].rule.id).toBe('acs');
+    expect(ranked[0].rule.dangerous).toBe(true);
+    expect(ranked.find(r => r.rule.id === 'musculoskeletal_chest')!.against.length).toBeGreaterThan(0);
+  });
+  it('review of systems answers feed the rules', () => {
+    const d = emptyClerking();
+    d.complaints = [{ uid: '1', complaintId: 'night_sweats', label: 'Night sweats', duration: { value: 2, unit: 'months' }, answers: {} }];
+    d.history.ros = { 'Night sweats': 'present', 'Weight loss': 'present' };
+    d.history.pmh = { hiv: { status: 'Yes' } };
+    const ids = rankDifferentials(d, {}).filter(r => r.score > 0).map(r => r.rule.id);
+    expect(ids).toContain('tb');
+    expect(ids).toContain('lymphoma');
+  });
+  it('a high-riding testis with sudden pain is torsion before epididymo-orchitis', () => {
+    const d = emptyClerking();
+    d.complaints = [{ uid: '1', complaintId: 'scrotal_swelling', label: 'Scrotal swelling', duration: { value: 3, unit: 'hours' }, answers: { onset: 'Sudden (seconds–minutes)' } }];
+    d.exam = { genital: { gen_testes: 'High-riding / horizontal lie' } };
+    expect(rankDifferentials(d, { ageYears: 15, sex: 'Male' })[0].rule.id).toBe('testicular_torsion');
+  });
+  it('hypoglycaemia is derived from the glucose reading', () => {
+    const d = emptyClerking();
+    d.complaints = [{ uid: '1', complaintId: 'confusion', label: 'Confusion', duration: { value: 1, unit: 'hours' }, answers: {} }];
+    d.vitals = { glucose: 2.4 };
+    expect(rankDifferentials(d, {})[0].rule.id).toBe('hypoglycaemia');
   });
 });
