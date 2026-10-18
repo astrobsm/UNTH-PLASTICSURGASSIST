@@ -4,6 +4,10 @@ import { patientService, normalizeArrayField } from '../services/patientService'
 import { apiClient } from '../services/apiClient';
 import { db } from '../db/database';
 import { format, differenceInDays, parseISO } from 'date-fns';
+import { clinicalEncounterService } from '../services/clinicalEncounterService';
+import { buildClinicalFacts } from '../services/scribe/clinicalFacts';
+import { buildScribePlan, buildFindings, type ScribePlan } from '../services/scribe/scribePlan';
+import { ScribeTreatmentPlanPanel } from './scribe/ScribeTreatmentPlanPanel';
 
 // ─── Specialty analysis types ───────────────────────────────────────────────
 
@@ -13,6 +17,8 @@ interface SpecialtyFlag {
   finding: string;
   severity: 'info' | 'warning' | 'critical';
   recommendation: string;
+  /** Where in the record the finding came from. */
+  evidence?: string;
 }
 
 interface VitalTrend {
@@ -37,408 +43,16 @@ interface ComprehensiveData {
   transfers: any[];
   riskAssessments: any[];
   woundCareRecords: any[];
+  /** The structured clerking: encounters, tracked problems and plan items. */
+  clinical?: { encounters: any[]; problems: any[]; plan_items: any[] } | null;
 }
 
-// ─── Multi-specialty clinical analysis engine ───────────────────────────────
-
-const SPECIALTY_RULES: {
-  specialty: string;
-  category: string;
-  check: (data: ComprehensiveData) => SpecialtyFlag[];
-}[] = [
-  // ── Internal Medicine / General ──
-  {
-    specialty: 'Internal Medicine',
-    category: 'General & Foundational',
-    check: (d) => {
-      const flags: SpecialtyFlag[] = [];
-      const latestVitals = d.vitals[0];
-      if (latestVitals) {
-        if (latestVitals.temperature && latestVitals.temperature >= 38.5)
-          flags.push({ specialty: 'Internal Medicine', category: 'General', finding: `Febrile: ${latestVitals.temperature}°C`, severity: 'warning', recommendation: 'Perform septic work-up: blood cultures x2, urinalysis, CRP/PCT. Consider empiric antibiotics if source identified.' });
-        if (latestVitals.temperature && latestVitals.temperature >= 39.5)
-          flags.push({ specialty: 'Infectious Disease', category: 'Internal Medicine Subspecialties', finding: `High fever: ${latestVitals.temperature}°C`, severity: 'critical', recommendation: 'Urgent sepsis workup. Consider ID consultation. Start broad-spectrum antibiotics after cultures obtained.' });
-      }
-      // Polypharmacy check
-      if (d.prescriptions.length > 0) {
-        const allMeds = extractAllMedications(d.prescriptions);
-        if (allMeds.length >= 5)
-          flags.push({ specialty: 'Internal Medicine', category: 'General', finding: `Polypharmacy: ${allMeds.length} active medications`, severity: 'warning', recommendation: 'Review medication list for interactions, duplications, and necessity. Consider pharmacy consultation.' });
-      }
-      return flags;
-    }
-  },
-
-  // ── Cardiology ──
-  {
-    specialty: 'Cardiology',
-    category: 'Internal Medicine Subspecialties',
-    check: (d) => {
-      const flags: SpecialtyFlag[] = [];
-      const v = d.vitals[0];
-      if (v) {
-        if (v.pulse && v.pulse > 120)
-          flags.push({ specialty: 'Cardiology', category: 'Cardiovascular', finding: `Tachycardia: ${v.pulse} bpm`, severity: 'warning', recommendation: 'Obtain 12-lead ECG. Check electrolytes, thyroid function. Assess for pain, hypovolemia, sepsis, PE. Consider telemetry monitoring.' });
-        if (v.pulse && v.pulse < 50)
-          flags.push({ specialty: 'Cardiology', category: 'Cardiovascular', finding: `Bradycardia: ${v.pulse} bpm`, severity: 'warning', recommendation: 'Check for beta-blocker or calcium channel blocker use. 12-lead ECG to rule out heart block. Check electrolytes (K+, Ca2+).' });
-        if (v.bp_systolic && v.bp_systolic >= 180)
-          flags.push({ specialty: 'Cardiology', category: 'Cardiovascular', finding: `Hypertensive crisis: ${v.bp_systolic}/${v.bp_diastolic} mmHg`, severity: 'critical', recommendation: 'Assess for end-organ damage (troponin, renal function, fundoscopy). Consider IV antihypertensives. Urgent cardiology review.' });
-        if (v.bp_systolic && v.bp_systolic < 90)
-          flags.push({ specialty: 'Cardiology', category: 'Cardiovascular', finding: `Hypotension: ${v.bp_systolic}/${v.bp_diastolic} mmHg`, severity: 'critical', recommendation: 'Fluid resuscitation (crystalloid bolus). Assess for hemorrhage, sepsis, cardiogenic shock. Consider vasopressors if unresponsive to fluids.' });
-        if (v.bp_systolic && v.bp_systolic >= 140 && v.bp_systolic < 180)
-          flags.push({ specialty: 'Cardiology', category: 'Cardiovascular', finding: `Hypertension: ${v.bp_systolic}/${v.bp_diastolic} mmHg`, severity: 'info', recommendation: 'Optimize antihypertensive therapy. Ensure adequate pain control. Monitor trend. Target BP < 140/90 perioperatively.' });
-      }
-      return flags;
-    }
-  },
-
-  // ── Pulmonology / Respiratory ──
-  {
-    specialty: 'Pulmonology',
-    category: 'Internal Medicine Subspecialties',
-    check: (d) => {
-      const flags: SpecialtyFlag[] = [];
-      const v = d.vitals[0];
-      if (v) {
-        if (v.spo2 && v.spo2 < 94)
-          flags.push({ specialty: 'Pulmonology', category: 'Respiratory', finding: `Hypoxemia: SpO2 ${v.spo2}%`, severity: 'critical', recommendation: 'Initiate supplemental O2 (target SpO2 >= 94%). Obtain ABG. CXR to evaluate for pneumonia, effusion, atelectasis, PE. Consider CTPA if PE suspected.' });
-        if (v.spo2 && v.spo2 >= 94 && v.spo2 < 96)
-          flags.push({ specialty: 'Pulmonology', category: 'Respiratory', finding: `Borderline SpO2: ${v.spo2}%`, severity: 'warning', recommendation: 'Monitor closely. Encourage deep breathing exercises and incentive spirometry. Consider CXR if post-operative.' });
-        if (v.respiratory_rate && v.respiratory_rate > 24)
-          flags.push({ specialty: 'Pulmonology', category: 'Respiratory', finding: `Tachypnea: RR ${v.respiratory_rate}/min`, severity: 'warning', recommendation: 'Assess for respiratory distress. Check SpO2, auscultate chest. Consider ABG, CXR. Rule out PE, pneumonia, pain-related splinting.' });
-      }
-      return flags;
-    }
-  },
-
-  // ── Nephrology ──
-  {
-    specialty: 'Nephrology',
-    category: 'Internal Medicine Subspecialties',
-    check: (d) => {
-      const flags: SpecialtyFlag[] = [];
-      const labText = getAllLabText(d.labInvestigations, d.labResults);
-      if (/creatinine/i.test(labText) && /high|abnormal|elevated/i.test(labText))
-        flags.push({ specialty: 'Nephrology', category: 'Renal', finding: 'Elevated creatinine detected', severity: 'warning', recommendation: 'Assess fluid status. Avoid nephrotoxic drugs (NSAIDs, aminoglycosides). Renal dose-adjust medications. Consider nephrology consultation if acute kidney injury.' });
-      if (/potassium|k\+/i.test(labText) && /high|abnormal|critical/i.test(labText))
-        flags.push({ specialty: 'Nephrology', category: 'Renal', finding: 'Hyperkalemia detected', severity: 'critical', recommendation: 'Urgent ECG. If K+ > 6.0: IV calcium gluconate, insulin + dextrose, nebulized salbutamol. Hold ACEi/ARBs, potassium-sparing diuretics.' });
-      return flags;
-    }
-  },
-
-  // ── Endocrinology ──
-  {
-    specialty: 'Endocrinology',
-    category: 'Internal Medicine Subspecialties',
-    check: (d) => {
-      const flags: SpecialtyFlag[] = [];
-      const allText = getAllClinicalText(d);
-      const labText = getAllLabText(d.labInvestigations, d.labResults);
-      if (/diabet|DM|blood sugar|glucose|HbA1c/i.test(allText))
-        flags.push({ specialty: 'Endocrinology', category: 'Metabolic', finding: 'Diabetes mellitus noted', severity: 'info', recommendation: 'Perioperative glucose monitoring (QDS). Target glucose 6-10 mmol/L. Adjust insulin/OHAs around surgery. Check HbA1c if not done in 3 months. Diabetic foot assessment.' });
-      if (/thyroid|hypothyroid|hyperthyroid|TSH/i.test(allText))
-        flags.push({ specialty: 'Endocrinology', category: 'Metabolic', finding: 'Thyroid disorder noted', severity: 'info', recommendation: 'Ensure thyroid function is optimized pre-operatively. Continue thyroid medications perioperatively. TSH/FT4 if not checked recently.' });
-      if (/glucose/i.test(labText) && /high|abnormal|critical/i.test(labText))
-        flags.push({ specialty: 'Endocrinology', category: 'Metabolic', finding: 'Elevated blood glucose', severity: 'warning', recommendation: 'Sliding scale insulin. Consider endocrine review for uncontrolled diabetes. Check ketones if glucose > 14 mmol/L.' });
-      return flags;
-    }
-  },
-
-  // ── Hematology ──
-  {
-    specialty: 'Hematology',
-    category: 'Internal Medicine Subspecialties',
-    check: (d) => {
-      const flags: SpecialtyFlag[] = [];
-      const labText = getAllLabText(d.labInvestigations, d.labResults);
-      const allText = getAllClinicalText(d);
-      if (/haemoglobin|hemoglobin|hb|PCV/i.test(labText) && /low|abnormal|critical/i.test(labText))
-        flags.push({ specialty: 'Hematology', category: 'Blood', finding: 'Anemia detected', severity: 'warning', recommendation: 'Check Hb level. If Hb < 7 g/dL or symptomatic: consider transfusion. G&S/cross-match pre-surgery. Iron studies, reticulocyte count. For chronic leg ulcer: nutritional assessment.' });
-      if (/sickle|SS|SC|genotype/i.test(allText))
-        flags.push({ specialty: 'Hematology', category: 'Blood', finding: 'Sickle cell disease/trait noted', severity: 'warning', recommendation: 'Perioperative hydration. Avoid hypothermia, hypoxia, acidosis. Check Hb electrophoresis if not done. Pre-operative exchange transfusion if major surgery and HbSS. Hematology review.' });
-      if (/platelet|thrombocytop/i.test(labText) && /low|abnormal|critical/i.test(labText))
-        flags.push({ specialty: 'Hematology', category: 'Blood', finding: 'Thrombocytopenia detected', severity: 'warning', recommendation: 'Surgical bleeding risk if platelets < 50,000. Consider platelet transfusion pre-operatively. Check coagulation profile. Hematology consultation.' });
-      if (/INR|PT|APTT|coagul/i.test(labText) && /high|abnormal|prolonged/i.test(labText))
-        flags.push({ specialty: 'Hematology', category: 'Blood', finding: 'Coagulopathy detected', severity: 'warning', recommendation: 'Hold anticoagulants pre-operatively as per protocol. Vitamin K if warfarin. Fresh frozen plasma if urgent surgery needed. Check liver function.' });
-      return flags;
-    }
-  },
-
-  // ── Plastic & Reconstructive Surgery ──
-  {
-    specialty: 'Plastic & Reconstructive Surgery',
-    category: 'Subspecialized Surgery',
-    check: (d) => {
-      const flags: SpecialtyFlag[] = [];
-      const allText = getAllClinicalText(d);
-      if (/wound|ulcer|flap|graft|debridement|burn|contracture|keloid/i.test(allText))
-        flags.push({ specialty: 'Plastic Surgery', category: 'Wound Management', finding: 'Wound/ulcer/reconstructive case', severity: 'info', recommendation: 'Serial wound assessment with measurements and photography. Optimize nutrition (albumin > 30, Hb > 10). Wound bed preparation. Consider VAC therapy for chronic wounds. Tissue culture before antibiotics.' });
-      if (/chronic.*ulcer|chronic.*wound/i.test(allText))
-        flags.push({ specialty: 'Plastic Surgery', category: 'Wound Management', finding: 'Chronic wound identified', severity: 'warning', recommendation: 'Biopsy wound edge to rule out Marjolin ulcer (squamous cell carcinoma). Optimize vascular status (ABPI for leg ulcers). Nutritional supplementation. Compression therapy if venous etiology. Address underlying cause.' });
-      if (/RTA|trauma|accident|crush|avulsion|degloving/i.test(allText))
-        flags.push({ specialty: 'Plastic Surgery', category: 'Trauma', finding: 'Traumatic injury', severity: 'info', recommendation: 'Thorough wound exploration. Assess neurovascular status distally. Tetanus prophylaxis. Serial debridement as needed. Plan definitive reconstruction after wound stabilization.' });
-      if (/cleft|lip|palate|craniofacial/i.test(allText))
-        flags.push({ specialty: 'Plastic Surgery', category: 'Craniofacial', finding: 'Craniofacial/cleft condition', severity: 'info', recommendation: 'Multidisciplinary team approach. Ensure adequate nutrition and weight. Timing per protocol (lip repair ~3mo, palate repair ~9-12mo). Pre-op Hb, G&S.' });
-      if (/hand|tendon|nerve.*repair|replant|finger|thumb/i.test(allText))
-        flags.push({ specialty: 'Plastic Surgery', category: 'Hand Surgery', finding: 'Hand/tendon/nerve injury', severity: 'info', recommendation: 'Detailed neurovascular examination. X-ray for bony injury. Early surgical exploration within 6 hours for sharp injuries. Tetanus prophylaxis. Hand therapy referral post-op.' });
-      return flags;
-    }
-  },
-
-  // ── General Surgery ──
-  {
-    specialty: 'General Surgery',
-    category: 'Surgical Specialties',
-    check: (d) => {
-      const flags: SpecialtyFlag[] = [];
-      const allText = getAllClinicalText(d);
-      if (/abdomen|abdominal|appendic|cholecyst|hernia|bowel|intestin/i.test(allText))
-        flags.push({ specialty: 'General Surgery', category: 'Abdominal', finding: 'Abdominal/GI surgical condition', severity: 'info', recommendation: 'Abdominal examination. Erect CXR if perforation suspected. USS abdomen. LFTs, amylase, FBC. NPO if surgical abdomen. NG tube if obstructed.' });
-      return flags;
-    }
-  },
-
-  // ── Orthopedic Surgery ──
-  {
-    specialty: 'Orthopedic Surgery',
-    category: 'Subspecialized Surgery',
-    check: (d) => {
-      const flags: SpecialtyFlag[] = [];
-      const allText = getAllClinicalText(d);
-      if (/fracture|dislocation|orthopaedic|orthopedic|bone/i.test(allText))
-        flags.push({ specialty: 'Orthopedics', category: 'Musculoskeletal', finding: 'Musculoskeletal injury noted', severity: 'info', recommendation: 'X-ray of affected area. Assess neurovascular status distal to injury. Immobilization. Orthopedic consultation if fracture confirmed.' });
-      return flags;
-    }
-  },
-
-  // ── Anesthesiology ──
-  {
-    specialty: 'Anesthesiology',
-    category: 'Anaesthesia & Critical Care',
-    check: (d) => {
-      const flags: SpecialtyFlag[] = [];
-      const allText = getAllClinicalText(d);
-      const age = extractAge(d.patient);
-      if (d.surgeries.length > 0 || /surgery|operation|procedure|theatre/i.test(allText)) {
-        flags.push({ specialty: 'Anesthesiology', category: 'Perioperative', finding: 'Surgical case - anesthetic assessment needed', severity: 'info', recommendation: 'Pre-anesthetic assessment: ASA classification, airway assessment (Mallampati), NPO status, previous anesthetic history. Optimize comorbidities. ECG if > 50 yrs or cardiac history.' });
-        if (age && age >= 70)
-          flags.push({ specialty: 'Anesthesiology', category: 'Perioperative', finding: `Elderly patient (${age} yrs) for surgery`, severity: 'warning', recommendation: 'Geriatric anesthetic considerations: careful fluid management, reduced drug doses, regional anesthesia preferred, post-op delirium prevention, early mobilization plan.' });
-      }
-      if (/allerg/i.test(allText))
-        flags.push({ specialty: 'Anesthesiology', category: 'Safety', finding: 'Allergies documented', severity: 'info', recommendation: 'Verify all drug allergies. Document in anesthetic chart. Alert theatre team. Have emergency drugs available.' });
-      return flags;
-    }
-  },
-
-  // ── DVT / Vascular ──
-  {
-    specialty: 'Vascular Surgery',
-    category: 'Vascular & Specialized Fields',
-    check: (d) => {
-      const flags: SpecialtyFlag[] = [];
-      const allText = getAllClinicalText(d);
-      if (/DVT|deep vein|thrombosis|embolism|PE|anticoagul|clexane|enoxaparin|heparin/i.test(allText))
-        flags.push({ specialty: 'Vascular Surgery', category: 'Thromboprophylaxis', finding: 'DVT/PE risk or history', severity: 'warning', recommendation: 'VTE risk assessment. Mechanical prophylaxis (TED stockings, IPC). Pharmacological prophylaxis (LMWH) unless contraindicated. Early mobilization. Doppler USS if clinical suspicion of DVT.' });
-      if (/peripheral.*vascular|PVD|claudication|ABPI|gangrene|ischaemi/i.test(allText))
-        flags.push({ specialty: 'Vascular Surgery', category: 'Peripheral Vascular', finding: 'Peripheral vascular disease', severity: 'warning', recommendation: 'ABPI measurement. Vascular surgery consultation. Optimize cardiovascular risk factors. Consider angiography. Wound healing may be impaired.' });
-      return flags;
-    }
-  },
-
-  // ── Geriatrics ──
-  {
-    specialty: 'Geriatrics',
-    category: 'Internal Medicine Subspecialties',
-    check: (d) => {
-      const flags: SpecialtyFlag[] = [];
-      const age = extractAge(d.patient);
-      if (age && age >= 65) {
-        flags.push({ specialty: 'Geriatrics', category: 'Elderly Care', finding: `Elderly patient: ${age} years old`, severity: 'info', recommendation: 'Comprehensive geriatric assessment. Fall risk evaluation. Cognitive screening (MMSE/MoCA). Nutritional assessment (MNA). Medication review for potentially inappropriate medications (Beers criteria). Pressure injury prevention.' });
-        if (age >= 80)
-          flags.push({ specialty: 'Geriatrics', category: 'Elderly Care', finding: `Very elderly patient: ${age} years`, severity: 'warning', recommendation: 'Enhanced recovery protocols. Frailty screening (Clinical Frailty Scale). Early mobilization. Delirium prevention bundle. Goals of care discussion. DVT prophylaxis. Nutrition optimization.' });
-      }
-      return flags;
-    }
-  },
-
-  // ── Pediatrics ──
-  {
-    specialty: 'Pediatrics',
-    category: 'Pediatric Medicine',
-    check: (d) => {
-      const flags: SpecialtyFlag[] = [];
-      const age = extractAge(d.patient);
-      if (age !== null && age < 18) {
-        flags.push({ specialty: 'Pediatrics', category: 'Pediatric', finding: `Pediatric patient: ${age} years old`, severity: 'info', recommendation: 'Age-appropriate assessments. Weight-based dosing for all medications. Pediatric vital sign reference ranges. Parental consent. Child-friendly environment. EMLA cream for procedures.' });
-        if (age < 2)
-          flags.push({ specialty: 'Pediatrics', category: 'Neonatal/Infant', finding: `Infant patient: ${age} years`, severity: 'warning', recommendation: 'Neonatal/infant considerations: thermoregulation, fluid balance, glucose monitoring, weight-based calculations, dedicated pediatric anesthesia.' });
-      }
-      return flags;
-    }
-  },
-
-  // ── Infectious Disease ──
-  {
-    specialty: 'Infectious Disease',
-    category: 'Internal Medicine Subspecialties',
-    check: (d) => {
-      const flags: SpecialtyFlag[] = [];
-      const allText = getAllClinicalText(d);
-      if (/HIV|retroviral|ARV|hepatitis|HBV|HCV|TB|tuberculosis/i.test(allText))
-        flags.push({ specialty: 'Infectious Disease', category: 'Infection Control', finding: 'Infectious disease noted', severity: 'warning', recommendation: 'Universal precautions. Check viral load and CD4 if HIV+. Screen for TB. Hepatitis serology. Infection control measures. Consider ID team review. Post-exposure prophylaxis protocol awareness.' });
-      if (/sepsis|septic|bacteremia|SIRS/i.test(allText))
-        flags.push({ specialty: 'Infectious Disease', category: 'Sepsis', finding: 'Sepsis or systemic infection', severity: 'critical', recommendation: 'Sepsis-6 bundle: blood cultures, lactate, IV antibiotics within 1hr, IV fluids, urine output monitoring, O2. Consider ICU referral if severe sepsis. Source control.' });
-      if (/wound.*infection|infected.*wound|cellulitis|abscess|pus|purulent/i.test(allText))
-        flags.push({ specialty: 'Infectious Disease', category: 'Wound Infection', finding: 'Wound infection noted', severity: 'warning', recommendation: 'Wound swab for M/C/S before starting antibiotics. Incision and drainage if fluctuant. Empiric antibiotics based on local antibiogram. Reassess after culture results.' });
-      return flags;
-    }
-  },
-
-  // ── Psychiatry / Mental Health ──
-  {
-    specialty: 'Psychiatry',
-    category: 'Neurological & Mental Health',
-    check: (d) => {
-      const flags: SpecialtyFlag[] = [];
-      const allText = getAllClinicalText(d);
-      if (/aggressi|agitat|combative|confused|delirium|psychos|psych|hallucin/i.test(allText))
-        flags.push({ specialty: 'Psychiatry', category: 'Mental Health', finding: 'Behavioral/psychiatric concern noted', severity: 'warning', recommendation: 'Assess for delirium (CAM tool). Rule out organic causes (infection, metabolic, medication-related). Ensure patient and staff safety. Consider psychiatric liaison. Avoid physical restraints where possible.' });
-      if (/suicid|self.harm|overdose/i.test(allText))
-        flags.push({ specialty: 'Psychiatry', category: 'Mental Health', finding: 'Self-harm/suicidal ideation', severity: 'critical', recommendation: 'Urgent psychiatric assessment. 1:1 nursing observation. Remove access to means. Supportive communication. Inform consultant and next of kin.' });
-      return flags;
-    }
-  },
-
-  // ── Neurology ──
-  {
-    specialty: 'Neurology',
-    category: 'Neurological & Mental Health',
-    check: (d) => {
-      const flags: SpecialtyFlag[] = [];
-      const allText = getAllClinicalText(d);
-      if (/stroke|CVA|hemiplegia|hemiparesis|neurological deficit|seizure|epilepsy/i.test(allText))
-        flags.push({ specialty: 'Neurology', category: 'Neurological', finding: 'Neurological condition noted', severity: 'warning', recommendation: 'Neurological examination including GCS. CT brain if acute. Assess swallowing (SALT referral). DVT prophylaxis. Neurology review. Anticonvulsant levels if on medication.' });
-      if (/GCS|glasgow|conscious.*level|LOC|unrespons/i.test(allText))
-        flags.push({ specialty: 'Neurology', category: 'Consciousness', finding: 'Altered consciousness/GCS concern', severity: 'warning', recommendation: 'Serial GCS monitoring. CT brain. Check glucose, electrolytes, blood gas. Assess for raised ICP. Neurosurgical consultation if GCS dropping.' });
-      return flags;
-    }
-  },
-
-  // ── Nutrition / Rehabilitation ──
-  {
-    specialty: 'Physical Medicine & Rehabilitation',
-    category: 'Rehabilitation & Supportive Care',
-    check: (d) => {
-      const flags: SpecialtyFlag[] = [];
-      const allText = getAllClinicalText(d);
-      const labText = getAllLabText(d.labInvestigations, d.labResults);
-      if (/malnutri|albumin|wasting|cachexia|weight loss|BMI/i.test(allText) || (/albumin/i.test(labText) && /low|abnormal/i.test(labText)))
-        flags.push({ specialty: 'Nutrition/Rehabilitation', category: 'Supportive Care', finding: 'Nutritional concern', severity: 'warning', recommendation: 'Nutritional assessment (MUST score). Check albumin, pre-albumin. High protein diet. Consider nutritional supplements. Dietitian referral. Wound healing requires adequate nutrition.' });
-      if (/immobil|bed.?bound|pressure.*sore|pressure.*ulcer|decubitus/i.test(allText))
-        flags.push({ specialty: 'Physical Medicine', category: 'Rehabilitation', finding: 'Immobility/pressure injury risk', severity: 'warning', recommendation: 'Pressure area care: 2-hourly turns, pressure-relieving mattress. Waterlow/Braden score. Early mobilization with physiotherapy. Occupational therapy for functional assessment.' });
-      return flags;
-    }
-  },
-
-  // ── Pain Medicine ──
-  {
-    specialty: 'Pain Medicine',
-    category: 'Anaesthesia & Critical Care',
-    check: (d) => {
-      const flags: SpecialtyFlag[] = [];
-      const allText = getAllClinicalText(d);
-      if (/pain|analges|opioid|morphine|tramadol|codeine|paracetamol/i.test(allText))
-        flags.push({ specialty: 'Pain Medicine', category: 'Pain Management', finding: 'Pain management consideration', severity: 'info', recommendation: 'WHO pain ladder approach. Regular paracetamol + NSAID (if no contraindication). Opioids for severe pain. Document pain scores. Multimodal analgesia perioperatively. Consider nerve blocks for surgical patients.' });
-      return flags;
-    }
-  },
-
-  // ── Dermatology ──
-  {
-    specialty: 'Dermatology',
-    category: 'Dermatologic & Sensory',
-    check: (d) => {
-      const flags: SpecialtyFlag[] = [];
-      const allText = getAllClinicalText(d);
-      if (/skin.*lesion|melanoma|BCC|SCC|skin.*cancer|nevus|mole|dermatitis|eczema|psoriasis/i.test(allText))
-        flags.push({ specialty: 'Dermatology', category: 'Skin', finding: 'Dermatological condition noted', severity: 'info', recommendation: 'Dermatological assessment. Consider biopsy for suspicious lesions. Dermoscopy if available. Histopathology for excised specimens. Sun protection advice.' });
-      return flags;
-    }
-  },
-
-  // ── Oncology ──
-  {
-    specialty: 'Oncology',
-    category: 'Oncological & Palliative',
-    check: (d) => {
-      const flags: SpecialtyFlag[] = [];
-      const allText = getAllClinicalText(d);
-      if (/cancer|malignant|tumour|tumor|carcinoma|lymphoma|leukemia|metast|oncol|chemo|radiother/i.test(allText))
-        flags.push({ specialty: 'Oncology', category: 'Cancer Care', finding: 'Oncological condition noted', severity: 'warning', recommendation: 'Multidisciplinary team (MDT) discussion. Staging investigations. Histopathology review. Consider oncology consultation. Nutritional support. Pain management. Psychosocial support.' });
-      if (/palliati|end.of.life|terminal|comfort.care|hospice/i.test(allText))
-        flags.push({ specialty: 'Palliative Care', category: 'End of Life', finding: 'Palliative/end-of-life care', severity: 'info', recommendation: 'Goals of care discussion with patient and family. Symptom management (pain, nausea, dyspnea). DNACPR discussion if appropriate. Palliative care team referral. Advance care planning.' });
-      return flags;
-    }
-  },
-
-  // ── Ophthalmology ──
-  {
-    specialty: 'Ophthalmology',
-    category: 'Dermatologic & Sensory',
-    check: (d) => {
-      const flags: SpecialtyFlag[] = [];
-      const allText = getAllClinicalText(d);
-      if (/eye|ocular|orbital|eyelid|blephar|periorbital|vision|visual/i.test(allText))
-        flags.push({ specialty: 'Ophthalmology', category: 'Eye', finding: 'Ocular/periorbital condition', severity: 'info', recommendation: 'Ophthalmology assessment. Visual acuity check. Eye protection in periorbital procedures. Fundoscopy if hypertensive/diabetic.' });
-      return flags;
-    }
-  },
-
-  // ── ENT ──
-  {
-    specialty: 'Otolaryngology (ENT)',
-    category: 'Head & Neck',
-    check: (d) => {
-      const flags: SpecialtyFlag[] = [];
-      const allText = getAllClinicalText(d);
-      if (/airway|tracheostomy|neck.*mass|parotid|submandibular|facial.*nerve/i.test(allText))
-        flags.push({ specialty: 'ENT', category: 'Head & Neck', finding: 'Head & neck/airway concern', severity: 'info', recommendation: 'Airway assessment. ENT consultation if airway compromise. CT neck if mass lesion. Fine needle aspiration if indicated. Facial nerve assessment for parotid lesions.' });
-      return flags;
-    }
-  },
-
-  // ── Obstetrics & Gynecology ──
-  {
-    specialty: 'Obstetrics & Gynecology',
-    category: 'Women\'s Health',
-    check: (d) => {
-      const flags: SpecialtyFlag[] = [];
-      const allText = getAllClinicalText(d);
-      const gender = (d.patient.sex || d.patient.gender || '').toLowerCase();
-      if (gender === 'female' || gender === 'f') {
-        if (/pregnan|gravid|trimester|antenatal|obstetric/i.test(allText))
-          flags.push({ specialty: 'Obstetrics', category: 'Pregnancy', finding: 'Pregnancy noted', severity: 'critical', recommendation: 'Obstetric team involvement essential. Avoid teratogenic medications. Positioning considerations (left lateral tilt). Fetal monitoring. Radiation avoidance. Thromboprophylaxis per obstetric protocol.' });
-        const age = extractAge(d.patient);
-        if (age && age >= 15 && age <= 50 && (d.surgeries.length > 0 || /surgery|operation/i.test(allText)))
-          flags.push({ specialty: 'Obstetrics', category: 'Reproductive', finding: 'Woman of reproductive age for surgery', severity: 'info', recommendation: 'Pregnancy test (urine beta-hCG) before surgery/anesthesia/radiology. Document LMP. Contraception counseling if teratogenic drugs prescribed.' });
-      }
-      return flags;
-    }
-  },
-
-  // ── Urology ──
-  {
-    specialty: 'Urology',
-    category: 'Surgical Specialties',
-    check: (d) => {
-      const flags: SpecialtyFlag[] = [];
-      const allText = getAllClinicalText(d);
-      if (/catheter|urinary|urine output|oliguria|anuria|retention/i.test(allText))
-        flags.push({ specialty: 'Urology', category: 'Urinary', finding: 'Urinary concern noted', severity: 'info', recommendation: 'Monitor urine output (target >= 0.5 ml/kg/hr). Fluid balance chart. Urinalysis. Consider catheterization if retention. Review nephrotoxic medications.' });
-      return flags;
-    }
-  },
-];
+// ─── Clinical analysis ──────────────────────────────────────────────────────
+//
+// The old rules matched fragments anywhere in the text (/SS|SC/ in
+// "pressure", /DM/ in "admitted") and never read the structured clerking.
+// Findings and the draft plan now come from services/scribe, which reads the
+// clerking first, matches whole words, honours negation and cites evidence.
 
 // ─── Helper functions ───────────────────────────────────────────────────────
 
@@ -469,46 +83,6 @@ function extractAllMedications(prescriptions: any[]): string[] {
     }
   });
   return [...new Set(meds)];
-}
-
-function getAllClinicalText(d: ComprehensiveData): string {
-  const parts: string[] = [];
-  // Patient info
-  const p = d.patient;
-  if (p) {
-    parts.push(p.primary_diagnosis || '', p.diagnosis || '', p.medical_history || '', p.surgical_history || '',
-      p.allergies || '', p.chronic_conditions || '', p.current_medications || '', p.presenting_complaint || '',
-      p.comorbidities || '', p.blood_group || '', p.genotype || '');
-  }
-  // Admissions
-  d.admissions.forEach(a => parts.push(a.admitting_diagnosis || '', a.provisional_diagnosis || '', a.presenting_complaint || '',
-    a.reasons_for_admission || '', a.ward_location || '', a.clinical_notes || ''));
-  // Encounters
-  d.encounters.forEach(e => {
-    let soap = e.soap;
-    if (typeof soap === 'string') try { soap = JSON.parse(soap); } catch { /* Value is left as it was when it does not parse. */ }
-    if (typeof soap === 'string') try { soap = JSON.parse(soap); } catch { /* Value is left as it was when it does not parse. */ }
-    if (typeof soap === 'object' && soap) {
-      parts.push(soap.subjective || '', soap.objective || '', soap.assessment || '', soap.plan || '', soap.note || '');
-    }
-    parts.push(e.content || '', e.notes || '', e.note || '', e.presenting_complaint || '');
-  });
-  // Ward rounds
-  d.wardRounds.forEach(r => {
-    const findings = parseFindingsObj(r);
-    parts.push(findings.chief_complaint || r.chief_complaint || '', findings.clinical_notes || r.clinical_notes || '',
-      findings.examination_findings || '', findings.assessment_notes || '', findings.wound_notes || '',
-      findings.complications || '', r.plan || '', findings.follow_up_plan || '',
-      findings.discharge_planning || '', findings.consultation_requests || '');
-  });
-  // Treatment plans
-  d.treatmentPlans.forEach(tp => parts.push(tp.diagnosis || '', tp.plan || '', tp.goals || ''));
-  // Surgeries
-  d.surgeries.forEach(s => parts.push(s.procedure_name || '', s.surgery_type || '', s.anaesthesia_type || '',
-    s.pre_op_notes || '', s.post_op_notes || '', s.intra_op_notes || ''));
-  // Risk assessments
-  d.riskAssessments.forEach(r => parts.push(r.risk_type || '', r.risk_level || '', r.notes || ''));
-  return parts.filter(Boolean).join(' ');
 }
 
 function getAllLabText(labInvestigations: any[], labResults: any[]): string {
@@ -556,6 +130,7 @@ async function fetchComprehensivePatientData(patientId: string): Promise<Compreh
     fetchWithFallback(async () => { try { return await apiClient.getRiskAssessments(pidStr); } catch { return []; } }, async () => []),
     fetchWithFallback(async () => [], () => dbQuery(db.wound_care, 'patient_id', pid, pidStr)),
   ]);
+  const clinical = await clinicalEncounterService.list(pidStr).catch(() => null);
 
   // Sort vitals by date descending
   const sortedVitals = (Array.isArray(vitals) ? vitals : []).sort(
@@ -576,6 +151,7 @@ async function fetchComprehensivePatientData(patientId: string): Promise<Compreh
     transfers: normalizeArr(transfers),
     riskAssessments: normalizeArr(riskAssessments),
     woundCareRecords: normalizeArr(woundCareRecords),
+    clinical,
   };
 }
 
@@ -610,7 +186,16 @@ async function dbQuery(table: any, field: string, numericId: number, stringId: s
 
 // ─── Summary generation ─────────────────────────────────────────────────────
 
-function generateComprehensiveSummary(data: ComprehensiveData, patientId: string): PatientSummary & { specialtyFlags: SpecialtyFlag[]; vitalTrends: VitalTrend[]; recommendations: string[] } {
+/** Numeric lab values (name, value) for findings — never inferred from words like "high". */
+function numericLabs(labs: any[]): { name: string; value: number | null }[] {
+  return labs.map(l => {
+    const raw = l.result_value ?? l.result ?? l.value;
+    const m = /-?\d+(\.\d+)?/.exec(String(raw ?? ''));
+    return { name: String(l.test_name || l.investigation_name || ''), value: m ? Number(m[0]) : null };
+  });
+}
+
+function generateComprehensiveSummary(data: ComprehensiveData, patientId: string): PatientSummary & { specialtyFlags: SpecialtyFlag[]; vitalTrends: VitalTrend[]; recommendations: string[]; scribePlan: ScribePlan } {
   const { patient, admissions, encounters, wardRounds, prescriptions, labInvestigations, labResults, vitals, treatmentPlans, surgeries } = data;
   const age = extractAge(patient);
   const patientName = patient.full_name || `${patient.first_name || ''} ${patient.last_name || ''}`.trim();
@@ -624,8 +209,15 @@ function generateComprehensiveSummary(data: ComprehensiveData, patientId: string
   const ward = latestAdmission?.ward_location || latestAdmission?.ward || patient.ward || 'Not assigned';
   const los = admissionDate ? differenceInDays(new Date(), new Date(admissionDate)) : 0;
 
+  // ── What the record says (structured clerking first) ──
+  const facts = buildClinicalFacts({
+    patient, admissions, wardRounds, progressNotes: encounters, prescriptions, treatmentPlans,
+    clinical: data.clinical, medicationNames: extractAllMedications(prescriptions),
+  });
+  const scribePlan = buildScribePlan(facts);
+
   // ── Diagnoses ──
-  const diagnosisSources: string[] = [];
+  const diagnosisSources: string[] = facts.problems.map(p => `${p.label}${p.code ? ` (${p.code})` : ''}`);
   if (patient.primary_diagnosis) diagnosisSources.push(patient.primary_diagnosis);
   if (patient.diagnosis) diagnosisSources.push(patient.diagnosis);
   admissions.forEach(a => { if (a.admitting_diagnosis) diagnosisSources.push(a.admitting_diagnosis); if (a.provisional_diagnosis) diagnosisSources.push(a.provisional_diagnosis); });
@@ -653,8 +245,15 @@ function generateComprehensiveSummary(data: ComprehensiveData, patientId: string
   content += `  Hospital No: ${hospitalNumber}\n`;
   content += `  Age/Sex: ${age ? `${age} years` : 'Unknown'} / ${gender}\n`;
   if (patient.blood_group) content += `  Blood Group: ${patient.blood_group}${patient.genotype ? ` | Genotype: ${patient.genotype}` : ''}\n`;
-  content += `  Allergies: ${allergies.length > 0 ? allergies.join(', ') : 'NKDA (No Known Drug Allergies)'}\n`;
-  if (comorbidities) content += `  Comorbidities: ${comorbidities}\n`;
+  // "NKDA" only when somebody recorded it — an unasked question is not a negative.
+  content += `  Allergies: ${facts.allergies.status === 'documented' ? facts.allergies.items.join(', ')
+    : facts.allergies.status === 'nkda' ? 'NKDA (documented)' : 'NOT DOCUMENTED — confirm before prescribing'}\n`;
+  const presentConds = [...facts.conditions.values()].filter(c => c.presence === 'present' && c.id !== 'pressure_injury');
+  const negatives = [...facts.conditions.values()].filter(c => c.presence === 'absent');
+  if (presentConds.length) content += `  Comorbidities: ${presentConds.map(c => `${c.label}${c.detail ? ` (${c.detail})` : ''}`).join('; ')}\n`;
+  else if (comorbidities && !/^admitted\b/i.test(String(comorbidities))) content += `  Recorded history: ${comorbidities}\n`;
+  if (facts.riskFactors.length) content += `  Risk factors: ${facts.riskFactors.join('; ')}\n`;
+  if (negatives.length) content += `  Relevant negatives: no ${negatives.map(c => c.label.toLowerCase()).join(', no ')}\n`;
   content += '\n';
 
   // ── Admission Details ──
@@ -680,7 +279,9 @@ function generateComprehensiveSummary(data: ComprehensiveData, patientId: string
   content += '\n';
 
   // ── Presenting Complaint & History ──
-  const presentingComplaint = latestAdmission?.presenting_complaint || latestAdmission?.reasons_for_admission || patient.presenting_complaint || '';
+  const presentingComplaint = facts.complaints.length
+    ? facts.complaints.map(c => `${c.label}${c.duration ? ` — ${c.duration}` : ''}`).join('; ')
+    : (latestAdmission?.presenting_complaint || latestAdmission?.reasons_for_admission || patient.presenting_complaint || '');
   if (presentingComplaint) {
     content += `**PRESENTING COMPLAINT / HISTORY OF PRESENTING ILLNESS**\n`;
     content += `${presentingComplaint}\n\n`;
@@ -823,13 +424,7 @@ function generateComprehensiveSummary(data: ComprehensiveData, patientId: string
   }
 
   // ── Run multi-specialty analysis ──
-  const specialtyFlags: SpecialtyFlag[] = [];
-  SPECIALTY_RULES.forEach(rule => {
-    try {
-      const flags = rule.check(data);
-      specialtyFlags.push(...flags);
-    } catch { /* Value is left as it was when it does not parse. */ }
-  });
+  const specialtyFlags: SpecialtyFlag[] = buildFindings(facts, vitals[0], numericLabs([...labInvestigations, ...labResults]));
 
   // ── Build recommendations from specialty flags ──
   const recommendations: string[] = [];
@@ -842,14 +437,17 @@ function generateComprehensiveSummary(data: ComprehensiveData, patientId: string
     recommendations.push(`[${f.specialty}] ${f.recommendation}`);
   });
 
-  // Add universal recommendations
-  if (recommendations.length === 0) {
-    recommendations.push('Continue current management plan.', 'Monitor vital signs regularly.', 'Review investigation results and adjust management accordingly.');
-  }
+
 
   // ── Key Points ──
   const keyPoints: string[] = [];
   if (primaryDiagnosis !== 'Not specified') keyPoints.push(`Diagnosis: ${primaryDiagnosis}`);
+  if (facts.complaints.length) keyPoints.push(`Presenting complaint: ${facts.complaints.map(c => `${c.label}${c.duration ? ` (${c.duration})` : ''}`).join('; ')}`);
+  [...facts.conditions.values()].filter(c => c.presence === 'present' && c.id !== 'pressure_injury')
+    .forEach(c => keyPoints.push(`${c.label}${c.detail ? ` (${c.detail})` : ''}`));
+  if (facts.allergies.status === 'not_documented') keyPoints.push('!! Allergy status not documented');
+  const urgentOutstanding = scribePlan.carriedOver.filter(i => i.priority === 'urgent').length;
+  if (urgentOutstanding) keyPoints.push(`!! ${urgentOutstanding} urgent plan item(s) outstanding`);
   if (ward !== 'Not assigned') keyPoints.push(`Ward: ${ward}`);
   if (los > 0) keyPoints.push(`Length of Stay: ${los} day(s)`);
   if (patient.blood_group) keyPoints.push(`Blood Group: ${patient.blood_group}`);
@@ -864,7 +462,9 @@ function generateComprehensiveSummary(data: ComprehensiveData, patientId: string
   specialtyFlags.filter(f => f.severity === 'critical').forEach(f => keyPoints.push(`CRITICAL: ${f.finding}`));
 
   // ── Current Problems ──
-  const currentProblems = uniqueDiagnoses.length > 0 ? [...uniqueDiagnoses] : ['No active problems documented'];
+  const currentProblems = facts.problems.length
+    ? facts.problems.map(p => `${p.label}${p.code ? ` (${p.code})` : ''}${p.status && p.status !== 'active' ? ` — ${p.status}` : ''}`)
+    : (uniqueDiagnoses.length > 0 ? [...uniqueDiagnoses] : ['No active problems documented']);
   // Add complications from ward rounds
   wardRounds.forEach(r => {
     const f = parseFindingsObj(r);
@@ -877,7 +477,7 @@ function generateComprehensiveSummary(data: ComprehensiveData, patientId: string
     .map(l => l.test_name || l.investigation_name || 'Lab Test');
 
   // ── Plan ──
-  const plan: string[] = [];
+  const plan: string[] = scribePlan.carriedOver.map(i => `${i.priority === 'urgent' ? '[URGENT] ' : ''}${i.text}`);
   if (sortedRounds.length > 0) {
     const latestRound = sortedRounds[0];
     const f = parseFindingsObj(latestRound);
@@ -893,7 +493,7 @@ function generateComprehensiveSummary(data: ComprehensiveData, patientId: string
     }
   });
   if (pendingInvestigations.length > 0) plan.push(`Awaiting results: ${pendingInvestigations.join(', ')}`);
-  if (plan.length === 0) plan.push('Continue monitoring', 'Review treatment response');
+  if (plan.length === 0) plan.push('See the draft treatment plan below — awaiting consultant approval');
 
   // ── Active Problem List ──
   content += `**ACTIVE PROBLEM LIST**\n`;
@@ -915,6 +515,29 @@ function generateComprehensiveSummary(data: ComprehensiveData, patientId: string
     });
     content += '\n';
   }
+
+  // ── Draft treatment plan (for consultant approval) ──
+  content += `**DRAFT TREATMENT PLAN — FOR CONSULTANT APPROVAL**\n`;
+  scribePlan.problems.forEach((pp, i) => {
+    content += `  ${i + 1}. ${pp.problem}${pp.code ? ` (${pp.code})` : ''}\n`;
+    const sec = (t: string, xs: { text: string; priority?: string }[]) => {
+      if (!xs.length) return;
+      content += `     ${t}:\n`;
+      xs.forEach(x => content += `       - ${x.priority === 'urgent' ? '[URGENT] ' : ''}${x.text}\n`);
+    };
+    sec('Goals', pp.goals); sec('Investigations', pp.investigations); sec('Treatment', pp.treatment);
+    sec('Monitoring', pp.monitoring); sec('Referrals', pp.referrals);
+  });
+  scribePlan.comorbidities.forEach(c => {
+    content += `  • ${c.condition}: ${c.actions.map(a => a.text).join('; ')}\n`;
+  });
+  scribePlan.general.forEach(g => {
+    content += `  ${g.heading}: ${g.items.map(i => i.text).join('; ')}\n`;
+  });
+  if (scribePlan.carriedOver.length) content += `  Outstanding from clerking: ${scribePlan.carriedOver.map(i => i.text).join('; ')}\n`;
+  content += `  Discharge criteria: ${scribePlan.dischargeCriteria.join('; ')}\n`;
+  if (scribePlan.cautions.length) content += `  ⚠ ${scribePlan.cautions.join(' ⚠ ')}\n`;
+  content += '\n';
 
   // ── Signature block ──
   content += `${line}\n`;
@@ -939,6 +562,7 @@ function generateComprehensiveSummary(data: ComprehensiveData, patientId: string
     specialtyFlags,
     vitalTrends,
     recommendations,
+    scribePlan,
   };
 }
 
@@ -950,6 +574,7 @@ interface PatientSummaryViewProps {
 }
 
 type ExtendedSummary = PatientSummary & {
+  scribePlan?: ScribePlan;
   specialtyFlags?: SpecialtyFlag[];
   vitalTrends?: VitalTrend[];
   recommendations?: string[];
@@ -1297,6 +922,17 @@ export const PatientSummaryView: React.FC<PatientSummaryViewProps> = ({
           </div>
         )}
 
+        {/* Comprehensive treatment plan — drafted by the scribe, approved by a consultant */}
+        {selectedSummary.scribePlan && (
+          <div className="px-4 py-3 border-b">
+            <ScribeTreatmentPlanPanel
+              patientId={patientId}
+              draft={selectedSummary.scribePlan}
+              findings={(selectedSummary.specialtyFlags || []) as any}
+            />
+          </div>
+        )}
+
         {/* Management Plan */}
         <div className="px-4 py-3 border-b">
           <button onClick={() => toggleSection('plan')} className="w-full flex items-center justify-between text-left">
@@ -1335,6 +971,7 @@ export const PatientSummaryView: React.FC<PatientSummaryViewProps> = ({
                       <div key={i} className="bg-red-50 border-l-4 border-red-500 rounded-r-lg p-3 mb-1.5">
                         <p className="text-sm font-medium text-red-900">[{f.specialty}] {f.finding}</p>
                         <p className="text-xs text-red-700 mt-1">&rarr; {f.recommendation}</p>
+                        {f.evidence && <p className="text-[11px] text-gray-500 mt-0.5">Evidence: {f.evidence}</p>}
                       </div>
                     ))}
                   </div>
@@ -1346,6 +983,7 @@ export const PatientSummaryView: React.FC<PatientSummaryViewProps> = ({
                       <div key={i} className="bg-yellow-50 border-l-4 border-yellow-500 rounded-r-lg p-3 mb-1.5">
                         <p className="text-sm font-medium text-yellow-900">[{f.specialty}] {f.finding}</p>
                         <p className="text-xs text-yellow-700 mt-1">&rarr; {f.recommendation}</p>
+                        {f.evidence && <p className="text-[11px] text-gray-500 mt-0.5">Evidence: {f.evidence}</p>}
                       </div>
                     ))}
                   </div>
@@ -1357,6 +995,7 @@ export const PatientSummaryView: React.FC<PatientSummaryViewProps> = ({
                       <div key={i} className="bg-blue-50 border-l-4 border-blue-500 rounded-r-lg p-3 mb-1.5">
                         <p className="text-sm font-medium text-blue-900">[{f.specialty}] {f.finding}</p>
                         <p className="text-xs text-blue-700 mt-1">&rarr; {f.recommendation}</p>
+                        {f.evidence && <p className="text-[11px] text-gray-500 mt-0.5">Evidence: {f.evidence}</p>}
                       </div>
                     ))}
                   </div>
