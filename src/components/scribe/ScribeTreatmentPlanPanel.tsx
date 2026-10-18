@@ -11,6 +11,8 @@ import { CheckCircle2, ClipboardCheck, Loader2, Send, XCircle, AlertTriangle, Fi
 import toast from 'react-hot-toast';
 import type { ScribePlan, PlanLine, ScribeFinding } from '../../services/scribe/scribePlan';
 import { scribePlanService, type StoredScribePlan } from '../../services/scribe/scribePlanService';
+import type { LoggedAction } from '../../services/scribe/planItems';
+import { ImplementationTracker } from './ImplementationTracker';
 
 type Excluded = Set<string>;
 
@@ -126,8 +128,17 @@ function PlanView({ plan, excluded, toggle, editable }: { plan: ScribePlan; excl
   );
 }
 
-export function ScribeTreatmentPlanPanel({ patientId, draft, findings }: { patientId: string; draft: ScribePlan; findings: ScribeFinding[] }) {
+export function ScribeTreatmentPlanPanel({ patientId, draft, findings, defaultPlace, onChanged }: {
+  patientId: string; draft: ScribePlan; findings: ScribeFinding[];
+  /** Where the patient is (e.g. "Ward 10, Bed 16"), offered as the place of each log. */
+  defaultPlace?: string;
+  /** Called after anything is approved or logged, so the summary refreshes. */
+  onChanged?: () => void;
+}) {
   const [stored, setStored] = useState<StoredScribePlan[] | null>(null);
+  const [actions, setActions] = useState<LoggedAction[]>([]);
+  const [canLog, setCanLog] = useState(true);
+  const [showDraft, setShowDraft] = useState(false);
   const [canApprove, setCanApprove] = useState(false);
   const [excluded, setExcluded] = useState<Excluded>(new Set());
   const [additions, setAdditions] = useState('');
@@ -139,6 +150,8 @@ export function ScribeTreatmentPlanPanel({ patientId, draft, findings }: { patie
     try {
       const r = await scribePlanService.forPatient(patientId);
       setStored(r.plans);
+      setActions(r.actions);
+      setCanLog(r.can_log);
       setCanApprove(r.can_approve);
       setError('');
     } catch (e: any) {
@@ -147,6 +160,11 @@ export function ScribeTreatmentPlanPanel({ patientId, draft, findings }: { patie
     }
   }, [patientId]);
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const t = setInterval(() => { if (document.visibilityState === 'visible') void load(); }, 30_000);
+    return () => clearInterval(t);
+  }, [load]);
+  const changed = async () => { await load(); onChanged?.(); };
 
   const pending = stored?.find(p => p.status === 'pending_approval') || null;
   const approved = stored?.find(p => p.status === 'approved') || null;
@@ -163,7 +181,7 @@ export function ScribeTreatmentPlanPanel({ patientId, draft, findings }: { patie
       await scribePlanService.submit(patientId, filterPlan(draft, excluded, additions), findings);
       toast.success('Plan submitted for consultant approval');
       reset();
-      await load();
+      await changed();
     } catch (e: any) { toast.error(e?.message || 'Could not submit the plan'); }
     finally { setBusy(null); }
   };
@@ -175,7 +193,7 @@ export function ScribeTreatmentPlanPanel({ patientId, draft, findings }: { patie
       await scribePlanService.approve(pending.id, edited, note || undefined);
       toast.success('Plan approved — now the active treatment plan');
       reset();
-      await load();
+      await changed();
     } catch (e: any) { toast.error(e?.message || 'Could not approve the plan'); }
     finally { setBusy(null); }
   };
@@ -187,7 +205,7 @@ export function ScribeTreatmentPlanPanel({ patientId, draft, findings }: { patie
       await scribePlanService.reject(pending.id, note.trim());
       toast.success('Plan returned to the team');
       reset();
-      await load();
+      await changed();
     } catch (e: any) { toast.error(e?.message || 'Could not reject the plan'); }
     finally { setBusy(null); }
   };
@@ -214,8 +232,23 @@ export function ScribeTreatmentPlanPanel({ patientId, draft, findings }: { patie
         {error && <p className="text-xs text-amber-700">{error}</p>}
         {stored === null ? (
           <p className="flex items-center gap-2 text-sm text-gray-500"><Loader2 className="w-4 h-4 animate-spin" /> Loading…</p>
+        ) : approved && !pending && !showDraft ? (
+          <>
+            <ImplementationTracker
+              planId={approved.id} patientId={patientId}
+              plan={approved.approved_plan || approved.plan}
+              actions={actions.filter(a => (a as any).scribe_plan_id === undefined || (a as any).scribe_plan_id === approved.id)}
+              canLog={canLog} defaultPlace={defaultPlace} onChanged={changed}
+            />
+            <button onClick={() => setShowDraft(true)} className="text-sm text-green-800 underline">
+              Draft a revised plan from today's record
+            </button>
+          </>
         ) : (
           <>
+            {approved && !pending && (
+              <button onClick={() => setShowDraft(false)} className="text-sm text-green-800 underline">Back to the approved plan</button>
+            )}
             {pending && !canApprove && (
               <p className="text-xs text-gray-600 flex items-center gap-1.5"><FileText className="w-4 h-4" /> Showing the version awaiting approval. Submitting again replaces it with today's draft.</p>
             )}

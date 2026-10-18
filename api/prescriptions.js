@@ -143,7 +143,10 @@ async function createPrescription(data, user, req, res) {
     
     const results = [];
     for (const p of prescriptions) {
-      const medicationName = p.medicationName || p.medication;
+      // The Prescriptions page sends drugName / dose; the modals send
+      // medication / dosage. Accepting only the latter rejected every
+      // prescription written on that page (it was queued and never stored).
+      const medicationName = p.medicationName || p.medication || p.drugName || p.drug_name || p.name;
       if (!medicationName) {
         return res.status(400).json({ error: 'Medication name is required for all prescriptions' });
       }
@@ -157,7 +160,7 @@ async function createPrescription(data, user, req, res) {
         [
           patientId, 
           medicationName, 
-          p.dosage || '', 
+          p.dosage || p.dose || '', 
           p.frequency || '', 
           p.duration || '', 
           p.route || 'oral', 

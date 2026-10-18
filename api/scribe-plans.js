@@ -6,6 +6,12 @@
 //   POST /api/scribe-plans?action=submit           draft → pending approval
 //   POST /api/scribe-plans?action=approve&id=…     consultant / admin only
 //   POST /api/scribe-plans?action=reject&id=…      consultant / admin only
+//   POST /api/scribe-plans?action=log&id=…         log implementation of one item
+//   GET  /api/scribe-plans?attachment=…            a result file (photo / scan / PDF)
+//
+// Implementation logs carry the SERVER time (not the device clock), the user
+// from the token (not a typed name) and the location the device reported, so
+// who did what, when and where cannot be edited after the fact.
 //
 // A draft is never an order. On approval (with any edits the consultant
 // made) it becomes the patient's active treatment plan in treatment_plans,
@@ -42,6 +48,43 @@ async function ensureTable() {
       treatment_plan_id INTEGER
     )`);
   await query(`CREATE INDEX IF NOT EXISTS idx_scribe_plans_patient ON scribe_treatment_plans (patient_id, version DESC)`);
+  await query(`
+    CREATE TABLE IF NOT EXISTS scribe_plan_actions (
+      id SERIAL PRIMARY KEY,
+      scribe_plan_id INTEGER NOT NULL,
+      patient_id TEXT NOT NULL,
+      item_key TEXT NOT NULL,
+      item_text TEXT,
+      item_kind VARCHAR(20),
+      status VARCHAR(30) NOT NULL,
+      note TEXT,
+      prescription JSONB,
+      investigation JSONB,
+      result JSONB,
+      latitude DOUBLE PRECISION,
+      longitude DOUBLE PRECISION,
+      accuracy_m DOUBLE PRECISION,
+      location_label TEXT,
+      location_status VARCHAR(20),
+      user_id INTEGER,
+      user_name TEXT,
+      user_role TEXT,
+      client_time TIMESTAMPTZ,
+      logged_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_scribe_actions_plan ON scribe_plan_actions (scribe_plan_id, item_key, logged_at DESC)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_scribe_actions_patient ON scribe_plan_actions (patient_id, logged_at DESC)`);
+  await query(`
+    CREATE TABLE IF NOT EXISTS scribe_plan_attachments (
+      id SERIAL PRIMARY KEY,
+      action_id INTEGER NOT NULL,
+      patient_id TEXT NOT NULL,
+      name TEXT,
+      mime TEXT,
+      size_bytes INTEGER,
+      data TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
   ready = true;
 }
 
@@ -80,11 +123,31 @@ export default async function handler(req, res) {
     const id = parseInt(url.searchParams.get('id'), 10);
 
     if (req.method === 'GET') {
+      const att = url.searchParams.get('attachment');
+      if (att) {
+        const a = (await query(`SELECT id, name, mime, data FROM scribe_plan_attachments WHERE id = $1`, [parseInt(att, 10)])).rows[0];
+        if (!a) return res.status(404).json({ error: 'Attachment not found' });
+        return res.status(200).json({ attachment: a });
+      }
       const pid = url.searchParams.get('patient_id');
       if (pid) {
         const r = await query(
           `SELECT * FROM scribe_treatment_plans WHERE patient_id = $1 ORDER BY version DESC LIMIT 20`, [String(pid)]);
-        return res.status(200).json({ plans: r.rows, can_approve: APPROVER_ROLES.includes(user.role) });
+        // Implementation log of the plans shown, newest first, with attachment
+        // metadata (the files themselves are fetched one at a time).
+        const ids = r.rows.map((x) => x.id);
+        const actions = ids.length ? (await query(
+          `SELECT a.*, COALESCE(json_agg(json_build_object('id', f.id, 'name', f.name, 'mime', f.mime, 'size', f.size_bytes))
+                    FILTER (WHERE f.id IS NOT NULL), '[]') AS attachments
+             FROM scribe_plan_actions a
+             LEFT JOIN scribe_plan_attachments f ON f.action_id = a.id
+            WHERE a.scribe_plan_id = ANY($1::int[])
+            GROUP BY a.id ORDER BY a.logged_at DESC`, [ids])).rows : [];
+        return res.status(200).json({
+          plans: r.rows, actions,
+          can_approve: APPROVER_ROLES.includes(user.role),
+          can_log: CLINICAL_ROLES.includes(user.role),
+        });
       }
       // The consultant's queue: every plan awaiting approval.
       if (url.searchParams.get('pending') !== null) {
@@ -119,6 +182,56 @@ export default async function handler(req, res) {
         [String(b.patient_id), v, JSON.stringify(b.plan), JSON.stringify(b.findings || []),
          JSON.stringify(b.basis || b.plan.basis || []), user.id || null, nameOf(user)]);
       return res.status(201).json({ plan: r.rows[0] });
+    }
+
+    if (action === 'log') {
+      if (!CLINICAL_ROLES.includes(user.role)) return res.status(403).json({ error: 'Not permitted' });
+      if (Number.isNaN(id)) return res.status(400).json({ error: 'id is required' });
+      const plan = (await query(`SELECT id, patient_id, status FROM scribe_treatment_plans WHERE id = $1`, [id])).rows[0];
+      if (!plan) return res.status(404).json({ error: 'Plan not found' });
+      // Only an approved plan is carried out.
+      if (plan.status !== 'approved') return res.status(409).json({ error: 'Only an approved plan can be implemented' });
+      if (!b.item_key || !b.status) return res.status(400).json({ error: 'item_key and status are required' });
+      const allowed = ['done', 'partial', 'not_done', 'ordered', 'prescribed', 'result_entered', 'cancelled'];
+      if (!allowed.includes(b.status)) return res.status(400).json({ error: `status must be one of ${allowed.join(', ')}` });
+      if (['not_done', 'partial', 'cancelled'].includes(b.status) && !String(b.note || '').trim()) {
+        return res.status(400).json({ error: 'Say why it was not (fully) done' });
+      }
+      const loc = b.location || {};
+      const num = (v) => (v === null || v === undefined || v === '' || Number.isNaN(Number(v)) ? null : Number(v));
+      const attachments = Array.isArray(b.attachments) ? b.attachments : [];
+      for (const f of attachments) {
+        if (!/^data:[\w.+-]+\/[\w.+-]+;base64,/.test(String(f?.data || ''))) return res.status(400).json({ error: 'Attachments must be data URLs' });
+      }
+      // Vercel refuses request bodies over ~4.5 MB; photos are compressed on the device first.
+      if (attachments.reduce((n, f) => n + String(f.data).length, 0) > 4_000_000) {
+        return res.status(413).json({ error: 'The files are too large together (max ~3 MB per save) — attach fewer, or save them in two steps.' });
+      }
+      const r = await query(
+        `INSERT INTO scribe_plan_actions
+           (scribe_plan_id, patient_id, item_key, item_text, item_kind, status, note, prescription, investigation, result,
+            latitude, longitude, accuracy_m, location_label, location_status, user_id, user_name, user_role, client_time)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING *`,
+        [id, plan.patient_id, String(b.item_key), b.item_text || null, b.item_kind || null, b.status,
+         b.note ? String(b.note).trim() : null,
+         b.prescription ? JSON.stringify(b.prescription) : null,
+         b.investigation ? JSON.stringify(b.investigation) : null,
+         b.result ? JSON.stringify(b.result) : null,
+         num(loc.latitude), num(loc.longitude), num(loc.accuracy), loc.label ? String(loc.label).slice(0, 200) : null,
+         loc.status ? String(loc.status).slice(0, 20) : null,
+         user.id || null, nameOf(user), user.role || null,
+         b.client_time && !Number.isNaN(Date.parse(b.client_time)) ? b.client_time : null]);
+      const action = r.rows[0];
+      const saved = [];
+      for (const f of attachments) {
+        const a = await query(
+          `INSERT INTO scribe_plan_attachments (action_id, patient_id, name, mime, size_bytes, data)
+           VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, name, mime, size_bytes AS size`,
+          [action.id, plan.patient_id, f.name || 'result', /^data:([^;]+)/.exec(f.data)[1],
+           Math.round(String(f.data).length * 0.75), f.data]);
+        saved.push(a.rows[0]);
+      }
+      return res.status(201).json({ action: { ...action, attachments: saved } });
     }
 
     if (action === 'approve' || action === 'reject') {

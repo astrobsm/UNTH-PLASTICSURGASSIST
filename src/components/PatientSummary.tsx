@@ -8,6 +8,8 @@ import { clinicalEncounterService } from '../services/clinicalEncounterService';
 import { buildClinicalFacts } from '../services/scribe/clinicalFacts';
 import { buildScribePlan, buildFindings, type ScribePlan } from '../services/scribe/scribePlan';
 import { ScribeTreatmentPlanPanel } from './scribe/ScribeTreatmentPlanPanel';
+import { scribePlanService, type StoredScribePlan } from '../services/scribe/scribePlanService';
+import { flattenPlan, itemState, type LoggedAction } from '../services/scribe/planItems';
 
 // ─── Specialty analysis types ───────────────────────────────────────────────
 
@@ -45,6 +47,8 @@ interface ComprehensiveData {
   woundCareRecords: any[];
   /** The structured clerking: encounters, tracked problems and plan items. */
   clinical?: { encounters: any[]; problems: any[]; plan_items: any[] } | null;
+  /** Scribe plans and their implementation log. */
+  scribe?: { plans: StoredScribePlan[]; actions: LoggedAction[] } | null;
 }
 
 // ─── Clinical analysis ──────────────────────────────────────────────────────
@@ -130,7 +134,10 @@ async function fetchComprehensivePatientData(patientId: string): Promise<Compreh
     fetchWithFallback(async () => { try { return await apiClient.getRiskAssessments(pidStr); } catch { return []; } }, async () => []),
     fetchWithFallback(async () => [], () => dbQuery(db.wound_care, 'patient_id', pid, pidStr)),
   ]);
-  const clinical = await clinicalEncounterService.list(pidStr).catch(() => null);
+  const [clinical, scribe] = await Promise.all([
+    clinicalEncounterService.list(pidStr).catch(() => null),
+    scribePlanService.forPatient(pidStr).catch(() => null),
+  ]);
 
   // Sort vitals by date descending
   const sortedVitals = (Array.isArray(vitals) ? vitals : []).sort(
@@ -152,6 +159,7 @@ async function fetchComprehensivePatientData(patientId: string): Promise<Compreh
     riskAssessments: normalizeArr(riskAssessments),
     woundCareRecords: normalizeArr(woundCareRecords),
     clinical,
+    scribe: scribe ? { plans: scribe.plans, actions: scribe.actions } : null,
   };
 }
 
@@ -446,6 +454,17 @@ function generateComprehensiveSummary(data: ComprehensiveData, patientId: string
   [...facts.conditions.values()].filter(c => c.presence === 'present' && c.id !== 'pressure_injury')
     .forEach(c => keyPoints.push(`${c.label}${c.detail ? ` (${c.detail})` : ''}`));
   if (facts.allergies.status === 'not_documented') keyPoints.push('!! Allergy status not documented');
+  const approvedForKp = data.scribe?.plans.find(p => p.status === 'approved');
+  if (approvedForKp) {
+    const its = flattenPlan((approvedForKp.approved_plan || approvedForKp.plan) as ScribePlan).filter(i => i.actionable);
+    const acts = (data.scribe?.actions || []).filter((a: any) => a.scribe_plan_id === approvedForKp.id);
+    const d = its.filter(i => itemState(acts.filter(a => a.item_key === i.key)).tone === 'done').length;
+    keyPoints.push(`Approved plan v${approvedForKp.version}: ${d}/${its.length} items implemented`);
+    const lastAct = acts[0];
+    if (lastAct) keyPoints.push(`Last action: ${lastAct.item_text || lastAct.item_key} — ${lastAct.status.replace(/_/g, ' ')} by ${lastAct.user_name || 'Unknown'} (${format(new Date(lastAct.logged_at), 'dd/MM HH:mm')})`);
+  } else if (data.scribe?.plans.some(p => p.status === 'pending_approval')) {
+    keyPoints.push('Treatment plan awaiting consultant approval');
+  }
   const urgentOutstanding = scribePlan.carriedOver.filter(i => i.priority === 'urgent').length;
   if (urgentOutstanding) keyPoints.push(`!! ${urgentOutstanding} urgent plan item(s) outstanding`);
   if (ward !== 'Not assigned') keyPoints.push(`Ward: ${ward}`);
@@ -512,6 +531,24 @@ function generateComprehensiveSummary(data: ComprehensiveData, patientId: string
       const severity = f.severity === 'critical' ? 'CRITICAL' : f.severity === 'warning' ? 'CAUTION' : 'NOTE';
       content += `  [${severity}] ${f.specialty}: ${f.finding}\n`;
       content += `    → ${f.recommendation}\n`;
+    });
+    content += '\n';
+  }
+
+  // ── Approved plan: what has been done, by whom, when and where ──
+  const approvedPlan = data.scribe?.plans.find(p => p.status === 'approved');
+  if (approvedPlan) {
+    const items = flattenPlan((approvedPlan.approved_plan || approvedPlan.plan) as ScribePlan).filter(i => i.actionable);
+    const acts = (data.scribe?.actions || []).filter((a: any) => a.scribe_plan_id === approvedPlan.id);
+    const st = items.map(i => ({ i, s: itemState(acts.filter(a => a.item_key === i.key)) }));
+    const doneN = st.filter(x => x.s.tone === 'done').length;
+    content += `**APPROVED TREATMENT PLAN — IMPLEMENTATION** (v${approvedPlan.version}, approved by ${approvedPlan.reviewed_by_name || 'consultant'}; ${doneN}/${items.length} done)\n`;
+    st.forEach(({ i, s: x }) => {
+      const l = x.last;
+      const who = l ? ` — ${l.user_name || 'Unknown'}, ${format(new Date(l.logged_at), 'dd/MM HH:mm')}, ${l.location_label || 'place not named'}` : '';
+      const extra = l?.prescription ? ` [Rx ${l.prescription.drug} ${l.prescription.dose} ${String(l.prescription.frequency || '').toUpperCase()}]`
+        : l?.result ? ` [Result: ${[l.result.value, l.result.unit].filter(Boolean).join(' ')}${l.result.text ? ` ${l.result.text}` : ''}]` : '';
+      content += `  [${x.label.toUpperCase()}] ${i.text}${extra}${who}${l?.note ? ` — "${l.note}"` : ''}\n`;
     });
     content += '\n';
   }
@@ -604,21 +641,33 @@ export const PatientSummaryView: React.FC<PatientSummaryViewProps> = ({
     });
   };
 
-  const loadSummary = async () => {
-    setIsLoading(true);
+  // Real time: the summary is rebuilt from the record every 30 s while the
+  // page is in view, and at once when the plan is approved or an item is
+  // logged — a new prescription, result or note shows without a reload.
+  const [refreshedAt, setRefreshedAt] = useState<Date | null>(null);
+  const loadSummary = async (silent = false) => {
+    if (!silent) setIsLoading(true);
     try {
       const data = await fetchComprehensivePatientData(patientId);
       const summary = generateComprehensiveSummary(data, patientId);
       setSelectedSummary(summary);
-      // Save for future retrieval
-      try { await db.patient_summaries?.add(summary as any); } catch { /* Value is left as it was when it does not parse. */ }
+      setRefreshedAt(new Date());
+      // Saved once per load, not on every live refresh.
+      if (!silent) { try { await db.patient_summaries?.add(summary as any); } catch { /* local cache only */ } }
     } catch (error) {
       console.error('Error loading summary:', error);
-      setSelectedSummary(null);
+      if (!silent) setSelectedSummary(null);
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   };
+  useEffect(() => {
+    const tick = () => { if (document.visibilityState === 'visible' && navigator.onLine) void loadSummary(true); };
+    const t = setInterval(tick, 30_000);
+    window.addEventListener('focus', tick);
+    return () => { clearInterval(t); window.removeEventListener('focus', tick); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [patientId]);
 
   const generateNewSummary = async () => {
     setIsGenerating(true);
@@ -790,7 +839,8 @@ export const PatientSummaryView: React.FC<PatientSummaryViewProps> = ({
             </h2>
             <p className="text-xs text-gray-500 mt-0.5">
               Generated {selectedSummary.generated_at.toLocaleDateString()} at {selectedSummary.generated_at.toLocaleTimeString()} |
-              Data sources: Encounters, Ward Rounds, Prescriptions, Investigations, Vitals, Bookings
+              Data sources: Clerking, Encounters, Ward Rounds, Prescriptions, Investigations, Vitals, Plan log
+              {refreshedAt && <span className="ml-1 inline-flex items-center gap-1 text-green-700"><span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />live · updated {refreshedAt.toLocaleTimeString()}</span>}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -929,6 +979,8 @@ export const PatientSummaryView: React.FC<PatientSummaryViewProps> = ({
               patientId={patientId}
               draft={selectedSummary.scribePlan}
               findings={(selectedSummary.specialtyFlags || []) as any}
+              defaultPlace={selectedSummary.key_points.find(k => k.startsWith('Ward: '))?.slice(6)}
+              onChanged={() => void loadSummary(true)}
             />
           </div>
         )}
