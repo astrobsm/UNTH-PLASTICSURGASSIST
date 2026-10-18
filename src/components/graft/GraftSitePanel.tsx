@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import type { GraftSite, SeriesPoint } from '../../services/skinGraftService';
 import { DonorHealingCurve } from './DonorHealingCurve';
+import { StoredWoundImage } from '../wound/StoredWoundImage';
 
 interface Props {
   site: GraftSite;
@@ -203,11 +204,10 @@ export function GraftSitePanel({ site, onCapture, onLockBaseline, className = ''
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
                   Most recent photograph{latest.overlayUrl ? ', with the traced margin' : ''}
                 </p>
-                <img
+                <StoredWoundImage
                   src={latest.overlayUrl || latest.imageUrl || ''}
                   alt={`${site.site_label || 'Graft site'} on postoperative day ${latest.day ?? '—'}`}
                   className="rounded-xl border max-h-72 object-contain bg-gray-50"
-                  loading="lazy"
                 />
                 <p className="text-[11px] text-gray-400 mt-1">
                   POD {latest.day ?? '—'} · {new Date(latest.capturedAt).toLocaleString()}

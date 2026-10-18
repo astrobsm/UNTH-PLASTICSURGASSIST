@@ -3,6 +3,7 @@ import { query, getPool } from '../_lib/db.js';
 import { cors, authenticateRequest } from '../_lib/auth.js';
 import { ensureDetoxColumns, DETOX_TABLES } from '../_lib/detoxSchema.js';
 import { ensureLymphedemaColumns, LYMPHEDEMA_TABLES } from '../_lib/lymphedemaSchema.js';
+import { ensureModuleColumns, MODULE_COLUMNS } from '../_lib/moduleColumns.js';
 
 // Cache table columns to avoid repeated information_schema queries
 const tableColumnsCache = {};
@@ -10,6 +11,7 @@ async function getTableColumns(tableName) {
   // Detox tables gain the columns the app writes before their list is read.
   if (DETOX_TABLES.has(tableName) && !tableColumnsCache[tableName]) await ensureDetoxColumns();
   if (LYMPHEDEMA_TABLES.has(tableName) && !tableColumnsCache[tableName]) await ensureLymphedemaColumns();
+  if (MODULE_COLUMNS[tableName] && !tableColumnsCache[tableName]) await ensureModuleColumns(tableName);
   if (!tableColumnsCache[tableName]) {
     try {
       const result = await query(

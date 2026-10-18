@@ -289,7 +289,7 @@ function extractAnaesthetistComments(preOpAssessments) {
 }
 
 // Process shopping list status
-function processShoppingListStatus(shoppingListRows) {
+export function processShoppingListStatus(shoppingListRows) {
   if (!shoppingListRows || shoppingListRows.length === 0) {
     return {
       is_complete: false,
@@ -300,38 +300,46 @@ function processShoppingListStatus(shoppingListRows) {
     };
   }
 
-  const items = [];
-  let procured = 0;
-  let total = 0;
+  // One entry per item. The same list saved twice (or an item on two lists)
+  // used to be counted twice; and `item.status || item.procured ? …` parsed as
+  // `(item.status || item.procured) ? …`, so any item with a status at all —
+  // including "pending" — was reported as procured.
+  const byKey = new Map();
+  const isProcured = (status, flag) =>
+    status ? ['procured', 'complete', 'completed', 'purchased'].includes(String(status).toLowerCase()) : !!flag;
+  const addItem = (name, quantity, procuredNow, category) => {
+    const key = `${String(name).trim().toLowerCase()}|${String(category).trim().toLowerCase()}`;
+    const prev = byKey.get(key);
+    if (!prev) {
+      byKey.set(key, { name, quantity, status: procuredNow ? 'procured' : 'pending', category });
+    } else {
+      prev.quantity = Math.max(Number(prev.quantity) || 1, Number(quantity) || 1);
+      if (procuredNow) prev.status = 'procured';
+    }
+  };
 
   shoppingListRows.forEach(row => {
-    const rowItems = typeof row.items === 'string' ? JSON.parse(row.items) : (row.items || []);
+    let rowItems = row.items;
+    if (typeof rowItems === 'string') {
+      try { rowItems = JSON.parse(rowItems); } catch { rowItems = []; }
+    }
     if (Array.isArray(rowItems)) {
-      rowItems.forEach(item => {
-        total++;
-        const status = item.status || item.procured ? 'procured' : 'pending';
-        if (status === 'procured') procured++;
-        items.push({
-          name: item.name || item.item_name || 'Unknown Item',
-          quantity: item.quantity || 1,
-          status,
-          category: item.category || 'General'
-        });
-      });
+      rowItems.forEach(item => addItem(
+        item.name || item.item_name || 'Unknown Item',
+        item.quantity || 1,
+        isProcured(item.status, item.procured),
+        item.category || 'General',
+      ));
     }
     // Also check if row-level fields exist
     if (row.item_name) {
-      total++;
-      const status = row.status === 'procured' || row.is_procured ? 'procured' : 'pending';
-      if (status === 'procured') procured++;
-      items.push({
-        name: row.item_name,
-        quantity: row.quantity || 1,
-        status,
-        category: row.category || 'General'
-      });
+      addItem(row.item_name, row.quantity || 1, isProcured(row.status, row.is_procured), row.category || 'General');
     }
   });
+
+  const items = [...byKey.values()];
+  const total = items.length;
+  const procured = items.filter(i => i.status === 'procured').length;
 
   return {
     is_complete: total > 0 && procured === total,

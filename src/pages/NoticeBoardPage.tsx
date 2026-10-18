@@ -32,6 +32,7 @@ export default function NoticeBoardPage() {
   const [formCategory, setFormCategory] = useState<string>('general');
   const [formContent, setFormContent] = useState('');
   const [formPinned, setFormPinned] = useState(false);
+  const [formExpires, setFormExpires] = useState('');
 
   // Same roles the server allows (api/notice-board.js NOTICE_ROLES).
   const isAdmin = ['admin', 'super_admin', 'consultant'].includes(user?.role || '');
@@ -56,9 +57,18 @@ export default function NoticeBoardPage() {
     setFormCategory('general');
     setFormContent('');
     setFormPinned(false);
+    setFormExpires('');
     setShowCreateForm(false);
     setEditingNotice(null);
   };
+
+  // Failures used to go to the console only, so a refused or failed post
+  // looked exactly like a successful one.
+  const fail = (what: string, error: unknown) => {
+    console.error(`Error ${what}:`, error);
+    alert((error as any)?.message || `Could not ${what}.`);
+  };
+  const expiresIso = () => (formExpires ? new Date(`${formExpires}T23:59:59`).toISOString() : null);
 
   const handleCreate = async () => {
     if (!formTitle.trim() || !formContent.trim()) return;
@@ -73,11 +83,12 @@ export default function NoticeBoardPage() {
         posted_by_role: user?.role || 'unknown',
         is_pinned: formPinned,
         is_active: true,
+        expires_at: expiresIso(),
       });
       resetForm();
       loadNotices();
     } catch (error) {
-      console.error('Error creating notice:', error);
+      fail('post the notice', error);
     }
   };
 
@@ -90,11 +101,12 @@ export default function NoticeBoardPage() {
         category: formCategory as NoticePost['category'],
         content: formContent.trim(),
         is_pinned: formPinned,
+        expires_at: expiresIso(),
       });
       resetForm();
       loadNotices();
     } catch (error) {
-      console.error('Error updating notice:', error);
+      fail('update the notice', error);
     }
   };
 
@@ -104,7 +116,7 @@ export default function NoticeBoardPage() {
       await noticeBoardService.deleteNotice(id);
       loadNotices();
     } catch (error) {
-      console.error('Error deleting notice:', error);
+      fail('delete the notice', error);
     }
   };
 
@@ -113,7 +125,7 @@ export default function NoticeBoardPage() {
       await noticeBoardService.togglePin(id);
       loadNotices();
     } catch (error) {
-      console.error('Error toggling pin:', error);
+      fail('change the pin', error);
     }
   };
 
@@ -123,6 +135,7 @@ export default function NoticeBoardPage() {
     setFormCategory(notice.category);
     setFormContent(notice.content);
     setFormPinned(notice.is_pinned);
+    setFormExpires(notice.expires_at ? String(notice.expires_at).slice(0, 10) : '');
     setShowCreateForm(true);
   };
 
@@ -288,6 +301,18 @@ export default function NoticeBoardPage() {
                     placeholder="Enter notice details, schedules, instructions..."
                     rows={6}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-none"
+                  />
+                </div>
+
+                {/* Expiry — the notice comes down by itself after this day */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Expires on (optional)</label>
+                  <input
+                    type="date"
+                    value={formExpires}
+                    min={new Date().toISOString().slice(0, 10)}
+                    onChange={(e) => setFormExpires(e.target.value)}
+                    className="w-full sm:w-56 px-3 py-2 border border-gray-300 rounded-lg text-sm"
                   />
                 </div>
 

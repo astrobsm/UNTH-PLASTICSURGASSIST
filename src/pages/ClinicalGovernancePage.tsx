@@ -94,7 +94,12 @@ export default function ClinicalGovernancePage() {
           </button>
         ))}
       </nav>
-      {loadError && <Banner kind="error">{loadError}</Banner>}
+      {loadError && (
+        <Banner kind="error">
+          {loadError}{' '}
+          <button onClick={() => { setLoadError(null); loadMeta(); }} className="underline font-medium ml-1">Retry</button>
+        </Banner>
+      )}
       {meta && tab === 'decisions' && <DecisionsTab meta={meta} onSaved={loadMeta} />}
       {meta && tab === 'protocols' && <ProtocolsTab meta={meta} />}
       {!meta && !loadError && <Loading />}
@@ -135,7 +140,7 @@ function DecisionsTab({ meta, onSaved }: { meta: SettingsResponse; onSaved: () =
 
   const loadHistory = async () => {
     try { setHistory((await apiClient.get<any>(`${BASE}?action=history`, { freshRead: true })).history || []); }
-    catch { setHistory([]); }
+    catch (e: any) { setHistory([]); setMsg({ ok: false, text: e?.message || 'Could not load the change history' }); }
   };
 
   return (
@@ -303,7 +308,7 @@ function ProtocolsTab({ meta }: { meta: SettingsResponse }) {
   useEffect(() => { load(); }, [load]);
 
   if (openId) return <ProfileEditor id={openId} meta={meta} onBack={() => { setOpenId(null); load(); }} />;
-  if (error) return <Banner kind="error">{error}</Banner>;
+  if (error) return <Banner kind="error">{error} <button onClick={() => { setError(null); load(); }} className="underline font-medium ml-1">Retry</button></Banner>;
   if (!profiles) return <Loading />;
 
   return (
@@ -354,6 +359,23 @@ function ProfileEditor({ id, meta, onBack }: { id: string; meta: SettingsRespons
   const latest = versions?.[0];
   const dirty = useMemo(() => !!(form && latest && JSON.stringify({ t: form.title, d: form.definition, s: form.sources }) !== JSON.stringify({ t: latest.title, d: latest.definition, s: latest.sources })), [form, latest]);
 
+  // A failed load used to leave this spinning for ever, with the error hidden behind it.
+  if (!versions && msg && !msg.ok) {
+    return (
+      <div className="space-y-2">
+        <Banner kind="error">{msg.text} <button onClick={() => { setMsg(null); load().catch(e => setMsg({ ok: false, text: e?.message || 'Load failed' })); }} className="underline font-medium ml-1">Retry</button></Banner>
+        <button onClick={onBack} className="text-sm text-gray-600 underline">Back to protocols</button>
+      </div>
+    );
+  }
+  if (versions && versions.length === 0) {
+    return (
+      <div className="space-y-2">
+        <Banner kind="info">This protocol has no saved version yet.</Banner>
+        <button onClick={onBack} className="text-sm text-gray-600 underline">Back to protocols</button>
+      </div>
+    );
+  }
   if (!form || !latest) return <Loading />;
   const d = form.definition;
   const setDef = (patch: Partial<ProfileDefinition>) => setForm(f => f && ({ ...f, definition: { ...f.definition, ...patch } }));

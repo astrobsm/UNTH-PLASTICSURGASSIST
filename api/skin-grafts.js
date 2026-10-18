@@ -321,12 +321,20 @@ async function lockBaseline(body, user, res) {
   }
 
   const a = (await query(
-    'SELECT id, area_cm2, assessed_at FROM wound_assessments WHERE id = $1 AND wound_id = $2',
+    'SELECT id, area_cm2, assessed_at, scale_reliable FROM wound_assessments WHERE id = $1 AND wound_id = $2',
     [b.assessmentId, site.wound_id],
   )).rows[0];
   if (!a) return res.status(400).json({ error: 'That assessment does not belong to this site' });
   if (!(Number(a.area_cm2) > 0)) {
     return res.status(400).json({ error: 'That assessment has no measured area to use as a baseline' });
+  }
+  // Every later take percentage is a ratio to this area, so it must come from
+  // a photograph whose scale was actually established.
+  if (a.scale_reliable === false) {
+    return res.status(400).json({
+      error: 'That photograph has no reliable scale',
+      message: 'Lock the baseline on a photograph calibrated against the reference marker.',
+    });
   }
 
   const r = await query(
@@ -500,10 +508,16 @@ async function analyseAssessment(body, user, res) {
     quality: { blocking: num(a.image_quality_score) != null && num(a.image_quality_score) < 0.4 },
   });
 
+  // An alert already open for this site is not raised again: re-analysing a
+  // photograph (or the next visit showing the same problem) used to stack up
+  // identical unacknowledged alerts.
   for (const al of alerts) {
     await query(
       `INSERT INTO graft_alerts (episode_id, site_id, analysis_id, severity, code, message)
-       VALUES ($1,$2,$3,$4,$5,$6)`,
+       SELECT $1::int, $2::int, $3::int, $4::varchar, $5::varchar, $6::text
+       WHERE NOT EXISTS (
+         SELECT 1 FROM graft_alerts
+          WHERE site_id = $2::int AND code = $5::varchar AND acknowledged_at IS NULL)`,
       [site.episode_id, site.id, saved.id, al.severity, al.code, al.message],
     );
   }

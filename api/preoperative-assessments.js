@@ -137,6 +137,24 @@ async function createAssessment(req, res) {
     }
   }
 
+  // Saving the form again is an update, not a new assessment. The form posts
+  // every time, so each save used to add another row for the same patient
+  // and operation. Same booking → that assessment; no booking → the one made
+  // in the last 14 days.
+  if (patientId) {
+    const existing = (await query(
+      surgeryId
+        ? `SELECT id FROM preoperative_assessments WHERE patient_id = $1 AND surgery_id = $2 ORDER BY created_at DESC LIMIT 1`
+        : `SELECT id FROM preoperative_assessments WHERE patient_id = $1 AND surgery_id IS NULL
+             AND created_at > NOW() - INTERVAL '14 days' ORDER BY created_at DESC LIMIT 1`,
+      surgeryId ? [patientId, surgeryId] : [patientId],
+    ).catch(() => ({ rows: [] }))).rows[0];
+    if (existing) {
+      if (body.consent_document && body.consent_obtained === undefined) body.consent_obtained = true;
+      return updateAssessment(req, res, existing.id);
+    }
+  }
+
   const result = await query(
     `INSERT INTO preoperative_assessments 
       (patient_id, surgery_id, hospital_number, patient_name, assessment_date, 

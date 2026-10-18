@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { db } from '../db/database';
+import { apiClient } from '../services/apiClient';
 import { normalizeArrayField } from '../services/patientService';
 import { useOnSelectedPatient } from '../hooks/useSelectedPatient';
 import { itemsFor, scoreItems, interpretScale, cowsPulseScore, vitalRedFlags, SCALE_MAX, type ScaleType } from '../services/withdrawalScales';
@@ -249,6 +250,17 @@ function AssessmentList({ assessments, loading, onView, onRefresh }: {
   const deleteAssessment = async (id: string) => {
     if (!confirm('Delete this assessment?')) return;
     try {
+      // The server first: deleting only on this device left the record on the
+      // server, and the next sync brought it straight back.
+      try {
+        await apiClient.delete(`/substance-assessments/${encodeURIComponent(id)}`);
+      } catch (err: any) {
+        if (err?.status === 403 || /403|not permitted|only a consultant/i.test(err?.message || '')) {
+          alert(err?.message || 'You are not permitted to delete this assessment.');
+          return;
+        }
+        try { await (db as any).sync_queue.add({ table: 'substance_use_assessments', action: 'delete', data: { id }, local_id: id, created_at: new Date() }); } catch { /* offline-safe */ }
+      }
       const rec = await db.substance_use_assessments.where('id').equals(id).first();
       if (rec) {
         await db.substance_use_assessments.delete((rec as any).local_id ?? rec.id);
@@ -1033,8 +1045,12 @@ function AssessmentDetail({ assessment, user, onUpdate }: {
         auditLog: [...(assessment.auditLog || []), { action: `status_changed_to_${newStatus}`, performedBy: user?.username || 'Unknown', performedAt: new Date() }],
       });
       try {
-        await (db as any).sync_queue.add({ table: 'substance_use_assessments', action: 'update', data: { id: assessment.id, status: newStatus }, local_id: assessment.id, created_at: new Date() });
-      } catch { /* offline-safe */ }
+        await apiClient.put(`/substance-assessments/${encodeURIComponent(assessment.id)}`, { status: newStatus });
+      } catch {
+        try {
+          await (db as any).sync_queue.add({ table: 'substance_use_assessments', action: 'update', data: { id: assessment.id, status: newStatus }, local_id: assessment.id, created_at: new Date() });
+        } catch { /* offline-safe */ }
+      }
       onUpdate();
     } catch (e) { console.error(e); }
   };
@@ -1215,7 +1231,13 @@ function AssessmentDetail({ assessment, user, onUpdate }: {
                 {fu.status === 'scheduled' && (
                   <button onClick={async () => {
                     const key = (fu as any).local_id ?? fu.id;
-                    await db.detox_follow_ups.update(key, { status: 'completed', actualDate: new Date().toISOString(), updatedAt: new Date() });
+                    const actualDate = new Date().toISOString();
+                    await db.detox_follow_ups.update(key, { status: 'completed', actualDate, updatedAt: new Date() });
+                    try {
+                      await apiClient.put(`/substance-assessments/${encodeURIComponent(assessment.id)}/follow-ups/${encodeURIComponent(fu.id)}`, { status: 'completed', actualDate });
+                    } catch {
+                      try { await (db as any).sync_queue.add({ table: 'detox_follow_ups', action: 'update', data: { ...fu, status: 'completed', actualDate }, local_id: fu.id, created_at: new Date() }); } catch { /* offline-safe */ }
+                    }
                     loadRelatedData();
                   }} className="text-xs text-green-600 hover:underline">Mark Complete</button>
                 )}

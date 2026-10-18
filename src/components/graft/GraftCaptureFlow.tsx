@@ -123,6 +123,18 @@ export function GraftCaptureFlow({ site, patientId, onClose, onSaved }: Props) {
     return () => { cancelled = true; stopCamera(); };
   }, [stopCamera]);
 
+  // The <video> only exists once liveReady is true, so the stream cannot be
+  // attached where it is obtained — the ref is still null there, and the
+  // preview stayed black. Attach it whenever the element is (re)mounted,
+  // which also covers coming back to capture after a retake.
+  useEffect(() => {
+    const v = videoRef.current;
+    const stream = streamRef.current;
+    if (!liveReady || !v || !stream) return;
+    if (v.srcObject !== stream) v.srcObject = stream;
+    void v.play().catch(() => {});
+  }, [liveReady, stage]);
+
   // The live quality meter. Scored on a downsampled frame so it can run four
   // times a second without heating the phone.
   useEffect(() => {

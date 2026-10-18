@@ -14,7 +14,7 @@
  * ward round is exactly where the network is not.
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Activity, AlertTriangle, ArrowLeft, Calculator, ClipboardList, ExternalLink, FileText,
@@ -120,6 +120,11 @@ export default function ClinicianAssistantPage() {
   const [running, setRunning] = useState(false);
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<RunResult | null>(null);
+  // One sync key per analysis result: saving it twice updates, a new run is a new record.
+  const saveKeyRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    saveKeyRef.current = result ? `ca-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}` : undefined;
+  }, [result]);
   const [history, setHistory] = useState<SavedAnalysisSummary[]>([]);
   const [recent, setRecent] = useState<SavedAnalysisSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -138,7 +143,9 @@ export default function ClinicianAssistantPage() {
       setLoading(true);
       try {
         const [p, r] = await Promise.all([
-          apiClient.get('/patients').catch(() => null),
+          // The default page is 50 — the newest 50 patients were the only
+          // ones that could ever be picked.
+          apiClient.get('/patients?limit=500').catch(() => null),
           listRecent(25).catch(() => []),
         ]);
         const rows: PatientRow[] = (p as any)?.patients || (Array.isArray(p) ? p : []);
@@ -150,13 +157,27 @@ export default function ClinicianAssistantPage() {
     })();
   }, []);
 
+  // Beyond the loaded list, search the server too, so older patients are found.
+  const [remote, setRemote] = useState<PatientRow[]>([]);
+  useEffect(() => {
+    const q = search.trim();
+    if (q.length < 2) { setRemote([]); return; }
+    const t = setTimeout(() => {
+      apiClient.get(`/patients?limit=40&search=${encodeURIComponent(q)}`)
+        .then((p: any) => setRemote((p?.patients || (Array.isArray(p) ? p : [])) as PatientRow[]))
+        .catch(() => setRemote([]));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return patients.slice(0, 40);
-    return patients
-      .filter(p => `${p.first_name || ''} ${p.last_name || ''} ${p.hospital_number || ''}`.toLowerCase().includes(q))
-      .slice(0, 40);
-  }, [patients, search]);
+    const local = patients
+      .filter(p => `${p.first_name || ''} ${p.last_name || ''} ${p.hospital_number || ''}`.toLowerCase().includes(q));
+    const seen = new Set(local.map(p => String(p.id)));
+    return [...local, ...remote.filter(p => !seen.has(String(p.id)))].slice(0, 40);
+  }, [patients, search, remote]);
 
   /** Choosing a patient opens the source chooser; it no longer auto-analyses. */
   const choosePatient = useCallback(async (patient: PatientRow) => {
@@ -196,7 +217,11 @@ export default function ClinicianAssistantPage() {
     if (!result || !selected) return;
     setSaving(true);
     try {
-      await saveAnalysis(selected.id, result, { source: analysisSource });
+      await saveAnalysis(selected.id, result, {
+        source: analysisSource,
+        extraction: (result as any).extraction ?? recordExtraction ?? undefined,
+        syncKey: saveKeyRef.current,
+      });
       toast.success('Analysis saved to the patient record');
       setHistory(await listForPatient(selected.id).catch(() => []));
     } catch (err: any) {
@@ -431,7 +456,7 @@ export default function ClinicianAssistantPage() {
                 if (!ctx) throw new Error('Could not load patient context');
 
                 const analysis = runForContext(ctx, extraction);
-                setResult({ analysis, unmapped: [], sources: { investigations: extraction.analytes.length, vitals: 0 } });
+                setResult({ analysis, unmapped: [], sources: { investigations: extraction.analytes.length, vitals: 0 }, extraction } as any);
                 setAnalysisSource(recordExtraction && recordExtraction.analytes.length ? 'mixed' : 'scan');
                 setTab('analysis');
               } catch (err: any) {

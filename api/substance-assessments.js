@@ -44,6 +44,10 @@ export default async function handler(req, res) {
         return await updateAssessment(resourceId, req.body, auth.user, res);
       case 'DELETE':
         if (!resourceId) return res.status(400).json({ error: 'Assessment ID required' });
+        // A clinical record is deleted only by senior staff.
+        if (!['admin', 'super_admin', 'consultant', 'senior_registrar'].includes(auth.user?.role)) {
+          return res.status(403).json({ error: 'Only a consultant, senior registrar or admin can delete an assessment' });
+        }
         return await deleteAssessment(resourceId, res);
       default:
         res.status(405).json({ error: 'Method not allowed' });

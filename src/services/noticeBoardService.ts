@@ -14,7 +14,14 @@ export interface NoticePost {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  /** When the notice comes down by itself (the server stops returning it). */
+  expires_at?: string | null;
+  /** True once the server has it; unsent notices are retried on the next load. */
+  synced?: boolean;
 }
+
+const isRefusal = (e: any) => e?.status === 403 || e?.status === 401 || /\b40[13]\b|not permitted|forbidden/i.test(e?.message || '');
+const isExpired = (n: NoticePost) => !!n.expires_at && new Date(n.expires_at).getTime() <= Date.now();
 
 export const NOTICE_CATEGORIES = [
   { value: 'weekly_activities', label: 'Weekly Activities', color: 'bg-blue-100 text-blue-800' },
@@ -38,7 +45,7 @@ class NoticeBoardService {
     try {
       const notices = await db.notice_board.toArray();
       return notices
-        .filter((n: NoticePost) => n.is_active !== false)
+        .filter((n: NoticePost) => n.is_active !== false && !isExpired(n))
         .sort((a: NoticePost, b: NoticePost) => {
           if (a.is_pinned && !b.is_pinned) return -1;
           if (!a.is_pinned && b.is_pinned) return 1;
@@ -61,6 +68,11 @@ class NoticeBoardService {
     }
   }
 
+  /**
+   * Posts a notice. The server decides who may post; a refusal is reported to
+   * the caller instead of leaving a notice on this device that nobody else
+   * would ever see. Offline, the notice is kept and sent on the next load.
+   */
   async createNotice(notice: Omit<NoticePost, 'id' | 'created_at' | 'updated_at'>): Promise<NoticePost> {
     const newNotice: NoticePost = {
       ...notice,
@@ -68,14 +80,17 @@ class NoticeBoardService {
       is_active: true,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
+      synced: false,
     };
 
+    try {
+      await this.pushToServer(newNotice);
+      newNotice.synced = true;
+    } catch (e) {
+      if (isRefusal(e)) throw new Error((e as any)?.message || 'You are not permitted to post on the notice board.');
+      console.warn('Notice saved on this device; it will be posted when the connection returns:', e);
+    }
     await db.notice_board.add(newNotice);
-
-    // Push to server in background
-    this.pushToServer(newNotice).catch(e =>
-      console.warn('Failed to push notice to server (will retry on next load):', e)
-    );
 
     return newNotice;
   }
@@ -85,27 +100,30 @@ class NoticeBoardService {
       ...updates,
       updated_at: new Date().toISOString(),
     };
-    await db.notice_board.update(id, updatedFields);
-
-    // Push update to server
-    const notice = await db.notice_board.get(id);
-    if (notice) {
-      this.pushToServer(notice).catch(e =>
-        console.warn('Failed to push notice update to server:', e)
-      );
+    const before = await db.notice_board.get(id);
+    if (!before) return;
+    const after = { ...before, ...updatedFields } as NoticePost;
+    try {
+      await this.pushToServer(after);
+      after.synced = true;
+    } catch (e) {
+      if (isRefusal(e)) throw new Error((e as any)?.message || 'You are not permitted to edit this notice.');
+      after.synced = false;
     }
+    await db.notice_board.put(after);
   }
 
   async deleteNotice(id: string): Promise<void> {
+    try {
+      await this.deleteFromServer(id);
+    } catch (e) {
+      if (isRefusal(e)) throw new Error((e as any)?.message || 'You are not permitted to remove this notice.');
+      console.warn('Notice removed here; the server will be updated when the connection returns:', e);
+    }
     await db.notice_board.update(id, {
       is_active: false,
       updated_at: new Date().toISOString(),
     });
-
-    // Push delete to server
-    this.deleteFromServer(id).catch(e =>
-      console.warn('Failed to delete notice from server:', e)
-    );
   }
 
   async togglePin(id: string): Promise<void> {
@@ -118,9 +136,13 @@ class NoticeBoardService {
 
       const updated = await db.notice_board.get(id);
       if (updated) {
-        this.pushToServer(updated).catch(e =>
-          console.warn('Failed to push pin toggle to server:', e)
-        );
+        try { await this.pushToServer(updated); }
+        catch (e) {
+          // Put it back: a pin only this device can see is not a pin.
+          await db.notice_board.update(id, { is_pinned: notice.is_pinned });
+          if (isRefusal(e)) throw new Error((e as any)?.message || 'You are not permitted to pin notices.');
+          throw e;
+        }
       }
     }
   }
@@ -131,10 +153,26 @@ class NoticeBoardService {
     const serverNotices: NoticePost[] = data.notices || [];
 
     // Merge: server notices win by updated_at timestamp
+    const onServer = new Set<string>();
     for (const serverNotice of serverNotices) {
+      if (serverNotice.id) onServer.add(serverNotice.id);
       const local = await db.notice_board.get(serverNotice.id);
       if (!local || new Date(serverNotice.updated_at) > new Date(local.updated_at)) {
-        await db.notice_board.put(serverNotice);
+        await db.notice_board.put({ ...serverNotice, synced: true });
+      }
+    }
+
+    // The server returns only live notices. One it once had but no longer
+    // returns was removed or has expired, and comes down here too; one never
+    // sent (posted offline) is sent now.
+    const locals = await db.notice_board.toArray();
+    for (const n of locals as NoticePost[]) {
+      if (!n.id || n.is_active === false || onServer.has(n.id)) continue;
+      if (n.synced === false) {
+        try { await this.pushToServer(n); await db.notice_board.update(n.id, { synced: true }); }
+        catch (e) { if (isRefusal(e)) await db.notice_board.update(n.id, { is_active: false }); }
+      } else {
+        await db.notice_board.update(n.id, { is_active: false });
       }
     }
   }

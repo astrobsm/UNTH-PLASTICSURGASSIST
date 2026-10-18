@@ -65,13 +65,13 @@ export default function BriefOutcomePanel({ patientId, conferenceData }: Props) 
     setError('');
     try {
       const bundle = await preSurgicalBriefService.get(patientId);
-      setBrief(bundle.brief);
-      setTasks(bundle.tasks);
+      setBrief(bundle?.brief ?? null);
+      setTasks(Array.isArray(bundle?.tasks) ? bundle.tasks : []);
       setDrafts({
-        preop_plan: bundle.brief?.preop_plan || '',
-        intraop_plan: bundle.brief?.intraop_plan || '',
-        contingency_plan: bundle.brief?.contingency_plan || '',
-        postop_plan: bundle.brief?.postop_plan || '',
+        preop_plan: bundle?.brief?.preop_plan || '',
+        intraop_plan: bundle?.brief?.intraop_plan || '',
+        contingency_plan: bundle?.brief?.contingency_plan || '',
+        postop_plan: bundle?.brief?.postop_plan || '',
       });
     } catch {
       setError('Could not load the brief for this patient.');
@@ -89,7 +89,7 @@ export default function BriefOutcomePanel({ patientId, conferenceData }: Props) 
     setError('');
     try {
       const bundle = await preSurgicalBriefService.savePlans(patientId, { [key]: value });
-      setBrief(bundle.brief);
+      setBrief(bundle?.brief ?? null);
     } catch {
       setError('That change could not be saved. It is still on screen — try again.');
     } finally {
@@ -120,7 +120,7 @@ export default function BriefOutcomePanel({ patientId, conferenceData }: Props) 
     setTasks(prev => prev.map(t => (t.id === task.id ? { ...t, status } : t)));
     try {
       const res = await preSurgicalBriefService.updateTask(patientId, task.id, { status });
-      if (res.tasks) setTasks(res.tasks);
+      if (Array.isArray(res?.tasks)) setTasks(res.tasks);
     } catch {
       setError('That status change did not save.');
       await load();
@@ -131,8 +131,8 @@ export default function BriefOutcomePanel({ patientId, conferenceData }: Props) 
     setError('');
     try {
       const bundle = await preSurgicalBriefService.approve(patientId, cleared);
-      setBrief(bundle.brief);
-      setTasks(bundle.tasks);
+      setBrief(bundle?.brief ?? null);
+      setTasks(Array.isArray(bundle?.tasks) ? bundle.tasks : []);
     } catch {
       setError('Only a consultant or administrator may record a clearance decision.');
     }

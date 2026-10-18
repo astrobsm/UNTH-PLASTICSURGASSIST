@@ -62,9 +62,13 @@ export function runForContext(patient: PatientContext, extraction: Extraction): 
 export async function saveAnalysis(
   patientId: string | number | null,
   result: RunResult,
-  opts: { source?: 'record' | 'scan' | 'manual' | 'mixed'; notes?: string } = {}
+  opts: { source?: 'record' | 'scan' | 'manual' | 'mixed'; notes?: string; extraction?: unknown; syncKey?: string } = {}
 ): Promise<any> {
   const { analysis, unmapped } = result;
+  // A key per analysis, so a retried save (flaky ward Wi-Fi) updates the same
+  // row instead of filing the analysis twice.
+  const syncKey = opts.syncKey
+    || `ca-${patientId ?? 'none'}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const payload = {
     patient_id: patientId ?? null,
     hospital_number: analysis.patient.hospitalNumber || null,
@@ -75,7 +79,11 @@ export async function saveAnalysis(
     modules: analysis.modules,
     correlations: analysis.correlations,
     patient_context: analysis.patient,
-    extraction: { analytes: [], observations: [], micro: [], ecg: [] },
+    // What was actually read from the record or the scanned report — it used
+    // to be saved as an empty extraction, so the evidence behind every saved
+    // analysis was lost.
+    extraction: opts.extraction ?? { analytes: [], observations: [], micro: [], ecg: [] },
+    sync_key: syncKey,
     unmapped,
     engine_version: ENGINE_VERSION,
     notes: opts.notes || null,

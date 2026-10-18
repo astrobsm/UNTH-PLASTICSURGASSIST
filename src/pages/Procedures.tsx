@@ -7,6 +7,7 @@ import { logDataExport } from '../services/auditLoggingService';
 import { useAuthStore } from '../store/authStore';
 import { db } from '../db/database';
 import { syncService } from '../db/syncService';
+import { applyProcedureUpdate, missingProcedureFields } from '../services/procedureRecords';
 import { PS_UNITS } from '../config/psUnits';
 
 export const Procedures: React.FC = () => {
@@ -384,9 +385,17 @@ const NewProcedureModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
       return;
     }
     
+    // The step-by-step form only checked fields on the step being shown, so a
+    // record could reach step 8 without a patient, date or surgeon.
+    const missing = missingProcedureFields(formData as any);
+    if (missing.length) {
+      alert(`Please complete: ${missing.join(', ')}`);
+      return;
+    }
+
     try {
       const { user } = useAuthStore.getState();
-      const procedureId = `proc-${Date.now()}`;
+      const procedureId = `proc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
       // Build procedure record (exclude File objects which can't be stored in IndexedDB)
       const procedureRecord = {
@@ -394,6 +403,10 @@ const NewProcedureModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         procedure_name: formData.procedure_name,
         procedure_type: formData.procedure_type,
         scheduled_date: formData.scheduled_date,
+        // The server column is procedure_date (NOT NULL); without it every
+        // procedure was rejected on sync and existed only on this device.
+        procedure_date: formData.scheduled_date,
+        sync_key: procedureId,
         scheduled_time: formData.scheduled_time,
         operating_room: formData.operating_room,
         ps_unit: formData.ps_unit,
@@ -1445,7 +1458,13 @@ const ProcedureOverview: React.FC = () => {
           status: (p as any).status || 'scheduled',
         }));
       
-      const combinedProcedures = [...todaysBookings, ...additionalProcedures] as any[];
+      const combinedProcedures = [
+        ...todaysBookings.map(b => ({ ...b, _source: 'booking' as const })),
+        // A record created from one of today's bookings is shown through that booking's row.
+        ...additionalProcedures
+          .filter((p: any) => !(p.booking_id && bookingIds.has(p.booking_id)))
+          .map(p => ({ ...p, _source: 'procedure' as const })),
+      ] as any[];
       setProcedures(combinedProcedures);
       
       // Calculate stats from real data
@@ -1787,13 +1806,10 @@ const IntraoperativeFindingsModal: React.FC<{ procedure: any; onClose: () => voi
       };
 
       // Update procedure with intraop findings
-      if (procedure.id) {
-        await db.procedures.update(procedure.id, {
-          intraoperative_findings: findingsRecord,
-          status: 'completed',
-        } as any);
-        await syncService.queueAction('update', 'procedures', procedure.id, findingsRecord);
-      }
+      await applyProcedureUpdate(procedure, {
+        intraoperative_findings: findingsRecord,
+        status: 'completed',
+      });
 
       alert('Intraoperative findings recorded successfully!');
       onClose();
@@ -2052,15 +2068,13 @@ const RescheduleProcedureModal: React.FC<{ procedure: any; onClose: () => void }
       };
 
       // Update procedure with new schedule
-      if (procedure.id) {
-        await db.procedures.update(procedure.id, {
-          scheduled_date: formData.new_date,
-          scheduled_time: formData.new_time,
-          status: 'rescheduled',
-          reschedule_history: rescheduleRecord,
-        } as any);
-        await syncService.queueAction('update', 'procedures', procedure.id, rescheduleRecord);
-      }
+      await applyProcedureUpdate(procedure, {
+        scheduled_date: formData.new_date,
+        procedure_date: formData.new_date,
+        scheduled_time: formData.new_time,
+        status: 'rescheduled',
+        reschedule_history: rescheduleRecord,
+      });
 
       alert('Procedure rescheduled successfully!');
       onClose();
@@ -2234,13 +2248,10 @@ const CancelProcedureModal: React.FC<{ procedure: any; onClose: () => void }> = 
       };
 
       // Update procedure status to cancelled
-      if (procedure.id) {
-        await db.procedures.update(procedure.id, {
-          status: 'cancelled',
-          cancellation_details: cancellationRecord,
-        } as any);
-        await syncService.queueAction('update', 'procedures', procedure.id, cancellationRecord);
-      }
+      await applyProcedureUpdate(procedure, {
+        status: 'cancelled',
+        cancellation_details: cancellationRecord,
+      });
 
       alert('Procedure cancelled successfully!');
       onClose();
@@ -2415,12 +2426,9 @@ const PostoperativeTreatmentModal: React.FC<{ procedure: any; onClose: () => voi
       };
 
       // Update procedure with postop treatment plan
-      if (procedure.id) {
-        await db.procedures.update(procedure.id, {
-          postoperative_plan: postopPlanRecord,
-        } as any);
-        await syncService.queueAction('update', 'procedures', procedure.id, postopPlanRecord);
-      }
+      await applyProcedureUpdate(procedure, {
+        postoperative_plan: postopPlanRecord,
+      });
 
       alert('Postoperative treatment plan documented successfully!');
       onClose();
@@ -2734,12 +2742,9 @@ const PostoperativeNoteModal: React.FC<{ procedure: any; onClose: () => void }> 
       };
 
       // Update procedure with postop note
-      if (procedure.id) {
-        await db.procedures.update(procedure.id, {
-          postoperative_note: postopNoteRecord,
-        } as any);
-        await syncService.queueAction('update', 'procedures', procedure.id, postopNoteRecord);
-      }
+      await applyProcedureUpdate(procedure, {
+        postoperative_note: postopNoteRecord,
+      });
 
       alert('Postoperative note generated successfully!');
       onClose();

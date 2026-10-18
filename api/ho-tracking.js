@@ -86,6 +86,17 @@ async function handleGet(req, res, currentUser) {
         } catch (e) { console.warn(`ho-detail [${label || 'query'}] failed:`, e.message); return []; }
       };
 
+      // Everything below is for the current rotation, like the metrics above.
+      // The lists used to cover the trainee's whole history while the counts
+      // beside them covered the rotation, so the two never agreed and a
+      // previous posting's work appeared under this one.
+      const rotationRows = await safeDetailQuery(`
+        SELECT * FROM trainee_rotations
+        WHERE user_id = $1 AND status IN ('active', 'extended', 'pending_signout')
+        ORDER BY created_at DESC LIMIT 1
+      `, [targetId]);
+      const since = rotationRows[0]?.start_date ? new Date(rotationRows[0].start_date).toISOString() : null;
+
       // Documentation logs — ward rounds by this HO
       const wardRounds = await safeDetailQuery(`
         SELECT wr.id, wr.patient_id, wr.round_date, wr.round_type,
@@ -93,9 +104,9 @@ async function handleGet(req, res, currentUser) {
                p.first_name, p.last_name, p.hospital_number
         FROM ward_rounds wr
         LEFT JOIN patients p ON wr.patient_id::text = p.id::text
-        WHERE wr.user_id = $1
+        WHERE wr.user_id = $1 AND ($2::timestamptz IS NULL OR wr.created_at >= $2::timestamptz)
         ORDER BY wr.created_at DESC LIMIT 50
-      `, [targetId], 'wardRounds');
+      `, [targetId, since], 'wardRounds');
 
       // Prescriptions written
       const prescriptions = await safeDetailQuery(`
@@ -103,9 +114,9 @@ async function handleGet(req, res, currentUser) {
                p.first_name, p.last_name, p.hospital_number
         FROM prescriptions pr
         LEFT JOIN patients p ON pr.patient_id::text = p.id::text
-        WHERE pr.prescribed_by = $1
+        WHERE pr.prescribed_by = $1 AND ($2::timestamptz IS NULL OR pr.created_at >= $2::timestamptz)
         ORDER BY pr.created_at DESC LIMIT 50
-      `, [targetId]);
+      `, [targetId, since]);
 
       // Lab orders placed
       const labOrders = await safeDetailQuery(`
@@ -113,30 +124,30 @@ async function handleGet(req, res, currentUser) {
                p.first_name, p.last_name, p.hospital_number
         FROM lab_orders lo
         LEFT JOIN patients p ON lo.patient_id::text = p.id::text
-        WHERE lo.ordered_by = $1
+        WHERE lo.ordered_by = $1 AND ($2::timestamptz IS NULL OR lo.created_at >= $2::timestamptz)
         ORDER BY lo.created_at DESC LIMIT 50
-      `, [targetId], 'labOrders');
+      `, [targetId, since], 'labOrders');
 
       // Progress notes / activity logs
       const activityLogs = await safeDetailQuery(`
         SELECT * FROM activity_logs
-        WHERE user_id = $1
+        WHERE user_id = $1 AND ($2::timestamptz IS NULL OR created_at >= $2::timestamptz)
         ORDER BY created_at DESC LIMIT 100
-      `, [targetId]);
+      `, [targetId, since]);
 
       // CBT attempts
       const cbtAttempts = await safeDetailQuery(`
         SELECT * FROM cbt_attempts
-        WHERE user_id = $1 AND completed = true
+        WHERE user_id = $1 AND completed = true AND ($2::timestamptz IS NULL OR created_at >= $2::timestamptz)
         ORDER BY created_at DESC
-      `, [targetId]);
+      `, [targetId, since]);
 
       // Training/CME progress
       const cmeProgress = await safeDetailQuery(`
         SELECT * FROM training_progress
-        WHERE user_id = $1
+        WHERE user_id = $1 AND ($2::timestamptz IS NULL OR completed_at >= $2::timestamptz)
         ORDER BY completed_at DESC
-      `, [targetId]);
+      `, [targetId, since]);
 
       // Assigned patients — use both int and text forms (house_officer_id is VARCHAR)
       const uid = String(targetId);
@@ -150,12 +161,6 @@ async function handleGet(req, res, currentUser) {
         ORDER BY pa.assigned_at DESC
       `, [targetId, uid], 'assignedPatients');
 
-      // Rotation
-      const rotationRows = await safeDetailQuery(`
-        SELECT * FROM trainee_rotations
-        WHERE user_id = $1 AND status IN ('active', 'extended', 'pending_signout')
-        ORDER BY created_at DESC LIMIT 1
-      `, [targetId]);
 
       // All patients this HO has documented on — query each table individually
       // (resilient to missing tables, mirrors getHOFullMetrics approach)
