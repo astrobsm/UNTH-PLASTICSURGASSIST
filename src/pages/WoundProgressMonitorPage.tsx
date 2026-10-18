@@ -25,6 +25,8 @@ import { aiWoundMeasurement, type WoundProgressEntry } from '../services/aiWound
 import type { ImageQualityReport } from '../services/woundImageQuality';
 import { putLocalImage, attachToAssessment } from '../services/woundImageStore';
 import { renderContourOverlay } from '../services/woundOverlayRenderer';
+import { correctionMagnitude } from '../services/woundContourGeometry';
+import type { TraceOutput } from '../components/wound/WoundTracer';
 import { PatientQuickPicker } from '../components/patients/PatientQuickPicker';
 import CalibrationEvidenceBadge from '../components/wound/CalibrationEvidenceBadge';
 import type { CalibrationEvidence } from '../services/aiWoundMeasurement';
@@ -50,7 +52,7 @@ import {
 
 const WoundHealingMap = lazy(() => import('../components/WoundHealingMap'));
 const WoundCalibrationPicker = lazy(() => import('../components/WoundCalibrationPicker'));
-const WoundContourEditor = lazy(() => import('../components/WoundContourEditor'));
+const WoundTracer = lazy(() => import('../components/wound/WoundTracer'));
 const WoundProgressChart = lazy(() => import('../components/WoundProgressChart'));
 const WoundPhotoHistory = lazy(() => import('../components/wound/WoundPhotoHistory'));
 
@@ -677,7 +679,10 @@ const CaptureAssessmentModal: React.FC<{ wound: Wound; onClose: () => void; onSa
   const galleryRef = useRef<HTMLInputElement>(null);
   // The last photo analysed, kept so the scale can be set manually and the
   // measurement recomputed without asking for the picture again.
-  const [pending, setPending] = useState<{ url: string; imageData: ImageData; w: number; h: number } | null>(null);
+  // `bitmap` is the decoded photograph: the scale and tracing screens draw from
+  // it directly. Re-loading the photo from an object URL failed on Android and
+  // left those screens blank.
+  const [pending, setPending] = useState<{ bitmap: ImageBitmap; imageData: ImageData; w: number; h: number } | null>(null);
   const [showCalibration, setShowCalibration] = useState(false);
   // Editable measurement fields (auto-filled by AI, clinician confirms).
   const [m, setM] = useState<Partial<WoundAssessment>>({});
@@ -702,6 +707,11 @@ const CaptureAssessmentModal: React.FC<{ wound: Wound; onClose: () => void; onSa
   // The clinician's correction, kept apart from the pipeline's outline. Both are
   // saved: the pair is the audit trail and the training data.
   const [showEditor, setShowEditor] = useState(false);
+  /** The automatic outline in image pixels, offered as a starting point when tracing. */
+  const [aiContourPx, setAiContourPx] = useState<Array<{ x: number; y: number }> | null>(null);
+  /** The clinician's tracing, kept so it can be reopened and adjusted. */
+  const [trace, setTrace] = useState<TraceOutput | null>(null);
+  const [scaleLabel, setScaleLabel] = useState('');
   const [aiContour, setAiContour] = useState<Array<{ x: number; y: number }> | undefined>();
   const [aiCentroidPx, setAiCentroidPx] = useState<{ x: number; y: number } | null>(null);
   const [pxPerCm, setPxPerCm] = useState(0);
@@ -722,11 +732,20 @@ const CaptureAssessmentModal: React.FC<{ wound: Wound; onClose: () => void; onSa
     setAnalyzing(true);
     setError('');
     try {
+      // The scale is what tracing needs; record it first.
+      setPxPerCm(pixelsPerCm);
+      setScaleLabel(referenceLabel);
+      setScaleReliable(true);
+      setCalibType(`manual:${referenceLabel}`);
+      // A tracing already done is re-measured against the new scale.
+      if (trace) { setTrace(null); setCorrection(null); }
       await aiWoundMeasurement.initialize();
       const calibration = aiWoundMeasurement.createManualCalibration(pixelsPerCm, 1);
       const result = await aiWoundMeasurement.measureWound(pending.imageData, calibration);
-      setScaleReliable(true);
-      setCalibType(`manual:${referenceLabel}`);
+      if (result.noWoundDetected) return; // nothing detected: the clinician traces it
+      setAiContourPx(result.contourPoints?.length > 2 ? result.contourPoints : null);
+      setAiContour(result.contourCm);
+      setAiCentroidPx(result.centroid);
       setM(prev => ({
         ...prev,
         length_cm: round(result.length),
@@ -748,6 +767,7 @@ const CaptureAssessmentModal: React.FC<{ wound: Wound; onClose: () => void; onSa
     setError('');
     try {
       const bitmap = await createImageBitmap(file);
+      setTrace(null); setCorrection(null); setAiContourPx(null); setPxPerCm(0); setScaleLabel(''); setM({});
       const canvas = document.createElement('canvas');
       canvas.width = bitmap.width; canvas.height = bitmap.height;
       const ctx = canvas.getContext('2d')!;
@@ -756,7 +776,7 @@ const CaptureAssessmentModal: React.FC<{ wound: Wound; onClose: () => void; onSa
 
       // Keep the image: if auto-detection cannot find a marker, the clinician
       // sets the scale by hand against it rather than re-taking the photo.
-      setPending({ url: URL.createObjectURL(file), imageData, w: canvas.width, h: canvas.height });
+      setPending(prev => { try { prev?.bitmap.close(); } catch { /* already released */ } return { bitmap, imageData, w: canvas.width, h: canvas.height }; });
 
       // Persist the photograph before anything else touches it. Until now these
       // were held only in memory and lost when the modal closed, which left the
@@ -793,8 +813,15 @@ const CaptureAssessmentModal: React.FC<{ wound: Wound; onClose: () => void; onSa
       // plausible wound, returning zeros. Those zeros must not reach the form —
       // a 0 cm² assessment saved on a healing chart reads as a closed wound.
       if (result.noWoundDetected) {
-        setError(result.warnings.join(' ') || 'No measurable wound found in this photograph.');
-        setMode('manual');
+        // Keep the photograph: the clinician sets the scale and traces the
+        // wound themselves rather than being sent to manual entry.
+        setError(`${result.warnings.join(' ') || 'The wound outline was not found automatically.'} Set the scale and trace the wound below.`);
+        if (result.calibrated && result.scaleReliable) {
+          setPxPerCm(result.measurements.calibrationFactor);
+          setScaleLabel(result.calibrationMethod || 'detected marker');
+          setScaleReliable(true);
+          setCalibrated(true);
+        }
         return;
       }
 
@@ -840,7 +867,11 @@ const CaptureAssessmentModal: React.FC<{ wound: Wound; onClose: () => void; onSa
       // Held so the clinician can correct the outline against the photograph.
       setAiContour(result.contourCm);
       setAiCentroidPx(result.centroid);
-      setPxPerCm(result.measurements.calibrationFactor);
+      setAiContourPx(result.contourPoints?.length > 2 ? result.contourPoints : null);
+      // Tracing needs a trustworthy scale: only an automatically detected
+      // marker counts; otherwise the clinician sets it from their marker.
+      setPxPerCm(result.calibrated && result.scaleReliable ? result.measurements.calibrationFactor : 0);
+      if (result.calibrated && result.scaleReliable) setScaleLabel(result.calibrationMethod || 'detected marker');
       setCorrection(null);
 
       setM({
@@ -955,6 +986,39 @@ const CaptureAssessmentModal: React.FC<{ wound: Wound; onClose: () => void; onSa
     }
   };
 
+  /** A finished tracing drives every measurement and the tissue percentages. */
+  const applyTrace = async (out: TraceOutput) => {
+    setShowEditor(false);
+    setTrace(out);
+    const magnitude = aiContour && aiContour.length > 2 ? correctionMagnitude(aiContour, out.contourCm) : 0;
+    setCorrection({ contourCm: out.contourCm, reason: aiContour ? 'Traced by clinician' : 'Traced by clinician (no automatic outline)', magnitude });
+    const traced = (['granulation', 'slough', 'necrotic', 'epithelial'] as const).some(t => out.regions[t].length) || out.remainder !== 'unassigned';
+    setM(prev => ({
+      ...prev,
+      length_cm: out.measurements.length,
+      width_cm: out.measurements.width,
+      area_cm2: out.measurements.area,
+      perimeter_cm: out.measurements.perimeter,
+      contour_cm: out.contourCm,
+      ...(traced ? {
+        granulation_pct: out.tissuePct.granulation,
+        slough_pct: out.tissuePct.slough,
+        necrotic_pct: out.tissuePct.necrotic,
+        epithelial_pct: out.tissuePct.epithelial,
+      } : {}),
+    }));
+    if (out.overlay && pending) {
+      setOverlayUrl(URL.createObjectURL(out.overlay));
+      try {
+        overlayRefRef.current = await putLocalImage({
+          blob: out.overlay, kind: 'overlay', width: pending.w, height: pending.h,
+          woundId: wound.id != null ? Number(wound.id) : null,
+          patientId: wound.patient_id != null ? Number(wound.patient_id) : null,
+        });
+      } catch (e) { console.warn('[wound] could not store the traced overlay:', e); }
+    }
+  };
+
   const setField = (k: keyof WoundAssessment, v: string) => setM(prev => ({ ...prev, [k]: v === '' ? undefined : Number(v) }));
 
   return (
@@ -1041,6 +1105,37 @@ const CaptureAssessmentModal: React.FC<{ wound: Wound; onClose: () => void; onSa
             </div>
           )}
 
+          {pending && !analyzing && (
+            <div className="mt-3 rounded-xl border border-teal-200 bg-teal-50/60 p-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-sm">
+                  <span className="font-semibold">1. Scale</span>{' '}
+                  {pxPerCm > 0
+                    ? <span className="text-green-700">set — {pxPerCm.toFixed(1)} px/cm{scaleLabel ? ` (${scaleLabel})` : ''}</span>
+                    : <span className="text-amber-700">not set — drag across the marker in the photo</span>}
+                </div>
+                <button type="button" onClick={() => setShowCalibration(true)}
+                  className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium ${pxPerCm > 0 ? 'border border-teal-600 text-teal-700' : 'bg-teal-600 text-white'}`}>
+                  <Ruler className="w-3.5 h-3.5 inline mr-1" />{pxPerCm > 0 ? 'Reset scale' : 'Set scale'}
+                </button>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-sm">
+                  <span className="font-semibold">2. Trace</span>{' '}
+                  {trace
+                    ? <span className="text-green-700">done — {trace.measurements.area} cm²</span>
+                    : <span className="text-gray-600">wound margin, then slough, granulation, necrotic and epithelial areas</span>}
+                </div>
+                <button type="button" disabled={!(pxPerCm > 0)} onClick={() => setShowEditor(true)}
+                  title={pxPerCm > 0 ? undefined : 'Set the scale first'}
+                  className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-40 ${trace ? 'border border-teal-600 text-teal-700' : 'bg-teal-600 text-white'}`}>
+                  <Pencil className="w-3.5 h-3.5 inline mr-1" />{trace ? 'Edit tracing' : 'Trace wound & tissues'}
+                </button>
+              </div>
+              <p className="text-[11px] text-gray-500">The app calculates area, length, width, perimeter and the tissue percentages from your tracing; you can still adjust any number below.</p>
+            </div>
+          )}
+
           {!analyzing && m.area_cm2 != null && (
             <div className="mt-2 space-y-2">
               {/* What was traced, over the photograph it was traced from.
@@ -1070,50 +1165,26 @@ const CaptureAssessmentModal: React.FC<{ wound: Wound; onClose: () => void; onSa
                 confidence={calibrationConfidence}
                 onSetScale={pending ? () => setShowCalibration(true) : undefined}
               />
-              {pending && (
-                <div className="flex flex-wrap gap-2">
-                  {aiContour && aiContour.length > 2 && aiCentroidPx && pxPerCm > 0 && (
-                    <button
-                      onClick={() => setShowEditor(true)}
-                      className="px-3 py-1.5 rounded-md text-xs font-medium border border-primary-300 text-primary-700 hover:bg-primary-50 inline-flex items-center gap-1"
-                    >
-                      <Pencil className="w-3.5 h-3.5" /> {correction ? 'Edit my outline' : 'Correct the outline'}
-                    </button>
-                  )}
-                </div>
-              )}
-
               {correction && (
                 <p className="mt-2 text-xs text-primary-800">
-                  Using your corrected outline — {Math.round(correction.magnitude * 100)}% area change
-                  from the detected one. Both are saved.
+                  Using your traced outline{aiContour ? ` — ${Math.round(correction.magnitude * 100)}% area change from the detected one. Both are saved.` : '.'}
                 </p>
               )}
             </div>
           )}
 
-          {showEditor && pending && aiContour && aiCentroidPx && (
+          {showEditor && pending && pxPerCm > 0 && (
             <Suspense fallback={null}>
-              <WoundContourEditor
-                imageUrl={pending.url}
+              <WoundTracer
+                source={pending.bitmap}
+                width={pending.w}
+                height={pending.h}
                 pixelsPerCm={pxPerCm}
-                aiContourCm={aiContour}
-                aiCentroidPx={aiCentroidPx}
+                scaleLabel={scaleLabel}
+                initialWoundPx={aiContourPx}
+                initial={trace ? { woundPx: trace.woundPx, regions: trace.regions, remainder: trace.remainder } : null}
                 onCancel={() => setShowEditor(false)}
-                onConfirm={({ contourCm, measurements, reason, magnitude }) => {
-                  // The corrected outline drives the numbers. A measurement the
-                  // clinician did not endorse must not sit beside an outline
-                  // they did.
-                  setCorrection({ contourCm, reason, magnitude });
-                  setM(prev => ({
-                    ...prev,
-                    length_cm: measurements.length,
-                    width_cm: measurements.width,
-                    area_cm2: measurements.area,
-                    perimeter_cm: measurements.perimeter,
-                  }));
-                  setShowEditor(false);
-                }}
+                onDone={applyTrace}
               />
             </Suspense>
           )}
@@ -1121,7 +1192,7 @@ const CaptureAssessmentModal: React.FC<{ wound: Wound; onClose: () => void; onSa
           {showCalibration && pending && (
             <Suspense fallback={null}>
               <WoundCalibrationPicker
-                imageUrl={pending.url}
+                source={pending.bitmap}
                 naturalWidth={pending.w}
                 naturalHeight={pending.h}
                 onCancel={() => setShowCalibration(false)}

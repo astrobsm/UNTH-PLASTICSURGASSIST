@@ -1525,13 +1525,13 @@ export default function BookingRegisterPage() {
   return (
     <div className="max-w-7xl mx-auto px-2 sm:px-4 pb-24">
       {/* Header */}
-      <div className="flex items-center gap-3 py-4">
-        <button onClick={() => navigate(-1)} className="p-2 hover:bg-gray-100 rounded-lg">
+      <div className="flex items-center gap-2 sm:gap-3 py-3 sm:py-4">
+        <button onClick={() => navigate(-1)} className="p-2 hover:bg-gray-100 rounded-lg shrink-0">
           <ArrowLeft size={20} />
         </button>
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">Surgery Booking Register</h1>
-          <p className="text-sm text-gray-500">Pre-operative planning, booking & theatre management</p>
+        <div className="min-w-0">
+          <h1 className="text-lg sm:text-xl font-bold text-gray-900">Surgery Booking Register</h1>
+          <p className="text-xs sm:text-sm text-gray-500">Pre-operative planning, booking & theatre management</p>
         </div>
       </div>
 
@@ -1545,7 +1545,7 @@ export default function BookingRegisterPage() {
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${activeTab === tab.key ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+            className={`flex items-center gap-2 px-3 sm:px-4 py-2.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${activeTab === tab.key ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
           >
             {tab.icon} {tab.label}
           </button>
@@ -1611,7 +1611,7 @@ export default function BookingRegisterPage() {
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-gray-900">{selectedPatient.full_name}</p>
                   <p className="text-xs text-gray-500">
-                    {selectedPatient.hospital_number} &bull; {selectedPatient.gender} &bull; {patientAge}yrs
+                    {selectedPatient.hospital_number} &bull; {selectedPatient.gender || 'sex not recorded'} &bull; {patientAge == null || Number.isNaN(patientAge) ? 'age not recorded' : patientAge < 1 ? 'under 1 yr' : `${patientAge}yrs`}
                     {selectedPatient.ward ? ` • Ward: ${selectedPatient.ward}` : ''}
                   </p>
                 </div>
@@ -1620,8 +1620,9 @@ export default function BookingRegisterPage() {
                 </button>
               </div>
 
-              {/* Section sidebar + content */}
-              <div className="flex gap-3">
+              {/* Section sidebar + content. Stacked on phones: side by side,
+                  the full-width section picker pushed the content off screen. */}
+              <div className="flex flex-col md:flex-row gap-3">
                 {/* Sidebar */}
                 <div className="w-48 flex-shrink-0 hidden md:block">
                   <nav className="bg-white rounded-xl border divide-y overflow-hidden">
@@ -1640,7 +1641,7 @@ export default function BookingRegisterPage() {
                 </div>
 
                 {/* Mobile section picker */}
-                <div className="md:hidden w-full mb-3">
+                <div className="md:hidden w-full">
                   <select
                     value={activeSection}
                     onChange={e => setActiveSection(e.target.value as PlanningSection)}
@@ -2273,11 +2274,11 @@ export default function BookingRegisterPage() {
                             </h5>
                             <div className="space-y-2">
                               {INVESTIGATION_PARAMETERS[selectedInvForEntry].map(param => (
-                                <div key={param.parameter} className="grid grid-cols-12 gap-2 items-center">
-                                  <label className="col-span-4 text-sm text-gray-700 font-medium truncate" title={param.parameter}>
+                                <div key={param.parameter} className="grid grid-cols-12 gap-x-2 gap-y-1 items-center border-b sm:border-0 pb-2 sm:pb-0">
+                                  <label className="col-span-12 sm:col-span-4 text-sm text-gray-700 font-medium sm:truncate" title={param.parameter}>
                                     {param.parameter}
                                   </label>
-                                  <div className="col-span-3">
+                                  <div className="col-span-6 sm:col-span-3">
                                     {param.type === 'qualitative' && param.options ? (
                                       <select
                                         value={paramEntries[param.parameter] || ''}
@@ -2299,7 +2300,7 @@ export default function BookingRegisterPage() {
                                     )}
                                   </div>
                                   <span className="col-span-2 text-xs text-gray-500">{param.unit}</span>
-                                  <span className="col-span-2 text-xs text-gray-400">{param.reference_range}</span>
+                                  <span className="col-span-3 sm:col-span-2 text-xs text-gray-400">{param.reference_range}</span>
                                   <div className="col-span-1 text-center">
                                     {paramEntries[param.parameter] && (
                                       <span className={`inline-block w-2 h-2 rounded-full ${

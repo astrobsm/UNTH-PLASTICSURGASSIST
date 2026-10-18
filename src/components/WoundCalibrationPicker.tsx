@@ -47,7 +47,10 @@ export const REFERENCE_OBJECTS: { id: string; label: string; cm: number; hint: s
 interface Point { x: number; y: number }
 
 interface Props {
-  imageUrl: string;
+  /** The decoded photograph. Preferred: drawing from it cannot fail. */
+  source?: ImageBitmap | HTMLCanvasElement;
+  /** Fallback when no decoded image is available. */
+  imageUrl?: string;
   /** Natural pixel dimensions of the source image, for scaling the drawn line. */
   naturalWidth: number;
   naturalHeight: number;
@@ -57,10 +60,11 @@ interface Props {
 }
 
 export default function WoundCalibrationPicker({
-  imageUrl, naturalWidth, naturalHeight, onCancel, onCalibrated,
+  source, imageUrl, naturalWidth, naturalHeight, onCancel, onCalibrated,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const imgRef = useRef<HTMLImageElement | null>(null);
+  const imgRef = useRef<CanvasImageSource | null>(null);
+  const [loadError, setLoadError] = useState(false);
   const [start, setStart] = useState<Point | null>(null);
   const [end, setEnd] = useState<Point | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -73,15 +77,25 @@ export default function WoundCalibrationPicker({
   // Displayed size, so the drawn line can be mapped back to source pixels.
   const [display, setDisplay] = useState({ w: 0, h: 0 });
 
+  // Draw from the decoded photograph when given one. Re-loading the photo from
+  // an object URL could fail silently on Android (the camera file is gone by
+  // then), which left this canvas black.
   useEffect(() => {
+    if (source) { imgRef.current = source; setLoadError(false); draw(); return; }
+    if (!imageUrl) { setLoadError(true); return; }
     const img = new Image();
-    img.onload = () => {
-      imgRef.current = img;
-      draw();
-    };
+    img.onload = () => { imgRef.current = img; setLoadError(false); draw(); };
+    img.onerror = () => setLoadError(true);
     img.src = imageUrl;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [imageUrl]);
+  }, [source, imageUrl]);
+
+  useEffect(() => {
+    const onResize = () => draw();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => { draw(); }, [start, end, display]);
 
@@ -91,9 +105,9 @@ export default function WoundCalibrationPicker({
     if (!canvas || !img) return;
 
     const maxW = Math.min(canvas.parentElement?.clientWidth || 480, 640);
-    const scale = maxW / img.naturalWidth;
-    const w = Math.round(img.naturalWidth * scale);
-    const h = Math.round(img.naturalHeight * scale);
+    const scale = maxW / naturalWidth;
+    const w = Math.round(naturalWidth * scale);
+    const h = Math.round(naturalHeight * scale);
     if (w !== display.w || h !== display.h) setDisplay({ w, h });
 
     canvas.width = w;
@@ -125,20 +139,24 @@ export default function WoundCalibrationPicker({
     }
   };
 
-  const pointFrom = (e: React.MouseEvent | React.TouchEvent): Point => {
-    const canvas = canvasRef.current!;
-    const rect = canvas.getBoundingClientRect();
-    const src = 'touches' in e ? e.touches[0] : (e as React.MouseEvent);
-    return { x: src.clientX - rect.left, y: src.clientY - rect.top };
+  // Pointer events: one code path for finger, stylus and mouse. Separate touch
+  // and mouse handlers could reset the line on phones that also emit mouse events.
+  const pointFrom = (e: React.PointerEvent<HTMLCanvasElement>): Point => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    return {
+      x: (e.clientX - rect.left) * (display.w ? display.w / rect.width : 1),
+      y: (e.clientY - rect.top) * (display.h ? display.h / rect.height : 1),
+    };
   };
 
-  const beginDrag = (e: React.MouseEvent | React.TouchEvent) => {
+  const beginDrag = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
     const p = pointFrom(e);
     setStart(p);
     setEnd(p);
     setDragging(true);
   };
-  const moveDrag = (e: React.MouseEvent | React.TouchEvent) => {
+  const moveDrag = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!dragging) return;
     e.preventDefault();
     setEnd(pointFrom(e));
@@ -156,14 +174,14 @@ export default function WoundCalibrationPicker({
   const canConfirm = pixelsPerCm > 0 && !tooShort;
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[92vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-2 sm:p-4">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[96vh] overflow-y-auto">
         <div className="flex items-center justify-between px-5 py-3 border-b">
           <h2 className="font-semibold text-gray-900">Set the scale</h2>
           <button onClick={onCancel} className="p-1 text-gray-400 hover:text-gray-600"><X className="h-5 w-5" /></button>
         </div>
 
-        <div className="p-5 space-y-4">
+        <div className="p-3 sm:p-5 space-y-4">
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-900 flex gap-2">
             <Move className="h-4 w-4 flex-shrink-0 mt-0.5" />
             <div>
@@ -176,17 +194,19 @@ export default function WoundCalibrationPicker({
             </div>
           </div>
 
+          {loadError && (
+            <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800">
+              The photograph could not be displayed. Close this and take or upload the photo again.
+            </p>
+          )}
           <div className="border rounded-lg overflow-hidden bg-gray-900 flex justify-center">
             <canvas
               ref={canvasRef}
               className="touch-none cursor-crosshair max-w-full"
-              onMouseDown={beginDrag}
-              onMouseMove={moveDrag}
-              onMouseUp={endDrag}
-              onMouseLeave={endDrag}
-              onTouchStart={beginDrag}
-              onTouchMove={moveDrag}
-              onTouchEnd={endDrag}
+              onPointerDown={beginDrag}
+              onPointerMove={moveDrag}
+              onPointerUp={endDrag}
+              onPointerCancel={endDrag}
             />
           </div>
 
@@ -218,21 +238,24 @@ export default function WoundCalibrationPicker({
             </div>
           )}
 
-          <div className="flex gap-2">
+          {!displayLength && !loadError && (
+            <p className="text-xs text-gray-500">Drag across the marker on the photograph above to continue.</p>
+          )}
+          <div className="flex flex-wrap gap-2">
             <button
               onClick={() => onCalibrated({ pixelsPerCm, referenceLabel: reference.label, referenceCm })}
               disabled={!canConfirm}
-              className="px-4 py-2 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50 inline-flex items-center gap-2"
+              className="w-full sm:w-auto px-4 py-2 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50 inline-flex items-center justify-center gap-2"
             >
               <Check className="h-4 w-4" /> Use this scale
             </button>
             <button
               onClick={() => { setStart(null); setEnd(null); }}
-              className="px-4 py-2 rounded-md border text-sm inline-flex items-center gap-2"
+              className="flex-1 sm:flex-none px-4 py-2 rounded-md border text-sm inline-flex items-center justify-center gap-2"
             >
               <RotateCcw className="h-4 w-4" /> Redraw
             </button>
-            <button onClick={onCancel} className="px-4 py-2 rounded-md border text-sm">Cancel</button>
+            <button onClick={onCancel} className="flex-1 sm:flex-none px-4 py-2 rounded-md border text-sm">Cancel</button>
           </div>
         </div>
       </div>
