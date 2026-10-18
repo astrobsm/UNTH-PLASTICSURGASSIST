@@ -8,8 +8,8 @@ const GEO_EXEMPT_ENDPOINTS = new Set([
 ]);
 
 // API Base URL - handles all environments
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL 
-  || (import.meta.env.PROD 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+  || (import.meta.env.PROD
     ? '/api'  // Production fallback: use relative path (proxied by Nginx)
     : 'http://localhost:3005/api');  // Development: direct to backend
 
@@ -70,6 +70,17 @@ const ENDPOINT_TO_TABLE: Record<string, string> = {
   'clinician-assistant': 'clinician_analyses',
 };
 
+/**
+ * Never stored on the device and always read live: chat (messages and
+ * base64 attachments are patient data, and a cached poll is always one
+ * interval behind) and conferencing (config holds TURN credentials).
+ */
+const NO_CACHE_PREFIXES = ['/chat', '/conference-config', '/conference-attendance'];
+const isNoCache = (endpoint: string) => NO_CACHE_PREFIXES.some(p => endpoint.startsWith(p));
+
+/** How old a cached copy may be and still be shown instantly while it refreshes. */
+const SWR_MAX_AGE_MS = 60_000;
+
 // Sync state for cross-device sync
 interface SyncState {
   lastSyncTimestamp: string | null;
@@ -90,6 +101,10 @@ const NON_QUEUEABLE_PREFIXES = [
   '/users/reset-password',
   // Subscribing / unsubscribing a device is about this moment only.
   '/push-subscriptions',
+  // Live, or decisions: a chat message, a conference heartbeat, a consultant's
+  // clearance or a tumour-board plan replayed hours later is wrong, and the
+  // offline stand-in response (no id) crashed the screens that used it.
+  '/chat', '/conference-attendance', '/pre-surgical-brief', '/tumor-board',
 ];
 
 class ApiClient {
@@ -115,7 +130,7 @@ class ApiClient {
 
     // Listen for storage changes from other tabs/devices
     window.addEventListener('storage', this.handleStorageChange.bind(this));
-    
+
     // Listen for online/offline events
     window.addEventListener('online', this.handleOnline.bind(this));
     window.addEventListener('offline', this.handleOffline.bind(this));
@@ -215,10 +230,10 @@ class ApiClient {
     // correctness-critical reads like the staff list and team assignments, where a
     // stale copy (e.g. a just-deactivated user) must not be shown.
     const freshRead = options.freshRead === true;
-    
+
     // Check if this is a protected endpoint that requires authentication
     const isProtectedEndpoint = !endpoint.includes('/auth') && !endpoint.includes('/health') && !endpoint.includes('/diagnostics') && !endpoint.includes('/students/register') && !endpoint.includes('/students/login');
-    
+
     // If it's a protected endpoint and we don't have a token, throw immediately
     if (isProtectedEndpoint && !token) {
       throw new Error('No token provided');
@@ -286,7 +301,12 @@ class ApiClient {
     // serving it from cache made that check a no-op from the second load
     // onward — a revoked or deactivated account kept a "valid" client session
     // for the full 30-day token life because no GET could ever see a 401.
-    if (navigator.onLine && isGet && !freshRead && !isAuthEndpoint) {
+    if (navigator.onLine && isGet && !freshRead && !isAuthEndpoint && !isNoCache(endpoint)
+        && (await this.cachedAgeMs(endpoint)) < SWR_MAX_AGE_MS) {
+      // Only a copy under a minute old is shown instantly. An older one made
+      // every screen show the previous visit's data (and, after a save, the
+      // pre-save data) until the next reload; it now waits for the network
+      // and is used only if the network fails.
       const cached = await this.getCachedResponse<T>(endpoint, entityInfo);
       if (cached !== null) {
         // Return cached data immediately, refresh in background.
@@ -311,7 +331,7 @@ class ApiClient {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Request failed' }));
-        
+
         // Handle token expiration
         if (response.status === 401 || response.status === 403) {
           const errorMsg = typeof errorData.error === 'string' ? errorData.error : '';
@@ -357,14 +377,14 @@ class ApiClient {
             } as unknown as T;
           }
         }
-        
+
         let errorMessage = `HTTP ${response.status}`;
         if (typeof errorData.error === 'string') {
           errorMessage = errorData.error;
         } else if (typeof errorData.message === 'string') {
           errorMessage = errorData.message;
         }
-        
+
         if (errorData.userRole) {
           errorMessage += ` (Your role: ${errorData.userRole})`;
         }
@@ -380,9 +400,11 @@ class ApiClient {
         throw err;
       }
 
-      // Update sync timestamp for successful mutations
+      // Update sync timestamp for successful mutations, and drop cached reads
+      // of the same module so the next read shows what was just saved.
       if (!isGet) {
         this.updateSyncTimestamp();
+        this.invalidateModule(endpoint).catch(() => {});
       }
 
       const data = await response.json();
@@ -405,7 +427,7 @@ class ApiClient {
       }
 
       // Cache successful GET responses in IndexedDB (skip offline fallbacks)
-      if (isGet && data && !isOfflineSWResponse) {
+      if (isGet && data && !isOfflineSWResponse && !isNoCache(endpoint)) {
         this.cacheResponse(endpoint, entityInfo, data).catch(err =>
           console.warn('Cache write failed:', err)
         );
@@ -498,7 +520,7 @@ class ApiClient {
     }
     this.syncState.pendingChanges++;
     this.notifySyncListeners();
-    
+
     // Return optimistic data for mutations
     if (bodyData && typeof bodyData === 'object') {
       return { ...bodyData, _offline: true, _queued: true } as T;
@@ -559,12 +581,12 @@ class ApiClient {
     // Remove query params and leading slash
     const path = endpoint.split('?')[0].replace(/^\//, '');
     const segments = path.split('/').filter(Boolean);
-    
+
     // Try to match first segment to a known entity table
     const entityType = segments[0] || '';
     const tableName = ENDPOINT_TO_TABLE[entityType];
     const entityId = segments.length > 1 ? segments[1] : undefined;
-    
+
     return { entityType, entityId, tableName };
   }
 
@@ -589,24 +611,30 @@ class ApiClient {
       // If we have a dedicated table, cache entities there
       // BUT skip destructive clear()+bulkPut() for tables managed by DataSyncService
       // — those tables are written to by the sync loop and clear() would corrupt mid-write
-      if (entityInfo.tableName && !ApiClient.SYNC_MANAGED_TABLES.has(entityInfo.tableName)) {
+      // Entity tables are only ever MERGED into (put / bulkPut), never
+      // cleared: clear() deleted records created offline and not yet pushed
+      // (notices), and the "first array in the object" rule wrote one
+      // response's sub-list (tumour-board assessments) over another table's
+      // rows. Filtered or action responses (?…) are not entity lists, and a
+      // single entity is only stored when it actually looks like one.
+      const plainPath = !endpoint.includes('?');
+      if (plainPath && entityInfo.tableName && !ApiClient.SYNC_MANAGED_TABLES.has(entityInfo.tableName)) {
         const table = (db as any)[entityInfo.tableName];
+        const rows = (list: any[]) => list.filter(item => item && typeof item === 'object' && item.id != null)
+          .map((item: any) => ({ ...item, synced: true, updated_at: new Date() }));
         if (table) {
           if (entityInfo.entityId) {
-            // Single entity - put/update
-            await table.put({ ...data, synced: true, updated_at: new Date() });
-          } else if (Array.isArray(data)) {
-            // Array response - replace all
-            await table.clear();
-            if (data.length > 0) {
-              await table.bulkPut(data.map((item: any) => ({ ...item, synced: true, updated_at: new Date() })));
+            if (data && typeof data === 'object' && !Array.isArray(data) && data.id != null) {
+              await table.put({ ...data, synced: true, updated_at: new Date() });
             }
+          } else if (Array.isArray(data)) {
+            const r = rows(data);
+            if (r.length) await table.bulkPut(r);
           } else if (data && typeof data === 'object') {
-            // Object with nested array (e.g. { patients: [...], total: N })
-            const arrayKey = Object.keys(data).find(k => Array.isArray(data[k]));
-            if (arrayKey && data[arrayKey].length > 0) {
-              await table.clear();
-              await table.bulkPut(data[arrayKey].map((item: any) => ({ ...item, synced: true, updated_at: new Date() })));
+            const arrays = Object.keys(data).filter(k => Array.isArray(data[k]));
+            if (arrays.length === 1) {
+              const r = rows(data[arrays[0]]);
+              if (r.length) await table.bulkPut(r);
             }
           }
           // Don't return — also write to api_cache for full response structure
@@ -633,6 +661,12 @@ class ApiClient {
       // the entity table can't filter — it would return ALL records as a raw array,
       // which has the wrong shape (raw array vs { notes: [...] }) and wrong data
       // (all patients instead of one). Use api_cache for those instead.
+      // The stored response for this exact request keeps its real shape
+      // ({ notices: [...] }); the entity table is only a fallback.
+      const exact = await db.api_cache.get(endpoint);
+      if (exact?.data && (!exact.updated_at || Date.now() - new Date(exact.updated_at).getTime() <= 30 * 24 * 60 * 60 * 1000)) {
+        return exact.data as T;
+      }
       const hasQueryParams = endpoint.includes('?');
       if (entityInfo.tableName && !hasQueryParams) {
         const table = (db as any)[entityInfo.tableName];
@@ -711,6 +745,23 @@ class ApiClient {
     return this.request<T>(endpoint, { method: 'DELETE' });
   }
 
+  /** Age of the stored response for an endpoint (Infinity when none). */
+  private async cachedAgeMs(endpoint: string): Promise<number> {
+    try {
+      const c = await db.api_cache.get(endpoint);
+      return c?.updated_at ? Date.now() - new Date(c.updated_at).getTime() : Infinity;
+    } catch {
+      return Infinity;
+    }
+  }
+
+  /** Drop every stored read of a module (e.g. all /tumor-board… reads) after a write to it. */
+  private async invalidateModule(endpoint: string): Promise<void> {
+    const base = '/' + (endpoint.split('?')[0].replace(/^\//, '').split('/')[0] || '');
+    if (base === '/') return;
+    await db.api_cache.where('endpoint').startsWith(base).delete();
+  }
+
   /**
    * Invalidate stale-while-revalidate cache for a specific endpoint.
    * Call after mutations (POST/PUT/DELETE) so the next GET fetches fresh data.
@@ -750,7 +801,7 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify({ username: email, password })
     });
-    
+
     // Diagnostic: log response shape to help debug auth issues
     console.log('🔐 Login response keys:', data ? Object.keys(data) : 'null/undefined');
     if (!data || !data.user) {
@@ -1013,7 +1064,7 @@ class ApiClient {
       initial_management_plan: admissionData.initial_management_plan,
       status: admissionData.status || 'active'
     };
-    
+
     console.log('📤 Sending FULL admission to server:', Object.keys(backendData).length, 'fields');
     const data = await this.request('/admissions', {
       method: 'POST',
@@ -1088,7 +1139,7 @@ class ApiClient {
     };
 
     console.log('🔄 Sending treatment plan to API:', transformedData);
-    
+
     const data = await this.request('/treatment-plans', {
       method: 'POST',
       body: JSON.stringify(transformedData)

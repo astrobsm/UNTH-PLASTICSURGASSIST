@@ -73,7 +73,13 @@ export function authenticateRequest(req, options = {}) {
   // "Last active" for the Admin page (throttled, never awaited). Staff only.
   if (!(decoded.sub_type === 'student' || decoded.role === 'student')) touchLastSeen(decoded.id);
 
-  return { authenticated: true, user: decoded };
+  // Tokens carry `fullName`; much of the server reads `full_name` or `name`,
+  // so authors, approvers and attendees were recorded as nobody. One place
+  // gives every handler all three.
+  const name = decoded.fullName || decoded.full_name || decoded.name || null;
+  const user = { ...decoded, fullName: name, full_name: name, name };
+
+  return { authenticated: true, user };
 }
 
 // CORS for API routes: any origin may call the API.

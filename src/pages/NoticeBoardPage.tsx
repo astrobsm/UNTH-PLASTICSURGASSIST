@@ -33,7 +33,8 @@ export default function NoticeBoardPage() {
   const [formContent, setFormContent] = useState('');
   const [formPinned, setFormPinned] = useState(false);
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'consultant';
+  // Same roles the server allows (api/notice-board.js NOTICE_ROLES).
+  const isAdmin = ['admin', 'super_admin', 'consultant'].includes(user?.role || '');
 
   useEffect(() => {
     loadNotices();

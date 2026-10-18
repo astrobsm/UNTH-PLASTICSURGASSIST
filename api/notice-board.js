@@ -2,6 +2,11 @@
 import { query } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
 
+// Who may post, edit and remove notices — enforced here, not only by the page
+// hiding its buttons (any signed-in user could previously overwrite or remove
+// any notice, and set its author).
+export const NOTICE_ROLES = ['admin', 'super_admin', 'consultant'];
+
 export default async function handler(req, res) {
   if (cors(req, res)) return;
 
@@ -13,12 +18,16 @@ export default async function handler(req, res) {
   const { method } = req;
   const userId = authResult.user.id;
   const userRole = authResult.user.role;
+  if (method !== 'GET' && !NOTICE_ROLES.includes(userRole)) {
+    return res.status(403).json({ error: 'Only administrators and consultants can post or change notices' });
+  }
 
   try {
     switch (method) {
       case 'GET':
         return await handleGet(req, res, userId);
       case 'POST':
+        req.authUserName = authResult.user.fullName || '';
         return await handlePost(req, res, userId, userRole);
       case 'PUT':
         return await handlePut(req, res, userId, userRole);
@@ -39,7 +48,7 @@ async function handleGet(req, res, userId) {
   await ensureTable();
 
   const { category, since } = req.query;
-  let sql = `SELECT * FROM notice_board WHERE is_active = true`;
+  let sql = `SELECT * FROM notice_board WHERE is_active = true AND (expires_at IS NULL OR expires_at > NOW())`;
   const params = [];
 
   if (category && category !== 'all') {
@@ -61,23 +70,26 @@ async function handleGet(req, res, userId) {
 async function handlePost(req, res, userId, userRole) {
   await ensureTable();
 
-  const { id, title, category, content, posted_by, posted_by_name, posted_by_role, is_pinned } = req.body;
+  const { id, title, category, content, is_pinned, expires_at } = req.body || {};
+  // The author is whoever is signed in — never what the request says.
+  const author = { id: String(userId), name: req.authUserName || '', role: userRole };
 
   if (!title || !content || !category) {
     return res.status(400).json({ error: 'Title, content and category are required' });
   }
 
   const result = await query(
-    `INSERT INTO notice_board (id, title, category, content, posted_by, posted_by_name, posted_by_role, is_pinned, is_active, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, NOW(), NOW())
+    `INSERT INTO notice_board (id, title, category, content, posted_by, posted_by_name, posted_by_role, is_pinned, is_active, created_at, updated_at, expires_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, NOW(), NOW(), $9)
      ON CONFLICT (id) DO UPDATE SET
        title = EXCLUDED.title,
        category = EXCLUDED.category,
        content = EXCLUDED.content,
        is_pinned = EXCLUDED.is_pinned,
+       expires_at = EXCLUDED.expires_at,
        updated_at = NOW()
      RETURNING *`,
-    [id || crypto.randomUUID(), title, category, content, posted_by || userId, posted_by_name || '', posted_by_role || userRole, is_pinned || false]
+    [id || crypto.randomUUID(), title, category, content, author.id, author.name, author.role, is_pinned || false, expires_at || null]
   );
 
   return res.status(201).json({ notice: result.rows[0] });
@@ -137,7 +149,9 @@ async function ensureTable() {
       is_pinned BOOLEAN DEFAULT false,
       is_active BOOLEAN DEFAULT true,
       created_at TIMESTAMPTZ DEFAULT NOW(),
-      updated_at TIMESTAMPTZ DEFAULT NOW()
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      expires_at TIMESTAMPTZ
     )
   `);
+  try { await query(`ALTER TABLE notice_board ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ`); } catch { /* exists */ }
 }
