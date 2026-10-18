@@ -57,6 +57,20 @@ interface LayoutProps {
   children: ReactNode;
 }
 
+type NavEntry = { name: string; subtitle?: string };
+const navTitle = (item: NavEntry) => (item.subtitle ? `${item.name} / ${item.subtitle}` : item.name);
+
+/** A menu label; an item with a subtitle shows it as a second line of equal weight. */
+const NavLabel = ({ item, truncate = false }: { item: NavEntry; truncate?: boolean }) =>
+  item.subtitle ? (
+    <span className="flex flex-col leading-tight min-w-0">
+      <span className={truncate ? 'truncate' : ''}>{item.name}</span>
+      <span className={truncate ? 'truncate' : ''}>{item.subtitle}</span>
+    </span>
+  ) : (
+    <span className={truncate ? 'truncate' : ''}>{item.name}</span>
+  );
+
 // Every navigation destination. What each role actually sees is filtered
 // through config/routeAccess, the same table the router gates on — so the menu
 // never offers a screen that would bounce the user straight back.
@@ -69,7 +83,8 @@ const navigation = [
   { name: 'Call Duty Roster', href: '/call-duty', icon: PhoneCall },
   { name: 'Clinic Duties', href: '/clinic-duties', icon: Shield },
   { name: 'Clinic Day Log', href: '/clinic-day-log', icon: ClipboardCheck },
-  { name: 'Clinic Appointments/Surgery Booking', href: '/clinic-appointments', icon: CalendarCheck },
+  // Two lines in the menu, so surgery booking is visible at a glance.
+  { name: 'Clinic Appointments', subtitle: 'Surgery Booking', href: '/clinic-appointments', icon: CalendarCheck },
   { name: 'Consults', href: '/consults', icon: Stethoscope },
   { name: 'WoundProgress Monitor', href: '/wound-monitor', icon: Activity },
   { name: 'Skin Graft Monitoring', href: '/skin-grafts', icon: Activity },
@@ -335,7 +350,7 @@ export default function Layout({ children }: LayoutProps) {
                   `}
                 >
                   <item.icon className="mr-3 h-5 w-5 flex-shrink-0" />
-                  <span>{item.name}</span>
+                  <NavLabel item={item} />
                 </Link>
               );
             })}
@@ -364,7 +379,7 @@ export default function Layout({ children }: LayoutProps) {
                 <Link
                   key={item.name}
                   to={item.href}
-                  title={isCollapsed ? item.name : undefined}
+                  title={isCollapsed ? navTitle(item) : undefined}
                   className={`
                     flex items-center ${isCollapsed ? 'justify-center px-2' : 'px-3'} py-2.5 rounded-lg text-sm font-medium transition-all duration-200
                     ${isActive
@@ -374,7 +389,7 @@ export default function Layout({ children }: LayoutProps) {
                   `}
                 >
                   <item.icon className={`${isCollapsed ? '' : 'mr-3'} h-5 w-5 flex-shrink-0`} />
-                  {!isCollapsed && <span className="truncate">{item.name}</span>}
+                  {!isCollapsed && <NavLabel item={item} truncate />}
                 </Link>
               );
             })}

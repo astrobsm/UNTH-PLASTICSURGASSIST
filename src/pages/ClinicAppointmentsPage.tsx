@@ -391,49 +391,100 @@ const ClinicAppointmentsPage: React.FC = () => {
     noShow: appointments.filter(a => a.status === 'no-show').length,
   };
 
+  /** Status actions for one appointment — the same buttons in the table and the phone cards. */
+  const renderActions = (a: typeof appointments[number]) => (
+    <>
+      {a.status !== 'cancelled' && a.status !== 'completed' && (
+        <div className="flex flex-wrap items-center gap-1">
+          {a.status === 'booked' && (
+            <button onClick={() => updateStatus(a.id, 'checked-in')}
+              disabled={updating === a.id}
+              className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-xs font-medium hover:bg-yellow-200 disabled:opacity-50">
+              Check In
+            </button>
+          )}
+          {a.status === 'checked-in' && (
+            <button onClick={() => updateStatus(a.id, 'in-progress')}
+              disabled={updating === a.id}
+              className="px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs font-medium hover:bg-purple-200 disabled:opacity-50">
+              Start
+            </button>
+          )}
+          {(a.status === 'in-progress' || a.status === 'checked-in') && (
+            <button onClick={() => updateStatus(a.id, 'completed')}
+              disabled={updating === a.id}
+              className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium hover:bg-green-200 disabled:opacity-50">
+              <CheckCircle className="w-3 h-3 inline mr-0.5" />Done
+            </button>
+          )}
+          {a.status !== 'no-show' && (
+            <button onClick={() => updateStatus(a.id, 'no-show')}
+              disabled={updating === a.id}
+              className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs font-medium hover:bg-gray-200 disabled:opacity-50">
+              <AlertTriangle className="w-3 h-3 inline mr-0.5" />No Show
+            </button>
+          )}
+          <button onClick={() => promoteToSurgery(a.id)}
+            disabled={updating === a.id}
+            title="Add to surgery scheduling queue"
+            className="px-2 py-1 bg-orange-100 text-orange-700 rounded text-xs font-medium hover:bg-orange-200 disabled:opacity-50">
+            <Scissors className="w-3 h-3 inline mr-0.5" />Surgery
+          </button>
+          <button onClick={() => cancelAppointment(a.id)}
+            disabled={updating === a.id}
+            className="px-2 py-1 bg-red-100 text-red-700 rounded text-xs font-medium hover:bg-red-200 disabled:opacity-50">
+            <XCircle className="w-3 h-3 inline mr-0.5" />Cancel
+          </button>
+        </div>
+      )}
+    </>
+  );
+
   return (
-    <div className="p-4 md:p-6 max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6">
+    <div className="p-3 sm:p-4 md:p-6 max-w-7xl mx-auto">
+      {/* Header. The actions wrap: in one unbroken row they ran off a phone's
+          screen and left the page full of gaps. */}
+      <div className="flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-3 mb-4 sm:mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Clinic Appointments</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Clinic Appointments</h1>
           <p className="text-sm text-gray-500 mt-1">Manage patient clinic bookings &middot; Tuesdays &amp; Wednesdays</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2">
           <select
             value={pdfOrientation}
             onChange={e => setPdfOrientation(e.target.value as 'portrait' | 'landscape')}
-            className="px-2 py-2 bg-white border border-gray-300 rounded-lg text-sm"
+            className="w-full sm:w-auto px-2 py-2 bg-white border border-gray-300 rounded-lg text-sm"
             aria-label="PDF orientation"
           >
             <option value="landscape">Landscape PDF</option>
             <option value="portrait">Portrait PDF</option>
           </select>
-          <button onClick={exportPdf} disabled={exportingPdf || loading || appointments.length === 0} className="flex items-center gap-1.5 px-3 py-2 bg-white border border-green-600 text-green-700 rounded-lg text-sm hover:bg-green-50 disabled:opacity-50 disabled:cursor-not-allowed">
+          <button onClick={exportPdf} disabled={exportingPdf || loading || appointments.length === 0} className="flex items-center justify-center gap-1.5 whitespace-nowrap px-3 py-2 bg-white border border-green-600 text-green-700 rounded-lg text-sm hover:bg-green-50 disabled:opacity-50 disabled:cursor-not-allowed">
             <Download className="w-4 h-4" /> {exportingPdf ? 'Exporting...' : 'Export PDF'}
           </button>
-          <button onClick={fetchAppointments} className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm hover:bg-gray-50">
+          <button onClick={fetchAppointments} className="flex items-center justify-center gap-1.5 whitespace-nowrap px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm hover:bg-gray-50">
             <RefreshCw className="w-4 h-4" /> Refresh
           </button>
           <a href="/book-appointment.html" target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-3 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">
+            className="flex items-center justify-center gap-1.5 whitespace-nowrap px-3 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">
             <ExternalLink className="w-4 h-4" /> Open Booking Page
           </a>
           <a href="/appointment-qr.html" target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-3 py-2 bg-white border border-green-600 text-green-700 rounded-lg text-sm hover:bg-green-50">
-            📱 QR Code &amp; Instructions
+            className="flex items-center justify-center gap-1.5 whitespace-nowrap px-3 py-2 bg-white border border-green-600 text-green-700 rounded-lg text-sm hover:bg-green-50">
+            📱 QR &amp; Instructions
           </a>
         </div>
       </div>
 
       {/* Shareable Link */}
-      <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+      <div className="bg-green-50 border border-green-200 rounded-lg p-3 sm:p-4 mb-4">
         <p className="text-sm font-semibold text-green-800 mb-2">📎 Patient Booking Link (share with patients)</p>
         <div className="flex items-center gap-2 flex-wrap">
           <input
             readOnly
             value={bookingUrl}
-            className="flex-1 min-w-0 px-3 py-2 border border-green-300 rounded-md text-sm bg-white text-gray-800"
+            className="w-full sm:w-auto sm:flex-1 min-w-0 px-3 py-2 border border-green-300 rounded-md text-sm bg-white text-gray-800"
+            onFocus={e => e.currentTarget.select()}
           />
           <button onClick={copyLink}
             className="flex items-center gap-1.5 px-3 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">
@@ -447,7 +498,7 @@ const ClinicAppointmentsPage: React.FC = () => {
       </div>
 
       {/* Audio Reminder Controls */}
-      <div className={`border rounded-lg p-4 mb-4 ${remindersEnabled ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'}`}>
+      <div className={`border rounded-lg p-3 sm:p-4 mb-4 ${remindersEnabled ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'}`}>
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
           <div className="flex items-center gap-3">
             {remindersEnabled ? (
@@ -466,7 +517,7 @@ const ClinicAppointmentsPage: React.FC = () => {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {remindersEnabled && (
               <div className="flex items-center gap-1.5">
                 <label className="text-xs font-medium text-gray-600">Remind</label>
@@ -668,7 +719,44 @@ const ClinicAppointmentsPage: React.FC = () => {
             <p className="text-sm mt-1">Adjust filters or select a different date</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          {/* Phones: one card per appointment, actions in reach. */}
+          <ul className="md:hidden divide-y divide-gray-100">
+            {appointments.map(a => (
+              <li key={a.id} className={`p-3 ${a.status === 'cancelled' ? 'opacity-50' : ''} ${
+                remindersEnabled && isToday && a.id === currentSlotId ? 'bg-green-50' :
+                remindersEnabled && isToday && a.id === nextSlotId ? 'bg-amber-50' : ''}`}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-gray-900 truncate">{a.patient_name || a.patient_number}</p>
+                    <p className="text-xs text-gray-500">
+                      <Clock className="w-3 h-3 inline mr-0.5" />{formatTime(a.time_slot)}
+                      {a.patient_name && <> · <span className="font-mono">{a.patient_number}</span></>}
+                      {a.station_number ? <> · Station #{a.station_number}</> : null}
+                    </p>
+                  </div>
+                  <span className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-semibold ${STATUS_COLORS[a.status] || 'bg-gray-100'}`}>
+                    {a.status.replace('-', ' ').toUpperCase()}
+                  </span>
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                  {a.category && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-medium"
+                      style={{ backgroundColor: `${categoryColor(a.category)}1A`, color: categoryColor(a.category) }}>
+                      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: categoryColor(a.category) }} />{a.category}
+                    </span>
+                  )}
+                  {a.doctor_assigned && <span className="text-gray-600">{a.doctor_assigned}</span>}
+                  {a.phone_number && (
+                    <a href={`https://wa.me/${a.phone_number.replace(/^\+/, '').replace(/^0/, '234')}`} target="_blank" rel="noopener noreferrer" className="text-green-600">📱 {a.phone_number}</a>
+                  )}
+                </div>
+                <div className="mt-2">{renderActions(a)}</div>
+              </li>
+            ))}
+          </ul>
+
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b">
                 <tr>
@@ -729,56 +817,13 @@ const ClinicAppointmentsPage: React.FC = () => {
                         {a.status.replace('-', ' ').toUpperCase()}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
-                      {a.status !== 'cancelled' && a.status !== 'completed' && (
-                        <div className="flex items-center gap-1">
-                          {a.status === 'booked' && (
-                            <button onClick={() => updateStatus(a.id, 'checked-in')}
-                              disabled={updating === a.id}
-                              className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-xs font-medium hover:bg-yellow-200 disabled:opacity-50">
-                              Check In
-                            </button>
-                          )}
-                          {a.status === 'checked-in' && (
-                            <button onClick={() => updateStatus(a.id, 'in-progress')}
-                              disabled={updating === a.id}
-                              className="px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs font-medium hover:bg-purple-200 disabled:opacity-50">
-                              Start
-                            </button>
-                          )}
-                          {(a.status === 'in-progress' || a.status === 'checked-in') && (
-                            <button onClick={() => updateStatus(a.id, 'completed')}
-                              disabled={updating === a.id}
-                              className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium hover:bg-green-200 disabled:opacity-50">
-                              <CheckCircle className="w-3 h-3 inline mr-0.5" />Done
-                            </button>
-                          )}
-                          {a.status !== 'no-show' && (
-                            <button onClick={() => updateStatus(a.id, 'no-show')}
-                              disabled={updating === a.id}
-                              className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs font-medium hover:bg-gray-200 disabled:opacity-50">
-                              <AlertTriangle className="w-3 h-3 inline mr-0.5" />No Show
-                            </button>
-                          )}
-                          <button onClick={() => promoteToSurgery(a.id)}
-                            disabled={updating === a.id}
-                            title="Add to surgery scheduling queue"
-                            className="px-2 py-1 bg-orange-100 text-orange-700 rounded text-xs font-medium hover:bg-orange-200 disabled:opacity-50">
-                            <Scissors className="w-3 h-3 inline mr-0.5" />Surgery
-                          </button>
-                          <button onClick={() => cancelAppointment(a.id)}
-                            disabled={updating === a.id}
-                            className="px-2 py-1 bg-red-100 text-red-700 rounded text-xs font-medium hover:bg-red-200 disabled:opacity-50">
-                            <XCircle className="w-3 h-3 inline mr-0.5" />Cancel
-                          </button>
-                        </div>
-                      )}
-                    </td>
+                    <td className="px-4 py-3">{renderActions(a)}                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          </>
         )}
 
         {/* Surgery Scheduling Section */}

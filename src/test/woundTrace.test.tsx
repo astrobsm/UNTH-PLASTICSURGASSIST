@@ -101,3 +101,15 @@ describe('surgery booking on small phones', () => {
     expect(page).toMatch(/<div className="flex flex-col md:flex-row gap-3">/);
   });
 });
+
+describe('clinic appointments on small phones', () => {
+  const page = fs.readFileSync(path.resolve(__dirname, '../pages/ClinicAppointmentsPage.tsx'), 'utf8');
+  it('header actions wrap instead of running off screen', () => {
+    expect(page).toMatch(/grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2/);
+  });
+  it('appointments are cards on phones and a table from md up, sharing one set of actions', () => {
+    expect(page).toMatch(/<ul className="md:hidden/);
+    expect(page).toMatch(/hidden md:block overflow-x-auto/);
+    expect((page.match(/renderActions\(a\)/g) || []).length).toBe(2);
+  });
+});
