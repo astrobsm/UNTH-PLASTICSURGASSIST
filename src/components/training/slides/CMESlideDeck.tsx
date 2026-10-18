@@ -80,20 +80,28 @@ export default function CMESlideDeck({ slides, articleTitle, meta, index, onInde
       style={{ fontSize: 'clamp(14px, 1.1vw + 11px, 21px)' }}>
       {/* Slide */}
       <div
-        className={`relative flex flex-col select-text ${fullscreen ? 'flex-1' : 'h-[calc(100dvh-230px)] min-h-[420px] sm:h-auto sm:aspect-[16/10] lg:aspect-video'}`}
+        className={`relative flex flex-col overflow-hidden select-text ${fullscreen ? 'flex-1 min-h-0' : 'h-[calc(100dvh-230px)] min-h-[420px] sm:h-auto sm:aspect-[16/10] sm:max-h-[calc(100dvh-170px)] lg:aspect-video'}`}
         onPointerDown={onPointerDown} onPointerUp={onPointerUp}
         role="region" aria-roledescription="slide" aria-label={`Slide ${index + 1} of ${slides.length}: ${slide.title}`}
       >
         {slide.kind === 'title' ? (
-          <div className="flex-1 flex flex-col items-center justify-center text-center px-[6%] py-6 bg-gradient-to-br from-emerald-800 via-emerald-700 to-emerald-900 text-white">
-            <img src={LOGO} alt="University of Nigeria Teaching Hospital, Enugu" className="w-[22%] min-w-[72px] max-w-[130px] bg-white rounded-full p-2 shadow-lg" />
+          <div className="flex-1 min-h-0 overflow-y-auto bg-gradient-to-br from-emerald-800 via-emerald-700 to-emerald-900 text-white">
+          <div className="min-h-full flex flex-col items-center justify-center text-center px-[6%] py-5">
+            <img src={LOGO} alt="University of Nigeria Teaching Hospital, Enugu" className="w-[18%] min-w-[64px] max-w-[110px] bg-white rounded-full p-2 shadow-lg" />
             <p className="mt-3 text-[0.7em] tracking-[0.18em] uppercase text-amber-300 font-semibold">Continuing Medical Education</p>
-            <h2 className="mt-2 font-extrabold leading-tight text-[1.55em] sm:text-[1.9em] max-w-[22ch]">{articleTitle}</h2>
+            <h2 className="mt-2 font-extrabold leading-tight text-[1.5em] sm:text-[1.7em] max-w-[24ch]">{articleTitle}</h2>
             <div className="mt-4 h-1 w-20 bg-amber-400 rounded-full" />
             <p className="mt-4 text-[0.78em] text-emerald-50">{DEPARTMENT}</p>
             <p className="text-[0.72em] text-emerald-100/90">{INSTITUTION}</p>
             {meta && <p className="mt-3 text-[0.7em] px-3 py-1 rounded-full bg-white/10 border border-white/20">{meta}</p>}
-            <p className="mt-6 text-[0.68em] text-emerald-100/80 sm:hidden">Swipe left to begin →</p>
+            {slides.length > 1 && (
+              <button type="button" onClick={() => go(1)}
+                className="mt-5 inline-flex items-center gap-1.5 px-5 py-2 rounded-full bg-amber-400 text-emerald-950 font-bold text-[0.8em] shadow hover:bg-amber-300">
+                Start slides <ChevronRight className="w-[1.1em] h-[1.1em]" />
+              </button>
+            )}
+            <p className="mt-2 text-[0.62em] text-emerald-100/80">Swipe, use the arrow keys, or the buttons below</p>
+          </div>
           </div>
         ) : (
           <>
@@ -130,7 +138,7 @@ export default function CMESlideDeck({ slides, articleTitle, meta, index, onInde
       </div>
 
       {/* Controls */}
-      <div className="flex items-center gap-2 px-3 py-2 bg-white border-t border-emerald-100">
+      <div className="relative z-10 shrink-0 flex items-center gap-2 px-3 py-2 bg-white border-t border-emerald-100">
         <button type="button" onClick={() => go(index - 1)} disabled={index === 0} aria-label="Previous slide"
           className="h-10 w-10 shrink-0 rounded-full border-2 border-emerald-600 text-emerald-700 flex items-center justify-center disabled:opacity-30">
           <ChevronLeft className="w-5 h-5" />
