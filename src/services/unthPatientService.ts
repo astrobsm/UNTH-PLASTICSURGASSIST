@@ -355,7 +355,8 @@ class UNTHPatientService {
       return patientId;
     } catch (error) {
       console.error('Error registering patient:', error);
-      throw new Error('Patient registration failed');
+      // Keep the reason (a duplicate number, a refused field) for the form.
+      throw new Error((error as any)?.message || 'Patient registration failed');
     }
   }
 

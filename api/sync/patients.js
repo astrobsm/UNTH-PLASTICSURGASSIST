@@ -1,5 +1,6 @@
 // Sync patients endpoint - GET all patients, POST to create
 import { query } from '../_lib/db.js';
+import { normalizeHospitalNumber, findPatientsByHospitalNumber, duplicateResponse } from '../_lib/hospitalNumber.js';
 import { cors, authenticateRequest } from '../_lib/auth.js';
 
 export default async function handler(req, res) {
@@ -142,6 +143,13 @@ async function createPatient(data, user, res) {
       error: 'First name and last name are required',
       received: data 
     });
+  }
+
+  // Same rule as /patients: written as PT-12345, never registered twice.
+  if (patientData.hospital_number) {
+    patientData.hospital_number = normalizeHospitalNumber(patientData.hospital_number);
+    const taken = await findPatientsByHospitalNumber(query, patientData.hospital_number);
+    if (taken.length) return res.status(409).json(duplicateResponse(taken, patientData.hospital_number));
   }
 
   // Generate hospital number if not provided

@@ -2,6 +2,7 @@
 import { query } from '../_lib/db.js';
 import { cors, authenticateRequest } from '../_lib/auth.js';
 import { idempotent, rememberResponse } from '../_lib/idempotency.js';
+import { normalizeHospitalNumber, findPatientsByHospitalNumber, duplicateResponse, listDuplicateHospitalNumbers } from '../_lib/hospitalNumber.js';
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
@@ -24,6 +25,22 @@ export default async function handler(req, res) {
         // file — Vercel routes two-segment paths to patients/[id].js, which
         // knows nothing about name history, so the subpath 404'd. The query
         // form lands on /api/patients directly and cannot be mis-routed.
+        // Is this patient number already registered? Asked by the registration
+        // form as soon as the number is typed, before anything else is filled.
+        {
+          // Patients already sharing a number (ignoring case/punctuation), for merging.
+          if (url.searchParams.get('hospital_number_duplicates') !== null) {
+            if (!['admin', 'super_admin', 'consultant'].includes(auth.user.role)) {
+              return res.status(403).json({ error: 'Administrators only' });
+            }
+            return res.status(200).json({ duplicates: await listDuplicateHospitalNumbers(query) });
+          }
+          const lookup = url.searchParams.get('hospital_number_lookup');
+          if (lookup !== null) {
+            const matches = await findPatientsByHospitalNumber(query, lookup);
+            return res.status(200).json({ normalized: normalizeHospitalNumber(lookup), exists: matches.length > 0, matches });
+          }
+        }
         {
           const nameHistoryId = url.searchParams.get('name_history');
           if (nameHistoryId) {
@@ -192,6 +209,14 @@ async function createPatient(data, user, req, res) {
       error: 'First name and last name are required',
       received: data 
     });
+  }
+
+  // One written form (PT-12345), and no second registration of the same
+  // number however it is typed — case, spaces and dashes are ignored.
+  if (patientData.hospital_number) {
+    patientData.hospital_number = normalizeHospitalNumber(patientData.hospital_number);
+    const taken = await findPatientsByHospitalNumber(query, patientData.hospital_number);
+    if (taken.length) return res.status(409).json(duplicateResponse(taken, patientData.hospital_number));
   }
 
   // Generate hospital number if not provided
@@ -363,6 +388,15 @@ async function updatePatient(id, data, user, res) {
     emergencyContactPhone: 'emergency_contact_phone',
     emergency_contact_phone: 'emergency_contact_phone'
   };
+
+  // Changing a patient's number to one another patient already has is refused.
+  for (const k of ['hospitalNumber', 'hospital_number']) {
+    if (data[k] !== undefined && data[k] !== null && String(data[k]).trim()) {
+      data[k] = normalizeHospitalNumber(data[k]);
+      const taken = await findPatientsByHospitalNumber(query, data[k], id);
+      if (taken.length) return res.status(409).json(duplicateResponse(taken, data[k]));
+    }
+  }
 
   for (const [key, dbField] of Object.entries(fieldMap)) {
     if (data[key] !== undefined) {

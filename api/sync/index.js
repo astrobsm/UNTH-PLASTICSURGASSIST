@@ -4,6 +4,7 @@ import { cors, authenticateRequest } from '../_lib/auth.js';
 import { ensureDetoxColumns, DETOX_TABLES } from '../_lib/detoxSchema.js';
 import { ensureLymphedemaColumns, LYMPHEDEMA_TABLES } from '../_lib/lymphedemaSchema.js';
 import { ensureModuleColumns, MODULE_COLUMNS } from '../_lib/moduleColumns.js';
+import { normalizeHospitalNumber, KEY_SQL, hospitalNumberKey } from '../_lib/hospitalNumber.js';
 
 // Cache table columns to avoid repeated information_schema queries
 const tableColumnsCache = {};
@@ -559,12 +560,14 @@ async function handlePush(data, user, res) {
           resolvedLast = resolvedLast || 'Patient';
           
           // Generate a fallback hospital_number for records that don't have one
-          const effectiveHospitalNumber = hospital_number || 
+          // Written as PT-12345 and matched ignoring case and punctuation, so a
+          // patient registered offline as "pt 12345" meets the existing record.
+          const effectiveHospitalNumber = (hospital_number && normalizeHospitalNumber(hospital_number)) ||
             `AUTO-${resolvedFirst.substring(0,3).toUpperCase()}${resolvedLast.substring(0,3).toUpperCase()}-${Date.now().toString(36)}`;
           
           const existing = await query(
-            'SELECT id, first_name, last_name, date_of_birth FROM patients WHERE hospital_number = $1',
-            [effectiveHospitalNumber]
+            `SELECT id, first_name, last_name, date_of_birth FROM patients WHERE ${KEY_SQL()} = $1 ORDER BY created_at ASC LIMIT 1`,
+            [hospitalNumberKey(effectiveHospitalNumber)]
           );
           // The hospital number is already someone's. Updating that row with
           // this payload overwrote another patient's name and date of birth —
@@ -585,9 +588,9 @@ async function handlePush(data, user, res) {
                blood_group = COALESCE($8, blood_group), allergies = COALESCE($9, allergies), 
                medical_history = COALESCE($10, medical_history), primary_diagnosis = COALESCE($11, primary_diagnosis),
                created_by = COALESCE(created_by, $13),
-               updated_at = CURRENT_TIMESTAMP WHERE hospital_number = $12`,
+               updated_at = CURRENT_TIMESTAMP WHERE id = $12`,
               [resolvedFirst, resolvedLast, date_of_birth, gender, phone, email, address,
-               blood_group, allergies, medical_history, primary_diagnosis, effectiveHospitalNumber, user.id]
+               blood_group, allergies, medical_history, primary_diagnosis, existing.rows[0].id, user.id]
             );
           } else {
             await query(

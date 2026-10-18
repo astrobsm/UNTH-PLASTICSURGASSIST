@@ -4,6 +4,7 @@
 // so one bad row never fails the whole batch.
 import { unitIndexFromId, UNIT_IDS } from './_lib/teamAssignment.js';
 import { query } from './_lib/db.js';
+import { normalizeHospitalNumber, findPatientsByHospitalNumber } from './_lib/hospitalNumber.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
 import { assignPatientToStudentGroup } from './_lib/studentAssignment.js';
 
@@ -44,11 +45,15 @@ export default async function handler(req, res) {
       continue;
     }
 
-    const hospital_number = (row.hospital_number || row.hospitalNumber || '').trim() || genHospitalNumber();
+    const hospital_number = normalizeHospitalNumber(row.hospital_number || row.hospitalNumber || '') || genHospitalNumber();
 
     try {
-      // 1) Register the patient
-      const patientInsert = await query(
+      // 1) Register the patient — unless the number is already registered, in
+      //    which case that patient is admitted (no second registration).
+      const already = await findPatientsByHospitalNumber(query, hospital_number);
+      const patientInsert = already.length
+        ? { rows: [already[0]], existing: true }
+        : await query(
         `INSERT INTO patients (
            hospital_number, first_name, last_name, date_of_birth, gender,
            phone, email, address, blood_group, allergies, medical_history,
@@ -73,9 +78,17 @@ export default async function handler(req, res) {
       );
 
       const patient = patientInsert.rows[0];
-      results.registered++;
+      if (patientInsert.existing) {
+        results.existing = (results.existing || 0) + 1;
+      } else {
+        results.registered++;
+      }
 
-      const rowResult = { index: i, patientId: patient.id, hospitalNumber: patient.hospital_number, name: `${first_name} ${last_name}`, admitted: false };
+      const rowResult = {
+        index: i, patientId: patient.id, hospitalNumber: patient.hospital_number,
+        name: `${first_name} ${last_name}`, admitted: false,
+        ...(patientInsert.existing ? { alreadyRegistered: true, registeredName: `${patient.first_name || ''} ${patient.last_name || ''}`.trim() } : {}),
+      };
 
       // 2) Admit (unless explicitly disabled with admit === false)
       if (row.admit !== false) {

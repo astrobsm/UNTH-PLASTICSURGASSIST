@@ -1,5 +1,6 @@
 // Process incoming consults: auto-register patients, auto-admit, auto-assign to HOs, notify
 import { query } from '../_lib/db.js';
+import { normalizeHospitalNumber, findPatientsByHospitalNumber } from '../_lib/hospitalNumber.js';
 import { cors, authenticateRequest } from '../_lib/auth.js';
 import webpush from 'web-push';
 import { onCallTeamAt } from '../_lib/callRoster.js';
@@ -177,7 +178,9 @@ async function processIncomingConsults(currentUser, res) {
 
   for (const consult of allConsults) {
     const consultId = consult.consult_id || `ext-${consult.id}`;
-    const hospitalNumber = consult.hospital_number?.trim();
+    // Written as PT-12345 so consults for the same patient merge however the
+    // number was typed on the consult form.
+    const hospitalNumber = normalizeHospitalNumber(consult.hospital_number) || undefined;
 
     try {
       // Check if already processed
@@ -251,9 +254,7 @@ async function processIncomingConsults(currentUser, res) {
       // A) Register or find patient
       let patientId = null;
       if (hospitalNumber) {
-        const patientResult = await query(
-          'SELECT id FROM patients WHERE hospital_number = $1', [hospitalNumber]
-        );
+        const patientResult = { rows: await findPatientsByHospitalNumber(query, hospitalNumber) };
         if (patientResult.rows.length > 0) {
           patientId = patientResult.rows[0].id;
           // Update patient info if needed

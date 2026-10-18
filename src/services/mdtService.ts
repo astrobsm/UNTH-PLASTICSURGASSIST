@@ -1,3 +1,4 @@
+import { normalizeHospitalNumber, findLocalPatientByHospitalNumber } from '../utils/hospitalNumber';
 import { db } from '../db/database';
 import { format } from 'date-fns';
 import { apiClient } from './apiClient';
@@ -206,9 +207,10 @@ class MDTService {
     // Resolve a patient record (MDT server table references patients(id)).
     let patientId: string | null = null;
     let patientName = consult.patient_name;
-    const hn = (consult.hospital_number || '').trim();
+    const hn = normalizeHospitalNumber(consult.hospital_number || '');
     if (hn) {
-      const existing = await db.patients.where('hospital_number').equals(hn).first();
+      // Matched ignoring case and punctuation ("pt 12345" = PT-12345).
+      const existing = await findLocalPatientByHospitalNumber(hn);
       if (existing?.id != null) {
         patientId = String((existing as any).serverId ?? existing.id);
         const full = `${existing.first_name || ''} ${existing.last_name || ''}`.trim();
@@ -233,8 +235,15 @@ class MDTService {
         });
         patientId = created ? String(created.serverId ?? created.id) : null;
       } catch (e) {
-        console.error('enrolFromConsult: failed to create patient stub', e);
-        return { ok: false, message: 'Could not create a patient record for this consult.' };
+        // Already registered on the server: use that patient.
+        const known = (e as any)?.data?.existing?.[0];
+        if (known?.id != null) {
+          patientId = String(known.id);
+          if (known.name) patientName = known.name;
+        } else {
+          console.error('enrolFromConsult: failed to create patient stub', e);
+          return { ok: false, message: 'Could not create a patient record for this consult.' };
+        }
       }
     }
 

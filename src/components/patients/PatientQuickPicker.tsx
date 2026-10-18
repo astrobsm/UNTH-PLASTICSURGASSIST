@@ -17,6 +17,8 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Search, UserPlus, Loader2, AlertCircle, X, ArrowLeft } from 'lucide-react';
 import { apiClient } from '../../services/apiClient';
+import { HospitalNumberField, type NumberCheck } from '../HospitalNumberField';
+import { normalizeHospitalNumber } from '../../utils/hospitalNumber';
 
 export interface PickedPatient {
   id: number | string;
@@ -165,10 +167,21 @@ function QuickRegister({ initialName, onCancel, onRegistered, onClose, title }: 
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [numberCheck, setNumberCheck] = useState<NumberCheck>({ state: 'empty' });
 
   const submit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    // Clinic, emergency and consult quick-add: the same patient is not
+    // registered twice — an existing number is offered for use instead.
+    if (numberCheck.state === 'duplicate') {
+      setError('This patient number is already registered — choose "Use this patient" above.');
+      return;
+    }
+    if (numberCheck.state === 'invalid' || numberCheck.state === 'checking') {
+      setError(numberCheck.state === 'checking' ? 'Still checking the patient number…' : 'Enter the patient number as PT-12345, or leave it blank.');
+      return;
+    }
     if (!form.first_name.trim() || !form.last_name.trim()) {
       setError('Both names are needed — the record is hard to find later without them.');
       return;
@@ -181,7 +194,7 @@ function QuickRegister({ initialName, onCancel, onRegistered, onClose, title }: 
         last_name: form.last_name.trim(),
         // Left out entirely when blank, so the server mints one rather than
         // storing an empty string that looks like a real number.
-        ...(form.hospital_number.trim() ? { hospital_number: form.hospital_number.trim() } : {}),
+        ...(form.hospital_number.trim() ? { hospital_number: normalizeHospitalNumber(form.hospital_number) } : {}),
       });
       const patient = (created?.patient || created) as PickedPatient;
       if (!patient?.id) throw new Error('The patient was created but came back without an id.');
@@ -191,7 +204,7 @@ function QuickRegister({ initialName, onCancel, onRegistered, onClose, title }: 
     } finally {
       setSaving(false);
     }
-  }, [form, onRegistered]);
+  }, [form, onRegistered, numberCheck]);
 
   return (
     <Shell title={title} onClose={onClose}>
@@ -203,13 +216,25 @@ function QuickRegister({ initialName, onCancel, onRegistered, onClose, title }: 
       </button>
 
       <form onSubmit={submit} className="space-y-3">
+        {/* The number first — so a patient already registered is found before anything is typed. */}
+        <HospitalNumberField
+          optional
+          className=""
+          value={form.hospital_number}
+          onChange={(v) => setForm(f => ({ ...f, hospital_number: v }))}
+          onCheck={setNumberCheck}
+          onUseExisting={(m) => onRegistered({
+            id: m.id, hospital_number: m.hospital_number,
+            first_name: m.name.split(' ')[0], last_name: m.name.split(' ').slice(1).join(' '), full_name: m.name,
+          } as unknown as PickedPatient)}
+        />
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
             <span className="block text-xs font-medium text-gray-600 mb-1">
               First name <span className="text-red-500">*</span>
             </span>
             <input
-              autoFocus required value={form.first_name}
+              required value={form.first_name}
               onChange={(e) => setForm({ ...form, first_name: e.target.value })}
               className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none"
             />
@@ -226,18 +251,7 @@ function QuickRegister({ initialName, onCancel, onRegistered, onClose, title }: 
           </label>
         </div>
 
-        <label className="block">
-          <span className="block text-xs font-medium text-gray-600 mb-1">Hospital number</span>
-          <input
-            value={form.hospital_number}
-            onChange={(e) => setForm({ ...form, hospital_number: e.target.value })}
-            placeholder="Leave blank if not yet issued"
-            className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none"
-          />
-          <span className="block text-[11px] text-gray-400 mt-1">
-            A temporary number is issued if you leave this blank, and can be replaced later.
-          </span>
-        </label>
+
 
         {error && (
           <div role="alert" className="flex items-start gap-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg p-2">

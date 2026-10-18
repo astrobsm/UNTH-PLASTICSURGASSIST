@@ -34,12 +34,19 @@ describe('a patient can be registered where the wound is being seen', () => {
   it('needs only a name', () => {
     // The API mints a hospital number when none is given; refusing the record
     // until one is issued loses the measurement, which cannot be recovered.
-    expect(picker).toContain('Leave blank if not yet issued');
-    expect(picker).toContain('A temporary number is issued if you leave this blank');
+    // The number field is optional here (and checked for duplicates when given).
+    const field = read('src/components/HospitalNumberField.tsx');
+    expect(picker).toMatch(/<HospitalNumberField\s+optional/);
+    expect(field).toContain('Not issued yet? Leave blank — a temporary number is given');
   });
 
   it('does not store an empty hospital number that looks like a real one', () => {
-    expect(picker).toContain("...(form.hospital_number.trim() ? { hospital_number: form.hospital_number.trim() } : {})");
+    expect(picker).toContain("...(form.hospital_number.trim() ? { hospital_number: normalizeHospitalNumber(form.hospital_number) } : {})");
+  });
+
+  it('offers the existing patient instead of registering a duplicate', () => {
+    expect(picker).toContain('onUseExisting');
+    expect(picker).toContain("numberCheck.state === 'duplicate'");
   });
 
   it('shows the split name for correction rather than guessing silently', () => {

@@ -3,6 +3,8 @@ import React, { useState } from 'react';
 import { unthPatientService, PatientRegistration, Ward } from '../services/unthPatientService';
 import { riskAssessmentService } from '../services/riskAssessmentService';
 import { apiClient } from '../services/apiClient';
+import { HospitalNumberField, type NumberCheck } from './HospitalNumberField';
+import { normalizeHospitalNumber } from '../utils/hospitalNumber';
 import { useAuthStore } from '../store/authStore';
 import {
   createPDF,
@@ -2311,6 +2313,10 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     generateAIRecommendations('pressureSore', score, riskLevel);
   }, [riskAssessmentData.pressureSore]);
 
+  // The patient-number lookup's latest verdict; registration waits on it.
+  const [numberCheck, setNumberCheck] = useState<NumberCheck>({ state: 'empty' });
+  const numberBlocks = numberCheck.state !== 'clear';
+
   const handleInputChange = (field: string, value: any) => {
     if (field.includes('.')) {
       const [parent, child] = field.split('.');
@@ -2328,6 +2334,16 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (numberCheck.state === 'duplicate') {
+      alert('This patient number is already registered. Open the existing record instead of registering again.');
+      return;
+    }
+    if (numberCheck.state !== 'clear') {
+      alert(numberCheck.state === 'checking'
+        ? 'Still checking the patient number — try again in a moment.'
+        : 'Enter the patient number as PT-12345 first.');
+      return;
+    }
     setIsSubmitting(true);
 
     try {
@@ -2342,6 +2358,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
         (list && list.length ? list : fallback && fallback.length ? fallback : undefined);
       const updatedFormData = {
         ...formData,
+        hospital_number: normalizeHospitalNumber(formData.hospital_number),
         primary_diagnosis: riskAssessmentData.clinical.primary_diagnosis || (formData as any).primary_diagnosis,
         secondary_diagnoses: filled(riskAssessmentData.clinical.secondary_diagnoses, (formData as any).secondary_diagnoses),
         comorbidities: filled(riskAssessmentData.clinical.comorbidities, (formData as any).comorbidities),
@@ -2585,7 +2602,11 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
       onSuccess?.(patientId);
     } catch (error) {
       console.error('Registration failed:', error);
-      alert('Registration failed. Please try again.');
+      // The server's reason (e.g. the number is already registered) is shown,
+      // not swallowed into a generic message.
+      alert((error as any)?.message && (error as any).message !== 'Patient registration failed'
+        ? (error as any).message
+        : 'Registration failed. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -2595,18 +2616,11 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
       <h3 className="text-lg font-semibold text-gray-900">Basic Information</h3>
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Hospital Number (auto-generated if empty)
-          </label>
-          <input
-            type="text"
-            value={formData.hospital_number || ''}
-            onChange={(e) => handleInputChange('hospital_number', e.target.value)}
-            className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
-            placeholder="UNTH/2024/0001"
-          />
-        </div>
+        <HospitalNumberField
+          value={formData.hospital_number || ''}
+          onChange={(v) => handleInputChange('hospital_number', v)}
+          onCheck={setNumberCheck}
+        />
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -2817,7 +2831,8 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
             )}
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || numberBlocks}
+              title={numberCheck.state === 'duplicate' ? 'This patient number is already registered' : undefined}
               className="btn-primary w-full sm:w-auto"
             >
               {isSubmitting

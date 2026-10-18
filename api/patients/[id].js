@@ -2,6 +2,7 @@
 import { query } from '../_lib/db.js';
 import { cors, authenticateRequest } from '../_lib/auth.js';
 import { propagatePatientDenormalized } from '../_lib/patientPropagation.js';
+import { normalizeHospitalNumber, findPatientsByHospitalNumber, duplicateResponse } from '../_lib/hospitalNumber.js';
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
@@ -92,6 +93,15 @@ async function updatePatient(id, data, res) {
     ['emergency_contact_name', ['emergency_contact_name', 'emergencyContactName']],
     ['emergency_contact_phone', ['emergency_contact_phone', 'emergencyContactPhone']],
   ];
+
+  // Changing a patient's number to one another patient already has is refused.
+  for (const k of ['hospital_number', 'hospitalNumber']) {
+    if (data[k] !== undefined && data[k] !== null && String(data[k]).trim()) {
+      data[k] = normalizeHospitalNumber(data[k]);
+      const taken = await findPatientsByHospitalNumber(query, data[k], id);
+      if (taken.length) return res.status(409).json(duplicateResponse(taken, data[k]));
+    }
+  }
 
   for (const [dbField, keys] of columns) {
     const key = keys.find(k => data[k] !== undefined);

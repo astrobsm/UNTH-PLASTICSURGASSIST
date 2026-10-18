@@ -397,6 +397,8 @@ class ApiClient {
         // real server errors.
         const err = new Error(`[HTTP ${response.status}] ${errorMessage}`);
         (err as any).status = response.status;
+        // The body too — e.g. which patient already holds a number (409).
+        (err as any).data = errorData;
         throw err;
       }
 

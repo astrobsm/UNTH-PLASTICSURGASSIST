@@ -1,3 +1,4 @@
+import { normalizeHospitalNumber, findLocalPatientByHospitalNumber } from '../utils/hospitalNumber';
 import { db, Patient, TreatmentPlan, PlanStep } from '../db/database';
 import { syncService } from '../db/syncService';
 import toast from 'react-hot-toast';
@@ -36,6 +37,14 @@ class OfflineDataService {
   // Patient operations
   async createPatient(data: CreatePatientData): Promise<number> {
     try {
+      if ((data as any).hospital_number) {
+        (data as any).hospital_number = normalizeHospitalNumber((data as any).hospital_number);
+        const twin = await findLocalPatientByHospitalNumber((data as any).hospital_number);
+        if (twin) {
+          toast.error(`Patient number ${(data as any).hospital_number} is already registered.`);
+          return twin.id as number;
+        }
+      }
       const patientId = await db.patients.add({
         ...data,
         created_at: new Date(),

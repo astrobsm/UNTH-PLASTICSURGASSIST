@@ -14,6 +14,7 @@
 // ============================================================================
 
 import { query } from './db.js';
+import { normalizeHospitalNumber, findPatientsByHospitalNumber } from './hospitalNumber.js';
 import { rolesForGrade } from './roles.js';
 import { onCallTeamAt, getUnitConfig, saveUnitConfig } from './callRoster.js';
 
@@ -414,10 +415,11 @@ export async function applyUnitMembershipIfChanged() {
 
 /** Find a patient by hospital number, else create a lightweight record. Returns patients.id. */
 export async function findOrCreatePatient(consult) {
-  const hn = (consult.hospital_number || '').trim();
+  const hn = normalizeHospitalNumber(consult.hospital_number || '');
   if (hn) {
-    const found = await query(`SELECT id FROM patients WHERE hospital_number=$1 LIMIT 1`, [hn]);
-    if (found.rows[0]) return found.rows[0].id;
+    // Matched ignoring case and punctuation, so "pt 12345" on a consult finds PT-12345.
+    const found = await findPatientsByHospitalNumber(query, hn);
+    if (found[0]) return found[0].id;
   }
   const parts = String(consult.patient_name || 'Unknown Patient').trim().split(/\s+/);
   const first = parts.shift() || 'Unknown';
@@ -433,8 +435,8 @@ export async function findOrCreatePatient(consult) {
     return r.rows[0].id;
   } catch (e) {
     if (e.code === '23505') { // unique hospital_number race — fetch existing
-      const again = await query(`SELECT id FROM patients WHERE hospital_number=$1 LIMIT 1`, [hospNo]);
-      if (again.rows[0]) return again.rows[0].id;
+      const again = await findPatientsByHospitalNumber(query, hospNo);
+      if (again[0]) return again[0].id;
     }
     throw e;
   }

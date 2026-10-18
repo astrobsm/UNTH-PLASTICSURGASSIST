@@ -3,6 +3,7 @@
  * Handles both API calls (for sync) and IndexedDB (for offline)
  */
 
+import { normalizeHospitalNumber, findLocalPatientByHospitalNumber } from '../utils/hospitalNumber';
 import { apiClient } from './apiClient';
 import { db } from '../db/database';
 import { syncService } from '../db/syncService';
@@ -349,6 +350,9 @@ class PatientService {
    * Create a new patient
    */
   async createPatient(patientData: any) {
+    if (patientData?.hospital_number) {
+      patientData = { ...patientData, hospital_number: normalizeHospitalNumber(patientData.hospital_number) };
+    }
     try {
       // Save to API first
       const savedPatient = await apiClient.createPatient(patientData);
@@ -370,7 +374,19 @@ class PatientService {
       return savedPatient;
     } catch (error) {
       console.error('Error creating patient via API:', error);
-      
+      // The server refused: the number is already registered. Saving it here
+      // anyway (as every failure used to be) made a duplicate on this device.
+      if ((error as any)?.status === 409 || (error as any)?.status === 400) throw error;
+
+      // Offline: no second registration of a number this device already holds.
+      const twin = await findLocalPatientByHospitalNumber(patientData?.hospital_number);
+      if (twin) {
+        const e: any = new Error(`Patient number ${normalizeHospitalNumber(patientData.hospital_number)} is already registered to ${`${twin.first_name || ''} ${twin.last_name || ''}`.trim() || 'another patient'}.`);
+        e.status = 409;
+        e.data = { code: 'DUPLICATE_HOSPITAL_NUMBER', existing: [{ id: twin.serverId ?? twin.id, hospital_number: twin.hospital_number, name: `${twin.first_name || ''} ${twin.last_name || ''}`.trim() }] };
+        throw e;
+      }
+
       // Save to IndexedDB only (will sync later)
       const localId = await db.patients.add({
         ...patientData,
