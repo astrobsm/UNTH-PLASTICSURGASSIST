@@ -113,3 +113,23 @@ describe('clinic appointments on small phones', () => {
     expect((page.match(/renderActions\(a\)/g) || []).length).toBe(2);
   });
 });
+
+describe('clinic appointments and surgery booking are one module', () => {
+  const read = (p: string) => fs.readFileSync(path.resolve(__dirname, '..', p), 'utf8');
+  it('the sidebar has no separate Booking Register', () => {
+    const layout = read('components/Layout.tsx');
+    const nav = layout.slice(layout.indexOf('const navigation = ['), layout.indexOf('export const patientActions'));
+    expect(nav).not.toMatch(/name: 'Booking Register'/);
+    expect(nav).toMatch(/name: 'Clinic Appointments', subtitle: 'Surgery Booking'/);
+  });
+  it('old addresses land on the Surgery Booking tab with their query', () => {
+    const app = read('App.tsx');
+    expect(app).toMatch(/path="\/booking-register" element=\{<SurgeryBookingRedirect \/>\}/);
+    expect(app).toMatch(/path="\/preoperative-planning" element=\{<SurgeryBookingRedirect \/>\}/);
+    expect(app).toMatch(/params\.set\('tab', 'surgery'\)/);
+  });
+  it('the theatre slate appears once, inside surgery booking', () => {
+    expect(read('pages/ClinicAppointmentsPage.tsx')).not.toMatch(/<SurgeryScheduler/);
+    expect(read('pages/BookingRegisterPage.tsx')).toMatch(/<SurgeryScheduler \/>/);
+  });
+});

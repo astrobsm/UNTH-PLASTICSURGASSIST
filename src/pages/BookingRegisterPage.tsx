@@ -18,6 +18,7 @@ import {
   Scissors, Minus, Camera, TestTube
 } from 'lucide-react';
 const PreoperativePlanningModule = lazy(() => import('../components/procedures/PreoperativePlanningModule'));
+const SurgeryScheduler = lazy(() => import('../components/SurgeryScheduler'));
 const PreoperativeAssessmentForm = lazy(() => import('../components/PreoperativeAssessmentForm'));
 import {
   createPDF, addPDFHeader, addSectionHeader, addBulletList,
@@ -46,7 +47,8 @@ interface Patient {
   phone?: string;
 }
 
-type TabKey = 'surgical-planning' | 'booked-cases' | 'theatre-calendar';
+type TabKey = 'surgical-planning' | 'booked-cases' | 'theatre-calendar' | 'theatre-slate';
+const TAB_KEYS: TabKey[] = ['surgical-planning', 'booked-cases', 'theatre-calendar', 'theatre-slate'];
 type CaseCategory = 'minor' | 'intermediate' | 'major' | 'super_major';
 type PlanningSection = 'patient' | 'clinical' | 'risk' | 'investigations' | 'procedure' | 'results' | 'ecg' | 'payment' | 'checklist';
 type InvestigationFlag = 'normal' | 'borderline' | 'abnormal';
@@ -471,13 +473,21 @@ function prioritySort(a: any, b: any): number {
 // ============================
 // MAIN COMPONENT
 // ============================
-export default function BookingRegisterPage() {
+/**
+ * Surgery booking: planning, booked cases, theatre calendar and the day's
+ * theatre slate. Shown as the "Surgery Booking" tab of Clinic Appointments
+ * (`embedded`); /booking-register redirects there.
+ */
+export default function BookingRegisterPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { user } = useAuthStore();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
-  // --- Tabs ---
-  const [activeTab, setActiveTab] = useState<TabKey>('surgical-planning');
+  // --- Tabs (?view= opens a specific one) ---
+  const [activeTab, setActiveTab] = useState<TabKey>(() => {
+    const v = searchParams.get('view') as TabKey | null;
+    return v && TAB_KEYS.includes(v) ? v : 'surgical-planning';
+  });
 
   // --- Patient selection ---
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -1524,8 +1534,8 @@ export default function BookingRegisterPage() {
   // ============================
   return (
     <div className="max-w-7xl mx-auto px-2 sm:px-4 pb-24">
-      {/* Header */}
-      <div className="flex items-center gap-2 sm:gap-3 py-3 sm:py-4">
+      {/* Header (the surrounding page provides it when embedded) */}
+      {!embedded && <div className="flex items-center gap-2 sm:gap-3 py-3 sm:py-4">
         <button onClick={() => navigate(-1)} className="p-2 hover:bg-gray-100 rounded-lg shrink-0">
           <ArrowLeft size={20} />
         </button>
@@ -1533,7 +1543,7 @@ export default function BookingRegisterPage() {
           <h1 className="text-lg sm:text-xl font-bold text-gray-900">Surgery Booking Register</h1>
           <p className="text-xs sm:text-sm text-gray-500">Pre-operative planning, booking & theatre management</p>
         </div>
-      </div>
+      </div>}
 
       {/* Tab Bar */}
       <div className="flex gap-1 bg-gray-100 p-1 rounded-xl mb-4 overflow-x-auto">
@@ -1541,6 +1551,7 @@ export default function BookingRegisterPage() {
           { key: 'surgical-planning' as TabKey, label: 'Surgical Planning', icon: <ClipboardCheck size={16} /> },
           { key: 'booked-cases' as TabKey, label: 'Booked Cases', icon: <Users size={16} /> },
           { key: 'theatre-calendar' as TabKey, label: 'Theatre Calendar', icon: <Calendar size={16} /> },
+          { key: 'theatre-slate' as TabKey, label: 'Theatre Slate', icon: <ListChecks size={16} /> },
         ]).map(tab => (
           <button
             key={tab.key}
@@ -1595,7 +1606,7 @@ export default function BookingRegisterPage() {
                   ))}
               </div>
               <button
-                onClick={() => navigate('/patients?action=register&returnTo=/booking-register')}
+                onClick={() => navigate(`/patients?action=register&returnTo=${encodeURIComponent('/clinic-appointments?tab=surgery')}`)}
                 className="mt-3 w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium"
               >
                 <Plus size={16} /> Register New Patient
@@ -2714,6 +2725,13 @@ export default function BookingRegisterPage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* ===== TAB 4: THEATRE SLATE — the day's list against the 4-point cap ===== */}
+      {activeTab === 'theatre-slate' && (
+        <Suspense fallback={<div className="flex items-center gap-2 text-gray-500 py-6"><Loader2 size={16} className="animate-spin" /> Loading theatre slate…</div>}>
+          <SurgeryScheduler />
+        </Suspense>
       )}
 
       {/* ===== TAB 3: THEATRE CALENDAR ===== */}

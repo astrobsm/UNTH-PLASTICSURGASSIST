@@ -90,11 +90,9 @@ const navigation = [
   { name: 'Skin Graft Monitoring', href: '/skin-grafts', icon: Activity },
   { name: 'Scar & Keloid Monitor', href: '/scar-monitor', icon: Activity },
   { name: 'Tumour Board', href: '/tumor-board', icon: Stethoscope },
-  // The surgical pathway, in the order it happens: book the case, establish the
-  // patient is fit, brief the room. All three were reachable only from the
-  // per-patient menu on the Patients page, which is fine for one patient and no
-  // use at all for "show me the list".
-  { name: 'Booking Register', href: '/booking-register', icon: ClipboardCheck },
+  // The surgical pathway, in the order it happens: establish the patient is
+  // fit, brief the room. Booking the case lives under Clinic Appointments /
+  // Surgery Booking above (the separate Booking Register was the same data).
   { name: 'Pre-Op Workup', href: '/preoperative-workup', icon: ClipboardCheck },
   { name: 'Pre-Surgical Conference', href: '/pre-surgical-conference', icon: Presentation },
   { name: 'Procedures', href: '/procedures', icon: Scissors },
@@ -121,7 +119,9 @@ export const patientActions = [
   { name: 'Paperwork', href: '/paperwork', icon: FolderOpen },
   { name: 'MDT', href: '/mdt', icon: UserCog },
   { name: 'Referral Reports', href: '/reports/referrals', icon: BarChart3 },
-  { name: 'Booking Register', href: '/booking-register', icon: ClipboardCheck },
+  // Kept at /booking-register: the address keys this patient's surgery records
+  // and redirects to Clinic Appointments → Surgery Booking.
+  { name: 'Surgery Booking', href: '/booking-register', icon: ClipboardCheck },
   { name: 'Procedures', href: '/procedures', icon: Scissors },
   { name: 'Pre-Surgical Conference', href: '/pre-surgical-conference', icon: Presentation },
   { name: 'Blood Transfusion', href: '/blood-transfusion', icon: Droplet },

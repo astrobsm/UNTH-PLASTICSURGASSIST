@@ -92,7 +92,6 @@ const MedicalTrainingPage = lazyWithRetry(() => import('./pages/MedicalTrainingP
 const TreatmentPlanBuilder = lazyWithRetry(() => import('./components/TreatmentPlanBuilder'));
 const TreatmentPlanCreator = lazyWithRetry(() => import('./pages/TreatmentPlanCreator'));
 const TreatmentPlanManager = lazyWithRetry(() => import('./pages/TreatmentPlanManager'));
-const BookingRegisterPage = lazyWithRetry(() => import('./pages/BookingRegisterPage'));
 const PreOperativeWorkupPage = lazyWithRetry(() => import('./pages/PreOperativeWorkupPage'));
 const Procedures = lazyWithRetry(() => import('./pages/Procedures'));
 const PreSurgicalConferencePage = lazyWithRetry(() => import('./pages/PreSurgicalConferencePage'));
@@ -138,6 +137,14 @@ const PageLoader = () => (
     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
   </div>
 );
+
+/** /booking-register → /clinic-appointments?tab=surgery, keeping patientId / section. */
+function SurgeryBookingRedirect() {
+  const loc = useLocation();
+  const params = new URLSearchParams(loc.search);
+  params.set('tab', 'surgery');
+  return <Navigate to={`/clinic-appointments?${params.toString()}`} replace />;
+}
 
 function App() {
   const location = useLocation();
@@ -435,10 +442,11 @@ function App() {
               <Route path="/mdt" element={<MDTPage />} />
               <Route path="/blood-transfusion" element={<BloodTransfusionPage />} />
               <Route path="/ward-rounds" element={<WardRoundsPage />} />
-              <Route path="/booking-register" element={<BookingRegisterPage />} />
+              {/* Merged into Clinic Appointments → Surgery Booking. */}
+              <Route path="/booking-register" element={<SurgeryBookingRedirect />} />
               <Route path="/preoperative-workup" element={<PreOperativeWorkupPage />} />
               <Route path="/procedures" element={<Procedures />} />
-              <Route path="/preoperative-planning" element={<BookingRegisterPage />} />
+              <Route path="/preoperative-planning" element={<SurgeryBookingRedirect />} />
               <Route path="/pre-surgical-conference" element={<PreSurgicalConferencePage />} />
               <Route path="/labs" element={<Labs />} />
               <Route path="/prescriptions" element={<PrescriptionsPage />} />

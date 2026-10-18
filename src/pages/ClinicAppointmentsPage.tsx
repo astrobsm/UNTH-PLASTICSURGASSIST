@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Calendar, Clock, User, Filter, RefreshCw, XCircle, CheckCircle, AlertTriangle, Copy, ExternalLink, Volume2, VolumeX, Bell, BellOff, Users, Timer, Scissors, Download } from 'lucide-react';
 import { apiClient } from '../services/apiClient';
-import SurgeryScheduler from '../components/SurgeryScheduler';
 import SurgeryQueuePanel from '../components/SurgeryQueuePanel';
 import { broadcastChange, useCrossTabRefresh } from '../utils/crossTabSync';
 import { clinicConfigService, QueueStats, ClinicCategory } from '../services/clinicConfigService';
@@ -115,7 +115,7 @@ function playAlertTone(frequency = 880, duration = 300) {
   } catch (_) { /* Web Audio not available */ }
 }
 
-const ClinicAppointmentsPage: React.FC = () => {
+const ClinicAppointmentsView: React.FC = () => {
   const { user } = useAuthStore();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -826,9 +826,46 @@ const ClinicAppointmentsPage: React.FC = () => {
           </>
         )}
 
-        {/* Surgery Scheduling Section */}
-        <SurgeryScheduler />
       </div>
+    </div>
+  );
+};
+
+const SurgeryBooking = lazy(() => import('./BookingRegisterPage'));
+
+/**
+ * Clinic appointments and surgery booking in one place. Surgery booking was a
+ * separate "Booking Register" page plus a second theatre scheduler at the
+ * bottom of this one — the same bookings shown twice. Now one page, two tabs;
+ * ?tab=surgery opens surgery booking (old /booking-register links land there).
+ */
+const ClinicAppointmentsPage: React.FC = () => {
+  const [params, setParams] = useSearchParams();
+  const tab = params.get('tab') === 'surgery' ? 'surgery' : 'appointments';
+  const select = (t: 'appointments' | 'surgery') => {
+    const next = new URLSearchParams(params);
+    if (t === 'surgery') next.set('tab', 'surgery'); else next.delete('tab');
+    setParams(next, { replace: true });
+  };
+  return (
+    <div>
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 pt-3 sm:pt-4">
+        <div className="flex gap-1 bg-gray-100 p-1 rounded-xl" role="tablist" aria-label="Clinic and surgery">
+          {([['appointments', 'Clinic Appointments', <Calendar key="i" className="w-4 h-4" />], ['surgery', 'Surgery Booking', <Scissors key="i" className="w-4 h-4" />]] as const).map(([key, label, icon]) => (
+            <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => select(key)}
+              className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold transition-colors ${tab === key ? 'bg-white text-green-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}>
+              {icon} {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {tab === 'appointments' ? (
+        <ClinicAppointmentsView />
+      ) : (
+        <Suspense fallback={<div className="p-6 text-sm text-gray-500">Loading surgery booking…</div>}>
+          <SurgeryBooking embedded />
+        </Suspense>
+      )}
     </div>
   );
 };
