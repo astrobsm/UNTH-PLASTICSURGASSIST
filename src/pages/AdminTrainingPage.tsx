@@ -1,3 +1,4 @@
+import { buildTraineeStatusMessage } from '../services/traineeStatusMessage';
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Users, Search, AlertTriangle, CheckCircle, Clock, XCircle,
@@ -777,9 +778,8 @@ const AdminTrainingPage: React.FC = () => {
                                 e.stopPropagation();
                                 setWhatsAppTarget(t);
                                 setWhatsAppPhone(t.phone || '');
-                                const statusMsg = t.metrics.overallScore === 0
-                                  ? `Hi ${t.full_name}, this is a reminder from the Plastic Surgery Training Program. You have NO recorded activity yet. Please log in to the app and begin your clinical tasks, CBT tests, and duty assignments immediately.`
-                                  : `Hi ${t.full_name}, this is an update from the Plastic Surgery Training Program.\n\nYour current performance:\n- Overall Score: ${t.metrics.overallScore}%\n- CBT Tests: ${t.metrics.cbtTestsCompleted}/${t.requirements.cbtTests}\n- Patient Entries: ${t.metrics.patientEntries}/${t.requirements.patientEntries}\n- Duties: ${t.metrics.dutiesCompleted}/${t.requirements.duties}\n\n${t.metrics.overallScore < 50 ? 'Your performance is below expectations. Please improve your engagement urgently.' : 'Keep up the good work! Continue to meet your targets.'}`;
+                                // Paced to the day of the rotation — see traineeStatusMessage.
+                                const statusMsg = buildTraineeStatusMessage(t);
                                 setWhatsAppMessage(statusMsg);
                                 setShowWhatsAppModal(true);
                               }}

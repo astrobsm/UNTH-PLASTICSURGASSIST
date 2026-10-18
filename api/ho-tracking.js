@@ -1,5 +1,6 @@
 // House Officer Tracking API
 // Provides detailed HO documentation logs, patient care metrics, and sign-out eligibility
+import { countCompletedDuties } from './_lib/traineeCounts.js';
 import { query } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
 import { getRequirements, pctOf, computeOverall, computeEligibility, weightsFor, morningRoundsComponent } from './_lib/traineeScoring.js';
@@ -492,8 +493,23 @@ async function getHOFullMetrics(userId, fullName, username) {
      FROM cbt_attempts WHERE (user_id = $1 OR user_id::text = $2) AND (completed = true OR passed = true)${rotationDateClause}`,
     [uidInt, uid], { completed: 0, avg_score: 0, best_score: 0, worst_score: 0 }
   );
-  const cbtCompleted = parseInt(cbt.completed) || 0;
-  const cbtAvgScore = parseFloat(cbt.avg_score) || 0;
+  // The CBT page marks its papers into learner_test_attempts (question-bank
+  // papers). Only the legacy cbt_attempts was read here, so a trainee who sat
+  // the current CBT showed 0 tests. Both are counted, weighted by number.
+  const rotationDayCbt = rotationStart ? new Date(rotationStart).toISOString().slice(0, 10) : null;
+  const bank = await safeQuery(
+    `SELECT COUNT(*) as completed, COALESCE(AVG(score), 0) as avg_score
+       FROM learner_test_attempts
+      WHERE learner_kind = 'user' AND learner_id = $1
+        AND ($2::date IS NULL OR submitted_at::date >= $2::date)`,
+    [uidInt, rotationDayCbt], { completed: 0, avg_score: 0 }
+  );
+  const legacyCbt = parseInt(cbt.completed) || 0;
+  const bankCbt = parseInt(bank.completed) || 0;
+  const cbtCompleted = legacyCbt + bankCbt;
+  const cbtAvgScore = cbtCompleted
+    ? ((legacyCbt * (parseFloat(cbt.avg_score) || 0)) + (bankCbt * (parseFloat(bank.avg_score) || 0))) / cbtCompleted
+    : 0;
 
   // ── Name matching for VARCHAR columns ──
   const auditUserClause = fullName
@@ -653,34 +669,18 @@ async function getHOFullMetrics(userId, fullName, username) {
   // ── 4. Duties — formal assignments + clinic/call duties (NO audit_log double-count) ──
   let dutiesCompleted = 0;
 
-  // 4a. Formal duty assignments completed
-  const formalDutyRow = await safeQuery(
-    `SELECT COUNT(*) as cnt FROM duty_assignments WHERE user_id = $1 AND status = 'completed'${rotationDateClause}`,
-    [uidInt], { cnt: 0 }
-  );
-  dutiesCompleted += parseInt(formalDutyRow.cnt) || 0;
-
-  // 4b. Clinic duty logs
-  {
-    const clause = nameMatchClause.replace(/\$COL/g, 'user_id');
-    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM clinic_duty_logs WHERE ${clause}${rotationDateClause}`, nameMatchValues, { cnt: 0 });
-    dutiesCompleted += parseInt(r.cnt) || 0;
-  }
-
-  // 4c. Call duty roster entries
-  {
-    let callClause = `(senior_registrar_id = $1 OR registrar_id = $1 OR house_officer_id = $1`;
-    const callParams = [uid];
-    let pIdx = 1;
-    if (fullName) {
-      pIdx++;
-      callParams.push(fullName);
-      callClause += ` OR LOWER(senior_registrar_name) = LOWER($${pIdx}) OR LOWER(registrar_name) = LOWER($${pIdx}) OR LOWER(house_officer_name) = LOWER($${pIdx})`;
-    }
-    callClause += `)`;
-    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM call_duty_roster WHERE ${callClause}${rotationDateClause}`, callParams, { cnt: 0 });
-    dutiesCompleted += parseInt(r.cnt) || 0;
-  }
+  // A duty counts only once it has actually been done, inside this rotation.
+  // Previously a rostered shift counted the moment the roster was generated —
+  // the auto-roster writes the whole month ahead, so a house officer who had
+  // just joined showed 39/20 "duties" on day one — and every clinic duty log
+  // counted whatever its status. One shared definition (traineeCounts) so the
+  // trainee's own status, sign-out and this screen give the same number.
+  const rotationDay = rotationStart ? new Date(rotationStart).toISOString().slice(0, 10) : null;
+  const dutyCounts = await countCompletedDuties(uidInt, { fullName, rotationStart });
+  const formalDuties = dutyCounts.formal;
+  const clinicDuties = dutyCounts.clinic;
+  const callShifts = dutyCounts.callShifts;
+  dutiesCompleted = dutyCounts.total;
 
   // NOTE: Removed audit_log clinical-action counting (section 4d) — those actions are already
   // captured in patient entries and should not be double-counted as duties.
@@ -700,31 +700,51 @@ async function getHOFullMetrics(userId, fullName, username) {
   let loginDays = parseInt(loginRow.cnt) || 0;
 
   // ── 6. CME / Education Topics ──
-  let cmeCount = 0;
+  // Articles COMPLETED. Three tables used to be added together — the same
+  // article could count three times — and one of them (cme_reading_progress)
+  // records an article merely opened. The current reader writes
+  // learner_article_progress, which was not read here at all. The sources
+  // are alternative records of the same reading, so the largest is taken,
+  // not the sum.
+  const rotDay = rotationStart ? new Date(rotationStart).toISOString().slice(0, 10) : null;
+  const lapRow = await safeQuery(
+    `SELECT COUNT(*) as cnt FROM learner_article_progress
+      WHERE learner_kind = 'user' AND learner_id = $1 AND is_fully_completed
+        AND ($2::date IS NULL OR COALESCE(assessment_completed_at, reading_completed_at, updated_at)::date >= $2::date)`,
+    [uidInt, rotDay], { cnt: 0 }
+  );
   const tpRow = await safeQuery(
-    `SELECT COUNT(*) as cnt FROM training_progress WHERE user_id = $1 OR user_id::text = $2`,
-    [uidInt, uid], { cnt: 0 }
+    `SELECT COUNT(*) as cnt FROM training_progress
+      WHERE (user_id = $1 OR user_id::text = $2) AND ($3::date IS NULL OR completed_at::date >= $3::date)`,
+    [uidInt, uid, rotDay], { cnt: 0 }
   );
-  cmeCount += parseInt(tpRow.cnt) || 0;
-
-  const cmeReadRow = await safeQuery(
-    `SELECT COUNT(DISTINCT article_id) as cnt FROM cme_reading_progress WHERE user_id = $1`, [uid], { cnt: 0 }
-  );
-  cmeCount += parseInt(cmeReadRow.cnt) || 0;
-
   const cmeProgRow = await safeQuery(
     `SELECT COUNT(*) as cnt FROM cme_progress WHERE user_id = $1 AND completed = true`, [uid], { cnt: 0 }
   );
-  cmeCount += parseInt(cmeProgRow.cnt) || 0;
+  const cmeCount = Math.max(
+    parseInt(lapRow.cnt) || 0, parseInt(tpRow.cnt) || 0, parseInt(cmeProgRow.cnt) || 0,
+  );
 
   // ── 6b. Self-assessment (best score per topic) ──
+  // Article self-assessments taken in the current reader count too.
   const saRow = await safeQuery(
     `SELECT COUNT(*) as cnt, COALESCE(AVG(percentage), 0) as avg
-       FROM self_assessment_attempts WHERE user_id = $1 OR user_id::text = $2`,
-    [uidInt, uid], { cnt: 0, avg: 0 }
+       FROM self_assessment_attempts
+      WHERE (user_id = $1 OR user_id::text = $2) AND ($3::date IS NULL OR completed_at::date >= $3::date)`,
+    [uidInt, uid, rotDay], { cnt: 0, avg: 0 }
   );
-  const selfAssessmentCount = parseInt(saRow.cnt) || 0;
-  const selfAssessmentAvgScore = parseFloat(saRow.avg) || 0;
+  const lapSa = await safeQuery(
+    `SELECT COUNT(*) as cnt, COALESCE(AVG(assessment_score), 0) as avg
+       FROM learner_article_progress
+      WHERE learner_kind = 'user' AND learner_id = $1 AND assessment_completed
+        AND ($2::date IS NULL OR assessment_completed_at::date >= $2::date)`,
+    [uidInt, rotDay], { cnt: 0, avg: 0 }
+  );
+  const saLegacyN = parseInt(saRow.cnt) || 0, saNewN = parseInt(lapSa.cnt) || 0;
+  const selfAssessmentCount = saLegacyN + saNewN;
+  const selfAssessmentAvgScore = selfAssessmentCount
+    ? ((saLegacyN * (parseFloat(saRow.avg) || 0)) + (saNewN * (parseFloat(lapSa.avg) || 0))) / selfAssessmentCount
+    : 0;
 
   // ── 7. Assigned patients (house_officer_id is VARCHAR, so cast uidInt to text) ──
   const assignedCount = await safeQuery(
@@ -795,6 +815,9 @@ async function getHOFullMetrics(userId, fullName, username) {
       totalDocumentation,
       dutiesTotal: parseInt(dutiesTotal.cnt) || 0,
       dutiesCompleted,
+      // Where the duty figure came from, so a number can be checked.
+      dutiesBreakdown: { formal: formalDuties, clinic: clinicDuties, callShifts },
+      rotationStart: rotationDay,
       loginDays,
       assignedPatients: parseInt(assignedCount.cnt) || 0,
       overallScore,

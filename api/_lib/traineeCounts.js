@@ -104,6 +104,60 @@ async function gatherDocumentation(userId, identities) {
   return { patients: patients.size, entries };
 }
 
+/**
+ * Duties a trainee has actually COMPLETED in the current rotation — the one
+ * definition used by every screen (HO tracking, training admin, the trainee's
+ * own status, rotation sign-out).
+ *
+ *   formal      duty_assignments marked completed
+ *   clinic      clinic duty logs marked completed (an "assigned" log is not done)
+ *   callShifts  call-roster shifts that have already ENDED — the auto-roster
+ *               writes a month ahead, and a future shift is a plan, not a duty
+ *
+ * Only dated on or after the rotation start. Each source is queried on its own
+ * so a missing table counts as none rather than failing the total.
+ */
+export async function countCompletedDuties(userId, { fullName = null, rotationStart = null } = {}) {
+  const uid = String(userId);
+  const since = rotationStart ? new Date(rotationStart).toISOString().slice(0, 10) : null;
+  const one = async (sql, params) => {
+    try { return Number(Object.values((await query(sql, params)).rows[0] || {})[0]) || 0; }
+    catch { return 0; }
+  };
+  const formal = await one(
+    `SELECT COUNT(*) FROM duty_assignments
+      WHERE user_id::text = $1 AND status = 'completed'
+        AND ($2::date IS NULL OR COALESCE(completed_at, due_at, assigned_at)::date >= $2::date)`,
+    [uid, since]);
+  const clinic = await one(
+    `SELECT COUNT(*) FROM clinic_duty_logs
+      WHERE (user_id = $1 OR ($2::text IS NOT NULL AND LOWER(user_name) = LOWER($2::text)))
+        AND LOWER(COALESCE(status, '')) IN ('completed', 'done')
+        AND ($3::date IS NULL OR created_at::date >= $3::date)`,
+    [uid, fullName, since]);
+  const callShifts = await one(
+    `SELECT COUNT(*) FROM call_duty_roster
+      WHERE (senior_registrar_id = $1 OR registrar_id = $1 OR house_officer_id = $1
+             OR ($2::text IS NOT NULL AND (LOWER(senior_registrar_name) = LOWER($2::text)
+                 OR LOWER(registrar_name) = LOWER($2::text) OR LOWER(house_officer_name) = LOWER($2::text))))
+        AND end_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+        AND LEFT(end_date, 10)::date < CURRENT_DATE
+        AND ($3::date IS NULL OR LEFT(start_date, 10)::date >= $3::date)`,
+    [uid, fullName, since]);
+  return { total: formal + clinic + callShifts, formal, clinic, callShifts };
+}
+
+/** The current rotation's start, if the trainee has one. */
+export async function currentRotationStart(userId) {
+  try {
+    const r = await query(
+      `SELECT start_date FROM trainee_rotations
+        WHERE user_id = $1 AND status IN ('active', 'extended', 'pending_signout')
+        ORDER BY created_at DESC LIMIT 1`, [userId]);
+    return r.rows[0]?.start_date || null;
+  } catch { return null; }
+}
+
 /** The strings a name-typed author column might hold for this user. */
 async function identitiesFor(userId) {
   const out = [String(userId)];
@@ -146,8 +200,13 @@ export async function gatherTraineeCounts(userId) {
     scalar(`SELECT COALESCE(AVG(score), 0) FROM learner_test_attempts
             WHERE learner_kind = 'user' AND learner_id = $1`, [userId]),
 
-    scalar(`SELECT COUNT(*) FROM duty_assignments
-            WHERE user_id = $1 AND status = 'completed'`, [userId]),
+    // Duties: the shared definition (completed, ended, this rotation).
+    (async () => {
+      let fullName = null;
+      try { fullName = (await query('SELECT full_name FROM users WHERE id = $1', [userId])).rows[0]?.full_name || null; }
+      catch { /* name matching is a fallback only */ }
+      return countCompletedDuties(userId, { fullName, rotationStart: await currentRotationStart(userId) });
+    })(),
 
     scalar(`SELECT COUNT(DISTINCT DATE(created_at)) FROM activity_logs
             WHERE user_id = $1 AND activity_type = 'login'`, [userId]),
@@ -183,11 +242,13 @@ export async function gatherTraineeCounts(userId) {
     cbtTests,
     cbtAverage,
     patients: documentation.patients,
-    // Documentation written is the trainee's day-to-day work; duty_assignments
-    // is a rota that most deployments never populated (0 rows in production),
-    // so an empty rota must not read as a trainee who did nothing.
-    duties: formalDuties + documentation.entries,
-    dutiesFormal: formalDuties,
+    // Duties are duties done — formal assignments, completed clinic duties and
+    // call shifts already worked. Documentation used to be added in here as
+    // well, which counted the same ward work twice (once as patients, once as
+    // duties) and gave a different figure from the HO tracking screen.
+    duties: formalDuties.total,
+    dutiesFormal: formalDuties.formal,
+    dutiesBreakdown: { formal: formalDuties.formal, clinic: formalDuties.clinic, callShifts: formalDuties.callShifts },
     documentationEntries: documentation.entries,
     loginDays,
     cmeArticles: Math.max(cmeArticles, legacyCme),
