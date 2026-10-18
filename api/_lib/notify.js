@@ -37,14 +37,16 @@ function ensureVapid() {
  * @returns {Promise<{sent: number, failed: number}>}
  */
 export async function notifyUsers(userIds, notification) {
-  const ids = [...new Set((userIds || []).map(Number).filter(Number.isFinite))];
+  // push_subscriptions.user_id is TEXT; comparing it with int[] errored and
+  // the catch below turned every targeted notification into "sent: 0".
+  const ids = [...new Set((userIds || []).map(v => String(v ?? '').trim()).filter(Boolean))];
   if (!ids.length || !ensureVapid()) return { sent: 0, failed: 0 };
 
   let subscriptions = [];
   try {
     const r = await query(
       `SELECT id, endpoint, keys FROM push_subscriptions
-        WHERE user_id = ANY($1::int[]) AND COALESCE(is_active, true)`,
+        WHERE user_id::text = ANY($1::text[]) AND COALESCE(is_active, true)`,
       [ids]
     );
     subscriptions = r.rows;
@@ -55,8 +57,8 @@ export async function notifyUsers(userIds, notification) {
   const payload = JSON.stringify({
     title: notification.title,
     body: notification.body,
-    icon: '/icons/icon-192x192.png',
-    badge: '/icons/badge-72x72.png',
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
     tag: notification.tag,
     data: { url: notification.url || '/', ...(notification.data || {}) },
   });

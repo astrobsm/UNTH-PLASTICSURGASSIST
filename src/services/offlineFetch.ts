@@ -168,7 +168,7 @@ export const offlineFetch = async (
     const response = await fetch(url, {
       ...fetchOptions,
       headers,
-      credentials: 'include',
+      credentials: 'same-origin',
       signal: controller.signal,
     });
 

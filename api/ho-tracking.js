@@ -4,6 +4,7 @@ import { query } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
 import { getRequirements, pctOf, computeOverall, computeEligibility, weightsFor, morningRoundsComponent } from './_lib/traineeScoring.js';
 import { morningCompliance } from './_lib/morningRounds.js';
+import { signOutRotation, scoreFor } from './_lib/rotationLifecycle.js';
 
 const ADMIN_ROLES = ['consultant', 'super_admin', 'admin', 'senior_registrar'];
 
@@ -372,22 +373,16 @@ async function handlePost(req, res, currentUser) {
       if (!rotationId) return res.status(400).json({ error: 'rotationId required' });
 
       if (approved) {
-        await query(
-          `UPDATE trainee_rotations
-           SET status = 'signed_out', actual_end_date = CURRENT_TIMESTAMP,
-               sign_out_approved = true, sign_out_approved_by = $1,
-               sign_out_approved_at = CURRENT_TIMESTAMP,
-               sign_out_comments = $2, final_score = $3, updated_at = CURRENT_TIMESTAMP
-           WHERE id = $4`,
-          [currentUser.id, comments || 'Approved', finalScore || 0, rotationId]
-        );
-
-        await query(
-          `INSERT INTO activity_logs (user_id, activity_type, description, metadata)
-           VALUES ((SELECT user_id FROM trainee_rotations WHERE id = $1), 'signout_approved', $2, $3)`,
-          [rotationId, `Sign-out approved by ${currentUser.full_name || currentUser.username}`,
-           JSON.stringify({ rotation_id: rotationId, approved_by: currentUser.id })]
-        );
+        // The same sign-out as Training Admin and the automatic sweep: only an
+        // open rotation, the score computed by the engine (not whatever the
+        // page displayed, or 0), and the standard reason format and log.
+        let score = Number.isFinite(Number(finalScore)) ? Number(finalScore) : null;
+        try {
+          const rot = (await query(`SELECT user_id, level FROM trainee_rotations WHERE id = $1`, [rotationId])).rows[0];
+          if (rot) score = (await scoreFor(rot.user_id, rot.level)).overall;
+        } catch { /* keep the displayed score */ }
+        const out = await signOutRotation({ rotationId, mode: 'approved', reason: comments, byUserId: currentUser.id, finalScore: score });
+        if (!out.ok) return res.status(400).json({ error: out.error });
       } else {
         await query(
           `UPDATE trainee_rotations SET status = 'active',
@@ -734,7 +729,9 @@ async function getHOFullMetrics(userId, fullName, username) {
   // ── Calculate Scores (comprehensive, shared formula) ──
   // HO Tracking is house-officer level; admin-training re-scores per level using
   // the same shared module. Component scores are each 0–100.
-  const reqs = getRequirements('house_officer');
+  const baseReqs = getRequirements('house_officer');
+  // Pages read patientEntries / overallScore; the engine names them patients / the pass mark.
+  const reqs = { ...baseReqs, patientEntries: baseReqs.patients, overallScore: 70 };
   const cmeScore = pctOf(cmeCount, reqs.cmeArticles);
   const patientScore = pctOf(distinctPatientsServed, reqs.patients);
   const dutyScore = pctOf(dutiesCompleted, reqs.duties);

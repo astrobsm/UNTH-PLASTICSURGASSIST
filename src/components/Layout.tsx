@@ -1,9 +1,9 @@
 import { ReactNode, useState, useEffect, useMemo } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
-  Users, 
-  FlaskConical, 
-  GraduationCap, 
+  Users,
+  FlaskConical,
+  GraduationCap,
   Settings as SettingsIcon,
   ClipboardList,
   ClipboardCheck,
@@ -151,10 +151,10 @@ export default function Layout({ children }: LayoutProps) {
     [user?.role],
   );
   const isHomePage = location.pathname === '/';
-  
+
   // Mobile menu state
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  
+
   // Desktop sidebar collapse state
   const [isCollapsed, setIsCollapsed] = useState(() => {
     const saved = localStorage.getItem('sidebar-collapsed');
@@ -216,11 +216,11 @@ export default function Layout({ children }: LayoutProps) {
                   <ArrowLeft className="h-5 w-5" />
                 </button>
               )}
-              
+
               <div className="flex items-center space-x-2 sm:space-x-3">
-                <img 
-                  src="/logo.png" 
-                  alt="Plastic Surgery Logo" 
+                <img
+                  src="/logo.png"
+                  alt="Plastic Surgery Logo"
                   className="w-8 h-8 sm:w-10 sm:h-10 object-contain"
                 />
                 <div className="text-left">
@@ -232,7 +232,7 @@ export default function Layout({ children }: LayoutProps) {
                 </div>
               </div>
             </div>
-            
+
             {/* Right side - User actions */}
             <div className="flex items-center space-x-1 sm:space-x-4">
               {/* Global Search */}
@@ -246,21 +246,24 @@ export default function Layout({ children }: LayoutProps) {
 
               {/* Check for Updates */}
               <HeaderCheckForUpdates />
-              
+
               {/* Sync Status */}
               <div className="hidden sm:block">
                 <SyncStatusIndicator />
               </div>
-              
+
               {/* Notifications */}
-              <button 
+              {/* Opens the notification centre. It was a button that did
+                  nothing, with a permanent "unread" dot. */}
+              <Link
+                to="/notifications"
                 className="relative p-2 text-sky-300 hover:text-white rounded-full hover:bg-navy-700"
                 title="Notifications"
+                aria-label="Notifications"
               >
                 <Bell className="h-5 w-5 sm:h-6 sm:w-6" />
-                <span className="absolute top-1 right-1 h-2 w-2 bg-danger-500 rounded-full"></span>
-              </button>
-              
+              </Link>
+
               {/* User info */}
               <div className="flex items-center space-x-2 sm:space-x-3">
                 <div className="hidden md:flex items-center space-x-2">
@@ -272,7 +275,7 @@ export default function Layout({ children }: LayoutProps) {
                     <p className="text-sky-400 capitalize text-xs">{user?.role?.replace('_', ' ')}</p>
                   </div>
                 </div>
-                
+
                 <button
                   onClick={logout}
                   className="p-2 text-sky-300 hover:text-white rounded-full hover:bg-navy-700"
@@ -289,16 +292,16 @@ export default function Layout({ children }: LayoutProps) {
       <div className="flex">
         {/* Mobile Navigation Overlay */}
         {isMobileMenuOpen && (
-          <div 
+          <div
             className="fixed inset-0 bg-black/60 z-40 lg:hidden backdrop-blur-sm"
             onClick={() => setIsMobileMenuOpen(false)}
           />
         )}
 
         {/* Mobile Navigation Drawer */}
-        <nav 
+        <nav
           className={`
-            fixed top-0 left-0 bottom-0 w-72 max-w-[85vw] bg-navy-900 shadow-2xl z-50 
+            fixed top-0 left-0 bottom-0 w-72 max-w-[85vw] bg-navy-900 shadow-2xl z-50
             transform transition-transform duration-300 ease-in-out
             lg:hidden
             ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
@@ -399,7 +402,7 @@ export default function Layout({ children }: LayoutProps) {
         {/* Main Content with watermark */}
         <main className="flex-1 min-w-0 overflow-x-hidden relative">
           {/* UNTH Logo Watermark */}
-          <div 
+          <div
             className="fixed pointer-events-none -z-10"
             style={{
               top: '50%',

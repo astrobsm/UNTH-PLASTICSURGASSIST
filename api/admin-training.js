@@ -6,9 +6,12 @@ import { cors, authenticateRequest } from './_lib/auth.js';
 // numbers as the HO Tracking card view (single source of truth).
 import { getHOFullMetrics } from './ho-tracking.js';
 import { getRequirements as sharedRequirements, pctOf, computeOverall, morningRoundsComponent, computeEligibility as sharedEligibility } from './_lib/traineeScoring.js';
-import { extendRotation, signOutRotation, evaluateDueRotations, scoreFor, ROTATION_ADMIN_ROLES } from './_lib/rotationLifecycle.js';
+import { extendRotation, signOutRotation, evaluateDueRotations, scoreFor, startRotation, DEFAULT_ROTATION_DAYS, ROTATION_ADMIN_ROLES } from './_lib/rotationLifecycle.js';
+import { PASS_THRESHOLD } from './_lib/traineeScoring.js';
 
-const ADMIN_ROLES = ['consultant', 'super_admin', 'admin'];
+// The same people who may run rotations everywhere else. Senior registrars saw
+// this page (the route allows supervisors) and were refused every action.
+const ADMIN_ROLES = ROTATION_ADMIN_ROLES;
 let tablesEnsured = false;
 
 export default async function handler(req, res) {
@@ -86,6 +89,8 @@ async function ensureTables() {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
+  // startRotation (and onboarding) write department; tables first created here lacked it.
+  try { await query(`ALTER TABLE trainee_rotations ADD COLUMN IF NOT EXISTS department VARCHAR(100) DEFAULT 'Plastic Surgery'`); } catch { /* exists */ }
 
   await query(`
     CREATE TABLE IF NOT EXISTS activity_logs (
@@ -138,13 +143,11 @@ async function handleGet(req, res, adminUser) {
       for (const t of trainees.rows) {
         const traineeLevel = roleToLevel(t.role);
         const metrics = await getTraineeMetrics(t.id, traineeLevel, t.full_name, t.username);
-        let rotation = await getActiveRotation(t.id);
-        // Backfill: ensure every active trainee has a rotation so their metrics
-        // are always tracked. Start from their onboarding date so no historical
-        // activity is lost when the rotation is created retroactively.
-        if (!rotation) {
-          rotation = await backfillRotation(t.id, traineeLevel, t.registered_at);
-        }
+        // No backfill. Creating a rotation here dated from the account's
+        // creation made it instantly overdue, and the sweep this page runs then
+        // signed out (or held) trainees who had never started. Rotations now
+        // start from posting onboarding, or "Start rotation" below.
+        const rotation = await getActiveRotation(t.id);
         const reqs = getRequirements(traineeLevel);
         const eligibility = computeEligibility(metrics, reqs);
         const warningCount = await query(
@@ -251,12 +254,12 @@ async function handleGet(req, res, adminUser) {
         WHERE role IN ('intern', 'registrar', 'junior_registrar', 'senior_registrar', 'house_officer', 'junior_resident', 'senior_resident')
           AND is_active = true
       `);
-      
+
       const debug = {};
       for (const t of trainees.rows) {
         const uid = String(t.id);
         const checks = {};
-        
+
         // Clinical tables with created_by (INTEGER)
         try { const r = await query(`SELECT COUNT(*) as cnt FROM patients WHERE created_by = $1`, [t.id]); checks.patients_created_by = parseInt(r.rows[0].cnt); } catch(e) { checks.patients_created_by = `ERR: ${e.message}`; }
         try { const r = await query(`SELECT COUNT(*) as cnt FROM treatment_plans WHERE created_by = $1`, [t.id]); checks.treatment_plans_created_by = parseInt(r.rows[0].cnt); } catch(e) { checks.treatment_plans_created_by = `ERR: ${e.message}`; }
@@ -279,12 +282,12 @@ async function handleGet(req, res, adminUser) {
         try { const r = await query(`SELECT COUNT(*) as cnt FROM cme_reading_progress WHERE user_id = $1`, [uid]); checks.cme_reading_progress = parseInt(r.rows[0].cnt); } catch(e) { checks.cme_reading_progress = `ERR: ${e.message}`; }
 
         // Distinct values in key tables
-        try { 
-          const r = await query(`SELECT DISTINCT created_by FROM patients WHERE created_by IS NOT NULL LIMIT 10`); 
+        try {
+          const r = await query(`SELECT DISTINCT created_by FROM patients WHERE created_by IS NOT NULL LIMIT 10`);
           checks.patients_created_by_values = r.rows.map(r => r.created_by);
         } catch(e) { checks.patients_created_by_values = `ERR: ${e.message}`; }
-        try { 
-          const r = await query(`SELECT DISTINCT user_id, user_name FROM audit_logs LIMIT 10`); 
+        try {
+          const r = await query(`SELECT DISTINCT user_id, user_name FROM audit_logs LIMIT 10`);
           checks.audit_logs_users = r.rows.map(r => `id=${r.user_id},name=${r.user_name}`);
         } catch(e) { checks.audit_logs_users = `ERR: ${e.message}`; }
 
@@ -292,15 +295,15 @@ async function handleGet(req, res, adminUser) {
         try { const r = await query(`SELECT COUNT(*) as cnt FROM patients`); checks.total_patients = parseInt(r.rows[0].cnt); } catch(e) {}
         try { const r = await query(`SELECT COUNT(*) as cnt FROM audit_logs`); checks.total_audit_logs = parseInt(r.rows[0].cnt); } catch(e) {}
         try { const r = await query(`SELECT COUNT(*) as cnt FROM cbt_attempts`); checks.total_cbt_attempts = parseInt(r.rows[0].cnt); } catch(e) {}
-        
+
         // Computed metrics
         const traineeLevel = roleToLevel(t.role);
         const metrics = await getTraineeMetrics(t.id, traineeLevel, t.full_name, t.username);
         checks.computed_metrics = metrics;
-        
+
         debug[`${t.full_name} (id=${t.id}, role=${t.role})`] = checks;
       }
-      
+
       return res.status(200).json({ debug });
     }
 
@@ -350,24 +353,14 @@ async function handlePost(req, res, adminUser) {
         return res.status(400).json({ error: 'userId and level are required' });
       }
 
-      const existing = await query(
-        `SELECT id FROM trainee_rotations WHERE user_id = $1 AND status IN ('active', 'extended')`, [targetUserId]
-      );
-      if (existing.rows.length > 0) {
-        return res.status(400).json({ error: 'Active rotation already exists for this user' });
-      }
-
-      const durations = { house_officer: 30, junior_resident: 90, senior_resident: 180 };
-      const days = durations[rotLevel] || 30;
-
-      const result = await query(
-        `INSERT INTO trainee_rotations (user_id, level, start_date, expected_end_date, status)
-         VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '1 day' * $3, 'active')
-         RETURNING *`,
-        [targetUserId, rotLevel, days]
-      );
-
-      return res.status(201).json({ rotation: result.rows[0] });
+      // One rotation lifecycle for the whole app (onboarding, joining, this
+      // page): the same lengths, the same "already open" rule (pending
+      // sign-out counts) and the same activity log.
+      const u = (await query(`SELECT role FROM users WHERE id = $1`, [targetUserId])).rows[0];
+      const roleKey = u?.role || rotLevel;
+      const r = await startRotation({ userId: Number(targetUserId), level: roleKey, days: Number(body.days) || DEFAULT_ROTATION_DAYS[roleKey] });
+      if (!r.created) return res.status(400).json({ error: 'An open rotation already exists for this trainee' });
+      return res.status(201).json({ rotation: r.rotation });
     }
 
     case 'extend-rotation': {
@@ -406,9 +399,18 @@ async function handlePost(req, res, adminUser) {
         return res.status(200).json({ success: true, approved: false });
       }
 
+      // The score recorded is the one the sign-out engine computes, not
+      // whatever the page happened to display (or nothing at all).
+      let score = Number.isFinite(Number(finalScore)) ? Number(finalScore) : null;
+      if (score == null) {
+        try {
+          const rot = (await query(`SELECT user_id, level FROM trainee_rotations WHERE id = $1`, [rotationId])).rows[0];
+          if (rot) score = (await scoreFor(rot.user_id, rot.level)).overall;
+        } catch { /* recorded as unknown */ }
+      }
       const out = await signOutRotation({
         rotationId, mode: 'approved', reason: comments,
-        byUserId: adminUser.id, finalScore,
+        byUserId: adminUser.id, finalScore: score,
       });
       if (!out.ok) return res.status(400).json({ error: out.error });
       return res.status(200).json({ success: true, approved: true, rotation: out.rotation });
@@ -480,7 +482,10 @@ function roleToLevel(role) {
 
 // Single source of truth for per-level requirements (comprehensive scoring).
 function getRequirements(level) {
-  return sharedRequirements(level);
+  // The pages read patientEntries / overallScore; the engine calls them
+  // patients / the pass threshold. Both names are sent.
+  const r = sharedRequirements(level);
+  return { ...r, patientEntries: r.patients, overallScore: PASS_THRESHOLD };
 }
 
 async function getTraineeMetrics(userId, level, fullName, username) {

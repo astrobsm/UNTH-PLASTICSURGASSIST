@@ -14,7 +14,27 @@ interface PushSubscriptionData {
 }
 
 class PushNotificationService {
-  private vapidPublicKey = 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LhPVhJveYTGq-eAqD1Qj2HhVBNvRfGLr1JiOF0j-T_Hxxw';
+  /**
+   * The server's VAPID public key. It used to be a hard-coded demo key, which
+   * only matched the server by accident; a subscription made with any other
+   * key is rejected by the push service when the server sends.
+   */
+  private async serverKey(): Promise<string | null> {
+    try {
+      const r: any = await apiClient.get('/push-subscriptions?action=vapid-key', { freshRead: true });
+      if (r?.publicKey && r?.configured) return r.publicKey;
+    } catch { /* offline */ }
+    const fromBuild = (import.meta as any).env?.VITE_VAPID_PUBLIC_KEY;
+    return fromBuild || null;
+  }
+
+  private sameKey(sub: PushSubscription, keyB64: string): boolean {
+    const current = sub.options?.applicationServerKey;
+    if (!current) return false;
+    const a = new Uint8Array(current as ArrayBuffer);
+    const b = this.urlBase64ToUint8Array(keyB64);
+    return a.length === b.length && a.every((v, i) => v === b[i]);
+  }
 
   // Request notification permission and subscribe to push notifications
   async requestPermission(): Promise<boolean> {
@@ -49,13 +69,22 @@ class PushNotificationService {
   async subscribeToPushNotifications(): Promise<void> {
     try {
       const registration = await navigator.serviceWorker.ready;
-      
-      // Check if already subscribed
+      const key = await this.serverKey();
+      if (!key) {
+        logger.warn('Push is not configured on the server — skipping push subscription');
+        return;
+      }
+
+      // Check if already subscribed — and with the server's key
       let subscription = await registration.pushManager.getSubscription();
-      
+      if (subscription && !this.sameKey(subscription, key)) {
+        await subscription.unsubscribe().catch(() => {});
+        subscription = null;
+      }
+
       if (!subscription) {
         // Create new subscription
-        const applicationServerKey = this.urlBase64ToUint8Array(this.vapidPublicKey);
+        const applicationServerKey = this.urlBase64ToUint8Array(key);
         subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey: applicationServerKey as BufferSource
@@ -94,6 +123,22 @@ class PushNotificationService {
     }
   }
 
+  /**
+   * On sign-out: stop this device receiving the signed-out user's alerts. Must
+   * run while the session token is still present.
+   */
+  async unsubscribe(): Promise<void> {
+    try {
+      if (!('serviceWorker' in navigator)) return;
+      const registration = await navigator.serviceWorker.ready;
+      const sub = await registration.pushManager.getSubscription();
+      if (sub) {
+        await apiClient.request('/push-subscriptions', { method: 'DELETE', body: JSON.stringify({ endpoint: sub.endpoint }) } as any).catch(() => {});
+        await sub.unsubscribe().catch(() => {});
+      }
+    } catch { /* best effort */ }
+  }
+
   // Show local notification with voice announcement
   async showNotification(title: string, options: NotificationOptions & { voiceMessage?: string }): Promise<void> {
     try {
@@ -102,8 +147,8 @@ class PushNotificationService {
         
         await registration.showNotification(title, {
           body: options.body,
-          icon: options.icon || '/icons/icon-192x192.png',
-          badge: options.badge || '/icons/badge-72x72.png',
+          icon: options.icon || '/icon-192.png',
+          badge: options.badge || '/icon-192.png',
           tag: options.tag || 'default',
           data: options.data,
           requireInteraction: true

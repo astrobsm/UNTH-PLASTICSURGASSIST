@@ -14,7 +14,7 @@ import { useNavigate } from 'react-router-dom';
 type ViewMode = 'overview' | 'detail';
 type Tab = 'summary' | 'documentation' | 'cbt' | 'cme' | 'patients' | 'eligibility';
 
-const ADMIN_ROLES = ['admin', 'consultant', 'senior_registrar'];
+const ADMIN_ROLES = ['admin', 'super_admin', 'consultant', 'senior_registrar'];
 
 const HOTrackingPage: React.FC = () => {
   const { user } = useAuthStore();
@@ -137,7 +137,9 @@ const HOTrackingPage: React.FC = () => {
 
   const handleApproveSignOut = async (rotationId: number, approved: boolean) => {
     const comments = prompt(approved ? 'Approval comments (optional):' : 'Reason for rejection:');
-    if (!approved && !comments) return;
+    // Cancel means cancel — it used to approve anyway.
+    if (comments === null) return;
+    if (!approved && !comments.trim()) return;
     try {
       const ho = selectedHO?.houseOfficer;
       await hoTrackingService.approveSignOut(

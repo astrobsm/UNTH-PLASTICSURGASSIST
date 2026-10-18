@@ -4,13 +4,14 @@ import { cors, authenticateRequest } from '../_lib/auth.js';
 import webpush from 'web-push';
 
 // Configure web-push with VAPID keys
-const vapidPublicKey = process.env.VAPID_PUBLIC_KEY || 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LhPVhJveYTGq-eAqD1Qj2HhVBNvRfGLr1JiOF0j-T_Hxxw';
+// No fallback key: a published demo key would let anyone sign pushes.
+const vapidPublicKey = process.env.VAPID_PUBLIC_KEY;
 const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
 if (!vapidPrivateKey) {
   console.error('WARNING: VAPID_PRIVATE_KEY env var not set. Push notifications will fail.');
 }
 
-if (vapidPrivateKey) {
+if (vapidPrivateKey && vapidPublicKey) {
   webpush.setVapidDetails(
     'mailto:admin@plasticsurgeryassistant.com',
     vapidPublicKey,
@@ -58,6 +59,9 @@ async function broadcastNotification(data, res) {
   if (!title || !body) {
     return res.status(400).json({ error: 'Title and body are required' });
   }
+  if (!vapidPrivateKey || !vapidPublicKey) {
+    return res.status(503).json({ error: 'Push is not configured on the server (VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY).' });
+  }
 
   try {
     // First, ensure the push_subscriptions table exists
@@ -79,7 +83,7 @@ async function broadcastNotification(data, res) {
     );
 
     const subscriptions = result.rows || [];
-    
+
     // If no subscriptions, return success with 0 sent
     if (subscriptions.length === 0) {
       return res.status(200).json({
@@ -95,9 +99,10 @@ async function broadcastNotification(data, res) {
       title,
       body,
       voiceMessage,
-      data: notificationData,
-      icon: '/icons/icon-192x192.png',
-      badge: '/icons/badge-72x72.png',
+      // Tapping the notification opens what it is about, not the home page.
+      data: { url: notificationData?.url || (notificationData?.patientId ? `/patients/${notificationData.patientId}` : '/'), ...(notificationData || {}) },
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
       vibrate: [200, 100, 200],
       tag: notificationData?.type || 'default',
       requireInteraction: true
@@ -108,8 +113,8 @@ async function broadcastNotification(data, res) {
     try {
       const pushSubscription = {
         endpoint: subscription.endpoint,
-        keys: typeof subscription.keys === 'string' 
-          ? JSON.parse(subscription.keys) 
+        keys: typeof subscription.keys === 'string'
+          ? JSON.parse(subscription.keys)
           : subscription.keys
       };
 
@@ -118,15 +123,15 @@ async function broadcastNotification(data, res) {
       return { success: true, userId: subscription.user_id };
     } catch (error) {
       console.error('Failed to send push notification to:', subscription.user_id, error);
-      
+
       // If subscription is no longer valid, mark it as inactive
-      if (error.statusCode === 410) {
+      if (error.statusCode === 410 || error.statusCode === 404) {
         await query(
           'UPDATE push_subscriptions SET is_active = false WHERE id = $1',
           [subscription.id]
         );
       }
-      
+
       return { success: false, userId: subscription.user_id, error: error.message };
     }
   });
@@ -144,9 +149,9 @@ async function broadcastNotification(data, res) {
   });
   } catch (error) {
     console.error('Broadcast notification error:', error);
-    return res.status(500).json({ 
-      error: 'Failed to broadcast notification', 
-      message: error.message 
+    return res.status(500).json({
+      error: 'Failed to broadcast notification',
+      message: error.message
     });
   }
 }

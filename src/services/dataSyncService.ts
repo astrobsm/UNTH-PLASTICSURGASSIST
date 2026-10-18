@@ -1,9 +1,9 @@
 /**
  * DataSyncService - Comprehensive 2-Way Cross-Device Sync
- * 
+ *
  * Provides robust push-to-cloud and pull-from-cloud synchronization for ALL entity types.
  * Ensures data consistency across devices (laptop, phone, tablet).
- * 
+ *
  * Features:
  * - Automatic sync on app startup
  * - Periodic background sync (every 2 minutes)
@@ -24,7 +24,7 @@ import { medicalTeamService } from './medicalTeamService';
 
 // Entity types that need cross-device sync
 // NOTE: Only include entities that have corresponding backend API endpoints
-export type SyncableEntity = 
+export type SyncableEntity =
   | 'patients'
   | 'admissions'
   | 'discharges'
@@ -229,9 +229,9 @@ class DataSyncService {
     window.addEventListener('offline', () => {
       this.isOnline = false;
       logger.log('📴 Gone offline - changes will be queued');
-      toast.error('You are offline. Changes will sync when reconnected.', { 
-        id: 'connectivity', 
-        duration: 5000 
+      toast.error('You are offline. Changes will sync when reconnected.', {
+        id: 'connectivity',
+        duration: 5000
       });
       this.notifyListeners();
     });
@@ -367,7 +367,13 @@ class DataSyncService {
         if (this.isOnline && !this.isSyncing && apiClient.getToken()) {
           try {
             const pendingCount = await this.getTotalPendingChanges();
-            if (pendingCount > 0) {
+            // Settings → Auto-sync. Off stops the background pull of other
+            // devices' changes; this device's own unsynced work is still
+            // pushed, so switching it off can never lose data.
+            const autoSync = localStorage.getItem('auto_sync_enabled') !== 'false';
+            if (!autoSync && pendingCount === 0) {
+              // nothing of ours to send, and pulling is switched off
+            } else if (pendingCount > 0) {
               console.log(`⏰ Periodic sync: ${pendingCount} items pending`);
               await this.performFullSync();
             } else {
@@ -420,7 +426,7 @@ class DataSyncService {
   public async getStatus(): Promise<SyncStatus> {
     const totalPending = await this.getTotalPendingChanges();
     const entityStatuses: Record<SyncableEntity, EntitySyncStatus> = {} as any;
-    
+
     this.entitySyncStatus.forEach((status, entity) => {
       entityStatuses[entity] = { ...status };
     });
@@ -671,9 +677,9 @@ class DataSyncService {
 
           // If this is an auth failure (401/403/token), abort remaining pulls
           if (error instanceof Error && (
-            error.message.includes('401') || 
-            error.message.includes('403') || 
-            error.message.includes('Not authenticated') || 
+            error.message.includes('401') ||
+            error.message.includes('403') ||
+            error.message.includes('Not authenticated') ||
             error.message.includes('No token')
           )) {
             console.warn('🔒 Auth failure — skipping remaining entity pulls');
@@ -829,16 +835,16 @@ class DataSyncService {
     try {
       const query = since ? `?since=${since}` : '';
       const response = await apiClient.request(`${endpoint}${query}`);
-      
+
       // Handle different response structures
       if (Array.isArray(response)) {
         return response;
       }
-      
+
       // Check for common response wrappers - exact keys from API responses
       const possibleKeys = [
-        'patients', 'admissions', 'discharges', 'plans', 'prescriptions', 
-        'notes', 'investigations', 'results', 'assessments', 'surgeries', 
+        'patients', 'admissions', 'discharges', 'plans', 'prescriptions',
+        'notes', 'investigations', 'results', 'assessments', 'surgeries',
         'rounds', 'records', 'data', 'items',
         // Exact API response keys
         'labOrders', 'labOrder', 'lab_orders', 'lab_investigations',
@@ -847,7 +853,7 @@ class DataSyncService {
         'treatment_plans', 'treatmentPlans', 'treatmentPlan',
         'surgery_bookings', 'surgeryBookings', 'surgery'
       ];
-      
+
       for (const key of possibleKeys) {
         if (response[key] && Array.isArray(response[key])) {
           return response[key];
@@ -1082,14 +1088,14 @@ class DataSyncService {
           await table.clear();
         }
       }
-      
+
       // Clear sync state
       localStorage.removeItem('dataSyncService_lastFullSync');
       localStorage.removeItem('dataSyncService_entityStates');
-      
+
       this.lastFullSyncTime = null;
       this.initializeEntityStatus();
-      
+
       console.log('🗑️ All cached data cleared');
     } catch (error) {
       console.error('Error clearing data:', error);

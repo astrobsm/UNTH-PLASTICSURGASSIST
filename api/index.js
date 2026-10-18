@@ -1,6 +1,8 @@
 // API index - lists all available endpoints
+import { cors } from './_lib/auth.js';
+
 export default function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  if (cors(req, res)) return;
   res.status(200).json({
     name: 'Plastic Surgeon Assistant API',
     version: '1.0.0',

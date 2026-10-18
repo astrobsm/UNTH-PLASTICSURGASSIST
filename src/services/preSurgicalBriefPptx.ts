@@ -103,7 +103,7 @@ function labValue(r: LabResult): string {
 async function toDataUrl(url: string): Promise<string | null> {
   try {
     if (url.startsWith('data:')) return url;
-    const res = await fetch(url, { credentials: 'include' });
+    const res = await fetch(url, { credentials: 'same-origin' });
     if (!res.ok) return null;
     const blob = await res.blob();
     return await new Promise<string | null>(resolve => {

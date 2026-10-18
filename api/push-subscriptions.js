@@ -11,13 +11,23 @@ export default async function handler(req, res) {
   }
 
   const { method } = req;
+  const action = req.query?.action;
 
   try {
     switch (method) {
       case 'POST':
         return await saveSubscription(req.body, auth.user, res);
       case 'GET':
-        return await getAllSubscriptions(res);
+        // The server's public VAPID key: the app subscribes with this one, so
+        // a subscription and the key the server signs with always match.
+        if (action === 'vapid-key') {
+          const key = process.env.VAPID_PUBLIC_KEY || null;
+          return res.status(200).json({ publicKey: key, configured: Boolean(key && process.env.VAPID_PRIVATE_KEY) });
+        }
+        // Your own devices only — this used to return every user's endpoints.
+        return await getOwnSubscriptions(auth.user, res);
+      case 'DELETE':
+        return await deleteSubscription(req.body || {}, auth.user, res);
       default:
         res.status(405).json({ error: 'Method not allowed' });
     }
@@ -54,7 +64,7 @@ async function saveSubscription(data, user, res) {
 
     if (existingResult.rows.length > 0) {
       const result = await query(
-        `UPDATE push_subscriptions 
+        `UPDATE push_subscriptions
          SET keys = $1, updated_at = NOW()
          WHERE user_id::text = $2 AND endpoint = $3
          RETURNING *`,
@@ -111,10 +121,23 @@ async function ensurePushSubscriptionsTable() {
   }
 }
 
-async function getAllSubscriptions(res) {
+async function getOwnSubscriptions(user, res) {
   await ensurePushSubscriptionsTable();
   const result = await query(
-    'SELECT * FROM push_subscriptions WHERE is_active = true ORDER BY created_at DESC'
+    'SELECT id, endpoint, is_active, created_at, updated_at FROM push_subscriptions WHERE user_id::text = $1 AND is_active = true ORDER BY created_at DESC',
+    [String(user.id)]
   );
   res.status(200).json({ subscriptions: result.rows });
+}
+
+/** Sign-out on a shared phone: stop this device receiving this user's alerts. */
+async function deleteSubscription(body, user, res) {
+  await ensurePushSubscriptionsTable();
+  const endpoint = typeof body.endpoint === 'string' ? body.endpoint : null;
+  const r = await query(
+    `UPDATE push_subscriptions SET is_active = FALSE, updated_at = NOW()
+      WHERE user_id::text = $1 ${endpoint ? 'AND endpoint = $2' : ''}`,
+    endpoint ? [String(user.id), endpoint] : [String(user.id)]
+  );
+  res.status(200).json({ removed: r.rowCount || 0 });
 }

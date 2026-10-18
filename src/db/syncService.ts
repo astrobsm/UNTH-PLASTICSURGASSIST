@@ -1019,7 +1019,7 @@ class SyncService {
     const response = await this.fetchWithTimeout(`${baseUrl}${endpoint}`, {
       method,
       headers,
-      credentials: 'include',
+      credentials: 'same-origin',
       body: data ? JSON.stringify(data) : undefined,
     });
 

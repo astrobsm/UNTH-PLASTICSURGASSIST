@@ -76,34 +76,22 @@ export function authenticateRequest(req, options = {}) {
   return { authenticated: true, user: decoded };
 }
 
-// CORS helper for API routes
+// CORS for API routes: any origin may call the API.
+//
+// Safe because authentication is a bearer token in the Authorization header —
+// there are no cookies or other ambient credentials, so a page on another
+// origin cannot act as a signed-in user; it must hold the user's token.
+// Credentials mode is therefore never allowed (and is incompatible with "*").
+// vercel.json sets the same headers for every /api route.
+export const CORS_ALLOW_HEADERS = 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization, X-Idempotency-Key, x-init-secret';
+
 export function cors(req, res) {
-  const origin = req.headers.origin;
-  
-  // Allow all Vercel preview deployments and the main domain
-  const isAllowedOrigin = (
-    origin === 'https://plasticsurgassisstant.vercel.app' ||
-    (origin && origin.startsWith('https://plasticsurgassisstant-') && origin.endsWith('.vercel.app')) ||
-    (process.env.NODE_ENV !== 'production' && origin === 'http://localhost:5173')
-  );
-  
-  // Set CORS headers if origin is allowed
-  if (isAllowedOrigin) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-  } else if (!origin) {
-    // Same-origin requests or server-to-server (no origin header)
-    // Do NOT set wildcard — omit Access-Control-Allow-Origin for security
-  }
-  
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader(
-    'Access-Control-Allow-Headers',
-    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization, X-Idempotency-Key'
-  );
-  
+  res.setHeader('Access-Control-Allow-Headers', CORS_ALLOW_HEADERS);
+  res.setHeader('Access-Control-Max-Age', '86400');
   if (req.method === 'OPTIONS') {
-    res.status(200).end();
+    res.status(204).end();
     return true;
   }
   return false;

@@ -1,7 +1,9 @@
+import { cors } from './_lib/auth.js';
 // Health check endpoint with database connectivity test
 import { testConnection } from './_lib/db.js';
 
 export default async function handler(req, res) {
+  if (cors(req, res)) return;
   res.setHeader('Access-Control-Allow-Origin', '*');
   
   // Quick health check (no DB test)

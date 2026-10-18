@@ -1,5 +1,5 @@
 // VAPID keys for Web Push (in production, these should be environment variables)
-export const VAPID_PUBLIC_KEY = 'BL7ELnbFPVkimqMT3g8xm9EkB8u6xKpZnWRe4J5-v3g1-RxSp1T5-HKFzKy2_QrIZ8Q4X1D2KmNkJ5T_aJ9wT3E';
+// The VAPID key comes from the server (see pushNotificationService).
 
 export interface NotificationPayload {
   title: string;
@@ -60,25 +60,15 @@ class NotificationService {
   }
 
   // Subscribe to push notifications
+  // Subscribe to push notifications — through the one push service, which
+  // uses the server's VAPID key and registers the device with the server.
+  // This used to subscribe with a separate made-up key and only write the
+  // subscription to localStorage, so the server could never reach it.
   private async subscribeToPush(): Promise<void> {
-    if (!this.registration) {
-      throw new Error('Service Worker not registered');
-    }
-
     try {
-      const subscription = await this.registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: this.urlBase64ToUint8Array(VAPID_PUBLIC_KEY) as BufferSource
-      });
-
-      this.subscription = subscription;
-      
-      // In a real app, send this subscription to your server
-      console.log('Push subscription:', JSON.stringify(subscription));
-      
-      // Store subscription locally for demo purposes
-      localStorage.setItem('push-subscription', JSON.stringify(subscription));
-      
+      const { pushNotificationService } = await import('./pushNotificationService');
+      await pushNotificationService.subscribeToPushNotifications();
+      this.subscription = (await this.registration?.pushManager.getSubscription()) || null;
     } catch (error) {
       console.error('Failed to subscribe to push notifications:', error);
     }

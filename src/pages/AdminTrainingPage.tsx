@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Users, Search, AlertTriangle, CheckCircle, Clock, XCircle,
   Send, Eye, BarChart3, Shield,
-  User, Activity, BookOpen, ClipboardCheck, Calendar, 
+  User, Activity, BookOpen, ClipboardCheck, Calendar,
   Bell, ArrowLeft, RefreshCw, Target, MessageCircle, Phone,
 } from 'lucide-react';
 import { apiClient } from '../services/apiClient';
@@ -86,6 +86,10 @@ const LEVEL_LABELS: Record<string, string> = {
   senior_resident: 'Senior Registrar',
 };
 
+// Whole class names, so Tailwind keeps them in the build.
+const LEVEL_BG: Record<string, string> = { house_officer: 'bg-blue-100', junior_resident: 'bg-green-100', senior_resident: 'bg-purple-100' };
+const LEVEL_TEXT: Record<string, string> = { house_officer: 'text-blue-600', junior_resident: 'text-green-600', senior_resident: 'text-purple-600' };
+const LEVEL_BADGE: Record<string, string> = { house_officer: 'bg-blue-100 text-blue-700', junior_resident: 'bg-green-100 text-green-700', senior_resident: 'bg-purple-100 text-purple-700' };
 const LEVEL_COLORS: Record<string, string> = {
   house_officer: 'blue',
   junior_resident: 'green',
@@ -237,6 +241,9 @@ const AdminTrainingPage: React.FC = () => {
 
   const handleApproveSignout = async (rotationId: number, approved: boolean) => {
     const comments = prompt(approved ? 'Approval comments:' : 'Rejection reason:');
+    // Cancel means cancel — it used to send the approval anyway.
+    if (comments === null) return;
+    if (!approved && !comments.trim()) return;
     try {
       await apiClient.request('/admin-training?action=approve-signout', {
         method: 'POST',
@@ -359,8 +366,8 @@ const AdminTrainingPage: React.FC = () => {
           <div className="bg-white rounded-xl shadow-sm border p-6 mb-6">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
               <div className="flex items-center gap-4">
-                <div className={`w-14 h-14 rounded-full bg-${LEVEL_COLORS[t.level]}-100 flex items-center justify-center`}>
-                  <User className={`w-7 h-7 text-${LEVEL_COLORS[t.level]}-600`} />
+                <div className={`w-14 h-14 rounded-full ${LEVEL_BG[t.level] || 'bg-gray-100'} flex items-center justify-center`}>
+                  <User className={`w-7 h-7 ${LEVEL_TEXT[t.level] || 'text-gray-600'}`} />
                 </div>
                 <div>
                   <h1 className="text-xl font-bold text-gray-900">{t.full_name}</h1>
@@ -384,7 +391,7 @@ const AdminTrainingPage: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-semibold text-gray-800">Overall Performance Score</h2>
-                <p className="text-sm text-gray-600">Weighted: CBT 30% + Patients 35% + Duties 25% + Attendance 10%</p>
+                <p className="text-sm text-gray-600">Weighted: clinical work 30% · CBT 20% · CME 15% · self-assessment 15% · duties 10% · attendance 10% (house officers: morning round 15%)</p>
               </div>
               <div className={`text-4xl font-bold ${getScoreColor(m.overallScore)}`}>{m.overallScore}%</div>
             </div>
@@ -721,8 +728,8 @@ const AdminTrainingPage: React.FC = () => {
                       <tr className="hover:bg-gray-50 cursor-pointer" onClick={() => setExpandedTrainee(expandedTrainee === t.id ? null : t.id)}>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-3">
-                            <div className={`w-8 h-8 rounded-full bg-${LEVEL_COLORS[t.level]}-100 flex items-center justify-center flex-shrink-0`}>
-                              <User className={`w-4 h-4 text-${LEVEL_COLORS[t.level]}-600`} />
+                            <div className={`w-8 h-8 rounded-full ${LEVEL_BG[t.level] || 'bg-gray-100'} flex items-center justify-center flex-shrink-0`}>
+                              <User className={`w-4 h-4 ${LEVEL_TEXT[t.level] || 'text-gray-600'}`} />
                             </div>
                             <div className="min-w-0">
                               <p className="font-medium text-gray-900 truncate">{t.full_name}</p>
@@ -733,7 +740,7 @@ const AdminTrainingPage: React.FC = () => {
                           </div>
                         </td>
                         <td className="px-4 py-3">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium bg-${LEVEL_COLORS[t.level]}-100 text-${LEVEL_COLORS[t.level]}-700`}>
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${LEVEL_BADGE[t.level] || 'bg-gray-100 text-gray-700'}`}>
                             {LEVEL_LABELS[t.level]}
                           </span>
                         </td>

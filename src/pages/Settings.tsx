@@ -1,6 +1,6 @@
 /**
  * Settings Page
- * 
+ *
  * Provides device sync controls, data management, and app configuration.
  * The main sync button pushes all local data to the cloud so other devices can pull automatically.
  */
@@ -9,7 +9,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   RefreshCw,
   Cloud,
-  
+
   Upload,
   Download,
   CheckCircle2,
@@ -117,13 +117,16 @@ export default function Settings() {
   // Check for app updates via service worker
   const handleCheckForUpdates = useCallback(async () => {
     setUpdateStatus('checking');
+    // A local flag: the state value captured by this callback is stale, which
+    // made every check end in "latest version" even when one was found.
+    let found = false;
     try {
       if ('serviceWorker' in navigator) {
         const registration = await navigator.serviceWorker.getRegistration();
         if (registration) {
           // Force check for new service worker
           await registration.update();
-          
+
           if (registration.waiting) {
             // A new SW is already waiting
             setUpdateStatus('available');
@@ -135,6 +138,7 @@ export default function Settings() {
               if (newWorker) {
                 newWorker.addEventListener('statechange', () => {
                   if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                    found = true;
                     setUpdateStatus('available');
                     toast.success('Update available! Tap "Update Now" to apply.');
                   }
@@ -145,8 +149,8 @@ export default function Settings() {
             // Wait a few seconds for any update to be found
             await new Promise(resolve => setTimeout(resolve, 4000));
             registration.removeEventListener('updatefound', onUpdateFound);
-            
-            if (updateStatus !== 'available') {
+
+            if (!found) {
               // Also try clearing caches to force fresh assets on next reload
               setUpdateStatus('not-available');
               toast('You are on the latest version.', { icon: '✓' });
@@ -254,7 +258,7 @@ export default function Settings() {
       const result = await dataSyncService.performFullSync();
       setSyncResult(result);
       setSyncPhase(result.errors.length > 0 && result.pushed === 0 && result.pulled === 0 ? 'error' : 'complete');
-      
+
       // Refresh local data summary after sync
       await loadLocalDataSummary();
 
@@ -309,6 +313,11 @@ export default function Settings() {
 
   // Clear local data
   const handleClearLocalData = async () => {
+    // Unsynced work exists only on this device; clearing would destroy it.
+    if (syncState.totalPendingChanges > 0) {
+      toast.error(`${syncState.totalPendingChanges} change(s) on this device have not synced yet. Sync first, then clear the cache.`);
+      return;
+    }
     if (!window.confirm(
       'Are you sure you want to clear all locally cached data?\n\n' +
       'This will NOT delete your data from the cloud. ' +
@@ -341,8 +350,8 @@ export default function Settings() {
 
       {/* Connection Status Banner */}
       <div className={`rounded-xl p-4 flex items-center gap-3 ${
-        syncState.isOnline 
-          ? 'bg-green-50 border border-green-200' 
+        syncState.isOnline
+          ? 'bg-green-50 border border-green-200'
           : 'bg-red-50 border border-red-200'
       }`}>
         {syncState.isOnline ? (
@@ -444,8 +453,8 @@ export default function Settings() {
           {/* Sync Result */}
           {syncResult && !syncState.isSyncing && (
             <div className={`rounded-lg p-4 ${
-              syncPhase === 'error' 
-                ? 'bg-red-50 border border-red-200' 
+              syncPhase === 'error'
+                ? 'bg-red-50 border border-red-200'
                 : 'bg-green-50 border border-green-200'
             }`}>
               {syncPhase === 'complete' ? (
@@ -585,7 +594,7 @@ export default function Settings() {
               <RefreshCw className="h-5 w-5 text-gray-400" />
               <div>
                 <p className="text-sm font-medium text-gray-800">Auto-sync</p>
-                <p className="text-xs text-gray-500">Sync automatically every 2 minutes when online</p>
+                <p className="text-xs text-gray-500">Download other devices’ changes every 2 minutes when online. Your own unsynced work is always sent.</p>
               </div>
             </div>
             <button
@@ -621,7 +630,7 @@ export default function Settings() {
                 <p className="font-medium mb-1">How cross-device sync works:</p>
                 <ol className="list-decimal ml-4 space-y-1 text-blue-700">
                   <li><strong>Push:</strong> Tap "Sync Now" on this device to upload all your data to the cloud.</li>
-                  <li><strong>Auto-Pull:</strong> When you log in on another device (laptop, phone, or tablet), 
+                  <li><strong>Auto-Pull:</strong> When you log in on another device (laptop, phone, or tablet),
                       it automatically downloads the latest data from the cloud.</li>
                   <li><strong>Background sync:</strong> While online, data syncs automatically every 2 minutes.</li>
                   <li><strong>Offline mode:</strong> Changes made offline are saved locally and uploaded when back online.</li>
@@ -728,7 +737,7 @@ export default function Settings() {
       <SyncConflictsViewer />
 
       {/* ──────────────────────── CLINIC CONFIGURATION (admin) ──────────────────────── */}
-      {['admin', 'consultant', 'senior_registrar'].includes(user?.role || '') && (
+      {['admin', 'super_admin', 'consultant', 'senior_registrar'].includes(user?.role || '') && (
         <ClinicConfigPanel />
       )}
 

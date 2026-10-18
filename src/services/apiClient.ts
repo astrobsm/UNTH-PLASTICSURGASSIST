@@ -88,6 +88,8 @@ const NON_QUEUEABLE_PREFIXES = [
   '/posting-onboarding',
   // A reset replayed later would issue a temporary password nobody sees.
   '/users/reset-password',
+  // Subscribing / unsubscribing a device is about this moment only.
+  '/push-subscriptions',
 ];
 
 class ApiClient {

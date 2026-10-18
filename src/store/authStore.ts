@@ -142,6 +142,12 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: async () => {
+        // Stop this device getting the signed-out user's push alerts — while
+        // the token still exists, and never holding up the sign-out itself.
+        try {
+          const { pushNotificationService } = await import('../services/pushNotificationService');
+          await Promise.race([pushNotificationService.unsubscribe(), new Promise(r => setTimeout(r, 2000))]);
+        } catch { /* offline or unsupported */ }
         clearEncryption();
         localStorage.removeItem('userId');
         // SECURITY: Clear all patient-specific data from localStorage to prevent cross-user data leakage

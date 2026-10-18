@@ -20,7 +20,7 @@ const authenticatedFetch = async (url: string, options: RequestInit = {}): Promi
   return fetch(url, {
     ...options,
     headers,
-    credentials: 'include'
+    credentials: 'same-origin'
   });
 };
 
