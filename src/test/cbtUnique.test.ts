@@ -75,3 +75,12 @@ describe('wiring', () => {
     expect(read('api/learning-content.js')).toMatch(/junior_resident: \['junior_resident', 'junior_registrar', 'registrar'\]/);
   });
 });
+
+describe('curriculum query', () => {
+  it('orders by the selected alias — DISTINCT with ORDER BY c.level is rejected by Postgres (the 500)', () => {
+    const src = fs.readFileSync(path.resolve(__dirname, '../../api/learning-content.js'), 'utf8');
+    const q = src.slice(src.indexOf('SELECT DISTINCT c.id'), src.indexOf('[CURRICULUM_KEYS'));
+    expect(q).toMatch(/ORDER BY level`/);
+    expect(q).not.toMatch(/ORDER BY c\.level/);
+  });
+});

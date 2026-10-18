@@ -158,11 +158,14 @@ const CURRICULUM_KEYS = {
 export async function categoriesFor(level) {
   const key = level.startsWith('surgery_') ? `student_${level}` : level;
   const configured = (await query(
+    // DISTINCT because several curriculum keys can name the same category.
+    // Its ORDER BY must use the selected expression (the alias), or Postgres
+    // rejects the query — which took the whole library down with a 500.
     `SELECT DISTINCT c.id, c.name, c.code, c.level::text AS level
      FROM level_curriculum lc
      JOIN rotation_categories c ON c.id = lc.category_id
      WHERE lc.training_level = ANY($1::text[]) AND c.is_active
-     ORDER BY c.level`,
+     ORDER BY level`,
     [CURRICULUM_KEYS[key] || [key]],
   )).rows;
   if (configured.length) return configured;
