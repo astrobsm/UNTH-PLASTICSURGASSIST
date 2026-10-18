@@ -3,6 +3,7 @@ import { query } from '../_lib/db.js';
 import { cors, authenticateRequest } from '../_lib/auth.js';
 import { idempotent, rememberResponse } from '../_lib/idempotency.js';
 import { normalizeHospitalNumber, findPatientsByHospitalNumber, duplicateResponse, listDuplicateHospitalNumbers } from '../_lib/hospitalNumber.js';
+import { mergePatients, recordCounts } from '../_lib/patientMerge.js';
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
@@ -33,7 +34,11 @@ export default async function handler(req, res) {
             if (!['admin', 'super_admin', 'consultant'].includes(auth.user.role)) {
               return res.status(403).json({ error: 'Administrators only' });
             }
-            return res.status(200).json({ duplicates: await listDuplicateHospitalNumbers(query) });
+            const duplicates = await listDuplicateHospitalNumbers(query);
+            // How much is recorded against each, so the fuller record is kept.
+            const counts = await recordCounts(duplicates.flatMap(g => g.patients.map(p => p.id)));
+            for (const g of duplicates) for (const p of g.patients) p.records = counts[String(p.id)] || { total: 0, tables: {} };
+            return res.status(200).json({ duplicates });
           }
           const lookup = url.searchParams.get('hospital_number_lookup');
           if (lookup !== null) {
@@ -55,6 +60,19 @@ export default async function handler(req, res) {
         }
         return await getAllPatients(url.searchParams, res);
       case 'POST':
+        // Merge two registrations of one patient — administrators only.
+        if (url.searchParams.get('action') === 'merge') {
+          if (!['admin', 'super_admin'].includes(auth.user.role)) {
+            return res.status(403).json({ error: 'Only an administrator can merge patient records' });
+          }
+          try {
+            const b = req.body || {};
+            const result = await mergePatients({ keepId: b.keepId, dropId: b.dropId, force: !!b.force, user: auth.user });
+            return res.status(200).json({ success: true, ...result });
+          } catch (e) {
+            return res.status(e.status || 500).json({ error: e.message, code: e.code });
+          }
+        }
         if (await idempotent(req, res, auth.user)) return;
         return await createPatient(req.body, auth.user, req, res);
       case 'PUT':

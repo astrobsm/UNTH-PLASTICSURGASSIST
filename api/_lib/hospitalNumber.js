@@ -95,6 +95,8 @@ export function duplicateResponse(rows, raw) {
  * administrator to merge. Tried once per instance; never throws.
  */
 let indexTried = false;
+/** After a merge retires a duplicate, the index is worth trying again. */
+export function resetHospitalNumberIndexAttempt() { indexTried = false; }
 export async function ensureHospitalNumberIndex(query) {
   if (indexTried) return;
   indexTried = true;
@@ -118,6 +120,7 @@ export async function listDuplicateHospitalNumbers(query) {
               'created_at', created_at) ORDER BY created_at) AS patients
        FROM patients
       WHERE hospital_number IS NOT NULL AND hospital_number <> ''
+        AND hospital_number NOT LIKE 'MERGED-%'
       GROUP BY 1 HAVING COUNT(*) > 1
       ORDER BY 1`);
   return r.rows;

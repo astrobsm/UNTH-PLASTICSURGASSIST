@@ -63,11 +63,12 @@ import { resetDatabase, fullDatabaseRecovery, triggerEmergencyRecovery } from '.
 import toast from 'react-hot-toast';
 import RotationManagement from '../components/admin/RotationManagement';
 import RoleManagement from '../components/admin/RoleManagement';
+import DuplicatePatientsMerge from '../components/admin/DuplicatePatientsMerge';
 import { UnitRosterConfig } from '../config/psUnits';
 import { useAuthStore } from '../store/authStore';
 import { rolesService, StaffRole } from '../services/rolesService';
 
-type AdminTab = 'dashboard' | 'user-approvals' | 'users' | 'bulk-import' | 'team-analytics' | 'roles' | 'rotations' | 'system' | 'database' | 'security' | 'analytics' | 'settings';
+type AdminTab = 'dashboard' | 'user-approvals' | 'users' | 'duplicates' | 'bulk-import' | 'team-analytics' | 'roles' | 'rotations' | 'system' | 'database' | 'security' | 'analytics' | 'settings';
 
 interface User {
   id: string;
@@ -118,7 +119,7 @@ export default function Admin() {
   const [activeTab, setActiveTab] = useState<AdminTab>(() => {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab');
-    return (tab && ['dashboard','user-approvals','users','bulk-import','team-analytics','roles','rotations','system','database','security','analytics','settings'].includes(tab))
+    return (tab && ['dashboard','user-approvals','users','duplicates','bulk-import','team-analytics','roles','rotations','system','database','security','analytics','settings'].includes(tab))
       ? tab as AdminTab : 'dashboard';
   });
 
@@ -555,6 +556,7 @@ export default function Admin() {
         <TabButton tab="dashboard" label="Dashboard" icon={BarChart3} />
         <TabButton tab="user-approvals" label="Approvals" icon={UserCheck} />
         <TabButton tab="users" label="Users" icon={Users} />
+        <TabButton tab="duplicates" label="Duplicate Patients" icon={UserCheck} />
         <TabButton tab="bulk-import" label="Bulk Import" icon={UserPlus} />
         <TabButton tab="team-analytics" label="Team Analytics" icon={Activity} />
         <TabButton tab="roles" label="Roles" icon={Shield} />
@@ -1057,6 +1059,8 @@ export default function Admin() {
       )}
 
       {/* Bulk Import Tab */}
+      {activeTab === 'duplicates' && <DuplicatePatientsMerge />}
+
       {activeTab === 'bulk-import' && (
         <BulkUserImport />
       )}
