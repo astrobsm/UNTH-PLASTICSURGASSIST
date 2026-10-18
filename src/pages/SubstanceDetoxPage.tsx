@@ -3,6 +3,7 @@ import { useAuthStore } from '../store/authStore';
 import { db } from '../db/database';
 import { normalizeArrayField } from '../services/patientService';
 import { useOnSelectedPatient } from '../hooks/useSelectedPatient';
+import { itemsFor, scoreItems, interpretScale, cowsPulseScore, vitalRedFlags, SCALE_MAX, type ScaleType } from '../services/withdrawalScales';
 import {
   substanceDefinitions,
   calculatePhysicalDependenceScore,
@@ -1277,14 +1278,47 @@ function AssessmentDetail({ assessment, user, onUpdate }: {
 function MonitoringForm({ assessmentId, patientId, user, onSaved, onCancel }: {
   assessmentId: string; patientId: string; user: any; onSaved: () => void; onCancel: () => void;
 }) {
+  // Each withdrawal scale is scored item by item against its published anchors;
+  // the total, severity band and escalation are computed, not typed.
   const [form, setForm] = useState({
     heartRate: '', bloodPressure: '', temperature: '', respiratoryRate: '', oxygenSaturation: '',
-    withdrawalScaleScore: '', withdrawalScaleType: 'COWS' as 'COWS' | 'CIWA-Ar' | 'CIWA-B',
+    withdrawalScaleScore: '', withdrawalScaleType: 'COWS' as ScaleType,
     clinicalNotes: '', escalationTriggered: false, escalationReason: '',
   });
+  const [items, setItems] = useState<Record<string, number | undefined>>({});
+  const [escalationTouched, setEscalationTouched] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const scaleItems = itemsFor(form.withdrawalScaleType);
+  const hr = form.heartRate ? Number(form.heartRate) : undefined;
+  // COWS pulse item follows the measured heart rate unless set by hand.
+  const effectiveItems = { ...items };
+  if (form.withdrawalScaleType === 'COWS' && effectiveItems.pulse === undefined) {
+    const p = cowsPulseScore(hr);
+    if (p !== null) effectiveItems.pulse = p;
+  }
+  const result = scaleItems
+    ? scoreItems(form.withdrawalScaleType, effectiveItems)
+    : interpretScale(form.withdrawalScaleType, form.withdrawalScaleScore === '' ? null : Number(form.withdrawalScaleScore));
+  const systolic = form.bloodPressure ? Number(String(form.bloodPressure).split('/')[0]) : undefined;
+  const redFlags = vitalRedFlags({
+    heartRate: hr, systolic: Number.isFinite(systolic as number) ? systolic : undefined,
+    temperature: form.temperature ? Number(form.temperature) : undefined,
+    respiratoryRate: form.respiratoryRate ? Number(form.respiratoryRate) : undefined,
+    oxygenSaturation: form.oxygenSaturation ? Number(form.oxygenSaturation) : undefined,
+  });
+  const proposedEscalation = result.escalate || redFlags.length > 0;
+  const proposedReason = [result.escalate ? `${form.withdrawalScaleType} ${result.total} — ${result.band}` : '', redFlags.length ? `Vital signs: ${redFlags.join(', ')}` : '']
+    .filter(Boolean).join('; ');
+  const escalationTriggered = escalationTouched ? form.escalationTriggered : proposedEscalation;
+  const escalationReason = escalationTouched ? form.escalationReason : proposedReason;
 
   const save = async () => {
+    setError('');
+    if (result.total == null) { setError('Score the withdrawal scale before saving.'); return; }
+    if (scaleItems && !result.complete) { setError('Score every item of the scale — an unscored item is not zero.'); return; }
+    if (escalationTriggered && !escalationReason.trim()) { setError('Give the reason for escalation.'); return; }
     setSaving(true);
     try {
       const now = new Date();
@@ -1296,19 +1330,21 @@ function MonitoringForm({ assessmentId, patientId, user, onSaved, onCancel }: {
         recordedAt: now,
         monitoredBy: user?.username || 'Unknown',
         vitalSigns: {
-          heartRate: form.heartRate ? Number(form.heartRate) : undefined,
+          heartRate: hr,
           bloodPressure: form.bloodPressure || undefined,
           temperature: form.temperature ? Number(form.temperature) : undefined,
           respiratoryRate: form.respiratoryRate ? Number(form.respiratoryRate) : undefined,
           oxygenSaturation: form.oxygenSaturation ? Number(form.oxygenSaturation) : undefined,
         },
-        withdrawalScaleScore: form.withdrawalScaleScore ? Number(form.withdrawalScaleScore) : undefined,
+        withdrawalScaleScore: result.total,
         withdrawalScaleType: form.withdrawalScaleType,
+        withdrawalScaleItems: scaleItems ? effectiveItems : null,
+        withdrawalSeverity: result.band,
         symptomChecklist: [],
         medicationsGiven: [],
         clinicalNotes: form.clinicalNotes,
-        escalationTriggered: form.escalationTriggered,
-        escalationReason: form.escalationReason || undefined,
+        escalationTriggered,
+        escalationReason: escalationTriggered ? escalationReason : undefined,
         synced: false,
       };
       await db.detox_monitoring_records.add(record);
@@ -1316,47 +1352,86 @@ function MonitoringForm({ assessmentId, patientId, user, onSaved, onCancel }: {
         await (db as any).sync_queue.add({ table: 'detox_monitoring_records', action: 'create', data: record, local_id: record.id, created_at: now });
       } catch { /* offline-safe */ }
       onSaved();
-    } catch (e) { console.error(e); alert('Error saving record'); } finally { setSaving(false); }
+    } catch (e: any) {
+      setError(e?.message || 'Could not save the record.');
+    } finally { setSaving(false); }
   };
 
   const u = (partial: Partial<typeof form>) => setForm(prev => ({ ...prev, ...partial }));
+  const tone = result.severity === 'severe' ? 'border-red-300 bg-red-50 text-red-900'
+    : result.severity === 'moderate' ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-green-300 bg-white text-green-900';
 
   return (
-    <div className="border rounded-lg p-4 bg-green-50">
+    <div className="border rounded-lg p-3 sm:p-4 bg-green-50">
       <h4 className="font-medium text-sm mb-3">New Monitoring Record</h4>
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-3">
-        <div><label className="block text-xs text-gray-600 mb-1">HR (bpm)</label><input value={form.heartRate} onChange={e => u({ heartRate: e.target.value })} type="number" title="Heart Rate" className="w-full border rounded px-2 py-1.5 text-sm" /></div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 mb-3">
+        <div><label className="block text-xs text-gray-600 mb-1">HR (bpm)</label><input value={form.heartRate} onChange={e => u({ heartRate: e.target.value })} type="number" inputMode="numeric" title="Heart Rate" className="w-full border rounded px-2 py-1.5 text-sm" /></div>
         <div><label className="block text-xs text-gray-600 mb-1">BP</label><input value={form.bloodPressure} onChange={e => u({ bloodPressure: e.target.value })} placeholder="120/80" className="w-full border rounded px-2 py-1.5 text-sm" /></div>
-        <div><label className="block text-xs text-gray-600 mb-1">Temp (°C)</label><input value={form.temperature} onChange={e => u({ temperature: e.target.value })} type="number" step="0.1" title="Temperature" className="w-full border rounded px-2 py-1.5 text-sm" /></div>
-        <div><label className="block text-xs text-gray-600 mb-1">RR (/min)</label><input value={form.respiratoryRate} onChange={e => u({ respiratoryRate: e.target.value })} type="number" title="Respiratory Rate" className="w-full border rounded px-2 py-1.5 text-sm" /></div>
-        <div><label className="block text-xs text-gray-600 mb-1">SpO2 (%)</label><input value={form.oxygenSaturation} onChange={e => u({ oxygenSaturation: e.target.value })} type="number" title="Oxygen Saturation" className="w-full border rounded px-2 py-1.5 text-sm" /></div>
+        <div><label className="block text-xs text-gray-600 mb-1">Temp (°C)</label><input value={form.temperature} onChange={e => u({ temperature: e.target.value })} type="number" step="0.1" inputMode="decimal" title="Temperature" className="w-full border rounded px-2 py-1.5 text-sm" /></div>
+        <div><label className="block text-xs text-gray-600 mb-1">RR (/min)</label><input value={form.respiratoryRate} onChange={e => u({ respiratoryRate: e.target.value })} type="number" inputMode="numeric" title="Respiratory Rate" className="w-full border rounded px-2 py-1.5 text-sm" /></div>
+        <div><label className="block text-xs text-gray-600 mb-1">SpO2 (%)</label><input value={form.oxygenSaturation} onChange={e => u({ oxygenSaturation: e.target.value })} type="number" inputMode="numeric" title="Oxygen Saturation" className="w-full border rounded px-2 py-1.5 text-sm" /></div>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-        <div>
-          <label className="block text-xs text-gray-600 mb-1">Scale Type</label>
-          <select value={form.withdrawalScaleType} onChange={e => u({ withdrawalScaleType: e.target.value as any })} title="Withdrawal Scale Type" className="w-full border rounded px-2 py-1.5 text-sm">
-            <option value="COWS">COWS (Opioid)</option>
-            <option value="CIWA-Ar">CIWA-Ar (Alcohol)</option>
-            <option value="CIWA-B">CIWA-B (Benzo)</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs text-gray-600 mb-1">Withdrawal Score</label>
-          <input value={form.withdrawalScaleScore} onChange={e => u({ withdrawalScaleScore: e.target.value })} type="number" title="Withdrawal Score" className="w-full border rounded px-2 py-1.5 text-sm" />
-        </div>
+
+      <div className="mb-3">
+        <label className="block text-xs text-gray-600 mb-1">Withdrawal scale</label>
+        <select value={form.withdrawalScaleType} onChange={e => { u({ withdrawalScaleType: e.target.value as ScaleType, withdrawalScaleScore: '' }); setItems({}); }} title="Withdrawal Scale Type" className="w-full sm:w-auto border rounded px-2 py-1.5 text-sm">
+          <option value="COWS">COWS — opioid (11 items, 0–48)</option>
+          <option value="CIWA-Ar">CIWA-Ar — alcohol (10 items, 0–67)</option>
+          <option value="CIWA-B">CIWA-B — benzodiazepine (total 0–80)</option>
+        </select>
       </div>
+
+      {scaleItems ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
+          {scaleItems.map(item => {
+            const auto = form.withdrawalScaleType === 'COWS' && item.id === 'pulse' && items.pulse === undefined && effectiveItems.pulse !== undefined;
+            return (
+              <label key={item.id} className="block bg-white rounded border p-2">
+                <span className="block text-xs font-medium text-gray-700 mb-1">{item.label}{auto && <span className="ml-1 text-[10px] text-green-700">(from HR)</span>}</span>
+                <select
+                  value={effectiveItems[item.id] ?? ''}
+                  onChange={e => setItems(prev => ({ ...prev, [item.id]: e.target.value === '' ? undefined : Number(e.target.value) }))}
+                  className={`w-full border rounded px-2 py-1.5 text-sm ${effectiveItems[item.id] === undefined ? 'border-amber-400' : ''}`}
+                >
+                  <option value="">— score —</option>
+                  {item.options.map(o => <option key={o.score} value={o.score}>{o.score}{o.text ? ` — ${o.text}` : ''}</option>)}
+                </select>
+              </label>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="mb-3">
+          <label className="block text-xs text-gray-600 mb-1">CIWA-B total (0–80)</label>
+          <input value={form.withdrawalScaleScore} onChange={e => u({ withdrawalScaleScore: e.target.value })} type="number" min={0} max={80} inputMode="numeric" title="Withdrawal Score" className="w-full sm:w-40 border rounded px-2 py-1.5 text-sm" />
+        </div>
+      )}
+
+      <div className={`rounded-lg border p-3 mb-3 text-sm ${tone}`} role="status">
+        <p className="font-semibold">
+          {result.total == null ? 'Not scored yet' : `${form.withdrawalScaleType} ${result.total} / ${SCALE_MAX[form.withdrawalScaleType]} — ${result.band}`}
+          {scaleItems && !result.complete && result.total != null && <span className="font-normal"> (incomplete — {scaleItems.length - Object.values(effectiveItems).filter(v => v !== undefined).length} item(s) unscored)</span>}
+        </p>
+        {result.total != null && <p className="text-xs mt-0.5">{result.advice}</p>}
+        {redFlags.length > 0 && <p className="text-xs mt-1 text-red-800">Vital-sign red flags: {redFlags.join(', ')}</p>}
+      </div>
+
       <div className="mb-3">
         <label className="block text-xs text-gray-600 mb-1">Clinical Notes</label>
         <textarea value={form.clinicalNotes} onChange={e => u({ clinicalNotes: e.target.value })} rows={2} title="Clinical Notes" className="w-full border rounded px-2 py-1.5 text-sm" />
       </div>
-      <label className="flex items-center gap-2 text-sm mb-3">
-        <input type="checkbox" checked={form.escalationTriggered} onChange={e => u({ escalationTriggered: e.target.checked })} className="rounded border-gray-300 text-red-600" />
-        <span className="text-red-700 font-medium">Escalation Required</span>
+      <label className="flex items-center gap-2 text-sm mb-1">
+        <input type="checkbox" checked={escalationTriggered}
+          onChange={e => { setEscalationTouched(true); u({ escalationTriggered: e.target.checked, escalationReason: escalationReason }); }}
+          className="rounded border-gray-300 text-red-600" />
+        <span className="text-red-700 font-medium">Escalation required</span>
+        {!escalationTouched && proposedEscalation && <span className="text-[11px] text-red-600">(proposed from the score / vital signs)</span>}
       </label>
-      {form.escalationTriggered && (
-        <div className="mb-3"><input value={form.escalationReason} onChange={e => u({ escalationReason: e.target.value })} placeholder="Escalation reason..." className="w-full border border-red-300 rounded px-2 py-1.5 text-sm" /></div>
+      {escalationTriggered && (
+        <div className="mb-3"><input value={escalationReason} onChange={e => { setEscalationTouched(true); u({ escalationTriggered: true, escalationReason: e.target.value }); }} placeholder="Escalation reason..." className="w-full border border-red-300 rounded px-2 py-1.5 text-sm" /></div>
       )}
-      <div className="flex gap-2">
+      {error && <p className="text-sm text-red-700 mb-2">{error}</p>}
+      <div className="flex flex-wrap gap-2">
         <button onClick={save} disabled={saving} className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 disabled:opacity-50">
           {saving ? 'Saving...' : 'Save Record'}
         </button>

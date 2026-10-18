@@ -11,6 +11,7 @@ import { patientService } from '../services/patientService';
 import { getCurrentUserName } from '../utils/getCurrentUser';
 import { useOnSelectedPatient, useSelectedPatient } from '../hooks/useSelectedPatient';
 import { WoundTrackingPanel } from '../components/wound/WoundTrackingPanel';
+import { calculateLimbVolume, islStage, islSeverity, campisiStage } from '../services/limbVolume';
 
 // ============================================
 // TYPES & INTERFACES
@@ -28,7 +29,8 @@ interface Patient {
 type ISLStage = 0 | 1 | 2 | '2late' | 3;
 
 /** Campisi Clinical Stage */
-type CampisiStage = 'IA' | 'IB' | 'II' | 'IIIA' | 'IIIB' | 'IV' | 'V';
+// 'IIIA' / 'IIIB' are kept only so assessments saved before the Campisi fix still display.
+type CampisiStage = 'IA' | 'IB' | 'II' | 'III' | 'IIIA' | 'IIIB' | 'IV' | 'V';
 
 /** Lymphedema etiology */
 type LymphedemaEtiology =
@@ -81,6 +83,9 @@ interface LymphedemaAssessment {
   volume_affected_ml: number;
   volume_contralateral_ml: number;
   volume_difference_pct: number;
+  volume_excess_ml?: number;
+  volume_segments_used?: number;
+  isl_severity?: 'none' | 'minimal' | 'moderate' | 'severe' | null;
   skin_changes: string[];
   stemmer_sign: boolean;
   pitting: 'none' | 'mild' | 'moderate' | 'severe';
@@ -203,6 +208,7 @@ const CAMPISI_STAGES: Record<CampisiStage, { name: string; description: string }
   'IA': { name: 'Stage IA', description: 'No edema despite presence of lymphatic abnormalities' },
   'IB': { name: 'Stage IB', description: 'Mild edema spontaneously reversible with elevation' },
   'II': { name: 'Stage II', description: 'Persistent edema that regresses only with treatment' },
+  'III': { name: 'Stage III', description: 'Persistent, progressive edema that does not regress; recurrent lymphangitis' },
   'IIIA': { name: 'Stage IIIA', description: 'Persistent progressive edema; recurrent lymphangitis' },
   'IIIB': { name: 'Stage IIIB', description: 'Persistent progressive edema; no lymphangitis' },
   'IV': { name: 'Stage IV', description: 'Fibrotic lymphedema with column limb' },
@@ -724,42 +730,16 @@ const SCORING_SYSTEMS = {
   }
 };
 
-// Volume calculation from circumferential measurements (truncated cone formula)
-function calculateVolumeFromMeasurements(measurements: LimbMeasurement[]): { affected: number; contralateral: number; difference_pct: number } {
-  const interval = 4; // 4cm between measurement points
-  let affVol = 0, conVol = 0;
-  for (let i = 0; i < measurements.length - 1; i++) {
-    const c1a = measurements[i].affected_cm;
-    const c2a = measurements[i + 1].affected_cm;
-    const c1c = measurements[i].contralateral_cm;
-    const c2c = measurements[i + 1].contralateral_cm;
-    // Truncated cone: V = h/(12π) × (C1² + C1×C2 + C2²)
-    affVol += (interval / (12 * Math.PI)) * (c1a * c1a + c1a * c2a + c2a * c2a);
-    conVol += (interval / (12 * Math.PI)) * (c1c * c1c + c1c * c2c + c2c * c2c);
-  }
-  const diff = conVol > 0 ? ((affVol - conVol) / conVol) * 100 : 0;
-  return { affected: Math.round(affVol), contralateral: Math.round(conVol), difference_pct: Math.round(diff * 10) / 10 };
-}
+// Volume (frustum over real segment heights), ISL stage, ISL severity and
+// Campisi stage live in services/limbVolume.ts.
 
-// Auto-stage based on clinical findings
-function autoStageISL(data: {
-  pitting: string; fibrosis: string; volume_diff_pct: number;
-  elevation_reduces: boolean; papillomatosis: boolean; stemmer: boolean;
-}): ISLStage {
-  if (data.papillomatosis || data.volume_diff_pct > 40) return 3;
-  if (data.fibrosis === 'severe' || (data.fibrosis === 'moderate' && data.volume_diff_pct > 30)) return '2late';
-  if (!data.elevation_reduces || data.fibrosis !== 'none' || data.stemmer) return 2;
-  if (data.volume_diff_pct > 10) return 1;
-  return 0;
-}
-
-function autoCampisiStage(isl: ISLStage, recurrentCellulitis: boolean): CampisiStage {
-  if (isl === 3) return 'V';
-  if (isl === '2late') return 'IV';
-  if (isl === 2) return recurrentCellulitis ? 'IIIA' : 'IIIB';
-  if (isl === 1) return 'IB';
-  return 'IA';
-}
+const MEASUREMENT_LOCATIONS = [
+  'Hand / Foot (metatarsals)', 'Wrist / Ankle', '4cm proximal', '8cm proximal', '12cm proximal',
+  '16cm proximal', '20cm proximal', '24cm proximal', '28cm proximal', '32cm proximal',
+  '36cm proximal (thigh / upper arm)',
+];
+const blankMeasurements = (): LimbMeasurement[] =>
+  MEASUREMENT_LOCATIONS.map(location => ({ location, affected_cm: 0, contralateral_cm: 0, difference_cm: 0, difference_pct: 0 }));
 
 // ============================================
 // MAIN COMPONENT
@@ -840,19 +820,7 @@ const LymphedemaPage: React.FC = () => {
     pneumatic_compression: false
   });
 
-  const [limbMeasurements, setLimbMeasurements] = useState<LimbMeasurement[]>([
-    { location: 'Hand / Foot (metatarsals)', affected_cm: 0, contralateral_cm: 0, difference_cm: 0, difference_pct: 0 },
-    { location: 'Wrist / Ankle', affected_cm: 0, contralateral_cm: 0, difference_cm: 0, difference_pct: 0 },
-    { location: '4cm proximal', affected_cm: 0, contralateral_cm: 0, difference_cm: 0, difference_pct: 0 },
-    { location: '8cm proximal', affected_cm: 0, contralateral_cm: 0, difference_cm: 0, difference_pct: 0 },
-    { location: '12cm proximal', affected_cm: 0, contralateral_cm: 0, difference_cm: 0, difference_pct: 0 },
-    { location: '16cm proximal', affected_cm: 0, contralateral_cm: 0, difference_cm: 0, difference_pct: 0 },
-    { location: '20cm proximal', affected_cm: 0, contralateral_cm: 0, difference_cm: 0, difference_pct: 0 },
-    { location: '24cm proximal', affected_cm: 0, contralateral_cm: 0, difference_cm: 0, difference_pct: 0 },
-    { location: '28cm proximal', affected_cm: 0, contralateral_cm: 0, difference_cm: 0, difference_pct: 0 },
-    { location: '32cm proximal', affected_cm: 0, contralateral_cm: 0, difference_cm: 0, difference_pct: 0 },
-    { location: '36cm proximal (thigh / upper arm)', affected_cm: 0, contralateral_cm: 0, difference_cm: 0, difference_pct: 0 }
-  ]);
+  const [limbMeasurements, setLimbMeasurements] = useState<LimbMeasurement[]>(blankMeasurements);
 
   // Load data
   useEffect(() => {
@@ -895,16 +863,18 @@ const LymphedemaPage: React.FC = () => {
   };
 
   // Computed staging
-  const computedVolumes = calculateVolumeFromMeasurements(limbMeasurements);
-  const computedISL = autoStageISL({
+  const computedVolumes = calculateLimbVolume(limbMeasurements);
+  // Stage is clinical (ISL 2020); volume excess gives severity, not stage.
+  // Swelling: a measured excess of 5 % or more (beyond tape error), pitting or Stemmer sign.
+  const computedISL = islStage({
     pitting: formData.pitting,
     fibrosis: formData.fibrosis,
-    volume_diff_pct: computedVolumes.difference_pct,
     elevation_reduces: formData.elevation_reduces,
     papillomatosis: formData.papillomatosis,
-    stemmer: formData.stemmer_sign
+    swellingPresent: computedVolumes.difference_pct >= 5 || formData.pitting !== 'none' || formData.stemmer_sign,
   });
-  const computedCampisi = autoCampisiStage(computedISL, formData.recurrent_cellulitis_episodes >= 3);
+  const computedSeverity = computedVolumes.segmentsUsed > 0 ? islSeverity(computedVolumes.difference_pct) : null;
+  const computedCampisi: CampisiStage = campisiStage(computedISL, formData.recurrent_cellulitis_episodes >= 3, formData.papillomatosis && formData.fibrosis !== 'none');
 
   // Evaluate surgical candidacy
   const evaluateSurgicalCriteria = useCallback(() => {
@@ -1127,6 +1097,18 @@ ul{margin:4px 0;padding-left:18px}li{margin:2px 0;font-size:10pt}
     setConsentUploaded(false);
   };
 
+  // Push the whole record after a local change (tracking, reminders, consent),
+  // keyed by sync_key so the server row is updated, not duplicated. The consent
+  // image stays on the device; its filename and date travel.
+  const pushAssessment = async (assessmentId: string) => {
+    try {
+      const rec: any = await db.lymphedema_assessments.get(assessmentId as any);
+      if (!rec) return;
+      const { consent_document: _omit, ...rest } = rec;
+      await syncService.queueAction('update', 'lymphedema_assessments' as any, assessmentId as any, { ...rest, sync_key: rec.id });
+    } catch (e) { console.warn('Lymphedema sync queue failed (kept locally):', e); }
+  };
+
   const handleSaveConsent = async (assessmentId: string) => {
     if (!consentFile) return;
     try {
@@ -1139,6 +1121,7 @@ ul{margin:4px 0;padding-left:18px}li{margin:2px 0;font-size:10pt}
           consent_uploaded_at: new Date().toISOString(),
           updated_at: new Date()
         } as any);
+        void pushAssessment(assessmentId);
         setConsentUploaded(true);
         setAssessments(prev => prev.map(a => a.id === assessmentId ? { ...a, consent_document: data, consent_filename: consentFile.name } as any : a));
         if (selectedAssessment?.id === assessmentId) {
@@ -1168,6 +1151,7 @@ ul{margin:4px 0;padding-left:18px}li{margin:2px 0;font-size:10pt}
         tracking_entries: updated,
         updated_at: new Date()
       } as any);
+      void pushAssessment(assessmentId);
     } catch (e) { console.error('Error saving tracking entry:', e); }
     setShowAddTracking(false);
     setTrackingForm({ phase: 'cdt_intensive', activity: '', notes: '', measurements_taken: false, volume_change_pct: 0, compliance: 'full', next_due: '' });
@@ -1205,6 +1189,7 @@ ul{margin:4px 0;padding-left:18px}li{margin:2px 0;font-size:10pt}
         reminders: updatedReminders,
         updated_at: new Date()
       } as any);
+      void pushAssessment(assessmentId);
       // Schedule push notification
       const scheduledDate = new Date(`${reminderForm.date}T${reminderForm.time}`);
       if (scheduledDate > new Date()) {
@@ -1226,6 +1211,7 @@ ul{margin:4px 0;padding-left:18px}li{margin:2px 0;font-size:10pt}
     setReminders(updated);
     try {
       await db.lymphedema_assessments.update(assessmentId as any, { reminders: updated, updated_at: new Date() } as any);
+      void pushAssessment(assessmentId);
     } catch (e) { console.error('Error removing reminder:', e); }
   };
 
@@ -1271,6 +1257,9 @@ ul{margin:4px 0;padding-left:18px}li{margin:2px 0;font-size:10pt}
         volume_affected_ml: computedVolumes.affected,
         volume_contralateral_ml: computedVolumes.contralateral,
         volume_difference_pct: computedVolumes.difference_pct,
+        volume_excess_ml: computedVolumes.excess_ml,
+        volume_segments_used: computedVolumes.segmentsUsed,
+        isl_severity: computedSeverity,
         skin_changes: formData.skin_changes,
         stemmer_sign: formData.stemmer_sign,
         pitting: formData.pitting,
@@ -1306,7 +1295,8 @@ ul{margin:4px 0;padding-left:18px}li{margin:2px 0;font-size:10pt}
       };
 
       const localId = await db.lymphedema_assessments.add(assessment as any);
-      await syncService.queueAction('create', 'lymphedema_assessments' as any, localId as number, assessment);
+      // sync_key = the local id, so a re-push updates the server row rather than duplicating it.
+      await syncService.queueAction('create', 'lymphedema_assessments' as any, localId as number, { ...assessment, sync_key: assessment.id });
       setAssessments(prev => [assessment, ...prev]);
       setSelectedAssessment(assessment);
       setActiveTab('details');
@@ -1323,6 +1313,7 @@ ul{margin:4px 0;padding-left:18px}li{margin:2px 0;font-size:10pt}
         lefs_score: undefined, dash_score: undefined, quality_of_life_score: undefined,
         notes: '', compression_class: 'II', pneumatic_compression: false
       });
+      setLimbMeasurements(blankMeasurements());
       setSelectedPatient(null);
     } catch (e) {
       console.error('Error saving assessment:', e);
@@ -1545,9 +1536,10 @@ ul{margin:4px 0;padding-left:18px}li{margin:2px 0;font-size:10pt}
           Every wound module used to end at "what does it look like today";
           serial area lived in a separate page against a separately chosen
           patient, so nothing here could answer whether it was healing. */}
+      {/* The patient picked on this form wins, so wounds are never shown for a different patient. */}
       <WoundTrackingPanel
-        patientId={trackedPatient?.id}
-        hospitalNumber={(trackedPatient as any)?.hospital_number}
+        patientId={(selectedPatient as any)?.id ?? trackedPatient?.id}
+        hospitalNumber={(selectedPatient as any)?.hospital_number ?? (trackedPatient as any)?.hospital_number}
         defaultWoundType="Lymphoedema"
       />
       {/* Patient Selection */}
@@ -1719,7 +1711,34 @@ ul{margin:4px 0;padding-left:18px}li{margin:2px 0;font-size:10pt}
           Circumferential Limb Measurements (cm)
         </h3>
         <p className="text-xs text-gray-500 mb-3">Measure at each point every 4cm from the most distal landmark. Enter both affected and contralateral limb.</p>
-        <div className="overflow-x-auto">
+        {/* Phones: one card per level */}
+        <div className="sm:hidden space-y-2">
+          {limbMeasurements.map((m, i) => (
+            <div key={i} className={`rounded-lg border p-2 ${m.difference_pct > 20 ? 'bg-red-50 border-red-200' : m.difference_pct > 10 ? 'bg-yellow-50 border-yellow-200' : 'bg-white'}`}>
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <p className="text-xs font-semibold text-gray-800">{m.location}</p>
+                {(m.affected_cm > 0 && m.contralateral_cm > 0) && (
+                  <span className={`text-xs font-semibold ${m.difference_pct > 20 ? 'text-red-600' : m.difference_pct > 10 ? 'text-yellow-700' : 'text-gray-600'}`}>
+                    {m.difference_cm > 0 ? '+' : ''}{m.difference_cm} cm ({m.difference_pct > 0 ? '+' : ''}{m.difference_pct}%)
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="text-[11px] text-gray-600">Affected (cm)
+                  <input type="number" step="0.1" min={0} inputMode="decimal" value={m.affected_cm || ''}
+                    onChange={e => updateMeasurement(i, 'affected_cm', Number(e.target.value))}
+                    className="mt-0.5 w-full border rounded px-2 py-2 text-sm text-center" />
+                </label>
+                <label className="text-[11px] text-gray-600">Contralateral (cm)
+                  <input type="number" step="0.1" min={0} inputMode="decimal" value={m.contralateral_cm || ''}
+                    onChange={e => updateMeasurement(i, 'contralateral_cm', Number(e.target.value))}
+                    className="mt-0.5 w-full border rounded px-2 py-2 text-sm text-center" />
+                </label>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="hidden sm:block overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
               <tr className="bg-gray-50">
@@ -1772,8 +1791,20 @@ ul{margin:4px 0;padding-left:18px}li{margin:2px 0;font-size:10pt}
             <p className={`text-lg font-bold ${computedVolumes.difference_pct > 20 ? 'text-red-700' : computedVolumes.difference_pct > 10 ? 'text-yellow-700' : 'text-green-700'}`}>
               {computedVolumes.difference_pct}%
             </p>
+            {computedSeverity && (
+              <p className="text-[11px] text-gray-600">ISL severity: <strong className="capitalize">{computedSeverity}</strong>{computedVolumes.excess_ml > 0 ? ` (+${computedVolumes.excess_ml} ml)` : ''}</p>
+            )}
           </div>
         </div>
+        <p className="mt-2 text-[11px] text-gray-500">
+          Truncated-cone volume from the wrist / ankle upward over {computedVolumes.segmentsUsed} segment(s) measured on both limbs.
+          The hand / foot level is recorded but not used in the volume. Severity (ISL): minimal &lt;20 %, moderate 20–40 %, severe &gt;40 % excess.
+        </p>
+        {computedVolumes.warnings.length > 0 && (
+          <ul className="mt-2 text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded p-2 list-disc pl-5 space-y-0.5">
+            {computedVolumes.warnings.map(w => <li key={w}>{w}</li>)}
+          </ul>
+        )}
       </div>
 
       {/* Auto-Staging Result */}
@@ -1931,6 +1962,7 @@ ul{margin:4px 0;padding-left:18px}li{margin:2px 0;font-size:10pt}
               <p className={`text-xl font-bold ${a.volume_difference_pct > 20 ? 'text-red-700' : a.volume_difference_pct > 10 ? 'text-yellow-700' : 'text-green-700'}`}>
                 {a.volume_difference_pct}%
               </p>
+              {a.isl_severity && <p className="text-[11px] text-gray-600 capitalize">ISL severity: {a.isl_severity}</p>}
             </div>
           </div>
           {/* Measurement table */}

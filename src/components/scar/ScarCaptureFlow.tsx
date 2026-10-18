@@ -30,6 +30,7 @@ import { putLocalImage } from '../../services/woundImageStore';
 import { addAssessment } from '../../services/woundMonitorService';
 import { RegionTracer, type TraceResult, type ElevationResult } from '../wound/RegionTracer';
 import { scarService, type ScarCase } from '../../services/scarService';
+import { measureContour, polygonArea, polygonCentroid } from '../../services/woundContourGeometry';
 
 const PIPELINE_VERSION = '2026.08-cv1';
 
@@ -145,6 +146,18 @@ export function ScarCaptureFlow({ scar, onClose, onSaved }: Props) {
     await ingest(file, canvas.width, canvas.height, ctx.getImageData(0, 0, canvas.width, canvas.height));
   }, [ingest]);
 
+  /** The main outline converted to cm, with its perimeter, length and width. */
+  const outlineCm = (t: TraceResult) => {
+    const main = t.totalRegions.filter(r => r.points.length >= 3)
+      .sort((a, b) => Math.abs(polygonArea(b.points)) - Math.abs(polygonArea(a.points)))[0];
+    if (!main || !(t.pixelsPerCm > 0)) return {};
+    const c = polygonCentroid(main.points);
+    const contour = main.points.map(p => ({ x: (p.x - c.x) / t.pixelsPerCm, y: (p.y - c.y) / t.pixelsPerCm }));
+    const m = measureContour(contour);
+    const r2 = (v: number) => Math.round(v * 100) / 100;
+    return { contour_cm: contour as never, perimeter_cm: r2(m.perimeter), length_cm: r2(m.length), width_cm: r2(m.width) };
+  };
+
   /** Saves the assessment, then the graft-specific and 3D parts of it. */
   const save = async () => {
     if (!trace) return;
@@ -162,8 +175,11 @@ export function ScarCaptureFlow({ scar, onClose, onSaved }: Props) {
         // nothing for this lesion.
         tissue_source: 'none',
         calibration_type: trace.calibrationSource === 'traced' ? 'manual:marker' : 'auto:marker',
-        scale_reliable: true,
-        contour_cm: trace.totalRegions as never,
+        // Reliable only with a real scale and a photograph good enough to trust it.
+        scale_reliable: trace.pixelsPerCm > 0 && (quality?.score ?? 1) >= 0.5,
+        // The margin in centimetres (largest outline, about its centroid) —
+        // the tracer works in photograph pixels, which mean nothing once stored.
+        ...outlineCm(trace),
         image_quality_score: quality?.score,
         image_quality_flags: quality?.flags as never,
         model_name: 'on-device-cv',

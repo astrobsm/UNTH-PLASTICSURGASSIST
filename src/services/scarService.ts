@@ -139,7 +139,7 @@ export interface ScarCaseDetail {
   methodConsistency: { consistent: boolean; methods: string[]; warning: string | null };
   alerts: { id: number; severity: string; code: string; message: string; acknowledged_at?: string | null; created_at: string }[];
   treatments: TreatmentEvent[];
-  threeD: { available: boolean; reason: string };
+  threeD: { available: boolean; method?: string | null; reason: string };
 }
 
 /** One item of a validated scale, as the server defines it. */
@@ -182,6 +182,15 @@ export const scarService = {
    * second copy in the UI would eventually disagree with the scorer, and a
    * VSS scored against the wrong anchors is not a VSS.
    */
+  /** What one visit already holds — scale items, exam and patient report. */
+  assessment(id: number | string): Promise<{
+    scores: Record<string, Record<string, number>>;
+    exam: Record<string, string | boolean | number>;
+    patientReported: Record<string, number | string>;
+  }> {
+    return apiClient.get(`/scars/assessment/${encodeURIComponent(String(id))}`);
+  },
+
   scales(): Promise<{ scales: Record<string, ScaleDefinition> }> {
     return apiClient.get('/scars/scales');
   },

@@ -306,14 +306,13 @@ function ScarDetail({ id, onBack }: { id: number; onBack: () => void }) {
         )}
       </div>
 
-      {/* §23 — 3D, and why there is none. */}
-      {!data.threeD.available && (
-        <p className="flex items-start gap-2 text-xs text-gray-500 bg-white border rounded-xl p-2.5">
-          <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-          <span><strong className="text-gray-700">3D elevation and volume: not reliably measurable.</strong>{' '}
-          {data.threeD.reason}</span>
-        </p>
-      )}
+      {/* §23 — height and volume: how they were measured, or how to measure them. */}
+      <p className="flex items-start gap-2 text-xs text-gray-500 bg-white border rounded-xl p-2.5">
+        <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+        <span><strong className="text-gray-700">
+          {data.threeD.available ? 'Height and volume: profile-view measurement.' : 'Height and volume: not measured yet.'}
+        </strong>{' '}{data.threeD.reason}</span>
+      </p>
 
       {capturing && (
         <ScarCaptureFlow

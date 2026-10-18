@@ -1,6 +1,7 @@
 // Substance Use Assessments & Detoxification API endpoint
 import { query } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
+import { ensureDetoxColumns } from './_lib/detoxSchema.js';
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
@@ -18,6 +19,7 @@ export default async function handler(req, res) {
   const subResourceId = pathParts[2];
 
   try {
+    await ensureDetoxColumns();
     // Sub-resource routing
     if (resourceId && subResource === 'monitoring') {
       return await handleMonitoring(method, resourceId, subResourceId, req.body, auth.user, res);
@@ -200,30 +202,34 @@ async function handleMonitoring(method, assessmentId, recordId, body, user, res)
         if (r.rows.length === 0) return res.status(404).json({ error: 'Monitoring record not found' });
         return res.status(200).json({ record: r.rows[0] });
       }
-      const records = await query('SELECT * FROM detox_monitoring_records WHERE assessment_id = $1 ORDER BY recorded_at DESC', [assessmentId]);
+      const records = await query('SELECT * FROM detox_monitoring_records WHERE assessment_id = $1 ORDER BY COALESCE(recorded_at, monitored_at, monitoring_date, created_at) DESC', [assessmentId]);
       return res.status(200).json({ records: records.rows });
 
     case 'POST': {
       const {
-        patientId, vitalSigns, withdrawalScaleScore, withdrawalScaleType,
+        id, patientId, vitalSigns, withdrawalScaleScore, withdrawalScaleType, withdrawalScaleItems,
         symptomChecklist, medicationsGiven, clinicalNotes, escalationTriggered, escalationReason
       } = body;
+      // The id column has no default; the app supplies one, else one is made.
       const result = await query(
         `INSERT INTO detox_monitoring_records (
-          assessment_id, patient_id, vital_signs, withdrawal_scale_score,
+          id, assessment_id, patient_id, vital_signs, withdrawal_scale_score,
           withdrawal_scale_type, symptom_checklist, medications_given,
           clinical_notes, escalation_triggered, escalation_reason,
-          monitored_by, recorded_at
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW()) RETURNING *`,
+          monitored_by, recorded_at, withdrawal_scale_items
+        ) VALUES ($12,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW(),$13)
+        ON CONFLICT (id) DO NOTHING RETURNING *`,
         [
           assessmentId, patientId, JSON.stringify(vitalSigns || {}),
           withdrawalScaleScore || null, withdrawalScaleType || null,
           JSON.stringify(symptomChecklist || []), JSON.stringify(medicationsGiven || []),
           clinicalNotes || '', escalationTriggered || false, escalationReason || null,
-          user.username || user.id
+          user.username || user.id,
+          id || `dmr_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+          withdrawalScaleItems ? JSON.stringify(withdrawalScaleItems) : null,
         ]
       );
-      return res.status(201).json({ record: result.rows[0] });
+      return res.status(201).json({ record: result.rows[0] || null });
     }
     default:
       return res.status(405).json({ error: 'Method not allowed for monitoring' });
@@ -240,16 +246,16 @@ async function handleFollowUps(method, assessmentId, followUpId, body, user, res
         if (r.rows.length === 0) return res.status(404).json({ error: 'Follow-up not found' });
         return res.status(200).json({ followUp: r.rows[0] });
       }
-      const followUps = await query('SELECT * FROM detox_follow_ups WHERE assessment_id = $1 ORDER BY scheduled_date ASC', [assessmentId]);
+      const followUps = await query('SELECT * FROM detox_follow_ups WHERE assessment_id = $1 ORDER BY COALESCE(scheduled_date, follow_up_date) ASC', [assessmentId]);
       return res.status(200).json({ followUps: followUps.rows });
 
     case 'POST': {
-      const { patientId, scheduledDate, followUpType, notes } = body;
+      const { id, patientId, scheduledDate, followUpType, notes } = body;
       const result = await query(
         `INSERT INTO detox_follow_ups (
-          assessment_id, patient_id, scheduled_date, follow_up_type, notes, status
-        ) VALUES ($1,$2,$3,$4,$5,'scheduled') RETURNING *`,
-        [assessmentId, patientId, scheduledDate, followUpType || 'clinic', notes || '']
+          id, assessment_id, patient_id, scheduled_date, follow_up_date, follow_up_type, notes, status
+        ) VALUES ($6,$1,$2,$3,$3,$4,$5,'scheduled') ON CONFLICT (id) DO NOTHING RETURNING *`,
+        [assessmentId, patientId, scheduledDate, followUpType || 'clinic', notes || '', id || `dfu_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`]
       );
       return res.status(201).json({ followUp: result.rows[0] });
     }

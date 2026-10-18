@@ -30,6 +30,7 @@ import {
   keloidStatus, treatmentResponse,
 } from './_lib/keloidProgress.js';
 import { measureProfile, estimateVolume, profileQuality } from './_lib/keloidElevation.js';
+import { deriveScarAlerts, raiseScarAlerts } from './_lib/scarAlerts.js';
 
 const WRITE_ROLES = ['admin', 'consultant', 'senior_registrar', 'registrar', 'house_officer', 'nurse'];
 const num = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
@@ -50,6 +51,7 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       if (action === 'dashboard') return await getDashboard(res);
       if (action === 'case') return await getCase(parts[1], res);
+      if (action === 'assessment') return await getAssessment(parts[1], res);
       if (action === 'scales') return res.status(200).json({ scales: SCALES });
       return await listScars(url.searchParams, res);
     }
@@ -337,9 +339,7 @@ async function getCase(id, res) {
     method: v.measurement_method,
   }));
 
-  const alerts = (await query(
-    `SELECT * FROM scar_alerts WHERE scar_id = $1 ORDER BY created_at DESC LIMIT 100`, [id],
-  )).rows;
+  const methods = methodConsistency(observations);
 
   // Treatment, from the existing keloid plan rather than a second table.
   // Overlaid on the trend charts so a clinician can see whether a change
@@ -402,6 +402,20 @@ async function getCase(id, res) {
     treatmentResponse: treatmentResponse(areaSeries, treatmentDays),
   };
 
+  // Alerts for the latest visit, raised once each, then read back.
+  if (latest) {
+    await raiseScarAlerts(scar.id, latest.id,
+      deriveScarAlerts({ keloid, latest, multimodal, methodConsistency: methods }));
+  }
+  const alerts = (await query(
+    `SELECT * FROM scar_alerts WHERE scar_id = $1 ORDER BY created_at DESC LIMIT 100`, [id],
+  )).rows;
+
+  // Height and volume come from a calibrated lateral (profile) view traced
+  // against the skin line — available whenever a visit has one. A full
+  // photogrammetric surface model is not run on this deployment.
+  const withHeight = visits.filter((v) => v.max_elevation_mm != null);
+
   return res.status(200).json({
     scar,
     keloid,
@@ -410,17 +424,24 @@ async function getCase(id, res) {
     scales: scaleTrends,
     multimodal,
     eligibility: predictionEligibility(observations),
-    methodConsistency: methodConsistency(observations),
+    methodConsistency: methods,
     alerts,
     treatments,
-    // §23: 3D is not available on this deployment, and says so rather than
-    // returning zeros.
-    threeD: {
-      available: false,
-      reason: 'No 3D reconstruction backend is configured. Multi-view photogrammetry '
-            + 'needs structure-from-motion and dense stereo, which this deployment '
-            + 'cannot run. Elevation and volume are reported as not reliably measurable.',
-    },
+    threeD: withHeight.length
+      ? {
+          available: true,
+          method: 'calibrated-profile-view',
+          reason: `Height${withHeight.some((v) => v.volume_cm3 != null) ? ' and volume' : ''} measured from a calibrated `
+                + `lateral photograph on ${withHeight.length} visit(s). This is a profile-view estimate, `
+                + 'not a photogrammetric surface model.',
+        }
+      : {
+          available: false,
+          method: null,
+          reason: 'No height measured yet. Take a lateral (side-on) photograph with the reference marker '
+                + 'in the plane of the lesion and trace the profile against the skin line to measure '
+                + 'height and estimate volume.',
+        },
   });
 }
 
@@ -468,7 +489,13 @@ async function putScores(body, user, res) {
     return res.status(409).json({ error: 'This assessment is finalized and cannot be edited' });
   }
 
-  const scored = scoreScale(b.scale, b.items || {});
+  // Merge with the items already scored for this scale, so finishing the
+  // patient-reported items later does not erase the examination items.
+  const prior = (await query(
+    'SELECT items FROM scar_validated_scores WHERE assessment_id = $1 AND scale = $2',
+    [b.assessmentId, b.scale])).rows[0]?.items || {};
+  const items = { ...prior, ...(b.items || {}) };
+  const scored = scoreScale(b.scale, items);
   if (!scored.ok) return res.status(400).json({ error: scored.reason });
 
   const r = await query(
@@ -480,10 +507,58 @@ async function putScores(body, user, res) {
        overall_item = EXCLUDED.overall_item, complete = EXCLUDED.complete,
        scored_by = EXCLUDED.scored_by
      RETURNING *`,
-    [b.assessmentId, b.scale, JSON.stringify(b.items || {}),
+    [b.assessmentId, b.scale, JSON.stringify(items),
      scored.total, scored.overall, scored.complete, user.id],
   );
   return res.status(200).json({ score: r.rows[0], scored });
+}
+
+// Exam and patient report are saved in parts — a visit is often finished in
+// two sittings, and the form only sends what was filled this time. A blind
+// upsert of every column nulled whatever the earlier sitting had recorded, so
+// only the fields the request carries are written.
+const blankToNull = (v) => (v === '' || v === undefined ? null : v);
+const toBool = (v) => (v === '' || v === null || v === undefined ? null : !!v);
+const EXAM_FIELDS = {
+  pliability: ['pliability', blankToNull], consistency: ['consistency', blankToNull],
+  mobility: ['mobility', blankToNull], tenderness: ['tenderness', blankToNull],
+  compressibility: ['compressibility', blankToNull], adherence: ['adherence', blankToNull],
+  contracturePresent: ['contracture_present', toBool],
+  jointInvolved: ['joint_involved', blankToNull], contractureDirection: ['contracture_direction', blankToNull],
+  romDegrees: ['rom_degrees', num], romDeficitDegrees: ['rom_deficit_degrees', num],
+  functionalLimitation: ['functional_limitation', blankToNull], examinerNotes: ['examiner_notes', blankToNull],
+};
+const PRO_FIELDS = {
+  pain: ['pain_0_10', num], itch: ['itch_0_10', num], tightness: ['tightness_0_10', num],
+  tenderness: ['tenderness_0_10', num], functionalLimitation: ['functional_limitation_0_10', num],
+  cosmeticConcern: ['cosmetic_concern_0_10', num],
+  treatmentSatisfaction: ['treatment_satisfaction_0_10', num], freeText: ['free_text', blankToNull],
+};
+
+function pickFields(body, map) {
+  const cols = [], vals = [];
+  for (const [key, [col, conv]] of Object.entries(map)) {
+    if (!Object.prototype.hasOwnProperty.call(body, key)) continue;
+    const v = conv(body[key]);
+    if (conv === num && v !== null && !Number.isFinite(v)) {
+      throw Object.assign(new Error(`${key} must be a number`), { status: 400 });
+    }
+    if (col.endsWith('_0_10') && v !== null && (v < 0 || v > 10)) {
+      throw Object.assign(new Error(`${key} must be between 0 and 10`), { status: 400 });
+    }
+    cols.push(col); vals.push(v);
+  }
+  return { cols, vals };
+}
+
+async function partialUpsert(table, assessmentId, cols, vals, byCol, userId) {
+  const allCols = ['assessment_id', ...cols, byCol];
+  const allVals = [assessmentId, ...vals, userId];
+  const ph = allVals.map((_, i) => `$${i + 1}`).join(',');
+  const set = [...cols, byCol].map((c) => `${c} = EXCLUDED.${c}`).join(', ');
+  return query(
+    `INSERT INTO ${table} (${allCols.join(',')}) VALUES (${ph})
+     ON CONFLICT (assessment_id) DO UPDATE SET ${set} RETURNING *`, allVals);
 }
 
 async function putExam(body, user, res) {
@@ -492,30 +567,9 @@ async function putExam(body, user, res) {
   if (await isFinalized(b.assessmentId)) {
     return res.status(409).json({ error: 'This assessment is finalized and cannot be edited' });
   }
-  const r = await query(
-    `INSERT INTO scar_physical_exams
-       (assessment_id, pliability, consistency, mobility, tenderness, compressibility,
-        adherence, contracture_present, joint_involved, contracture_direction,
-        rom_degrees, rom_deficit_degrees, functional_limitation, examiner_notes, examined_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
-     ON CONFLICT (assessment_id) DO UPDATE SET
-       pliability=EXCLUDED.pliability, consistency=EXCLUDED.consistency,
-       mobility=EXCLUDED.mobility, tenderness=EXCLUDED.tenderness,
-       compressibility=EXCLUDED.compressibility, adherence=EXCLUDED.adherence,
-       contracture_present=EXCLUDED.contracture_present,
-       joint_involved=EXCLUDED.joint_involved,
-       contracture_direction=EXCLUDED.contracture_direction,
-       rom_degrees=EXCLUDED.rom_degrees, rom_deficit_degrees=EXCLUDED.rom_deficit_degrees,
-       functional_limitation=EXCLUDED.functional_limitation,
-       examiner_notes=EXCLUDED.examiner_notes, examined_by=EXCLUDED.examined_by
-     RETURNING *`,
-    [b.assessmentId, b.pliability || null, b.consistency || null, b.mobility || null,
-     b.tenderness || null, b.compressibility || null, b.adherence || null,
-     b.contracturePresent === undefined ? null : !!b.contracturePresent,
-     b.jointInvolved || null, b.contractureDirection || null,
-     num(b.romDegrees), num(b.romDeficitDegrees),
-     b.functionalLimitation || null, b.examinerNotes || null, user.id],
-  );
+  let picked;
+  try { picked = pickFields(b, EXAM_FIELDS); } catch (e) { return res.status(e.status || 400).json({ error: e.message }); }
+  const r = await partialUpsert('scar_physical_exams', b.assessmentId, picked.cols, picked.vals, 'examined_by', user.id);
   return res.status(200).json({ exam: r.rows[0] });
 }
 
@@ -525,25 +579,37 @@ async function putPatientReported(body, user, res) {
   if (await isFinalized(b.assessmentId)) {
     return res.status(409).json({ error: 'This assessment is finalized and cannot be edited' });
   }
-  const r = await query(
-    `INSERT INTO scar_patient_reported
-       (assessment_id, pain_0_10, itch_0_10, tightness_0_10, tenderness_0_10,
-        functional_limitation_0_10, cosmetic_concern_0_10,
-        treatment_satisfaction_0_10, free_text, recorded_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-     ON CONFLICT (assessment_id) DO UPDATE SET
-       pain_0_10=EXCLUDED.pain_0_10, itch_0_10=EXCLUDED.itch_0_10,
-       tightness_0_10=EXCLUDED.tightness_0_10, tenderness_0_10=EXCLUDED.tenderness_0_10,
-       functional_limitation_0_10=EXCLUDED.functional_limitation_0_10,
-       cosmetic_concern_0_10=EXCLUDED.cosmetic_concern_0_10,
-       treatment_satisfaction_0_10=EXCLUDED.treatment_satisfaction_0_10,
-       free_text=EXCLUDED.free_text, recorded_by=EXCLUDED.recorded_by
-     RETURNING *`,
-    [b.assessmentId, num(b.pain), num(b.itch), num(b.tightness), num(b.tenderness),
-     num(b.functionalLimitation), num(b.cosmeticConcern),
-     num(b.treatmentSatisfaction), b.freeText || null, user.id],
-  );
+  let picked;
+  try { picked = pickFields(b, PRO_FIELDS); } catch (e) { return res.status(e.status || 400).json({ error: e.message }); }
+  const r = await partialUpsert('scar_patient_reported', b.assessmentId, picked.cols, picked.vals, 'recorded_by', user.id);
   return res.status(200).json({ patientReported: r.rows[0] });
+}
+
+/** What a visit already holds, so the form opens filled in rather than blank. */
+async function getAssessment(id, res) {
+  if (!id) return res.status(400).json({ error: 'assessment id is required' });
+  const a = (await query('SELECT * FROM scar_assessments WHERE id = $1', [id])).rows[0];
+  if (!a) return res.status(404).json({ error: 'Assessment not found' });
+  const scores = (await query(
+    'SELECT scale, items FROM scar_validated_scores WHERE assessment_id = $1', [id])).rows;
+  const exam = (await query('SELECT * FROM scar_physical_exams WHERE assessment_id = $1', [id])).rows[0];
+  const pro = (await query('SELECT * FROM scar_patient_reported WHERE assessment_id = $1', [id])).rows[0];
+  const back = (row, map) => {
+    const out = {};
+    if (!row) return out;
+    for (const [key, [col, conv]] of Object.entries(map)) {
+      const v = row[col];
+      if (v === null || v === undefined) continue;
+      out[key] = conv === num ? Number(v) : v;
+    }
+    return out;
+  };
+  return res.status(200).json({
+    assessment: a,
+    scores: Object.fromEntries(scores.map((s) => [s.scale, s.items || {}])),
+    exam: back(exam, EXAM_FIELDS),
+    patientReported: back(pro, PRO_FIELDS),
+  });
 }
 
 /**
@@ -570,6 +636,9 @@ async function putElevation(body, res) {
   if (b.preview) return res.status(200).json({ profile, volume, quality });
 
   if (!b.assessmentId) return res.status(400).json({ error: 'assessmentId is required' });
+  if (await isFinalized(b.assessmentId)) {
+    return res.status(409).json({ error: 'This assessment is finalized and cannot be edited' });
+  }
 
   const r = await query(
     `INSERT INTO scar_3d_models
@@ -599,6 +668,9 @@ async function putElevation(body, res) {
 async function putColour(body, res) {
   const b = body || {};
   if (!b.assessmentId) return res.status(400).json({ error: 'assessmentId is required' });
+  if (await isFinalized(b.assessmentId)) {
+    return res.status(409).json({ error: 'This assessment is finalized and cannot be edited' });
+  }
   const r = await query(
     `INSERT INTO scar_colour_analysis
        (assessment_id, delta_e, erythema_index, lightness_delta, yellowness_delta,

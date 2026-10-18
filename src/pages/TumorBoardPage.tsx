@@ -25,6 +25,7 @@ import {
   getBoard, getCaseDetail, createCase, recordAssessment, stageFromAssessment,
   buildPlanForCase, savePlan, buildLetters, saveReferrals,
   buildSurveillance, saveSurveillance, buildCounselling,
+  ratifyPlan, markReferralSent, completeSurveillanceItem,
   type TumorBoardCase, type TumorBoardAssessment, type CaseDetail, type BoardSummary,
 } from '../services/tumorBoardService';
 import { computeStage } from '../services/oncology/stagingEngine';
@@ -35,6 +36,9 @@ import {
   generateSurveillancePdf, generateCounsellingPdf,
 } from '../services/tumorBoardPdfService';
 import { GUIDELINE_BASIS, isAwaitingClinicalReview, provenanceLine } from '../services/oncology/guidelineProvenance';
+import { checkTumourMeasurements, marginStatus, marginsSummary, melanomaExcisionMargin } from '../services/oncology/tumourMeasurements';
+import { TumourPatientPicker, MeasureLesionFromPhoto } from '../components/oncology/TumourFormParts';
+import { useSelectedPatient } from '../hooks/useSelectedPatient';
 
 const TUMOR_FAMILIES: { value: TumorFamily; label: string; hint: string }[] = [
   { value: 'cutaneous_melanoma', label: 'Cutaneous melanoma', hint: 'Staged on Breslow thickness and ulceration' },
@@ -294,7 +298,16 @@ function AssessmentForm({
   onSaved: (caseId: number | string) => void;
 }) {
   const [family, setFamily] = useState<TumorFamily>(existingCase?.tumor_family || 'cutaneous_melanoma');
-  const [patientId, setPatientId] = useState(String(existingCase?.patient_id ?? ''));
+  // A registered patient, picked — or the patient already selected elsewhere in the app.
+  const { patient: contextPatient } = useSelectedPatient();
+  const [picked, setPicked] = useState<{ id: string; name: string; hospitalNumber?: string } | null>(null);
+  useEffect(() => {
+    if (existingCase || picked || !contextPatient) return;
+    const cp: any = contextPatient;
+    const sid = cp.serverId ?? cp.server_id ?? cp.id;
+    if (sid != null) setPicked({ id: String(sid), name: (cp.full_name || `${cp.first_name || ''} ${cp.last_name || ''}`).trim(), hospitalNumber: cp.hospital_number });
+  }, [contextPatient, existingCase, picked]);
+  const patientId = existingCase ? String(existingCase.patient_id ?? '') : (picked?.id ?? '');
   const [diagnosis, setDiagnosis] = useState(existingCase?.diagnosis || '');
   const [primarySite, setPrimarySite] = useState(existingCase?.primary_site || '');
   const [basis, setBasis] = useState<StagingBasis>('clinical');
@@ -322,7 +335,9 @@ function AssessmentForm({
   const [localSpread, setLocalSpread] = useState('');
   const [regionalSpread, setRegionalSpread] = useState('');
   const [metastaticSpread, setMetastaticSpread] = useState('');
-  const [margins, setMargins] = useState('');
+  const [marginNote, setMarginNote] = useState('');
+  const [peripheralMm, setPeripheralMm] = useState('');
+  const [deepMm, setDeepMm] = useState('');
   const [notes, setNotes] = useState('');
 
   const isMelanoma = family === 'cutaneous_melanoma';
@@ -357,8 +372,21 @@ function AssessmentForm({
   // staging engine is pure, so this costs nothing.
   const preview = useMemo(() => computeStage(stagingInput), [stagingInput]);
 
+  const toNum = (v: string) => (v.trim() === '' ? null : Number(v));
+  const measureCheck = checkTumourMeasurements({
+    breslowMm: isMelanoma ? toNum(breslowMm) : null,
+    sizeCm: !isMelanoma ? toNum(sizeCm) : null,
+    largestNodeCm: toNum(largestNodeCm),
+    peripheralMarginMm: toNum(peripheralMm),
+    deepMarginMm: toNum(deepMm),
+  });
+  const mStatus = marginStatus(toNum(peripheralMm), toNum(deepMm));
+  const margins = marginsSummary({ peripheralMarginMm: toNum(peripheralMm), deepMarginMm: toNum(deepMm), note: marginNote });
+  const excisionAdvice = isMelanoma ? melanomaExcisionMargin(toNum(breslowMm), inSitu) : null;
+
   const submit = async () => {
-    if (!patientId && !existingCase) { toast.error('Patient ID is required'); return; }
+    if (!patientId && !existingCase) { toast.error('Choose a registered patient'); return; }
+    if (measureCheck.errors.length) { toast.error(measureCheck.errors[0]); return; }
     setSaving(true);
     try {
       let caseRecord = existingCase;
@@ -413,8 +441,8 @@ function AssessmentForm({
       <div className="space-y-5">
         {!existingCase && (
           <Section title="Case">
-            <Field label="Patient ID">
-              <input value={patientId} onChange={e => setPatientId(e.target.value)} className="input" placeholder="Numeric patient ID" />
+            <Field label="Patient">
+              <TumourPatientPicker value={picked} onChange={setPicked} />
             </Field>
             <Field label="Tumour type">
               <select value={family} onChange={e => setFamily(e.target.value as TumorFamily)} className="input">
@@ -445,15 +473,26 @@ function AssessmentForm({
           {isMelanoma && (
             <>
               <Field label="Breslow thickness (mm)">
-                <input type="number" step="0.01" value={breslowMm} onChange={e => setBreslowMm(e.target.value)} className="input" />
+                <input type="number" step="0.01" min={0} max={50} inputMode="decimal" value={breslowMm} onChange={e => setBreslowMm(e.target.value)} className="input" placeholder="e.g. 1.2" />
+                <p className="text-[11px] text-gray-500 mt-1">From the histology report, in millimetres. Recorded to 0.1 mm for staging (AJCC 8).</p>
               </Field>
+              {excisionAdvice && (
+                <p className="text-xs bg-emerald-50 border border-emerald-200 text-emerald-900 rounded p-2">Recommended wide local excision: <strong>{excisionAdvice}</strong></p>
+              )}
               <Check label="Ulceration present" checked={ulceration} onChange={setUlceration} />
               <Check label="In situ (no invasion)" checked={inSitu} onChange={setInSitu} />
             </>
           )}
           {!isMelanoma && (
             <Field label="Greatest dimension (cm)">
-              <input type="number" step="0.1" value={sizeCm} onChange={e => setSizeCm(e.target.value)} className="input" />
+              <div className="flex flex-wrap gap-2 items-center">
+                <input type="number" step="0.1" min={0} inputMode="decimal" value={sizeCm} onChange={e => setSizeCm(e.target.value)} className="input flex-1 min-w-[8rem]" />
+                <MeasureLesionFromPhoto onMeasured={(cm) => { setSizeCm(String(cm)); toast.success(`Greatest dimension ${cm} cm from the photograph`); }} />
+              </div>
+              <p className="text-[11px] text-gray-500 mt-1">
+                Photograph with the reference marker in the plane of the lesion, calibrate, then trace its margin.
+                {isSarcoma ? ' For a deep sarcoma use the imaging (MRI/CT) dimension — a photo shows only the surface.' : ''}
+              </p>
             </Field>
           )}
           {isKeratinocyte && (
@@ -541,7 +580,24 @@ function AssessmentForm({
         </Section>
 
         <Section title="Pathology & notes">
-          <Field label="Margins"><input value={margins} onChange={e => setMargins(e.target.value)} className="input" placeholder="e.g. clear, 8 mm closest deep margin" /></Field>
+          <Field label="Histological margins (mm)">
+            <div className="grid grid-cols-2 gap-2">
+              <input type="number" step="0.1" min={0} inputMode="decimal" value={peripheralMm} onChange={e => setPeripheralMm(e.target.value)} className="input" placeholder="Closest peripheral" aria-label="Closest peripheral margin (mm)" />
+              <input type="number" step="0.1" min={0} inputMode="decimal" value={deepMm} onChange={e => setDeepMm(e.target.value)} className="input" placeholder="Deep" aria-label="Deep margin (mm)" />
+            </div>
+            <input value={marginNote} onChange={e => setMarginNote(e.target.value)} className="input mt-2" placeholder="Margin note (e.g. closest at 3 o'clock)" />
+            {mStatus !== 'not_reported' && (
+              <p className={`text-xs mt-1 font-semibold ${mStatus === 'involved' ? 'text-red-700' : mStatus === 'close' ? 'text-amber-700' : 'text-green-700'}`}>
+                {mStatus === 'involved' ? 'Involved margin (0 mm) — re-excision / adjuvant discussion' : mStatus === 'close' ? 'Close margin (< 1 mm)' : 'Clear margins'}
+              </p>
+            )}
+          </Field>
+          {(measureCheck.errors.length > 0 || measureCheck.warnings.length > 0) && (
+            <ul className="text-xs space-y-0.5">
+              {measureCheck.errors.map(e => <li key={e} className="text-red-700">• {e}</li>)}
+              {measureCheck.warnings.map(w => <li key={w} className="text-amber-700">• {w}</li>)}
+            </ul>
+          )}
           <Field label="Notes"><textarea value={notes} onChange={e => setNotes(e.target.value)} className="input" rows={2} /></Field>
         </Section>
 
@@ -666,6 +722,21 @@ function CaseDetailView({
     }
   };
 
+  // What is actually on record, beside what the engine would generate now.
+  const savedPlan = detail.plans?.[0];
+  const savedReferral = (specialty: string) =>
+    (detail.referrals || []).find((r: any) => r.specialty === specialty && r.status === 'draft')
+    || (detail.referrals || []).find((r: any) => r.specialty === specialty);
+  const savedSurveillance = (detail.surveillance || []) as any[];
+  const today = new Date().toISOString().slice(0, 10);
+
+  const act = async (fn: () => Promise<unknown>, ok: string) => {
+    setBusy(true);
+    try { await fn(); toast.success(ok); await onRefresh(); }
+    catch (err: any) { toast.error(err?.message || 'Action failed'); }
+    finally { setBusy(false); }
+  };
+
   const TABS = [
     { id: 'timeline', label: 'Staging timeline', icon: Activity },
     { id: 'plan', label: 'Management plan', icon: ClipboardList },
@@ -755,6 +826,17 @@ function CaseDetailView({
 
       {tab === 'plan' && plan && (
         <div className="space-y-3">
+          <div className={`border rounded-lg p-3 text-sm flex flex-wrap items-center justify-between gap-2 ${savedPlan ? (savedPlan.ratified ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200') : 'bg-amber-50 border-amber-200'}`}>
+            <span>
+              {savedPlan
+                ? <>Saved plan <strong>version {savedPlan.version}</strong>{savedPlan.board_date ? ` · board ${String(savedPlan.board_date).slice(0, 10)}` : ''} · {savedPlan.ratified ? <strong className="text-green-800">ratified</strong> : 'awaiting consultant ratification'}</>
+                : 'Not saved yet — press "Save plan" to put this plan, its referrals and the surveillance schedule on record.'}
+            </span>
+            {savedPlan && !savedPlan.ratified && (
+              <button disabled={busy} onClick={() => act(() => ratifyPlan(savedPlan.id), 'Plan ratified')}
+                className="px-3 py-1.5 bg-green-700 text-white rounded-lg text-xs disabled:opacity-50">Ratify (consultant)</button>
+            )}
+          </div>
           <div className="bg-white border rounded-lg p-4">
             <div className="text-sm text-gray-600">{plan.summary}</div>
           </div>
@@ -787,15 +869,33 @@ function CaseDetailView({
           <ExportButton onClick={() => generateAllReferralLettersPdf(letters, meta)} label="Export all letters (PDF)" />
           {letters.map((l, i) => (
             <details key={i} className="bg-white border rounded-lg p-4">
-              <summary className="cursor-pointer font-semibold text-gray-900 flex items-center justify-between">
+              <summary className="cursor-pointer font-semibold text-gray-900 flex flex-wrap items-center justify-between gap-2">
                 <span>{l.specialtyLabel}</span>
-                {l.urgency !== 'routine' && (
-                  <span className="px-2 py-0.5 rounded text-xs bg-red-100 text-red-800">
-                    {l.urgency === 'two_week' ? 'Cancer pathway' : 'Urgent'}
-                  </span>
-                )}
+                <span className="flex items-center gap-1.5">
+                  {l.urgency !== 'routine' && (
+                    <span className="px-2 py-0.5 rounded text-xs bg-red-100 text-red-800">
+                      {l.urgency === 'two_week' ? 'Cancer pathway' : 'Urgent'}
+                    </span>
+                  )}
+                  {(() => {
+                    const r: any = savedReferral(l.specialty);
+                    if (!r) return <span className="px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-600">not saved</span>;
+                    return r.status === 'sent'
+                      ? <span className="px-2 py-0.5 rounded text-xs bg-green-100 text-green-800">sent {r.sent_at ? String(r.sent_at).slice(0, 10) : ''}</span>
+                      : <span className="px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-800">draft</span>;
+                  })()}
+                </span>
               </summary>
               <pre className="mt-3 text-xs whitespace-pre-wrap font-sans text-gray-700 border-t pt-3">{l.body}</pre>
+              {(() => {
+                const r: any = savedReferral(l.specialty);
+                return r && r.status === 'draft' ? (
+                  <button disabled={busy} onClick={() => act(() => markReferralSent(r.id), `${l.specialtyLabel} referral marked sent`)}
+                    className="mt-3 px-3 py-1.5 bg-primary-600 text-white rounded-lg text-xs flex items-center gap-1.5 disabled:opacity-50">
+                    <Send className="w-3.5 h-3.5" /> Mark as sent
+                  </button>
+                ) : null;
+              })()}
             </details>
           ))}
         </div>
@@ -805,7 +905,37 @@ function CaseDetailView({
         <div className="space-y-3">
           <ExportButton onClick={() => generateSurveillancePdf(surveillance, meta)} label="Export schedule (PDF)" />
           <div className="bg-white border rounded-lg p-4 text-sm text-gray-700">{surveillance.narrative}</div>
-          <div className="bg-white border rounded-lg divide-y">
+          {savedSurveillance.length > 0 ? (
+            <div className="bg-white border rounded-lg divide-y">
+              <div className="px-3 py-2 text-xs font-semibold text-gray-600 bg-gray-50">On record — {savedSurveillance.filter(x => x.status === 'completed').length} of {savedSurveillance.length} done</div>
+              {savedSurveillance.slice(0, 80).map((s: any) => {
+                const due = s.due_date ? String(s.due_date).slice(0, 10) : '';
+                const overdue = s.status === 'scheduled' && due && due < today;
+                return (
+                  <div key={s.id} className="p-3 flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-gray-900">{s.title}</div>
+                      <div className="text-xs text-gray-500 mt-0.5">{s.detail}</div>
+                      {s.findings && <div className="text-xs text-gray-700 mt-0.5">Findings: {s.findings}</div>}
+                    </div>
+                    <div className="flex items-center gap-2 text-xs whitespace-nowrap">
+                      <span className={overdue ? 'text-red-700 font-semibold' : 'text-gray-600'}>{due}{overdue ? ' · overdue' : ''}</span>
+                      {s.status === 'completed'
+                        ? <span className="px-2 py-0.5 rounded bg-green-100 text-green-800">done</span>
+                        : <button disabled={busy} onClick={() => {
+                            const findings = window.prompt(`Findings for "${s.title}" (optional)`, '');
+                            if (findings === null) return;
+                            void act(() => completeSurveillanceItem(s.id, findings), 'Surveillance item recorded');
+                          }} className="px-2 py-1 border rounded hover:bg-gray-50">Mark done</button>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded p-2">Not on record yet — this is the generated schedule. Press "Save plan" to schedule it.</p>
+          )}
+          <div className={`bg-white border rounded-lg divide-y ${savedSurveillance.length ? 'hidden' : ''}`}>
             {surveillance.items.slice(0, 60).map((s, i) => (
               <div key={i} className="p-3 flex items-start justify-between gap-3">
                 <div>

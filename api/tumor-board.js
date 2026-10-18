@@ -137,6 +137,11 @@ async function ensureTumorBoardTables() {
     CREATE INDEX IF NOT EXISTS idx_tb_surv_due ON tumor_board_surveillance(due_date);
     CREATE INDEX IF NOT EXISTS idx_tb_surv_status ON tumor_board_surveillance(status);
   `);
+  // Margins were VARCHAR(120); a full margin report ("peripheral 8 mm, deep
+  // 1.5 mm, closest at 3 o'clock …") overflowed it and failed the whole save.
+  try {
+    await query(`ALTER TABLE tumor_board_assessments ALTER COLUMN margins TYPE TEXT`);
+  } catch (e) { console.warn('tumor-board margins widen:', e.message); }
   schemaReady = true;
 }
 
@@ -306,6 +311,14 @@ async function createCase(body, user, res) {
   const b = body || {};
   if (!b.patient_id) return res.status(400).json({ error: 'patient_id is required' });
   if (!b.tumor_family) return res.status(400).json({ error: 'tumor_family is required' });
+  // The case must belong to a registered patient — a typed number that
+  // matches nobody used to create an orphan case under "Patient 123".
+  const pid = parseInt(b.patient_id, 10);
+  if (Number.isNaN(pid)) return res.status(400).json({ error: 'Choose a registered patient' });
+  const patient = (await query('SELECT id, hospital_number FROM patients WHERE id = $1', [pid])).rows[0];
+  if (!patient) return res.status(404).json({ error: 'No registered patient with that id' });
+  b.patient_id = pid;
+  if (!b.hospital_number) b.hospital_number = patient.hospital_number;
 
   const result = await query(
     `INSERT INTO tumor_board_cases
@@ -388,11 +401,20 @@ async function savePlan(body, user, res) {
   const b = body || {};
   if (!b.case_id) return res.status(400).json({ error: 'case_id is required' });
 
-  const prev = await query(
-    `SELECT COALESCE(MAX(version), 0) AS v FROM tumor_board_plans WHERE case_id = $1`,
+  // Saving the same plan twice is not a new version. Only a changed plan (or
+  // one already ratified, which is frozen) starts the next version.
+  const last = (await query(
+    `SELECT * FROM tumor_board_plans WHERE case_id = $1 ORDER BY version DESC LIMIT 1`,
     [b.case_id]
-  );
-  const version = (prev.rows[0]?.v || 0) + 1;
+  )).rows[0];
+  const same = last && !last.ratified
+    && (last.intent || null) === (b.intent || null)
+    && JSON.stringify(last.items || []) === JSON.stringify(b.items || [])
+    && String(last.assessment_id ?? '') === String(b.assessment_id ?? '');
+  if (same) {
+    return res.status(200).json({ plan: last, version: last.version, unchanged: true });
+  }
+  const version = (last?.version || 0) + 1;
 
   const result = await query(
     `INSERT INTO tumor_board_plans
@@ -436,18 +458,33 @@ async function saveReferrals(body, user, res) {
     return res.status(400).json({ error: 'case_id and referrals[] are required' });
   }
 
+  // One live referral per specialty per case. An unsent draft is refreshed in
+  // place; a letter already sent with the same text is not drafted again; a
+  // sent letter whose content has changed gets a new draft beside it.
   const saved = [];
   for (const r of b.referrals) {
-    const result = await query(
-      `INSERT INTO tumor_board_referrals
-        (case_id, patient_id, plan_id, specialty, specialty_label, subject, body, urgency, status, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
-      [
-        b.case_id, b.patient_id, b.plan_id || null, r.specialty,
-        r.specialtyLabel || r.specialty_label || null, r.subject || null,
-        r.body || null, r.urgency || 'routine', r.status || 'draft', user.id || null,
-      ]
-    );
+    if (!r || !r.specialty) continue;
+    const existing = (await query(
+      `SELECT * FROM tumor_board_referrals WHERE case_id = $1 AND specialty = $2 ORDER BY created_at DESC`,
+      [b.case_id, r.specialty]
+    )).rows;
+    const draft = existing.find((x) => x.status === 'draft');
+    const sentSame = existing.find((x) => x.status !== 'draft' && (x.body || '') === (r.body || ''));
+    if (sentSame && !draft) { saved.push(sentSame); continue; }
+    const vals = [
+      b.plan_id || null, r.specialtyLabel || r.specialty_label || null, r.subject || null,
+      r.body || null, r.urgency || 'routine',
+    ];
+    const result = draft
+      ? await query(
+          `UPDATE tumor_board_referrals SET plan_id = COALESCE($1, plan_id), specialty_label = $2, subject = $3,
+             body = $4, urgency = $5, updated_at = NOW() WHERE id = $6 RETURNING *`,
+          [...vals, draft.id])
+      : await query(
+          `INSERT INTO tumor_board_referrals
+            (case_id, patient_id, specialty, plan_id, specialty_label, subject, body, urgency, status, created_by)
+           VALUES ($6,$7,$8,$1,$2,$3,$4,$5,'draft',$9) RETURNING *`,
+          [...vals, b.case_id, b.patient_id, r.specialty, user.id || null]);
     saved.push(result.rows[0]);
   }
   return res.status(201).json({ referrals: saved });
@@ -482,8 +519,14 @@ async function saveSurveillance(body, res) {
   // items are preserved — they are a record of what actually happened.
   await query(`DELETE FROM tumor_board_surveillance WHERE case_id = $1 AND status = 'scheduled'`, [b.case_id]);
 
+  const done = new Set((await query(
+    `SELECT title, due_date::text AS d FROM tumor_board_surveillance WHERE case_id = $1 AND status <> 'scheduled'`,
+    [b.case_id]
+  )).rows.map((x) => `${x.title}|${x.d}`));
+
   const saved = [];
   for (const item of b.items) {
+    if (done.has(`${item.title || null}|${item.dueDate || item.due_date || null}`)) continue;
     const result = await query(
       `INSERT INTO tumor_board_surveillance
         (case_id, patient_id, category, title, detail, due_date, due_month, phase, basis)

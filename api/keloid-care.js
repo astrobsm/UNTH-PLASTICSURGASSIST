@@ -2,6 +2,10 @@
 import { query } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
 
+// Who may change a keloid plan; deleting one is for senior staff only.
+const WRITE_ROLES = ['admin', 'super_admin', 'consultant', 'senior_registrar', 'registrar', 'house_officer', 'nurse'];
+const DELETE_ROLES = ['admin', 'super_admin', 'consultant', 'senior_registrar'];
+
 export default async function handler(req, res) {
   if (cors(req, res)) return;
 
@@ -15,6 +19,14 @@ export default async function handler(req, res) {
   const pathParts = url.pathname.replace('/api/keloid-care', '').split('/').filter(Boolean);
   const planId = pathParts[0];
   const subResource = pathParts[1]; // e.g., 'injections', 'tests', 'radiotherapy'
+
+  const role = auth.user?.role;
+  if (method !== 'GET' && method !== 'DELETE' && !WRITE_ROLES.includes(role)) {
+    return res.status(403).json({ error: 'Not permitted to change keloid care plans' });
+  }
+  if (method === 'DELETE' && !DELETE_ROLES.includes(role)) {
+    return res.status(403).json({ error: 'Only a consultant, senior registrar or admin can delete a care plan' });
+  }
 
   try {
     switch (method) {
@@ -44,11 +56,11 @@ export default async function handler(req, res) {
         }
         if (subResource === 'injections') {
           const injectionId = pathParts[2];
-          return await updateInjection(injectionId, req.body, res);
+          return await updateInjection(planId, injectionId, req.body, res);
         }
         if (subResource === 'tests') {
           const testId = pathParts[2];
-          return await updateTest(testId, req.body, res);
+          return await updateTest(planId, testId, req.body, res);
         }
         return await updatePlan(planId, req.body, res);
       case 'DELETE':
@@ -470,7 +482,8 @@ async function addInjection(planId, data, user, res) {
   res.status(201).json({ injection: result.rows[0] });
 }
 
-async function updateInjection(id, data, res) {
+// Scoped to the plan in the URL, so an id from another plan cannot be edited through this one.
+async function updateInjection(planId, id, data, res) {
   const updateFields = [];
   const params = [];
   let paramCount = 1;
@@ -496,10 +509,10 @@ async function updateInjection(id, data, res) {
   }
 
   updateFields.push('updated_at = CURRENT_TIMESTAMP');
-  params.push(id);
+  params.push(id, planId);
 
   const result = await query(
-    `UPDATE keloid_injections SET ${updateFields.join(', ')} WHERE id = $${paramCount} RETURNING *`,
+    `UPDATE keloid_injections SET ${updateFields.join(', ')} WHERE id = $${paramCount} AND keloid_plan_id = $${paramCount + 1} RETURNING *`,
     params
   );
 
@@ -529,13 +542,13 @@ async function addTest(planId, data, user, res) {
     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
     RETURNING *`,
     [planId, testType, testName, orderedDate, resultDate || null, resultValue || null,
-     resultStatus || 'pending', isWithinNormal || null, notes || null, user.id]
+     resultStatus || 'pending', typeof isWithinNormal === 'boolean' ? isWithinNormal : null, notes || null, user.id]
   );
 
   res.status(201).json({ test: result.rows[0] });
 }
 
-async function updateTest(id, data, res) {
+async function updateTest(planId, id, data, res) {
   const updateFields = [];
   const params = [];
   let paramCount = 1;
@@ -555,10 +568,10 @@ async function updateTest(id, data, res) {
     return res.status(400).json({ error: 'No fields to update' });
   }
 
-  params.push(id);
+  params.push(id, planId);
 
   const result = await query(
-    `UPDATE keloid_pretreatment_tests SET ${updateFields.join(', ')} WHERE id = $${paramCount} RETURNING *`,
+    `UPDATE keloid_pretreatment_tests SET ${updateFields.join(', ')} WHERE id = $${paramCount} AND keloid_plan_id = $${paramCount + 1} RETURNING *`,
     params
   );
 

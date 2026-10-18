@@ -71,7 +71,9 @@ describe('every wound module carries the progress panel', () => {
 
   it.each(WOUND_MODULES)('%s passes a patient to it', (mod) => {
     const src = read(`src/pages/${mod}.tsx`);
-    expect(src).toMatch(/patientId=\{(trackedPatient|patient)\?\.id\}/);
+    // Either the tracked patient, or (Lymphoedema) the patient picked on the
+    // form falling back to the tracked one.
+    expect(src).toMatch(/patientId=\{(\(selectedPatient as any\)\?\.id \?\? )?(trackedPatient|patient)\?\.id\}/);
   });
 
   it.each(WOUND_MODULES)('%s names the kind of wound it deals with', (mod) => {

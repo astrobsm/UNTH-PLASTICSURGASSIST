@@ -50,12 +50,25 @@ export function ScarAssessmentForm({ assessmentId, onSaved, className = '' }: Pr
 
   useEffect(() => {
     let cancelled = false;
-    scarService.scales()
-      .then((r) => { if (!cancelled) setScales(r.scales); })
+    // The scales, and whatever this visit already holds, so reopening a visit
+    // shows what was recorded instead of blank boxes.
+    Promise.all([
+      scarService.scales(),
+      scarService.assessment(assessmentId).catch(() => null),
+    ])
+      .then(([r, existing]) => {
+        if (cancelled) return;
+        setScales(r.scales);
+        if (existing) {
+          setAnswers(existing.scores || {});
+          setExam(existing.exam || {});
+          setPro((existing.patientReported || {}) as Record<string, number | ''>);
+        }
+      })
       .catch(() => { if (!cancelled) setError('Could not load the scale definitions.'); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, []);
+  }, [assessmentId]);
 
   const setItem = useCallback((scale: string, key: string, value: number | '') => {
     setAnswers((a) => ({ ...a, [scale]: { ...(a[scale] || {}), [key]: value } }));
