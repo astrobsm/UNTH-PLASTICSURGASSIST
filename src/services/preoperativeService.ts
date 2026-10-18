@@ -10,11 +10,11 @@ const authenticatedFetch = async (url: string, options: RequestInit = {}): Promi
     'Accept': 'application/json',
     ...(options.headers as Record<string, string> || {})
   };
-  
+
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
-  
+
   return fetch(url, {
     ...options,
     headers,
@@ -68,7 +68,7 @@ export interface CapriniDVTRisk {
   serious_lung_disease: boolean;
   abnormal_pulmonary_function: boolean;
   medical_patient_bed_rest: boolean;
-  
+
   // 2 points factors
   age_61_74: boolean;
   arthroscopic_surgery: boolean;
@@ -78,7 +78,7 @@ export interface CapriniDVTRisk {
   patient_confined_to_bed: boolean;
   immobilizing_plaster_cast: boolean;
   central_venous_access: boolean;
-  
+
   // 3 points factors
   age_over_75: boolean;
   history_dvt_pe: boolean;
@@ -89,14 +89,14 @@ export interface CapriniDVTRisk {
   anticardiolipin_antibodies: boolean;
   heparin_induced_thrombocytopenia: boolean;
   other_thrombophilia: boolean;
-  
+
   // 5 points factors
   elective_major_lower_extremity_arthroplasty: boolean;
   hip_pelvis_leg_fracture: boolean;
   stroke_1_month: boolean;
   multiple_trauma: boolean;
   acute_spinal_cord_injury: boolean;
-  
+
   total_score: number;
   risk_level?: string;
   risk_category: 'low' | 'moderate' | 'high' | 'very-high';
@@ -111,21 +111,21 @@ export interface CardiovascularRiskAssessment {
   history_cerebrovascular_disease: boolean;
   diabetes_on_insulin: boolean;
   preop_creatinine_over_2: boolean;
-  
+
   // Additional factors
   hypertension: boolean;
   smoking: boolean;
   age_over_65: boolean;
-  
+
   // Vitals
   systolic_bp?: number;
   diastolic_bp?: number;
   heart_rate?: number;
-  
+
   // Labs
   creatinine?: number;
   hba1c?: number;
-  
+
   rcri_score: number;
   total_score?: number;
   risk_level: 'low' | 'intermediate' | 'high';
@@ -141,7 +141,7 @@ export interface PressureSoreRiskAssessment {
   mobility: 1 | 2 | 3 | 4; // 1=completely immobile, 4=no limitations
   nutrition: 1 | 2 | 3 | 4; // 1=very poor, 4=excellent
   friction_shear: 1 | 2 | 3; // 1=problem, 3=no apparent problem
-  
+
   braden_total: number; // 6-23, lower = higher risk
   risk_category: 'severe' | 'high' | 'moderate' | 'low' | 'no-risk';
   preventive_measures: string[];
@@ -158,28 +158,28 @@ export interface PreoperativeAssessment {
   id?: string;
   patient_id: string;
   surgery_booking_id?: string;
-  
+
   // Medications
   current_medications: Medication[];
-  
+
   // Risk Assessments
   bleeding_risk?: BleedingRiskAssessment;
   dvt_risk?: CapriniDVTRisk;
   cardiovascular_risk?: CardiovascularRiskAssessment;
   pressure_sore_risk?: PressureSoreRiskAssessment;
-  
+
   // Comorbidities with medications
   comorbidities_medications: ComorbidityMedication[];
-  
+
   // File uploads (base64 or URLs)
   consent_document?: string;
   payment_evidence?: string;
   insurance_covered: boolean;
-  
+
   // Generated summaries
   comprehensive_summary?: string;
   preop_instructions?: string;
-  
+
   // Metadata
   assessed_by: string;
   assessed_at: Date;
@@ -203,7 +203,7 @@ class PreoperativeService {
   calculateBleedingRisk(assessment: Partial<BleedingRiskAssessment>): BleedingRiskAssessment {
     let score = 0;
     const recommendations: string[] = [];
-    
+
     if (assessment.anticoagulant_use) {
       score += 3;
       recommendations.push(`Stop ${assessment.anticoagulant_type || 'anticoagulant'} as per protocol`);
@@ -228,19 +228,25 @@ class PreoperativeService {
       score += 3;
       recommendations.push('Investigate cause of recent bleeding');
     }
-    
+
     // Lab values
-    if (assessment.platelet_count && assessment.platelet_count < 100000) {
-      score += 2;
-      recommendations.push('Consider platelet transfusion if <50,000');
+    // Platelets are entered in ×10⁹/L (normal 150–400). The check compared that
+    // with 100,000, so every patient scored as thrombocytopenic. A value typed
+    // per µL (e.g. 250000) is converted.
+    if (assessment.platelet_count) {
+      const plt = assessment.platelet_count > 2000 ? assessment.platelet_count / 1000 : assessment.platelet_count;
+      if (plt < 100) {
+        score += 2;
+        recommendations.push(plt < 50 ? 'Platelets < 50 ×10⁹/L — discuss platelet transfusion before surgery' : 'Platelets < 100 ×10⁹/L — check trend and bleeding history');
+      }
     }
     if (assessment.inr && assessment.inr > 1.5) {
       score += 2;
       recommendations.push('Correct INR to <1.5 before surgery');
     }
-    
+
     const risk_level = score >= 7 ? 'high' : score >= 4 ? 'moderate' : 'low';
-    
+
     return {
       ...assessment as BleedingRiskAssessment,
       risk_score: score,
@@ -254,7 +260,7 @@ class PreoperativeService {
    */
   calculateCapriniScore(assessment: Partial<CapriniDVTRisk>): CapriniDVTRisk {
     let score = 0;
-    
+
     // 1 point factors
     if (assessment.age_41_60) score += 1;
     if (assessment.minor_surgery) score += 1;
@@ -269,7 +275,7 @@ class PreoperativeService {
     if (assessment.serious_lung_disease) score += 1;
     if (assessment.abnormal_pulmonary_function) score += 1;
     if (assessment.medical_patient_bed_rest) score += 1;
-    
+
     // 2 points factors
     if (assessment.age_61_74) score += 2;
     if (assessment.arthroscopic_surgery) score += 2;
@@ -279,7 +285,7 @@ class PreoperativeService {
     if (assessment.patient_confined_to_bed) score += 2;
     if (assessment.immobilizing_plaster_cast) score += 2;
     if (assessment.central_venous_access) score += 2;
-    
+
     // 3 points factors
     if (assessment.age_over_75) score += 3;
     if (assessment.history_dvt_pe) score += 3;
@@ -290,31 +296,36 @@ class PreoperativeService {
     if (assessment.anticardiolipin_antibodies) score += 3;
     if (assessment.heparin_induced_thrombocytopenia) score += 3;
     if (assessment.other_thrombophilia) score += 3;
-    
+
     // 5 points factors
     if (assessment.elective_major_lower_extremity_arthroplasty) score += 5;
     if (assessment.hip_pelvis_leg_fracture) score += 5;
     if (assessment.stroke_1_month) score += 5;
     if (assessment.multiple_trauma) score += 5;
     if (assessment.acute_spinal_cord_injury) score += 5;
-    
+
     let risk_category: 'low' | 'moderate' | 'high' | 'very-high';
     let prophylaxis_recommendation: string;
-    
+
+    // ACCP 2012 (Gould et al.) Caprini bands: 0 very low, 1–2 low, 3–4
+    // moderate, ≥5 high (≥9 highest). They were one tier too high.
     if (score === 0) {
       risk_category = 'low';
-      prophylaxis_recommendation = 'Early ambulation';
+      prophylaxis_recommendation = 'Very low risk — early ambulation';
     } else if (score <= 2) {
-      risk_category = 'moderate';
-      prophylaxis_recommendation = 'Mechanical prophylaxis (IPC or GCS)';
+      risk_category = 'low';
+      prophylaxis_recommendation = 'Low risk — mechanical prophylaxis (IPC)';
     } else if (score <= 4) {
+      risk_category = 'moderate';
+      prophylaxis_recommendation = 'Moderate risk — LMWH (or IPC if bleeding risk is high)';
+    } else if (score <= 8) {
       risk_category = 'high';
-      prophylaxis_recommendation = 'LMWH or Mechanical prophylaxis';
+      prophylaxis_recommendation = 'High risk — LMWH + mechanical prophylaxis';
     } else {
       risk_category = 'very-high';
-      prophylaxis_recommendation = 'LMWH + Mechanical prophylaxis';
+      prophylaxis_recommendation = 'Highest risk (≥9) — LMWH + mechanical prophylaxis; consider extended prophylaxis';
     }
-    
+
     return {
       ...assessment as CapriniDVTRisk,
       total_score: score,
@@ -329,7 +340,7 @@ class PreoperativeService {
   calculateCardiovascularRisk(assessment: Partial<CardiovascularRiskAssessment>): CardiovascularRiskAssessment {
     let rcri_score = 0;
     const recommendations: string[] = [];
-    
+
     if (assessment.high_risk_surgery) rcri_score += 1;
     if (assessment.ischemic_heart_disease) {
       rcri_score += 1;
@@ -345,7 +356,7 @@ class PreoperativeService {
       recommendations.push('Perioperative glucose monitoring');
     }
     if (assessment.preop_creatinine_over_2) rcri_score += 1;
-    
+
     // Additional recommendations
     if (assessment.hypertension) {
       recommendations.push('Continue antihypertensives except ACE-I/ARBs on day of surgery');
@@ -353,10 +364,10 @@ class PreoperativeService {
     if (assessment.smoking) {
       recommendations.push('Smoking cessation advised');
     }
-    
+
     let risk_level: 'low' | 'intermediate' | 'high';
     let cardiac_event_risk_percent: number;
-    
+
     if (rcri_score === 0) {
       risk_level = 'low';
       cardiac_event_risk_percent = 0.4;
@@ -373,7 +384,7 @@ class PreoperativeService {
       recommendations.push('Cardiology consultation required');
       recommendations.push('Consider non-invasive cardiac testing');
     }
-    
+
     return {
       ...assessment as CardiovascularRiskAssessment,
       rcri_score,
@@ -387,17 +398,17 @@ class PreoperativeService {
    * Calculate pressure sore risk (Braden Scale)
    */
   calculatePressureSoreRisk(assessment: Partial<PressureSoreRiskAssessment>): PressureSoreRiskAssessment {
-    const total = 
-      (assessment.sensory_perception || 4) +
-      (assessment.moisture || 4) +
-      (assessment.activity || 4) +
-      (assessment.mobility || 4) +
-      (assessment.nutrition || 4) +
-      (assessment.friction_shear || 3);
-    
+    // A missing subscale is not "no risk". It used to default to the best
+    // score (4/3), so an unscored patient looked safe; it now counts as the
+    // worst (1) and the result says the scale is incomplete.
+    const parts = [assessment.sensory_perception, assessment.moisture, assessment.activity,
+      assessment.mobility, assessment.nutrition, assessment.friction_shear];
+    const incomplete = parts.some(v => v == null || !Number.isFinite(Number(v)) || Number(v) < 1);
+    const total = parts.reduce<number>((n, v) => n + (v == null || !(Number(v) >= 1) ? 1 : Number(v)), 0);
+
     let risk_category: 'severe' | 'high' | 'moderate' | 'low' | 'no-risk';
     const preventive_measures: string[] = [];
-    
+
     if (total <= 9) {
       risk_category = 'severe';
       preventive_measures.push('Pressure-relieving mattress required');
@@ -420,7 +431,8 @@ class PreoperativeService {
       risk_category = 'no-risk';
       preventive_measures.push('Routine care');
     }
-    
+    if (incomplete) preventive_measures.unshift('Braden incomplete — score all six subscales (missing items counted as highest risk)');
+
     return {
       ...assessment as PressureSoreRiskAssessment,
       braden_total: total,
@@ -439,7 +451,7 @@ class PreoperativeService {
 
     try {
       const prompt = this.buildComprehensiveSummaryPrompt(data);
-      
+
       const response = await authenticatedFetch('/api/ai/chat', {
         method: 'POST',
         body: JSON.stringify({
@@ -475,7 +487,7 @@ class PreoperativeService {
    */
   private buildComprehensiveSummaryPrompt(data: ComprehensiveSummaryData): string {
     const { patient, assessment, surgery_details, lab_results, allergies } = data;
-    
+
     return `Generate a comprehensive pre-operative summary for the following patient:
 
 PATIENT INFORMATION:
@@ -522,7 +534,7 @@ Format as a formal medical summary suitable for the theatre team and medical rec
    */
   private generateStructuredSummary(data: ComprehensiveSummaryData): string {
     const { patient, assessment, surgery_details, allergies } = data;
-    
+
     return `
 PRE-OPERATIVE SUMMARY
 
@@ -544,13 +556,13 @@ ${assessment.current_medications.map(m => `• ${m.drug_name} ${m.dosage} ${m.fr
 RISK ASSESSMENT SUMMARY:
 • Bleeding Risk: ${assessment.bleeding_risk?.risk_level?.toUpperCase() || 'NOT ASSESSED'} (Score: ${assessment.bleeding_risk?.risk_score || 'N/A'})
   ${assessment.bleeding_risk?.recommendations.map(r => `  - ${r}`).join('\n  ') || ''}
-  
+
 • DVT Risk: ${assessment.dvt_risk?.risk_category?.toUpperCase() || 'NOT ASSESSED'} (Caprini: ${assessment.dvt_risk?.total_score || 'N/A'})
   Prophylaxis: ${assessment.dvt_risk?.prophylaxis_recommendation || 'Not specified'}
-  
+
 • Cardiovascular Risk: ${assessment.cardiovascular_risk?.risk_level?.toUpperCase() || 'NOT ASSESSED'} (RCRI: ${assessment.cardiovascular_risk?.rcri_score || 'N/A'}, ${assessment.cardiovascular_risk?.cardiac_event_risk_percent}% event risk)
   ${assessment.cardiovascular_risk?.recommendations.map(r => `  - ${r}`).join('\n  ') || ''}
-  
+
 • Pressure Sore Risk: ${assessment.pressure_sore_risk?.risk_category?.toUpperCase() || 'NOT ASSESSED'} (Braden: ${assessment.pressure_sore_risk?.braden_total || 'N/A'})
   ${assessment.pressure_sore_risk?.preventive_measures.map(m => `  - ${m}`).join('\n  ') || ''}
 
@@ -577,7 +589,7 @@ Date: ${new Date().toLocaleDateString()}
 
     try {
       const prompt = this.buildInstructionsPrompt(data);
-      
+
       const response = await authenticatedFetch('/api/ai/chat', {
         method: 'POST',
         body: JSON.stringify({
@@ -614,7 +626,7 @@ Date: ${new Date().toLocaleDateString()}
   private buildInstructionsPrompt(data: ComprehensiveSummaryData): string {
     const { patient, assessment, surgery_details } = data;
     const anaesthesiaType = surgery_details.anaesthesia_type;
-    
+
     return `Generate patient-friendly pre-operative instructions for:
 
 PATIENT: ${patient.first_name} ${patient.last_name}
@@ -633,19 +645,19 @@ Generate clear, specific instructions including:
    - Clear fluids: ${anaesthesiaType === 'general' ? '2 hours before' : '2 hours before'}
    - Solid food: ${anaesthesiaType === 'general' ? '6 hours before' : '6 hours before'}
    - Emphasize NO eating or drinking after specified times
-   
+
 2. **MEDICATION MANAGEMENT**
    - Which medications to continue
    - Which to stop and when
    - Morning-of-surgery instructions
-   
+
 3. **PERSONAL PREPARATION**
    - Shower/bathing instructions
    - Removal of jewelry, makeup, nail polish
    - What to bring to hospital
-   
+
 4. **SPECIAL INSTRUCTIONS** based on comorbidities
-   
+
 5. **WHAT TO EXPECT** on day of surgery
 
 Format as clear, numbered instructions that patients can easily follow.`;
@@ -657,11 +669,11 @@ Format as clear, numbered instructions that patients can easily follow.`;
   private generateStructuredInstructions(data: ComprehensiveSummaryData): string {
     const { patient, assessment, surgery_details } = data;
     const anaesthesiaType = surgery_details.anaesthesia_type;
-    
+
     // Determine fasting times based on anaesthesia type
     let fastingHoursSolid = 6;
     let fastingHoursClear = 2;
-    
+
     if (anaesthesiaType === 'general' || anaesthesiaType === 'sedation') {
       fastingHoursSolid = 8;
       fastingHoursClear = 2;
@@ -672,7 +684,7 @@ Format as clear, numbered instructions that patients can easily follow.`;
       fastingHoursSolid = 4;
       fastingHoursClear = 2;
     }
-    
+
     return `
 PRE-OPERATIVE INSTRUCTIONS
 
@@ -701,12 +713,12 @@ This means:
 â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-
 
 MEDICATIONS TO STOP:
-${assessment.current_medications.filter(m => m.stop_before_surgery).map(m => 
+${assessment.current_medications.filter(m => m.stop_before_surgery).map(m =>
   `❌ ${m.drug_name}: STOP ${m.stop_hours_before} hours before surgery`
 ).join('\n')}
 
 MEDICATIONS TO CONTINUE:
-${assessment.current_medications.filter(m => !m.stop_before_surgery).map(m => 
+${assessment.current_medications.filter(m => !m.stop_before_surgery).map(m =>
   `✅ ${m.drug_name}: Continue as prescribed (take with small sip of water if needed)`
 ).join('\n')}
 
@@ -781,7 +793,7 @@ Emergency Contact: [INSERT HOSPITAL NUMBER]
 
 â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-
 
-${assessment.cardiovascular_risk?.risk_level === 'high' || assessment.cardiovascular_risk?.risk_level === 'intermediate' ? 
+${assessment.cardiovascular_risk?.risk_level === 'high' || assessment.cardiovascular_risk?.risk_level === 'intermediate' ?
 `⚠️  SPECIAL CARDIAC PRECAUTIONS:
 Due to your cardiovascular risk, extra monitoring will be provided during surgery.
 ${assessment.cardiovascular_risk.recommendations.map(r => `• ${r}`).join('\n')}

@@ -331,7 +331,7 @@ export function BurnsPanel({ weightKg, ageYears }: { weightKg: number; ageYears:
   const [circumferential, setCircumferential] = useState(false);
 
   const tbsa = useMemo(
-    () => NINES.reduce((sum, r) => sum + Math.min(num(areas[r.key] || ''), r.max), 0),
+    () => NINES.reduce((sum, r) => sum + Math.max(0, Math.min(num(areas[r.key] || ''), r.max)), 0),
     [areas]
   );
 
@@ -344,8 +344,8 @@ export function BurnsPanel({ weightKg, ageYears }: { weightKg: number; ageYears:
     // the whole reason Parkland is anchored to injury, not to arrival.
     const now = new Date();
     const burnTime = new Date(now.getTime() - elapsed * 3600_000);
-    return burnCareService.calculateParklandFormula(weightKg, tbsa, burnTime, now);
-  }, [weightKg, tbsa, elapsed]);
+    return burnCareService.calculateParklandFormula(weightKg, tbsa, burnTime, now, ageYears);
+  }, [weightKg, tbsa, elapsed, ageYears]);
 
   const baux = useMemo(
     () => (ageYears && tbsa ? burnCareService.calculateRevisedBauxScore(ageYears, tbsa, inhalation) : null),
@@ -418,6 +418,11 @@ export function BurnsPanel({ weightKg, ageYears }: { weightKg: number; ageYears:
               {elapsed} h have already elapsed since the burn — the rate above is increased to deliver
               the first-phase volume in the time remaining, not restarted from arrival.
             </p>
+          )}
+          {plan.notes && plan.notes.length > 1 && (
+            <ul className="list-disc pl-5 text-amber-800 space-y-0.5">
+              {plan.notes.slice(1).map(n => <li key={n}>{n}</li>)}
+            </ul>
           )}
         </div>
       )}
@@ -795,7 +800,7 @@ export function WoundMealPlanPanel({ weightKg }: { weightKg: number }) {
             <option value="severe">Severe, multiple or extensive</option>
           </select>
         </Field>
-        <Field label="Albumin (g/dL)" hint="Optional"><input type="number" step="0.1" value={albumin} onChange={e => setAlbumin(e.target.value)} className="input" /></Field>
+        <Field label="Albumin (g/dL or g/L)" hint="Optional — g/L is converted"><input type="number" step="0.1" value={albumin} onChange={e => setAlbumin(e.target.value)} className="input" /></Field>
       </div>
 
       <div className="flex flex-wrap gap-4 text-sm">

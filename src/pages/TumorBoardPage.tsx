@@ -55,10 +55,11 @@ type View = 'board' | 'case' | 'assess';
 
 const stageTone = (group?: string): string => {
   if (!group) return 'bg-gray-100 text-gray-700';
-  if (group === '0' || group.startsWith('IA') || group === 'I') return 'bg-green-100 text-green-800';
-  if (group.startsWith('II')) return 'bg-amber-100 text-amber-800';
-  if (group.startsWith('III')) return 'bg-orange-100 text-orange-800';
+  // Most specific first: "III" also starts with "II", and IB/IC start with "I".
   if (group.startsWith('IV')) return 'bg-red-100 text-red-800';
+  if (group.startsWith('III')) return 'bg-orange-100 text-orange-800';
+  if (group.startsWith('II')) return 'bg-amber-100 text-amber-800';
+  if (group === '0' || group.startsWith('I')) return 'bg-green-100 text-green-800';
   return 'bg-gray-100 text-gray-700';
 };
 

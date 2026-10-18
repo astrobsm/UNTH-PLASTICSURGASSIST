@@ -157,8 +157,11 @@ export function stageMelanomaT(input: StagingInput): string {
   if (input.noPrimary) return 'T0';
   if (input.inSitu) return 'Tis';
 
-  const b = input.breslowMm;
-  if (b === null || b === undefined || Number.isNaN(b)) return 'TX';
+  const raw = input.breslowMm;
+  if (raw === null || raw === undefined || Number.isNaN(raw)) return 'TX';
+  // AJCC 8: Breslow is recorded to the nearest 0.1 mm before categorising —
+  // 0.75 mm is 0.8 (T1b, not T1a); 1.04 mm is 1.0 (T1b, not T2).
+  const b = Math.round(raw * 10) / 10;
 
   const ulc = !!input.ulceration;
 
@@ -180,6 +183,8 @@ export function stageMelanomaN(input: StagingInput): string {
   const detected = !!input.nodesClinicallyDetected;
   const matted = !!input.mattedNodes;
 
+  // Matted nodes, of any number, are N3b — or N3c with in-transit disease.
+  if (matted) return inTransit ? 'N3c' : 'N3b';
   if (n === 0 && !inTransit) return 'N0';
   // N1c/N2c/N3c encode in-transit, satellite or microsatellite disease, graded
   // by how many nodes accompany it.
@@ -199,7 +204,12 @@ export function stageMelanomaN(input: StagingInput): string {
 }
 
 /** AJCC 8th pathological stage groups for cutaneous melanoma. */
-function melanomaStageGroup(T: string, N: string, M: string, basis: StagingBasis): string {
+function melanomaStageGroup(Tin: string, N: string, M: string, basisIn: StagingBasis): string {
+  // Restaging is clinical (it prints the "c" prefix); only p / yp use the
+  // pathological groupings.
+  const basis: StagingBasis = basisIn === 'pathological' || basisIn === 'post_neoadjuvant' ? 'pathological' : 'clinical';
+  // In situ with nodal disease is grouped as an unknown primary.
+  const T = Tin === 'Tis' && N !== 'N0' ? 'T0' : Tin;
   if (M !== 'M0') return 'IV';
   if (T === 'Tis') return '0';
   if (T === 'TX') return 'Not assignable';
@@ -229,8 +239,11 @@ function melanomaStageGroup(T: string, N: string, M: string, basis: StagingBasis
   if (t4b) return ['N3a', 'N3b', 'N3c'].includes(N) ? 'IIID' : 'IIIC';
   if (tHigh) return 'IIIC';
 
+  // T0 (unknown primary): N1b/N1c are IIIB; N2b, N2c and any N3 are IIIC.
+  if (T === 'T0') return ['N1a', 'N1b', 'N1c', 'N2a'].includes(N) ? 'IIIB' : 'IIIC';
+
   if (tLow) {
-    if (['N1a', 'N2a'].includes(N)) return T === 'T0' ? 'IIIB' : 'IIIA';
+    if (['N1a', 'N2a'].includes(N)) return 'IIIA';
     if (['N1b', 'N1c', 'N2b'].includes(N)) return 'IIIB';
     return 'IIIC'; // N2c, N3a/b/c
   }
@@ -275,10 +288,14 @@ export function stageCutaneousCarcinomaN(input: StagingInput): string {
   const n = input.nodesInvolved ?? 0;
   if (n === 0) return 'N0';
 
-  // Extranodal extension overrides size and number — it is N3b however small.
-  if (input.extranodalExtension) return 'N3b';
-
   const size = input.largestNodeCm ?? 0;
+  // Extranodal extension: clinically overt ENE is cN3b. Pathologically, a
+  // single ipsilateral node ≤3 cm with ENE is pN2a; any other ENE is pN3b.
+  if (input.extranodalExtension) {
+    const pathological = input.basis === 'pathological' || input.basis === 'post_neoadjuvant';
+    if (pathological && n === 1 && size > 0 && size <= 3 && !input.contralateralOrBilateralNodes) return 'N2a';
+    return 'N3b';
+  }
   if (size > 6) return 'N3a';
   if (input.contralateralOrBilateralNodes) return 'N2c';
   if (n > 1) return 'N2b';
@@ -286,17 +303,16 @@ export function stageCutaneousCarcinomaN(input: StagingInput): string {
   return 'N1';
 }
 
+// AJCC 8th Ch.15 has a single Stage IV — T1-3 N2, any N3, T4 any N, or M1.
+// IVA/IVB/IVC belong to other head & neck chapters, not cutaneous carcinoma.
 function cutaneousCarcinomaStageGroup(T: string, N: string, M: string): string {
-  if (M !== 'M0') return 'IVC';
-  if (T === 'Tis') return '0';
+  if (M !== 'M0') return 'IV';
+  if (T === 'Tis') return N === 'N0' ? '0' : 'Not assignable';
   if (T === 'TX') return 'Not assignable';
 
-  if (T === 'T4b' || N === 'N3a' || N === 'N3b') return 'IVB';
-
-  const t123 = ['T1', 'T2', 'T3'].includes(T);
-  if (N === 'N2a' || N === 'N2b' || N === 'N2c') return 'IVA';
-  if (T === 'T4a') return 'IVA';
-  if (N === 'N1') return t123 ? 'III' : 'IVA';
+  if (T === 'T4a' || T === 'T4b') return 'IV';
+  if (N === 'N3a' || N === 'N3b' || N === 'N2a' || N === 'N2b' || N === 'N2c') return 'IV';
+  if (N === 'N1') return 'III';
 
   // N0
   if (T === 'T1') return 'I';
@@ -331,8 +347,9 @@ export function stageMerkelN(input: StagingInput): string {
   return 'N1a';
 }
 
-function merkelStageGroup(T: string, N: string, M: string): string {
+function merkelStageGroup(T: string, N: string, M: string, basis: StagingBasis = 'pathological'): string {
   if (M !== 'M0') return 'IV';
+  const pathological = basis === 'pathological' || basis === 'post_neoadjuvant';
   if (T === 'Tis') return '0';
   if (T === 'TX') return 'Not assignable';
 
@@ -343,9 +360,12 @@ function merkelStageGroup(T: string, N: string, M: string): string {
     return 'Not assignable';
   }
 
-  // Occult nodal disease carries a materially better prognosis than macroscopic
-  // disease, which is why IIIA and IIIB split on how the node was found.
-  if (N === 'N1a') return T === 'T0' ? 'IIIA' : 'IIIA';
+  // Clinical staging has a single Stage III (any T, N1-3, M0).
+  if (!pathological) return 'III';
+
+  // Pathological: occult nodal disease carries a materially better prognosis
+  // than macroscopic disease, which is why IIIA and IIIB split on it.
+  if (N === 'N1a') return 'IIIA';
   if (N === 'N1b' && T === 'T0') return 'IIIA';
   return 'IIIB';
 }
@@ -384,10 +404,9 @@ function sarcomaStageGroup(T: string, N: string, M: string, grade: SarcomaGrade,
   if (site === 'head_neck' || site === 'viscera') return 'Not assignable';
 
   if (M !== 'M0') return 'IV';
-  // Regional nodal disease in extremity/trunk and retroperitoneal sarcoma is
-  // Stage IV in the 8th edition even without distant metastases — a frequent
-  // source of under-staging.
-  if (N === 'N1') return 'IV';
+  // Regional nodes: Stage IV for trunk/extremity (AJCC 8 Ch.41), but Stage
+  // IIIB for retroperitoneal sarcoma (Ch.42).
+  if (N === 'N1') return site === 'retroperitoneal' ? 'IIIB' : 'IV';
   if (T === 'TX') return 'Not assignable';
 
   const lowGrade = grade === 'G1' || grade === 'GX';
@@ -418,7 +437,7 @@ const STAGE_DESCRIPTIONS: Record<string, string> = {
   IVA: 'Advanced locoregional disease.',
   IVB: 'Very advanced locoregional disease.',
   IVC: 'Distant metastatic disease.',
-  IV: 'Distant metastatic disease.',
+  IV: 'Stage IV — distant metastases, or (cutaneous carcinoma) advanced nodal disease or bone / skull-base invasion.',
   'Not assignable': 'AJCC does not publish a stage grouping for this combination.',
 };
 
@@ -438,7 +457,7 @@ export function computeStage(input: StagingInput): StageResult {
       N = stageMelanomaN(input);
       stageGroup = melanomaStageGroup(T, N, M, basis);
       if (T === 'TX') caveats.push('Breslow thickness not recorded — T category cannot be assigned.');
-      if (basis === 'clinical' && stageGroup === 'III') {
+      if (basis !== 'pathological' && basis !== 'post_neoadjuvant' && stageGroup === 'III') {
         caveats.push('Clinical staging does not subdivide Stage III; sub-stage requires pathological nodal data.');
       }
       if (input.distantMets && input.ldhElevated === null) {
@@ -466,7 +485,7 @@ export function computeStage(input: StagingInput): StageResult {
     case 'merkel_cell': {
       T = stageMerkelT(input);
       N = stageMerkelN(input);
-      stageGroup = merkelStageGroup(T, N, M);
+      stageGroup = merkelStageGroup(T, N, M, basis);
       if (N === 'N0' && !input.nodesClinicallyOccult && basis === 'clinical') {
         caveats.push(
           'Merkel cell carcinoma has a high occult nodal rate — sentinel lymph node biopsy is recommended ' +
@@ -488,7 +507,9 @@ export function computeStage(input: StagingInput): StageResult {
         caveats.push(`AJCC 8th edition publishes no stage grouping for ${site.replace('_', ' & ')} sarcoma.`);
       }
       if (N === 'N1' && M === 'M0') {
-        caveats.push('Regional nodal involvement in soft tissue sarcoma is classified Stage IV in AJCC 8th edition.');
+        caveats.push(site === 'retroperitoneal'
+          ? 'Regional nodal involvement in retroperitoneal sarcoma is Stage IIIB in AJCC 8th edition.'
+          : 'Regional nodal involvement in trunk/extremity soft tissue sarcoma is Stage IV in AJCC 8th edition.');
       }
       break;
     }

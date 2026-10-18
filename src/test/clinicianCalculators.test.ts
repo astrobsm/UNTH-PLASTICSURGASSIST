@@ -123,10 +123,14 @@ describe('sepsis assessment', () => {
     expect(assessSepsis({ heartRate: 80, respiratoryRate: 14 }).sepsisSuspected).toBe(false);
   });
 
-  it('flags septic shock on MAP below 65 or lactate above 2', () => {
+  it('Sepsis-3: shock needs low MAP AND lactate > 2; either alone is hypoperfusion', () => {
     const byMap = assessSepsis({ respiratoryRate: 24, systolicBP: 80, diastolicBP: 50 });
     expect(byMap.map).toBeLessThan(65);
-    expect(byMap.septicShock).toBe(true);
+    expect(byMap.septicShock).toBe(false);
+    expect(byMap.hypoperfusion).toBe(true);
+
+    const both = assessSepsis({ respiratoryRate: 24, systolicBP: 80, diastolicBP: 50 }, { lactate: 3 });
+    expect(both.septicShock).toBe(true);
 
     // Lactate qualifies only once sepsis is suspected: a raised lactate with a
     // normal blood pressure and no other criteria has many causes and is not
@@ -136,7 +140,8 @@ describe('sepsis assessment', () => {
       { lactate: 4 }
     );
     expect(byLactate.sepsisSuspected).toBe(true);
-    expect(byLactate.septicShock).toBe(true);
+    expect(byLactate.septicShock).toBe(false);
+    expect(byLactate.hypoperfusion).toBe(true);
 
     const lactateAlone = assessSepsis({ systolicBP: 130, diastolicBP: 85 }, { lactate: 4 });
     expect(lactateAlone.sepsisSuspected).toBe(false);

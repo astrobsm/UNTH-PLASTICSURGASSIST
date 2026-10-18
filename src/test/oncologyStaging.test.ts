@@ -30,9 +30,14 @@ describe('melanoma T category (AJCC 8th)', () => {
   it('classifies the 0.8 mm boundary correctly', () => {
     // The single most consequential threshold in melanoma staging: it decides
     // whether sentinel node biopsy is even discussed.
-    expect(stageMelanomaT(melanoma({ breslowMm: 0.79 }))).toBe('T1a');
+    // AJCC 8 records Breslow to the nearest 0.1 mm BEFORE categorising.
+    expect(stageMelanomaT(melanoma({ breslowMm: 0.7 }))).toBe('T1a');
+    expect(stageMelanomaT(melanoma({ breslowMm: 0.74 }))).toBe('T1a');  // → 0.7
+    expect(stageMelanomaT(melanoma({ breslowMm: 0.75 }))).toBe('T1b');  // → 0.8
+    expect(stageMelanomaT(melanoma({ breslowMm: 0.79 }))).toBe('T1b');  // → 0.8
     expect(stageMelanomaT(melanoma({ breslowMm: 0.8 }))).toBe('T1b');
     expect(stageMelanomaT(melanoma({ breslowMm: 1.0 }))).toBe('T1b');
+    expect(stageMelanomaT(melanoma({ breslowMm: 1.04 }))).toBe('T1b');  // → 1.0, not T2
   });
 
   it('makes any ulcerated sub-1mm melanoma T1b', () => {
@@ -43,7 +48,8 @@ describe('melanoma T category (AJCC 8th)', () => {
     expect(stageMelanomaT(melanoma({ breslowMm: 1.5 }))).toBe('T2a');
     expect(stageMelanomaT(melanoma({ breslowMm: 1.5, ulceration: true }))).toBe('T2b');
     expect(stageMelanomaT(melanoma({ breslowMm: 4.0 }))).toBe('T3a');
-    expect(stageMelanomaT(melanoma({ breslowMm: 4.01, ulceration: true }))).toBe('T4b');
+    expect(stageMelanomaT(melanoma({ breslowMm: 4.01, ulceration: true }))).toBe('T3b');  // → 4.0
+    expect(stageMelanomaT(melanoma({ breslowMm: 4.1, ulceration: true }))).toBe('T4b');
   });
 
   it('returns TX when Breslow is missing rather than guessing', () => {
@@ -149,8 +155,18 @@ describe('cutaneous carcinoma (AJCC 8th, head & neck)', () => {
     expect(stageCutaneousCarcinomaT(scc({ sizeCm: 3, skullBaseInvasion: true }))).toBe('T4b');
   });
 
-  it('makes extranodal extension N3b regardless of node size', () => {
-    expect(stageCutaneousCarcinomaN(scc({ nodesInvolved: 1, largestNodeCm: 1, extranodalExtension: true }))).toBe('N3b');
+  it('grades extranodal extension per AJCC 8 (cN3b; pN2a for a single node ≤3 cm; otherwise pN3b)', () => {
+    expect(stageCutaneousCarcinomaN(scc({ nodesInvolved: 1, largestNodeCm: 1, extranodalExtension: true, basis: 'clinical' }))).toBe('N3b');
+    expect(stageCutaneousCarcinomaN(scc({ nodesInvolved: 1, largestNodeCm: 1, extranodalExtension: true, basis: 'pathological' }))).toBe('N2a');
+    expect(stageCutaneousCarcinomaN(scc({ nodesInvolved: 1, largestNodeCm: 4, extranodalExtension: true, basis: 'pathological' }))).toBe('N3b');
+    expect(stageCutaneousCarcinomaN(scc({ nodesInvolved: 2, largestNodeCm: 2, extranodalExtension: true, basis: 'pathological' }))).toBe('N3b');
+  });
+
+  it('has a single Stage IV for cutaneous carcinoma (no IVA/B/C)', () => {
+    expect(computeStage(scc({ sizeCm: 1, nodesInvolved: 2, largestNodeCm: 2 })).stageGroup).toBe('IV');      // T1 N2b
+    expect(computeStage(scc({ sizeCm: 1, boneInvasionCortical: true })).stageGroup).toBe('IV');            // T4a N0
+    expect(computeStage(scc({ sizeCm: 1, nodesInvolved: 1, largestNodeCm: 2 })).stageGroup).toBe('III');   // T1 N1
+    expect(computeStage(scc({ sizeCm: 1, distantMets: true })).stageGroup).toBe('IV');
   });
 
   it('grades N by size, number and laterality', () => {
@@ -259,5 +275,24 @@ describe('result shape and helpers', () => {
 
     const meta = computeStage(melanoma({ breslowMm: 2, distantMets: true, metSites: ['lung'] }));
     expect(isMetastatic(meta)).toBe(true);
+  });
+});
+
+describe('AJCC 8 corrections (module audit)', () => {
+  it('melanoma: T0 N2b is IIIC; matted nodes are N3b; restaging groups clinically', () => {
+    expect(computeStage(melanoma({ noPrimary: true, nodesInvolved: 2, nodesClinicallyDetected: true })).stageGroup).toBe('IIIC');
+    expect(computeStage(melanoma({ noPrimary: true, nodesInvolved: 1, nodesClinicallyDetected: true })).stageGroup).toBe('IIIB');
+    expect(stageMelanomaN(melanoma({ nodesInvolved: 1, mattedNodes: true }))).toBe('N3b');
+    expect(computeStage(melanoma({ breslowMm: 0.9, basis: 'restaging' })).stageGroup).toBe('IB');
+  });
+  it('Merkel: clinical stage III is not subdivided', () => {
+    const merkel = (o: any) => ({ family: 'merkel_cell', basis: 'clinical', sizeCm: 1.5, ...o });
+    expect(computeStage(merkel({ nodesInvolved: 1, nodesClinicallyDetected: true }) as any).stageGroup).toBe('III');
+    expect(computeStage(merkel({ basis: 'pathological', nodesInvolved: 1 }) as any).stageGroup).toBe('IIIA');
+  });
+  it('sarcoma: nodes are IIIB in the retroperitoneum, IV in trunk/extremity', () => {
+    const s = (site: string) => ({ family: 'soft_tissue_sarcoma', basis: 'pathological', sizeCm: 6, grade: 'G3', nodesInvolved: 1, sarcomaSite: site });
+    expect(computeStage(s('retroperitoneal') as any).stageGroup).toBe('IIIB');
+    expect(computeStage(s('trunk_extremity') as any).stageGroup).toBe('IV');
   });
 });

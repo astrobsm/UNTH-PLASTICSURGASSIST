@@ -1,6 +1,6 @@
 /**
  * Burn Care Protocol Service
- * 
+ *
  * Comprehensive burn care management based on:
  * - WHO Standards & Recommendations for Burns Care (2024)
  * - ISBI Practice Guidelines for Burn Care
@@ -18,37 +18,37 @@ export interface BurnPatient {
   admissionDate: Date;
   timeOfBurn: Date;
   mechanism: BurnMechanism;
-  
+
   // TBSA Assessment
   tbsaAssessment: TBSAAssessment;
   tbsa?: number;
-  
+
   // Scores
   bauxScore: number;
   revisedBauxScore: number;
   absiScore: ABSIScore;
-  
+
   // Inhalation Injury
   inhalationInjury: InhalationInjuryAssessment;
-  
+
   // Patient Demographics
   age: number;
   weight: number; // kg
   gender: 'male' | 'female';
-  
+
   // Resuscitation
   resuscitation: ResuscitationPlan;
-  
+
   // Monitoring
   monitoring: BurnMonitoring;
-  
+
   // Alerts
   activeAlerts: BurnAlert[];
-  
+
   // Status
   status: 'active' | 'discharged' | 'deceased' | 'transferred';
   disposition: 'ward' | 'icu' | 'burn_center' | 'outpatient';
-  
+
   // Metadata
   tetanusStatus: 'current' | 'needs_update' | 'unknown';
   createdAt: Date;
@@ -76,7 +76,7 @@ export interface TBSARegion {
   isCircumferential: boolean;
 }
 
-export type AnatomicalRegion = 
+export type AnatomicalRegion =
   | 'head_anterior' | 'head_posterior'
   | 'neck_anterior' | 'neck_posterior'
   | 'trunk_anterior' | 'trunk_posterior'
@@ -164,27 +164,30 @@ export interface ABSIScore {
 export interface ResuscitationPlan {
   protocol: 'parkland' | 'modified_brooke' | 'custom';
   fluidType: 'lactated_ringers' | 'normal_saline' | 'plasmalyte';
-  
+
   // Calculated volumes
   totalVolume24h: number; // mL
   firstHalfVolume: number; // mL (first 8 hours from burn time)
   secondHalfVolume: number; // mL (next 16 hours)
-  
+
   // Current status
   currentRate: number; // mL/hr
   volumeGiven: number; // mL
   remainingVolume: number; // mL
-  
+
   // Timing
   resuscitationStartTime: Date;
   firstHalfEndTime: Date;
   resuscitationEndTime: Date;
-  
+
   // Adjustments
   rateAdjustments: FluidRateAdjustment[];
-  
+
   // Targets
   urineOutputTarget: { min: number; max: number }; // mL/kg/hr
+
+  /** Safety notes on the plan (late presentation, rate capped, paediatrics). */
+  notes?: string[];
 }
 
 export interface FluidRateAdjustment {
@@ -305,7 +308,7 @@ export interface BurnAlert {
   status: 'open' | 'acknowledged' | 'resolved';
 }
 
-export type BurnAlertType = 
+export type BurnAlertType =
   | 'low_urine_output'
   | 'high_urine_output'
   | 'hypotension'
@@ -355,7 +358,7 @@ export const BURN_ALERT_THRESHOLDS = {
 // ================== SERVICE CLASS ==================
 
 class BurnCareService {
-  
+
   /**
    * Get age group for Lund-Browder chart
    */
@@ -373,13 +376,13 @@ class BurnCareService {
   calculateTBSALundBrowder(regions: TBSARegion[], age: number): number {
     const ageGroup = this.getAgeGroup(age);
     let totalTBSA = 0;
-    
+
     regions.forEach(region => {
       const maxPercent = LUND_BROWDER_CHART[region.region]?.[ageGroup] || 0;
       // percentBurned is the fraction of that region affected (0-100%)
       totalTBSA += (region.percentBurned / 100) * maxPercent;
     });
-    
+
     return Math.round(totalTBSA * 10) / 10;
   }
 
@@ -585,8 +588,10 @@ class BurnCareService {
     weightKg: number,
     tbsa: number,
     timeOfBurn: Date,
-    currentTime: Date = new Date()
+    currentTime: Date = new Date(),
+    ageYears?: number | null
   ): ResuscitationPlan {
+    const notes: string[] = ['Parkland is a starting estimate — titrate hourly to urine output (ABA / ATLS).'];
     const totalVolume24h = 4 * weightKg * tbsa;
     const firstHalfVolume = totalVolume24h / 2;
     const secondHalfVolume = totalVolume24h / 2;
@@ -603,15 +608,28 @@ class BurnCareService {
     let currentRate = 0;
     const remainingVolume = totalVolume24h;
 
-    if (hoursElapsed < 8) {
-      // First 8 hours - give first half
-      const hoursRemaining = 8 - hoursElapsed;
-      currentRate = firstHalfVolume / hoursRemaining;
+    // Late presentation: giving the whole remaining half over the time left
+    // became a huge bolus near the 8-hour mark (7.9 h → 80× the hourly rate).
+    // The catch-up rate is capped at twice the scheduled rate and flagged.
+    const capAt = (rate: number, scheduled: number, phase: string) => {
+      if (rate <= scheduled * 2) return rate;
+      notes.push(`Presented late in the ${phase}: catching up would need ${Math.round(rate)} mL/h. Rate capped at 2× the scheduled ${Math.round(scheduled)} mL/h — titrate to urine output; senior review.`);
+      return scheduled * 2;
+    };
+    if (hoursElapsed < 0) {
+      notes.push('Burn time is in the future — check the time of injury.');
+    } else if (hoursElapsed < 8) {
+      currentRate = capAt(firstHalfVolume / (8 - hoursElapsed), firstHalfVolume / 8, 'first 8 hours');
     } else if (hoursElapsed < 24) {
-      // Next 16 hours - give second half
-      const hoursRemaining = 24 - hoursElapsed;
-      currentRate = secondHalfVolume / hoursRemaining;
+      currentRate = capAt(secondHalfVolume / (24 - hoursElapsed), secondHalfVolume / 16, 'second 16 hours');
+    } else {
+      notes.push('More than 24 h since the burn — Parkland no longer applies; give maintenance fluid guided by urine output and ongoing losses.');
     }
+
+    // Children: higher urine-output target, and resuscitation fluid is given
+    // on top of dextrose-containing maintenance fluid.
+    const child = (ageYears != null && ageYears < 14) || weightKg < 30;
+    if (child) notes.push('Child: add maintenance fluid (Holliday–Segar, with dextrose) to the resuscitation volume; target urine output 1.0–1.5 mL/kg/h.');
 
     return {
       protocol: 'parkland',
@@ -626,7 +644,8 @@ class BurnCareService {
       firstHalfEndTime,
       resuscitationEndTime,
       rateAdjustments: [],
-      urineOutputTarget: { min: 0.5, max: 1.0 },
+      urineOutputTarget: child ? { min: 1.0, max: 1.5 } : { min: 0.5, max: 1.0 },
+      notes,
     };
   }
 
@@ -640,7 +659,7 @@ class BurnCareService {
     timeOfBurn: Date
   ): ResuscitationPlan {
     const plan = this.calculateParklandFormula(weightKg, tbsa, timeOfBurn);
-    
+
     // Modified Brooke uses 2 mL instead of 4 mL
     plan.protocol = 'modified_brooke';
     plan.totalVolume24h = Math.round(plan.totalVolume24h / 2);
@@ -816,11 +835,11 @@ class BurnCareService {
   generateUrineOutputAlert(urineOutputs: UrineOutput[], targetMin: number): BurnAlert | null {
     // Check last 2 consecutive hours
     const recentOutputs = urineOutputs.slice(-2);
-    
+
     if (recentOutputs.length < 2) return null;
-    
+
     const allBelowTarget = recentOutputs.every(uo => uo.mlPerKgPerHr < targetMin);
-    
+
     if (allBelowTarget) {
       const avgUO = recentOutputs.reduce((sum, uo) => sum + uo.mlPerKgPerHr, 0) / recentOutputs.length;
       return {
@@ -878,7 +897,7 @@ class BurnCareService {
       disposition = 'burn_center';
       reasons.push(`TBSA ≥10% (${tbsa}%)`);
     }
-    
+
     if (hasFullThickness && tbsa >= 5) {
       disposition = 'burn_center';
       reasons.push('Full-thickness burns ≥5% TBSA');
@@ -954,23 +973,23 @@ class BurnCareService {
    */
   getDepthInfo(depth: BurnDepth): { name: string; color: string; description: string } {
     const info: Record<BurnDepth, { name: string; color: string; description: string }> = {
-      'superficial': { 
-        name: 'Superficial (1st Degree)', 
+      'superficial': {
+        name: 'Superficial (1st Degree)',
         color: 'pink',
         description: 'Epidermis only. Red, dry, painful. Heals in 3-5 days without scarring.'
       },
-      'superficial_partial': { 
-        name: 'Superficial Partial (2nd Degree)', 
+      'superficial_partial': {
+        name: 'Superficial Partial (2nd Degree)',
         color: 'red',
         description: 'Epidermis + superficial dermis. Blisters, moist, very painful. Heals in 1-2 weeks.'
       },
-      'deep_partial': { 
-        name: 'Deep Partial (2nd Degree)', 
+      'deep_partial': {
+        name: 'Deep Partial (2nd Degree)',
         color: 'yellow',
         description: 'Into deep dermis. May have blisters, less painful. Heals in 2-4 weeks, may scar.'
       },
-      'full_thickness': { 
-        name: 'Full Thickness (3rd Degree)', 
+      'full_thickness': {
+        name: 'Full Thickness (3rd Degree)',
         color: 'brown',
         description: 'Entire dermis destroyed. Waxy, leathery, painless. Requires grafting.'
       },

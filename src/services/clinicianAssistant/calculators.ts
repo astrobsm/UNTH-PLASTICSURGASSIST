@@ -152,7 +152,14 @@ export interface SepsisAssessment {
   qSOFA: number;
   sirs: number;
   sepsisSuspected: boolean;
+  /**
+   * Sepsis-3 septic shock: MAP < 65 needing vasopressors AND lactate > 2
+   * mmol/L despite fluids. Vasopressor need is not an input here, so this is
+   * "likely" — both markers present — and must be confirmed after fluids.
+   */
   septicShock: boolean;
+  /** Sepsis with either marker of hypoperfusion (MAP < 65 or lactate > 2). */
+  hypoperfusion: boolean;
   /** Each component that scored, so the number can be checked not just trusted. */
   qSOFAComponents: string[];
   sirsComponents: string[];
@@ -165,7 +172,7 @@ export function meanArterialPressure(systolic?: number | null, diastolic?: numbe
 }
 
 /**
- * qSOFA and SIRS, with septic shock flagged on MAP or lactate.
+ * qSOFA and SIRS; septic shock (Sepsis-3) needs low MAP and raised lactate.
  *
  * Components are returned alongside the score. A bedside score that cannot be
  * checked against its inputs invites being trusted when a value was missing.
@@ -198,9 +205,13 @@ export function assessSepsis(vitals: ResuscitationVitals, labs: ResuscitationLab
   const lactate = Number(labs.lactate) || 0;
 
   const sepsisSuspected = qSOFA >= 2 || sirs >= 2;
-  const septicShock = sepsisSuspected && ((map != null && map < 65) || lactate > 2);
+  const lowMap = map != null && map < 65;
+  // Shock needs BOTH (Sepsis-3); either one alone is hypoperfusion — still
+  // urgent, but it was being called septic shock.
+  const septicShock = sepsisSuspected && lowMap && lactate > 2;
+  const hypoperfusion = sepsisSuspected && (lowMap || lactate > 2);
 
-  return { map, qSOFA, sirs, sepsisSuspected, septicShock, qSOFAComponents, sirsComponents };
+  return { map, qSOFA, sirs, sepsisSuspected, septicShock, hypoperfusion, qSOFAComponents, sirsComponents };
 }
 
 export type DehydrationSeverity = 'mild' | 'moderate' | 'severe';

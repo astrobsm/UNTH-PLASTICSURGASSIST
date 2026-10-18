@@ -254,7 +254,9 @@ function Resuscitation({ weightKg }: { weightKg: number }) {
       {(result.sepsisSuspected || result.septicShock) && (
         <div className={`rounded-lg border p-3 ${result.septicShock ? 'bg-red-50 border-red-300' : 'bg-amber-50 border-amber-300'}`}>
           <p className="font-semibold text-sm">
-            {result.septicShock ? 'Septic shock criteria met' : 'Sepsis suspected'}
+            {result.septicShock
+              ? 'Septic shock likely — MAP < 65 and lactate > 2 (Sepsis-3: confirm vasopressor need after fluids)'
+              : result.hypoperfusion ? 'Sepsis with hypoperfusion — resuscitate now' : 'Sepsis suspected'}
           </p>
           <p className="text-xs mt-1">
             Start the sepsis bundle: cultures before antibiotics, broad-spectrum antibiotics within one hour,

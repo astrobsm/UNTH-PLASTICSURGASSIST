@@ -72,10 +72,14 @@ export function acidBase(input: AcidBaseInput): AcidBaseOutput {
     // a hypoalbuminaemic surgical patient an uncorrected gap reads normal while
     // a real lactic acidosis is present.
     if (input.albumin != null && input.albumin > 0) {
-      correctedAnionGap = anionGap + 2.5 * (4 - input.albumin);
+      // Nigerian labs usually report albumin in g/L (e.g. 35); the correction
+      // is in g/dL. A value above 10 can only be g/L, and used as g/dL it gave
+      // a corrected gap of about −77.
+      const albGdL = input.albumin > 10 ? input.albumin / 10 : input.albumin;
+      correctedAnionGap = anionGap + 2.5 * (4 - albGdL);
       if (correctedAnionGap - anionGap >= 2) {
         notes.push(
-          `Albumin ${input.albumin} g/dL: the measured gap of ${anionGap.toFixed(1)} corrects to ` +
+          `Albumin ${albGdL.toFixed(1)} g/dL: the measured gap of ${anionGap.toFixed(1)} corrects to ` +
           `${correctedAnionGap.toFixed(1)}. A low albumin masks a raised anion gap.`
         );
       }
@@ -240,7 +244,9 @@ export function woundHealingMealPlan(input: WoundMealPlanInput | number, legacy?
     ? { weightKg: input, severity: legacy?.largeWound ? 'severe' : 'mild' }
     : input;
 
-  const { weightKg, severity = 'mild', albuminGdL = null, diabetes, ckd, liverDisease } = opts;
+  const { weightKg, severity = 'mild', diabetes, ckd, liverDisease } = opts;
+  // Accept g/L as well (a value above 10 cannot be g/dL).
+  const albuminGdL = opts.albuminGdL != null && opts.albuminGdL > 10 ? opts.albuminGdL / 10 : (opts.albuminGdL ?? null);
 
   let proteinPerKg = 1.5;
   let kcalPerKg = 30;

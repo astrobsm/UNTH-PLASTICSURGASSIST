@@ -33,7 +33,9 @@ const ITEM = (key, label, min, max, source, anchors) =>
 // ---------------------------------------------------------------------------
 
 /**
- * VSS: vascularity, pigmentation, pliability, height. Total 0–13.
+ * Modified Vancouver Scar Scale (Baryza & Baryza 1995): vascularity 0–3,
+ * pigmentation 0–3 (normal / hypo / mixed / hyper), pliability 0–5, height
+ * 0–3. Total 0–14. (The original 1990 VSS scores pigmentation 0–2, total 13.)
  *
  * Pliability is an examination item and stays one — §27 is explicit that it
  * remains physical examination unless independently validated technology is
@@ -68,7 +70,7 @@ export const VSS_ITEMS = [
   ]),
 ];
 
-export const VSS_MAX = VSS_ITEMS.reduce((s, i) => s + i.max, 0); // 14
+export const VSS_MAX = VSS_ITEMS.reduce((s, i) => s + i.max, 0); // 14 (modified VSS)
 
 // ---------------------------------------------------------------------------
 // POSAS v2.0
@@ -155,7 +157,7 @@ export const DKS_MAX = DKS_ITEMS.reduce((s, i) => s + i.max, 0); // 12
 // ---------------------------------------------------------------------------
 
 export const SCALES = {
-  vss: { key: 'vss', name: 'Vancouver Scar Scale', items: VSS_ITEMS, min: 0, max: VSS_MAX, worseIsHigher: true },
+  vss: { key: 'vss', name: 'Vancouver Scar Scale (modified, 0–14)', items: VSS_ITEMS, min: 0, max: VSS_MAX, worseIsHigher: true },
   posas_observer: {
     key: 'posas_observer', name: 'POSAS observer', items: POSAS_OBSERVER_ITEMS,
     min: 6, max: 60, worseIsHigher: true, overall: POSAS_OVERALL.observer,

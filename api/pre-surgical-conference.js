@@ -90,8 +90,8 @@ async function getScheduledPatients(searchParams, res) {
 async function getFullConferenceData(patientId, res) {
   // Get patient info
   const patientResult = await query(
-    `SELECT id, hospital_number, first_name, last_name, full_name, date_of_birth, 
-            gender, blood_group, allergies, medical_history, primary_diagnosis, 
+    `SELECT id, hospital_number, first_name, last_name, full_name, date_of_birth,
+            gender, blood_group, allergies, medical_history, primary_diagnosis,
             secondary_diagnoses, ward, bed_number
      FROM patients WHERE id = $1`, [patientId]
   );
@@ -115,10 +115,10 @@ async function getFullConferenceData(patientId, res) {
     query(`SELECT id, test_type, test_name, results, status, ordered_at, completed_at,
            (SELECT full_name FROM users WHERE id = lo.ordered_by) as ordered_by_name
            FROM lab_orders lo WHERE patient_id = $1 ORDER BY ordered_at DESC`, [patientId]),
-    query(`SELECT id, medication_name, dosage, frequency, duration, route, instructions, 
+    query(`SELECT id, medication_name, dosage, frequency, duration, route, instructions,
            status, prescribed_at,
            (SELECT full_name FROM users WHERE id = pr.prescribed_by) as prescribed_by_name
-           FROM prescriptions pr WHERE patient_id = $1 AND status = 'active' 
+           FROM prescriptions pr WHERE patient_id = $1 AND status = 'active'
            ORDER BY prescribed_at DESC`, [patientId]),
     query(`SELECT id, procedure_name, procedure_type, scheduled_date, estimated_duration,
            anesthesia_type, operating_room, pre_op_notes, required_equipment, status,
@@ -180,11 +180,14 @@ async function getFullConferenceData(patientId, res) {
 }
 
 // Extract comorbidities from patient medical history and secondary diagnoses
-function extractComorbidities(patient) {
+export function extractComorbidities(patient) {
   const comorbidities = [];
 
   // Parse medical history for common comorbidities
   const history = (patient.medical_history || '').toLowerCase();
+  // Whole words only. "/…|pe/" matched the "pe" in hyPErtension, so every
+  // hypertensive patient was shown a severe pulmonary embolism history; "tb"
+  // and "aids" (hearing aids) had the same fault.
   const comorbidityPatterns = [
     { pattern: /diabet(es|ic)/i, name: 'Diabetes Mellitus', severity: 'moderate' },
     { pattern: /hypertens(ion|ive)/i, name: 'Hypertension', severity: 'moderate' },
@@ -192,17 +195,18 @@ function extractComorbidities(patient) {
     { pattern: /heart\s*(disease|failure)/i, name: 'Heart Disease', severity: 'severe' },
     { pattern: /renal\s*(disease|failure|insufficiency)/i, name: 'Renal Disease', severity: 'severe' },
     { pattern: /liver\s*(disease|cirrhosis)/i, name: 'Liver Disease', severity: 'severe' },
-    { pattern: /hiv|aids/i, name: 'HIV/AIDS', severity: 'moderate' },
+    { pattern: /\bhiv\b|(?<!hearing\s{0,3})\baids\b/i, name: 'HIV/AIDS', severity: 'moderate' },
     { pattern: /hepatitis/i, name: 'Hepatitis', severity: 'moderate' },
     { pattern: /sickle\s*cell/i, name: 'Sickle Cell Disease', severity: 'moderate' },
     { pattern: /epilepsy|seizure/i, name: 'Epilepsy', severity: 'moderate' },
-    { pattern: /tuberculosis|tb/i, name: 'Tuberculosis', severity: 'moderate' },
+    { pattern: /tuberculosis|\bp?tb\b/i, name: 'Tuberculosis', severity: 'moderate' },
     { pattern: /obesity|obese/i, name: 'Obesity', severity: 'mild' },
     { pattern: /anemia|anaemia/i, name: 'Anaemia', severity: 'mild' },
     { pattern: /copd/i, name: 'COPD', severity: 'moderate' },
-    { pattern: /stroke|cva/i, name: 'Previous Stroke/CVA', severity: 'severe' },
-    { pattern: /deep\s*vein|dvt/i, name: 'DVT History', severity: 'moderate' },
-    { pattern: /pulmonary\s*embolism|pe/i, name: 'Pulmonary Embolism History', severity: 'severe' },
+    { pattern: /stroke|\bcva\b/i, name: 'Previous Stroke/CVA', severity: 'severe' },
+    { pattern: /deep\s*vein|\bdvt\b/i, name: 'DVT History', severity: 'moderate' },
+    // "PE" only as the capitalised abbreviation, as a word; spelled out, any case.
+    { pattern: /[Pp]ulmonary\s*[Ee]mbol|PULMONARY\s*EMBOL|\bPE\b/, name: 'Pulmonary Embolism History', severity: 'severe' },
   ];
 
   comorbidityPatterns.forEach(({ pattern, name, severity }) => {
@@ -245,9 +249,9 @@ function extractClinicalPhotographs(wardRounds, patientId) {
     // Ward rounds may have clinical_images JSONB or other photo fields
     try {
       const images = typeof round.clinical_images === 'string'
-        ? JSON.parse(round.clinical_images) 
+        ? JSON.parse(round.clinical_images)
         : (round.clinical_images || []);
-      
+
       if (Array.isArray(images)) {
         images.forEach((img, idx) => {
           photos.push({
@@ -272,11 +276,12 @@ function extractAnaesthetistComments(preOpAssessments) {
     id: assessment.id,
     comment: assessment.notes || '',
     anaesthetist_name: assessment.assessed_by || 'Unknown',
-    asa_grade: assessment.asa_class ? `ASA ${assessment.asa_class}` : null,
-    airway_assessment: assessment.mallampati_score 
-      ? `Mallampati ${assessment.mallampati_score}` 
-      : (typeof assessment.airway_assessment === 'object' 
-        ? JSON.stringify(assessment.airway_assessment) 
+    // The page prefixes "ASA"; sent bare so it does not read "ASA ASA 2".
+    asa_grade: assessment.asa_class ? String(assessment.asa_class).replace(/^ASA\s*/i, '') : null,
+    airway_assessment: assessment.mallampati_score
+      ? `Mallampati ${assessment.mallampati_score}`
+      : (typeof assessment.airway_assessment === 'object'
+        ? JSON.stringify(assessment.airway_assessment)
         : assessment.airway_assessment),
     anesthesia_plan: assessment.anesthesia_plan || '',
     created_at: assessment.assessment_date
