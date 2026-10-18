@@ -535,6 +535,16 @@ class ChatService {
   /**
    * Get chat rooms for current user
    */
+  /** Active staff who can be added to a conversation. */
+  async getContacts(): Promise<{ id: string; name: string; role: string }[]> {
+    try {
+      return (await apiClient.get<{ id: string; name: string; role: string }[]>('/chat/contacts')) || [];
+    } catch (error) {
+      logger.warn('Chat: could not load contacts', error);
+      return [];
+    }
+  }
+
   async getRooms(): Promise<ChatRoom[]> {
     // The permanent "API unavailable" latch that used to guard this is gone.
     // It existed because /chat/* had no handler at all, so one 404 was proof

@@ -18,7 +18,6 @@ import {
 } from 'lucide-react';
 import chatService, { ChatRoom, ChatMessage } from '../services/chatService';
 import { useAuthStore } from '../store/authStore';
-import Layout from '../components/Layout';
 
 /**
  * Resolve a message's attachment to something the browser can display.
@@ -105,6 +104,17 @@ const ChatRooms: React.FC = () => {
   const [newRoomName, setNewRoomName] = useState('');
   const [newRoomType, setNewRoomType] = useState<'direct' | 'group'>('group');
   const [newRoomParticipants, setNewRoomParticipants] = useState<string[]>([]);
+  const [contacts, setContacts] = useState<{ id: string; name: string; role: string }[]>([]);
+  const [contactQuery, setContactQuery] = useState('');
+  const [roomsError, setRoomsError] = useState('');
+  const [creating, setCreating] = useState(false);
+
+  // The listeners are registered once; they read the open room through this
+  // ref. Reading `activeRoom` directly froze it at null (the value when the
+  // listener was registered), so messages from others never appeared in the
+  // open conversation.
+  const activeRoomRef = useRef<ChatRoom | null>(null);
+  useEffect(() => { activeRoomRef.current = activeRoom; }, [activeRoom]);
 
   // Refs
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -113,18 +123,22 @@ const ChatRooms: React.FC = () => {
 
   // Initialize chat service
   useEffect(() => {
+    const unsubs: (() => void)[] = [];
     const initChat = async () => {
       if (user) {
         try {
           await chatService.initialize(user.id.toString(), user.name, user.role);
           
-          // Set up event listeners
-          chatService.on('message-received', handleNewMessage);
-          chatService.on('typing-started', handleTypingStarted);
-          chatService.on('typing-stopped', handleTypingStopped);
-          chatService.on('user-online', handleUserOnline);
-          chatService.on('user-offline', handleUserOffline);
-          chatService.on('connection-status', handleConnectionStatus);
+          // Set up event listeners (removed again on unmount, so revisiting
+          // the page does not stack duplicate handlers).
+          unsubs.push(
+            chatService.on('message-received', handleNewMessage as any),
+            chatService.on('typing-started', handleTypingStarted as any),
+            chatService.on('typing-stopped', handleTypingStopped as any),
+            chatService.on('user-online', handleUserOnline as any),
+            chatService.on('user-offline', handleUserOffline as any),
+            chatService.on('connection-status', handleConnectionStatus as any),
+          );
 
           // Load rooms
           await loadRooms();
@@ -137,18 +151,21 @@ const ChatRooms: React.FC = () => {
     initChat();
 
     return () => {
+      unsubs.forEach(u => { try { u(); } catch { /* already removed */ } });
       chatService.disconnect();
     };
-  }, [user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   // Load room from URL
+  // Only when the URL names a different room from the open one: the room list
+  // changes on every incoming message, and re-selecting on each change
+  // refetched the whole history in a loop.
   useEffect(() => {
-    if (roomId && rooms.length > 0) {
-      const room = rooms.find(r => r.id === roomId);
-      if (room) {
-        selectRoom(room);
-      }
-    }
+    if (!roomId || rooms.length === 0 || activeRoomRef.current?.id === roomId) return;
+    const room = rooms.find(r => r.id === roomId);
+    if (room) selectRoom(room);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId, rooms]);
 
   // Poll the open room for messages other people send.
@@ -173,9 +190,12 @@ const ChatRooms: React.FC = () => {
 
   // Event handlers
   const handleNewMessage = (message: ChatMessage) => {
-    if (activeRoom && message.roomId === activeRoom.id) {
-      setMessages(prev => [...prev, message]);
-      chatService.markAsRead(activeRoom.id, [message.id]);
+    const open = activeRoomRef.current;
+    if (open && message.roomId === open.id) {
+      // The poller may report a message already shown (our own, or one
+      // loaded with the history) — never show it twice.
+      setMessages(prev => (prev.some(m => m.id === message.id) ? prev : [...prev, message]));
+      chatService.markAsRead(open.id, [message.id]);
     }
     
     // Update room list with last message
@@ -184,7 +204,7 @@ const ChatRooms: React.FC = () => {
         return {
           ...room,
           lastMessage: message,
-          unreadCount: activeRoom?.id === room.id ? 0 : room.unreadCount + 1,
+          unreadCount: activeRoomRef.current?.id === room.id ? 0 : (room.unreadCount || 0) + 1,
           updatedAt: new Date(),
         };
       }
@@ -219,40 +239,25 @@ const ChatRooms: React.FC = () => {
   };
 
   // Load rooms
+  // No invented rooms on failure: a fake "General Discussion" that cannot hold
+  // a message is worse than saying the list could not be loaded.
   const loadRooms = async () => {
     setIsLoading(true);
+    setRoomsError('');
     try {
       const fetchedRooms = await chatService.getRooms();
       setRooms(fetchedRooms);
     } catch (error) {
       console.error('Failed to load rooms:', error);
-      // Mock data for development
-      setRooms([
-        {
-          id: 'room-1',
-          name: 'General Discussion',
-          type: 'group',
-          participants: [],
-          unreadCount: 2,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          isActive: true,
-        },
-        {
-          id: 'room-2',
-          name: 'Surgical Team',
-          type: 'group',
-          participants: [],
-          unreadCount: 0,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          isActive: true,
-        },
-      ]);
+      setRoomsError('Could not load your conversations. Check the connection and try again.');
     } finally {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (showNewRoomDialog && contacts.length === 0) chatService.getContacts().then(setContacts);
+  }, [showNewRoomDialog, contacts.length]);
 
   // Select room
   const selectRoom = async (room: ChatRoom) => {
@@ -263,8 +268,13 @@ const ChatRooms: React.FC = () => {
     await chatService.joinRoom(room.id);
     
     // Load messages
+    setMessages([]);
     const fetchedMessages = await chatService.getMessages(room.id);
-    setMessages(fetchedMessages);
+    if (activeRoomRef.current?.id !== room.id && activeRoomRef.current !== null) return; // switched away meanwhile
+    setMessages(prev => {
+      const ids = new Set(fetchedMessages.map(m => m.id));
+      return [...fetchedMessages, ...prev.filter(m => !ids.has(m.id))];
+    });
     
     // Mark as read
     if (fetchedMessages.length > 0) {
@@ -324,20 +334,25 @@ const ChatRooms: React.FC = () => {
 
   // Create new room
   const createRoom = async () => {
-    if (!newRoomName.trim()) return;
+    const directWith = newRoomType === 'direct' ? contacts.find(c => c.id === newRoomParticipants[0]) : undefined;
+    const name = newRoomName.trim() || directWith?.name || '';
+    if (!name) return;
+    if (newRoomType === 'direct' && newRoomParticipants.length !== 1) return;
+    if (newRoomType === 'group' && newRoomParticipants.length === 0) return;
 
-    const room = await chatService.createRoom(
-      newRoomName,
-      newRoomType,
-      newRoomParticipants
-    );
-
-    if (room) {
-      setRooms(prev => [room, ...prev]);
-      selectRoom(room);
-      setShowNewRoomDialog(false);
-      setNewRoomName('');
-      setNewRoomParticipants([]);
+    setCreating(true);
+    try {
+      const room = await chatService.createRoom(name, newRoomType, newRoomParticipants);
+      if (room) {
+        setRooms(prev => [room, ...prev.filter(r => r.id !== room.id)]);
+        selectRoom(room);
+        setShowNewRoomDialog(false);
+        setNewRoomName('');
+        setNewRoomParticipants([]);
+        setContactQuery('');
+      }
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -389,10 +404,11 @@ const ChatRooms: React.FC = () => {
   const commonEmojis = ['👍', '❤️', '😂', '😮', '😢', '👏', '🔥', '🎉'];
 
   return (
-    <Layout>
-      <div className="h-[calc(100vh-64px)] flex bg-white dark:bg-gray-900">
+    // The app's Layout already wraps every route; wrapping again here drew a
+    // second sidebar and header inside the page.
+      <div className="h-[calc(100dvh-9rem)] min-h-[420px] flex bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
         {/* Rooms sidebar */}
-        <div className={`w-80 border-r border-gray-200 dark:border-gray-700 flex flex-col ${activeRoom ? 'hidden md:flex' : 'flex'}`}>
+        <div className={`w-full md:w-80 shrink-0 border-r border-gray-200 dark:border-gray-700 flex flex-col min-h-0 ${activeRoom ? 'hidden md:flex' : 'flex'}`}>
           {/* Header */}
           <div className="p-4 border-b border-gray-200 dark:border-gray-700">
             <div className="flex items-center justify-between mb-4">
@@ -423,6 +439,11 @@ const ChatRooms: React.FC = () => {
             {isLoading ? (
               <div className="flex items-center justify-center py-8">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
+              </div>
+            ) : roomsError ? (
+              <div className="text-center py-8 px-4 text-sm text-red-700">
+                <p>{roomsError}</p>
+                <button onClick={loadRooms} className="mt-3 px-3 py-1.5 border border-red-300 rounded-lg hover:bg-red-50">Retry</button>
               </div>
             ) : filteredRooms.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
@@ -775,7 +796,7 @@ const ChatRooms: React.FC = () => {
         {/* New Room Dialog */}
         {showNewRoomDialog && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-0 sm:p-4">
-            <div className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-md w-full">
+            <div className="bg-white dark:bg-gray-800 rounded-none sm:rounded-xl p-4 sm:p-6 max-w-md w-full h-full sm:h-auto overflow-y-auto">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-bold text-gray-900 dark:text-white">New Conversation</h2>
                 <button
@@ -829,6 +850,41 @@ const ChatRooms: React.FC = () => {
                     </button>
                   </div>
                 </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    {newRoomType === 'direct' ? 'Person' : `Participants (${newRoomParticipants.length})`}
+                  </label>
+                  <input
+                    type="text"
+                    value={contactQuery}
+                    onChange={(e) => setContactQuery(e.target.value)}
+                    placeholder="Search staff by name or role…"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm text-gray-900 dark:text-white"
+                  />
+                  <div className="mt-2 max-h-48 overflow-y-auto border border-gray-200 dark:border-gray-600 rounded-lg divide-y divide-gray-100 dark:divide-gray-700">
+                    {contacts
+                      .filter(c => !contactQuery.trim() || `${c.name} ${c.role}`.toLowerCase().includes(contactQuery.trim().toLowerCase()))
+                      .slice(0, 60)
+                      .map(c => {
+                        const on = newRoomParticipants.includes(c.id);
+                        return (
+                          <label key={c.id} className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700">
+                            <input
+                              type={newRoomType === 'direct' ? 'radio' : 'checkbox'}
+                              name="chat-participant"
+                              checked={on}
+                              onChange={() => setNewRoomParticipants(prev =>
+                                newRoomType === 'direct' ? [c.id] : on ? prev.filter(x => x !== c.id) : [...prev, c.id])}
+                            />
+                            <span className="flex-1 text-gray-900 dark:text-white truncate">{c.name}</span>
+                            <span className="text-xs text-gray-500 capitalize">{c.role.replace(/_/g, ' ')}</span>
+                          </label>
+                        );
+                      })}
+                    {contacts.length === 0 && <p className="px-3 py-3 text-xs text-gray-500">Loading staff…</p>}
+                  </div>
+                </div>
               </div>
 
               <div className="flex gap-3 mt-6">
@@ -840,17 +896,17 @@ const ChatRooms: React.FC = () => {
                 </button>
                 <button
                   onClick={createRoom}
-                  disabled={!newRoomName.trim()}
+                  disabled={creating
+                    || (newRoomType === 'direct' ? newRoomParticipants.length !== 1 : (!newRoomName.trim() || newRoomParticipants.length === 0))}
                   className="flex-1 py-2 px-4 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
-                  Create
+                  {creating ? 'Creating…' : 'Create'}
                 </button>
               </div>
             </div>
           </div>
         )}
       </div>
-    </Layout>
   );
 };
 

@@ -250,21 +250,50 @@ async function createRoom(body, user, res) {
     ? body.type
     : 'group';
 
-  const id = String(body?.id || '').trim() ||
-    `chat-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+  // Only real, active, approved staff can be added.
+  const requested = (Array.isArray(body?.participantIds) ? body.participantIds : [])
+    .map(Number).filter(n => Number.isFinite(n) && n !== Number(user.id));
+  const valid = requested.length
+    ? (await query(
+        `SELECT id FROM users WHERE id = ANY($1::int[]) AND is_active = TRUE AND COALESCE(is_approved, TRUE) = TRUE`,
+        [requested])).rows.map(r => Number(r.id))
+    : [];
+  if (type === 'direct' && valid.length !== 1) {
+    return res.status(400).json({ error: 'A direct conversation needs exactly one other person' });
+  }
+
+  // A direct conversation between the same two people is reused, not duplicated.
+  if (type === 'direct') {
+    const existing = (await query(
+      `SELECT r.* FROM chat_rooms r
+        WHERE r.type = 'direct' AND r.is_active
+          AND (SELECT COUNT(*) FROM chat_participants p WHERE p.room_id = r.id) = 2
+          AND EXISTS (SELECT 1 FROM chat_participants p WHERE p.room_id = r.id AND p.user_id = $1)
+          AND EXISTS (SELECT 1 FROM chat_participants p WHERE p.room_id = r.id AND p.user_id = $2)
+        LIMIT 1`,
+      [user.id, valid[0]])).rows[0];
+    if (existing) return res.status(200).json(toRoom(existing, [], undefined));
+  }
+
+  // The client proposes an id so the room it navigates into is the one stored.
+  // An id that already exists belongs to someone else's room: posting it used
+  // to add the caller as a participant of that room (ON CONFLICT DO NOTHING,
+  // then the participant insert), which let anyone join any conversation whose
+  // id they knew. A taken id now gets a fresh one instead.
+  let id = String(body?.id || '').trim();
+  if (!/^[\w-]{6,80}$/.test(id) || (await query('SELECT 1 FROM chat_rooms WHERE id = $1', [id])).rows.length) {
+    id = `chat-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+  }
 
   await query(
     `INSERT INTO chat_rooms (id, name, type, patient_id, created_by)
-     VALUES ($1, $2, $3, $4, $5)
-     ON CONFLICT (id) DO NOTHING`,
+     VALUES ($1, $2, $3, $4, $5)`,
     [id, name, type, body?.patientId ? Number(body.patientId) : null, user.id]
   );
 
   // The creator is always a participant; without that they could create a room
   // and immediately not see it.
-  const participantIds = Array.isArray(body?.participantIds) ? body.participantIds : [];
-  const members = [...new Set([user.id, ...participantIds.map(Number)])]
-    .filter(n => Number.isFinite(n));
+  const members = [...new Set([Number(user.id), ...valid])].filter(n => Number.isFinite(n));
 
   for (const uid of members) {
     await query(
@@ -463,6 +492,15 @@ export default async function handler(req, res) {
       if (parts[2] === 'read' && req.method === 'POST') {
         return await markRead(roomId, userId, res);
       }
+    }
+
+    // Staff who can be added to a conversation.
+    if (parts[0] === 'contacts' && req.method === 'GET') {
+      const r = await query(
+        `SELECT id, full_name, role FROM users
+          WHERE is_active = TRUE AND COALESCE(is_approved, TRUE) = TRUE AND id <> $1
+          ORDER BY full_name`, [userId]);
+      return res.status(200).json(r.rows.map(u => ({ id: String(u.id), name: u.full_name || 'Unknown', role: u.role || '' })));
     }
 
     if (parts[0] === 'messages' && parts[1] === 'search' && req.method === 'GET') {

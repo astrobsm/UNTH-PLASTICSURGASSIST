@@ -221,8 +221,11 @@ describe('creating a room', () => {
   it('always adds the creator as a participant', async () => {
     // A room its creator is not in would be invisible to them the moment the
     // page reloaded, and would reject every message they posted into it.
-    respond([ONE_ROOM, [{ id: 'r-new', name: 'Burns MDT', type: 'group', is_active: true,
-      created_at: 'x', updated_at: 'x' }]]);
+    respond(
+      [/SELECT id FROM users WHERE id = ANY/i, [{ id: 9 }]],
+      [ONE_ROOM, [{ id: 'r-new', name: 'Burns MDT', type: 'group', is_active: true,
+        created_at: 'x', updated_at: 'x' }]],
+    );
 
     await call('POST', '/api/chat/rooms', { name: 'Burns MDT', type: 'group', participantIds: [9] });
 
@@ -230,6 +233,23 @@ describe('creating a room', () => {
     const users = inserts.map(c => c[1][1]);
     expect(users).toContain(USER.id);
     expect(users).toContain(9);
+  });
+
+  it('only adds participants who are active staff', async () => {
+    respond([/SELECT id FROM users WHERE id = ANY/i, [{ id: 9 }]]);
+    await call('POST', '/api/chat/rooms', { name: 'MDT', type: 'group', participantIds: [9, 404] });
+    const users = query.mock.calls.filter(c => /INSERT INTO chat_participants/i.test(c[0])).map(c => c[1][1]);
+    expect(users).toContain(9);
+    expect(users).not.toContain(404);
+  });
+
+  it('never joins the caller to an existing room by reusing its id', async () => {
+    // Posting someone else's room id used to add the caller to that room.
+    respond([/SELECT 1 FROM chat_rooms WHERE id/i, [{ '?column?': 1 }]]);
+    await call('POST', '/api/chat/rooms', { id: 'chat-someone-elses', name: 'x', type: 'group' });
+    const roomIds = query.mock.calls.filter(c => /INSERT INTO chat_participants/i.test(c[0])).map(c => c[1][0]);
+    expect(roomIds.length).toBeGreaterThan(0);
+    expect(roomIds).not.toContain('chat-someone-elses');
   });
 
   it('requires a name', async () => {

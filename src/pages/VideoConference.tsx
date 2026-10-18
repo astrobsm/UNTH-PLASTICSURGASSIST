@@ -185,6 +185,13 @@ export default function VideoConference() {
     return () => window.removeEventListener('pagehide', onUnload);
   }, [roomId]);
 
+  // Leaving the page any other way (back button, a link) hangs up too —
+  // otherwise the camera stayed on and the peers kept a dead tile.
+  useEffect(() => () => {
+    void apiClient.post('/conference-attendance', { action: 'leave', roomId }).catch(() => {});
+    void videoConferenceService.leaveRoom();
+  }, [roomId]);
+
   // ── actions ───────────────────────────────────────────────────────────────
 
   const leave = useCallback(async () => {
@@ -330,7 +337,11 @@ export default function VideoConference() {
         </main>
 
         {(showPeople || showChat) && (
-          <aside className="w-72 shrink-0 border-l border-slate-700 bg-slate-800 flex flex-col min-h-0">
+          <aside className="fixed inset-x-0 bottom-0 top-[52px] z-40 sm:static sm:z-auto sm:w-72 shrink-0 border-l border-slate-700 bg-slate-800 flex flex-col min-h-0">
+            <button onClick={() => { setShowPeople(false); setShowChat(false); }}
+              className="sm:hidden self-end m-2 p-2 rounded-lg bg-slate-700 hover:bg-slate-600" aria-label="Close panel">
+              <X className="w-4 h-4" />
+            </button>
             {showPeople && (
               <PeoplePanel
                 participants={participants} selfId={selfId} isHost={isHost}

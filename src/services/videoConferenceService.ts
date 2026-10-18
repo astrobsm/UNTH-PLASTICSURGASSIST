@@ -89,6 +89,8 @@ class VideoConferenceService {
   private screenStream: MediaStream | null = null;
   private peerConnections = new Map<string, RTCPeerConnection>();
   private remoteStreams = new Map<string, MediaStream>();
+  /** ICE candidates that arrived before the peer's remote description. */
+  private pendingIce = new Map<string, RTCIceCandidateInit[]>();
   private signalling: ConferenceSignalling | null = null;
   private unsubscribes: Array<() => void> = [];
   private listeners = new Map<string, Set<ConferenceEventListener>>();
@@ -191,22 +193,41 @@ class VideoConferenceService {
     this.emit('screen-share-stopped');
   }
 
+  /**
+   * Every peer connection carries one audio and one video transceiver from the
+   * start, sending or not. Outgoing media is then always a replaceTrack on the
+   * right transceiver — no renegotiation. Previously a participant who joined
+   * with the camera off and turned it on later called addTrack without a new
+   * offer, so nobody ever saw them.
+   */
+  private senderFor(pc: RTCPeerConnection, kind: 'audio' | 'video'): RTCRtpSender | undefined {
+    // Every transceiver has a receiver track of its kind, sending or not.
+    return pc.getTransceivers().find((x) => x.receiver.track?.kind === kind)?.sender;
+  }
+
+  private attachLocalTracks(pc: RTCPeerConnection) {
+    for (const kind of ['audio', 'video'] as const) {
+      const track = kind === 'video'
+        ? (this.screenStream?.getVideoTracks()[0] || this.localStream?.getVideoTracks()[0] || null)
+        : (this.localStream?.getAudioTracks()[0] || null);
+      const tr = pc.getTransceivers().find((x) => x.receiver.track?.kind === kind);
+      if (!tr) continue;
+      if (tr.direction !== 'sendrecv') {
+        try { tr.direction = 'sendrecv'; } catch { /* closed */ }
+      }
+      void tr.sender.replaceTrack(track).catch(() => { /* peer closed */ });
+    }
+  }
+
   /** Swaps the outgoing video on every peer without a renegotiation. */
   private replaceVideoTrack(track: MediaStreamTrack) {
     this.peerConnections.forEach((pc) => {
-      const sender = pc.getSenders().find((s) => s.track?.kind === 'video');
-      void sender?.replaceTrack(track);
+      void this.senderFor(pc, 'video')?.replaceTrack(track).catch(() => {});
     });
   }
 
-  private replaceOutgoingTracks(stream: MediaStream) {
-    this.peerConnections.forEach((pc) => {
-      stream.getTracks().forEach((track) => {
-        const sender = pc.getSenders().find((s) => s.track?.kind === track.kind);
-        if (sender) void sender.replaceTrack(track);
-        else pc.addTrack(track, stream);
-      });
-    });
+  private replaceOutgoingTracks(_stream: MediaStream) {
+    this.peerConnections.forEach((pc) => this.attachLocalTracks(pc));
   }
 
   // ── rooms ─────────────────────────────────────────────────────────────────
@@ -223,7 +244,13 @@ class VideoConferenceService {
     settings?: Partial<RoomSettings>,
   ): Promise<ConferenceRoom | null> {
     // Short enough to read aloud on a ward round, long enough not to collide.
-    const roomId = `${type === 'pre_surgical' ? 'psc' : 'psa'}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+    // The channel is reachable by anyone who knows the id, so the random part
+    // is long enough not to be guessed.
+    const rand = (() => {
+      try { return Array.from(crypto.getRandomValues(new Uint8Array(6)), (b) => b.toString(36).padStart(2, '0')).join(''); }
+      catch { return Math.random().toString(36).slice(2, 12); }
+    })();
+    const roomId = `${type === 'pre_surgical' ? 'psc' : 'psa'}-${Date.now().toString(36)}-${rand}`;
     this.currentRoom = {
       id: roomId,
       name,
@@ -297,6 +324,7 @@ class VideoConferenceService {
     this.peerConnections.forEach((pc) => pc.close());
     this.peerConnections.clear();
     this.remoteStreams.clear();
+    this.pendingIce.clear();
 
     this.unsubscribes.forEach((u) => u());
     this.unsubscribes = [];
@@ -323,27 +351,48 @@ class VideoConferenceService {
 
     this.unsubscribes.push(
       s.on('offer', async (m) => {
-        const pc = this.peerFor(m.from);
-        await pc.setRemoteDescription(new RTCSessionDescription(m.sdp));
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        await s.send({ kind: 'answer', from: s.self.id, to: m.from, sdp: answer });
+        try {
+          // A fresh offer from a peer we already hold (they reloaded) replaces
+          // the old connection rather than colliding with it.
+          const old = this.peerConnections.get(m.from);
+          if (old && old.signalingState !== 'stable') this.dropPeer(m.from, false);
+          const pc = this.peerFor(m.from, false);
+          await pc.setRemoteDescription(new RTCSessionDescription(m.sdp));
+          this.attachLocalTracks(pc);
+          await this.flushIce(m.from);
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          await s.send({ kind: 'answer', from: s.self.id, to: m.from, sdp: answer });
+        } catch (e) {
+          console.warn('conference: could not answer', e);
+        }
       }),
 
       s.on('answer', async (m) => {
         const pc = this.peerConnections.get(m.from);
         // An answer for a connection we no longer hold is stale, not an error.
-        if (pc && pc.signalingState !== 'stable') {
-          await pc.setRemoteDescription(new RTCSessionDescription(m.sdp));
+        if (pc && pc.signalingState === 'have-local-offer') {
+          try {
+            await pc.setRemoteDescription(new RTCSessionDescription(m.sdp));
+            await this.flushIce(m.from);
+          } catch (e) {
+            console.warn('conference: bad answer', e);
+          }
         }
       }),
 
       s.on('ice', async (m) => {
-        try {
-          await this.peerConnections.get(m.from)?.addIceCandidate(new RTCIceCandidate(m.candidate));
-        } catch {
-          // Candidates can arrive before the remote description; harmless.
+        const pc = this.peerConnections.get(m.from);
+        // Candidates often arrive before the remote description. They used to
+        // be thrown away, which on hospital networks (where the first
+        // candidates are often the only ones that work) meant no media.
+        if (!pc || !pc.remoteDescription) {
+          const q = this.pendingIce.get(m.from) || [];
+          q.push(m.candidate);
+          this.pendingIce.set(m.from, q);
+          return;
         }
+        try { await pc.addIceCandidate(new RTCIceCandidate(m.candidate)); } catch { /* stale */ }
       }),
 
       s.on('chat', (m) => this.emit('message-received', {
@@ -385,14 +434,30 @@ class VideoConferenceService {
     this.emit('participants-changed', this.currentRoom.participants);
   }
 
-  private peerFor(peerId: string): RTCPeerConnection {
+  private async flushIce(peerId: string) {
+    const pc = this.peerConnections.get(peerId);
+    const q = this.pendingIce.get(peerId);
+    if (!pc || !q?.length) return;
+    this.pendingIce.delete(peerId);
+    for (const c of q) {
+      try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch { /* stale */ }
+    }
+  }
+
+  private peerFor(peerId: string, asOfferer = true): RTCPeerConnection {
     const existing = this.peerConnections.get(peerId);
     if (existing) return existing;
 
     const pc = new RTCPeerConnection({ iceServers: this.signalling?.iceServers ?? [] });
     this.peerConnections.set(peerId, pc);
 
-    this.localStream?.getTracks().forEach((t) => pc.addTrack(t, this.localStream!));
+    // The offerer creates the audio and video transceivers; the answerer gets
+    // them from the offer. Either way media is attached with replaceTrack.
+    if (asOfferer) {
+      pc.addTransceiver('audio', { direction: 'sendrecv' });
+      pc.addTransceiver('video', { direction: 'sendrecv' });
+      this.attachLocalTracks(pc);
+    }
 
     pc.onicecandidate = (e) => {
       if (e.candidate && this.signalling) {
@@ -403,8 +468,11 @@ class VideoConferenceService {
     };
 
     pc.ontrack = (e) => {
-      const [stream] = e.streams;
-      if (!stream) return;
+      // A track sent through a transceiver may arrive without a stream; the
+      // peer's tracks are gathered into one stream of our own.
+      let stream = this.remoteStreams.get(peerId) || e.streams[0];
+      if (!stream) stream = new MediaStream();
+      if (!stream.getTracks().includes(e.track)) stream.addTrack(e.track);
       this.remoteStreams.set(peerId, stream);
       this.emit('stream-added', { participantId: peerId, stream });
       if (this.signalling) this.syncParticipants(this.signalling.participants());
@@ -429,11 +497,12 @@ class VideoConferenceService {
     await this.signalling.send({ kind: 'offer', from: this.signalling.self.id, to: peerId, sdp: offer });
   }
 
-  private dropPeer(peerId: string) {
+  private dropPeer(peerId: string, announce = true) {
     this.peerConnections.get(peerId)?.close();
     this.peerConnections.delete(peerId);
     this.remoteStreams.delete(peerId);
-    this.emit('participant-left', { participantId: peerId });
+    this.pendingIce.delete(peerId);
+    if (announce) this.emit('participant-left', { participantId: peerId });
   }
 
   // ── host controls ─────────────────────────────────────────────────────────
@@ -447,6 +516,10 @@ class VideoConferenceService {
    */
   async hostControl(action: ControlAction, target: string | 'all') {
     if (!this.signalling) return;
+    if (!this.isHost()) {
+      this.emit('error', { code: 'NOT_HOST', message: 'Only the host can do that.' });
+      return;
+    }
     await this.signalling.send({
       kind: 'control', from: this.signalling.self.id, to: target, action,
     });
@@ -455,6 +528,9 @@ class VideoConferenceService {
   }
 
   private applyControl(action: ControlAction, from: string) {
+    // Only the host's instructions are obeyed. Any participant could otherwise
+    // mute everyone or end the meeting by sending the same message.
+    if (from !== this.localParticipant?.id && !this.isHost(from)) return;
     switch (action) {
       case 'mute-audio':
         if (this.localParticipant?.audioEnabled) this.toggleAudio();
