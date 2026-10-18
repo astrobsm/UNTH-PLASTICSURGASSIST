@@ -117,7 +117,7 @@ export const learningContentService = {
    * Randomised server-side and returned without the answers — marking happens
    * on submission, so reading the network traffic tells a candidate nothing.
    */
-  questions(limit = 25, topicId?: string): Promise<{ questions: TestQuestion[]; total: number }> {
+  questions(limit = 25, topicId?: string): Promise<{ questions: TestQuestion[]; total: number; drawSeed?: string }> {
     const qs = new URLSearchParams({ action: 'questions', limit: String(limit) });
     if (topicId) qs.set('topicId', topicId);
     return apiClient.get(`/learning-content?${qs.toString()}`);
@@ -137,10 +137,26 @@ export const learningContentService = {
    */
   submitTest(payload: {
     answers: Record<string, string>;
+    /** From questions(): the options were shuffled for this draw. */
+    drawSeed?: string;
     startedAt?: string;
     durationSeconds?: number;
   }): Promise<TestResult> {
     return apiClient.post('/learning-content?action=submit-test', payload);
+  },
+
+  /**
+   * This learner's weekly CBT paper from the question bank — never a question
+   * from their earlier papers or tests. Null when the bank has nothing at
+   * their level (the app then builds the paper itself).
+   */
+  async cbtPaper(testNumber: number, cycle: number, count = 25): Promise<{ questions: any[]; source: 'bank' } | null> {
+    try {
+      const r: any = await apiClient.get(`/learning-content?action=cbt-paper&test=${testNumber}&cycle=${cycle}&count=${count}`, { freshRead: true });
+      return Array.isArray(r?.questions) && r.questions.length ? r : null;
+    } catch {
+      return null;
+    }
   },
 
   /** Records the posting a student is on, which opens their rotation too. */

@@ -60,6 +60,8 @@ export function PoolTestRunner({ onBack, count = 25, topicId, topicName, onFinis
   const [remaining, setRemaining] = useState(0);
 
   const startedAt = useRef<string>(new Date().toISOString());
+  /** Options are shuffled per draw; the seed lets the server mark them. */
+  const drawSeed = useRef<string | undefined>(undefined);
   const startedMs = useRef<number>(Date.now());
 
   const load = useCallback(async () => {
@@ -71,6 +73,7 @@ export function PoolTestRunner({ onBack, count = 25, topicId, topicName, onFinis
         setError('There are no questions at your level yet. Tell your administrator.');
       }
       setQuestions(r.questions);
+      drawSeed.current = r.drawSeed;
       setAnswers({});
       setFlagged(new Set());
       setIndex(0);
@@ -100,6 +103,7 @@ export function PoolTestRunner({ onBack, count = 25, topicId, topicName, onFinis
     try {
       const r = await learningContentService.submitTest({
         answers,
+        drawSeed: drawSeed.current,
         startedAt: startedAt.current,
         durationSeconds: Math.round((Date.now() - startedMs.current) / 1000),
       });

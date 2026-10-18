@@ -19,6 +19,9 @@
 import { query } from './_lib/db.js';
 import { cors, authenticateRequest } from './_lib/auth.js';
 import { normalizeLevel, getRequirements } from './_lib/traineeScoring.js';
+import {
+  drawQuestions, newDrawSeed, shuffleRow, toOriginalLetter, toDisplayedLetter, ensureCbtPapers, normaliseStem,
+} from './_lib/questionDraw.js';
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
@@ -66,7 +69,12 @@ export default async function handler(req, res) {
     }
 
     if (action === 'questions') {
-      return res.status(200).json(await questionSet(req, res, categories));
+      return res.status(200).json(await questionSet(req, categories, { learnerKind, learnerId }));
+    }
+
+    if (action === 'cbt-paper') {
+      const paper = await cbtPaper(req, categories, { learnerKind, learnerId, level });
+      return paper ? res.status(200).json(paper) : res.status(404).json({ error: 'No question bank at your level yet' });
     }
 
     if (action === 'article') {
@@ -141,14 +149,21 @@ async function surgeryLevels() {
  * — a level nobody has configured — the category matching the level's own name
  * is used, so a new posting is not silently empty.
  */
+const CURRICULUM_KEYS = {
+  // level_curriculum is keyed by role; scoring names the stage.
+  junior_resident: ['junior_resident', 'junior_registrar', 'registrar'],
+  senior_resident: ['senior_resident', 'senior_registrar'],
+};
+
 export async function categoriesFor(level) {
+  const key = level.startsWith('surgery_') ? `student_${level}` : level;
   const configured = (await query(
-    `SELECT c.id, c.name, c.code, c.level::text AS level
+    `SELECT DISTINCT c.id, c.name, c.code, c.level::text AS level
      FROM level_curriculum lc
      JOIN rotation_categories c ON c.id = lc.category_id
-     WHERE lc.training_level = $1 AND c.is_active
+     WHERE lc.training_level = ANY($1::text[]) AND c.is_active
      ORDER BY c.level`,
-    [level.startsWith('surgery_') ? `student_${level}` : level],
+    [CURRICULUM_KEYS[key] || [key]],
   )).rows;
   if (configured.length) return configured;
 
@@ -213,36 +228,92 @@ async function articlesFor(categories, learnerKind, learnerId) {
  * checked on the server when the attempt is submitted, so a candidate reading
  * the network traffic learns nothing.
  */
-async function questionSet(req, res, categories) {
+async function questionSet(req, categories, { learnerKind, learnerId }) {
   const ids = categories.map((c) => c.id);
   const limit = Math.min(Math.max(Number(req.query.limit) || 25, 1), 100);
   const topicId = req.query.topicId || null;
 
   if (!ids.length) return { questions: [], total: 0 };
 
-  const rows = (await query(
-    `SELECT q.id, q.question_text, q.option_a, q.option_b, q.option_c, q.option_d, q.option_e,
-            q.difficulty::text AS difficulty, t.name AS topic
-     FROM questions q
-     LEFT JOIN topics t ON t.id = q.topic_id
-     WHERE q.category_id = ANY($1) AND q.is_active
-       AND ($2::uuid IS NULL OR q.topic_id = $2::uuid)
-     ORDER BY random()
-     LIMIT $3`,
-    [ids, topicId, limit],
-  )).rows;
+  // Unseen first, one row per stem, options shuffled for this draw. The seed
+  // comes back with the answers so they can be mapped to the stored key.
+  const drawSeed = newDrawSeed();
+  const rows = await drawQuestions({ categoryIds: ids, learnerKind, learnerId, limit, topicId });
 
   return {
+    drawSeed,
     questions: rows.map((q) => ({
       id: q.id,
       question: q.question_text,
       topic: q.topic,
       difficulty: q.difficulty,
-      options: {
-        A: q.option_a, B: q.option_b, C: q.option_c, D: q.option_d, E: q.option_e,
-      },
+      options: shuffleRow(q, drawSeed).options,
     })),
     total: rows.length,
+  };
+}
+
+/**
+ * This learner's own weekly CBT paper: drawn once from the bank (never a
+ * question from their earlier papers or bank tests), kept, and returned the
+ * same way if they open it again. Sent with its key, because the weekly CBT
+ * runs and marks on the device so it can work offline.
+ */
+async function cbtPaper(req, categories, { learnerKind, learnerId, level }) {
+  const ids = categories.map((c) => c.id);
+  if (!ids.length) return null;
+  const testNumber = Math.max(1, Math.min(200, Number(req.query.test) || 1));
+  const cycle = Math.max(1, Math.min(50, Number(req.query.cycle) || 1));
+  const count = Math.max(5, Math.min(50, Number(req.query.count) || 25));
+  await ensureCbtPapers();
+
+  let paper = (await query(
+    `SELECT * FROM cbt_papers WHERE learner_kind = $1 AND learner_id = $2 AND level = $3 AND cycle = $4 AND test_number = $5`,
+    [learnerKind, Number(learnerId), level, cycle, testNumber],
+  )).rows[0];
+
+  let rows;
+  if (paper) {
+    rows = (await query(
+      `SELECT q.id, q.question_text, q.option_a, q.option_b, q.option_c, q.option_d, q.option_e,
+              q.correct_option, q.explanation, t.name AS topic
+         FROM questions q LEFT JOIN topics t ON t.id = q.topic_id
+        WHERE q.id = ANY($1::uuid[])`,
+      [paper.question_ids],
+    )).rows;
+    const order = new Map(paper.question_ids.map((id, i) => [String(id), i]));
+    rows.sort((a, b) => order.get(String(a.id)) - order.get(String(b.id)));
+  } else {
+    rows = await drawQuestions({ categoryIds: ids, learnerKind, learnerId, limit: count, withKey: true });
+    if (!rows.length) return null;
+    const seed = newDrawSeed();
+    paper = (await query(
+      `INSERT INTO cbt_papers (learner_kind, learner_id, level, cycle, test_number, seed, question_ids, stems)
+       VALUES ($1,$2,$3,$4,$5,$6,$7::uuid[],$8::text[])
+       ON CONFLICT (learner_kind, learner_id, level, cycle, test_number) DO NOTHING
+       RETURNING *`,
+      [learnerKind, Number(learnerId), level, cycle, testNumber, seed, rows.map(r => r.id), rows.map(r => normaliseStem(r.question_text))],
+    )).rows[0];
+    if (!paper) return cbtPaper(req, categories, { learnerKind, learnerId, level }); // drawn concurrently elsewhere
+  }
+
+  return {
+    source: 'bank',
+    level, cycle, testNumber,
+    questions: rows.map((q, i) => {
+      const { options, correct } = shuffleRow(q, paper.seed);
+      return {
+        id: `bank:${q.id}`,
+        questionNumber: i + 1,
+        clinicalScenario: '',
+        question: q.question_text,
+        options,
+        correctAnswer: correct,
+        explanation: q.explanation || '',
+        topic: q.topic || '',
+        marks: 4,
+      };
+    }),
   };
 }
 
@@ -421,20 +492,26 @@ async function markTest(body, { learnerKind, learnerId, level, categories }) {
       new Error('none of those questions are on your curriculum'), { status: 400 });
   }
 
+  // A draw from questionSet shuffled the options; its seed maps the letters
+  // the candidate saw back to the stored key, and the result is shown in the
+  // order they saw.
+  const seed = typeof body.drawSeed === 'string' && body.drawSeed ? body.drawSeed : null;
   let correct = 0;
   const marked = key.map((q) => {
-    const given = String(answers[q.id] ?? '').trim().toUpperCase();
+    const shown = String(answers[q.id] ?? '').trim().toUpperCase();
+    const given = seed ? toOriginalLetter(shown, seed, q.id) : shown;
     const isCorrect = given !== '' && given === String(q.correct_option).toUpperCase();
     if (isCorrect) correct += 1;
     return {
       id: q.id,
       question: q.question_text,
       topic: q.topic,
-      options: { A: q.option_a, B: q.option_b, C: q.option_c, D: q.option_d, E: q.option_e },
-      given: given || null,
-      correctOption: String(q.correct_option).toUpperCase(),
+      options: seed ? shuffleRow(q, seed).options : { A: q.option_a, B: q.option_b, C: q.option_c, D: q.option_d, E: q.option_e },
+      given: (seed ? shown : given) || null,
+      correctOption: seed ? toDisplayedLetter(q.correct_option, seed, q.id) : String(q.correct_option).toUpperCase(),
       isCorrect,
       explanation: q.explanation,
+      _given: given,
     };
   });
 
@@ -458,7 +535,7 @@ async function markTest(body, { learnerKind, learnerId, level, categories }) {
     await query(
       `INSERT INTO learner_test_answers (attempt_id, question_id, selected_option, is_correct)
        VALUES ($1,$2,$3,$4) ON CONFLICT (attempt_id, question_id) DO NOTHING`,
-      [attempt.id, m.id, m.given, m.isCorrect],
+      [attempt.id, m.id, m._given || null, m.isCorrect],
     );
   }
 
@@ -475,6 +552,8 @@ async function markTest(body, { learnerKind, learnerId, level, categories }) {
       [rightOnes],
     );
   }
+
+  for (const m of marked) delete m._given;
 
   return {
     attemptId: attempt.id,

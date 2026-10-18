@@ -9,6 +9,7 @@ import { CBTTest, CBTAttempt, cbtService, CBT_CONFIG, getTestWindowLabel } from 
 import CBTTestSelection from './CBTTestSelection';
 import CBTExamInterface from './CBTExamInterface';
 import CBTResults from './CBTResults';
+import { learningContentService } from '../../services/learningContentService';
 
 interface CBTPageProps {
   level: TrainingLevel;
@@ -76,8 +77,25 @@ const CBTPage: React.FC<CBTPageProps> = ({ level, onBack, onResult }) => {
     setShowPreExamModal(true);
   };
 
-  const confirmStartTest = () => {
-    if (!currentTest) return;
+  /**
+   * The trainee's own paper from the question bank — drawn once for them, never
+   * repeating a question from their earlier papers or tests, and the same if
+   * they reopen it. Offline or with no bank at their level, the paper built on
+   * the device is used instead.
+   */
+  const personalPaper = async (test: CBTTest, userId: string): Promise<CBTTest> => {
+    if (!navigator.onLine) return test;
+    const cycle = cbtService.getCurrentPostingCycle(level, userId) || 1;
+    const paper = await learningContentService.cbtPaper(test.testNumber, cycle, CBT_CONFIG.questionsPerTest);
+    if (!paper) return test;
+    const questions = paper.questions as CBTTest['questions'];
+    return { ...test, questions, totalMarks: questions.reduce((n, q) => n + (q.marks || 0), 0) };
+  };
+
+  const [preparing, setPreparing] = useState(false);
+
+  const confirmStartTest = async () => {
+    if (!currentTest || preparing) return;
     const userId = resolveUserId();
     if (!userId) {
       setShowPreExamModal(false);
@@ -94,7 +112,11 @@ const CBTPage: React.FC<CBTPageProps> = ({ level, onBack, onResult }) => {
       return;
     }
 
-    const attempt = cbtService.startTest(currentTest, userId);
+    setPreparing(true);
+    const test = await personalPaper(currentTest, userId).catch(() => currentTest);
+    setPreparing(false);
+    setCurrentTest(test);
+    const attempt = cbtService.startTest(test, userId);
     setCurrentAttempt(attempt);
     setShowPreExamModal(false);
     setCurrentView('exam');
@@ -113,7 +135,7 @@ const CBTPage: React.FC<CBTPageProps> = ({ level, onBack, onResult }) => {
     });
   };
 
-  const handleViewResults = (testNumber: number) => {
+  const handleViewResults = async (testNumber: number) => {
     const userId = resolveUserId() || undefined;
     const attempt = cbtService
       .getAttemptsForLevel(level, userId)
@@ -123,11 +145,15 @@ const CBTPage: React.FC<CBTPageProps> = ({ level, onBack, onResult }) => {
       return;
     }
 
-    const test = cbtService.generateTestsForLevel(level).find(t => t.testNumber === testNumber);
-    if (!test) {
+    const local = cbtService.generateTestsForLevel(level).find(t => t.testNumber === testNumber);
+    if (!local) {
       setNotice('That test is no longer available for your level.');
       return;
     }
+    // A bank paper is fetched again (it is kept on the server) so the results
+    // show the questions the trainee actually answered.
+    const answeredBank = Object.keys(attempt.answers || {}).some(id => id.startsWith('bank:'));
+    const test = answeredBank ? await personalPaper(local, attempt.userId).catch(() => local) : local;
 
     setCurrentTest(test);
     setCompletedAttempt(attempt);
@@ -297,13 +323,14 @@ const CBTPage: React.FC<CBTPageProps> = ({ level, onBack, onResult }) => {
                 </button>
                 <button
                   onClick={confirmStartTest}
-                  className="flex-1 py-3 px-4 bg-green-500 hover:bg-green-600 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
+                  disabled={preparing}
+                  className="flex-1 py-3 px-4 bg-green-500 hover:bg-green-600 disabled:opacity-60 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
                 >
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  Start test
+                  {preparing ? 'Preparing your paper…' : 'Start test'}
                 </button>
               </div>
             </div>

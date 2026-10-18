@@ -160,46 +160,37 @@ const CLINICAL_SCENARIOS = {
   ]
 };
 
-// Question bank generated from CME content
+// Offline paper, built on the device from the CME self-assessment MCQs.
+//
+// Used only when the question bank cannot be reached (see CBTPage, which asks
+// the server for the trainee's own paper first). It used to wrap round a small
+// pool with modulo arithmetic, so one paper could ask the same question several
+// times; now each question appears once per paper, the pool is de-duplicated
+// by stem, and successive papers walk through the pool before reusing it.
 const generateQuestionsFromCME = (level: TrainingLevel, testNumber: number): CBTQuestion[] => {
   const modules = getModulesForLevel(level);
-  const questions: CBTQuestion[] = [];
-  const scenarios = CLINICAL_SCENARIOS[level];
-  
-  // Generate 25 questions for each test
-  for (let i = 0; i < 25; i++) {
-    const moduleIndex = (testNumber + i) % modules.length;
-    const module = modules[moduleIndex];
-    const topicIndex = i % module.topics.length;
-    const topic = module.topics[topicIndex];
-    const article = topic.article;
-    
-    // Get key points and create clinical question
-    const keyPoints = article.keyPoints || [];
-    const examTips = article.examTips || [];
-    const clinicalPearls = article.clinicalPearls || [];
-    const commonMistakes = article.commonMistakes || [];
-    
-    const scenarioIndex = i % scenarios.length;
-    const scenario = scenarios[scenarioIndex];
-    
-    // Generate question from content
-    const question = generateQuestionFromContent(
-      i + 1,
-      testNumber,
-      level,
-      topic.title,
-      scenario,
-      keyPoints,
-      examTips,
-      clinicalPearls,
-      commonMistakes,
-      article.selfAssessment || []
-    );
-    
-    questions.push(question);
+  const seen = new Set<string>();
+  const pool: Array<{ topicTitle: string; sa: { question: string; options: string[]; correctAnswer: number; explanation: string } }> = [];
+  for (const module of modules) {
+    for (const topic of module.topics) {
+      for (const sa of topic.article.selfAssessment || []) {
+        const stem = String(sa.question || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+        if (!stem || seen.has(stem)) continue;
+        seen.add(stem);
+        pool.push({ topicTitle: topic.title, sa });
+      }
+    }
   }
-  
+  if (!pool.length) return [];
+  const levelSeed = [...level].reduce((n, ch) => n * 31 + ch.charCodeAt(0), 7);
+  const ordered = shuffleWithSeed(pool, levelSeed);
+  const size = Math.min(CBT_CONFIG.questionsPerTest, ordered.length);
+  const start = ((testNumber - 1) * size) % ordered.length;
+  const questions: CBTQuestion[] = [];
+  for (let k = 0; k < size; k++) {
+    const { topicTitle, sa } = ordered[(start + k) % ordered.length];
+    questions.push(generateQuestionFromContent(k + 1, testNumber, level, topicTitle, '', [], [], [], [], [sa]));
+  }
   return questions;
 };
 
@@ -350,14 +341,16 @@ const generateTestsForLevel = (level: TrainingLevel): CBTTest[] => {
   const tests: CBTTest[] = [];
   
   for (let i = 1; i <= totalTests; i++) {
+    const questions = generateQuestionsFromCME(level, i);
     tests.push({
       id: `test-${level}-${i}`,
       testNumber: i,
       level,
       title: `${getLevelDisplayName(level)} Weekly Test ${i}`,
-      questions: generateQuestionsFromCME(level, i),
+      questions,
       duration: 600, // 10 minutes in seconds
-      totalMarks: 100, // 25 questions × 4 marks
+      // Marks follow the questions actually set (4 each), so a shorter paper is scored fairly.
+      totalMarks: questions.reduce((n, q) => n + q.marks, 0) || 100,
       passMark: 75, // 75% for posting sign-out
       scheduledDay: 'Tuesday',
       scheduledTimeStart: '08:00',
