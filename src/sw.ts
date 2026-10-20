@@ -46,6 +46,18 @@ const OCR_CACHE = 'ocr-engine-cache';
 // so NetworkFirst strategies don't wait for the SW to fully initialize first.
 navigationPreload.enable();
 
+// Keep every navigation's preload settled, including the ones no route reads:
+// a page this worker took over mid-load (right after an update), the
+// denylisted pages (book-appointment.html …) and a navigation that timed out
+// to the cached shell. Without this the browser warns that the preload "was
+// cancelled before 'preloadResponse' settled". Registered before the routes,
+// so Workbox still uses the preload where it can.
+self.addEventListener('fetch', (event: FetchEvent) => {
+  if (event.request.mode === 'navigate' && event.preloadResponse) {
+    event.waitUntil(Promise.resolve(event.preloadResponse).catch(() => undefined));
+  }
+});
+
 // ─── Precache (injected by vite-plugin-pwa at build time) ───
 precacheAndRoute(self.__WB_MANIFEST);
 cleanupOutdatedCaches();

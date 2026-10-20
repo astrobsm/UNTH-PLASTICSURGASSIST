@@ -1,4 +1,19 @@
 import { cmeWACSService } from './cmeWACSService';
+import { aiService } from './aiService';
+import { useAuthStore } from '../store/authStore';
+
+/**
+ * Who runs the automatic publication, and how often.
+ *
+ * It used to run on every device that had the app open: at 06:00 on a
+ * publishing day each phone generated its own article into its own local
+ * store — a different "article of the week" per device — and every device
+ * without AI logged an error on each load. Now only an administrator's device
+ * publishes, once per publishing day, and only when the server has AI
+ * configured; otherwise it steps aside quietly.
+ */
+const PUBLISHER_ROLES = ['admin', 'super_admin'];
+const SLOT_KEY = 'cme-auto-publish-slot';
 interface ArticleSchedule {
   id: string;
   scheduled_date: Date;
@@ -45,10 +60,21 @@ class CMEArticleSchedulerService {
     const hour = now.getHours();
 
     // Check if today is a scheduled day (Tuesday or Friday) and it's the publish hour
-    if (this.SCHEDULE_DAYS.includes(dayOfWeek) && hour === this.PUBLISH_HOUR) {
-      console.log('Time to publish CME article!');
-      await this.publishNextArticle();
+    if (!this.SCHEDULE_DAYS.includes(dayOfWeek) || hour !== this.PUBLISH_HOUR) return;
+
+    const role = useAuthStore.getState?.().user?.role || '';
+    if (!PUBLISHER_ROLES.includes(role)) return;
+
+    const slot = now.toISOString().slice(0, 10);
+    try { if (localStorage.getItem(SLOT_KEY) === slot) return; } catch { /* storage unavailable */ }
+
+    if (!(await aiService.isReady())) {
+      console.info('CME auto-publish skipped: AI is not configured on the server.');
+      return;
     }
+    try { localStorage.setItem(SLOT_KEY, slot); } catch { /* storage unavailable */ }
+    console.log('Time to publish CME article!');
+    await this.publishNextArticle();
   }
 
   // Publish the next article in the sequence

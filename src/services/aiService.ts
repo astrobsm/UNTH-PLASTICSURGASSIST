@@ -98,10 +98,22 @@ export interface ClinicalData {
 
 class AIService {
   private isConfigured: boolean = false;
+  /** The first configuration check, so callers can wait for it. */
+  private configChecked: Promise<void>;
 
   constructor() {
     // Check if backend AI is configured
-    this.checkBackendConfiguration();
+    this.configChecked = this.checkBackendConfiguration();
+  }
+
+  /**
+   * Whether AI is available — waiting for the first check if it is still in
+   * flight. Reading the flag directly raced the check: anything that ran at
+   * start-up (the CME scheduler) always saw "not configured".
+   */
+  private async ensureConfigured(): Promise<boolean> {
+    if (!this.isConfigured) await this.configChecked.catch(() => {});
+    return this.isConfigured;
   }
 
   private async checkBackendConfiguration() {
@@ -221,7 +233,7 @@ class AIService {
    * Generate multiple choice questions for a CME topic
    */
   async generateCMEQuestions(topic: string, content: string, count: number = 5): Promise<CMEQuestion[]> {
-    if (!this.isConfigured) {
+    if (!(await this.ensureConfigured())) {
       throw new Error('AI service not configured');
     }
 
@@ -289,7 +301,7 @@ class AIService {
     recentScores: number[], 
     weakAreas: string[]
   ): Promise<string[]> {
-    if (!this.isConfigured) {
+    if (!(await this.ensureConfigured())) {
       return this.getFallbackRecommendations(weakAreas);
     }
 
@@ -388,7 +400,7 @@ class AIService {
    * General purpose content generation method for various AI tasks
    */
   async generateContent(prompt: string): Promise<string> {
-    if (!this.isConfigured) {
+    if (!(await this.ensureConfigured())) {
       throw new Error('AI service not configured. Please set OpenAI API key.');
     }
 
@@ -415,7 +427,7 @@ class AIService {
    * Generate response for topic management system with WHO guidelines integration
    */
   async generateResponse(prompt: string): Promise<string> {
-    if (!this.isConfigured) {
+    if (!(await this.ensureConfigured())) {
       throw new Error('AI service not configured. Please set OpenAI API key.');
     }
 
