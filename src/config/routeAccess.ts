@@ -52,6 +52,7 @@ export const ROUTE_ROLES: Record<string, readonly string[]> = {
   '/topic-management': [ROLES.admin, ROLES.superAdmin, ROLES.consultant],
   // senior_registrar is in both lists; dedupe so the array reads honestly.
   '/bulk-admit': [...new Set([...SUPERVISOR_ROLES, ...TRAINEE_ROLES])],
+  '/ward-census': SUPERVISOR_ROLES,
 };
 
 /**

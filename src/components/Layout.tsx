@@ -78,6 +78,7 @@ const navigation = [
   { name: 'Dashboard', href: '/', icon: ClipboardList },
   { name: 'Patients', href: '/patients', icon: Users },
   { name: 'Bulk Register/Admit', href: '/bulk-admit', icon: UserPlus },
+  { name: 'Ward Census', href: '/ward-census', icon: ClipboardCheck },
   { name: 'Dept. Meetings', href: '/departmental-meetings', icon: Presentation },
   { name: 'Training', href: '/training', icon: BookOpen },
   { name: 'Call Duty Roster', href: '/call-duty', icon: PhoneCall },

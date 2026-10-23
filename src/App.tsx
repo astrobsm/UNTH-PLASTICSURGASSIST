@@ -122,6 +122,8 @@ const PublicConsultSubmitPage = lazyWithRetry(() => import('./pages/PublicConsul
 const ReferralAnalyticsPage = lazyWithRetry(() => import('./pages/ReferralAnalyticsPage'));
 const AdminTrainingPage = lazyWithRetry(() => import('./pages/AdminTrainingPage'));
 const BulkAdmitPage = lazyWithRetry(() => import('./pages/BulkAdmitPage'));
+const WardCensusPage = lazyWithRetry(() => import('./pages/WardCensusPage'));
+const WardCensusFormPage = lazyWithRetry(() => import('./pages/WardCensusFormPage'));
 const SJSManagementPage = lazyWithRetry(() => import('./pages/SJSManagementPage'));
 const SubstanceDetoxPage = lazyWithRetry(() => import('./pages/SubstanceDetoxPage'));
 const HOTrackingPage = lazyWithRetry(() => import('./pages/HOTrackingPage'));
@@ -497,6 +499,9 @@ function App() {
               {/* Renamed alongside /training. Old links still land. */}
               <Route path="/admin-training" element={<Navigate to="/training-admin" replace />} />
               <Route path="/bulk-admit" element={<ProtectedRoute allowedRoles={ROUTE_ROLES['/bulk-admit']}><BulkAdmitPage /></ProtectedRoute>} />
+              {/* Ward census: supervisors create and review; the shared link opens for any signed-in clinician. */}
+              <Route path="/ward-census" element={<ProtectedRoute allowedRoles={ROUTE_ROLES['/ward-census']}><WardCensusPage /></ProtectedRoute>} />
+              <Route path="/ward-census/:roundId" element={<WardCensusFormPage />} />
               <Route path="/ho-tracking" element={<ProtectedRoute allowedRoles={ROUTE_ROLES['/ho-tracking']}><HOTrackingPage /></ProtectedRoute>} />
               <Route path="/admin" element={<ProtectedRoute allowedRoles={ROUTE_ROLES['/admin']}><Admin /></ProtectedRoute>} />
               <Route path="/topic-management" element={<ProtectedRoute allowedRoles={ROUTE_ROLES['/topic-management']}><TopicManagement /></ProtectedRoute>} />
