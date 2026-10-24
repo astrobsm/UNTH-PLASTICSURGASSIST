@@ -23,11 +23,15 @@ export interface OnboardingStatus {
   record?: { unit_name: string; posting_start: string; posting_end: string; unit_note?: string | null } | null;
   catchUp?: CatchUp | null;
   today?: string;
+  /** 'resident': six-month unit blocks alternating automatically; 'posting': one fixed posting. */
+  cycle?: 'resident' | 'posting';
+  blockMonths?: number | null;
+  block?: { index: number; start: string; end: string; unitName: string; nextUnitName: string; nextStart: string } | null;
 }
 
 export const postingOnboardingService = {
   status: () => apiClient.get<OnboardingStatus>('/posting-onboarding', { freshRead: true }),
-  submit: (payload: { posting_start: string; posting_end: string; unit_key: string; accepted: true; rules_version: string }) =>
+  submit: (payload: { posting_start: string; posting_end: string; unit_key: string; accepted: true; rules_version: string; residency_start?: string }) =>
     apiClient.post<OnboardingStatus & { unitNote?: string | null }>('/posting-onboarding?action=submit', payload),
 };
 

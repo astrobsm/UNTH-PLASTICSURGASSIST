@@ -149,6 +149,9 @@ async function getOnCall(params, res) {
     catch (e) { console.warn('getOnCall: inactive-staff reconcile skipped:', e.message); }
     try { await pruneInactiveFromPsUnitRoster(); }
     catch (e) { console.warn('getOnCall: PS unit roster prune skipped:', e.message); }
+    // Residents whose six-month block ended move to the other unit.
+    try { await (await import('./_lib/residentRotation.js')).advanceResidents(); }
+    catch (e) { console.warn('getOnCall: resident rotation skipped:', e.message); }
     try { await applyUnitMembershipIfChanged(); }
     catch (e) { console.warn('getOnCall: unit membership skipped:', e.message); }
     // New admissions join their admitting unit's team.

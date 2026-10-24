@@ -19,6 +19,7 @@ import { getRequirements, normalizeLevel, PASS_THRESHOLD, MIN_SECTION_SCORE } fr
 import { getUnitConfig, saveUnitConfig } from './callRoster.js';
 import { GRADE_LIST_KEY } from './unitCallPattern.js';
 import { categoriesFor, countsFor } from '../learning-content.js';
+import { RESIDENT_GRADES, BLOCK_MONTHS, blockAt, ensureResidentColumns, advanceResidents, moveInRoster } from './residentRotation.js';
 
 export const ONBOARDING_GRADES = ['house_officer', 'registrar', 'senior_registrar'];
 const OPEN_STATUSES = ['active', 'extended', 'pending_signout'];
@@ -94,6 +95,14 @@ export function validatePosting({ start, end, today }) {
   return null;
 }
 
+/** Residents: only the residency start is checked — it may be years ago. */
+export function validateResidency({ start, today }) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(start || '')) return 'Enter the date your residency in the unit started';
+  if (daysBetween(today, start) > 60) return 'The start date is more than 60 days away — onboard closer to the start';
+  if (daysBetween(start, today) > 366 * 8) return 'The start date is more than eight years ago — check the year';
+  return null;
+}
+
 async function openRotation(userId) {
   const r = await query(
     `SELECT id, level, start_date, expected_end_date, status FROM trainee_rotations
@@ -150,9 +159,19 @@ export async function onboardingStatus(user) {
   if (!ONBOARDING_GRADES.includes(grade)) return { required: false, applicable: false };
 
   const today = todayWat();
+  const resident = RESIDENT_GRADES.includes(grade);
+  if (resident) {
+    await ensureResidentColumns();
+    // A block that has ended moves on to the next before anything is shown.
+    try { await advanceResidents({ userId: user.id, today }); } catch (e) { console.warn('advanceResidents:', e.message); }
+  }
   const [rotation, record, { list }] = await Promise.all([openRotation(user.id), latestRecord(user.id), units()]);
   const level = normalizeLevel(user.role);
-  const covered = record && (rotation ? record.rotation_id === rotation.id : ymd(record.posting_end) >= today);
+  // Residents onboard once for the whole residency; their six-month unit
+  // blocks then follow automatically. House officers onboard per posting.
+  const covered = resident
+    ? !!(record && record.residency_start)
+    : record && (rotation ? record.rotation_id === rotation.id : ymd(record.posting_end) >= today);
 
   // Pre-fill: the rotation already open, else the unit's cohort dates, else today + the usual length.
   const cohort = rotation ? null : await cohortDates(level);
@@ -177,10 +196,16 @@ export async function onboardingStatus(user) {
     catchUp.complete = catchUp.articles.done >= catchUp.articles.required && catchUp.cbt.done >= catchUp.cbt.required;
   }
 
+  const block = resident && record?.residency_start
+    ? blockAt({ residencyStart: record.residency_start, initialUnitKey: record.initial_unit_key, units: list, today })
+    : null;
   return {
     applicable: true,
     required: !covered,
     grade, level,
+    cycle: resident ? 'resident' : 'posting',
+    blockMonths: resident ? BLOCK_MONTHS : null,
+    block,
     units: list,
     defaults: { start: defaultStart, end: defaultEnd },
     requirements: req,
@@ -216,15 +241,28 @@ export async function submitOnboarding(user, body) {
   if (!status.applicable) return { status: 400, error: 'Posting onboarding is for house officers and residents' };
   if (!status.required) return { status: 409, error: 'You have already completed onboarding for this posting' };
 
-  const start = String(body.posting_start || '');
-  const end = String(body.posting_end || '');
   const today = todayWat();
-  const invalid = validatePosting({ start, end, today });
-  if (invalid) return { status: 400, error: invalid };
+  const resident = status.cycle === 'resident';
+  const residencyStart = String(body.residency_start || body.posting_start || '');
+  if (resident) {
+    const bad = validateResidency({ start: residencyStart, today });
+    if (bad) return { status: 400, error: bad };
+  }
   if (body.accepted !== true || !body.rules_version) return { status: 400, error: 'You must accept the expectations and sign-out rules' };
   const { cfg, list } = await units();
-  const unit = list.find(u => u.key === body.unit_key);
-  if (!unit) return { status: 400, error: 'Select the unit you are posted to' };
+  const chosen = list.find(u => u.key === body.unit_key);
+  if (!chosen) return { status: 400, error: resident ? 'Select the unit you started in' : 'Select the unit you are posted to' };
+
+  // Residents: the posting is the current six-month block of their residency,
+  // in the unit that block falls to (alternating from the unit they started in).
+  const block = resident ? blockAt({ residencyStart, initialUnitKey: chosen.key, units: list, today }) : null;
+  const start = resident ? block.start : String(body.posting_start || '');
+  const end = resident ? block.end : String(body.posting_end || '');
+  const unit = resident ? list.find(u => u.key === block.unitKey) : chosen;
+  if (!resident) {
+    const invalid = validatePosting({ start, end, today });
+    if (invalid) return { status: 400, error: invalid };
+  }
 
   // Rotation: correct the open one to the stated dates, or start one.
   let rotation = await openRotation(user.id);
@@ -243,15 +281,27 @@ export async function submitOnboarding(user, body) {
 
   const catchUp = computeCatchUp({ start, end, today, level: status.level });
   let unitNote = null;
-  try { unitNote = (await placeInUnit(cfg, unit.key, status.grade, user.id, user.id)).note; }
-  catch (e) { unitNote = `Could not update the call roster: ${e.message}`; }
+  try {
+    // A resident is moved to the block's unit (out of the other); a house
+    // officer is added to their unit when not already listed.
+    unitNote = resident
+      ? ((await moveInRoster(cfg, user.id, status.grade, unit.key, user.id)).note || null)
+      : (await placeInUnit(cfg, unit.key, status.grade, user.id, user.id)).note;
+  } catch (e) { unitNote = `Could not update the call roster: ${e.message}`; }
 
+  if (resident) await ensureResidentColumns();
   const ins = await query(
-    `INSERT INTO posting_onboarding (user_id, rotation_id, role, grade, level, unit_key, unit_name, posting_start, posting_end,
-       rules_version, days_late, catch_up_articles, catch_up_cbt, catch_up_due, unit_note)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+    resident
+      ? `INSERT INTO posting_onboarding (user_id, rotation_id, role, grade, level, unit_key, unit_name, posting_start, posting_end,
+           rules_version, days_late, catch_up_articles, catch_up_cbt, catch_up_due, unit_note,
+           cycle, residency_start, initial_unit_key, block_index)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'resident',$16,$17,$18) RETURNING *`
+      : `INSERT INTO posting_onboarding (user_id, rotation_id, role, grade, level, unit_key, unit_name, posting_start, posting_end,
+           rules_version, days_late, catch_up_articles, catch_up_cbt, catch_up_due, unit_note)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
     [user.id, rotation?.id ?? null, user.role, status.grade, status.level, unit.key, unit.name, start, end,
-     String(body.rules_version).slice(0, 40), catchUp.daysLate, catchUp.articles, catchUp.cbt, catchUp.due, unitNote]
+     String(body.rules_version).slice(0, 40), catchUp.daysLate, catchUp.articles, catchUp.cbt, catchUp.due, unitNote,
+     ...(resident ? [residencyStart, chosen.key, block.index] : [])]
   );
 
   // The house-officer responsibilities were part of what was accepted.
@@ -269,7 +319,7 @@ export async function submitOnboarding(user, body) {
     );
   } catch { /* activity log is best-effort */ }
 
-  return { status: 201, record: ins.rows[0], catchUp, unitNote };
+  return { status: 201, record: ins.rows[0], catchUp, unitNote, block };
 }
 
 /** Admin view: every onboarding, newest first, with any roster notes. */

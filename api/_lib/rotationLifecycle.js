@@ -186,8 +186,13 @@ export async function evaluateDueRotations({ userId = null } = {}) {
 
   const signedOut = [];
   const pending = [];
+  // Residents rotate between the units every six months (residentRotation);
+  // the end of a block is a move to the other unit, not a sign-out.
+  let residents = new Set();
+  try { residents = await (await import('./residentRotation.js')).residentUserIds(); } catch { /* none */ }
 
   for (const row of due.rows) {
+    if (residents.has(Number(row.user_id))) continue;
     let scored;
     try {
       scored = await scoreFor(row.user_id, row.level || row.role);
