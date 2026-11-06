@@ -185,6 +185,10 @@ export const NUTRITION_CONFIG_V1 = {
   sodiumRestrictedMg: c(2000, 'WHO 2012 sodium guideline (< 2 g/day)'),
   energyTolerancePct: c(5, 'Brief §6.3 — daily energy within ±5%'),
   mealSplit: c({ breakfast: 0.25, lunch: 0.30, dinner: 0.30, snacks: 0.15 }, 'Brief §6.2 default'),
+  portionScale: c({ min: 0.5, max: 2.0, swallowMax: 1.6 }, 'UNTH default — a dish may be served at 0.5–2× its standard portion (swallows ≤ 1.6×)'),
+  mealEnergyBand: c({ min: 0.5, max: 1.6 }, 'UNTH default — each meal carries 0.5–1.6× its share of the day\'s energy'),
+  roundingG: c(5, 'Brief §6.3 — round served weights to the nearest 5 g'),
+  maxDishPerWeek: c(2, 'Brief §6.2 — the same main dish no more than twice a week'),
 } as const;
 
 export type NutritionConfig = typeof NUTRITION_CONFIG_V1;

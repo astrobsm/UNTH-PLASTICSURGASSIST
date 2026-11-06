@@ -21,7 +21,7 @@ import { auditClinical } from './_lib/clinicalRecords.js';
 import {
   ensureNutritionTables, patientRecord, addMeasurement, measurementInError, saveVersioned, transition, versionedInError, saveIntake,
   searchFoods, upsertFoods, seedWafct, seedEnugu, updateFoodPlanning, listRecipes, upsertRecipe, verifyRecipe, listMeasures, upsertMeasure, foodSources,
-  configSignoffs, signConfig, worklist, canApprove, canRecord, canDraft, canAdminFoods,
+  configSignoffs, signConfig, worklist, canApprove, canRecord, canDraft, canAdminFoods, plannerCatalog,
 } from './_lib/nutrition.js';
 import { MISSING_FROM_WAFCT, ENUGU_SEED_VERSION } from './_lib/data/enuguFoods.js';
 
@@ -51,6 +51,7 @@ export default async function handler(req, res) {
       if (resource === 'worklist') return res.status(200).json({ ...(await worklist()), ...permissions });
       if (resource === 'foods') return res.status(200).json({ foods: await searchFoods(url.searchParams.get('q') || '', url.searchParams.get('limit')) });
       if (resource === 'recipes') return res.status(200).json({ recipes: await listRecipes() });
+      if (resource === 'catalog') return res.status(200).json(await plannerCatalog());
       if (resource === 'measures') return res.status(200).json({ measures: await listMeasures() });
       if (resource === 'sources') return res.status(200).json({ sources: await foodSources(), missing_local: MISSING_FROM_WAFCT, seed_version: ENUGU_SEED_VERSION, ...permissions });
       if (resource === 'signoffs') return res.status(200).json({ signoffs: await configSignoffs() });

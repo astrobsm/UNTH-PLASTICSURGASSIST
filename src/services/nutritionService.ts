@@ -69,6 +69,11 @@ export const nutritionService = {
   async markInError(kind: 'assessment' | 'plan', id: number, reason: string) { return (await apiClient.post<any>(`${BASE}?action=error&kind=${kind}&id=${id}`, { reason })).record; },
 
   async foods(q = '', limit = 50) { return arr<any>((await apiClient.get<any>(`${BASE}?resource=foods&q=${encodeURIComponent(q)}&limit=${limit}`))?.foods); },
+  /** Local foods, recipes and measures for the meal planner. */
+  async catalog(): Promise<{ foods: any[]; recipes: any[]; measures: any[]; food_data_version: string | null }> {
+    const r: any = await apiClient.get(`${BASE}?resource=catalog`, { freshRead: true });
+    return { foods: arr(r?.foods), recipes: arr(r?.recipes), measures: arr(r?.measures), food_data_version: r?.food_data_version ?? null };
+  },
   async recipes() { return arr<any>((await apiClient.get<any>(`${BASE}?resource=recipes`))?.recipes); },
   async measures() { return arr<any>((await apiClient.get<any>(`${BASE}?resource=measures`))?.measures); },
   async sources(): Promise<{ sources: any[]; missing_local: string[]; seed_version?: string } & Permissions> {

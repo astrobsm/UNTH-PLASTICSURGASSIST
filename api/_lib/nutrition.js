@@ -627,6 +627,16 @@ export async function upsertMeasure(body, user) {
   return r.rows[0] ? { status: 200, measure: r.rows[0] } : { status: 404, error: 'Measure not found' };
 }
 
+/** Everything the meal planner needs: local foods, recipes with ingredient values, measures, source versions. */
+export async function plannerCatalog() {
+  await ensureNutritionTables();
+  const [foods, recipes, measures, sources] = await Promise.all([
+    query(`SELECT * FROM nutrition_foods WHERE active AND tags @> '["local"]'::jsonb ORDER BY name`),
+    listRecipes(), listMeasures(), foodSources(),
+  ]);
+  return { foods: foods.rows, recipes, measures, food_data_version: sources.map(s => `${s.code}@${s.version || '?'}`).join(',') || null };
+}
+
 export async function foodSources() {
   await ensureNutritionTables();
   return (await query(`SELECT * FROM nutrition_food_sources ORDER BY code`)).rows;
