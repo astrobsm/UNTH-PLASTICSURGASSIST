@@ -28,6 +28,7 @@ const BUILTIN_ROLES = [
   { key: 'junior_registrar', label: 'Registrar', rosters_as: 'registrar', sort_order: 30 },
   { key: 'registrar', label: 'Registrar (alt)', rosters_as: 'registrar', sort_order: 31 },
   { key: 'house_officer', label: 'House Officer', rosters_as: 'house_officer', sort_order: 40 },
+  { key: 'dietitian', label: 'Dietitian', rosters_as: null, sort_order: 45 },
   { key: 'admin', label: 'Administrator', rosters_as: null, sort_order: 50 },
   { key: 'super_admin', label: 'Super Administrator', rosters_as: null, sort_order: 51 },
   { key: 'student', label: 'Student', rosters_as: null, sort_order: 60 },

@@ -22,6 +22,7 @@ export const ROLES = {
   registrar: 'registrar',
   houseOfficer: 'house_officer',
   medicalOfficer: 'medical_officer',
+  dietitian: 'dietitian',
   nursing: 'nursing',
   lab: 'lab',
   pharmacy: 'pharmacy',
@@ -32,6 +33,9 @@ export const ROLES = {
 export const SUPERVISOR_ROLES = [
   ROLES.admin, ROLES.superAdmin, ROLES.consultant, ROLES.seniorRegistrar,
 ];
+
+/** May approve nutrition assessments and meal plans (api/_lib/nutrition.js APPROVER_ROLES). */
+export const NUTRITION_APPROVER_ROLES = [ROLES.dietitian, ROLES.consultant, ROLES.seniorRegistrar];
 
 /** Doctors on a rotation. */
 export const TRAINEE_ROLES = [
