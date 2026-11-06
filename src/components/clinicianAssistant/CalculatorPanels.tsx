@@ -20,7 +20,7 @@ import {
   type ElectrolyteFinding, type WoundSeverity,
 } from '../../services/clinicianAssistant/clinicalCalculators';
 import type { Sex } from '../../services/clinicianAssistant/calculators';
-import { generateMealPlan, type DayPlan } from '../../data/nigerianFoods';
+import { QuickMealPlan } from '../nutrition/QuickMealPlan';
 import { burnCareService } from '../../services/burnCareService';
 import { riskAssessmentService } from '../../services/riskAssessmentService';
 
@@ -730,54 +730,7 @@ export function MustPanel({ weightKg, heightCm }: { weightKg: number; heightCm: 
 }
 
 // ── Meal plans ────────────────────────────────────────────────────────────
-
-function MealPlanDays({ days }: { days: DayPlan[] }) {
-  const [open, setOpen] = useState(0);
-  const d = days[open];
-  if (!d) return null;
-
-  const meals = [
-    ['Breakfast', d.breakfast], ['Mid-morning', d.midMorningSnack],
-    ['Lunch', d.lunch], ['Afternoon', d.afternoonSnack], ['Dinner', d.dinner],
-  ] as const;
-
-  return (
-    <div>
-      <div className="flex flex-wrap gap-1.5 mb-3">
-        {days.map((day, i) => (
-          <button
-            key={i}
-            onClick={() => setOpen(i)}
-            className={`px-2.5 py-1 rounded text-xs font-medium ${
-              i === open ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            {day.day}
-          </button>
-        ))}
-      </div>
-
-      <div className="border rounded-lg divide-y">
-        {meals.map(([label, meal]) => (
-          <div key={label} className="p-3">
-            <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-1">{label}</p>
-            <ul className="text-sm text-gray-800 space-y-0.5">
-              {meal.items.map((it, i) => (
-                <li key={i} className="flex justify-between gap-3">
-                  <span>{it.name} — <span className="text-gray-600">{it.qty}</span></span>
-                  <span className="text-xs text-gray-500 whitespace-nowrap">{it.kcal} kcal · {it.protein} g</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
-        <div className="p-3 bg-gray-50 text-sm font-medium text-gray-900">
-          Day total: {d.totalKcal} kcal · {d.totalProtein} g protein
-        </div>
-      </div>
-    </div>
-  );
-}
+// Plans are built by the constrained solver from WAFCT 2019 (components/nutrition/QuickMealPlan).
 
 export function WoundMealPlanPanel({ weightKg }: { weightKg: number }) {
   const [severity, setSeverity] = useState<WoundSeverity>('moderate');
@@ -841,7 +794,8 @@ export function WoundMealPlanPanel({ weightKg }: { weightKg: number }) {
 
           <div>
             <p className="font-semibold text-sm text-gray-900 mb-2">Seven-day plan</p>
-            <MealPlanDays days={r.days} />
+            <QuickMealPlan targetKcal={r.targetKcal} proteinG={r.targetProtein}
+              options={diabetes ? { targets: { kcal: r.targetKcal, proteinG: r.targetProtein, carbMaxG: Math.round((r.targetKcal * 0.45) / 4) } } : undefined} />
           </div>
         </>
       )}
@@ -861,13 +815,8 @@ export function NutritionPanel({ weightKg }: { weightKg: number }) {
   const targetKcal = num(kcal);
   const protein = Math.round(weightKg * num(proteinPerKg));
 
-  // Built against the protein target actually displayed above. Routing this
-  // through weightLossMealPlan would silently use its own 1.6 g/kg figure and
-  // the plan would not match the headline.
-  const days = useMemo(
-    () => (targetKcal > 0 && protein > 0 ? generateMealPlan(targetKcal, protein) : null),
-    [targetKcal, protein]
-  );
+  // Built against the protein target actually displayed above.
+  const ready = targetKcal > 0 && protein > 0;
 
   return (
     <div className="space-y-4">
@@ -889,20 +838,19 @@ export function NutritionPanel({ weightKg }: { weightKg: number }) {
 
       {!weightKg && <p className="text-sm text-amber-700">Enter a weight above.</p>}
 
-      {days && (
+      {ready && (
         <div>
           <p className="font-semibold text-sm text-gray-900 mb-2">Seven-day plan</p>
-          <MealPlanDays days={days} />
+          <QuickMealPlan targetKcal={targetKcal} proteinG={protein} />
         </div>
       )}
 
       <Note>
-        Portions use West African foods with household measures, from the app's food composition
-        data. Energy and protein figures are approximate and intended for planning, not for
-        prescribing parenteral nutrition.
+        Quantities are solved from the FAO/INFOODS West African Food Composition Table (2019). For a
+        patient, use their Clinical Nutrition record so the plan is assessed, approved and charted.
+        Not for prescribing parenteral nutrition.
       </Note>
     </div>
   );
 }
 
-export { MealPlanDays };

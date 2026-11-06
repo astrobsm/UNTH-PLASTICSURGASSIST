@@ -10,6 +10,7 @@ import { syncService } from '../db/syncService';
 import { applyProcedureUpdate, missingProcedureFields } from '../services/procedureRecords';
 import { PS_UNITS } from '../config/psUnits';
 
+import { NutritionSummaryCard } from '../components/nutrition/NutritionSummaryCard';
 export const Procedures: React.FC = () => {
   const navigate = useNavigate();
   const [activeModule, setActiveModule] = useState('overview');
@@ -2636,7 +2637,6 @@ const PostoperativeNoteModal: React.FC<{ procedure: any; onClose: () => void }> 
     dvt_prophylaxis: ''
   });
 
-  const [generatedMealPlan, setGeneratedMealPlan] = useState<any>(null);
 
   const comorbidityOptions = [
     'Diabetes Mellitus',
@@ -2658,85 +2658,19 @@ const PostoperativeNoteModal: React.FC<{ procedure: any; onClose: () => void }> 
     fluids: ['Water', 'Coconut water', 'Zobo drink', 'Palm wine (limited)', 'Fruit juice']
   };
 
-  const generateMealPlan = () => {
-    const isDiabetic = formData.comorbidities.includes('Diabetes Mellitus');
-    const isHypertensive = formData.comorbidities.includes('Hypertension');
-    const hasKidneyDisease = formData.comorbidities.includes('Chronic Kidney Disease');
-    const isMalnourished = formData.comorbidities.includes('Malnutrition');
-
-    const mealPlan = [];
-    
-    for (let day = 1; day <= 7; day++) {
-      const dayPlan = {
-        day,
-        breakfast: '',
-        lunch: '',
-        dinner: '',
-        snacks: '',
-        fluids: '2-3 liters of water daily',
-        notes: []
-      };
-
-      // Breakfast
-      if (day <= 2) {
-        dayPlan.breakfast = 'Light porridge (pap/akamu) with milk';
-      } else {
-        dayPlan.breakfast = isDiabetic 
-          ? 'Oat porridge with groundnuts, boiled egg'
-          : 'Yam porridge or rice with beans, boiled egg';
-      }
-
-      // Lunch
-      if (day === 1) {
-        dayPlan.lunch = 'Clear soup (light pepper soup) with white rice';
-      } else {
-        dayPlan.lunch = `Rice with ${hasKidneyDisease ? 'steamed fish' : 'fish/chicken'} stew, vegetable salad`;
-      }
-
-      // Dinner
-      if (day <= 2) {
-        dayPlan.dinner = 'Light soup (vegetable soup) with fufu/eba (small portion)';
-      } else {
-        dayPlan.dinner = `${isDiabetic ? 'Brown rice' : 'Jollof rice'} with grilled fish/chicken, steamed vegetables`;
-      }
-
-      // Snacks
-      dayPlan.snacks = 'Fruits (banana, orange, papaya), roasted groundnuts';
-
-      // Special dietary notes
-      if (isDiabetic) {
-        dayPlan.notes.push('Low sugar, high fiber diet. Avoid refined carbs');
-      }
-      if (isHypertensive) {
-        dayPlan.notes.push('Low sodium. Avoid excess salt, stock cubes');
-      }
-      if (hasKidneyDisease) {
-        dayPlan.notes.push('Low protein, controlled fluid intake');
-      }
-      if (isMalnourished) {
-        dayPlan.notes.push('High protein, high calorie diet. Frequent small meals');
-      }
-
-      mealPlan.push(dayPlan);
-    }
-
-    setGeneratedMealPlan(mealPlan);
-  };
+  // Diet after surgery follows the patient's Clinical Nutrition record (assessed,
+  // solved from WAFCT 2019 and approved); this note no longer writes its own plan.
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!generatedMealPlan) {
-      alert('Please generate the meal plan first');
-      return;
-    }
-
     try {
       const { user } = useAuthStore.getState();
       const postopNoteRecord = {
         procedure_id: procedure.id,
         ...formData,
-        meal_plan: generatedMealPlan,
+        meal_plan: null,
+        nutrition: 'See Clinical Nutrition record',
         documented_by: user?.name || 'Unknown',
         documented_at: new Date(),
       };
@@ -2985,53 +2919,8 @@ const PostoperativeNoteModal: React.FC<{ procedure: any; onClose: () => void }> 
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={generateMealPlan}
-                className="w-full px-4 py-3 bg-green-600 text-white rounded-md hover:bg-green-700 font-medium"
-              >
-                🍽️ Generate 7-Day African Meal Plan
-              </button>
+              {procedure?.patient_id && <NutritionSummaryCard patientId={procedure.patient_id} context="post-operative diet" />}
             </div>
-
-            {/* Generated Meal Plan Display */}
-            {generatedMealPlan && (
-              <div className="border border-gray-200 rounded-lg p-4 bg-white">
-                <h4 className="font-semibold text-gray-900 mb-4">Generated 7-Day Meal Plan</h4>
-                <div className="space-y-4 max-h-96 overflow-y-auto">
-                  {generatedMealPlan.map((day: any) => (
-                    <div key={day.day} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
-                      <h5 className="font-medium text-gray-900 mb-2">Day {day.day}</h5>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                        <div>
-                          <strong>Breakfast:</strong> {day.breakfast}
-                        </div>
-                        <div>
-                          <strong>Lunch:</strong> {day.lunch}
-                        </div>
-                        <div>
-                          <strong>Dinner:</strong> {day.dinner}
-                        </div>
-                        <div>
-                          <strong>Snacks:</strong> {day.snacks}
-                        </div>
-                      </div>
-                      <div className="text-sm mt-2">
-                        <strong>Fluids:</strong> {day.fluids}
-                      </div>
-                      {day.notes.length > 0 && (
-                        <div className="mt-2 bg-yellow-50 border border-yellow-200 rounded p-2">
-                          <p className="text-xs font-medium text-yellow-900">Dietary Notes:</p>
-                          {day.notes.map((note: string, idx: number) => (
-                            <p key={idx} className="text-xs text-yellow-800">• {note}</p>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
 
             {/* Ambulation & DVT Prophylaxis */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

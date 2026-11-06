@@ -27,9 +27,9 @@ import {
 } from '../../services/clinicianAssistant/calculators';
 import {
   AcidBasePanel, ElectrolytePanel, GfrPanel, BurnsPanel, DvtPanel,
-  PressureSorePanel, MustPanel, WoundMealPlanPanel, NutritionPanel, MealPlanDays,
+  PressureSorePanel, MustPanel, WoundMealPlanPanel, NutritionPanel,
 } from './CalculatorPanels';
-import { generateMealPlan } from '../../data/nigerianFoods';
+import { QuickMealPlan } from '../nutrition/QuickMealPlan';
 
 // The BNF database is several thousand drug records. Loading it with the tab
 // would make every other calculator wait for data most of them never touch.
@@ -458,10 +458,6 @@ function MealPlanSection({
   mode, targetCalories, proteinG,
 }: { mode: 'gain' | 'reduction'; targetCalories: number; proteinG: number }) {
   const [open, setOpen] = useState(false);
-  const days = useMemo(
-    () => (open ? generateMealPlan(targetCalories, proteinG) : null),
-    [open, targetCalories, proteinG]
-  );
 
   return (
     <div className="pt-3 border-t">
@@ -472,14 +468,14 @@ function MealPlanSection({
         {open ? 'Hide' : 'Show'} seven-day {mode === 'gain' ? 'weight gain' : 'weight loss'} meal plan
       </button>
 
-      {days && (
+      {open && (
         <div className="mt-3">
           <p className="text-xs text-gray-600 mb-2">
             Built to {targetCalories.toLocaleString()} kcal and {proteinG} g protein per day using local
             foods and household measures.
             {mode === 'reduction' && ' Protein is held high so the deficit comes off fat rather than muscle.'}
           </p>
-          <MealPlanDays days={days} />
+          <QuickMealPlan targetKcal={targetCalories} proteinG={proteinG} options={{ goal: mode === 'gain' ? 'gain' : 'lose' }} />
         </div>
       )}
     </div>

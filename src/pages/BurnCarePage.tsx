@@ -23,6 +23,7 @@ import { syncService } from '../db/syncService';
 import { useOnSelectedPatient, useSelectedPatient } from '../hooks/useSelectedPatient';
 import { WoundTrackingPanel } from '../components/wound/WoundTrackingPanel';
 
+import { NutritionSummaryCard } from '../components/nutrition/NutritionSummaryCard';
 interface BurnStats {
   activePatients: number;
   icuPatients: number;
@@ -302,6 +303,9 @@ const BurnCarePage: React.FC = () => {
           Every wound module used to end at "what does it look like today";
           serial area lived in a separate page against a separately chosen
           patient, so nothing here could answer whether it was healing. */}
+      {trackedPatient?.id && (
+        <NutritionSummaryCard patientId={trackedPatient.id} context="burns — record %TBSA and days post-burn in the assessment for Toronto/Curreri" />
+      )}
       <WoundTrackingPanel
         patientId={trackedPatient?.id}
         hospitalNumber={(trackedPatient as any)?.hospital_number}

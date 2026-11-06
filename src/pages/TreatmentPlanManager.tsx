@@ -13,6 +13,7 @@ import { treatmentPlanningService } from '../services/treatmentPlanningService';
 import { medicalTeamService } from '../services/medicalTeamService';
 import toast from 'react-hot-toast';
 
+import { NutritionSummaryCard } from '../components/nutrition/NutritionSummaryCard';
 // ─── WHO DISCHARGE CRITERIA (shared) ─────────────────────────────────────────
 const WHO_DISCHARGE_CRITERIA = [
   { id: 'vital_signs', label: 'Vital signs stable for ≥ 24 hours', category: 'Clinical' },
@@ -423,7 +424,6 @@ ${meds.map((m: any, i: number) => `<p>${i + 1}. ${m.name || m.medication_name} $
   const stats = getComplianceStats(plan);
   const woundDressing = parseJSON(plan.wound_dressing_prescription);
   const woundDebridement = parseJSON(plan.wound_debridement_prescription);
-  const mealPlan = (() => { try { return JSON.parse(localStorage.getItem(`meal_plan_${plan.patient_id}`) || 'null'); } catch { return null; } })();
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
@@ -582,59 +582,7 @@ ${meds.map((m: any, i: number) => `<p>${i + 1}. ${m.name || m.medication_name} $
             )}
 
             {/* Meal Plan */}
-            {mealPlan && (
-              <div className="bg-white rounded-xl border p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-1"><Apple className="w-4 h-4 text-green-600" /> 7-Day Nutritional Plan</h3>
-                  <button onClick={() => {
-                    const pw = window.open('', '_blank');
-                    if (!pw) return;
-                    pw.document.write(`<!DOCTYPE html><html><head><title>Meal Plan</title>
-<style>body{font-family:Arial;font-size:11px;margin:10px}h2{color:#0E9F6E}table{width:100%;border-collapse:collapse;margin:5px 0}th,td{border:1px solid #ddd;padding:3px;font-size:10px}th{background:#f0f0f0}
-@media print{@page{size:A4;margin:8mm}}</style></head><body>
-<h2>7-DAY MEAL PLAN - ${getPatientName(plan)}</h2>
-<p><b>Targets:</b> ${mealPlan.targets.calories} | Protein: ${mealPlan.targets.protein} | Fluids: ${mealPlan.targets.fluid}</p>
-<table><tr><th>Day</th><th>Breakfast</th><th>Mid-AM</th><th>Lunch</th><th>Mid-PM</th><th>Dinner</th><th>Fruits</th><th>Water</th></tr>
-${mealPlan.days.map((d: any) => `<tr><td><b>${d.day}</b></td><td>${d.meals.breakfast}</td><td>${d.meals.mid_morning}</td><td>${d.meals.lunch}</td><td>${d.meals.mid_afternoon}</td><td>${d.meals.dinner}</td><td>${d.meals.fruits}</td><td>${d.water}</td></tr>`).join('')}</table>
-${mealPlan.notes.length > 0 ? `<h3>Notes:</h3><ul>${mealPlan.notes.map((n: string) => `<li>${n}</li>`).join('')}</ul>` : ''}
-</body></html>`);
-                    pw.document.close(); pw.print();
-                  }} className="text-xs text-blue-600 hover:underline flex items-center gap-1"><Printer className="w-3 h-3" /> Print</button>
-                </div>
-                <div className="text-xs text-gray-500 mb-2">
-                  Targets: {mealPlan.targets.calories} | Protein: {mealPlan.targets.protein} | Fluids: {mealPlan.targets.fluid}
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-green-50">
-                        <th className="border px-2 py-1 text-left">Day</th>
-                        <th className="border px-2 py-1">Breakfast</th>
-                        <th className="border px-2 py-1">Lunch</th>
-                        <th className="border px-2 py-1">Dinner</th>
-                        <th className="border px-2 py-1">Fruits</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {mealPlan.days.map((d: any, i: number) => (
-                        <tr key={i} className={i % 2 === 0 ? 'bg-gray-50' : ''}>
-                          <td className="border px-2 py-1 font-medium">{d.day.slice(0, 3)}</td>
-                          <td className="border px-2 py-1">{d.meals.breakfast}</td>
-                          <td className="border px-2 py-1">{d.meals.lunch}</td>
-                          <td className="border px-2 py-1">{d.meals.dinner}</td>
-                          <td className="border px-2 py-1">{d.meals.fruits}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                {mealPlan.notes.length > 0 && (
-                  <div className="mt-2 space-y-0.5">
-                    {mealPlan.notes.map((n: string, i: number) => <p key={i} className="text-xs text-gray-600">{n}</p>)}
-                  </div>
-                )}
-              </div>
-            )}
+            <NutritionSummaryCard patientId={plan.patient_id} context="treatment plan" />
           </div>
         )}
 

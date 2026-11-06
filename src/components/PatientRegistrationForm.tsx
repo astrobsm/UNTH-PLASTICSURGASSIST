@@ -15,6 +15,11 @@ import {
   addFooter
 } from '../utils/pdfUtils';
 
+import toast from 'react-hot-toast';
+import { assessNutrition } from '../clinical/nutrition/assess';
+import { normaliseSex, plannerOptionsFrom } from '../clinical/nutrition/record';
+import { generateMealPlan } from '../clinical/nutrition/planner';
+import { loadCatalog } from './nutrition/QuickMealPlan';
 interface PatientRegistrationFormProps {
   onSuccess?: (patientId: string) => void;
   onCancel?: () => void;
@@ -741,149 +746,46 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     return recommendations[type]?.[riskLevel as keyof typeof recommendations[typeof type]] || { clinical: [], interventions: [] };
   };
 
+  // Provisional plan at registration: targets from the clinical nutrition
+  // engine, quantities solved from the FAO/INFOODS West African Food
+  // Composition Table (2019). The assessed, approved plan lives in the
+  // patient's Clinical Nutrition record.
   const generateNigerianMealPlan = async () => {
-    const { weight } = riskAssessmentData.nutritional;
-    const comorbidities = riskAssessmentData.clinical.comorbidities;
-    const diagnosis = riskAssessmentData.clinical.primary_diagnosis;
-    
-    // Calculate daily nutritional requirements
-    const baseMetabolicRate = weight * 24; // Simple BMR calculation
-    const activityLevel = riskAssessmentData.clinical.activity_level || 'moderate';
-    const activityMultiplier = activityLevel === 'sedentary' ? 1.2 : activityLevel === 'moderate' ? 1.5 : 1.7;
-    const dailyCalories = Math.round(baseMetabolicRate * activityMultiplier);
-    
-    // Adjust protein based on conditions (1.2-2.0 g/kg for wound healing, 0.8 g/kg for renal)
-    const hasRenalImpairment = comorbidities.includes('renal_impairment') || comorbidities.includes('chronic_kidney_disease');
-    const hasWoundHealing = diagnosis.toLowerCase().includes('wound') || diagnosis.toLowerCase().includes('surgery') || diagnosis.toLowerCase().includes('burn');
-    const proteinPerKg = hasRenalImpairment ? 0.6 : hasWoundHealing ? 1.5 : 1.0;
-    const dailyProtein = Math.round(weight * proteinPerKg);
-    
-    // Adjust carbs and fats based on diabetes
-    const hasDiabetes = comorbidities.includes('diabetes') || comorbidities.includes('type_2_diabetes');
-    const hasHypertension = comorbidities.includes('hypertension') || comorbidities.includes('high_blood_pressure');
-    const hasLiverDisease = comorbidities.includes('liver_disease') || comorbidities.includes('hepatitis');
-    
-    // Calculate macronutrient distribution
-    const carbsPercentage = hasDiabetes ? 0.40 : 0.50; // 40-50% calories from carbs
-    const fatPercentage = 0.30; // 30% calories from fats
-    const dailyCarbs = Math.round((dailyCalories * carbsPercentage) / 4); // 4 cal/g
-    const dailyFat = Math.round((dailyCalories * fatPercentage) / 9); // 9 cal/g
-    const dailyFiber = Math.round(weight * 0.4); // 25-40g fiber
-
-    // Nigerian Food Composition Table - Based on African Food Composition
-    const nigerianFoods = {
-      // Breakfast options (High fiber, moderate protein)
-      breakfast: {
-        diabetes: [
-          'Oats porridge (40g oats) with cucumber and boiled egg (provides 15g protein, low GI)',
-          'Unripe plantain porridge (200g) with smoked fish (30g protein, complex carbs)',
-          'Millet pap (akamu) with moi moi and fish (20g protein)',
-          'Boiled sweet potato (150g) with vegetable omelet (2 eggs, 12g protein)'
-        ],
-        normal: [
-          'Yam and scrambled eggs (2 eggs) with vegetables (45g carbs, 15g protein)',
-          'Bread (2 slices) and akara (bean cakes, 4 pieces) with pap (25g protein)',
-          'Pancakes with honey and fruits (garden egg, banana)',
-          'Fried yam (150g) with fried egg and vegetables (40g carbs)'
-        ]
+    const n = riskAssessmentData.nutritional;
+    const cm: string[] = (riskAssessmentData.clinical.comorbidities || []).map((x: any) => String(x).toLowerCase());
+    const has = (re: RegExp) => cm.some(x => re.test(x));
+    const diagnosis = String(riskAssessmentData.clinical.primary_diagnosis || '').toLowerCase();
+    const wound = /wound|surgery|burn|ulcer|graft|flap/.test(diagnosis);
+    const ageYears = formData.date_of_birth ? Math.floor((Date.now() - new Date(formData.date_of_birth).getTime()) / (365.25 * 24 * 60 * 60 * 1000)) : null;
+    const activity = riskAssessmentData.clinical.activity_level || 'moderate';
+    const result = assessNutrition({
+      weightKg: n.weight || null, heightCm: n.height || null, ageYears, sex: normaliseSex((formData as any).sex),
+      weightLossPct3to6m: n.weight_loss_percentage || null, acutelyIllNoIntake5d: !!n.acute_disease_effect,
+      diabetes: has(/diabet/), ckd: has(/renal|kidney/), liverDisease: has(/liver|hepat/), heartFailure: has(/heart_failure|cardiac_failure/),
+      mobility: activity === 'sedentary' ? 'chair' : 'ambulatory', stress: wound ? 'minor_surgery' : 'none',
+    });
+    const opts = plannerOptionsFrom(result, String(formData.hospital_number || 'registration'));
+    if (!opts) { toast.error(result.scope.notice || 'Weight, height, age and sex are needed for a plan'); return; }
+    let plan;
+    try {
+      const cat = await loadCatalog();
+      if (!cat.recipes.length) { toast.error('The food database has no recipes yet — import WAFCT 2019 under Clinical Nutrition › Food database'); return; }
+      plan = generateMealPlan(cat as any, opts);
+    } catch (e: any) { toast.error(String(e?.message || 'Could not load the food database')); return; }
+    const text = (items: any[], slots: string[]) => items.filter(i => slots.includes(i.slot))
+      .map(i => `${i.name} (${i.units ? `${i.units.n} ${i.units.label}` : `${i.servedG} g`})`).join(', ') || '—';
+    const instructions = [...result.targets.restrictions, ...plan.suggestions, 'Provisional — complete the assessment in the Clinical Nutrition record for an approved plan'];
+    const mealPlan = plan.days.map(d => ({
+      day: d.day,
+      breakfast: text(d.items, ['breakfast']), lunch: text(d.items, ['lunch']), dinner: text(d.items, ['dinner']),
+      snacks: [text(d.items, ['mid_morning']), text(d.items, ['afternoon', 'evening'])],
+      nutritionalInfo: {
+        calories: d.totals.energy_kcal ?? 0, protein: d.totals.protein_g ?? 0, carbs: d.totals.carb_g ?? 0, fat: d.totals.fat_g ?? 0, fiber: d.totals.fibre_g ?? 0,
+        sodium: `${d.totals.na_mg ?? 0} mg (excl. added salt)`, potassium: `${d.totals.k_mg ?? 0} mg`, phosphorus: `${d.totals.p_mg ?? 0} mg`,
       },
-      
-      // Lunch options (High protein, moderate carbs)
-      lunch: {
-        hypertension: [
-          'Brown rice (150g) with grilled fish (80g) and steamed vegetables - NO ADDED SALT (30g protein)',
-          'Yam porridge with vegetables (low sodium) - use herbs for flavor (8g protein)',
-          'Beans (100g) and plantain - reduced salt (15g protein, high fiber)',
-          'Tuwo shinkafa (150g) with miyan kuka - herbal seasoning only (20g protein)'
-        ],
-        normal: [
-          'Jollof rice (200g) with grilled chicken (100g) and plantain (35g protein)',
-          'Fried rice with chicken and vegetables (mixed peppers, carrots, green beans)',
-          'Ofada rice (180g) with ayamase stew (pepper sauce with assorted meat)',
-          'Coconut rice (200g) with chicken stew'
-        ]
-      },
-      
-      // Dinner options (Moderate protein, high vegetables)
-      dinner: {
-        renal: [
-          'White rice (150g) with low-protein vegetable stew (tomatoes, peppers) - limit to 30g protein/day',
-          'Rice with low-protein vegetable curry - avoid beans, limit meat',
-          'White rice with low-protein tomato stew - control phosphorus',
-          'Rice (150g) with vegetable soup - minimal protein sources'
-        ],
-        normal: [
-          'Pounded yam (250g) with egusi soup (melon seed) and fish (100g) (40g protein)',
-          'Fufu (200g) with bitter leaf soup and stockfish (35g protein)',
-          'Eba (garri, 200g) with okra soup and fish (25g protein)',
-          'Semo (150g) with ogbono soup (wild mango seed) and meat (30g protein)',
-          'Amala (200g) with ewedu and fish stew (28g protein)',
-          'Poundo yam with afang soup and periwinkle (32g protein)'
-        ]
-      },
-      
-      // Snacks (Nutrient-dense, portion-controlled)
-      snacks: {
-        liver_disease: [
-          'Banana (medium)', 'Cucumber slices (100g)', 'Carrot sticks (50g)', 
-          'Apple (small)', 'Orange (medium)', 'Watermelon (100g)', 'Carrot juice (200ml)'
-        ],
-        normal: [
-          'Groundnuts (30g, 7g protein)', 'Garden egg with groundnut paste',
-          'Tiger nuts (ayana, 40g)', 'Chin chin (30g)', 'Zobo drink (no sugar)',
-          'Coconut pieces (40g)', 'Boli (roasted plantain) with groundnut',
-          'Dates (5 pieces)', 'Yogurt (unsweetened, 150ml)', 'Meat pie (small)'
-        ]
-      }
-    };
-
-    // Generate 7-day meal plan with rotation
-    const mealPlan: any[] = [];
-    for (let day = 1; day <= 7; day++) {
-      const breakfast = nigerianFoods.breakfast[hasDiabetes ? 'diabetes' : 'normal'][day % 4];
-      const lunch = nigerianFoods.lunch[hasHypertension ? 'hypertension' : 'normal'][day % 4];
-      const dinner = nigerianFoods.dinner[hasRenalImpairment ? 'renal' : 'normal'][day % 6];
-      const snackOptions = nigerianFoods.snacks[hasLiverDisease ? 'liver_disease' : 'normal'];
-      const snacks = [
-        snackOptions[(day * 2) % snackOptions.length],
-        snackOptions[(day * 2 + 1) % snackOptions.length]
-      ];
-
-      mealPlan.push({
-        day,
-        breakfast,
-        lunch,
-        dinner,
-        snacks,
-        nutritionalInfo: {
-          calories: dailyCalories,
-          protein: hasRenalImpairment ? Math.round(dailyProtein * 0.8) : dailyProtein,
-          carbs: dailyCarbs,
-          fat: dailyFat,
-          fiber: dailyFiber,
-          sodium: hasHypertension ? '< 2000mg' : '< 2300mg',
-          potassium: hasRenalImpairment ? '< 2000mg' : 'normal',
-          phosphorus: hasRenalImpairment ? '< 1000mg' : 'normal'
-        },
-        specialInstructions: [
-          hasDiabetes ? 'Monitor blood glucose 2hrs after meals' : '',
-          hasHypertension ? 'NO added salt - use herbs (basil, thyme, ginger) for flavor' : '',
-          hasRenalImpairment ? 'Limit protein to prescribed amount, avoid potassium-rich foods' : '',
-          hasLiverDisease ? 'Small frequent meals, avoid fried foods' : '',
-          hasWoundHealing ? 'High protein for tissue repair, adequate vitamin C and zinc' : ''
-        ].filter(x => x)
-      });
-    }
-
-    // Calculate weekly nutritional summary
-    const weeklyRequirements = {
-      totalCalories: dailyCalories * 7,
-      totalProtein: dailyProtein * 7,
-      totalCarbs: dailyCarbs * 7,
-      totalFat: dailyFat * 7,
-      totalFiber: dailyFiber * 7
-    };
-
+      specialInstructions: instructions,
+    }));
+    const daily = { calories: result.targets.kcal ?? 0, protein: result.targets.proteinG ?? 0, carbs: result.targets.carbG ?? 0, fat: result.targets.fatG ?? 0, fiber: 0 };
     setAiRecommendations(prev => ({
       ...prev,
       nutritional: {
@@ -891,19 +793,13 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
         mealPlan: {
           generated: true,
           days: mealPlan,
-          dailyRequirements: {
-            calories: dailyCalories,
-            protein: dailyProtein,
-            carbs: dailyCarbs,
-            fat: dailyFat,
-            fiber: dailyFiber
-          },
-          weeklyRequirements,
+          dailyRequirements: daily,
+          weeklyRequirements: { totalCalories: daily.calories * 7, totalProtein: daily.protein * 7, totalCarbs: daily.carbs * 7, totalFat: daily.fat * 7, totalFiber: 0 },
           comorbidityAdjustments: {
-            diabetes: hasDiabetes ? 'Low GI foods, controlled carbohydrates' : null,
-            hypertension: hasHypertension ? 'Low sodium (<2000mg/day), DASH diet principles' : null,
-            renal: hasRenalImpairment ? 'Protein restriction, phosphorus & potassium control' : null,
-            liver: hasLiverDisease ? 'Small frequent meals, adequate protein, low fat' : null
+            diabetes: has(/diabet/) ? 'Carbohydrate ≤ 45% of energy, low glycaemic index, spread across meals' : null,
+            hypertension: has(/hypertension|blood_pressure/) ? 'Low sodium (< 2 g/day); no added salt or seasoning cubes' : null,
+            renal: has(/renal|kidney/) ? 'Protein, potassium and phosphate limits — physician to confirm' : null,
+            liver: has(/liver|hepat/) ? 'Small frequent meals; protein is not restricted routinely' : null,
           }
         }
       }

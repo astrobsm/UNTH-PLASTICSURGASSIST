@@ -9,6 +9,9 @@
  * wound healing, J Dent Res) and the IWII 2022 consensus on host factors.
  */
 import { ans, multi, n, note, num, sel, text } from './common';
+import { bmiCalc } from '../nutrition/anthropometry';
+import { mustOf as engineMust } from '../nutrition/screening';
+import { NUTRITION_CONFIG } from '../nutrition/config';
 import type { Answers, ScoreDef, TemplateSection } from './types';
 
 export const nutritionSection = (): TemplateSection => ({
@@ -89,20 +92,20 @@ export const counsellingSection = (topics: string[] = []): TemplateSection => ({
 
 // ── scores ────────────────────────────────────────────────────────────────
 
+/** BMI from the template's nutrition answers (engine arithmetic). */
 export function bmiOf(a: Answers): number | null {
-  const w = n(a, 'nutrition', 'weight'), h = n(a, 'nutrition', 'height');
-  if (!w || !h) return null;
-  return Math.round((w / ((h / 100) ** 2)) * 10) / 10;
+  return bmiCalc(n(a, 'nutrition', 'weight'), n(a, 'nutrition', 'height'))?.value ?? null;
 }
 
+/** The template's categorical weight-loss answer, as the % the engine scores. */
+const LOSS_PCT: Record<string, number | null> = { '< 5%': 0, '5–10%': 7.5, '> 10%': 10.1, Unknown: null };
+
+/** MUST — the clinical nutrition engine's implementation, fed from the template answers. */
 export function mustOf(a: Answers): number | null {
   const bmi = bmiOf(a);
   const loss = ans(a, 'nutrition', 'wt_loss'), acute = ans(a, 'nutrition', 'acute');
   if (bmi === null || !loss || !acute) return null;
-  const s1 = bmi < 18.5 ? 2 : bmi < 20 ? 1 : 0;
-  const s2 = loss === '> 10%' ? 2 : loss === '5–10%' ? 1 : 0;
-  const s3 = acute === 'Yes' ? 2 : 0;
-  return s1 + s2 + s3;
+  return engineMust({ acutelyIllNoIntake5d: acute === 'Yes' }, { bmi, muacBand: null, lossPct: LOSS_PCT[loss] ?? null }, NUTRITION_CONFIG)?.value ?? null;
 }
 
 export const bmiScore: ScoreDef = {

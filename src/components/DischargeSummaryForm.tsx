@@ -11,6 +11,10 @@ import {
 } from '../services/admissionDischargeService';
 import { getCurrentUserName } from '../utils/getCurrentUser';
 import SpeechToTextInput from './SpeechToTextInput';
+import toast from 'react-hot-toast';
+import { nutritionService } from '../services/nutritionService';
+import { toDischargeMealPlan } from '../clinical/nutrition/formats';
+import { NutritionSummaryCard } from './nutrition/NutritionSummaryCard';
 
 interface DischargeSummaryFormProps {
   admission: Admission;
@@ -81,12 +85,23 @@ export default function DischargeSummaryForm({
     }
   };
 
-  // Generate meal plan based on comorbidities
-  const generateMealPlan = () => {
-    const comorbidities = admission.comorbidities || [];
-    const plan = admissionDischargeService.generate7DayMealPlan(comorbidities, finalDiagnosis);
-    setMealPlan(plan);
-    setShowMealPlan(true);
+  // The discharge meal plan is the patient's plan from their Clinical Nutrition
+  // record — assessed, solved from WAFCT 2019 and approved — not a second generator.
+  const generateMealPlan = async () => {
+    try {
+      const rec = await nutritionService.patient(String(admission.patient_id));
+      const plans = rec.meal_plans.filter(p => !['entered_in_error', 'superseded'].includes(p.status));
+      const planRec = plans.find(p => p.status === 'approved') || plans[0];
+      if (!planRec?.plan?.days?.length) {
+        toast.error('No meal plan in the Clinical Nutrition record yet — assess the patient and approve a plan there first.');
+        return;
+      }
+      const assessment = rec.assessments.find(a => a.id === planRec.assessment_id) || rec.assessments.find(a => a.status !== 'entered_in_error') || null;
+      setMealPlan(toDischargeMealPlan(planRec.plan, (assessment?.result as any) ?? null, { approved: planRec.status === 'approved', approvedBy: planRec.approved_by_name }) as MealPlan);
+      setShowMealPlan(true);
+    } catch (e: any) {
+      toast.error(String(e?.message || 'Could not load the nutrition record').replace(/^\[HTTP \d+\]\s*/, ''));
+    }
   };
 
   // Auto-generate hospital course summary
@@ -499,9 +514,10 @@ export default function DischargeSummaryForm({
             onClick={generateMealPlan}
             className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
           >
-            🍳 Generate Meal Plan
+            🍳 Use nutrition meal plan
           </button>
         </div>
+        <div className="mb-3"><NutritionSummaryCard patientId={admission.patient_id} context="discharge" /></div>
 
         {mealPlan && showMealPlan && (
           <div className="space-y-4">

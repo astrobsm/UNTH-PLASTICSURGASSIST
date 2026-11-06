@@ -28,6 +28,7 @@ import { DiabeticFootAssessment } from '../../services/diabeticFootService';
 import { patientService } from '../../services/patientService';
 import { dopplerRequestService, DopplerRequestData } from '../../services/dopplerRequestService';
 
+import { NutritionSummaryCard } from '../nutrition/NutritionSummaryCard';
 interface Patient {
   id: string;
   hospital_number: string;
@@ -272,7 +273,12 @@ export const DiabeticFootAssessmentForm: React.FC<Props> = ({
       case 7:
         return <Step7Osteomyelitis formData={formData} setFormData={setFormData} />;
       case 8:
-        return <Step8Results formData={formData} selectedPatient={selectedPatient} />;
+        return (
+          <>
+            {selectedPatient?.id && <div className="mb-4"><NutritionSummaryCard patientId={selectedPatient.id} context="diabetic foot / limb salvage" /></div>}
+            <Step8Results formData={formData} selectedPatient={selectedPatient} />
+          </>
+        );
       default:
         return null;
     }

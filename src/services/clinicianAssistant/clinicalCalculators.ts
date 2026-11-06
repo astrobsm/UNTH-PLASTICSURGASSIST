@@ -7,7 +7,7 @@
  *
  *   acid-base            → engine/modules/abg.ts   interpretAcidBase()
  *   potassium, sodium    → engine/replacement.ts   correctionPlan()
- *   meal plans           → data/nigerianFoods.ts   generateMealPlan()
+ *   meal plans           → clinical/nutrition/planner.ts (WAFCT 2019, constrained solver)
  *
  * The alternative — writing a second acid-base interpreter for a calculator
  * screen — is how two parts of one app come to disagree at the bedside. What is
@@ -19,7 +19,6 @@
 
 import { interpretAcidBase } from './engine/modules/abg';
 import { correctionPlan, type CorrectionPlan } from './engine/replacement';
-import { generateMealPlan, type DayPlan } from '../../data/nigerianFoods';
 import { emptyPatient, type PatientContext, type Sex } from './engine/types';
 
 // ── Acid-base ────────────────────────────────────────────────────────────
@@ -198,7 +197,6 @@ export function egfrCkdEpi(input: GfrInput): GfrOutput {
 export interface MealPlanOutput {
   targetKcal: number;
   targetProtein: number;
-  days: DayPlan[];
   rationale: string[];
 }
 
@@ -303,7 +301,6 @@ export function woundHealingMealPlan(input: WoundMealPlanInput | number, legacy?
     proteinPerKg,
     kcalPerKg,
     fluidMl: Math.round(weightKg * fluidPerKg),
-    days: generateMealPlan(targetKcal, targetProtein),
     modifications,
     cautions,
     rationale: [
@@ -325,7 +322,6 @@ export function weightLossMealPlan(targetKcal: number, weightKg: number): MealPl
   return {
     targetKcal,
     targetProtein,
-    days: generateMealPlan(targetKcal, targetProtein),
     rationale: [
       `${targetKcal} kcal/day with ${targetProtein} g protein.`,
       'Protein held at 1.6 g/kg so the deficit comes off fat rather than muscle.',

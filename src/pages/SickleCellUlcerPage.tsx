@@ -13,7 +13,9 @@ import toast from 'react-hot-toast';
 import { useSelectedPatient } from '../hooks/useSelectedPatient';
 import { useAuthStore } from '../store/authStore';
 import { sickleCellUlcerService, SickleCellUlcerAssessment } from '../services/sickleCellUlcerService';
-import { generateMealPlan, DayPlan } from '../data/nigerianFoods';
+import { useQuickPlan } from '../components/nutrition/QuickMealPlan';
+import { DayCard } from '../components/nutrition/MealPlanPanel';
+import { NutritionSummaryCard } from '../components/nutrition/NutritionSummaryCard';
 import { WoundTrackingPanel } from '../components/wound/WoundTrackingPanel';
 
 type Band = { label: string; points: number };
@@ -92,7 +94,7 @@ export default function SickleCellUlcerPage() {
   const [largeWound, setLargeWound] = useState(false);
   const [notes, setNotes] = useState('');
 
-  const [mealPlan, setMealPlan] = useState<DayPlan[]>([]);
+  const [planSeed, setPlanSeed] = useState(0);
   const [saving, setSaving] = useState(false);
   const [history, setHistory] = useState<SickleCellUlcerAssessment[]>([]);
 
@@ -179,14 +181,9 @@ export default function SickleCellUlcerPage() {
     return rec;
   }, [woundBed, infection]);
 
-  const regenerateMeals = useCallback(() => {
-    if (needs) setMealPlan(generateMealPlan(needs.kcal, needs.protein));
-  }, [needs]);
-
-  useEffect(() => {
-    if (needs) setMealPlan(generateMealPlan(needs.kcal, needs.protein));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [needs?.kcal, needs?.protein]);
+  // Solved from WAFCT 2019 against these targets; Regenerate rotates the dishes.
+  const { plan: mealPlan } = useQuickPlan(needs?.kcal ?? 0, needs?.protein ?? 0, { seed: `scd-${patient?.id ?? ''}-${planSeed}` }, !!needs);
+  const regenerateMeals = useCallback(() => setPlanSeed(n => n + 1), []);
 
   const loadHistory = useCallback(async () => {
     if (!patient?.id) return;
@@ -401,34 +398,11 @@ export default function SickleCellUlcerPage() {
             </button>
           )}
         </div>
-        {mealPlan.length === 0 ? (
+        {patient?.id && <div className="mb-3"><NutritionSummaryCard patientId={patient.id} context="sickle cell ulcer" /></div>}
+        {!mealPlan ? (
           <p className="text-sm text-gray-500">Enter weight to auto-generate a meal plan matched to the nutritional targets.</p>
         ) : (
-          <div className="space-y-3">
-            {mealPlan.map(d => {
-              const meets = needs ? d.totalProtein >= needs.protein - 8 : true;
-              return (
-                <div key={d.day} className="border border-gray-100 rounded-lg p-3">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <p className="font-semibold text-sm text-gray-800">{d.day}</p>
-                    <span className={`text-xs font-medium ${meets ? 'text-green-600' : 'text-amber-600'}`}>
-                      {d.totalKcal} kcal · {d.totalProtein} g protein
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-5 gap-2 text-xs">
-                    {[d.breakfast, d.midMorningSnack, d.lunch, d.afternoonSnack, d.dinner].map((m, i) => (
-                      <div key={i} className="bg-gray-50 rounded-md p-2">
-                        <p className="font-medium text-gray-500 mb-1">{['Breakfast', 'Snack', 'Lunch', 'Snack', 'Dinner'][i]}</p>
-                        {m.items.map((it, j) => (
-                          <p key={j} className="text-gray-700 leading-tight">{it.name} <span className="text-gray-400">— {it.qty}</span></p>
-                        ))}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <div className="space-y-3">{mealPlan.days.map(d => <DayCard key={d.day} d={d} igbo={false} />)}</div>
         )}
       </div>
 

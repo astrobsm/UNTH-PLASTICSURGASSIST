@@ -35,6 +35,7 @@ import {
 } from '../services/preoperativeMedicationAdvice';
 import { useOnSelectedPatient } from '../hooks/useSelectedPatient';
 
+import { NutritionSummaryCard } from '../components/nutrition/NutritionSummaryCard';
 /**
  * How old a laboratory result may be before theatre.
  *
@@ -252,6 +253,7 @@ export default function PreOperativeWorkupPage() {
               </div>
             ) : data ? (
               <>
+                {selected && <NutritionSummaryCard patientId={selected.id} context="pre-operative optimisation (GLIM, weight loss, albumin)" />}
                 <div className="flex justify-end">
                   <button
                     onClick={() => loadWorkup(selected.id)}

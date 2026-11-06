@@ -140,12 +140,13 @@ describe('electrolyteCorrection', () => {
 });
 
 describe('meal plans', () => {
-  it('builds a week of wound-healing meals at 1.5 g/kg', () => {
+  // The seven days themselves are built by the WAFCT-backed solver
+  // (clinical/nutrition/planner.ts, tested in nutritionPlanner.test.ts).
+  it('sets wound-healing targets at 1.5 g/kg', () => {
     const r = woundHealingMealPlan(60);
     expect(r.targetProtein).toBe(90);
     expect(r.targetKcal).toBe(1800);
-    expect(r.days).toHaveLength(7);
-    expect(r.days[0].breakfast.items.length).toBeGreaterThan(0);
+    expect('days' in r).toBe(false);
   });
 
   it('raises targets for an extensive wound', () => {
@@ -174,11 +175,9 @@ describe('meal plans', () => {
     expect(r.modifications.join(' ')).toMatch(/potassium/i);
   });
 
-  it('generates the meal plan against the capped target, not the uncapped one', () => {
+  it('reports the capped target, which is what the plan is solved against', () => {
     const r = woundHealingMealPlan({ weightKg: 60, severity: 'severe', ckd: true });
-    // The days must be built from the number actually reported.
     expect(r.targetProtein).toBe(60);
-    expect(r.days).toHaveLength(7);
   });
 
   it('adds diabetic modifications without changing the targets', () => {
@@ -198,14 +197,5 @@ describe('meal plans', () => {
     const r = weightLossMealPlan(1500, 90);
     expect(r.targetProtein).toBe(144);
     expect(r.targetKcal).toBe(1500);
-    expect(r.days).toHaveLength(7);
-  });
-
-  it('produces days that carry their own totals', () => {
-    const r = woundHealingMealPlan(70);
-    for (const d of r.days) {
-      expect(d.totalKcal).toBeGreaterThan(0);
-      expect(d.totalProtein).toBeGreaterThan(0);
-    }
   });
 });

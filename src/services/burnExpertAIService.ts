@@ -570,52 +570,6 @@ Format as a JSON array of recommendation strings.
   }
 
   /**
-   * Calculate nutrition requirements for burn patients
-   */
-  calculateNutritionRequirements(
-    weight: number,
-    tbsa: number,
-    age?: number
-  ): NutritionRecommendation {
-    // Curreri formula for adults: 25kcal/kg + 40kcal/%TBSA
-    // Modified for children: based on age and weight
-    let caloricTarget: number;
-    
-    if (age && age < 18) {
-      // Pediatric calculation
-      caloricTarget = (60 * weight) + (35 * tbsa);
-    } else {
-      // Adult calculation
-      caloricTarget = (25 * weight) + (40 * tbsa);
-    }
-    
-    // Protein: 1.5-2g/kg/day for major burns
-    const proteinMultiplier = tbsa > 20 ? 2.0 : 1.5;
-    const proteinTarget = weight * proteinMultiplier;
-    
-    // Carbs: 60-70% of non-protein calories
-    const nonProteinCalories = caloricTarget - (proteinTarget * 4);
-    const carbTarget = (nonProteinCalories * 0.65) / 4;
-    
-    // Fats: 30-35% of non-protein calories
-    const fatTarget = (nonProteinCalories * 0.35) / 9;
-    
-    // Micronutrients for wound healing
-    return {
-      caloricTarget: Math.round(caloricTarget),
-      proteinTarget: Math.round(proteinTarget),
-      carbTarget: Math.round(carbTarget),
-      fatTarget: Math.round(fatTarget),
-      vitaminC: 1000, // mg/day
-      vitaminE: 400, // IU/day
-      zinc: 220, // mg zinc sulfate/day
-      selenium: 400, // mcg/day
-      feedingRoute: tbsa > 20 ? 'Enteral (NG/NJ tube)' : 'Oral if possible',
-      specialConsiderations: this.getNutritionConsiderations(tbsa, age)
-    };
-  }
-
-  /**
    * Check burn center referral criteria
    */
   checkBurnCenterCriteria(

@@ -18,6 +18,7 @@ import {
   PS_CME_ARTICLE
 } from '../data/pressureSoreProtocol';
 
+import { NutritionSummaryCard } from '../components/nutrition/NutritionSummaryCard';
 // ============================================
 // TYPES
 // ============================================
@@ -666,6 +667,9 @@ const PressureSorePage: React.FC = () => {
                   <span><User className="h-4 w-4 inline mr-1" /> {selectedPatient.full_name || `${selectedPatient.first_name} ${selectedPatient.last_name}`} ({selectedPatient.hospital_number})</span>
                   <button onClick={() => setSelectedPatient(null)} className="text-gray-400 hover:text-gray-600" title="Clear patient selection"><X className="h-4 w-4" /></button>
                 </div>
+              )}
+              {selectedPatient && (
+                <div className="mt-2"><NutritionSummaryCard patientId={selectedPatient.id} context="pressure ulcer healing" /></div>
               )}
             </div>
 

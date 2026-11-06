@@ -19,6 +19,7 @@ import { searchDrugs, BNFDrug } from '../data/bnfDrugDatabase';
 import { ocrService } from '../services/ocrService';
 import { HO_ROUND_WINDOW } from '../config/psUnits';
 
+import { NutritionSummaryCard } from './nutrition/NutritionSummaryCard';
 interface WardRoundFormProps {
   patientId?: string;
   wardRoundId?: string;
@@ -1056,6 +1057,7 @@ export const WardRoundForm: React.FC<WardRoundFormProps> = ({
             {/* Vitals & Examination Tab */}
             {activeTab === 'vitals' && (
               <div className="space-y-6">
+                {formData.patient_id && <NutritionSummaryCard patientId={formData.patient_id} context="ward round" />}
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">Vital Signs</h3>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4">

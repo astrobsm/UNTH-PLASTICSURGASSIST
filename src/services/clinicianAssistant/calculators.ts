@@ -5,7 +5,7 @@
  * deliberately not ported:
  *   Acid-base            → engine/modules/abg.ts (fuller: Winter's compensation)
  *   Potassium, Sodium    → engine/replacement.ts (K, Na, Mg, Ca, phosphate)
- *   Wound-healing meals  → data/nigerianFoods.ts generateMealPlan()
+ *   Wound-healing meals  → clinical/nutrition/planner.ts generateMealPlan()
  *   Burns, DVT, Pressure sore, Nutrition, BNF, GFR → existing modules
  * A second implementation of the same clinical arithmetic drifts from the first
  * at the first edit, and the two then disagree at the bedside.

@@ -9,6 +9,8 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
+import { energyOptions, proteinOf } from '../clinical/nutrition/requirements';
+import { NUTRITION_CONFIG } from '../clinical/nutrition/config';
 
 // ================== INTERFACES ==================
 
@@ -858,23 +860,24 @@ class BurnCareService {
   }
 
   /**
-   * Calculate nutritional requirements
-   * Curreri Formula: 25 kcal/kg/day + 40 kcal/%TBSA/day
-   * Protein: 1.5-2.0 g/kg/day
+   * Burn energy and protein targets — delegated to the clinical nutrition
+   * engine (Curreri with TBSA capped at 50%; burns protein band from the
+   * versioned coefficients). For a full assessment (Toronto, ICU rules,
+   * refeeding) use the patient's Clinical Nutrition record.
    */
   calculateNutritionTargets(weightKg: number, tbsa: number): {
     caloriesPerDay: number;
     proteinPerDay: number;
     formula: string;
   } {
-    // Curreri formula for burns
-    const caloriesPerDay = Math.round(25 * weightKg + 40 * tbsa);
-    const proteinPerDay = Math.round(1.5 * weightKg * 10) / 10; // 1.5-2.0 g/kg/day
-
+    const inputs = { weightKg, tbsaPct: tbsa };
+    const body = { kg: weightKg, heightCm: null, bmi: null, ibw: null, adjbw: null };
+    const curreri = energyOptions(inputs, body, NUTRITION_CONFIG).find(o => o.id === 'curreri');
+    const protein = proteinOf(inputs, body, NUTRITION_CONFIG);
     return {
-      caloriesPerDay,
-      proteinPerDay,
-      formula: `Curreri: 25×${weightKg}kg + 40×${tbsa}%TBSA`,
+      caloriesPerDay: curreri?.value ?? 0,
+      proteinPerDay: protein?.value ?? 0,
+      formula: `${curreri?.method ?? 'Curreri'} (${weightKg} kg, ${tbsa}% TBSA) — overestimates; prefer Toronto/calorimetry. Protein ${protein?.method ?? ''}`,
     };
   }
 

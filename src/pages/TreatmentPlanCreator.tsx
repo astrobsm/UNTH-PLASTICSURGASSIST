@@ -17,6 +17,7 @@ import { searchInvestigations } from '../data/investigationDatabase';
 import { DocumentScannerModal } from '../components/DocumentScannerModal';
 import toast from 'react-hot-toast';
 
+import { NutritionSummaryCard } from '../components/nutrition/NutritionSummaryCard';
 // ─── PRESCRIPTION TEMPLATES ──────────────────────────────────────────────────
 const WOUND_CARE_SUPPLEMENTS = [
   { name: 'Vitamin C', dosage: '1g', route: 'oral', frequency: 'OD', duration: 'Until discharge', notes: 'Wound healing supplement' },
@@ -527,54 +528,6 @@ const TreatmentPlanCreator: React.FC = () => {
     toast.success(`Pressure sore prevention protocol generated (Braden: ${bradenTotal})`);
   };
 
-  const generateNutritionalPlan = () => {
-    const hasDiabetes = comorbidities.some(c => /diabet|dm|glyc/i.test(c));
-    const hasRenal = comorbidities.some(c => /renal|kidney|ckd|dialysis/i.test(c));
-    const hasHeart = comorbidities.some(c => /heart|cardiac|chf|ccf/i.test(c));
-    const isBurn = comorbidities.some(c => /burn/i.test(c)) || diagnosis.toLowerCase().includes('burn');
-
-    let calTarget = '2000-2500 kcal/day';
-    let proteinTarget = '1.2-1.5 g/kg/day';
-    let fluidTarget = '2-2.5L/day';
-    if (isBurn) { calTarget = '3000-4000 kcal/day'; proteinTarget = '2-2.5 g/kg/day'; fluidTarget = 'As per Parkland formula + maintenance'; }
-    if (hasRenal) { proteinTarget = '0.6-0.8 g/kg/day'; fluidTarget = '1-1.5L/day (fluid restrict)'; }
-    if (hasHeart) { fluidTarget = '1.5L/day (fluid restrict)'; }
-
-    const mealPlan = {
-      targets: { calories: calTarget, protein: proteinTarget, fluid: fluidTarget },
-      days: Array.from({ length: 7 }, (_, i) => ({
-        day: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][i],
-        meals: {
-          breakfast: hasDiabetes
-            ? 'Whole grain oats with nuts + boiled eggs (2) + low-sugar fruit (apple/pear)'
-            : 'Pap/oats with milk + eggs (2) + banana + tea with honey',
-          mid_morning: 'Fresh fruit (orange/watermelon) + handful of groundnuts',
-          lunch: hasRenal
-            ? `White rice + grilled ${['chicken', 'fish', 'turkey', 'chicken', 'fish', 'turkey', 'chicken'][i]} + steamed vegetables (small portion)`
-            : `${['Rice', 'Pasta', 'Amala', 'Rice', 'Semovita', 'Tuwo', 'Rice'][i]} + ${['Chicken stew', 'Fish pepper soup', 'Egusi soup + beef', 'Vegetable soup + fish', 'Okra soup + chicken', 'Beans + plantain', 'Jollof rice + chicken'][i]}`,
-          mid_afternoon: hasDiabetes ? 'Sugar-free yogurt + cucumber slices' : 'Yogurt + biscuit/chin-chin',
-          dinner: `Light soup + ${['bread', 'moi-moi', 'yam', 'bread', 'potato', 'plantain', 'noodles'][i]} + boiled ${['egg', 'fish', 'chicken', 'egg', 'fish', 'chicken', 'egg'][i]}`,
-          supper: 'Warm milk/milo + crackers/digestive biscuit',
-          fruits: ['Watermelon', 'Orange + pawpaw', 'Banana + apple', 'Pineapple', 'Guava + grape', 'Mango', 'Mixed fruit'][i],
-        },
-        water: hasRenal || hasHeart ? '200ml x 6-8 glasses (max 1.5L)' : '300ml x 8-10 glasses (2.5L min)',
-      })),
-      notes: [
-        hasDiabetes ? '⚠️ DIABETIC: Avoid refined sugars, white bread, sweet drinks. Monitor blood glucose before meals.' : '',
-        hasRenal ? '⚠️ RENAL: Low potassium, low phosphate, restrict protein. Avoid oranges, bananas, tomatoes.' : '',
-        hasHeart ? '⚠️ CARDIAC: Low salt diet (< 2g/day). Fluid restriction 1.5L/day. Avoid processed foods.' : '',
-        isBurn ? '⚠️ BURN: High calorie, high protein diet. Frequent small meals. Ensure adequate micronutrients.' : '',
-        'Ensure adequate protein at each meal for wound healing',
-        'Fruit intake minimum 3 servings per day',
-        'Avoid skipping meals - maintain regular eating schedule',
-      ].filter(Boolean)
-    };
-
-    // Store meal plan in notes for now
-    localStorage.setItem(`meal_plan_${selectedPatient?.id}`, JSON.stringify(mealPlan));
-    toast.success('7-day nutritional meal plan generated. View in plan details.');
-    return mealPlan;
-  };
 
   // ── SAVE PLAN ──────────────────────────────────────────────────────────────
   const savePlan = async () => {
@@ -1051,9 +1004,11 @@ const TreatmentPlanCreator: React.FC = () => {
               <div className="mt-3 p-2 bg-gray-50 rounded-lg text-sm text-gray-700">
                 <strong>Action:</strong> {mustRisk.action}
               </div>
-              <button onClick={() => { const mp = generateNutritionalPlan(); }} className="mt-2 px-4 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 flex items-center gap-1">
-                <Apple className="w-4 h-4" /> Auto-Generate 7-Day Nutritional Meal Plan
-              </button>
+              {selectedPatient?.id && (
+                <div className="mt-2">
+                  <NutritionSummaryCard patientId={selectedPatient.id} context="meal plan — assess and approve in the Clinical Nutrition record" />
+                </div>
+              )}
             </div>
 
             <div className="flex justify-between">
