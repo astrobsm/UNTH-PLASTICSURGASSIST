@@ -13,6 +13,8 @@ import type { PatientContext } from '../../../clinical/clerking/engine';
 import { clinicalEncounterService, localDraft, type ClinicalEncounter, type PatientEncounters, type TrackedPlanItem, type TrackedProblem } from '../../../services/clinicalEncounterService';
 import InitialEncounterForm from './InitialEncounterForm';
 import FollowUpEncounterForm from './FollowUpEncounterForm';
+import TemplatedReviewForm, { exportEncounterPdf, isTemplateKind } from '../templates/TemplatedReviewForm';
+import { REVIEW_KINDS } from '../../../clinical/templates/types';
 
 const STATUS_STYLE: Record<string, string> = {
   draft: 'bg-gray-100 text-gray-700', pending_review: 'bg-amber-100 text-amber-800', signed: 'bg-green-100 text-green-800', entered_in_error: 'bg-red-100 text-red-700 line-through',
@@ -21,6 +23,11 @@ const STATUS_STYLE: Record<string, string> = {
 };
 const label = (s: string) => s.replace(/_/g, ' ');
 const Badge: React.FC<{ s: string }> = ({ s }) => <span className={`text-[11px] px-2 py-0.5 rounded-full capitalize ${STATUS_STYLE[s] || 'bg-gray-100'}`}>{label(s)}</span>;
+/** What the encounter list calls each encounter. */
+export const encounterTitle = (e: ClinicalEncounter) =>
+  e.encounter_type === 'initial' ? 'Initial clerking'
+    : e.encounter_type === 'follow_up' ? 'Follow-up'
+    : e.summary?.title || REVIEW_KINDS.find(k => k.kind === e.encounter_type)?.label || label(e.encounter_type);
 const fmt = (d?: string | null) => (d ? new Date(d).toLocaleString(undefined, { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '');
 
 function useEncounters(patientId: string) {
@@ -43,7 +50,7 @@ function useEncounters(patientId: string) {
 export const StructuredEncountersPanel: React.FC<{ patientId: string; patientLabel: string; ctx: PatientContext; userName: string }> = ({ patientId, patientLabel, ctx, userName }) => {
   const { user } = useAuthStore();
   const { state, error, reload } = useEncounters(patientId);
-  const [form, setForm] = useState<{ type: 'initial' | 'follow_up'; existing?: ClinicalEncounter | null } | null>(null);
+  const [form, setForm] = useState<{ type: ClinicalEncounter['encounter_type'] | 'template'; existing?: ClinicalEncounter | null } | null>(null);
   const [viewing, setViewing] = useState<number | null>(null);
 
   const encounters = (state?.encounters || []).filter(e => e.status !== 'entered_in_error' || viewing === e.id);
@@ -56,7 +63,7 @@ export const StructuredEncountersPanel: React.FC<{ patientId: string; patientLab
   const planItems = state?.plan_items || [];
   const canSign = !!state?.can_sign;
 
-  const openExisting = (e: ClinicalEncounter) => setForm({ type: e.encounter_type, existing: e });
+  const openExisting = (e: ClinicalEncounter) => setForm({ type: isTemplateKind(e.encounter_type) ? 'template' : e.encounter_type, existing: e });
 
   const changeStatus = async (kind: 'problem' | 'plan', id: number, status: string) => {
     try {
@@ -79,12 +86,12 @@ export const StructuredEncountersPanel: React.FC<{ patientId: string; patientLab
     <div className="bg-white rounded-xl border-2 border-green-200 overflow-hidden">
       <div className="bg-gradient-to-r from-green-50 to-emerald-50 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="font-bold text-gray-900">🩺 Initial Patient Encounter <span className="text-xs font-normal text-gray-500">· structured clerking</span></h3>
+          <h3 className="font-bold text-gray-900">🩺 Clinical Encounters <span className="text-xs font-normal text-gray-500">· clerking, reviews and procedure templates</span></h3>
           <p className="text-xs text-gray-600">Detailed review by the house officer / junior registrar, with rule-based and AI-assisted differentials for your approval.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           {myDraft ? (
-            <button type="button" onClick={() => openExisting(myDraft)} className="px-3 py-2 text-sm rounded-lg bg-green-600 text-white">Continue draft ({myDraft.encounter_type === 'initial' ? 'initial' : 'follow-up'})</button>
+            <button type="button" onClick={() => openExisting(myDraft)} className="px-3 py-2 text-sm rounded-lg bg-green-600 text-white">Continue draft ({encounterTitle(myDraft).toLowerCase()})</button>
           ) : (
             <button type="button" onClick={() => setForm({ type: 'initial' })} className="px-3 py-2 text-sm rounded-lg bg-green-600 text-white">
               {localInitial ? 'Continue clerking (saved on this device)' : initial ? 'New initial clerking' : 'Start initial clerking'}
@@ -93,6 +100,9 @@ export const StructuredEncountersPanel: React.FC<{ patientId: string; patientLab
           <button type="button" disabled={!initial && problems.length === 0} onClick={() => setForm({ type: 'follow_up' })}
             title={!initial ? 'Complete an initial clerking first' : undefined}
             className="px-3 py-2 text-sm rounded-lg border border-green-600 text-green-700 disabled:opacity-40">Follow-up encounter</button>
+          <button type="button" onClick={() => setForm({ type: 'template' })}
+            title="Wound care, pre-operative, post-operative and follow-up reviews for every plastic surgery procedure"
+            className="px-3 py-2 text-sm rounded-lg bg-emerald-800 text-white">📋 Clinical review templates</button>
         </div>
       </div>
 
@@ -105,7 +115,7 @@ export const StructuredEncountersPanel: React.FC<{ patientId: string; patientLab
             <p className="text-sm font-semibold text-amber-900 mb-2">Awaiting your review</p>
             {pending.map(e => (
               <div key={e.id} className="flex flex-wrap items-center justify-between gap-2 text-sm py-1">
-                <span>{e.encounter_type === 'initial' ? 'Initial clerking' : 'Follow-up'} by {e.created_by_name || 'unknown'} · {fmt(e.submitted_at || e.updated_at)}</span>
+                <span>{encounterTitle(e)} by {e.created_by_name || 'unknown'} · {fmt(e.submitted_at || e.updated_at)}</span>
                 <button type="button" onClick={() => openExisting(e)} className="px-3 py-1 text-xs rounded bg-amber-600 text-white">Review & sign</button>
               </div>
             ))}
@@ -129,15 +139,19 @@ export const StructuredEncountersPanel: React.FC<{ patientId: string; patientLab
                 <li key={e.id} className="p-2.5">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="text-sm">
-                      <span className="font-medium">{e.encounter_type === 'initial' ? 'Initial clerking' : 'Follow-up'}</span>{' '}
+                      <span className="font-medium">{encounterTitle(e)}</span>{' '}
                       <Badge s={e.status} />
                       <span className="block text-[11px] text-gray-500">
                         {fmt(e.created_at)} · {e.created_by_name || 'unknown'}{e.signed_by_name ? ` · signed by ${e.signed_by_name} ${fmt(e.signed_at)}` : ''}
                       </span>
                       {e.summary?.complaints?.length > 0 && <span className="block text-xs text-gray-600">{e.summary.complaints.map((c: any) => c.label).join(' · ')}</span>}
+                      {isTemplateKind(e.encounter_type) && e.summary?.diagnosis && <span className="block text-xs text-gray-600">{e.summary.diagnosis}{e.summary.red_flags?.length ? <span className="text-red-700"> · ⚠ {e.summary.red_flags.length} alert(s)</span> : null}</span>}
                     </div>
                     <div className="flex gap-1">
                       <button type="button" onClick={() => setViewing(viewing === e.id ? null : e.id)} className="px-2 py-1 text-xs rounded border">{viewing === e.id ? 'Hide' : 'View note'}</button>
+                      {isTemplateKind(e.encounter_type) && e.data?.templateId && (
+                        <button type="button" onClick={() => exportEncounterPdf(e, patientLabel, ctx)} className="px-2 py-1 text-xs rounded border">PDF</button>
+                      )}
                       {['draft', 'pending_review'].includes(e.status) && (String(e.created_by) === String(user?.id) || canSign) && (
                         <button type="button" onClick={() => openExisting(e)} className="px-2 py-1 text-xs rounded border border-green-600 text-green-700">Open</button>
                       )}
@@ -163,6 +177,10 @@ export const StructuredEncountersPanel: React.FC<{ patientId: string; patientLab
       {form?.type === 'follow_up' && (
         <FollowUpEncounterForm patientId={patientId} patientLabel={patientLabel} ctx={ctx} userName={userName} canSign={canSign}
           problems={problems} planItems={planItems} initial={initial} existing={form.existing} onClose={() => setForm(null)} onSaved={reload} />
+      )}
+      {form?.type === 'template' && (
+        <TemplatedReviewForm patientId={patientId} patientLabel={patientLabel} ctx={ctx} userName={userName} canSign={canSign}
+          encounters={state?.encounters || []} existing={form.existing} onClose={() => setForm(null)} onSaved={reload} />
       )}
     </div>
   );

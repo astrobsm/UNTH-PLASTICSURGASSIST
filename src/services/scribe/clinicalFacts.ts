@@ -127,6 +127,8 @@ export interface FactsInput {
   now?: Date;
 }
 
+const TEMPLATE_REVIEW_TYPES = ['wound_review', 'preop_review', 'postop_review', 'procedure_follow_up'];
+
 /** The latest usable encounter of a type (not entered in error). */
 function latestEncounter(encs: any[], type: 'initial' | 'follow_up') {
   return [...encs]
@@ -176,6 +178,17 @@ export function buildClinicalFacts(input: FactsInput): ClinicalFacts {
   for (const f of [p.primary_diagnosis, p.diagnosis]) if (f) addProblem({ label: String(f), source: 'Registration' });
   for (const tp of input.treatmentPlans || []) if (tp.diagnosis) addProblem({ label: String(tp.diagnosis), source: 'Treatment plan' });
 
+  // Templated reviews (wound care / pre-op / post-op / follow-up), newest first.
+  const reviews = [...encs]
+    .filter(e => e && TEMPLATE_REVIEW_TYPES.includes(e.encounter_type) && e.status !== 'entered_in_error')
+    .sort((a, b) => String(b.updated_at || b.created_at).localeCompare(String(a.updated_at || a.created_at)));
+  const latestReview = reviews[0];
+  const reviewSummary = parse(latestReview?.summary) || {};
+  for (const r of reviews) {
+    const s = parse(r.summary) || {};
+    if (s.diagnosis) addProblem({ label: String(s.diagnosis), since: r.created_at, source: s.title || 'Clinical review' });
+  }
+
   // Conditions — clerking answers first (authoritative, positive and negative).
   const conditions = new Map<string, Fact>();
   const pmh = history.pmh || {};
@@ -212,6 +225,7 @@ export function buildClinicalFacts(input: FactsInput): ClinicalFacts {
     push(n.content || n.notes || n.note, 'Progress note');
   }
   if (initial?.narrative) push(initial.narrative, 'Clerking note');
+  if (latestReview?.narrative) push(latestReview.narrative, reviewSummary.title || 'Clinical review');
 
   for (const [id, def] of Object.entries(CONDITION_TERMS)) {
     if (conditions.has(id)) continue;
@@ -225,8 +239,14 @@ export function buildClinicalFacts(input: FactsInput): ClinicalFacts {
   }
 
   // Risk factors and red flags as the clerking derived them.
-  const riskFactors: string[] = Array.isArray(summary.risk_factors) ? summary.risk_factors : [];
-  const redFlags: string[] = Array.isArray(summary.red_flags) ? summary.red_flags : [];
+  const riskFactors: string[] = [...new Set([
+    ...(Array.isArray(summary.risk_factors) ? summary.risk_factors : []),
+    ...(Array.isArray(reviewSummary.healing_factors) ? reviewSummary.healing_factors : []),
+  ])];
+  const redFlags: string[] = [...new Set([
+    ...(Array.isArray(summary.red_flags) ? summary.red_flags : []),
+    ...(Array.isArray(reviewSummary.red_flags) ? reviewSummary.red_flags : []),
+  ])];
   const mobility: string | undefined = history.social?.mobility || undefined;
   if (mobility && /bed|wheelchair/i.test(mobility)) {
     conditions.set('immobility', { id: 'immobility', label: mobility, presence: 'present', evidence: 'Clerking — social history' });
@@ -236,7 +256,8 @@ export function buildClinicalFacts(input: FactsInput): ClinicalFacts {
   if (!conditions.get('obesity') && riskFactors.some(r => /BMI|obes/i.test(r))) {
     conditions.set('obesity', { id: 'obesity', label: 'Obesity', presence: 'present', evidence: 'Clerking — risk factors' });
   }
-  const w = Number(data.vitals?.weight), h = Number(data.vitals?.height);
+  const reviewNutrition = (parse(latestReview?.data) || {}).answers?.nutrition || {};
+  const w = Number(data.vitals?.weight || reviewNutrition.weight), h = Number(data.vitals?.height || reviewNutrition.height);
   const bmi = w > 0 && h > 0 ? w / ((h / 100) ** 2) : null;
 
   // Allergies — "NKDA" only when somebody actually recorded it.

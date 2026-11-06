@@ -79,7 +79,9 @@ export async function ensureEncounterTables() {
   ensured = true;
 }
 
-export const ENCOUNTER_TYPES = ['initial', 'follow_up'];
+// Templated reviews (src/clinical/templates) — wound care, pre-op, post-op and post-op follow-up.
+export const TEMPLATE_ENCOUNTER_TYPES = ['wound_review', 'preop_review', 'postop_review', 'procedure_follow_up'];
+export const ENCOUNTER_TYPES = ['initial', 'follow_up', ...TEMPLATE_ENCOUNTER_TYPES];
 export const PROBLEM_STATUSES = ['active', 'improving', 'worsening', 'resolved', 'ruled_out', 'withdrawn'];
 export const PLAN_STATUSES = ['pending', 'in_progress', 'done', 'not_done', 'stopped', 'withdrawn'];
 

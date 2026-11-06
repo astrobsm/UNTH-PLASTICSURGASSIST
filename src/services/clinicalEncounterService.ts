@@ -9,12 +9,13 @@ import { apiClient } from './apiClient';
 import type { Suggestion } from '../clinical/clerking/types';
 
 export type EncounterStatus = 'draft' | 'pending_review' | 'signed' | 'entered_in_error';
+export type EncounterType = 'initial' | 'follow_up' | 'wound_review' | 'preop_review' | 'postop_review' | 'procedure_follow_up';
 
 export interface ClinicalEncounter {
   id: number;
   patient_id: string;
   admission_id?: string | null;
-  encounter_type: 'initial' | 'follow_up';
+  encounter_type: EncounterType;
   parent_encounter_id?: number | null;
   status: EncounterStatus;
   data: any;
@@ -69,7 +70,7 @@ export const clinicalEncounterService = {
 
   async save(payload: {
     id?: number; version?: number; patient_id: string; admission_id?: string | null;
-    encounter_type: 'initial' | 'follow_up'; parent_encounter_id?: number | null;
+    encounter_type: EncounterType; parent_encounter_id?: number | null;
     data: any; suggestions: Suggestion[]; summary: any; narrative: string;
   }): Promise<ClinicalEncounter> {
     const r = await apiClient.post<{ encounter: ClinicalEncounter }>(`${BASE}?action=save`, payload);
