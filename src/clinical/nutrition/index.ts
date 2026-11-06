@@ -7,3 +7,4 @@ export * from './monitoring';
 export * from './assess';
 export { NUTRITION_CONFIG } from './config';
 export * from './fromRecord';
+export * from './foods';

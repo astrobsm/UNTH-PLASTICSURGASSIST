@@ -71,7 +71,12 @@ export const nutritionService = {
   async foods(q = '', limit = 50) { return arr<any>((await apiClient.get<any>(`${BASE}?resource=foods&q=${encodeURIComponent(q)}&limit=${limit}`))?.foods); },
   async recipes() { return arr<any>((await apiClient.get<any>(`${BASE}?resource=recipes`))?.recipes); },
   async measures() { return arr<any>((await apiClient.get<any>(`${BASE}?resource=measures`))?.measures); },
-  async sources() { return arr<any>((await apiClient.get<any>(`${BASE}?resource=sources`))?.sources); },
+  async sources(): Promise<{ sources: any[]; missing_local: string[]; seed_version?: string } & Permissions> {
+    const r: any = await apiClient.get(`${BASE}?resource=sources`, { freshRead: true });
+    return { sources: arr(r?.sources), missing_local: arr(r?.missing_local), seed_version: r?.seed_version, can_approve: !!r?.can_approve, can_draft: !!r?.can_draft, can_admin_foods: !!r?.can_admin_foods };
+  },
+  async seedWafct() { return apiClient.post<{ imported: number; rejected: any[] }>(`${BASE}?action=seed_wafct`, {}); },
+  async seedEnugu() { return apiClient.post<{ recipes: number; measures: number; missing: string[] }>(`${BASE}?action=seed_enugu`, {}); },
   async signoffs() { return arr<any>((await apiClient.get<any>(`${BASE}?resource=signoffs`))?.signoffs); },
   async importFoods(source: { code: string; name: string; version?: string; licence?: string; url?: string }, rows: any[]) {
     return apiClient.post<{ imported: number; rejected: any[] }>(`${BASE}?action=import_foods`, { source, rows });

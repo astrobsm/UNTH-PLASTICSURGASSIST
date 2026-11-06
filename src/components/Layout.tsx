@@ -45,7 +45,8 @@ import {
   Wine,
   Waves,
   Search,
-  BarChart3
+  BarChart3,
+  Apple
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { canAccess } from '../config/routeAccess';
@@ -98,6 +99,7 @@ const navigation = [
   { name: 'Pre-Surgical Conference', href: '/pre-surgical-conference', icon: Presentation },
   { name: 'Procedures', href: '/procedures', icon: Scissors },
   { name: 'Clinician Assistant', href: '/clinician-assistant', icon: Activity },
+  { name: 'Clinical Nutrition', subtitle: 'Food database', href: '/nutrition/foods', icon: Apple },
   { name: 'Clinical Governance', href: '/clinical-governance', icon: Shield },
   { name: 'Notice Board', href: '/notice-board', icon: Megaphone },
   { name: 'Shopping List', href: '/shopping-list', icon: ShoppingCart },

@@ -12,6 +12,7 @@
 //   POST ?action=submit|approve&kind=&id= {version}
 //   POST ?action=error&kind=&id=          {reason}
 //   POST ?action=import_foods             {source:{code,name,version,licence,url}, rows:[...]}
+//   POST ?action=seed_wafct | seed_enugu  bundled WAFCT 2019 table; Enugu local layer (draft recipes, unverified measures)
 //   POST ?action=food&id=                 planning fields (portions, cost, availability, local names)
 //   POST ?action=recipe | recipe_verify&id= | measure
 //   POST ?action=sign_config              {version, note}
@@ -19,9 +20,10 @@ import { cors, authenticateRequest } from './_lib/auth.js';
 import { auditClinical } from './_lib/clinicalRecords.js';
 import {
   ensureNutritionTables, patientRecord, addMeasurement, measurementInError, saveVersioned, transition, versionedInError, saveIntake,
-  searchFoods, upsertFoods, updateFoodPlanning, listRecipes, upsertRecipe, verifyRecipe, listMeasures, upsertMeasure, foodSources,
+  searchFoods, upsertFoods, seedWafct, seedEnugu, updateFoodPlanning, listRecipes, upsertRecipe, verifyRecipe, listMeasures, upsertMeasure, foodSources,
   configSignoffs, signConfig, worklist, canApprove, canRecord, canDraft, canAdminFoods,
 } from './_lib/nutrition.js';
+import { MISSING_FROM_WAFCT, ENUGU_SEED_VERSION } from './_lib/data/enuguFoods.js';
 
 const ENTITY = { assessment: 'nutrition_assessments', plan: 'nutrition_meal_plans' };
 
@@ -50,7 +52,7 @@ export default async function handler(req, res) {
       if (resource === 'foods') return res.status(200).json({ foods: await searchFoods(url.searchParams.get('q') || '', url.searchParams.get('limit')) });
       if (resource === 'recipes') return res.status(200).json({ recipes: await listRecipes() });
       if (resource === 'measures') return res.status(200).json({ measures: await listMeasures() });
-      if (resource === 'sources') return res.status(200).json({ sources: await foodSources() });
+      if (resource === 'sources') return res.status(200).json({ sources: await foodSources(), missing_local: MISSING_FROM_WAFCT, seed_version: ENUGU_SEED_VERSION, ...permissions });
       if (resource === 'signoffs') return res.status(200).json({ signoffs: await configSignoffs() });
       const patientId = url.searchParams.get('patient_id');
       if (!patientId) return res.status(400).json({ error: 'patient_id or resource is required' });
@@ -93,15 +95,17 @@ export default async function handler(req, res) {
       return send(r);
     }
 
-    if (['import_foods', 'food', 'recipe', 'recipe_verify', 'measure'].includes(action)) {
+    if (['import_foods', 'seed_wafct', 'seed_enugu', 'food', 'recipe', 'recipe_verify', 'measure'].includes(action)) {
       if (!canAdminFoods(user)) return res.status(403).json({ error: 'Only a dietitian, consultant or administrator can change food data' });
       let r;
       if (action === 'import_foods') r = await upsertFoods(body.rows, body.source, user);
+      else if (action === 'seed_wafct') r = await seedWafct(user);
+      else if (action === 'seed_enugu') r = await seedEnugu(user);
       else if (action === 'food') r = id ? await updateFoodPlanning(id, body) : { status: 400, error: 'id is required' };
       else if (action === 'recipe') r = await upsertRecipe(body, user);
       else if (action === 'recipe_verify') r = id ? await verifyRecipe(id, user) : { status: 400, error: 'id is required' };
       else r = await upsertMeasure(body, user);
-      if (!r.error) await auditClinical(user, { action, entity: 'nutrition_food_data', entityId: id || r.recipe?.id || r.measure?.id || r.food?.id || null, detail: action === 'import_foods' ? { source: body.source?.code, imported: r.imported, rejected: r.rejected?.length } : null });
+      if (!r.error) await auditClinical(user, { action, entity: 'nutrition_food_data', entityId: id || r.recipe?.id || r.measure?.id || r.food?.id || null, detail: action === 'import_foods' || action === 'seed_wafct' ? { source: body.source?.code || 'WAFCT2019', imported: r.imported, rejected: r.rejected?.length } : action === 'seed_enugu' ? { recipes: r.recipes, measures: r.measures, missing: r.missing } : null });
       return send(r);
     }
 
