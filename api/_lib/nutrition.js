@@ -10,6 +10,7 @@
 // ============================================================================
 import { query } from './db.js';
 import { ensureRecordStatus, notInError } from './clinicalRecords.js';
+import { MEASUREMENT_KINDS } from './data/nutritionKinds.js';
 
 // Same statements as database/migrations/024_clinical_nutrition.up.sql
 // (src/test/nutritionApi.test.ts keeps the two in step).
@@ -186,35 +187,7 @@ export const canAdminFoods = (u) => FOOD_ADMIN_ROLES.includes(u?.role);
 const nameOf = (u) => u?.full_name || u?.name || u?.username || null;
 
 // ── Measurements ────────────────────────────────────────────────────────────
-/** Every measurement kind, its SI unit and a plausibility range. */
-export const MEASUREMENT_KINDS = {
-  weight: { unit: 'kg', min: 10, max: 400 },
-  dressing_weight: { unit: 'kg', min: 0, max: 30 },
-  height: { unit: 'cm', min: 90, max: 230 },
-  knee_height: { unit: 'cm', min: 30, max: 75 },
-  ulna: { unit: 'cm', min: 15, max: 40 },
-  muac: { unit: 'cm', min: 10, max: 70 },
-  tsf: { unit: 'mm', min: 1, max: 80 },
-  calf: { unit: 'cm', min: 15, max: 70 },
-  grip: { unit: 'kg', min: 0, max: 100 },
-  phase_angle: { unit: '°', min: 1, max: 15 },
-  quadriceps: { unit: 'mm', min: 2, max: 80 },
-  indirect_calorimetry: { unit: 'kcal/day', min: 300, max: 6000 },
-  albumin: { unit: 'g/L', min: 5, max: 70 },
-  prealbumin: { unit: 'g/L', min: 0.01, max: 1 },
-  crp: { unit: 'mg/L', min: 0, max: 600 },
-  hb: { unit: 'g/L', min: 20, max: 250 },
-  lymphocytes: { unit: '×10⁹/L', min: 0, max: 100 },
-  glucose: { unit: 'mmol/L', min: 0.5, max: 60 },
-  hba1c: { unit: '%', min: 3, max: 20 },
-  urea: { unit: 'mmol/L', min: 0.5, max: 100 },
-  creatinine: { unit: 'µmol/L', min: 10, max: 3000 },
-  na: { unit: 'mmol/L', min: 90, max: 200 },
-  k: { unit: 'mmol/L', min: 1, max: 10 },
-  po4: { unit: 'mmol/L', min: 0.05, max: 6 },
-  mg: { unit: 'mmol/L', min: 0.1, max: 5 },
-  uun: { unit: 'g/day', min: 0, max: 60 },
-};
+export { MEASUREMENT_KINDS };
 
 export function validateMeasurement(m) {
   const k = MEASUREMENT_KINDS[m?.kind];

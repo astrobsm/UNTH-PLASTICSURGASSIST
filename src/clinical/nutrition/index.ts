@@ -9,3 +9,4 @@ export { NUTRITION_CONFIG } from './config';
 export * from './fromRecord';
 export * from './foods';
 export * from './planner';
+export * from './record';

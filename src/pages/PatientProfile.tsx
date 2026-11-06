@@ -26,6 +26,7 @@ import { PrescriptionBuilder } from '../components/prescriptions/PrescriptionBui
 import type { PrescriptionItem } from '../services/prescriptionPrintService';
 import { PatientGraftEpisodes } from '../components/graft/PatientGraftEpisodes';
 import { ScarMonitoringPanel } from '../components/scar/ScarMonitoringPanel';
+import { PatientNutritionPanel } from '../components/nutrition/PatientNutritionPanel';
 import {
   Activity, Camera, Calendar, FileText, Plus, 
   Scissors, ClipboardCheck, Pill, Heart, Image,
@@ -53,6 +54,7 @@ const ENCOUNTER_SECTIONS = [
   { id: 'fluid-io', name: 'Fluid I/O', icon: '💧' },
   { id: 'blood-transfusion', name: 'Blood Transfusion', icon: '🩸' },
   { id: 'blood-glucose', name: 'Blood Glucose', icon: '🩺' },
+  { id: 'nutrition', name: 'Clinical Nutrition', icon: '🥗' },
   { id: 'discharge', name: 'Discharge', icon: '🏠' },
 ];
 
@@ -138,6 +140,13 @@ export const PatientProfile: React.FC = () => {
       loadMedicalTeam();
     }
   }, [patient]);
+
+  // Deep link from other modules: /patients/:id?section=nutrition opens that section.
+  useEffect(() => {
+    const s = new URLSearchParams(window.location.search).get('section');
+    if (patient && s && ENCOUNTER_SECTIONS.some(x => x.id === s)) goToSection(s);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [patient?.id]);
 
   // Log patient access for HIPAA compliance
   useEffect(() => {
@@ -436,6 +445,19 @@ export const PatientProfile: React.FC = () => {
         return <BloodTransfusionTab patientId={id!} hospitalNumber={hospitalNumber} patientName={patientName} userName={user?.name || 'Unknown'} />;
       case 'blood-glucose':
         return <BloodGlucoseTab patientId={id!} hospitalNumber={hospitalNumber} patientName={patientName} userName={user?.name || 'Unknown'} />;
+      case 'nutrition':
+        return (
+          <PatientNutritionPanel
+            patientId={id!}
+            ctx={{
+              ageYears: calculateAge(patient?.dob || patient?.date_of_birth),
+              sex: (patient as any)?.sex || patient?.gender || null,
+              ward: admissionStatus?.ward || null,
+              diagnosis: (patient as any)?.primary_diagnosis || null,
+              allergies: Array.isArray(patient?.allergies) ? (patient!.allergies as string[]).join(', ') : ((patient?.allergies as string | undefined) || null),
+            }}
+          />
+        );
       case 'discharge':
         return (
           <DischargePlanning
