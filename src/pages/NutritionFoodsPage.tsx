@@ -8,13 +8,15 @@
  * and verifying recipes and measures by local weighing.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { BookOpen, CheckCircle2, Database, Loader2, Plus, Ruler, Save, Search, Trash2, UtensilsCrossed } from 'lucide-react';
+import { BookOpen, CheckCircle2, Database, FileText, Loader2, Plus, Ruler, Save, Search, ShieldCheck, Trash2, UtensilsCrossed } from 'lucide-react';
+import { coefficientChecklist } from '../clinical/nutrition/checklist';
+import { NUTRITION_CONFIG } from '../clinical/nutrition/config';
 import toast from 'react-hot-toast';
 import { nutritionService } from '../services/nutritionService';
 import { displayName, purchaseWeight, recipeNutrients, roundNutrients, type Food, type Recipe } from '../clinical/nutrition/foods';
 
 const clean = (e: any) => String(e?.message || 'Something went wrong').replace(/^\[HTTP \d+\]\s*/, '');
-type Tab = 'source' | 'foods' | 'recipes' | 'measures';
+type Tab = 'source' | 'foods' | 'recipes' | 'measures' | 'validation';
 
 export default function NutritionFoodsPage() {
   const [tab, setTab] = useState<Tab>('source');
@@ -30,6 +32,7 @@ export default function NutritionFoodsPage() {
     { id: 'foods', label: 'Foods', icon: Search },
     { id: 'recipes', label: 'Recipes', icon: UtensilsCrossed },
     { id: 'measures', label: 'Household measures', icon: Ruler },
+    { id: 'validation', label: 'Validation & sign-off', icon: ShieldCheck },
   ];
 
   return (
@@ -50,6 +53,7 @@ export default function NutritionFoodsPage() {
       {tab === 'foods' && <FoodsTab admin={admin} />}
       {tab === 'recipes' && <RecipesTab admin={admin} />}
       {tab === 'measures' && <MeasuresTab admin={admin} />}
+      {tab === 'validation' && <ValidationTab info={info} />}
     </div>
   );
 }
@@ -314,6 +318,69 @@ function MeasureRow({ m, label, admin, onVerify }: { m: any; label: string; admi
         ? <span className="text-emerald-700 text-xs">Verified{m.verified_by_name ? ` · ${m.verified_by_name}` : ''}</span>
         : admin ? <button onClick={() => onVerify(m, g)} className="text-xs text-emerald-700 underline">Weighed — confirm</button> : <span className="text-xs text-amber-700">To verify</span>}</td>
     </tr>
+  );
+}
+
+/**
+ * Everything that needs clinical sign-off before go-live: each coefficient and
+ * threshold (generated from the active configuration), draft recipes,
+ * unverified household measures and local foods with no source values.
+ */
+function ValidationTab({ info }: { info: any }) {
+  const rows = useMemo(() => coefficientChecklist(), []);
+  const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [measures, setMeasures] = useState<any[]>([]);
+  const [signoffs, setSignoffs] = useState<any[]>([]);
+  const [note, setNote] = useState('');
+  const load = useCallback(async () => {
+    try {
+      const [r, m, s] = await Promise.all([nutritionService.recipes(), nutritionService.measures(), nutritionService.signoffs()]);
+      setRecipes(r); setMeasures(m); setSignoffs(s);
+    } catch (e) { toast.error(clean(e)); }
+  }, []);
+  useEffect(() => { void load(); }, [load]);
+  const drafts = recipes.filter(r => r.status !== 'verified');
+  const unverified = measures.filter(m => !m.verified);
+  const signedThis = signoffs.filter(s => s.config_version === NUTRITION_CONFIG.version);
+  const sign = async () => {
+    if (!window.confirm(`Sign off coefficient set ${NUTRITION_CONFIG.version} (${rows.length} items) as clinically validated for UNTH?`)) return;
+    try { await nutritionService.signConfig(NUTRITION_CONFIG.version, note || undefined); toast.success('Sign-off recorded'); setNote(''); void load(); } catch (e) { toast.error(clean(e)); }
+  };
+  const exportPdf = async () => {
+    const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')]);
+    const { sanitizePdfDocument } = await import('../utils/pdfSafeText');
+    const doc = sanitizePdfDocument(new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' }));
+    doc.setFontSize(13); doc.text(`Clinical nutrition — validation checklist (coefficients ${NUTRITION_CONFIG.version}, ${NUTRITION_CONFIG.status.replace(/_/g, ' ')})`, 14, 14);
+    autoTable(doc, { startY: 20, head: [['[ ]', 'Coefficient / threshold', 'Value', 'Source / note']], body: rows.map(r => ['', r.key, r.value, [r.source, r.note].filter(Boolean).join(' — ')]), styles: { fontSize: 7, cellPadding: 1 }, columnStyles: { 0: { cellWidth: 6 }, 1: { cellWidth: 70 }, 2: { cellWidth: 60 } } });
+    autoTable(doc, { head: [['[ ]', 'Draft recipe (verify by local weighing)', 'Ingredients per portion']], body: drafts.map(r => ['', `${r.name} (${r.portion_g} g)`, r.ingredients.map(i => `${i.raw_g} g ${i.food_name}`).join(', ')]), styles: { fontSize: 7, cellPadding: 1 } });
+    autoTable(doc, { head: [['[ ]', 'Household measure (to be verified by local weighing)', 'Grams']], body: unverified.map(m => ['', m.measure + (m.recipe_id ? ` — ${recipes.find(r => r.id === m.recipe_id)?.name ?? ''}` : ''), String(m.grams)]), styles: { fontSize: 7, cellPadding: 1 } });
+    autoTable(doc, { head: [['[ ]', 'Local food with no WAFCT 2019 value']], body: (info?.missing_local || []).map((x: string) => ['', x]), styles: { fontSize: 7, cellPadding: 1 } });
+    autoTable(doc, { body: [['Signed (dietitian / consultant)', '', 'Date', '']], theme: 'grid', styles: { fontSize: 9, minCellHeight: 10 } });
+    doc.save(`nutrition_validation_checklist_${NUTRITION_CONFIG.version}.pdf`);
+  };
+  return (
+    <div className="space-y-4">
+      <div className="bg-white border rounded-lg p-3 flex flex-wrap items-center gap-3 text-sm">
+        <div><b>Coefficient set {NUTRITION_CONFIG.version}</b> — {signedThis.length ? <span className="text-emerald-700">signed off by {signedThis.map(s => `${s.signed_by_name} (${String(s.signed_by_role).replace('_', ' ')}, ${new Date(s.signed_at).toLocaleDateString()})`).join('; ')}</span> : <span className="text-amber-700">pending clinical validation</span>}</div>
+        <div className="ml-auto flex gap-2 items-center">
+          <button onClick={exportPdf} className="px-3 py-1.5 border rounded flex items-center gap-1"><FileText className="w-4 h-4" />Checklist PDF</button>
+          {info?.can_approve && <><input value={note} onChange={e => setNote(e.target.value)} placeholder="Sign-off note" className="border rounded px-2 py-1" />
+            <button onClick={sign} className="px-3 py-1.5 rounded bg-emerald-600 text-white flex items-center gap-1"><ShieldCheck className="w-4 h-4" />Sign off</button></>}
+        </div>
+      </div>
+      <div className="grid sm:grid-cols-3 gap-3 text-sm">
+        <div className="bg-amber-50 border border-amber-200 rounded p-3"><b>{drafts.length}</b> draft recipes to verify</div>
+        <div className="bg-amber-50 border border-amber-200 rounded p-3"><b>{unverified.length}</b> household measures to weigh</div>
+        <div className="bg-amber-50 border border-amber-200 rounded p-3"><b>{(info?.missing_local || []).length}</b> local foods without source values</div>
+      </div>
+      <div className="bg-white border rounded-lg overflow-x-auto">
+        <table className="min-w-full text-xs">
+          <thead className="bg-gray-50 text-left text-gray-600"><tr><th className="px-2 py-1">Coefficient / threshold</th><th className="px-2 py-1">Value</th><th className="px-2 py-1">Source</th></tr></thead>
+          <tbody className="divide-y">{rows.map(r => <tr key={r.key} className="align-top"><td className="px-2 py-1 font-medium">{r.key}</td><td className="px-2 py-1 font-mono">{r.value}</td><td className="px-2 py-1">{r.source}{r.note ? <div className="text-amber-700">{r.note}</div> : null}</td></tr>)}</tbody>
+        </table>
+      </div>
+      <p className="text-xs text-gray-500">To change a value, the configuration is versioned (src/clinical/nutrition/config) — see docs/CLINICAL_NUTRITION.md. A new version requires a new sign-off; assessments record the version they used.</p>
+    </div>
   );
 }
 

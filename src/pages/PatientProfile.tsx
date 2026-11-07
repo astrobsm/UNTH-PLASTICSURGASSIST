@@ -449,6 +449,8 @@ export const PatientProfile: React.FC = () => {
         return (
           <PatientNutritionPanel
             patientId={id!}
+            patientName={patientName}
+            hospitalNumber={hospitalNumber}
             ctx={{
               ageYears: calculateAge(patient?.dob || patient?.date_of_birth),
               sex: (patient as any)?.sex || patient?.gender || null,

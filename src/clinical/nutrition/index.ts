@@ -11,3 +11,4 @@ export * from './foods';
 export * from './planner';
 export * from './record';
 export * from './formats';
+export * from './checklist';

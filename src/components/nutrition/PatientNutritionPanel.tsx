@@ -5,7 +5,9 @@
  * record and link here; none keeps its own nutrition calculation.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CalendarClock, Loader2, RefreshCw, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, CalendarClock, FileText, Loader2, RefreshCw, ShieldCheck } from 'lucide-react';
+import { useAuthStore } from '../../store/authStore';
+import type { ReportMeta } from '../../clinical/nutrition/pdf';
 import toast from 'react-hot-toast';
 import { intakePctSeries, nitrogenSeries, patientStatus, type PatientContext } from '../../clinical/nutrition';
 import { nutritionService, type PatientNutrition } from '../../services/nutritionService';
@@ -20,7 +22,10 @@ import { NutritionTrends } from './NutritionTrends';
 type Tab = 'overview' | 'assessment' | 'measurements' | 'intake' | 'plan' | 'trends';
 const LEVEL: Record<string, string> = { low: 'Low risk', medium: 'Medium risk', high: 'High risk', refeeding: 'Refeeding risk' };
 
-export function PatientNutritionPanel({ patientId, ctx: ctxProp, initialTab = 'overview' }: { patientId: string; ctx: PatientContext; initialTab?: Tab }) {
+export function PatientNutritionPanel({ patientId, ctx: ctxProp, initialTab = 'overview', patientName, hospitalNumber }: {
+  patientId: string; ctx: PatientContext; initialTab?: Tab; patientName?: string; hospitalNumber?: string;
+}) {
+  const { user } = useAuthStore();
   const ctxKey = JSON.stringify(ctxProp);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const ctx = useMemo(() => ctxProp, [ctxKey]);
@@ -41,13 +46,43 @@ export function PatientNutritionPanel({ patientId, ctx: ctxProp, initialTab = 'o
     const kind = 'targets' in r && 'plan' in r ? 'plan' : 'assessment';
     try { await nutritionService.approve(kind, r.id, r.version); toast.success('Approved'); void load(); } catch (e) { toast.error(clean(e)); }
   };
+  const meta = (r: { status?: string; approved_by_name?: string | null; approved_at?: string | null; food_data_version?: string | null } | null): ReportMeta => ({
+    patientName: patientName || `Patient ${patientId}`, hospitalNumber, ward: ctx.ward,
+    ageSex: [ctx.ageYears != null ? `${ctx.ageYears} y` : null, ctx.sex].filter(Boolean).join(' · ') || null,
+    author: user?.name || (user as any)?.full_name || 'Unknown', status: r?.status, approvedBy: r?.approved_by_name, approvedAt: r?.approved_at, foodDataVersion: r?.food_data_version,
+  });
+  const pdf = async (kind: 'summary' | 'dietitian' | 'patient', igbo = false) => {
+    const m = await import('../../clinical/nutrition/pdf');
+    const planRec = activePlan || rec.meal_plans.find(p => !['entered_in_error', 'superseded'].includes(p.status)) || null;
+    if (kind === 'patient') {
+      if (!planRec) return toast.error('No meal plan yet');
+      const md = meta(planRec);
+      return m.savePdf(m.buildPatientPlanPdf(planRec.plan, md, { igbo, fluidMl: latest?.result?.targets?.fluidMl, restrictions: latest?.result?.targets?.restrictions }), md, 'meal_plan');
+    }
+    if (!latest) return toast.error('No assessment yet');
+    const md = meta({ ...latest, food_data_version: planRec?.food_data_version });
+    const intakeDays = intakePctSeries(rec.intake, status.summary?.kcal ?? null).map(p => {
+      const day = rec.intake.filter(r => String(r.intake_date).slice(0, 10) === p.date);
+      return { date: p.date, pct: p.value, kcal: day.reduce((s, r) => s + Number(r.kcal), 0), proteinG: day.reduce((s, r) => s + Number(r.protein_g), 0) };
+    });
+    const doc = kind === 'summary'
+      ? m.buildClinicianSummaryPdf(latest.result, md, { alerts: status.alerts, schedule: status.schedule, plan: planRec?.plan })
+      : m.buildDietitianReportPdf(latest.result, md, { measurements: rec.measurements, intakeDays, plan: planRec?.plan });
+    m.savePdf(doc, md, kind === 'summary' ? 'nutrition_summary' : 'dietitian_report');
+  };
   const tabs: [Tab, string][] = [['overview', 'Overview'], ['assessment', 'Assessment'], ['measurements', 'Measurements'], ['intake', 'Food chart'], ['plan', 'Meal plan'], ['trends', 'Trends']];
 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-1 border-b">
         {tabs.map(([id, l]) => <button key={id} onClick={() => setTab(id)} className={`px-3 py-1.5 text-sm border-b-2 -mb-px ${tab === id ? 'border-emerald-600 text-emerald-700 font-medium' : 'border-transparent text-gray-600'}`}>{l}</button>)}
-        <button onClick={() => void load()} className="ml-auto p-1 text-gray-500" title="Refresh"><RefreshCw className="w-4 h-4" /></button>
+        <div className="ml-auto flex items-center gap-1">
+          <button onClick={() => void pdf('summary')} className="px-2 py-1 text-xs border rounded flex items-center gap-1" title="One page for the ward round / case notes"><FileText className="w-3.5 h-3.5" />Clinician summary</button>
+          <button onClick={() => void pdf('dietitian')} className="px-2 py-1 text-xs border rounded flex items-center gap-1"><FileText className="w-3.5 h-3.5" />Dietitian report</button>
+          <button onClick={() => void pdf('patient')} className="px-2 py-1 text-xs border rounded flex items-center gap-1"><FileText className="w-3.5 h-3.5" />Patient plan</button>
+          <button onClick={() => void pdf('patient', true)} className="px-2 py-1 text-xs border rounded" title="Patient plan with Igbo food names">Igbo</button>
+          <button onClick={() => void load()} className="p-1 text-gray-500" title="Refresh"><RefreshCw className="w-4 h-4" /></button>
+        </div>
       </div>
 
       {tab === 'overview' && (
