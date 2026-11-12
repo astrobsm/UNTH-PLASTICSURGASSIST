@@ -15,7 +15,8 @@ import {
 import { medicationDosingService, GFRDosingRecommendation } from '../services/medicationDosingService';
 import { investigationPdfService } from '../services/investigationPdfService';
 import { medicalTeamService, StaffByRole } from '../services/medicalTeamService';
-import { searchMedications, BNFMedication, checkInteractions } from '../data/bnfMedications';
+import { searchMedications, BNFMedication } from '../data/bnfMedications';
+import { findInteractions } from '../data/drugInteractions';
 import { searchInvestigations, getInvestigationByName, Investigation, PREOP_PANELS } from '../data/investigationDatabase';
 
 import { cockcroftGault } from '../services/clinicianAssistant/engine/modules/renal';
@@ -412,8 +413,8 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
   };
   
   // Drug-drug interaction check
-  const drugInteractions = medications.length >= 2 
-    ? checkInteractions(medications.map(m => m.medication_name)) 
+  const drugInteractions = medications.length >= 2
+    ? findInteractions(medications.map(m => m.medication_name)).map(x => ({ med1: x.a, med2: x.b, interaction: `${x.severity.toUpperCase()}: ${x.mechanism} — ${x.management}` }))
     : [];
   
   // Auto-fill dosing based on medication name and GFR

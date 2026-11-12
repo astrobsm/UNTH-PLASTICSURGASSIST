@@ -14,6 +14,7 @@
  */
 import { BNF_DRUG_DATABASE, checkDrugInteractions, type BNFDrug } from '../../data/bnfDrugDatabase';
 import type { CcInteraction, CcMedication, CcMedReview } from './types';
+import { renalDoseGuidance } from '../../data/renalDosing';
 
 export type DrugClass =
   | 'ace' | 'arb' | 'k_sparing' | 'k_supplement' | 'nsaid' | 'loop' | 'thiazide' | 'aminoglycoside' | 'vancomycin' | 'trimethoprim'
@@ -131,6 +132,35 @@ const PAIRS: [DrugClass[], DrugClass[], CcInteraction['severity'], string, strin
   [['k_sparing'], ['k_supplement'], 'major', 'Hyperkalaemia', 'Avoid unless K is low and monitored'],
 ];
 
+/**
+ * Every interaction between two drugs — the single checker used by the
+ * critical-care review, prescribing and treatment plans (via
+ * src/data/drugInteractions.ts). Class rules first (mechanism and management
+ * stated), then the BNF database's own entries for the pair.
+ */
+export function pairInteractions(a: Pick<CcMedication, 'name' | 'class' | 'dose' | 'unit'>, b: Pick<CcMedication, 'name' | 'class' | 'dose' | 'unit'>, opts: { reportDuplicate?: boolean } = {}): CcInteraction[] {
+  const c = classesOf(a), oc = classesOf(b);
+  const out: CcInteraction[] = [];
+  for (const [x, y, sev, mech, mgmt] of PAIRS) {
+    if ((has(c, ...x) && has(oc, ...y)) || (has(c, ...y) && has(oc, ...x))) out.push({ with: b.name, severity: sev, mechanism: mech, management: mgmt, source: 'class rules' });
+  }
+  if (c.has('qt') && oc.has('qt')) out.push({ with: b.name, severity: 'major', mechanism: 'Additive QT prolongation (torsades risk)', management: 'ECG for QTc; correct K and Mg; avoid if QTc > 500 ms', source: 'class rules' });
+  if (c.has('serotonergic') && oc.has('serotonergic') && !(c.has('linezolid') || oc.has('linezolid'))) out.push({ with: b.name, severity: 'moderate', mechanism: 'Additive serotonergic effect', management: 'Monitor for serotonin toxicity (clonus, hyperthermia, agitation)', source: 'class rules' });
+  const ba = bnfFor(a.name), bb = bnfFor(b.name);
+  if (ba && bb && !out.length) {
+    const seen = new Set<string>();
+    for (const hit of [...checkDrugInteractions(ba, bb), ...checkDrugInteractions(bb, ba)]) {
+      if (seen.has(hit.effect)) continue; seen.add(hit.effect);
+      out.push({ with: b.name, severity: hit.severity, mechanism: hit.effect, management: 'See BNF interaction entry; confirm with pharmacist', source: 'BNF database' });
+    }
+  }
+  if (opts.reportDuplicate !== false) {
+    const dupe = ([['ppi'], ['h2'], ['nsaid'], ['ace', 'arb'], ['benzodiazepine'], ['heparin']] as DrugClass[][]).find(g => has(c, ...g) && has(oc, ...g));
+    if (dupe) out.push({ with: b.name, severity: 'moderate', mechanism: 'Duplicate therapy in the same class', management: 'Stop one', source: 'class rules' });
+  }
+  return out;
+}
+
 export function reviewMedications(meds: CcMedication[], f: PatientFacts): { reviews: CcMedReview[]; missing: { therapy: string; reason: string }[]; tripleWhammy: boolean } {
   const cls = meds.map(m => classesOf(m));
   const all = new Set<DrugClass>(cls.flatMap(c => [...c]));
@@ -171,23 +201,7 @@ export function reviewMedications(meds: CcMedication[], f: PatientFacts): { revi
 
     // Pairwise.
     meds.forEach((other, j) => {
-      if (j === i) return;
-      const oc = cls[j];
-      for (const [a, b, sev, mech, mgmt] of PAIRS) {
-        if ((has(c, ...a) && has(oc, ...b)) || (has(c, ...b) && has(oc, ...a))) inter.push({ with: other.name, severity: sev, mechanism: mech, management: mgmt });
-      }
-      if (c.has('qt') && oc.has('qt')) inter.push({ with: other.name, severity: 'major', mechanism: 'Additive QT prolongation (torsades risk)', management: 'ECG for QTc; correct K and Mg; avoid if QTc > 500 ms' });
-      if (c.has('serotonergic') && oc.has('serotonergic') && !(c.has('linezolid') || oc.has('linezolid'))) inter.push({ with: other.name, severity: 'moderate', mechanism: 'Additive serotonergic effect', management: 'Monitor for serotonin toxicity (clonus, hyperthermia, agitation)' });
-      const bnfOther = bnfFor(other.name);
-      if (bnf && bnfOther) {
-        if (!inter.some(x => x.with === other.name)) {
-          for (const hit of checkDrugInteractions(bnf, bnfOther)) inter.push({ with: other.name, severity: hit.severity, mechanism: hit.effect, management: 'See BNF interaction entry; confirm with pharmacist' });
-        }
-      }
-      // Duplicate class (same therapeutic class twice).
-      const dupe = ([['ppi'], ['h2'], ['nsaid'], ['ace', 'arb'], ['opioid'], ['benzodiazepine'], ['heparin']] as DrugClass[][])
-        .find(g => has(c, ...g) && has(oc, ...g) && !(g[0] === 'opioid'));
-      if (dupe && j > i) inter.push({ with: other.name, severity: 'moderate', mechanism: 'Duplicate therapy in the same class', management: 'Stop one' });
+      if (j !== i) inter.push(...pairInteractions(m, other, { reportDuplicate: j > i }));
     });
     if (tripleWhammy && has(c, 'ace', 'arb', 'loop', 'thiazide', 'nsaid', 'k_sparing')) inter.push({ with: 'ACE inhibitor/ARB + diuretic + NSAID', severity: 'major', mechanism: '"Triple whammy" — combined loss of renal autoregulation (AKI)', management: 'Stop the NSAID; review the others while AKI risk persists' });
 
@@ -205,9 +219,9 @@ export function reviewMedications(meds: CcMedication[], f: PatientFacts): { revi
     // Renal.
     let renal = 'No renal adjustment flagged';
     if (has(c, ...RENAL_SENSITIVE)) {
-      const band = f.crcl == null ? 'unknown (no creatinine/weight)' : f.crcl > 50 ? '> 50 mL/min' : f.crcl >= 30 ? '30–50 mL/min' : f.crcl >= 10 ? '10–29 mL/min' : '< 10 mL/min';
-      const bnfText = bnf?.dosage?.renalImpairment?.adjustment;
-      renal = `Renally relevant. CrCl band ${band}.${bnfText ? ` BNF: ${bnfText}.` : ''}${f.aki ? ' AKI: CrCl overestimates function while creatinine is rising — give full loading doses, adjust maintenance as function changes.' : ''} Confirm the dose with the formulary / pharmacist.`;
+      const g = renalDoseGuidance(m.name, f.crcl ?? null);
+      renal = `Renally relevant. ${g.summary}${f.aki ? ' AKI: CrCl overestimates function while creatinine is rising — give full loading doses, adjust maintenance as function changes.' : ''}`;
+      if (g.contraindicated) { adverse.push(`Renal: ${g.primary?.source} advises avoiding at ${g.band}`); escalate('substitute'); }
       if (f.crcl != null && f.crcl < 30) escalate('adjust');
     }
     const hepatic = has(c, ...HEPATIC_SENSITIVE) && (f.liverDisease || (f.alt ?? 0) > 3 * (f.altUln ?? 40) || (f.bilirubin ?? 0) > 34)

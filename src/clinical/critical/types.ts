@@ -55,7 +55,7 @@ export interface CcCalculation {
   name: string; inputs: Record<string, unknown>; formula: string; result: number | string | null; unit: string;
   interpretation: string; app_value_agrees: boolean | null; caveats: string;
 }
-export interface CcInteraction { with: string; severity: 'contraindicated' | 'major' | 'moderate' | 'minor'; mechanism: string; management: string }
+export interface CcInteraction { with: string; severity: 'contraindicated' | 'major' | 'moderate' | 'minor'; mechanism: string; management: string; source?: 'class rules' | 'BNF database' | 'BNF medications table (secondary)' }
 export interface CcMedReview {
   drug: string; class: string; mechanism: string; indication_ok: boolean | null; dose_assessment: string;
   renal_adjustment: string; hepatic_adjustment: string; adverse_effects_in_this_patient: string[];

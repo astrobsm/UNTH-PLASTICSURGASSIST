@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Plus, Pill, AlertTriangle, Search, Trash2, Ban, RotateCcw } from 'lucide-react';
 import { format } from 'date-fns';
 import { db } from '../db/database';
+import { findInteractions } from '../data/drugInteractions';
 interface Medication {
   id: string;
   medication_name: string;
@@ -516,32 +517,10 @@ export const MedicationOrderingModal: React.FC<MedicationOrderingModalProps> = (
     ));
   };
 
-  // Check for drug interactions
-  const checkInteractions = (): string[] => {
-    const interactions: string[] = [];
-    const medicationNames = medications.map(m => m.medication_name);
-
-    // Simple interaction checking logic
-    // In a real system, this would query a comprehensive drug interaction database
-    if (medicationNames.includes('Warfarin')) {
-      const interactingDrugs = ['Aspirin', 'Diclofenac', 'Ciprofloxacin', 'Metronidazole', 'Omeprazole'];
-      interactingDrugs.forEach(drug => {
-        if (medicationNames.includes(drug)) {
-          interactions.push(`⚠️ Warfarin + ${drug}: Increased bleeding risk. Monitor INR closely.`);
-        }
-      });
-    }
-
-    if (medicationNames.includes('Tramadol') && medicationNames.some(m => m.includes('Fluoxetine') || m.includes('Sertraline'))) {
-      interactions.push(`⚠️ Tramadol + SSRI: Risk of serotonin syndrome. Monitor closely.`);
-    }
-
-    if (medicationNames.includes('Metformin') && medicationNames.includes('Furosemide')) {
-      interactions.push(`⚠️ Metformin + Furosemide: Increased risk of lactic acidosis.`);
-    }
-
-    return interactions;
-  };
+  // Drug interactions — the shared checker (class rules + BNF database).
+  const checkInteractions = (): string[] =>
+    findInteractions(medications.map(m => m.medication_name))
+      .map(x => `⚠️ ${x.a} + ${x.b} (${x.severity}): ${x.mechanism} — ${x.management}`);
 
   const interactions = checkInteractions();
 

@@ -9,6 +9,7 @@
  */
 import type { Answers, ScoreDef, ScoreResult, TemplateQuestion, TemplateSection } from './types';
 
+import { news2 } from '../../services/clinicianAssistant/calculators';
 // ── helpers ────────────────────────────────────────────────────────────────
 
 export const q = (id: string, label: string, type: TemplateQuestion['type'], extra: Partial<TemplateQuestion> = {}): TemplateQuestion =>
@@ -252,21 +253,17 @@ export const rcriScore: ScoreDef = {
 };
 
 /** NEWS2 from the post-op observations (SpO₂ scale 1). */
+/** NEWS2 from the template observations — the shared implementation (calculators.news2). */
 export function news2Of(a: Answers): { total: number; anyThree: boolean } | null {
   const s = 'obs';
-  const rr = n(a, s, 'rr'), spo2 = n(a, s, 'spo2'), sbp = n(a, s, 'sbp'), hr = n(a, s, 'hr'), t = n(a, s, 'temp');
   const avpu = ans(a, s, 'avpu'), o2 = ans(a, s, 'o2');
-  if ([rr, spo2, sbp, hr, t].some(v => v === null) || !avpu) return null;
-  const parts = [
-    rr! <= 8 ? 3 : rr! <= 11 ? 1 : rr! <= 20 ? 0 : rr! <= 24 ? 2 : 3,
-    spo2! <= 91 ? 3 : spo2! <= 93 ? 2 : spo2! <= 95 ? 1 : 0,
-    o2 === 'Yes' ? 2 : 0,
-    sbp! <= 90 ? 3 : sbp! <= 100 ? 2 : sbp! <= 110 ? 1 : sbp! <= 219 ? 0 : 3,
-    hr! <= 40 ? 3 : hr! <= 50 ? 1 : hr! <= 90 ? 0 : hr! <= 110 ? 1 : hr! <= 130 ? 2 : 3,
-    avpu === 'Alert' ? 0 : 3,
-    t! <= 35 ? 3 : t! <= 36 ? 1 : t! <= 38 ? 0 : t! <= 39 ? 1 : 2,
-  ];
-  return { total: parts.reduce((x, y) => x + y, 0), anyThree: parts.some(p => p === 3) };
+  const r = news2({
+    respiratoryRate: n(a, s, 'rr'), spo2: n(a, s, 'spo2'), systolicBP: n(a, s, 'sbp'), heartRate: n(a, s, 'hr'), temperature: n(a, s, 'temp'),
+    // Supplemental oxygen is optional on the form: unanswered is scored as air, as before.
+    onOxygen: o2 === 'Yes', alteredConsciousness: avpu ? avpu !== 'Alert' : null,
+  });
+  if (!r.complete || r.total == null) return null;
+  return { total: r.total, anyThree: r.anyThree };
 }
 export const news2Score: ScoreDef = {
   id: 'news2', label: 'NEWS2', reference: 'Royal College of Physicians, NEWS2 (2017)',

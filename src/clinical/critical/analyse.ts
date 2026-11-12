@@ -24,8 +24,7 @@ import { emptyPatient, type Analyte, type Finding, type PatientContext } from '.
 import { akiStage, ckdEpi2021, ckdStage, cockcroftGault } from '../../services/clinicianAssistant/engine/modules/renal';
 import { interpretAcidBase } from '../../services/clinicianAssistant/engine/modules/abg';
 import { totalBodyWater } from '../../services/clinicianAssistant/engine/modules/electrolytes';
-import { assessSepsis, maintenanceFluidMlPerHour, meanArterialPressure } from '../../services/clinicianAssistant/calculators';
-import { news2Of } from '../templates/common';
+import { assessSepsis, maintenanceFluidMlPerHour, meanArterialPressure, news2 } from '../../services/clinicianAssistant/calculators';
 import { burnCareService } from '../../services/burnCareService';
 import {
   adrogueMadias, akiUrineStage, bicarbonateDeficit, childPugh, curb65, deltaRatio, deltaRatioMeaning, dosingWeight, effectiveOsmolality,
@@ -325,10 +324,11 @@ export function analyseCritical(input: CcInput, now = new Date()): CcReport {
   const sep = assessSepsis({ systolicBP: v.sbp, diastolicBP: v.dbp, heartRate: v.hr, respiratoryRate: v.rr, temperature: v.temp_c, gcs: v.gcs }, { wbc, lactate });
   const qMissing = [!ok(v.rr) && 'RR', !ok(v.sbp) && 'SBP', !ok(v.gcs) && 'GCS'].filter(Boolean) as string[];
   R.scores.push({ name: 'qSOFA', value: String(sep.qSOFA), complete: !qMissing.length, missing: qMissing, interpretation: sep.qSOFA >= 2 ? '≥ 2 — high risk of poor outcome if infection is present' : '< 2' });
-  const news = news2Of({ obs: { rr: v.rr, spo2: v.spo2, sbp: v.sbp, hr: v.hr, temp: v.temp_c, avpu: ok(v.gcs) ? (v.gcs === 15 ? 'Alert' : 'Not alert') : undefined, o2: fio2Frac != null ? (fio2Frac > 0.21 ? 'Yes' : 'No') : undefined } } as any);
-  const nMissing = [!ok(v.rr) && 'RR', !ok(v.spo2) && 'SpO2', !ok(v.sbp) && 'SBP', !ok(v.hr) && 'HR', !ok(v.temp_c) && 'temperature', !ok(v.gcs) && 'consciousness (GCS/AVPU)'].filter(Boolean) as string[];
-  R.scores.push({ name: 'NEWS2', value: news ? String(news.total) : '', complete: !!news && fio2Frac != null, missing: [...nMissing, ...(fio2Frac == null ? ['supplemental oxygen (scored as air)'] : [])],
-    interpretation: news ? (news.total >= 7 ? 'High — emergency response' : news.total >= 5 || news.anyThree ? 'Medium — urgent review' : 'Low') : 'Not calculable' });
+  const nw = news2({ respiratoryRate: v.rr, spo2: v.spo2, systolicBP: v.sbp, heartRate: v.hr, temperature: v.temp_c,
+    onOxygen: fio2Frac != null ? fio2Frac > 0.21 : null, alteredConsciousness: ok(v.gcs) ? v.gcs < 15 : null });
+  const news = nw.total != null ? { total: nw.total, anyThree: nw.anyThree } : null;
+  R.scores.push({ name: 'NEWS2', value: nw.total != null ? String(nw.total) : '', complete: nw.complete, missing: nw.missing,
+    interpretation: nw.risk ? `${nw.risk} — ${nw.response}` : 'Not calculable' });
   const vasoLevel = onVasopressor ? (meds.some(m => /adrenaline|epinephrine/.test(lc(m.name)) && !/nor/.test(lc(m.name))) || meds.filter(m => classesOf(m).has('vasopressor')).length > 1 ? 'high' : 'low') : 'none';
   const so = sofa({ pfMmHg, sfRatio: sf, ventilated, plt, bilirubinUmol: bili, map, vasopressor: vasoLevel as any, gcs: v.gcs, creatUmol: cr, uoMlDay: input.fluid_balance?.output_ml_24h ?? null });
   R.scores.push({ name: 'SOFA', value: so.value != null ? String(so.value) : '', complete: so.complete, missing: so.missing,

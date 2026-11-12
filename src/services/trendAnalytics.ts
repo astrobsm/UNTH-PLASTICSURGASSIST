@@ -18,6 +18,7 @@ import {
   
 } from './medicalValidation';
 
+import { news2 } from './clinicianAssistant/calculators';
 // ────────────────────────────────────────────────────────────
 // TYPES
 // ────────────────────────────────────────────────────────────
@@ -192,100 +193,27 @@ export function analyzeAllVitalTrends(dataPoints: VitalTrendPoint[]): TrendAnaly
 // EARLY WARNING SCORE (NEWS2-inspired for Nigerian context)
 // ────────────────────────────────────────────────────────────
 
-/** Calculate National Early Warning Score from latest vitals */
+/**
+ * NEWS2 from a charted vitals point — the shared implementation
+ * (calculators.news2). The vitals chart records neither supplemental oxygen
+ * nor consciousness, so those are reported as not recorded and the
+ * recommendation says the score may underestimate risk.
+ */
 export function calculateEWS(vitals: VitalTrendPoint): EarlyWarningScore {
+  const r = news2({
+    respiratoryRate: vitals.respiratory_rate ?? null, spo2: vitals.spo2 ?? null, systolicBP: vitals.bp_systolic ?? null,
+    heartRate: vitals.pulse ?? null, temperature: vitals.temperature ?? null, onOxygen: null, alteredConsciousness: null,
+  });
   const components: Record<string, { value: number; score: number }> = {};
-  let total = 0;
-
-  // Respiratory Rate
-  if (vitals.respiratory_rate != null) {
-    const rr = vitals.respiratory_rate;
-    let score = 0;
-    if (rr <= 8) score = 3;
-    else if (rr <= 11) score = 1;
-    else if (rr <= 20) score = 0;
-    else if (rr <= 24) score = 2;
-    else score = 3;
-    components.respiratory_rate = { value: rr, score };
-    total += score;
-  }
-
-  // SpO2
-  if (vitals.spo2 != null) {
-    const spo2 = vitals.spo2;
-    let score = 0;
-    if (spo2 <= 91) score = 3;
-    else if (spo2 <= 93) score = 2;
-    else if (spo2 <= 95) score = 1;
-    else score = 0;
-    components.spo2 = { value: spo2, score };
-    total += score;
-  }
-
-  // Temperature
-  if (vitals.temperature != null) {
-    const temp = vitals.temperature;
-    let score = 0;
-    if (temp <= 35.0) score = 3;
-    else if (temp <= 36.0) score = 1;
-    else if (temp <= 38.0) score = 0;
-    else if (temp <= 39.0) score = 1;
-    else score = 2;
-    components.temperature = { value: temp, score };
-    total += score;
-  }
-
-  // Systolic BP
-  if (vitals.bp_systolic != null) {
-    const sbp = vitals.bp_systolic;
-    let score = 0;
-    if (sbp <= 90) score = 3;
-    else if (sbp <= 100) score = 2;
-    else if (sbp <= 110) score = 1;
-    else if (sbp <= 219) score = 0;
-    else score = 3;
-    components.bp_systolic = { value: sbp, score };
-    total += score;
-  }
-
-  // Heart Rate / Pulse
-  if (vitals.pulse != null) {
-    const hr = vitals.pulse;
-    let score = 0;
-    if (hr <= 40) score = 3;
-    else if (hr <= 50) score = 1;
-    else if (hr <= 90) score = 0;
-    else if (hr <= 110) score = 1;
-    else if (hr <= 130) score = 2;
-    else score = 3;
-    components.pulse = { value: hr, score };
-    total += score;
-  }
-
-  let category: EarlyWarningScore['category'];
-  let recommendation: string;
-
-  if (total >= 7) {
-    category = 'critical';
-    recommendation = 'URGENT: Immediate senior review required. Consider ICU/HDU. Continuous monitoring.';
-  } else if (total >= 5) {
-    category = 'high';
-    recommendation = 'Urgent response: Senior clinician review within 30 minutes. Increase monitoring frequency to at least hourly.';
-  } else if (total >= 3) {
-    category = 'medium';
-    recommendation = 'Increase monitoring to at least 4-hourly. Inform registrar. Consider escalation.';
-  } else {
-    category = 'low';
-    recommendation = 'Continue routine monitoring (minimum 12-hourly). Routine clinical care.';
-  }
-
-  return {
-    totalScore: total,
-    category,
-    components,
-    recommendation,
-    assessedAt: new Date().toISOString(),
-  };
+  const put = (key: string, value: number | undefined, score: number | null) => { if (value != null && score != null) components[key] = { value, score }; };
+  put('respiratory_rate', vitals.respiratory_rate, r.parts.respiratoryRate);
+  put('spo2', vitals.spo2, r.parts.spo2);
+  put('temperature', vitals.temperature, r.parts.temperature);
+  put('bp_systolic', vitals.bp_systolic, r.parts.systolicBP);
+  put('pulse', vitals.pulse, r.parts.heartRate);
+  const category: EarlyWarningScore['category'] = r.risk === 'high' ? 'critical' : r.risk === 'medium' ? 'high' : r.risk === 'low-medium' ? 'medium' : 'low';
+  const unrecorded = r.missing.length ? ` Not recorded: ${r.missing.join(', ')} — the score may underestimate risk.` : '';
+  return { totalScore: r.total ?? 0, category, components, recommendation: `NEWS2 ${r.total ?? '—'}: ${r.response}.${unrecorded}`, assessedAt: new Date().toISOString() };
 }
 
 // ────────────────────────────────────────────────────────────

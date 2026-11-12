@@ -1702,15 +1702,6 @@ export function getMedicationsByCategory(category: MedicationCategory): BNFMedic
   return BNF_MEDICATIONS.filter(med => med.category === category);
 }
 
-/**
- * Get GFR-adjusted dosing for a medication
- */
-export function getGFRAdjustedDosing(medicationName: string, gfr: number): GFRAdjustment | undefined {
-  const med = getMedicationByName(medicationName);
-  if (!med) return undefined;
-  
-  return med.gfrAdjustments.find(adj => gfr >= adj.gfrMin && gfr <= adj.gfrMax);
-}
 
 /**
  * Get all medication names for autocomplete
@@ -1719,26 +1710,3 @@ export function getAllMedicationNames(): string[] {
   return BNF_MEDICATIONS.map(med => med.name);
 }
 
-/**
- * Check for contraindications between medications
- */
-export function checkInteractions(medicationNames: string[]): { med1: string; med2: string; interaction: string }[] {
-  const interactions: { med1: string; med2: string; interaction: string }[] = [];
-  
-  for (let i = 0; i < medicationNames.length; i++) {
-    const med1 = getMedicationByName(medicationNames[i]);
-    if (!med1) continue;
-    
-    for (let j = i + 1; j < medicationNames.length; j++) {
-      const med2Name = medicationNames[j];
-      const matchingInteraction = med1.interactions.find(inter => 
-        inter.toLowerCase().includes(med2Name.toLowerCase())
-      );
-      if (matchingInteraction) {
-        interactions.push({ med1: med1.name, med2: med2Name, interaction: matchingInteraction });
-      }
-    }
-  }
-  
-  return interactions;
-}

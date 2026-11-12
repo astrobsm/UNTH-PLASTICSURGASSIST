@@ -171,6 +171,60 @@ export function meanArterialPressure(systolic?: number | null, diastolic?: numbe
   return Math.round(Number(diastolic) + (Number(systolic) - Number(diastolic)) / 3);
 }
 
+export interface News2Input {
+  respiratoryRate?: number | null;
+  spo2?: number | null;
+  /** Supplemental oxygen; null/undefined = not recorded. */
+  onOxygen?: boolean | null;
+  systolicBP?: number | null;
+  heartRate?: number | null;
+  temperature?: number | null;
+  /** ACVPU: false = alert; true = new confusion, voice, pain or unresponsive; null = not recorded. */
+  alteredConsciousness?: boolean | null;
+}
+export interface News2Result {
+  /** Sum of the parameters recorded (null when none were). */
+  total: number | null;
+  parts: Record<'respiratoryRate' | 'spo2' | 'oxygen' | 'systolicBP' | 'heartRate' | 'consciousness' | 'temperature', number | null>;
+  missing: string[];
+  complete: boolean;
+  anyThree: boolean;
+  /** RCP clinical risk: low 0–4; low–medium = a single parameter scoring 3; medium 5–6; high ≥ 7. */
+  risk: 'low' | 'low-medium' | 'medium' | 'high' | null;
+  response: string;
+}
+
+/**
+ * NEWS2 (Royal College of Physicians 2017), SpO₂ scale 1 — the one
+ * implementation in the app. Parameters that were not recorded are listed in
+ * `missing` and contribute nothing; they are never silently scored as normal
+ * without saying so. (Scale 2, for confirmed hypercapnic failure, is not
+ * applied — use clinical judgement in COPD.)
+ */
+export function news2(v: News2Input): News2Result {
+  const ok = (x: unknown): x is number => typeof x === 'number' && Number.isFinite(x);
+  const parts: News2Result['parts'] = { respiratoryRate: null, spo2: null, oxygen: null, systolicBP: null, heartRate: null, consciousness: null, temperature: null };
+  const missing: string[] = [];
+  const rr = v.respiratoryRate, sp = v.spo2, sbp = v.systolicBP, hr = v.heartRate, t = v.temperature;
+  if (ok(rr)) parts.respiratoryRate = rr <= 8 ? 3 : rr <= 11 ? 1 : rr <= 20 ? 0 : rr <= 24 ? 2 : 3; else missing.push('respiratory rate');
+  if (ok(sp)) parts.spo2 = sp <= 91 ? 3 : sp <= 93 ? 2 : sp <= 95 ? 1 : 0; else missing.push('SpO₂');
+  if (v.onOxygen != null) parts.oxygen = v.onOxygen ? 2 : 0; else missing.push('supplemental oxygen');
+  if (ok(sbp)) parts.systolicBP = sbp <= 90 ? 3 : sbp <= 100 ? 2 : sbp <= 110 ? 1 : sbp <= 219 ? 0 : 3; else missing.push('systolic BP');
+  if (ok(hr)) parts.heartRate = hr <= 40 ? 3 : hr <= 50 ? 1 : hr <= 90 ? 0 : hr <= 110 ? 1 : hr <= 130 ? 2 : 3; else missing.push('heart rate');
+  if (v.alteredConsciousness != null) parts.consciousness = v.alteredConsciousness ? 3 : 0; else missing.push('consciousness (ACVPU)');
+  if (ok(t)) parts.temperature = t <= 35 ? 3 : t <= 36 ? 1 : t <= 38 ? 0 : t <= 39 ? 1 : 2; else missing.push('temperature');
+  const scored = Object.values(parts).filter((x): x is number => x != null);
+  const total = scored.length ? scored.reduce((a, b) => a + b, 0) : null;
+  const anyThree = scored.some(x => x === 3);
+  const risk: News2Result['risk'] = total == null ? null : total >= 7 ? 'high' : total >= 5 ? 'medium' : anyThree ? 'low-medium' : 'low';
+  const response = risk === 'high' ? 'Emergency assessment by a clinician with critical-care competencies; continuous monitoring'
+    : risk === 'medium' ? 'Urgent review by a ward clinician or acute team; at least hourly observations'
+      : risk === 'low-medium' ? 'Urgent ward-based review of the parameter scoring 3; at least hourly observations'
+        : risk === 'low' ? (total === 0 ? 'Routine monitoring (minimum 12-hourly)' : 'Ward assessment by a registered nurse; at least 4–6-hourly observations')
+          : 'Not calculable — no observations recorded';
+  return { total, parts, missing, complete: missing.length === 0, anyThree, risk, response };
+}
+
 /**
  * qSOFA and SIRS; septic shock (Sepsis-3) needs low MAP and raised lactate.
  *
