@@ -10,6 +10,7 @@ import { hoTrackingService, HOProfile, HODetail } from '../services/hoTrackingSe
 import { apiClient } from '../services/apiClient';
 import { useCrossTabRefresh } from '../utils/crossTabSync';
 import { useNavigate } from 'react-router-dom';
+import DutyChasePanel from '../components/DutyChasePanel';
 
 type ViewMode = 'overview' | 'detail';
 type Tab = 'summary' | 'documentation' | 'cbt' | 'cme' | 'patients' | 'eligibility';
@@ -224,6 +225,8 @@ const HOTrackingPage: React.FC = () => {
         </div>
 
         {error && <div className="bg-red-50 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>}
+
+        <DutyChasePanel />
 
         {/* Cohort analytics band */}
         {!loading && cohort && (

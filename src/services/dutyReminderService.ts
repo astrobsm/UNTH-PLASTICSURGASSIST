@@ -8,6 +8,7 @@ import { apiClient } from './apiClient';
  */
 
 export type ReminderKind = 'weekly' | 'daily';
+export type ChaseKind = 'chase' | 'commend';
 
 export interface ReminderPatient {
   hospitalNumber: string;
@@ -44,6 +45,27 @@ export interface QueuedReminder {
   sent_at?: string | null;
 }
 
+export interface ChasePerson {
+  id: string;
+  name: string;
+  grade: 'senior_registrar' | 'registrar' | 'house_officer';
+  gradeLabel: string;
+  phone: string | null;
+  patientsHeld: number;
+  verdict: 'chase' | 'commend' | 'no_record';
+  reviews: { expected: number; done: number; missed: { day: string; patient: string }[] };
+  morning: { expected: number; done: number; missed: number; late: number; no_folder: number; badDays: string[] } | null;
+  clinic: { missed: { duty: string; day: string }[]; done: number };
+  overdue: { title: string; due: string }[];
+  completedDuties: number;
+  notes: number;
+  calls: number;
+  message: string;
+  whatsappLink: string | null;
+}
+
+export interface ChaseReport { from: string; to: string; reviewDays: string[]; people: ChasePerson[] }
+
 export interface ReminderStatus {
   /** Always 'manual' — nothing is sent without someone pressing send. */
   delivery: 'manual';
@@ -78,6 +100,20 @@ class DutyReminderService {
   /** Record that a queued reminder was sent by hand. */
   async markSent(id: number): Promise<QueuedReminder> {
     const data: any = await apiClient.post('/duty-reminders?action=mark-sent', { id });
+    return data.reminder as QueuedReminder;
+  }
+
+  /** Missed and completed duties per SR, registrar and HO for a period. */
+  async chasePreview(from?: string, to?: string): Promise<ChaseReport> {
+    const qs = new URLSearchParams({ action: 'chase-preview' });
+    if (from) qs.set('from', from);
+    if (to) qs.set('to', to);
+    return await apiClient.get(`/duty-reminders?${qs.toString()}`, { freshRead: true } as any);
+  }
+
+  /** Record that a chase or commendation was sent on WhatsApp. */
+  async chaseRecord(userId: string, kind: ChaseKind, message: string): Promise<QueuedReminder> {
+    const data: any = await apiClient.post('/duty-reminders?action=chase-record', { user_id: userId, kind, message });
     return data.reminder as QueuedReminder;
   }
 }

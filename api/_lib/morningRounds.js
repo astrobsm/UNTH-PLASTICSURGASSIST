@@ -215,6 +215,20 @@ export async function morningChecklist(hoId, dayYmd = null, now = new Date()) {
  * documented on time with the folder confirmed. Days the HO was on leave, and
  * today until its window closes, are left out.
  */
+/**
+ * A person's leave as WAT day-number ranges (scheduled, active or completed).
+ * Days inside a range are neither expected nor missed — shared by the morning
+ * round and the duty chase.
+ */
+export async function absenceRanges(userId) {
+  try {
+    return (await query(
+      `SELECT start_date, end_date FROM staff_absences WHERE user_id::text = $1 AND status IN ('scheduled','active','completed')`,
+      [String(userId)]
+    )).rows.map(a => ({ from: watDayNumber(new Date(a.start_date)), to: watDayNumber(new Date(a.end_date)) }));
+  } catch { return []; /* no absence table */ }
+}
+
 export async function morningCompliance(hoId, { since = null, now = new Date() } = {}) {
   await ensureTables();
   const params = [String(hoId)];
@@ -225,13 +239,7 @@ export async function morningCompliance(hoId, { since = null, now = new Date() }
     params
   )).rows;
 
-  let absences = [];
-  try {
-    absences = (await query(
-      `SELECT start_date, end_date FROM staff_absences WHERE user_id::text = $1 AND status IN ('scheduled','active','completed')`,
-      [String(hoId)]
-    )).rows.map(a => ({ from: watDayNumber(new Date(a.start_date)), to: watDayNumber(new Date(a.end_date)) }));
-  } catch { /* no absence table */ }
+  const absences = await absenceRanges(hoId);
 
   const today = watDayNumber(now);
   const days = [];

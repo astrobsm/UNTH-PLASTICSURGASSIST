@@ -158,7 +158,7 @@ const DutyReminderQueue: React.FC = () => {
                     </span>
                   </p>
                   <p className="text-[11px] text-gray-500">
-                    {r.kind === 'weekly' ? 'Mon/Fri review' : 'Daily update'}
+                    {({ weekly: 'Mon/Fri review', daily: 'Daily update', chase: 'Duty chase', commend: 'Commendation' } as Record<string, string>)[r.kind] || r.kind}
                     {r.phone ? ` · ${r.phone}` : ' · no phone on file'}
                     {r.error_message ? ` · ${r.error_message}` : ''}
                   </p>

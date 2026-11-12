@@ -77,12 +77,17 @@ export default async function handler(req, res) {
         });
       }
       if (action === 'preview') return await preview(params, res);
+      if (action === 'chase-preview') {
+        if (!isAdmin) return res.status(403).json({ error: 'Only senior staff can chase duties' });
+        return res.status(200).json(await buildDutyChase({ from: params.get('from'), to: params.get('to'), senderName: auth.user.full_name || auth.user.name || '' }));
+      }
       return await listQueue(params, res);
     }
     if (req.method === 'POST') {
       if (!isAdmin) return res.status(403).json({ error: 'Only senior staff can run duty reminders' });
       if (action === 'run') return await run(req.body, auth.user, res);
       if (action === 'mark-sent') return await markSent(req.body, auth.user, res);
+      if (action === 'chase-record') return await chaseRecord(req.body, auth.user, res);
       return res.status(400).json({ error: 'Unknown action' });
     }
     return res.status(405).json({ error: 'Method not allowed' });
@@ -176,5 +181,25 @@ async function markSent(body, user, res) {
     [String(user.id), b.id]
   );
   if (r.rows.length === 0) return res.status(404).json({ error: 'Reminder not found' });
+  return res.status(200).json({ reminder: r.rows[0] });
+}
+
+async function chaseRecord(body, user, res) {
+  const b = parseBody(body);
+  const kind = ['chase', 'commend'].includes(b.kind) ? b.kind : null;
+  const message = String(b.message || '').trim();
+  if (!b.user_id || !kind || !message) return res.status(400).json({ error: 'user_id, kind (chase|commend) and message are required' });
+  const person = (await loadCareStaff()).find(s => String(s.id) === String(b.user_id));
+  if (!person) return res.status(404).json({ error: 'That staff member is not an active member of the care team' });
+  const r = await query(
+    `INSERT INTO duty_reminders (reminder_date, kind, user_id, user_name, user_role, phone, message, status, provider, whatsapp_link, sent_at, sent_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, 'sent', 'manual', $8, CURRENT_TIMESTAMP, $9)
+     ON CONFLICT (reminder_date, kind, user_id) DO UPDATE
+       SET message = EXCLUDED.message, phone = EXCLUDED.phone, whatsapp_link = EXCLUDED.whatsapp_link,
+           status = 'sent', sent_at = CURRENT_TIMESTAMP, sent_by = EXCLUDED.sent_by
+     RETURNING *`,
+    [unitToday(), kind, String(person.id), person.full_name, person.role, person.phone || null, message.slice(0, 4000),
+      person.phone ? whatsAppLink(person.phone, message) : null, String(user.id)]
+  );
   return res.status(200).json({ reminder: r.rows[0] });
 }
