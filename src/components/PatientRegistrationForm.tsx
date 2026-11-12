@@ -20,6 +20,9 @@ import { assessNutrition } from '../clinical/nutrition/assess';
 import { normaliseSex, plannerOptionsFrom } from '../clinical/nutrition/record';
 import { generateMealPlan } from '../clinical/nutrition/planner';
 import { loadCatalog } from './nutrition/QuickMealPlan';
+import { mustOf as engineMust } from '../clinical/nutrition/screening';
+import { NUTRITION_CONFIG } from '../clinical/nutrition/config';
+import { recordRegistrationScreen } from '../services/nutritionRegistration';
 interface PatientRegistrationFormProps {
   onSuccess?: (patientId: string) => void;
   onCancel?: () => void;
@@ -236,11 +239,8 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     return 0;
   };
 
-  const getBMIScore = (bmi: number): number => {
-    if (bmi < 18.5) return 2;
-    if (bmi < 20) return 1;
-    return 0;
-  };
+  /** MUST BMI points, from the engine's MUST. */
+  const getBMIScore = (bmi: number): number => engineMust({}, { bmi: bmi > 0 ? bmi : null, muacBand: null, lossPct: null }, NUTRITION_CONFIG)?.parts.bmi ?? 0;
 
   const calculateDVTScore = (factors: any): { score: number; riskLevel: 'low' | 'moderate' | 'high' | 'very_high' } => {
     let score = 0;
@@ -302,16 +302,11 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
     return { score, riskLevel };
   };
 
-  const calculateMUSTScore = (bmiScore: number, weightLoss: number, acuteDisease: boolean): { score: number; riskLevel: 'low' | 'moderate' | 'high' } => {
-    const weightLossScore = weightLoss >= 10 ? 2 : weightLoss >= 5 ? 1 : 0;
-    const acuteDiseaseScore = acuteDisease ? 2 : 0;
-    const score = bmiScore + weightLossScore + acuteDiseaseScore;
-    
-    let riskLevel: 'low' | 'moderate' | 'high' = 'low';
-    if (score >= 2) riskLevel = 'high';
-    else if (score === 1) riskLevel = 'moderate';
-    
-    return { score, riskLevel };
+  /** MUST from the clinical nutrition engine — the one implementation in the app. */
+  const calculateMUSTScore = (bmi: number, weightLoss: number, acuteDisease: boolean): { score: number; riskLevel: 'low' | 'moderate' | 'high'; bmiScore: number } => {
+    const m = engineMust({ acutelyIllNoIntake5d: !!acuteDisease }, { bmi: bmi > 0 ? bmi : null, muacBand: null, lossPct: Number.isFinite(weightLoss) ? weightLoss : null }, NUTRITION_CONFIG);
+    if (!m) return { score: 0, riskLevel: 'low', bmiScore: 0 };
+    return { score: m.value, riskLevel: m.risk === 'medium' ? 'moderate' : m.risk, bmiScore: m.parts.bmi };
   };
 
   // Generate AI Recommendations
@@ -2189,7 +2184,7 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
       
       // Generate nutritional recommendations when BMI changes
       const { score, riskLevel } = calculateMUSTScore(
-        bmiScore,
+        bmi,
         riskAssessmentData.nutritional.weight_loss_percentage,
         riskAssessmentData.nutritional.acute_disease_effect
       );
@@ -2399,56 +2394,17 @@ export const PatientRegistrationForm: React.FC<PatientRegistrationFormProps> = (
 
         await riskAssessmentService.savePressureSoreAssessment(pressureAssessment);
 
-        // Calculate and save Nutritional risk assessment
-        const bmiScore = getBMIScore(riskAssessmentData.nutritional.bmi);
-        const { score: mustScore, riskLevel: nutritionalRiskLevel } = calculateMUSTScore(
-          bmiScore,
-          riskAssessmentData.nutritional.weight_loss_percentage,
-          riskAssessmentData.nutritional.acute_disease_effect
-        );
-
-        const nutritionalAssessment = {
-          id: riskAssessmentService.generateAssessmentId(),
-          patient_id: patientId,
-          assessment_type: 'nutritional' as const,
-          assessment_date: new Date(),
-          assessed_by: 'Registration System',
-          score: mustScore,
-          risk_level: nutritionalRiskLevel,
-          must_components: {
-            bmi_score: bmiScore,
-            weight_loss_score: riskAssessmentData.nutritional.weight_loss_percentage >= 10 ? 2 : 
-                               riskAssessmentData.nutritional.weight_loss_percentage >= 5 ? 1 : 0,
-            acute_disease_score: riskAssessmentData.nutritional.acute_disease_effect ? 2 : 0
-          },
-          height: riskAssessmentData.nutritional.height,
-          weight: riskAssessmentData.nutritional.weight,
-          bmi: riskAssessmentData.nutritional.bmi,
-          weight_loss_percentage: riskAssessmentData.nutritional.weight_loss_percentage,
-          acute_disease_effect: riskAssessmentData.nutritional.acute_disease_effect,
-          dietary_intake: {
-            appetite_change: riskAssessmentData.nutritional.appetite_change || '',
-            eating_difficulties: false,
-            recent_diet_change: false,
-            dietary_restrictions: []
-          },
-          ai_recommendations: aiRecommendations.nutritional.recommendations,
-          action_plan: aiRecommendations.nutritional.interventions.map(intervention => ({
-            id: Math.random().toString(36).substr(2, 9),
-            description: intervention,
-            priority: 'medium' as const,
-            due_date: new Date(Date.now() + 24 * 60 * 60 * 1000), // 1 day from now
-            assigned_to: 'Registration System',
-            status: 'pending' as const,
-            created_at: new Date()
-          })),
-          meal_plan: aiRecommendations.nutritional.mealPlan.generated ? aiRecommendations.nutritional.mealPlan.days : [],
-          status: 'active' as const,
-          created_at: new Date(),
-          updated_at: new Date()
-        };
-
-        await riskAssessmentService.saveNutritionalAssessment(nutritionalAssessment);
+        // Nutrition screen → the patient's Clinical Nutrition record (engine MUST,
+        // measurements, assessment submitted for approval). Never blocks registration.
+        const nutrition = await recordRegistrationScreen(String(patientId), {
+          weightKg: riskAssessmentData.nutritional.weight, heightCm: riskAssessmentData.nutritional.height,
+          weightLossPct: riskAssessmentData.nutritional.weight_loss_percentage, acuteNoIntake5d: riskAssessmentData.nutritional.acute_disease_effect,
+          comorbidities: riskAssessmentData.clinical.comorbidities,
+        }, {
+          ageYears: formData.date_of_birth ? Math.floor((Date.now() - new Date(formData.date_of_birth).getTime()) / (365.25 * 24 * 60 * 60 * 1000)) : null,
+          sex: (formData as any).sex || null, diagnosis: riskAssessmentData.clinical.primary_diagnosis || null,
+        });
+        if (!nutrition.saved && nutrition.error) console.warn('Nutrition screen not saved to the nutrition record:', nutrition.error);
         
         // Create treatment plan if enabled
         if (createTreatmentPlan && treatmentPlanData.treatment_goals) {

@@ -36,6 +36,9 @@ export function catabolicReasons(i: NutritionInputs, cfg: NutritionConfig): stri
   return r;
 }
 
+/** An open wound that is healing (any size) — wound-specific energy and protein apply. */
+export const openWound = (i: NutritionInputs) => (i.woundAreaCm2 ?? 0) > 0 || (i.exudate != null && i.exudate !== 'none');
+
 // ── Energy ──────────────────────────────────────────────────────────────────
 export interface EnergyOption extends Calc {
   id: string;
@@ -122,12 +125,23 @@ export function energyOptions(i: NutritionInputs, b: Body, cfg: NutritionConfig)
   }
 
   if (pos(kg) && !(i.icu || i.ventilated)) {
-    const k = cfg.kcalPerKgWard.value;
     const obese = bmi !== null && bmi >= cfg.obeseBmi.value;
     const basisKg = obese && pos(b.adjbw) ? b.adjbw : kg;
-    out.push({ id: 'kcal_kg', label: 'Ward kcal/kg', value: r0((k.low + k.high) / 2 * basisKg), low: r0(k.low * basisKg), high: r0(k.high * basisKg),
-      method: `${k.low}–${k.high} kcal/kg/day on ${obese && pos(b.adjbw) ? 'adjusted' : 'actual'} weight`, inputs: { basisKg },
-      assumptions: obese && pos(b.adjbw) ? ['Obese — adjusted body weight used'] : [], warnings: [], source: cfg.kcalPerKgWard.source });
+    const basisText = `${obese && pos(b.adjbw) ? 'adjusted' : 'actual'} weight`;
+    const assumptions = obese && pos(b.adjbw) ? ['Obese — adjusted body weight used'] : [];
+    if (openWound(i) && !((i.tbsaPct ?? 0) > 0)) {
+      // EPUAP/NPIAP: 30 kcal/kg for a healing wound, 35 when large, heavily exuding or underweight.
+      const k = cfg.woundKcalPerKg.value;
+      const high = (i.woundAreaCm2 ?? 0) >= cfg.largeWoundCm2.value || i.exudate === 'high' || (bmi !== null && bmi < 18.5);
+      const per = high ? k.high : k.low;
+      out.push({ id: 'kcal_kg', label: 'Wound healing kcal/kg', value: r0(per * basisKg), low: r0(k.low * basisKg), high: r0(k.high * basisKg),
+        method: `${per} kcal/kg/day on ${basisText} (range ${k.low}–${k.high}${high ? '; large/exuding wound or underweight' : ''})`, inputs: { basisKg, woundAreaCm2: i.woundAreaCm2 ?? null, exudate: i.exudate ?? null },
+        assumptions, warnings: [], source: cfg.woundKcalPerKg.source });
+    } else {
+      const k = cfg.kcalPerKgWard.value;
+      out.push({ id: 'kcal_kg', label: 'Ward kcal/kg', value: r0((k.low + k.high) / 2 * basisKg), low: r0(k.low * basisKg), high: r0(k.high * basisKg),
+        method: `${k.low}–${k.high} kcal/kg/day on ${basisText}`, inputs: { basisKg }, assumptions, warnings: [], source: cfg.kcalPerKgWard.source });
+    }
   }
   return out;
 }
@@ -142,6 +156,8 @@ export function recommendedEnergy(opts: EnergyOption[], i: NutritionInputs): Ene
   if ((i.tbsaPct ?? 0) > 0) order.push('toronto');
   if (i.icu || i.ventilated) order.push('icu_kcal_kg');
   if ((i.tbsaPct ?? 0) > 0) order.push('curreri');
+  // A healing wound on the ward: the guideline kcal/kg band outranks a REE equation.
+  if (openWound(i) && !(i.icu || i.ventilated) && !((i.tbsaPct ?? 0) > 0)) order.push('kcal_kg');
   order.push('mifflin_total', 'kcal_kg', 'hb_total');
   for (const id of order) { const o = by(id); if (o) return o; }
   return null;
@@ -157,18 +173,26 @@ export function proteinOf(i: NutritionInputs, b: Body, cfg: NutritionConfig): (C
   const warnings: string[] = [];
   if (critical && obese && pos(b.ibw)) {
     band = b.bmi! >= 40 ? p.obeseIcuFrom40 : p.obeseIcu30to40; label = `Obese critically ill (BMI ${b.bmi! >= 40 ? '≥ 40' : '30–40'})`; basisKg = b.ibw; basis = 'ideal body weight';
-  } else if (i.ckd && !catabolic) {
-    band = p.ckdNonDialysis; label = 'CKD, non-dialysis, not catabolic';
-    warnings.push('Reduced protein for CKD — physician to confirm');
+  } else if (i.ckd && !critical && (catabolic || openWound(i))) {
+    // Healing or catabolic CKD on the ward: neither the stable-CKD restriction nor the full wound band.
+    const h = p.ckdHealingWound;
+    band = { low: h.low, high: h.high, target: catabolic ? h.high : h.target };
+    label = catabolic ? 'CKD (not on dialysis) with catabolic illness' : 'CKD (not on dialysis) with a healing wound';
+    warnings.push(`Healing and renal protection conflict — ${band.target} g/kg is a compromise; agree the target with nephrology and monitor urea`);
+  } else if (i.ckd && !critical) {
+    band = p.ckdNonDialysis; label = 'CKD, non-dialysis, metabolically stable';
+    warnings.push('Reduced protein for stable CKD (KDOQI 2020) — physician / nephrology to confirm');
   } else if ((i.tbsaPct ?? 0) > 0 || catabolicReasons(i, cfg).some(r => /wound/i.test(r))) {
     band = p.woundsBurns; label = 'Burns / large wounds';
   } else if (critical) {
     band = p.icu; label = 'Critical illness';
+  } else if (openWound(i)) {
+    band = p.woundHealing; label = 'Healing wound (EPUAP/NPIAP 2019)';
   } else {
     band = p.ward; label = 'General ward';
   }
   if (obese && !critical && pos(b.adjbw) && cfg.obeseWardProteinBasis.value === 'adjusted') { basisKg = b.adjbw; basis = 'adjusted body weight'; }
-  if (i.ckd && catabolic) warnings.push('CKD with catabolic illness — full protein given; monitor urea, physician to confirm');
+  if (i.ckd && critical) warnings.push('CKD in critical illness — protein is not restricted (ESPEN ICU); monitor urea, nephrology to confirm');
   if (!pos(basisKg)) return null;
   return {
     value: r0(band.target * basisKg), low: r0(band.low * basisKg), high: r0(band.high * basisKg), perKg: band.target, basis,

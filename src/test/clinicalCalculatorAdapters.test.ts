@@ -157,27 +157,40 @@ describe('meal plans', () => {
     expect(large.rationale.join(' ')).toMatch(/extensive wound/i);
   });
 
-  it('raises protein when albumin shows depletion', () => {
+  it('reports low albumin but does not let it set protein (it falls with inflammation)', () => {
     const r = woundHealingMealPlan({ weightKg: 60, severity: 'mild', albuminGdL: 2.4 });
-    expect(r.proteinPerKg).toBe(1.8);
-    expect(r.targetProtein).toBe(108);
-    expect(r.cautions.join(' ')).toMatch(/acute-phase reactant/i);
+    expect(r.proteinPerKg).toBe(1.5);
+    expect(r.targetProtein).toBe(90);
+    expect(r.cautions.join(' ')).toMatch(/Albumin 24 g\/L.*does not change the protein target/);
+    // g/L input is accepted too.
+    expect(woundHealingMealPlan({ weightKg: 60, albuminGdL: 24 }).cautions.join(' ')).toMatch(/Albumin 24 g\/L/);
   });
 
-  it('caps protein at 1.0 g/kg in CKD, and says so', () => {
-    // The headline number must agree with the advice. A plan that prints
-    // 1.8 g/kg while advising 0.8-1.0 is the defect this replaces.
-    const r = woundHealingMealPlan({ weightKg: 60, severity: 'severe', albuminGdL: 2.0, ckd: true });
-    expect(r.proteinPerKg).toBe(1.0);
-    expect(r.targetProtein).toBe(60);
-    expect(r.cautions.join(' ')).toMatch(/caps protein at 1\.0/i);
-    expect(r.cautions.join(' ')).toMatch(/nephrology/i);
-    expect(r.modifications.join(' ')).toMatch(/potassium/i);
+  it('CKD with a healing wound: 1.0 g/kg, 1.3 when extensive — never the stable-CKD restriction', () => {
+    // The headline number must agree with the advice.
+    const mild = woundHealingMealPlan({ weightKg: 60, severity: 'mild', ckd: true });
+    expect(mild.proteinPerKg).toBe(1.0);
+    expect(mild.targetProtein).toBe(60);
+    const severe = woundHealingMealPlan({ weightKg: 60, severity: 'severe', albuminGdL: 2.0, ckd: true });
+    expect(severe.proteinPerKg).toBe(1.3);
+    expect(severe.targetProtein).toBe(78);
+    expect(severe.cautions.join(' ')).toMatch(/nephrology/i);
+    expect(severe.modifications.join(' ')).toMatch(/potassium/i);
   });
 
-  it('reports the capped target, which is what the plan is solved against', () => {
+  it('agrees with the patient nutrition engine for the same patient', async () => {
+    const { assessNutrition } = await import('../clinical/nutrition/assess');
     const r = woundHealingMealPlan({ weightKg: 60, severity: 'severe', ckd: true });
-    expect(r.targetProtein).toBe(60);
+    const e = assessNutrition({ weightKg: 60, woundAreaCm2: 40, exudate: 'high', ckd: true });
+    expect(r.targetProtein).toBe(e.targets.proteinG);
+    expect(r.targetKcal).toBe(e.targets.kcal);
+  });
+
+  it('handles a missing or invalid weight without throwing', () => {
+    const r = woundHealingMealPlan({ weightKg: 0 });
+    expect(r.targetKcal).toBe(0);
+    expect(r.targetProtein).toBe(0);
+    expect(woundHealingMealPlan({ weightKg: NaN }).fluidMl).toBe(0);
   });
 
   it('adds diabetic modifications without changing the targets', () => {
@@ -188,9 +201,10 @@ describe('meal plans', () => {
     expect(dm.modifications.join(' ')).toMatch(/glycaemic control delays healing/i);
   });
 
-  it('computes a fluid target', () => {
-    expect(woundHealingMealPlan({ weightKg: 70, severity: 'mild' }).fluidMl).toBe(2100);
-    expect(woundHealingMealPlan({ weightKg: 70, severity: 'severe' }).fluidMl).toBe(2450);
+  it('computes a fluid target and flags exudate losses for an extensive wound', () => {
+    expect(woundHealingMealPlan({ weightKg: 70, severity: 'mild' }).fluidMl).toBe(2275); // 30–35 mL/kg midpoint
+    const severe = woundHealingMealPlan({ weightKg: 70, severity: 'severe' });
+    expect(severe.cautions.join(' ')).toMatch(/exudate — add measured losses/);
   });
 
   it('holds protein at 1.6 g/kg through a weight-loss deficit', () => {

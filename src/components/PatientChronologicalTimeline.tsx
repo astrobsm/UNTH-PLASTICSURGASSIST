@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Clock, FileText, Activity, Pill, Stethoscope, Clipboard, Scissors, Droplet, AlertTriangle, UserCheck, ChevronDown, ChevronUp } from 'lucide-react';
 import { db } from '../db/database';
+import { nutritionService } from '../services/nutritionService';
 import { displayArrayField } from '../services/patientService';
 import { format } from 'date-fns';
 
@@ -388,6 +389,28 @@ export function PatientChronologicalTimeline({ patientId, hospitalNumber }: Pati
           });
         }
       } catch(e) { console.warn('Timeline nutritional:', e); }
+
+      // 13b. Clinical Nutrition record (engine assessments; registration screens go here)
+      try {
+        const rec = await nutritionService.patient(String(patientId));
+        for (const n of rec.assessments.filter(x => x.status !== 'entered_in_error')) {
+          const sm = n.summary || {};
+          timelineEvents.push({
+            id: `nutrec_${n.id}`, date: safeDate(n.created_at), type: 'risk_assessment',
+            title: 'Nutrition assessment: ' + (sm.level || 'unscored') + ' risk',
+            description: `MUST ${sm.must ?? '—'} · GLIM ${sm.glim ?? '—'}${sm.kcal ? ` · ${sm.kcal} kcal, ${sm.protein_g} g protein` : ''} (${String(n.status).replace(/_/g, ' ')})`,
+            author: n.created_by_name || undefined,
+            details: [
+              { label: 'MUST', value: String(sm.must ?? '—') },
+              { label: 'GLIM', value: String(sm.glim ?? '—') },
+              ...(sm.bmi ? [{ label: 'BMI', value: String(sm.bmi) }] : []),
+              ...(sm.weight_kg ? [{ label: 'Weight', value: sm.weight_kg + ' kg' }] : []),
+              ...(sm.refeeding && sm.refeeding !== 'low' ? [{ label: 'Refeeding risk', value: String(sm.refeeding) }] : []),
+              ...(n.approved_by_name ? [{ label: 'Approved by', value: n.approved_by_name }] : []),
+            ],
+          });
+        }
+      } catch(e) { console.warn('Timeline nutrition record:', e); }
 
       // 14. Pre-operative Assessments
       try {

@@ -93,6 +93,10 @@ export function assessNutrition(inputs: NutritionInputs, cfg: NutritionConfig = 
       : screening.must?.value === 1 ? 'medium'
         : screening.must ? 'low' : 'medium';
   if (!screening.must) warnings.push('MUST could not be scored — monitoring set to medium until screened');
+  const alb = i.labs?.albuminGL;
+  if (alb != null && alb < cfg.lowAlbuminGL.value) {
+    warnings.push(`Albumin ${alb} g/L is low. It falls with inflammation and illness and is not a measure of intake, so it does not change the protein target — use GLIM, intake and the weight trend${(i.labs?.crpMgL ?? 0) > 10 ? ' (CRP is raised)' : ''}`);
+  }
 
   return {
     configVersion: cfg.version,

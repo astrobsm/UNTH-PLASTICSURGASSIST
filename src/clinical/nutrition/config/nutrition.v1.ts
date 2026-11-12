@@ -124,6 +124,8 @@ export const NUTRITION_CONFIG_V1 = {
   icuKcalPerKg: c({ earlyLow: 20, earlyHigh: 25, lateLow: 25, lateHigh: 30, earlyDays: 3 }, 'ESPEN ICU guideline (Singer 2019/2023): hypocaloric ≤ 70% in the first 3 days'),
   obeseIcu: c({ bmi30to50: { low: 11, high: 14, basis: 'actual' }, bmiOver50: { low: 22, high: 25, basis: 'ibw' } }, 'ASPEN/SCCM critical care guideline (McClave 2016; Compher 2022)'),
   kcalPerKgWard: c({ low: 25, high: 30 }, 'ESPEN 2017 surgery / NICE CG32 maintenance range'),
+  woundKcalPerKg: c({ low: 30, high: 35 }, 'EPUAP/NPIAP/PPPIA 2019 pressure injury guideline — 30–35 kcal/kg; 35 for large/exuding wounds or BMI < 18.5 (UNTH default)'),
+  lowAlbuminGL: c(30, 'ESPEN 2017 / ASPEN 2021 / GLIM: albumin reflects inflammation, not intake — flagged only, never used to set protein'),
 
   // ── Protein (g/kg/day) ────────────────────────────────────────────────────
   protein: c({
@@ -133,6 +135,11 @@ export const NUTRITION_CONFIG_V1 = {
     obeseIcu30to40: { low: 2.0, high: 2.0, target: 2.0 },
     obeseIcuFrom40: { low: 2.5, high: 2.5, target: 2.5 },
     ckdNonDialysis: { low: 0.6, high: 0.8, target: 0.8 },
+    // Healing wound on the ward: EPUAP/NPIAP 2019 — 1.25–1.5 g/kg.
+    woundHealing: { low: 1.25, high: 1.5, target: 1.5 },
+    // CKD (not on dialysis) with a healing wound: KDOQI 2020 restriction is for the
+    // metabolically stable; wound healing raises need. Target 1.0, 1.3 if catabolic.
+    ckdHealingWound: { low: 0.8, high: 1.3, target: 1.0 },
   }, 'ESPEN surgery 2017, ESPEN ICU 2019, ASPEN/SCCM 2016, KDIGO 2020 (CKD — physician to confirm). Targets within each band are UNTH defaults.'),
   obeseWardProteinBasis: c<'adjusted'>('adjusted', 'UNTH default — obese ward patients: protein on adjusted body weight'),
   catabolicBurnDays: c(60, 'UNTH default — a burn is treated as catabolic until 60 days post-injury or wound closure'),

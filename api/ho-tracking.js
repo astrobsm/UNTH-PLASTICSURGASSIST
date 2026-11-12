@@ -214,6 +214,8 @@ async function handleGet(req, res, currentUser) {
         { table: 'dvt_assessments', col: 'assessed_by', pidCol: 'patient_id', type: 'DVT Assessment' },
         { table: 'pressure_sore_assessments', col: 'assessed_by', pidCol: 'patient_id', type: 'Pressure Sore Assessment' },
         { table: 'nutritional_assessments', col: 'assessed_by', pidCol: 'patient_id', type: 'Nutritional Assessment' },
+        { table: 'nutrition_assessments', col: 'created_by_name', pidCol: 'patient_id', type: 'Nutritional Assessment' },
+        { table: 'nutrition_measurements', col: 'entered_by_name', pidCol: 'patient_id', type: 'Nutrition Measurement' },
         { table: 'diabetic_foot_assessments', col: 'assessed_by', pidCol: 'patient_id', type: 'Diabetic Foot Assessment' },
         { table: 'preoperative_assessments', col: 'assessed_by', pidCol: 'patient_id', type: 'Preoperative Assessment' },
         { table: 'blood_transfusions', col: 'administered_by', pidCol: 'patient_id', type: 'Blood Transfusion' },
@@ -644,6 +646,17 @@ async function getHOFullMetrics(userId, fullName, username) {
   // 3e. Assessment tables with assessed_by VARCHAR
   for (const tbl of ['dvt_assessments', 'pressure_sore_assessments', 'nutritional_assessments', 'diabetic_foot_assessments', 'preoperative_assessments']) {
     const clause = nameMatchClause.replace(/\$COL/g, 'assessed_by');
+    const r = await safeQuery(`SELECT COUNT(*) as cnt FROM ${tbl} WHERE ${clause}${rotationDateClause}`, nameMatchValues, { cnt: 0 });
+    totalDocumentation += parseInt(r.cnt) || 0;
+    try {
+      const pr = await query(`SELECT DISTINCT patient_id::text as pid FROM ${tbl} WHERE ${clause}${rotationDateClause}`, nameMatchValues);
+      pr.rows.forEach(r => patientIdSets.push(r.pid));
+    } catch {}
+  }
+
+  // 3e-ii. Clinical Nutrition record (created_by_name / entered_by_name)
+  for (const [tbl, col] of [['nutrition_assessments', 'created_by_name'], ['nutrition_measurements', 'entered_by_name']]) {
+    const clause = nameMatchClause.replace(/\$COL/g, col);
     const r = await safeQuery(`SELECT COUNT(*) as cnt FROM ${tbl} WHERE ${clause}${rotationDateClause}`, nameMatchValues, { cnt: 0 });
     totalDocumentation += parseInt(r.cnt) || 0;
     try {

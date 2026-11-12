@@ -140,9 +140,29 @@ describe('nutrition engine — components', () => {
   it('CKD non-dialysis reduces protein and flags it; catabolic CKD does not', () => {
     const a = assessNutrition({ ageYears: 60, sex: 'male', heightCm: 170, weightKg: 70, ckd: true });
     expect(a.protein?.value).toBe(56);
-    expect(a.protein?.warnings[0]).toMatch(/physician to confirm/);
+    expect(a.protein?.warnings[0]).toMatch(/nephrology to confirm/);
     const b = assessNutrition({ ageYears: 60, sex: 'male', heightCm: 170, weightKg: 70, ckd: true, sepsis: true });
-    expect(b.protein!.value).toBeGreaterThan(56);
+    expect(b.protein!.value).toBe(91); // catabolic CKD on the ward: 1.3 g/kg
+  });
+
+  it('wound healing: EPUAP protein and energy; CKD compromise; ICU CKD not restricted; albumin never sets protein', () => {
+    const small = assessNutrition({ weightKg: 60, woundAreaCm2: 10 });
+    expect(small.protein?.value).toBe(90); // 1.5 g/kg
+    expect(small.energy.selected?.id).toBe('kcal_kg');
+    expect(small.targets.kcal).toBe(1800); // 30 kcal/kg
+    const large = assessNutrition({ weightKg: 60, woundAreaCm2: 40, exudate: 'high' });
+    expect(large.protein?.value).toBe(108); // 1.8 g/kg (large wound band)
+    expect(large.targets.kcal).toBe(2100); // 35 kcal/kg
+    expect(assessNutrition({ weightKg: 60, woundAreaCm2: 10, ckd: true }).protein?.value).toBe(60); // 1.0
+    expect(assessNutrition({ weightKg: 60, woundAreaCm2: 40, ckd: true }).protein?.value).toBe(78); // 1.3 catabolic
+    const icu = assessNutrition({ weightKg: 60, ckd: true, icu: true });
+    expect(icu.protein?.perKg).toBe(1.3);
+    expect(icu.protein?.warnings.join(' ')).toMatch(/not restricted/);
+    const alb = assessNutrition({ weightKg: 60, woundAreaCm2: 10, labs: { albuminGL: 24, crpMgL: 80 } });
+    expect(alb.protein?.value).toBe(90);
+    expect(alb.warnings.some(w => /does not change the protein target/.test(w) && /CRP is raised/.test(w))).toBe(true);
+    // A healing wound with full data still uses the guideline band, not Mifflin.
+    expect(assessNutrition({ ageYears: 40, sex: 'female', heightCm: 160, weightKg: 60, woundAreaCm2: 10 }).energy.selected?.id).toBe('kcal_kg');
   });
 
   it('weight change windows', () => {

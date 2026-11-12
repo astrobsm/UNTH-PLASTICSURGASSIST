@@ -8,6 +8,7 @@ import {
 import { db } from '../db/database';
 import { patientService } from '../services/patientService';
 import { useOnSelectedPatient } from '../hooks/useSelectedPatient';
+import { nutritionService } from '../services/nutritionService';
 import { safeFormatDate, calculateAge } from '../utils/dateUtils';
 import {
   createPDF,
@@ -263,6 +264,19 @@ const PatientSummariesPage: React.FC = () => {
           });
         }
       } catch(e) { console.warn('nutritional:', e); }
+
+      // 11b. Clinical Nutrition record
+      try {
+        const rec = await nutritionService.patient(pid);
+        for (const n of rec.assessments.filter(x => x.status !== 'entered_in_error')) {
+          const sm = n.summary || {};
+          entries.push({ id: 'nutrec_' + n.id, date: safeDate(n.created_at), type: 'nutritional_assessment',
+            title: 'Nutrition assessment: ' + (sm.level || 'unscored') + ' risk',
+            summary: `MUST ${sm.must ?? '—'}${sm.kcal ? ` · ${sm.kcal} kcal / ${sm.protein_g} g protein` : ''}. ${String(n.status).replace(/_/g, ' ')}${n.created_by_name ? ' · ' + n.created_by_name : ''}`,
+            details: { 'Risk level': sm.level, MUST: sm.must, GLIM: sm.glim, BMI: sm.bmi, Weight: sm.weight_kg, Status: n.status, 'Approved by': n.approved_by_name },
+          });
+        }
+      } catch(e) { console.warn('nutrition record:', e); }
 
       // 12. Wound Care
       try {

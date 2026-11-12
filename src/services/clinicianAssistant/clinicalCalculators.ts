@@ -17,6 +17,7 @@
  * implementation to call, only inline uses.
  */
 
+import { assessNutrition } from '../../clinical/nutrition/assess';
 import { interpretAcidBase } from './engine/modules/abg';
 import { correctionPlan, type CorrectionPlan } from './engine/replacement';
 import { emptyPatient, type PatientContext, type Sex } from './engine/types';
@@ -205,7 +206,7 @@ export type WoundSeverity = 'mild' | 'moderate' | 'severe';
 export interface WoundMealPlanInput {
   weightKg: number;
   severity?: WoundSeverity;
-  /** g/dL. Below 3.0 indicates depletion and raises the protein target. */
+  /** g/dL or g/L. Reported as a caution only — albumin does not set the protein target. */
   albuminGdL?: number | null;
   diabetes?: boolean;
   ckd?: boolean;
@@ -222,97 +223,78 @@ export interface WoundMealPlanOutput extends MealPlanOutput {
 }
 
 /**
- * Wound-healing meal plan.
- *
- * Protein at 1.5 g/kg and 30-35 kcal/kg are the usual targets for a healing
- * surgical wound: tissue synthesis raises requirement well above maintenance,
- * and a deficit shows up as dehiscence and delayed closure rather than as
- * weight loss.
- *
- * CKD is the one comorbidity that changes the number rather than the advice.
- * A damaged kidney cannot clear the nitrogen load of 1.5-1.8 g/kg, so the
- * target is capped at 1.0 g/kg here and the conflict is stated outright. The
- * calculator this replaces printed "0.8-1.0 g/kg (consult nephrologist)" as a
- * note while leaving the headline target at 1.8 — the two disagreed on the
- * same screen, and the headline is the number people act on.
+ * Wound-healing targets — the bedside view of the clinical nutrition engine
+ * (src/clinical/nutrition). The numbers are the engine's, so this calculator
+ * and the patient's nutrition record can never disagree:
+ *  - healing wound: 1.25–1.5 g/kg protein, 30 kcal/kg (EPUAP/NPIAP 2019);
+ *  - extensive / heavily exuding wound: 1.5–2.0 g/kg, 35 kcal/kg;
+ *  - CKD not on dialysis with a wound: 1.0 g/kg (1.3 if catabolic), agreed
+ *    with nephrology — the stable-CKD restriction does not apply to a
+ *    healing wound;
+ *  - albumin is reported, never used to set protein (it falls with
+ *    inflammation, not intake).
  */
 export function woundHealingMealPlan(input: WoundMealPlanInput | number, legacy?: { largeWound?: boolean }): WoundMealPlanOutput {
   // Accept a bare weight so the simple call site stays readable.
   const opts: WoundMealPlanInput = typeof input === 'number'
     ? { weightKg: input, severity: legacy?.largeWound ? 'severe' : 'mild' }
     : input;
-
   const { weightKg, severity = 'mild', diabetes, ckd, liverDisease } = opts;
-  // Accept g/L as well (a value above 10 cannot be g/dL).
-  const albuminGdL = opts.albuminGdL != null && opts.albuminGdL > 10 ? opts.albuminGdL / 10 : (opts.albuminGdL ?? null);
+  // Accept g/dL or g/L (a value above 10 cannot be g/dL); the engine works in g/L.
+  const albuminGL = opts.albuminGdL == null || !Number.isFinite(opts.albuminGdL) ? null : opts.albuminGdL > 10 ? opts.albuminGdL : opts.albuminGdL * 10;
+  const wound = WOUND_BY_SEVERITY[severity] ?? WOUND_BY_SEVERITY.mild;
 
-  let proteinPerKg = 1.5;
-  let kcalPerKg = 30;
-  let fluidPerKg = 30;
+  const a = assessNutrition({
+    weightKg: Number.isFinite(weightKg) && weightKg > 0 ? weightKg : null,
+    woundAreaCm2: wound.areaCm2, exudate: wound.exudate, diabetes, ckd, liverDisease,
+    labs: albuminGL != null ? { albuminGL } : undefined,
+  });
+  const targetKcal = a.targets.kcal ?? 0;
+  const targetProtein = a.targets.proteinG ?? 0;
 
-  if (severity === 'severe') {
-    proteinPerKg = 2.0; kcalPerKg = 35; fluidPerKg = 35;
-  } else if (severity === 'moderate') {
-    proteinPerKg = 1.5; kcalPerKg = 32;
-  }
-
-  const cautions: string[] = [];
+  const cautions = [...(a.protein?.warnings || []), ...a.warnings.filter(w => /^Albumin/.test(w))];
   const modifications: string[] = [];
-
-  // Depletion raises requirement above the severity-based figure.
-  if (albuminGdL != null && albuminGdL < 3.0) {
-    proteinPerKg = Math.max(proteinPerKg, 1.8);
-    kcalPerKg = Math.max(kcalPerKg, 35);
-    cautions.push(
-      `Albumin ${albuminGdL} g/dL indicates depletion — protein raised to ${proteinPerKg} g/kg. ` +
-      'Albumin is also a negative acute-phase reactant, so a low value in sepsis is not nutrition alone.'
-    );
-  }
-
-  // CKD overrides everything above: the kidney sets the ceiling.
   if (ckd) {
-    const uncapped = proteinPerKg;
-    proteinPerKg = 1.0;
-    cautions.push(
-      `Chronic kidney disease caps protein at 1.0 g/kg, below the ${uncapped} g/kg this wound would ` +
-      'otherwise need. Healing and renal protection genuinely conflict here — agree the target with ' +
-      'nephrology rather than treating this figure as settled. A patient on dialysis is not capped.'
-    );
-    modifications.push('Restrict potassium (bananas, oranges, tomatoes) and phosphate (dairy, nuts, beans).');
+    modifications.push('Restrict potassium (bananas, oranges, tomatoes) and phosphate (dairy, nuts, beans) as advised by nephrology.');
     modifications.push('Low sodium; fluid restriction if one has been set.');
   }
-
   if (diabetes) {
     modifications.push('Whole grains over refined; pair carbohydrate with protein to blunt the glucose rise.');
     modifications.push('Avoid added sugars and sweetened drinks. Poor glycaemic control delays healing directly.');
   }
-
   if (liverDisease) {
     modifications.push('Small frequent meals with a late evening snack to limit overnight catabolism.');
     cautions.push('In decompensated liver disease protein is not restricted routinely — restriction worsens sarcopenia.');
   }
-
-  const targetKcal = Math.round(weightKg * kcalPerKg);
-  const targetProtein = Math.round(weightKg * proteinPerKg);
+  for (const f of a.fluid?.flags || []) cautions.push(f);
 
   return {
     targetKcal,
     targetProtein,
-    proteinPerKg,
-    kcalPerKg,
-    fluidMl: Math.round(weightKg * fluidPerKg),
+    proteinPerKg: a.protein?.perKg ?? 0,
+    kcalPerKg: weightKg > 0 ? Math.round(targetKcal / weightKg) : 0,
+    fluidMl: a.fluid?.value ?? 0,
     modifications,
     cautions,
     rationale: [
-      `${kcalPerKg} kcal/kg and ${proteinPerKg} g/kg protein.`,
+      a.energy.selected ? `Energy: ${a.energy.selected.method}.` : 'Energy: enter a weight.',
+      a.protein ? `Protein: ${a.protein.method}.` : 'Protein: enter a weight.',
       severity === 'severe'
         ? 'Raised targets for an extensive wound, where losses through the surface are substantial.'
         : 'Targets for a healing surgical or traumatic wound.',
       'Vitamin C and zinc support collagen synthesis; check for deficiency where healing is delayed.',
       'A protein deficit presents as wound breakdown before it presents as weight loss.',
+      `Coefficients ${a.configVersion} (pending clinical validation). For a patient, use their Clinical Nutrition record.`,
     ],
   };
 }
+
+/** Bedside severity → the wound description the engine reasons from. */
+const WOUND_BY_SEVERITY: Record<WoundSeverity, { areaCm2: number; exudate: 'low' | 'moderate' | 'high' }> = {
+  mild: { areaCm2: 5, exudate: 'low' },
+  moderate: { areaCm2: 15, exudate: 'moderate' },
+  severe: { areaCm2: 40, exudate: 'high' },
+};
 
 /** Weight-reduction meal plan built against an already-calculated target. */
 export function weightLossMealPlan(targetKcal: number, weightKg: number): MealPlanOutput {

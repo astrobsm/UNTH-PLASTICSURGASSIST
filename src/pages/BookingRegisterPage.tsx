@@ -31,6 +31,10 @@ import { useAuthStore } from '../store/authStore';
 import { ocrService } from '../services/ocrService';
 import { getUnitTeam, UnitRosterConfig, PS_UNITS } from '../config/psUnits';
 
+import { NUTRITION_CONFIG } from '../clinical/nutrition/config';
+import { bmiCalc, lossPct3to6m, muacBmiBand, weightOf } from '../clinical/nutrition/anthropometry';
+import { mustOf } from '../clinical/nutrition/screening';
+import { NutritionSummaryCard } from '../components/nutrition/NutritionSummaryCard';
 // ============================
 // TYPES & INTERFACES
 // ============================
@@ -72,11 +76,24 @@ interface SurgicalRiskMedication {
 }
 
 interface NutritionalRiskAssessment {
-  unplanned_weight_loss: boolean;
-  bmi_below_18_5: boolean;
-  reduced_intake_past_week: boolean;
-  severely_ill: boolean;
-  age_over_70: boolean;
+  // Legacy checkbox screen (records saved before MUST replaced it).
+  unplanned_weight_loss?: boolean;
+  bmi_below_18_5?: boolean;
+  reduced_intake_past_week?: boolean;
+  severely_ill?: boolean;
+  age_over_70?: boolean;
+  /** MUST inputs and working (clinical nutrition engine). */
+  tool?: 'MUST';
+  weight_kg?: number | null;
+  height_cm?: number | null;
+  muac_cm?: number | null;
+  weight_loss_pct?: number | null;
+  acute_no_intake_5d?: boolean;
+  bmi?: number | null;
+  parts?: { bmi: number; loss: number; acute: number };
+  method?: string;
+  assumptions?: string[];
+  config_version?: string;
   score: number;
   risk_level: 'low' | 'moderate' | 'high';
   recommendations: string[];
@@ -424,22 +441,38 @@ const makeDefaultPlan = (patientId: string, user: string): PreopPlanningData => 
 });
 
 // ============================
-// NUTRITIONAL RISK CALCULATOR
+// NUTRITIONAL RISK — MUST (BAPEN), from the clinical nutrition engine
 // ============================
-function calculateNutritionalRisk(data: {
-  unplanned_weight_loss: boolean; bmi_below_18_5: boolean;
-  reduced_intake_past_week: boolean; severely_ill: boolean; age_over_70: boolean;
-}): NutritionalRiskAssessment {
-  let score = 0;
-  const recommendations: string[] = [];
-  if (data.unplanned_weight_loss) { score += 2; recommendations.push('Assess percentage weight loss and duration'); }
-  if (data.bmi_below_18_5) { score += 2; recommendations.push('BMI < 18.5: consider nutritional supplementation'); }
-  if (data.reduced_intake_past_week) { score += 1; recommendations.push('Reduced oral intake: consider oral supplements or dietitian referral'); }
-  if (data.severely_ill) { score += 2; recommendations.push('Critical illness increases metabolic demand'); }
-  if (data.age_over_70) { score += 1; recommendations.push('Age > 70: higher nutritional risk'); }
-  const risk_level = score >= 4 ? 'high' : score >= 2 ? 'moderate' : 'low';
-  if (risk_level === 'high') recommendations.push('Refer to dietitian before surgery');
-  return { ...data, score, risk_level, recommendations };
+interface MustForm { weight_kg: string; height_cm: string; muac_cm: string; weight_loss_pct: string; acute_no_intake_5d: boolean }
+
+const numOrNull = (v: string) => { const n = parseFloat(v); return Number.isFinite(n) && n > 0 ? n : null; };
+
+/** MUST from the engine: BMI (or MUAC band), unplanned weight loss and acute illness. Null when it cannot be scored. */
+function calculateNutritionalRisk(f: MustForm): { result: NutritionalRiskAssessment } | { error: string } {
+  const inputs = {
+    weightKg: numOrNull(f.weight_kg), heightCm: numOrNull(f.height_cm), muacCm: numOrNull(f.muac_cm),
+    weightLossPct3to6m: f.weight_loss_pct.trim() === '' ? null : Math.max(0, parseFloat(f.weight_loss_pct) || 0),
+    acutelyIllNoIntake5d: f.acute_no_intake_5d,
+  };
+  const weight = weightOf(inputs, NUTRITION_CONFIG);
+  const bmi = bmiCalc(weight?.wholeBodyKg ?? null, inputs.heightCm);
+  const band = bmi ? null : muacBmiBand(inputs, NUTRITION_CONFIG);
+  const loss = lossPct3to6m(inputs);
+  const must = mustOf(inputs, { bmi: bmi?.value ?? null, muacBand: band?.value ?? null, lossPct: loss?.value ?? null }, NUTRITION_CONFIG);
+  if (!must) return { error: 'Enter weight and height (or MUAC if the patient cannot be weighed or measured)' };
+  const risk_level = must.risk === 'medium' ? 'moderate' : must.risk;
+  const recommendations = must.risk === 'high'
+    ? ['High risk (MUST ≥ 2): refer to the dietitian and start nutritional support before surgery', 'Consider postponing elective surgery to optimise nutrition (ESPEN surgery 2017)', 'Monitor and reassess weekly; complete the Clinical Nutrition assessment']
+    : must.risk === 'medium'
+      ? ['Medium risk (MUST 1): document dietary intake for 3 days and reassess', 'Offer oral nutritional supplements if intake is poor']
+      : ['Low risk (MUST 0): routine care; rescreen weekly in hospital'];
+  return {
+    result: {
+      tool: 'MUST', weight_kg: inputs.weightKg, height_cm: inputs.heightCm, muac_cm: inputs.muacCm, weight_loss_pct: inputs.weightLossPct3to6m,
+      acute_no_intake_5d: inputs.acutelyIllNoIntake5d, bmi: bmi?.value ?? null, parts: must.parts, method: must.method,
+      assumptions: must.assumptions, config_version: NUTRITION_CONFIG.version, score: must.value, risk_level, recommendations,
+    },
+  };
 }
 
 // Detect which surgical risk meds match patient's current medications
@@ -514,9 +547,8 @@ export default function BookingRegisterPage({ embedded = false }: { embedded?: b
 
   // --- Misc ---
   const [saving, setSaving] = useState(false);
-  const [nutritionalForm, setNutritionalForm] = useState({
-    unplanned_weight_loss: false, bmi_below_18_5: false,
-    reduced_intake_past_week: false, severely_ill: false, age_over_70: false,
+  const [nutritionalForm, setNutritionalForm] = useState<MustForm>({
+    weight_kg: '', height_cm: '', muac_cm: '', weight_loss_pct: '', acute_no_intake_5d: false,
   });
   const [newMedication, setNewMedication] = useState<Partial<Medication>>({ drug_name: '', dosage: '', frequency: '', route: 'oral', indication: '' });
   const [invResultEntry, setInvResultEntry] = useState<Partial<InvestigationResult>>({ name: '', value: '', flag: 'normal' });
@@ -732,9 +764,10 @@ export default function BookingRegisterPage({ embedded = false }: { embedded?: b
   // Nutritional risk
   const computeNutritionalRisk = useCallback(() => {
     if (!planData) return;
-    const result = calculateNutritionalRisk(nutritionalForm);
-    updatePlan({ nutritional_risk: result });
-    toast.success('Nutritional risk calculated');
+    const r = calculateNutritionalRisk(nutritionalForm);
+    if ('error' in r) { toast.error(r.error); return; }
+    updatePlan({ nutritional_risk: r.result });
+    toast.success(`MUST ${r.result.score} — ${r.result.risk_level} risk`);
   }, [nutritionalForm, planData, updatePlan]);
 
   // Investigation result entry
@@ -1833,31 +1866,30 @@ export default function BookingRegisterPage({ embedded = false }: { embedded?: b
                       {/* Nutritional Risk (inline) */}
                       <div className="border-t pt-4">
                         <h4 className="font-semibold text-sm mb-3 flex items-center gap-2"><Utensils size={16} className="text-orange-500" /> Nutritional Risk (MUST Score)</h4>
-                        <div className="space-y-2">
-                          {[
-                            { key: 'unplanned_weight_loss' as const, label: 'Unplanned weight loss in past 3-6 months' },
-                            { key: 'bmi_below_18_5' as const, label: 'BMI < 18.5' },
-                            { key: 'reduced_intake_past_week' as const, label: 'Reduced dietary intake in past week' },
-                            { key: 'severely_ill' as const, label: 'Severely/critically ill' },
-                            { key: 'age_over_70' as const, label: 'Age > 70 years' },
-                          ].map(item => (
-                            <label key={item.key} className="flex items-center gap-2 text-sm">
-                              <input
-                                type="checkbox"
-                                checked={nutritionalForm[item.key]}
-                                onChange={e => setNutritionalForm(prev => ({ ...prev, [item.key]: e.target.checked }))}
-                                className="w-4 h-4 text-green-600 rounded"
-                              />
-                              {item.label}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                          {([
+                            ['weight_kg', 'Weight (kg)'], ['height_cm', 'Height (cm)'], ['muac_cm', 'MUAC (cm) — if no height/weight'], ['weight_loss_pct', 'Unplanned weight loss 3–6 mo (%)'],
+                          ] as const).map(([key, label]) => (
+                            <label key={key} className="text-xs text-gray-600">{label}
+                              <input type="number" step="any" min="0" value={nutritionalForm[key]}
+                                onChange={e => setNutritionalForm(prev => ({ ...prev, [key]: e.target.value }))}
+                                className="mt-0.5 w-full border rounded px-2 py-1 text-sm" />
                             </label>
                           ))}
                         </div>
+                        <label className="mt-2 flex items-center gap-2 text-sm">
+                          <input type="checkbox" checked={nutritionalForm.acute_no_intake_5d}
+                            onChange={e => setNutritionalForm(prev => ({ ...prev, acute_no_intake_5d: e.target.checked }))} className="w-4 h-4 text-green-600 rounded" />
+                          Acutely ill with no (or likely no) nutritional intake for more than 5 days
+                        </label>
                         <button onClick={computeNutritionalRisk} className="mt-3 flex items-center gap-1 px-3 py-1.5 bg-orange-600 text-white rounded-lg text-sm hover:bg-orange-700">
-                          <Zap size={14} /> Calculate Nutritional Risk
+                          <Zap size={14} /> Calculate MUST
                         </button>
+                        {selectedPatient?.id && <div className="mt-3"><NutritionSummaryCard patientId={selectedPatient.id} context="pre-operative nutrition" /></div>}
                         {planData.nutritional_risk && (
-                          <div className={`mt-3 rounded-lg p-3 ${planData.surgical_risk_medications.length > 0 ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200'}`}>
-                            <p className="text-sm font-semibold">Score: {planData.nutritional_risk.score} — {planData.nutritional_risk.risk_level.toUpperCase()} risk</p>
+                          <div className={`mt-3 rounded-lg p-3 ${planData.nutritional_risk.risk_level === 'high' ? 'bg-red-50 border border-red-200' : planData.nutritional_risk.risk_level === 'moderate' ? 'bg-amber-50 border border-amber-200' : 'bg-green-50 border border-green-200'}`}>
+                            <p className="text-sm font-semibold">{planData.nutritional_risk.tool === 'MUST' ? 'MUST' : 'Score (legacy screen)'}: {planData.nutritional_risk.score} — {planData.nutritional_risk.risk_level.toUpperCase()} risk</p>
+                            {planData.nutritional_risk.parts && <p className="text-xs text-gray-600">BMI {planData.nutritional_risk.bmi ?? 'from MUAC'} → {planData.nutritional_risk.parts.bmi} · weight loss → {planData.nutritional_risk.parts.loss} · acute illness → {planData.nutritional_risk.parts.acute}{planData.nutritional_risk.assumptions?.length ? ` · ${planData.nutritional_risk.assumptions.join('; ')}` : ''}</p>}
                             {planData.nutritional_risk.recommendations.length > 0 && (
                               <ul className="mt-1 text-xs space-y-0.5">
                                 {planData.nutritional_risk.recommendations.map((r, i) => <li key={i} className="text-gray-600">&bull; {r}</li>)}
