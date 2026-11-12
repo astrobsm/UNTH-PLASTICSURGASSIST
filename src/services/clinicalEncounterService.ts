@@ -9,7 +9,7 @@ import { apiClient } from './apiClient';
 import type { Suggestion } from '../clinical/clerking/types';
 
 export type EncounterStatus = 'draft' | 'pending_review' | 'signed' | 'entered_in_error';
-export type EncounterType = 'initial' | 'follow_up' | 'wound_review' | 'preop_review' | 'postop_review' | 'procedure_follow_up';
+export type EncounterType = 'initial' | 'follow_up' | 'wound_review' | 'preop_review' | 'postop_review' | 'procedure_follow_up' | 'critical_care_review';
 
 export interface ClinicalEncounter {
   id: number;

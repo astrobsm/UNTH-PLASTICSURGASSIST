@@ -125,6 +125,7 @@ const BulkAdmitPage = lazyWithRetry(() => import('./pages/BulkAdmitPage'));
 const WardCensusPage = lazyWithRetry(() => import('./pages/WardCensusPage'));
 const NutritionFoodsPage = lazyWithRetry(() => import('./pages/NutritionFoodsPage'));
 const NutritionWorklistPage = lazyWithRetry(() => import('./pages/NutritionWorklistPage'));
+const CriticalCarePage = lazyWithRetry(() => import('./pages/CriticalCarePage'));
 const WardCensusFormPage = lazyWithRetry(() => import('./pages/WardCensusFormPage'));
 const SJSManagementPage = lazyWithRetry(() => import('./pages/SJSManagementPage'));
 const SubstanceDetoxPage = lazyWithRetry(() => import('./pages/SubstanceDetoxPage'));
@@ -476,6 +477,7 @@ function App() {
               <Route path="/tumor-board" element={<TumorBoardPage />} />
               <Route path="/clinician-assistant" element={<ClinicianAssistantPage />} />
               <Route path="/nutrition" element={<NutritionWorklistPage />} />
+              <Route path="/critical-care" element={<CriticalCarePage />} />
               <Route path="/nutrition/foods" element={<NutritionFoodsPage />} />
               <Route path="/keloid-care" element={<KeloidCarePage />} />
               <Route path="/sickle-cell-ulcer" element={<SickleCellUlcerPage />} />

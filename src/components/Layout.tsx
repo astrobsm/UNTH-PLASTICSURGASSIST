@@ -100,6 +100,7 @@ const navigation = [
   { name: 'Procedures', href: '/procedures', icon: Scissors },
   { name: 'Clinician Assistant', href: '/clinician-assistant', icon: Activity },
   { name: 'Clinical Nutrition', subtitle: 'Worklist & food database', href: '/nutrition', icon: Apple },
+  { name: 'Critical Care Review', subtitle: 'ICU decision support', href: '/critical-care', icon: HeartPulse },
   { name: 'Clinical Governance', href: '/clinical-governance', icon: Shield },
   { name: 'Notice Board', href: '/notice-board', icon: Megaphone },
   { name: 'Shopping List', href: '/shopping-list', icon: ShoppingCart },

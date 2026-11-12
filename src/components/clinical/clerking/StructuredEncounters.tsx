@@ -6,7 +6,7 @@
  *   ClinicalOutcomesSummary    (Summary tab) outcomes of every tracked problem
  *                              and plan item across encounters.
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../../../store/authStore';
 import type { PatientContext } from '../../../clinical/clerking/engine';
@@ -16,6 +16,7 @@ import FollowUpEncounterForm from './FollowUpEncounterForm';
 import TemplatedReviewForm, { exportEncounterPdf, isTemplateKind } from '../templates/TemplatedReviewForm';
 import { REVIEW_KINDS } from '../../../clinical/templates/types';
 
+const CriticalCareReview = lazy(() => import('../../critical/CriticalCareReview'));
 const STATUS_STYLE: Record<string, string> = {
   draft: 'bg-gray-100 text-gray-700', pending_review: 'bg-amber-100 text-amber-800', signed: 'bg-green-100 text-green-800', entered_in_error: 'bg-red-100 text-red-700 line-through',
   active: 'bg-blue-100 text-blue-800', improving: 'bg-green-100 text-green-800', worsening: 'bg-red-100 text-red-800', resolved: 'bg-emerald-100 text-emerald-800', ruled_out: 'bg-slate-100 text-slate-700',
@@ -103,6 +104,9 @@ export const StructuredEncountersPanel: React.FC<{ patientId: string; patientLab
           <button type="button" onClick={() => setForm({ type: 'template' })}
             title="Wound care, pre-operative, post-operative and follow-up reviews for every plastic surgery procedure"
             className="px-3 py-2 text-sm rounded-lg bg-emerald-800 text-white">📋 Clinical review templates</button>
+          <button type="button" onClick={() => setForm({ type: 'critical_care_review' })}
+            title="Consultant-level critical-care review: alerts, calculations, organ systems, medication review, differential and plan"
+            className="px-3 py-2 text-sm rounded-lg bg-red-700 text-white">🫀 Critical care review</button>
         </div>
       </div>
 
@@ -152,6 +156,9 @@ export const StructuredEncountersPanel: React.FC<{ patientId: string; patientLab
                       {isTemplateKind(e.encounter_type) && e.data?.templateId && (
                         <button type="button" onClick={() => exportEncounterPdf(e, patientLabel, ctx)} className="px-2 py-1 text-xs rounded border">PDF</button>
                       )}
+                      {e.encounter_type === 'critical_care_review' && !['draft', 'pending_review'].includes(e.status) && (
+                        <button type="button" onClick={() => openExisting(e)} className="px-2 py-1 text-xs rounded border">Open review</button>
+                      )}
                       {['draft', 'pending_review'].includes(e.status) && (String(e.created_by) === String(user?.id) || canSign) && (
                         <button type="button" onClick={() => openExisting(e)} className="px-2 py-1 text-xs rounded border border-green-600 text-green-700">Open</button>
                       )}
@@ -177,6 +184,22 @@ export const StructuredEncountersPanel: React.FC<{ patientId: string; patientLab
       {form?.type === 'follow_up' && (
         <FollowUpEncounterForm patientId={patientId} patientLabel={patientLabel} ctx={ctx} userName={userName} canSign={canSign}
           problems={problems} planItems={planItems} initial={initial} existing={form.existing} onClose={() => setForm(null)} onSaved={reload} />
+      )}
+      {form?.type === 'critical_care_review' && (
+        <div className="fixed inset-0 z-50 bg-black/40 overflow-y-auto p-2 sm:p-6" role="dialog" aria-label="Critical care review">
+          <div className="bg-white rounded-xl max-w-6xl mx-auto p-4">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="font-bold text-gray-900">🫀 Critical care review — {patientLabel}</h3>
+              <button type="button" onClick={() => setForm(null)} className="px-3 py-1 border rounded text-sm">Close</button>
+            </div>
+            <Suspense fallback={<p className="text-sm text-gray-500">Loading…</p>}>
+              <CriticalCareReview patientId={patientId}
+                initial={form.existing ? { id: form.existing.id, version: form.existing.version, data: form.existing.data } : null}
+                canSave={!form.existing || ['draft', 'pending_review'].includes(form.existing.status)}
+                onSaved={() => { reload(); setForm(null); }} />
+            </Suspense>
+          </div>
+        </div>
       )}
       {form?.type === 'template' && (
         <TemplatedReviewForm patientId={patientId} patientLabel={patientLabel} ctx={ctx} userName={userName} canSign={canSign}

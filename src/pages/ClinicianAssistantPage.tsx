@@ -14,7 +14,7 @@
  * ward round is exactly where the network is not.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Activity, AlertTriangle, ArrowLeft, Calculator, ClipboardList, ExternalLink, FileText,
@@ -36,6 +36,7 @@ import { buildFromPatientRecord } from '../services/clinicianAssistant/patientBr
 import { runForContext } from '../services/clinicianAssistant/clinicianAssistantService';
 import type { Extraction } from '../services/clinicianAssistant/engine/context';
 
+const CriticalCareReview = lazy(() => import('../components/critical/CriticalCareReview'));
 /**
  * Findings that already have a dedicated module in this app. Matched on the
  * engine's finding ids so the assistant hands over rather than duplicating.
@@ -128,7 +129,7 @@ export default function ClinicianAssistantPage() {
   const [history, setHistory] = useState<SavedAnalysisSummary[]>([]);
   const [recent, setRecent] = useState<SavedAnalysisSummary[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'analysis' | 'calculators'>('analysis');
+  const [tab, setTab] = useState<'analysis' | 'calculators' | 'critical'>('analysis');
   const [standaloneCalcs, setStandaloneCalcs] = useState(false);
   // What the clinician chose to analyse from. 'choose' is the step the module
   // previously skipped — selecting a patient went straight to the record, so
@@ -474,7 +475,7 @@ export default function ClinicianAssistantPage() {
           and making a clinician commit to an analysis path before reaching one
           put a pointless step in front of the fastest tool here. */}
       <div className="flex gap-1 border-b mb-4">
-        {([['analysis', 'Analysis'], ['calculators', 'Calculators']] as const).map(([id, label]) => (
+        {([['analysis', 'Analysis'], ['calculators', 'Calculators'], ['critical', 'Critical care review']] as const).map(([id, label]) => (
           <button
             key={id}
             onClick={() => setTab(id)}
@@ -486,6 +487,13 @@ export default function ClinicianAssistantPage() {
           </button>
         ))}
       </div>
+
+      {tab === 'critical' && (
+        <Suspense fallback={<p className="text-sm text-gray-500">Loading…</p>}>
+          {/* With a patient selected the review prefills from and saves to their record; without one it is a standalone case. */}
+          <CriticalCareReview key={selected?.id ?? 'standalone'} patientId={selected?.id != null ? String(selected.id) : null} />
+        </Suspense>
+      )}
 
       {tab === 'calculators' && (
         <BedsideCalculators
