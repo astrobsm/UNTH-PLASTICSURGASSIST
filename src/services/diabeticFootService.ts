@@ -19,6 +19,7 @@
 
 import { v4 as uuidv4 } from 'uuid';
 
+import { assessSepsis } from './clinicianAssistant/calculators';
 // ================== INTERFACES ==================
 
 export interface DiabeticFootAssessment {
@@ -545,18 +546,13 @@ class DiabeticFootService {
    * Calculate Sepsis Score
    */
   calculateSepsisScore(sepsis: Omit<SepsisAssessment, 'score' | 'sirsScore' | 'qsofaScore' | 'sepsisLikelihood'>): SepsisAssessment {
-    // Calculate SIRS score
-    let sirsScore = 0;
-    if (sepsis.temperature > 38 || sepsis.temperature < 36) sirsScore++;
-    if (sepsis.heartRate > 90) sirsScore++;
-    if (sepsis.respiratoryRate > 20) sirsScore++;
-    if (sepsis.wbc > 12 || sepsis.wbc < 4) sirsScore++;
-    
-    // Calculate qSOFA score
-    let qsofaScore = 0;
-    if (sepsis.alteredMentation) qsofaScore++;
-    if (sepsis.systolicBP < 100) qsofaScore++;
-    if (sepsis.respiratoryRate >= 22) qsofaScore++;
+    // SIRS and qSOFA from the shared sepsis calculator (qSOFA counts SBP ≤ 100).
+    const sep = assessSepsis(
+      { temperature: sepsis.temperature, heartRate: sepsis.heartRate, respiratoryRate: sepsis.respiratoryRate, systolicBP: sepsis.systolicBP, avpu: sepsis.alteredMentation ? 'V' : 'A' },
+      { wbc: sepsis.wbc },
+    );
+    const sirsScore = sep.sirs;
+    const qsofaScore = sep.qSOFA;
     
     // Determine sepsis likelihood
     let sepsisLikelihood: 'unlikely' | 'possible' | 'probable' | 'definite';

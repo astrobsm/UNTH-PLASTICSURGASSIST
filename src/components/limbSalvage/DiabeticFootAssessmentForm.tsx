@@ -29,6 +29,7 @@ import { patientService } from '../../services/patientService';
 import { dopplerRequestService, DopplerRequestData } from '../../services/dopplerRequestService';
 
 import { NutritionSummaryCard } from '../nutrition/NutritionSummaryCard';
+import { ckdEpi2021 } from '../../services/clinicianAssistant/engine/modules/renal';
 interface Patient {
   id: string;
   hospital_number: string;
@@ -913,29 +914,9 @@ const Step3Comorbidities: React.FC<{ formData: any; setFormData: any }> = ({ for
 
 // Step 4: Renal Status
 const Step4RenalStatus: React.FC<{ formData: any; setFormData: any }> = ({ formData, setFormData }) => {
-  // Calculate eGFR using CKD-EPI equation (2021 formula without race adjustment)
-  const calculateEGFR = (creatinine: number, age: number, gender: 'male' | 'female', _weight: number): number => {
-    if (creatinine <= 0 || age <= 0) return 0;
-    
-    // CKD-EPI 2021 equation (without race coefficient)
-    // eGFR = 142 × min(Scr/κ, 1)^α × max(Scr/κ, 1)^-1.200 × 0.9938^age × (1.012 if female)
-    // κ = 0.7 for females, 0.9 for males
-    // α = -0.241 for females, -0.302 for males
-    
-    const isFemale = gender === 'female';
-    const kappa = isFemale ? 0.7 : 0.9;
-    const alpha = isFemale ? -0.241 : -0.302;
-    const genderMultiplier = isFemale ? 1.012 : 1;
-    
-    const scrOverKappa = creatinine / kappa;
-    const minTerm = Math.pow(Math.min(scrOverKappa, 1), alpha);
-    const maxTerm = Math.pow(Math.max(scrOverKappa, 1), -1.200);
-    const ageTerm = Math.pow(0.9938, age);
-    
-    const egfr = 142 * minTerm * maxTerm * ageTerm * genderMultiplier;
-    
-    return Math.round(egfr);
-  };
+  // eGFR (CKD-EPI 2021, race-free) from the engine; this field is in mg/dL.
+  const calculateEGFR = (creatinine: number, age: number, gender: 'male' | 'female', _weight: number): number =>
+    creatinine > 0 && age > 0 ? ckdEpi2021(creatinine * 88.4, age, gender) ?? 0 : 0;
 
   // Auto-calculate eGFR when creatinine, age, gender, or weight changes
   React.useEffect(() => {

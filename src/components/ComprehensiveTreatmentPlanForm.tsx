@@ -18,6 +18,7 @@ import { medicalTeamService, StaffByRole } from '../services/medicalTeamService'
 import { searchMedications, BNFMedication, checkInteractions } from '../data/bnfMedications';
 import { searchInvestigations, getInvestigationByName, Investigation, PREOP_PANELS } from '../data/investigationDatabase';
 
+import { cockcroftGault } from '../services/clinicianAssistant/engine/modules/renal';
 interface ComprehensiveTreatmentPlanFormProps {
   onClose: () => void;
   onSubmit: (data: any) => Promise<void>;
@@ -246,13 +247,9 @@ export const ComprehensiveTreatmentPlanForm: React.FC<ComprehensiveTreatmentPlan
   // Auto-calculate eGFR using Cockcroft-Gault formula (standard for drug dosing)
   const patientGFR: number | '' = useMemo(() => {
     if (!gfrAge || !gfrWeight || !gfrCreatinine || gfrAge <= 0 || gfrWeight <= 0 || gfrCreatinine <= 0) return '';
-    // Convert creatinine to mg/dL if in µmol/L
-    const creatinineMgDl = gfrCreatinineUnit === 'µmol/L' ? gfrCreatinine / 88.4 : gfrCreatinine;
-    if (creatinineMgDl <= 0) return '';
-    // Cockcroft-Gault: CrCl = ((140 - age) × weight) / (72 × Scr)  × 0.85 if female
-    let gfr = ((140 - gfrAge) * gfrWeight) / (72 * creatinineMgDl);
-    if (gfrGender === 'female') gfr *= 0.85;
-    return Math.round(gfr);
+    // Cockcroft–Gault from the engine (creatinine in µmol/L).
+    const creatUmol = gfrCreatinineUnit === 'µmol/L' ? gfrCreatinine : gfrCreatinine * 88.4;
+    return cockcroftGault(creatUmol, gfrAge, gfrWeight, gfrGender) ?? '';
   }, [gfrAge, gfrGender, gfrWeight, gfrCreatinine, gfrCreatinineUnit]);
   const [gfrRecommendation, setGfrRecommendation] = useState<GFRDosingRecommendation | null>(null);
   

@@ -30,6 +30,7 @@ import { useOnSelectedPatient } from '../hooks/useSelectedPatient';
 import jsPDF from 'jspdf';
 
 import { sanitizePdfDocument } from '../utils/pdfSafeText';
+import { cockcroftGault } from '../services/clinicianAssistant/engine/modules/renal';
 // ─── TYPES ──────────────────────────────────────────────────────────────────
 
 interface PatientContext {
@@ -130,11 +131,9 @@ export default function PrescriptionsPage() {
         return p;
       }
 
-      // Cockcroft-Gault expects creatinine in mg/dL
-      const creatMgDl = creatinineUnit === 'µmol/L' ? (creatinine as number) / 88.4 : (creatinine as number);
-      const sexFactor = sex === 'female' ? 0.85 : 1;
-      const computed = ((140 - (age as number)) * (weight as number) * sexFactor) / (72 * creatMgDl);
-      const rounded = Math.max(0, Math.round(computed * 10) / 10);
+      // Cockcroft–Gault from the engine (creatinine in µmol/L).
+      const creatUmol = creatinineUnit === 'µmol/L' ? (creatinine as number) : (creatinine as number) * 88.4;
+      const rounded = Math.max(0, cockcroftGault(creatUmol, age as number, weight as number, sex === 'female' ? 'female' : 'male') ?? 0);
       if (p.gfr === rounded && p.gfrAutoCalculated === true) return p;
       return { ...p, gfr: rounded, gfrAutoCalculated: true };
     });

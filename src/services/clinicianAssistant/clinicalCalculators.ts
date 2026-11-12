@@ -22,6 +22,7 @@ import { interpretAcidBase } from './engine/modules/abg';
 import { correctionPlan, type CorrectionPlan } from './engine/replacement';
 import { emptyPatient, type PatientContext, type Sex } from './engine/types';
 
+import { ckdEpi2021 } from './engine/modules/renal';
 // ── Acid-base ────────────────────────────────────────────────────────────
 
 export const KPA_PER_MMHG = 0.1333;
@@ -162,21 +163,12 @@ export function egfrCkdEpi(input: GfrInput): GfrOutput {
     return { egfr: null, stage: '—', note: 'Creatinine, age and sex are required.' };
   }
 
-  // The equation is defined in mg/dL.
-  const scr = creatinineUmolL / 88.4;
-  const female = sex === 'female';
-  const kappa = female ? 0.7 : 0.9;
-  const alpha = female ? -0.241 : -0.302;
-  const ratio = scr / kappa;
-
-  let egfr =
-    142 *
-    Math.pow(Math.min(ratio, 1), alpha) *
-    Math.pow(Math.max(ratio, 1), -1.2) *
-    Math.pow(0.9938, ageYears);
-  if (female) egfr *= 1.012;
-
-  egfr = Math.round(egfr);
+  // The engine's CKD-EPI 2021 — the one implementation in the app.
+  const computed = ckdEpi2021(creatinineUmolL, ageYears, sex === 'female' ? 'female' : sex === 'male' ? 'male' : 'unspecified');
+  if (computed == null) {
+    return { egfr: null, stage: '—', note: 'CKD-EPI applies from age 18 — for a child use the bedside Schwartz equation (36.5 × height cm ÷ creatinine µmol/L).' };
+  }
+  const egfr = computed;
 
   const stage =
     egfr >= 90 ? 'G1 — normal or high'

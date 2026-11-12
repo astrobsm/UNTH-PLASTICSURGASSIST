@@ -18,6 +18,7 @@ import {
   PATIENT_EDUCATION, STI_CME_ARTICLE
 } from '../data/softTissueInfectionProtocol';
 
+import { assessSepsis } from '../services/clinicianAssistant/calculators';
 // ============================================
 // TYPES
 // ============================================
@@ -197,11 +198,7 @@ const SoftTissueInfectionPage: React.FC = () => {
   };
 
   const calculateQSOFA = () => {
-    let score = 0;
-    if (qsofaInputs.respiratoryRate >= 22) score += 1;
-    if (qsofaInputs.systolicBP <= 100) score += 1;
-    if (qsofaInputs.alteredMentation) score += 1;
-    setQsofaResult(score);
+    setQsofaResult(assessSepsis({ respiratoryRate: qsofaInputs.respiratoryRate, systolicBP: qsofaInputs.systolicBP, avpu: qsofaInputs.alteredMentation ? 'V' : 'A' }).qSOFA);
   };
 
   // Generate LRINEC Lab Request Form PDF

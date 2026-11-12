@@ -12,6 +12,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { energyOptions, proteinOf } from '../clinical/nutrition/requirements';
 import { NUTRITION_CONFIG } from '../clinical/nutrition/config';
 
+import { assessSepsis, meanArterialPressure } from './clinicianAssistant/calculators';
 // ================== INTERFACES ==================
 
 export interface BurnPatient {
@@ -732,17 +733,14 @@ class BurnCareService {
    * Calculate MAP from BP
    */
   calculateMAP(systolic: number, diastolic: number): number {
-    return Math.round(diastolic + (systolic - diastolic) / 3);
+    return meanArterialPressure(systolic, diastolic) ?? 0;
   }
 
   /**
    * Calculate qSOFA score
    */
   calculateQSOFA(rr: number, systolicBP: number, alteredMentation: boolean): { score: number; interpretation: string } {
-    let score = 0;
-    if (rr >= 22) score++;
-    if (systolicBP <= 100) score++;
-    if (alteredMentation) score++;
+    const score = assessSepsis({ respiratoryRate: rr, systolicBP, avpu: alteredMentation ? 'V' : 'A' }).qSOFA;
 
     let interpretation = '';
     if (score >= 2) {

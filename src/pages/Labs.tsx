@@ -2152,7 +2152,6 @@ const GFRSection = ({
   const [demographics, setDemographics] = useState<PatientDemographics>({
     age: 30,
     gender: 'male',
-    race: 'other'
   });
 
   const handleAutoCalculateGFR = async () => {
@@ -2368,7 +2367,7 @@ const GFRSection = ({
                   </div>
                   <div>
                     <span className="text-gray-600">Demographics:</span> 
-                    <span className="ml-2 font-medium">{calc.age}y, {calc.gender}, {calc.race.replace('_', ' ')}</span>
+                    <span className="ml-2 font-medium">{calc.age}y, {calc.gender}{calc.race ? ` (recorded race: ${calc.race.replace('_', ' ')} — not used)` : ''}</span>
                   </div>
                 </div>
 
@@ -2430,18 +2429,8 @@ const GFRSection = ({
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Race/Ethnicity
-                  </label>
-                  <select
-                    value={demographics.race}
-                    onChange={(e) => setDemographics(prev => ({ ...prev, race: e.target.value as 'african_american' | 'other' }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                  >
-                    <option value="other">Other/Non-African American</option>
-                    <option value="african_american">African American</option>
-                  </select>
+                <div className="text-xs text-gray-600 self-end">
+                  eGFR uses CKD-EPI 2021 (race-free). Under 18: bedside Schwartz — enter height.
                 </div>
 
                 <div>
@@ -2452,6 +2441,19 @@ const GFRSection = ({
                     type="number"
                     value={demographics.weight || ''}
                     onChange={(e) => setDemographics(prev => ({ ...prev, weight: parseFloat(e.target.value) || undefined }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                    step="0.1"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Height (cm) - Needed under 18 (Schwartz)
+                  </label>
+                  <input
+                    type="number"
+                    value={demographics.height || ''}
+                    onChange={(e) => setDemographics(prev => ({ ...prev, height: parseFloat(e.target.value) || undefined }))}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2"
                     step="0.1"
                   />

@@ -2,6 +2,8 @@ import { db } from '../db/database';
 import { aiService } from './aiService';
 import { apiClient } from './apiClient';
 import { syncService } from '../db/syncService';
+import { ckdEpi2021, cockcroftGault } from './clinicianAssistant/engine/modules/renal';
+import { schwartz } from '../clinical/critical/calculations';
 // Lab Investigation Interfaces
 export interface LabInvestigation {
   id: string;
@@ -95,7 +97,8 @@ export interface GFRCalculation {
   creatinine_unit: string;
   age: number;
   gender: 'male' | 'female';
-  race: 'african_american' | 'other';
+  /** Recorded on calculations made before eGFR became race-free; never used now. */
+  race?: 'african_american' | 'other';
   weight?: number;
   height?: number;
   gfr_value: number;
@@ -122,7 +125,8 @@ export interface GFRTrend {
 export interface PatientDemographics {
   age: number;
   gender: 'male' | 'female';
-  race: 'african_american' | 'other';
+  /** No longer used: eGFR is race-free (CKD-EPI 2021, NKF-ASN 2021). Kept so older records still display. */
+  race?: 'african_american' | 'other';
   weight?: number; // kg
   height?: number; // cm
 }
@@ -804,10 +808,10 @@ class LabService {
     
     switch (formula) {
       case 'CKD-EPI':
-        gfrValue = this.calculateCKDEPI(creatinineMgDl, demographics.age, demographics.gender, demographics.race);
+        gfrValue = this.calculateCKDEPI(creatinineMgDl, demographics.age, demographics.gender, demographics.height);
         break;
       case 'MDRD':
-        gfrValue = this.calculateMDRD(creatinineMgDl, demographics.age, demographics.gender, demographics.race);
+        gfrValue = this.calculateMDRD(creatinineMgDl, demographics.age, demographics.gender);
         break;
       case 'Cockcroft-Gault':
         if (!demographics.weight) {
@@ -847,44 +851,35 @@ class LabService {
     return gfrCalculation;
   }
 
-  private calculateCKDEPI(creatinine: number, age: number, gender: 'male' | 'female', race: 'african_american' | 'other'): number {
-    const isFemale = gender === 'female';
-    const isAfricanAmerican = race === 'african_american';
-    
-    const kappa = isFemale ? 0.7 : 0.9;
-    const alpha = isFemale ? -0.329 : -0.411;
-    const genderFactor = isFemale ? 1.018 : 1;
-    const raceFactor = isAfricanAmerican ? 1.159 : 1;
-    
-    const minCreatKappa = Math.min(creatinine / kappa, 1);
-    const maxCreatKappa = Math.max(creatinine / kappa, 1);
-    
-    return 141 * Math.pow(minCreatKappa, alpha) * Math.pow(maxCreatKappa, -1.209) * 
-           Math.pow(0.993, age) * genderFactor * raceFactor;
+  /**
+   * eGFR, CKD-EPI 2021 (race-free) — the engine's implementation, so Labs, the
+   * Clinician Assistant and the critical-care review all give the same number.
+   * Children (< 18 y) get the bedside Schwartz equation (needs height).
+   */
+  private calculateCKDEPI(creatinineMgDl: number, age: number, gender: 'male' | 'female', heightCm?: number): number {
+    const umol = creatinineMgDl * 88.4;
+    if (age < 18) {
+      const s = schwartz(heightCm ?? null, umol);
+      if (s == null) throw new Error('Under 18: CKD-EPI does not apply — enter height for the bedside Schwartz eGFR');
+      return s;
+    }
+    const egfr = ckdEpi2021(umol, age, gender);
+    if (egfr == null) throw new Error('eGFR could not be calculated — check creatinine and age');
+    return egfr;
   }
 
-  private calculateMDRD(creatinine: number, age: number, gender: 'male' | 'female', race: 'african_american' | 'other'): number {
-    const isFemale = gender === 'female';
-    const isAfricanAmerican = race === 'african_american';
-    
+  /** MDRD (legacy). The race coefficient has been removed (NKF-ASN 2021); prefer CKD-EPI 2021. */
+  private calculateMDRD(creatinine: number, age: number, gender: 'male' | 'female'): number {
     let gfr = 175 * Math.pow(creatinine, -1.154) * Math.pow(age, -0.203);
-    
-    if (isFemale) {
-      gfr *= 0.742;
-    }
-    
-    if (isAfricanAmerican) {
-      gfr *= 1.212;
-    }
-    
+    if (gender === 'female') gfr *= 0.742;
     return gfr;
   }
 
-  private calculateCockcroftGault(creatinine: number, age: number, gender: 'male' | 'female', weight: number): number {
-    const isFemale = gender === 'female';
-    const genderFactor = isFemale ? 0.85 : 1;
-    
-    return ((140 - age) * weight * genderFactor) / (72 * creatinine);
+  /** Cockcroft–Gault creatinine clearance — the engine's implementation. */
+  private calculateCockcroftGault(creatinineMgDl: number, age: number, gender: 'male' | 'female', weight: number): number {
+    const crcl = cockcroftGault(creatinineMgDl * 88.4, age, weight, gender);
+    if (crcl == null) throw new Error('Creatinine clearance could not be calculated — check creatinine, age and weight');
+    return crcl;
   }
 
   private determineCKDStage(gfr: number): { 
