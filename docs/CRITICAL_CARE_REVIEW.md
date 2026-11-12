@@ -33,7 +33,7 @@ This is consultant-level decision support for ICU and ward patients. It produces
    - the rule-based eGFR, CrCl, anion gap and delta ratio are sent as `app_calculations`, so the model recomputes them, and any disagreement is shown;
    - the output is coerced to the exact schema by `criticalCareNormalise.js`;
    - it is governed by the unit's external-AI switch (Clinical Governance D5), de-identified and audited;
-   - the function time limit is 60 s. If the AI fails, the rule-based report stands.
+   - the review is sized for the project's 30 s function limit (26 s timeout, 3,000-token answer). If the AI fails or times out, the rule-based report stands.
 
 ## Updating
 

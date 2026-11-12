@@ -15,6 +15,10 @@ import { deidentifyText, identifiersForPatient } from './_lib/deidentify.js';
 import { CRITICAL_CARE_SYSTEM_PROMPT, CRITICAL_CARE_PROMPT_VERSION } from './_lib/criticalCarePrompt.js';
 import { normaliseCriticalReview } from './_lib/criticalCareNormalise.js';
 
+// Time budget: the project-wide function limit (vercel.json) is 30 s — a
+// per-file entry there broke the build — so the review is sized to finish
+// inside it (26 s timeout, 3,000-token answer).
+
 const NO_ACCESS = ['student', 'lab'];
 const MAX_INPUT = 60000;
 const MODEL = 'gpt-4o';
@@ -70,12 +74,12 @@ export default async function handler(req, res) {
 
   try {
     const raw = await chatJSON({
-      model: MODEL, temperature: 0.1, max_tokens: 4500,
+      model: MODEL, temperature: 0.1, max_tokens: 3000,
       messages: [
         { role: 'system', content: CRITICAL_CARE_SYSTEM_PROMPT },
-        { role: 'user', content: `${text}\n\nReturn the JSON object only. Keep every key. Be concise: one or two sentences per text field and at most 25 calculations.` },
+        { role: 'user', content: `${text}\n\nReturn the JSON object only. Keep every key. Be concise: one short sentence per text field, at most 15 calculations, at most 6 differentials.` },
       ],
-    }, { timeoutMs: 55000, retries: 0 });
+    }, { timeoutMs: 26000, retries: 0 });
     const review = normaliseCriticalReview(raw);
     const diffs = discrepancies(body.rule_report, review);
     await auditClinical(user, { action: 'ai_request', entity: 'critical_care_review', patientId: body.patient_id || null, detail: { purpose: 'critical_care_review', model: MODEL, prompt: CRITICAL_CARE_PROMPT_VERSION, deidentified: true, ok: true, alerts: review.critical_alerts.length, discrepancies: diffs.length } });
