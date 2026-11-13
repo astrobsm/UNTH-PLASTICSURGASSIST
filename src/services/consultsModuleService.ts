@@ -201,7 +201,7 @@ export interface ConsultDigitalChart {
 
 export interface ConsultFeedbackEvent {
   id: number;
-  channel: 'sms' | 'whatsapp' | 'email';
+  channel: 'sms' | 'whatsapp' | 'email' | 'chase';
   to_phone?: string | null;
   to_name?: string | null;
   message: string;
@@ -219,6 +219,8 @@ export interface ReceivedConsultDetail {
   history: ConsultStatusEvent[];
   charts: ConsultDigitalChart[];
   feedback: ConsultFeedbackEvent[];
+  /** Chases sent to our own on-call team (not feedback to the referrer). */
+  chases?: ConsultFeedbackEvent[];
 }
 
 export interface DeliveredConsultDetail {
@@ -402,6 +404,28 @@ export function sendConsultFeedback(kind: 'received' | 'delivered', consultId: n
   message: string; channel?: 'sms' | 'whatsapp' | 'email'; to_phone?: string; to_name?: string;
 }) {
   return apiClient.post<ConsultFeedbackEvent>(`${BASE}/${kind}/${consultId}/feedback`, payload);
+}
+
+// ── Chase the on-call team ──────────────────────────────────────────────
+export type ChaseRole = 'senior_registrar' | 'registrar' | 'house_officer' | 'ho_ward';
+export interface ConsultChaseRecipient {
+  role: ChaseRole; label: string; id: string | null; name: string | null; phone: string | null;
+  message: string; whatsappLink: string | null;
+}
+export interface ConsultChasePreview {
+  open: boolean; status: ReceivedConsultStatus; consult_ref: string;
+  recipients: ConsultChaseRecipient[];
+  history: { id: number; to_name: string | null; to_phone: string | null; message: string; sent_by_name: string | null; sent_at: string | null; created_at: string }[];
+}
+/** Roles that may chase (mirrors CHASE_ROLES on the server). */
+export const CONSULT_CHASE_ROLES = ['admin', 'super_admin', 'consultant', 'senior_registrar', 'registrar'];
+export const CONSULT_OPEN_STATUSES: ReceivedConsultStatus[] = ['received', 'acknowledged', 'reviewed', 'plan_approved', 'plan_implemented'];
+export function getConsultChase(consultId: number) {
+  return apiClient.get<ConsultChasePreview>(`${BASE}/received/${consultId}/chase`, { freshRead: true } as any);
+}
+/** Record a chase (and push it in-app to that person). WhatsApp is opened by the caller. */
+export function recordConsultChase(consultId: number, role: ChaseRole, message: string) {
+  return apiClient.post<ConsultFeedbackEvent>(`${BASE}/received/${consultId}/chase`, { role, message });
 }
 
 // ── Public (no auth) ────────────────────────────────────────────────────

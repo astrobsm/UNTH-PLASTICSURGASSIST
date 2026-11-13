@@ -33,6 +33,8 @@ import { cors, authenticateRequest } from './_lib/auth.js';
 import { autoAdmitFromConsult } from './_lib/teamAssignment.js';
 import { onCallTeamAt } from './_lib/callRoster.js';
 import { notifyUsers } from './_lib/notify.js';
+import { whatsAppLink } from './_lib/messaging.js';
+import { CHASE_CHANNEL, CHASE_ROLES, OPEN_STATUSES, chaseRecipients, composeConsultChase } from './_lib/consultChase.js';
 
 // Status workflow definitions
 const RECEIVED_STATUSES   = ['received', 'acknowledged', 'reviewed', 'plan_approved', 'plan_implemented', 'closed', 'cancelled'];
@@ -436,6 +438,11 @@ export default async function handler(req, res) {
       // /received/:id/feedback
       if (parts.length === 3 && parts[2] === 'feedback' && method === 'POST')
         return sendFeedback('received', id, req.body || {}, user, res);
+      // /received/:id/chase — call the on-call SR/registrar/HO's attention
+      if (parts.length === 3 && parts[2] === 'chase' && method === 'GET')
+        return chasePreview(id, req, user, res);
+      if (parts.length === 3 && parts[2] === 'chase' && method === 'POST')
+        return chaseRecord(id, req, user, res);
       return notFound(res);
     }
 
@@ -682,8 +689,70 @@ async function getReceivedDetail(id, res) {
     attachments: attachments.rows,
     history: history.rows,
     charts: charts.rows,
-    feedback: feedback.rows,
+    // Chases go to our own team, not the referring unit — kept apart.
+    feedback: feedback.rows.filter(f => f.channel !== CHASE_CHANNEL),
+    chases: feedback.rows.filter(f => f.channel === CHASE_CHANNEL),
   });
+}
+
+// ── Chase the on-call team ────────────────────────────────────────────────
+const appUrlOf = (req) => (req.headers?.host ? `https://${req.headers.host}` : '');
+
+async function loadChase(id, req, user) {
+  const c = (await query(`SELECT * FROM received_consults WHERE id=$1`, [id])).rows[0];
+  if (!c) return null;
+  const ids = [c.oncall_senior_registrar_id, c.oncall_registrar_id, c.oncall_house_officer_id, c.oncall_ho_ward_id]
+    .filter(Boolean).map(String);
+  const users = ids.length
+    ? (await query(`SELECT id, full_name, phone FROM users WHERE id::text = ANY($1::text[])`, [ids])).rows
+    : [];
+  const senderName = user?.full_name || user?.name || '';
+  const recipients = chaseRecipients(c, users).map(r => {
+    const message = composeConsultChase(c, r, { senderName, appUrl: appUrlOf(req) });
+    return { ...r, message, whatsappLink: r.phone ? whatsAppLink(r.phone, message) : null };
+  });
+  return { consult: c, recipients };
+}
+
+async function chasePreview(id, req, user, res) {
+  if (!CHASE_ROLES.includes(user?.role)) return bad(res, 'Only consultants and residents can chase a consult', 403);
+  const r = await loadChase(id, req, user);
+  if (!r) return notFound(res);
+  const history = (await query(
+    `SELECT id, to_name, to_phone, message, sent_by_name, sent_at, created_at FROM consult_feedback_log
+      WHERE consult_kind='received' AND consult_id=$1 AND channel=$2 ORDER BY created_at DESC LIMIT 50`, [id, CHASE_CHANNEL])).rows;
+  return res.status(200).json({
+    open: OPEN_STATUSES.includes(r.consult.status),
+    status: r.consult.status, consult_ref: r.consult.consult_ref,
+    recipients: r.recipients, history,
+  });
+}
+
+async function chaseRecord(id, req, user, res) {
+  if (!CHASE_ROLES.includes(user?.role)) return bad(res, 'Only consultants and residents can chase a consult', 403);
+  const body = req.body || {};
+  const r = await loadChase(id, req, user);
+  if (!r) return notFound(res);
+  if (!OPEN_STATUSES.includes(r.consult.status)) return bad(res, 'This consult is closed — there is nothing to chase');
+  const who = r.recipients.find(x => x.role === body.role);
+  if (!who) return bad(res, 'That member of the on-call team is not recorded on this consult');
+  const message = String(body.message || who.message).trim().slice(0, 4000);
+  const log = (await query(
+    `INSERT INTO consult_feedback_log (consult_kind, consult_id, channel, to_phone, to_name, message, status, provider, sent_by, sent_by_name, sent_at)
+     VALUES ('received', $1, $2, $3, $4, $5, 'sent', 'whatsapp_manual', $6, $7, CURRENT_TIMESTAMP) RETURNING *`,
+    [id, CHASE_CHANNEL, who.phone, `${who.name || ''} (${who.label})`, message, user.id || null, user.full_name || user.name || null]
+  )).rows[0];
+  // Also reach them inside the app, in case WhatsApp is not seen.
+  if (who.id) {
+    try {
+      await notifyUsers([who.id], {
+        title: `Consult chase — ${String(r.consult.urgency || 'routine').toUpperCase()} ${r.consult.consult_ref}`,
+        body: message.split('\n').slice(1, 6).join(' ').slice(0, 180),
+        url: '/consults', tag: `consult-chase-${r.consult.id}`, data: { consultId: r.consult.id },
+      });
+    } catch (e) { console.warn('chase push failed:', e.message); }
+  }
+  return res.status(200).json(log);
 }
 
 async function updateReceivedStatus(id, body, user, res) {

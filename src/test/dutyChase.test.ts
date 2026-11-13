@@ -68,3 +68,11 @@ describe('duty chase rules', () => {
     expect(presetRange('thisWeek', '2026-11-12')).toEqual({ from: '2026-11-09', to: '2026-11-11' });
   });
 });
+
+describe('names already carrying a title', () => {
+  it('does not write "Dr Dr"', () => {
+    const p = { id: 1, full_name: 'Dr. Ngozi Eze', grade: 'registrar', phone: null };
+    const r = assessPerson(p, { ...base, roundsSet: new Set(), notes: 2 });
+    expect(composeChaseMessage(r, base)).toMatch(/^Dear Dr Ngozi Eze,/);
+  });
+});

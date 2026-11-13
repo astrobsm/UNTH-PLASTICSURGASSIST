@@ -23,6 +23,9 @@ import {
 } from '../services/consultsModuleService';
 import { ocrService } from '../services/ocrService';
 import ConsultDetailDrawer from '../components/ConsultDetailDrawer';
+import ConsultChaseModal from '../components/ConsultChaseModal';
+import { useAuthStore } from '../store/authStore';
+import { CONSULT_CHASE_ROLES, CONSULT_OPEN_STATUSES } from '../services/consultsModuleService';
 
 type Tab = 'received' | 'delivered' | 'links';
 
@@ -72,6 +75,8 @@ function TabBtn({ active, onClick, icon, label }: { active: boolean; onClick: ()
 
 // ── Received tab ───────────────────────────────────────────────────────
 function ReceivedTab({ refreshKey, onOpen }: { refreshKey: number; onOpen: (id: number) => void }) {
+  const canChase = CONSULT_CHASE_ROLES.includes(useAuthStore(st => st.user?.role) || '');
+  const [chaseId, setChaseId] = useState<number | null>(null);
   // One section per urgency, each newest first with its own paging, so a busy
   // emergency list never pushes urgent and routine consults off the first page.
   const [sections, setSections] = useState<Record<Urgency, { items: ReceivedConsult[]; total: number }>>(
@@ -80,7 +85,9 @@ function ReceivedTab({ refreshKey, onOpen }: { refreshKey: number; onOpen: (id: 
   const setPage = (_p: number) => setPages({ emergency: 1, urgent: 1, routine: 1 });
   const perPage = 20;
   const [statusFilter, setStatusFilter] = useState<ReceivedConsultStatus | ''>('');
-  const [urgencyFilter, setUrgencyFilter] = useState<Urgency | ''>('');
+  // Emergency / Urgent / Routine are tabs, like Received / Delivered / Links.
+  const [uTab, setUTab] = useState<Urgency>('emergency');
+  const pickedTab = React.useRef(false);
   const [search, setSearch] = useState('');
   const [mineOnly, setMineOnly] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -92,7 +99,8 @@ function ReceivedTab({ refreshKey, onOpen }: { refreshKey: number; onOpen: (id: 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      const shown = (Object.keys(URGENCY_META) as Urgency[]).filter(u => !urgencyFilter || u === urgencyFilter);
+      // All three load so each tab shows its count.
+      const shown = Object.keys(URGENCY_META) as Urgency[];
       const results = await Promise.all(shown.map(u =>
         listReceived({ status: statusFilter, urgency: u, search, page: pages[u], per_page: perPage, mine: mineOnly })));
       const next = { emergency: { items: [], total: 0 }, urgent: { items: [], total: 0 }, routine: { items: [], total: 0 } } as Record<Urgency, { items: ReceivedConsult[]; total: number }>;
@@ -101,6 +109,12 @@ function ReceivedTab({ refreshKey, onOpen }: { refreshKey: number; onOpen: (id: 
         next[u] = { items: byNewest, total: results[i].total };
       });
       setSections(next);
+      // First load: open the first tab that has consults.
+      if (!pickedTab.current) {
+        pickedTab.current = true;
+        const first = shown.find(u => next[u].total > 0);
+        if (first) setUTab(first);
+      }
     } catch (e: any) {
       const msg = e?.message || 'Failed to load';
       // A missing/expired session (common on offline field devices) surfaces as
@@ -114,7 +128,7 @@ function ReceivedTab({ refreshKey, onOpen }: { refreshKey: number; onOpen: (id: 
       }
     }
     finally { setLoading(false); }
-  }, [statusFilter, urgencyFilter, search, pages, mineOnly, refreshKey]);
+  }, [statusFilter, search, pages, mineOnly, refreshKey]);
   useEffect(() => { load(); }, [load]);
 
   return (
@@ -130,11 +144,6 @@ function ReceivedTab({ refreshKey, onOpen }: { refreshKey: number; onOpen: (id: 
           <option value="">All statuses</option>
           {Object.entries(STATUS_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
         </select>
-        <select value={urgencyFilter} onChange={(e) => { setUrgencyFilter(e.target.value as any); setPage(1); }}
-          className="px-2 py-2 border border-gray-300 rounded text-sm bg-white">
-          <option value="">All urgencies</option>
-          {Object.entries(URGENCY_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-        </select>
         <button onClick={() => { setMineOnly(v => !v); setPage(1); }}
           title="Consults routed to you as part of the on-call team"
           className={`px-3 py-2 rounded text-sm flex items-center gap-1 border ${mineOnly ? 'bg-green-50 border-green-500 text-green-800' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'}`}>
@@ -144,6 +153,22 @@ function ReceivedTab({ refreshKey, onOpen }: { refreshKey: number; onOpen: (id: 
           <Plus className="w-4 h-4" /> Manual entry
         </button>
       </div>
+
+      <nav className="flex gap-1 border-b border-gray-200" aria-label="Urgency">
+        {(Object.keys(URGENCY_META) as Urgency[]).map(u => {
+          const active = uTab === u;
+          const dot = u === 'emergency' ? 'bg-red-500' : u === 'urgent' ? 'bg-orange-500' : 'bg-blue-500';
+          return (
+            <button key={u} onClick={() => setUTab(u)} aria-pressed={active}
+              className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 -mb-[2px] ${
+                active ? 'border-green-600 text-green-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+              <span className={`w-2 h-2 rounded-full ${dot}`} />
+              <span>{URGENCY_META[u].label}</span>
+              <span className={`ml-0.5 px-1.5 rounded-full text-[11px] ${active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>{sections[u].total}</span>
+            </button>
+          );
+        })}
+      </nav>
 
       {error && <Banner kind="error" message={error} />}
 
@@ -155,14 +180,13 @@ function ReceivedTab({ refreshKey, onOpen }: { refreshKey: number; onOpen: (id: 
           hint={mineOnly ? 'Consults appear here when they arrive while you are on call.' : 'Share a public submission link with referring units, or create a manual entry.'} />
       ) : (
         <div className="space-y-5">
-          {(Object.keys(URGENCY_META) as Urgency[]).filter(u => !urgencyFilter || u === urgencyFilter).map(u => {
+          {[uTab].map(u => {
             const sec = sections[u];
             const meta = URGENCY_META[u];
             return (
               <section key={u} aria-label={`${meta.label} consults`}>
                 <h2 className="flex items-center gap-2 mb-2 text-sm font-semibold text-gray-800">
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${meta.color}`}>{meta.label}</span>
-                  <span className="text-gray-500 font-normal">{sec.total} {sec.total === 1 ? 'consult' : 'consults'} · newest first</span>
+                  <span className="text-gray-500 font-normal">{sec.total} {meta.label.toLowerCase()} {sec.total === 1 ? 'consult' : 'consults'} · newest first</span>
                   {loading && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />}
                 </h2>
                 {sec.items.length === 0 ? (
@@ -181,6 +205,13 @@ function ReceivedTab({ refreshKey, onOpen }: { refreshKey: number; onOpen: (id: 
                         <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium border ${um.color}`}>{um.label}</span>
                         <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${sm.bg} ${sm.color}`}>{sm.label}</span>
                         <span className="ml-auto text-xs text-gray-400">{new Date(c.created_at).toLocaleString()}</span>
+                      {canChase && CONSULT_OPEN_STATUSES.includes(c.status) && c.oncall_team && (
+                        <button onClick={(e) => { e.stopPropagation(); setChaseId(c.id); }}
+                          title="Chase the on-call senior registrar, registrar and house officer"
+                          className="px-2 py-0.5 rounded text-[11px] font-medium bg-amber-100 text-amber-800 border border-amber-300 hover:bg-amber-200">
+                          Chase
+                        </button>
+                      )}
                       </div>
                       <div className="mt-1 flex items-baseline gap-2">
                         <span className="font-semibold text-gray-900">{c.patient_name}</span>
@@ -206,6 +237,8 @@ function ReceivedTab({ refreshKey, onOpen }: { refreshKey: number; onOpen: (id: 
           })}
         </div>
       )}
+
+      {chaseId !== null && <ConsultChaseModal consultId={chaseId} onClose={() => setChaseId(null)} />}
 
       {showManual && (
         <ManualReceivedConsultModal

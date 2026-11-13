@@ -121,7 +121,7 @@ export function composeChaseMessage(r, { from, to, senderName }) {
     r.calls && `${plural(r.calls, 'call shift')}`,
   ].filter(Boolean);
   const sign = senderName ? `\n\n— ${senderName}` : '';
-  const head = `Dear Dr ${String(r.name || '').trim()},\n`;
+  const head = `Dear Dr ${String(r.name || '').trim().replace(/^dr\.?\s+/i, '')},\n`;
 
   if (r.verdict === 'commend') {
     return `${head}Well done — your duties for ${period} are fully recorded in the Plastic Surgery app.\n\n${good.map(g => `✅ ${g}`).join('\n')}\n\nThank you for keeping the patients' records complete and on time. Keep it up!${sign}`;
