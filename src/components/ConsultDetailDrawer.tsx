@@ -135,13 +135,13 @@ export const ConsultDetailDrawer: React.FC<Props> = ({ consultId, onClose, onCha
           {canChase && CONSULT_OPEN_STATUSES.includes(c.status) && c.oncall_team && (
             <button onClick={() => setChasing(true)}
               className="mt-2 px-3 py-1.5 text-sm rounded bg-amber-600 hover:bg-amber-700 text-white inline-flex items-center gap-1">
-              <MessageSquare className="w-4 h-4" /> Chase response (SR / registrar / HO)
+              <MessageSquare className="w-4 h-4" /> Chase responses (SR / registrar / HO)
             </button>
           )}
           {(detail.chases?.length ?? 0) > 0 && (
             <p className="text-xs text-gray-500 mt-1">Chased {detail.chases!.length}× — last {new Date(detail.chases![0].sent_at || detail.chases![0].created_at).toLocaleString()} ({detail.chases![0].to_name}).</p>
           )}
-          {chasing && <ConsultChaseModal consultId={consultId} onClose={() => { setChasing(false); reload(); }} />}
+          {chasing && <ConsultChaseModal focusConsultId={consultId} onClose={() => { setChasing(false); reload(); }} />}
         </Block>
 
         {/* Referring team */}

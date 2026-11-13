@@ -34,7 +34,7 @@ import { autoAdmitFromConsult } from './_lib/teamAssignment.js';
 import { onCallTeamAt } from './_lib/callRoster.js';
 import { notifyUsers } from './_lib/notify.js';
 import { whatsAppLink } from './_lib/messaging.js';
-import { CHASE_CHANNEL, CHASE_ROLES, OPEN_STATUSES, chaseRecipients, composeConsultChase } from './_lib/consultChase.js';
+import { CHASE_CHANNEL, CHASE_ROLES, OPEN_STATUSES, chaseRecipients, composeConsultChase, buildChaseDigest, composeChaseDigest } from './_lib/consultChase.js';
 
 // Status workflow definitions
 const RECEIVED_STATUSES   = ['received', 'acknowledged', 'reviewed', 'plan_approved', 'plan_implemented', 'closed', 'cancelled'];
@@ -420,6 +420,9 @@ export default async function handler(req, res) {
       if (parts.length === 1 && method === 'POST') return createReceivedByStaff(req.body || {}, user, res);
       // /received/analytics — referral reporting aggregates (must precede the :id parse)
       if (parts.length === 2 && parts[1] === 'analytics' && method === 'GET') return receivedAnalytics(req, res);
+      // /received/chase-digest — one message per SR/registrar/HO listing all their open consults
+      if (parts.length === 2 && parts[1] === 'chase-digest' && method === 'GET') return chaseDigestPreview(req, user, res);
+      if (parts.length === 2 && parts[1] === 'chase-digest' && method === 'POST') return chaseDigestRecord(req, user, res);
       // /received/:id
       const id = parseInt(parts[1], 10);
       if (!id) return notFound(res);
@@ -712,6 +715,62 @@ async function loadChase(id, req, user) {
     return { ...r, message, whatsappLink: r.phone ? whatsAppLink(r.phone, message) : null };
   });
   return { consult: c, recipients };
+}
+
+async function loadDigest(req, user) {
+  const consults = (await query(
+    `SELECT id, consult_ref, status, urgency, patient_name, hospital_number, ward, bed_number, referring_unit, created_at,
+            oncall_senior_registrar_id, oncall_registrar_id, oncall_house_officer_id, oncall_ho_ward_id, oncall_team
+       FROM received_consults WHERE status = ANY($1::text[]) ORDER BY created_at ASC LIMIT 1000`, [OPEN_STATUSES])).rows;
+  const ids = [...new Set(consults.flatMap(c => [c.oncall_senior_registrar_id, c.oncall_registrar_id, c.oncall_house_officer_id, c.oncall_ho_ward_id])
+    .filter(Boolean).map(String))];
+  const users = ids.length ? (await query(`SELECT id, full_name, phone FROM users WHERE id::text = ANY($1::text[])`, [ids])).rows : [];
+  const senderName = user?.full_name || user?.name || '';
+  const lastChased = (await query(
+    `SELECT sent_by_name, MAX(sent_at) AS at, to_name FROM consult_feedback_log
+      WHERE channel=$1 AND consult_kind='received' AND sent_at > NOW() - INTERVAL '14 days'
+      GROUP BY sent_by_name, to_name`, [CHASE_CHANNEL])).rows;
+  return buildChaseDigest(consults, users).map(p => {
+    const message = composeChaseDigest(p, { senderName, appUrl: appUrlOf(req) });
+    const last = lastChased.filter(l => String(l.to_name || '').startsWith(`${p.name || ''} (`))
+      .sort((a, b) => new Date(b.at) - new Date(a.at))[0];
+    return {
+      id: p.id, name: p.name, phone: p.phone, roles: p.roles, counts: p.counts,
+      consults: p.consults.map(c => ({ id: c.id, consult_ref: c.consult_ref, urgency: c.urgency, status: c.status, created_at: c.created_at })),
+      message, whatsappLink: p.phone ? whatsAppLink(p.phone, message) : null,
+      last_chased_at: last?.at || null,
+    };
+  });
+}
+
+async function chaseDigestPreview(req, user, res) {
+  if (!CHASE_ROLES.includes(user?.role)) return bad(res, 'Only consultants and residents can chase consults', 403);
+  return res.status(200).json({ people: await loadDigest(req, user) });
+}
+
+async function chaseDigestRecord(req, user, res) {
+  if (!CHASE_ROLES.includes(user?.role)) return bad(res, 'Only consultants and residents can chase consults', 403);
+  const body = req.body || {};
+  const person = (await loadDigest(req, user)).find(p => p.id === String(body.user_id || ''));
+  if (!person) return bad(res, 'That person has no open consults to chase');
+  const message = String(body.message || person.message).trim().slice(0, 4000);
+  const toName = `${person.name || ''} (${person.roles.join(' / ')})`;
+  // One log row per consult in the message, so each consult shows it was chased.
+  for (const c of person.consults) {
+    await query(
+      `INSERT INTO consult_feedback_log (consult_kind, consult_id, channel, to_phone, to_name, message, status, provider, sent_by, sent_by_name, sent_at)
+       VALUES ('received', $1, $2, $3, $4, $5, 'sent', 'whatsapp_manual', $6, $7, CURRENT_TIMESTAMP)`,
+      [c.id, CHASE_CHANNEL, person.phone, toName, message, user.id || null, user.full_name || user.name || null]
+    );
+  }
+  try {
+    await notifyUsers([person.id], {
+      title: `Consult chase — ${person.consults.length} consult${person.consults.length === 1 ? '' : 's'} awaiting you`,
+      body: `${person.counts.emergency} emergency, ${person.counts.urgent} urgent, ${person.counts.routine} routine. Open Consults to respond.`,
+      url: '/consults', tag: `consult-chase-${person.id}`,
+    });
+  } catch (e) { console.warn('chase push failed:', e.message); }
+  return res.status(200).json({ ok: true, consults: person.consults.length });
 }
 
 async function chasePreview(id, req, user, res) {

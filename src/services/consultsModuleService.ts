@@ -428,6 +428,20 @@ export function recordConsultChase(consultId: number, role: ChaseRole, message: 
   return apiClient.post<ConsultFeedbackEvent>(`${BASE}/received/${consultId}/chase`, { role, message });
 }
 
+/** One message per SR/registrar/HO listing every open consult they were on call for. */
+export interface ChaseDigestPerson {
+  id: string; name: string | null; phone: string | null; roles: string[];
+  counts: { emergency: number; urgent: number; routine: number };
+  consults: { id: number; consult_ref: string; urgency: Urgency; status: ReceivedConsultStatus; created_at: string }[];
+  message: string; whatsappLink: string | null; last_chased_at: string | null;
+}
+export function getChaseDigest() {
+  return apiClient.get<{ people: ChaseDigestPerson[] }>(`${BASE}/received/chase-digest`, { freshRead: true } as any);
+}
+export function recordChaseDigest(userId: string, message: string) {
+  return apiClient.post<{ ok: boolean; consults: number }>(`${BASE}/received/chase-digest`, { user_id: userId, message });
+}
+
 // ── Public (no auth) ────────────────────────────────────────────────────
 // These hit the API directly because apiClient injects Authorization headers
 // the public endpoints intentionally don't require.

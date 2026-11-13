@@ -10,7 +10,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   Inbox, Send, Link as LinkIcon, Plus, Copy, Check, Loader2, AlertTriangle,
-  Search, Camera, X, Stethoscope, UserCheck, CheckCircle2,
+  Search, Camera, X, Stethoscope, UserCheck, CheckCircle2, BellRing,
 } from 'lucide-react';
 import {
   listLinks, createLink, setLinkActive,
@@ -149,6 +149,13 @@ function ReceivedTab({ refreshKey, onOpen }: { refreshKey: number; onOpen: (id: 
           className={`px-3 py-2 rounded text-sm flex items-center gap-1 border ${mineOnly ? 'bg-green-50 border-green-500 text-green-800' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'}`}>
           <UserCheck className="w-4 h-4" /> Assigned to me
         </button>
+        {canChase && (
+          <button onClick={() => setChaseId(0)}
+            title="One WhatsApp message per SR / registrar / HO listing all their open consults"
+            className="px-3 py-2 bg-amber-600 text-white rounded text-sm hover:bg-amber-700 flex items-center gap-1">
+            <BellRing className="w-4 h-4" /> Chase team
+          </button>
+        )}
         <button onClick={() => setShowManual(true)} className="px-3 py-2 bg-green-600 text-white rounded text-sm hover:bg-green-700 flex items-center gap-1">
           <Plus className="w-4 h-4" /> Manual entry
         </button>
@@ -238,7 +245,7 @@ function ReceivedTab({ refreshKey, onOpen }: { refreshKey: number; onOpen: (id: 
         </div>
       )}
 
-      {chaseId !== null && <ConsultChaseModal consultId={chaseId} onClose={() => setChaseId(null)} />}
+      {chaseId !== null && <ConsultChaseModal focusConsultId={chaseId || undefined} onClose={() => setChaseId(null)} />}
 
       {showManual && (
         <ManualReceivedConsultModal

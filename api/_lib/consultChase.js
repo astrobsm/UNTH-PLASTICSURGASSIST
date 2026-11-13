@@ -94,3 +94,71 @@ export function composeConsultChase(consult, recipient, { senderName = '', appUr
   ];
   return lines.filter(l => l !== null).join('\n');
 }
+
+// ── One message per person ────────────────────────────────────────────────
+// Everyone on call for one or more open consults gets ONE message listing all
+// of them: emergencies first, then urgent, then routine; longest waiting first.
+
+const URGENCY_RANK = { emergency: 0, urgent: 1, routine: 2 };
+const SHORT_STEP = {
+  received: 'not yet acknowledged — please see',
+  acknowledged: 'awaiting review/plan',
+  reviewed: 'plan awaiting approval',
+  plan_approved: 'approved plan not yet implemented',
+  plan_implemented: 'follow up and close',
+};
+export const DIGEST_MAX_LINES = 30;
+
+const urgencyOf = (c) => (String(c.urgency || '').toLowerCase() in URGENCY_RANK ? String(c.urgency).toLowerCase() : 'routine');
+
+/** Group open consults by the SR/registrar/HO on call for them. */
+export function buildChaseDigest(consults, users = []) {
+  const byId = new Map(users.map(u => [String(u.id), u]));
+  const people = new Map();
+  for (const c of consults) {
+    if (!OPEN_STATUSES.includes(c.status)) continue;
+    for (const r of chaseRecipients(c, users)) {
+      if (!r.id) continue; // a name with no account cannot be tracked or pushed
+      let p = people.get(r.id);
+      if (!p) {
+        p = { id: r.id, name: byId.get(r.id)?.full_name || r.name, phone: byId.get(r.id)?.phone || r.phone || null, roles: [], consults: [] };
+        people.set(r.id, p);
+      }
+      if (!p.roles.includes(r.label)) p.roles.push(r.label);
+      if (!p.consults.some(x => x.id === c.id)) p.consults.push(c);
+    }
+  }
+  const out = [...people.values()];
+  for (const p of out) {
+    p.consults.sort((a, b) => URGENCY_RANK[urgencyOf(a)] - URGENCY_RANK[urgencyOf(b)]
+      || new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    p.counts = { emergency: 0, urgent: 0, routine: 0 };
+    for (const c of p.consults) p.counts[urgencyOf(c)]++;
+  }
+  out.sort((a, b) => b.counts.emergency - a.counts.emergency || b.consults.length - a.consults.length || String(a.name).localeCompare(String(b.name)));
+  return out;
+}
+
+export function composeChaseDigest(person, { senderName = '', appUrl = '', now = new Date() } = {}) {
+  const name = String(person.name || '').trim().replace(/^dr\.?\s+/i, '') || 'colleague';
+  const n = person.consults.length;
+  const head = [
+    `Dear Dr ${name},`,
+    `Consult chase — ${n} consult${n === 1 ? '' : 's'} on which you were on call ${n === 1 ? 'is' : 'are'} still awaiting attention` +
+      ` (${['emergency', 'urgent', 'routine'].filter(u => person.counts[u]).map(u => `${person.counts[u]} ${u}`).join(', ')}):`,
+    '',
+  ];
+  const shown = person.consults.slice(0, DIGEST_MAX_LINES);
+  const lines = shown.map((c, i) => {
+    const waited = elapsed(c.created_at, now);
+    return `${i + 1}. ${urgencyOf(c).toUpperCase()} · ${c.consult_ref || ''} · ${patientLabel(c)} · from ${c.referring_unit || 'another unit'}` +
+      `${waited ? ` · ${waited} ago` : ''} — ${SHORT_STEP[c.status] || SHORT_STEP.received}`;
+  });
+  if (n > shown.length) lines.push(`…and ${n - shown.length} more in the app.`);
+  const tail = [
+    '',
+    'Kindly attend to these and update each consult in the app' + (appUrl ? `: ${appUrl}/consults` : '.'),
+    senderName ? `\n— ${senderName}` : null,
+  ];
+  return [...head, ...lines, ...tail].filter(l => l !== null).join('\n');
+}
