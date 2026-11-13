@@ -5,6 +5,8 @@
 //   GET  ?action=status                       -> unit date/weekday, delivery mode
 //   POST ?action=run   { kind: weekly|daily } -> build and queue the day's messages
 //   POST ?action=mark-sent { id }             -> record that one was sent
+//   GET  ?action=chase-preview&from=&to=      -> missed/done per SR, registrar, HO
+//   POST ?action=chase-record { user_id, kind: chase|commend, message }
 //
 // Building is one press; SENDING IS MANUAL. A run prepares one message per
 // person holding admitted patients and queues it with a wa.me link — nothing is
@@ -15,6 +17,7 @@ import { cors, authenticateRequest } from './_lib/auth.js';
 import { buildRun, buildMessage, patientsFor, loadAdmittedAssignments, loadCareStaff, unitToday, unitWeekday }
   from './_lib/dutyReminder.js';
 import { whatsAppLink } from './_lib/messaging.js';
+import { buildDutyChase } from './_lib/dutyChase.js';
 
 const ADMIN_ROLES = ['admin', 'super_admin', 'consultant', 'senior_registrar'];
 const KINDS = ['weekly', 'daily'];
