@@ -531,7 +531,9 @@ async function listReceived(req, res, user) {
   }
   if (open === '1' || open === 'true') where.push(`status NOT IN ('closed','cancelled')`);
   if (status)   { args.push(status);   where.push(`status=$${args.length}`); }
-  if (urgency)  { args.push(urgency);  where.push(`urgency=$${args.length}`); }
+  // Blank or non-standard urgencies sort as routine, so they filter as routine too.
+  if (urgency === 'routine') where.push(`COALESCE(LOWER(urgency), '') NOT IN ('emergency','urgent')`);
+  else if (urgency) { args.push(urgency); where.push(`urgency=$${args.length}`); }
   if (priority) { args.push(priority); where.push(`COALESCE(referral_priority, urgency)=$${args.length}`); }
   if (referring_department) { args.push(referring_department); where.push(`referring_department=$${args.length}`); }
   if (referring_unit)       { args.push(referring_unit);       where.push(`referring_unit=$${args.length}`); }

@@ -72,9 +72,12 @@ function TabBtn({ active, onClick, icon, label }: { active: boolean; onClick: ()
 
 // ── Received tab ───────────────────────────────────────────────────────
 function ReceivedTab({ refreshKey, onOpen }: { refreshKey: number; onOpen: (id: number) => void }) {
-  const [items, setItems] = useState<ReceivedConsult[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
+  // One section per urgency, each newest first with its own paging, so a busy
+  // emergency list never pushes urgent and routine consults off the first page.
+  const [sections, setSections] = useState<Record<Urgency, { items: ReceivedConsult[]; total: number }>>(
+    { emergency: { items: [], total: 0 }, urgent: { items: [], total: 0 }, routine: { items: [], total: 0 } });
+  const [pages, setPages] = useState<Record<Urgency, number>>({ emergency: 1, urgent: 1, routine: 1 });
+  const setPage = (_p: number) => setPages({ emergency: 1, urgent: 1, routine: 1 });
   const perPage = 20;
   const [statusFilter, setStatusFilter] = useState<ReceivedConsultStatus | ''>('');
   const [urgencyFilter, setUrgencyFilter] = useState<Urgency | ''>('');
@@ -84,11 +87,20 @@ function ReceivedTab({ refreshKey, onOpen }: { refreshKey: number; onOpen: (id: 
   const [error, setError] = useState<string | null>(null);
   const [showManual, setShowManual] = useState(false);
 
+  const totalAll = sections.emergency.total + sections.urgent.total + sections.routine.total;
+
   const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      const r = await listReceived({ status: statusFilter, urgency: urgencyFilter, search, page, per_page: perPage, mine: mineOnly });
-      setItems(r.consults); setTotal(r.total);
+      const shown = (Object.keys(URGENCY_META) as Urgency[]).filter(u => !urgencyFilter || u === urgencyFilter);
+      const results = await Promise.all(shown.map(u =>
+        listReceived({ status: statusFilter, urgency: u, search, page: pages[u], per_page: perPage, mine: mineOnly })));
+      const next = { emergency: { items: [], total: 0 }, urgent: { items: [], total: 0 }, routine: { items: [], total: 0 } } as Record<Urgency, { items: ReceivedConsult[]; total: number }>;
+      shown.forEach((u, i) => {
+        const byNewest = [...results[i].consults].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        next[u] = { items: byNewest, total: results[i].total };
+      });
+      setSections(next);
     } catch (e: any) {
       const msg = e?.message || 'Failed to load';
       // A missing/expired session (common on offline field devices) surfaces as
@@ -102,7 +114,7 @@ function ReceivedTab({ refreshKey, onOpen }: { refreshKey: number; onOpen: (id: 
       }
     }
     finally { setLoading(false); }
-  }, [statusFilter, urgencyFilter, search, page, mineOnly, refreshKey]);
+  }, [statusFilter, urgencyFilter, search, pages, mineOnly, refreshKey]);
   useEffect(() => { load(); }, [load]);
 
   return (
@@ -135,44 +147,65 @@ function ReceivedTab({ refreshKey, onOpen }: { refreshKey: number; onOpen: (id: 
 
       {error && <Banner kind="error" message={error} />}
 
-      {loading ? (
+      {loading && totalAll === 0 ? (
         <div className="py-10 text-center text-gray-500"><Loader2 className="w-6 h-6 animate-spin mx-auto" /></div>
-      ) : items.length === 0 ? (
+      ) : totalAll === 0 ? (
         <Empty
           title={mineOnly ? 'No consults assigned to you' : 'No received consults yet'}
           hint={mineOnly ? 'Consults appear here when they arrive while you are on call.' : 'Share a public submission link with referring units, or create a manual entry.'} />
       ) : (
-        <ul className="space-y-2">
-          {items.map(c => {
-            const sm = STATUS_META[c.status] || STATUS_META.received;
-            const um = URGENCY_META[c.urgency] || URGENCY_META.routine;
-            const responsible = responsibleLabel(responsibleFromConsult(c));
+        <div className="space-y-5">
+          {(Object.keys(URGENCY_META) as Urgency[]).filter(u => !urgencyFilter || u === urgencyFilter).map(u => {
+            const sec = sections[u];
+            const meta = URGENCY_META[u];
             return (
-              <li key={c.id} onClick={() => onOpen(c.id)}
-                className="bg-white border border-gray-200 rounded-lg p-3 cursor-pointer hover:border-green-400 hover:shadow-sm">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-mono text-xs text-gray-500">{c.consult_ref}</span>
-                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium border ${um.color}`}>{um.label}</span>
-                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${sm.bg} ${sm.color}`}>{sm.label}</span>
-                  <span className="ml-auto text-xs text-gray-400">{new Date(c.created_at).toLocaleString()}</span>
-                </div>
-                <div className="mt-1 flex items-baseline gap-2">
-                  <span className="font-semibold text-gray-900">{c.patient_name}</span>
-                  <span className="text-xs text-gray-500">{c.referring_unit} · {c.referring_doctor_name}</span>
-                </div>
-                {c.indication && <p className="text-xs text-gray-600 mt-0.5 line-clamp-2">{c.indication}</p>}
-                {responsible && (
-                  <p className="text-xs text-green-800 mt-1 flex items-center gap-1">
-                    <Stethoscope className="w-3.5 h-3.5" /> Responsible consultant: <span className="font-medium">{responsible}</span>
-                  </p>
+              <section key={u} aria-label={`${meta.label} consults`}>
+                <h2 className="flex items-center gap-2 mb-2 text-sm font-semibold text-gray-800">
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${meta.color}`}>{meta.label}</span>
+                  <span className="text-gray-500 font-normal">{sec.total} {sec.total === 1 ? 'consult' : 'consults'} · newest first</span>
+                  {loading && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />}
+                </h2>
+                {sec.items.length === 0 ? (
+                  <p className="text-xs text-gray-400 px-1">No {meta.label.toLowerCase()} consults.</p>
+                ) : (
+                  <ul className="space-y-2">
+                      {sec.items.map(c => {
+                  const sm = STATUS_META[c.status] || STATUS_META.received;
+                  const um = URGENCY_META[c.urgency] || URGENCY_META.routine;
+                  const responsible = responsibleLabel(responsibleFromConsult(c));
+                  return (
+                    <li key={c.id} onClick={() => onOpen(c.id)}
+                      className="bg-white border border-gray-200 rounded-lg p-3 cursor-pointer hover:border-green-400 hover:shadow-sm">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-mono text-xs text-gray-500">{c.consult_ref}</span>
+                        <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium border ${um.color}`}>{um.label}</span>
+                        <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${sm.bg} ${sm.color}`}>{sm.label}</span>
+                        <span className="ml-auto text-xs text-gray-400">{new Date(c.created_at).toLocaleString()}</span>
+                      </div>
+                      <div className="mt-1 flex items-baseline gap-2">
+                        <span className="font-semibold text-gray-900">{c.patient_name}</span>
+                        <span className="text-xs text-gray-500">{c.referring_unit} · {c.referring_doctor_name}</span>
+                      </div>
+                      {c.indication && <p className="text-xs text-gray-600 mt-0.5 line-clamp-2">{c.indication}</p>}
+                      {responsible && (
+                        <p className="text-xs text-green-800 mt-1 flex items-center gap-1">
+                          <Stethoscope className="w-3.5 h-3.5" /> Responsible consultant: <span className="font-medium">{responsible}</span>
+                        </p>
+                      )}
+                    </li>
+                  );
+                })}
+                  </ul>
                 )}
-              </li>
+                {sec.total > perPage && (
+                  <Pagination page={pages[u]} perPage={perPage} total={sec.total}
+                    onPageChange={(p: number) => setPages(ps => ({ ...ps, [u]: p }))} />
+                )}
+              </section>
             );
           })}
-        </ul>
+        </div>
       )}
-
-      <Pagination page={page} perPage={perPage} total={total} onPageChange={setPage} />
 
       {showManual && (
         <ManualReceivedConsultModal
