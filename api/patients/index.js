@@ -100,6 +100,16 @@ export default async function handler(req, res) {
   }
 }
 
+/** WHERE clause for a patient search: each word must match a name or the hospital number. */
+export function patientSearchWhere(search) {
+  const words = String(search || '').trim().split(/\s+/).filter(Boolean).slice(0, 5);
+  if (!words.length) return { sql: '', params: [] };
+  const params = words.map(w => `%${w}%`);
+  const sql = ' WHERE ' + words.map((_, i) =>
+    `(first_name ILIKE $${i + 1} OR last_name ILIKE $${i + 1} OR hospital_number ILIKE $${i + 1})`).join(' AND ');
+  return { sql, params };
+}
+
 async function getAllPatients(searchParams, res) {
   const page = Math.max(1, parseInt(searchParams.get('page')) || 1);
   const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit')) || 50), 500);
@@ -122,8 +132,9 @@ async function getAllPatients(searchParams, res) {
   const params = [];
 
   if (search) {
-    queryStr += ` WHERE first_name ILIKE $1 OR last_name ILIKE $1 OR hospital_number ILIKE $1`;
-    params.push(`%${search}%`);
+    const w = patientSearchWhere(search);
+    queryStr += w.sql;
+    params.push(...w.params);
   }
 
   queryStr += ` ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
@@ -139,8 +150,9 @@ async function getAllPatients(searchParams, res) {
       let basicQuery = `SELECT ${basicColumns} FROM patients`;
       const basicParams = [];
       if (search) {
-        basicQuery += ` WHERE first_name ILIKE $1 OR last_name ILIKE $1 OR hospital_number ILIKE $1`;
-        basicParams.push(`%${search}%`);
+        const w = patientSearchWhere(search);
+        basicQuery += w.sql;
+        basicParams.push(...w.params);
       }
       basicQuery += ` ORDER BY created_at DESC LIMIT $${basicParams.length + 1} OFFSET $${basicParams.length + 2}`;
       basicParams.push(limit, offset);
@@ -154,8 +166,9 @@ async function getAllPatients(searchParams, res) {
   let countQuery = 'SELECT COUNT(*) FROM patients';
   let countParams = [];
   if (search) {
-    countQuery += ` WHERE first_name ILIKE $1 OR last_name ILIKE $1 OR hospital_number ILIKE $1`;
-    countParams.push(`%${search}%`);
+    const w = patientSearchWhere(search);
+    countQuery += w.sql;
+    countParams.push(...w.params);
   }
   const countResult = await query(countQuery, countParams);
   const total = parseInt(countResult.rows[0].count);

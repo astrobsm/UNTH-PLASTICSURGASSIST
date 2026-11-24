@@ -177,8 +177,10 @@ class PatientService {
         return this.getLocalPatients();
       }
 
-      // Fetch from API (server source of truth)
-      const patients = await apiClient.getPatients();
+      // Fetch from API (server source of truth). /sync/patients returns pages
+      // of 500 oldest-updated first, so page through with the cursor until the
+      // last page — one page alone hid every patient registered after the 500th.
+      const patients = await fetchAllPatientPages((since) => apiClient.getPatients(since));
       
       // Ensure we have an array
       if (!Array.isArray(patients)) {
@@ -553,6 +555,31 @@ class PatientService {
       return false;
     }
   }
+}
+
+/**
+ * Every page of /sync/patients. The cursor is the last row's updated_at; it is
+ * stepped back 1 ms so rows sharing that timestamp are not skipped (the
+ * duplicates are dropped by id), and paging stops when a page brings nothing new.
+ * Returns the first response as-is when it is not an array.
+ */
+export async function fetchAllPatientPages(getPage: (since?: string) => Promise<any>, pageSize = 500, maxPages = 40): Promise<any> {
+  const first = await getPage();
+  if (!Array.isArray(first)) return first;
+  const byId = new Map<string, any>();
+  for (const p of first) byId.set(String(p.id), p);
+  let page = first;
+  for (let i = 1; i < maxPages && page.length >= pageSize; i++) {
+    const last = page[page.length - 1]?.updated_at;
+    const t = last ? new Date(last).getTime() : NaN;
+    if (!Number.isFinite(t)) break;
+    page = await getPage(new Date(t - 1).toISOString());
+    if (!Array.isArray(page)) break;
+    const before = byId.size;
+    for (const p of page) byId.set(String(p.id), p);
+    if (byId.size === before) break;
+  }
+  return [...byId.values()];
 }
 
 export const patientService = new PatientService();

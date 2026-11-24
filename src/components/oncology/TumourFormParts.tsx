@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Camera, Search, X } from 'lucide-react';
 import { patientService } from '../../services/patientService';
+import { apiClient } from '../../services/apiClient';
 import { RegionTracer } from '../wound/RegionTracer';
 import { greatestDimensionCm } from '../../services/oncology/tumourMeasurements';
 
@@ -16,14 +17,45 @@ const nameOf = (p: any) => (p.full_name || `${p.first_name || ''} ${p.last_name 
 export function TumourPatientPicker({ value, onChange }: { value: PickedPatient | null; onChange: (p: PickedPatient | null) => void }) {
   const [all, setAll] = useState<any[]>([]);
   const [q, setQ] = useState('');
+  const [remote, setRemote] = useState<any[]>([]);
+  const [searching, setSearching] = useState(false);
   useEffect(() => {
     patientService.getAllPatients().then(setAll).catch(() => setAll([]));
   }, []);
+  // The server is searched as well: the device's list can be incomplete.
+  useEffect(() => {
+    const s = q.trim();
+    if (s.length < 2) { setRemote([]); return; }
+    let live = true;
+    setSearching(true);
+    const t = setTimeout(() => {
+      apiClient.get(`/patients?search=${encodeURIComponent(s)}&limit=20`)
+        .then((r: any) => { if (live) setRemote(Array.isArray(r?.patients) ? r.patients : Array.isArray(r) ? r : []); })
+        .catch(() => { if (live) setRemote([]); })
+        .finally(() => { if (live) setSearching(false); });
+    }, 300);
+    return () => { live = false; clearTimeout(t); };
+  }, [q]);
   const matches = useMemo(() => {
-    const s = q.trim().toLowerCase();
-    if (s.length < 2) return [];
-    return all.filter(p => nameOf(p).toLowerCase().includes(s) || String(p.hospital_number || '').toLowerCase().includes(s)).slice(0, 12);
-  }, [all, q]);
+    const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (q.trim().length < 2) return [];
+    const hit = (p: any) => {
+      const hay = `${nameOf(p)} ${p.other_names || ''} ${p.hospital_number || ''}`.toLowerCase();
+      return words.every(w => hay.includes(w));
+    };
+    const seen = new Set<string>();
+    const out: any[] = [];
+    for (const p of [...remote.map(r => ({ ...r, serverId: r.id })), ...all]) {
+      if (!hit(p)) continue;
+      const key = String(p.serverId ?? p.server_id ?? p.id);
+      const hn = String(p.hospital_number || '').toLowerCase();
+      if (seen.has(key) || (hn && seen.has(`hn:${hn}`))) continue;
+      seen.add(key); if (hn) seen.add(`hn:${hn}`);
+      out.push(p);
+      if (out.length >= 15) break;
+    }
+    return out;
+  }, [all, remote, q]);
 
   if (value) {
     return (
@@ -61,7 +93,7 @@ export function TumourPatientPicker({ value, onChange }: { value: PickedPatient 
           })}
         </ul>
       )}
-      {q.trim().length >= 2 && matches.length === 0 && <p className="mt-1 text-xs text-gray-500">No registered patient matches.</p>}
+      {q.trim().length >= 2 && matches.length === 0 && <p className="mt-1 text-xs text-gray-500">{searching ? 'Searching…' : 'No registered patient matches. Register the patient first, then pick them here.'}</p>}
     </div>
   );
 }
