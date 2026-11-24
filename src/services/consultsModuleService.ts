@@ -350,8 +350,28 @@ export async function listReceived(opts: {
 export function getReceivedDetail(id: number) {
   return apiClient.request<ReceivedConsultDetail>(`${BASE}/received/${id}`);
 }
-export function createReceivedByStaff(payload: Partial<ReceivedConsult> & { notes?: string }) {
+export function createReceivedByStaff(payload: Partial<ReceivedConsult> & { notes?: string; source?: 'staff_entry' | 'handwritten_scan' }) {
   return apiClient.post<ReceivedConsult>(`${BASE}/received`, payload);
+}
+
+/** Fields Claude read off a handwritten consult; null where the page is silent. */
+export interface ScannedConsultFields {
+  patient_name: string | null; hospital_number: string | null; age: number | null; sex: string | null;
+  ward: string | null; bed_number: string | null;
+  referring_hospital: string | null; referring_department: string | null; referring_unit: string | null;
+  referring_consultant: string | null; referring_doctor_name: string | null; referring_doctor_role: string | null; referring_phone: string | null;
+  urgency: Urgency; indication: string | null;
+  primary_diagnosis: string | null; presenting_complaint: string | null; history_summary: string | null;
+  examination_summary: string | null; investigations_summary: string | null; requested_input: string | null;
+  referral_datetime: string | null;
+}
+export interface ConsultScanResult { raw_text: string; confidence: number | null; fields: ScannedConsultFields; model: string; pages: number }
+
+/** Claude reads 1-3 photos (data: URIs) of a handwritten consult. Nothing is saved. */
+export function scanHandwrittenConsult(images: string[]) {
+  return apiClient.request<ConsultScanResult>(`${BASE}/received/scan`, {
+    method: 'POST', body: JSON.stringify({ images }), timeout: 40000,
+  } as any);
 }
 export function updateReceivedStatus(id: number, payload: {
   to_status: ReceivedConsultStatus; notes?: string;

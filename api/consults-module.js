@@ -12,7 +12,8 @@
 //   PATCH  /links/:id                     -> { is_active }
 //
 //   GET    /received                      -> list (filters: status, urgency, search, page, per_page)
-//   POST   /received                      -> staff-entered consult
+//   POST   /received                      -> staff-entered consult (source handwritten_scan: from a scan)
+//   POST   /received/scan                 -> { images[] } read a handwritten consult with Claude → fields to confirm
 //   GET    /received/:id                  -> detail (+ attachments, history, charts, feedback)
 //   PATCH  /received/:id/status           -> { to_status, notes, ...form_fields }
 //   POST   /received/:id/attachments      -> add attachment
@@ -34,6 +35,10 @@ import { autoAdmitFromConsult } from './_lib/teamAssignment.js';
 import { onCallTeamAt } from './_lib/callRoster.js';
 import { notifyUsers } from './_lib/notify.js';
 import { whatsAppLink } from './_lib/messaging.js';
+import { chatJSON, getAIKey, AIError, AI_MODEL } from './_lib/claude.js';
+import { externalAiAllowed } from './_lib/governance.js';
+import { auditClinical } from './_lib/clinicalRecords.js';
+import { CONSULT_SCAN_SYSTEM_PROMPT, CONSULT_SCAN_PROMPT_VERSION, normaliseConsultScan, checkScanPages } from './_lib/consultScan.js';
 import { CHASE_CHANNEL, CHASE_ROLES, OPEN_STATUSES, chaseRecipients, composeConsultChase, buildChaseDigest, composeChaseDigest } from './_lib/consultChase.js';
 
 // Status workflow definitions
@@ -418,6 +423,8 @@ export default async function handler(req, res) {
       // /received
       if (parts.length === 1 && method === 'GET')  return listReceived(req, res, user);
       if (parts.length === 1 && method === 'POST') return createReceivedByStaff(req.body || {}, user, res);
+      // /received/scan — Claude reads a handwritten consult (must precede the :id parse)
+      if (parts.length === 2 && parts[1] === 'scan' && method === 'POST') return scanHandwrittenConsult(req.body || {}, user, res);
       // /received/analytics — referral reporting aggregates (must precede the :id parse)
       if (parts.length === 2 && parts[1] === 'analytics' && method === 'GET') return receivedAnalytics(req, res);
       // /received/chase-digest — one message per SR/registrar/HO listing all their open consults
@@ -640,8 +647,17 @@ async function receivedAnalytics(req, res) {
 }
 
 async function createReceivedByStaff(body, user, res) {
-  const required = ['patient_name', 'referring_unit', 'referring_doctor_name', 'referring_phone', 'indication'];
+  // A scanned paper consult often has no contact name or phone on it; it is
+  // saved with what the page says, and the person who scanned it is the contact.
+  const scanned = body.source === 'handwritten_scan';
+  const required = scanned ? ['patient_name', 'referring_unit', 'indication']
+    : ['patient_name', 'referring_unit', 'referring_doctor_name', 'referring_phone', 'indication'];
   for (const f of required) if (!body[f]) return bad(res, `${f} is required`);
+  if (scanned) {
+    body = { ...body,
+      referring_doctor_name: body.referring_doctor_name || 'Not stated on the handwritten consult',
+      referring_phone: body.referring_phone || '' };
+  }
   const ref = generateRef('RC');
   const urgency = URGENCIES.includes(body.urgency) ? body.urgency : 'routine';
   const baseCols = [
@@ -652,7 +668,7 @@ async function createReceivedByStaff(body, user, res) {
     'indication', 'urgency', 'requested_input',
   ];
   const baseVals = [
-    ref, 'staff_entry', body.patient_name, body.hospital_number || null, body.age || null, body.sex || null, body.ward || null, body.bed_number || null,
+    ref, scanned ? 'handwritten_scan' : 'staff_entry', body.patient_name, body.hospital_number || null, body.age || null, body.sex || null, body.ward || null, body.bed_number || null,
     body.referring_unit, body.referring_consultant || null, body.referring_doctor_name, body.referring_doctor_role || null,
     body.referring_phone, body.referring_alt_phone || null,
     body.primary_diagnosis || null, body.presenting_complaint || null, body.history_summary || null,
@@ -666,13 +682,45 @@ async function createReceivedByStaff(body, user, res) {
     `INSERT INTO received_consults (${cols.join(',')}) VALUES (${placeholders}) RETURNING *`,
     vals
   );
-  await recordHistory('received', r.rows[0].id, null, 'received', body.notes || 'Created by staff', user);
+  await recordHistory('received', r.rows[0].id, null, 'received', body.notes || (scanned ? 'Scanned from a handwritten consult (read by Claude, checked by staff)' : 'Created by staff'), user);
   const consult = await assignOnCallTeam(r.rows[0]);
   // Staff-entered consults are trusted → auto-admit + assign a full team immediately.
   try { await autoAdmitFromConsult(consult, user); }
   catch (e) { console.error('auto-admit (staff entry) failed:', e.message); }
   await notifyOnCallTeam(consult);
   return res.status(201).json({ ...consult, responsible: responsibleSummary(consult) });
+}
+
+// ── Scan a handwritten consult (Claude vision) ───────────────────────────
+// Returns the transcription and the fields for the person to check; nothing
+// is saved here. The consult is created by POST /received once confirmed.
+async function scanHandwrittenConsult(body, user, res) {
+  const problem = checkScanPages(body.images);
+  if (problem) return bad(res, problem);
+  if (!(await externalAiAllowed())) return res.status(403).json({ error: 'External AI is switched off by the unit (Clinical Governance, D5). Enter the consult manually.', code: 'AI_DISABLED' });
+  if (!getAIKey()) return res.status(503).json({ error: 'Claude is not configured on the server (ANTHROPIC_API_KEY). Enter the consult manually.', code: 'AI_NOT_CONFIGURED' });
+  const pages = body.images.length;
+  try {
+    const raw = await chatJSON({
+      max_tokens: 3000,
+      messages: [
+        { role: 'system', content: CONSULT_SCAN_SYSTEM_PROMPT },
+        { role: 'user', content: [
+          ...body.images.map(url => ({ type: 'image_url', image_url: { url } })),
+          { type: 'text', text: pages > 1 ? `These ${pages} photos are consecutive pages of one consult. Read them in order.` : 'Read this handwritten consult.' },
+        ] },
+      ],
+    }, { timeoutMs: 27000, retries: 0 });
+    const out = normaliseConsultScan(raw);
+    await auditClinical(user, { action: 'ai_request', entity: 'received_consults', patientId: null, detail: { purpose: 'handwritten_consult_scan', model: AI_MODEL, prompt: CONSULT_SCAN_PROMPT_VERSION, pages, ok: true } }).catch(() => {});
+    return res.status(200).json({ ...out, model: AI_MODEL, prompt_version: CONSULT_SCAN_PROMPT_VERSION, pages });
+  } catch (e) {
+    console.error('consult scan error:', e?.status || '', e?.message);
+    await auditClinical(user, { action: 'ai_request', entity: 'received_consults', patientId: null, detail: { purpose: 'handwritten_consult_scan', model: AI_MODEL, pages, ok: false, status: e?.status || null } }).catch(() => {});
+    if (e instanceof AIError && e.status === 429) return res.status(429).json({ error: 'Claude is busy — try the scan again in a minute.' });
+    if (e instanceof AIError && e.status === 504) return res.status(504).json({ error: 'Reading the consult took too long — try again, or scan one page at a time.' });
+    return res.status(502).json({ error: 'Claude could not read the consult. Retake the photo in good light, or enter it manually.' });
+  }
 }
 
 async function getReceivedDetail(id, res) {

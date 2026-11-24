@@ -10,16 +10,16 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   Inbox, Send, Link as LinkIcon, Plus, Copy, Check, Loader2, AlertTriangle,
-  Search, Camera, X, Stethoscope, UserCheck, CheckCircle2, BellRing,
+  Search, Camera, X, Stethoscope, UserCheck, CheckCircle2, BellRing, ScanText, Sparkles, Trash2,
 } from 'lucide-react';
 import {
   listLinks, createLink, setLinkActive,
-  listReceived, createReceivedByStaff,
+  listReceived, createReceivedByStaff, scanHandwrittenConsult,
   listDelivered, createDelivered, addAttachment,
   listStaff, REFERRING_DEPARTMENTS, REFERRING_UNITS,
   STATUS_META, URGENCY_META, buildShareableUrl, responsibleFromConsult, responsibleLabel,
   type ReceivedConsult, type ResponsibleConsultant, type DeliveredConsult, type SubmissionLink,
-  type ReceivedConsultStatus, type Urgency, type StaffOption,
+  type ReceivedConsultStatus, type Urgency, type StaffOption, type ConsultScanResult,
 } from '../services/consultsModuleService';
 import { ocrService } from '../services/ocrService';
 import ConsultDetailDrawer from '../components/ConsultDetailDrawer';
@@ -92,7 +92,7 @@ function ReceivedTab({ refreshKey, onOpen }: { refreshKey: number; onOpen: (id: 
   const [mineOnly, setMineOnly] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showManual, setShowManual] = useState(false);
+  const [showManual, setShowManual] = useState<null | 'manual' | 'scan'>(null);
 
   const totalAll = sections.emergency.total + sections.urgent.total + sections.routine.total;
 
@@ -156,7 +156,12 @@ function ReceivedTab({ refreshKey, onOpen }: { refreshKey: number; onOpen: (id: 
             <BellRing className="w-4 h-4" /> Chase team
           </button>
         )}
-        <button onClick={() => setShowManual(true)} className="px-3 py-2 bg-green-600 text-white rounded text-sm hover:bg-green-700 flex items-center gap-1">
+        <button onClick={() => setShowManual('scan')}
+          title="Photograph a handwritten consult; Claude reads it into the form for you to check and save"
+          className="px-3 py-2 bg-violet-600 text-white rounded text-sm hover:bg-violet-700 flex items-center gap-1">
+          <ScanText className="w-4 h-4" /> Scan handwritten consult
+        </button>
+        <button onClick={() => setShowManual('manual')} className="px-3 py-2 bg-green-600 text-white rounded text-sm hover:bg-green-700 flex items-center gap-1">
           <Plus className="w-4 h-4" /> Manual entry
         </button>
       </div>
@@ -249,8 +254,9 @@ function ReceivedTab({ refreshKey, onOpen }: { refreshKey: number; onOpen: (id: 
 
       {showManual && (
         <ManualReceivedConsultModal
-          onClose={() => setShowManual(false)}
-          onCreated={() => { setShowManual(false); load(); }}
+          scan={showManual === 'scan'}
+          onClose={() => setShowManual(null)}
+          onCreated={() => { setShowManual(null); load(); }}
         />
       )}
     </div>
@@ -267,10 +273,52 @@ const MANUAL_EMPTY = {
   referring_medical_officer_name: '', referring_medical_officer_phone: '',
   referring_doctor_name: '', referring_doctor_role: '', referring_phone: '',
   indication: '', urgency: 'routine' as Urgency,
+  primary_diagnosis: '', presenting_complaint: '', history_summary: '',
+  examination_summary: '', investigations_summary: '', requested_input: '',
 };
+const CLINICAL_FIELDS = [
+  ['primary_diagnosis', 'Diagnosis'], ['presenting_complaint', 'Presenting complaint'], ['history_summary', 'History'],
+  ['examination_summary', 'Examination'], ['investigations_summary', 'Investigations'], ['requested_input', 'What is asked of us'],
+] as const;
 
-function ManualReceivedConsultModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+function ManualReceivedConsultModal({ onClose, onCreated, scan = false }: { onClose: () => void; onCreated: () => void; scan?: boolean }) {
   const [form, setForm] = useState({ ...MANUAL_EMPTY });
+  // Scan mode: photos of the handwritten consult and what Claude read off them.
+  const [pages, setPages] = useState<string[]>([]);
+  const [reading, setReading] = useState(false);
+  const [scanResult, setScanResult] = useState<ConsultScanResult | null>(null);
+  const [transcript, setTranscript] = useState('');
+  const [filled, setFilled] = useState<Set<string>>(new Set());
+
+  async function addPage(file: File) {
+    setError(null);
+    try {
+      const url = await downscale(file, 1800, 0.82);
+      setPages(p => (p.length >= 3 ? p : [...p, url]));
+    } catch { setError('That photo could not be opened - try again'); }
+  }
+
+  async function readWithClaude() {
+    if (!pages.length) return;
+    setReading(true); setError(null);
+    try {
+      const r = await scanHandwrittenConsult(pages);
+      setScanResult(r);
+      setTranscript(r.raw_text || '');
+      const got = new Set<string>();
+      setForm(p => {
+        const next: any = { ...p };
+        for (const [k, v] of Object.entries(r.fields || {})) {
+          if (v === null || v === undefined || v === '' || !(k in MANUAL_EMPTY)) continue;
+          if (k === 'urgency') { next.urgency = v; continue; }
+          next[k] = String(v); got.add(k);
+        }
+        return next;
+      });
+      setFilled(got);
+    } catch (e: any) { setError(e?.message || 'Claude could not read the consult'); }
+    finally { setReading(false); }
+  }
   const [staff, setStaff] = useState<StaffOption[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -294,6 +342,13 @@ function ManualReceivedConsultModal({ onClose, onCreated }: { onClose: () => voi
   async function save() {
     setError(null);
     const missing: string[] = [];
+    if (scan) {
+      // A paper consult rarely carries every field: only what is needed to act on it.
+      if (!scanResult) { setError('Take a photo of the consult and press "Read with Claude" first'); return; }
+      if (!form.patient_name) missing.push('Patient name');
+      if (!form.referring_unit) missing.push('Referring unit');
+      if (!form.indication) missing.push('Reason for referral');
+    } else {
     if (!form.patient_name) missing.push('Patient name');
     if (!form.referring_hospital) missing.push('Referring hospital');
     if (!form.referring_department) missing.push('Referring department');
@@ -303,6 +358,7 @@ function ManualReceivedConsultModal({ onClose, onCreated }: { onClose: () => voi
     if (!form.referring_doctor_name) missing.push('Contact name');
     if (!form.referring_phone) missing.push('Contact phone');
     if (!form.indication) missing.push('Reason for referral');
+    }
     if (missing.length) { setError(`Please complete: ${missing.join(', ')}`); return; }
     setSaving(true);
     try {
@@ -313,7 +369,17 @@ function ManualReceivedConsultModal({ onClose, onCreated }: { onClose: () => voi
         referral_priority: form.urgency,
         reason_for_referral: form.indication,
         referral_datetime: new Date().toISOString(),
+        ...(scan ? { source: 'handwritten_scan', notes: 'Scanned from a handwritten consult (read by Claude, checked by staff)' } : {}),
       } as any);
+      if (scan && pages.length) {
+        // Keep the paper itself with the consult, page 1 carrying the transcription.
+        const saved = await Promise.allSettled(pages.map((data_url, i) => addAttachment('received', c.id, {
+          kind: 'document', file_name: `handwritten-consult-page-${i + 1}.jpg`, mime_type: 'image/jpeg', data_url,
+          ...(i === 0 ? { ocr_text: transcript || undefined, ocr_structured: scanResult?.fields as any } : {}),
+          metadata: { source: 'handwritten_scan', page: i + 1, pages: pages.length, model: scanResult?.model },
+        })));
+        if (saved.some(s => s.status === 'rejected')) setError('The consult was saved, but a scanned page could not be attached. Add it again from the consult.');
+      }
       // Tell the person entering it who is now responsible before closing.
       setCreated({ ref: c.consult_ref, responsible: c.responsible ?? responsibleFromConsult(c) });
     } catch (e: any) { setError(e.message || 'Failed to create'); }
@@ -349,7 +415,48 @@ function ManualReceivedConsultModal({ onClose, onCreated }: { onClose: () => voi
   }
 
   return (
-    <ModalShell title="Manual received consult" onClose={onClose}>
+    <ModalShell title={scan ? 'Scan handwritten consult' : 'Manual received consult'} onClose={onClose}>
+      {scan && (
+        <div className="mb-3 space-y-2">
+          <p className="text-xs text-gray-600">
+            Photograph the handwritten consult (up to 3 pages). Claude reads it into the form below; check every field, then save.
+            The photos are kept with the consult.
+          </p>
+          {pages.length > 0 && (
+            <div className="flex gap-2 flex-wrap">
+              {pages.map((p, i) => (
+                <div key={i} className="relative">
+                  <img src={p} alt={`Page ${i + 1}`} className="h-24 w-20 object-cover rounded border" />
+                  <button type="button" onClick={() => { setPages(ps => ps.filter((_, j) => j !== i)); setScanResult(null); }}
+                    className="absolute -top-2 -right-2 bg-white rounded-full border p-0.5 text-red-600" aria-label={`Remove page ${i + 1}`}>
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                  <span className="absolute bottom-0 left-0 right-0 text-[10px] text-center bg-black/50 text-white rounded-b">Page {i + 1}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {pages.length < 3 && <FilePicker label={pages.length ? 'Add another page' : 'Take photo / upload the consult'} onPick={addPage} />}
+          <button type="button" onClick={readWithClaude} disabled={!pages.length || reading}
+            className="w-full px-3 py-2 bg-violet-600 text-white rounded text-sm hover:bg-violet-700 disabled:bg-gray-300 flex items-center justify-center gap-1">
+            {reading ? <><Loader2 className="w-4 h-4 animate-spin" /> Claude is reading the consult… (up to 30 s)</>
+              : <><Sparkles className="w-4 h-4" /> {scanResult ? 'Read again with Claude' : 'Read with Claude'}</>}
+          </button>
+          {scanResult && (
+            <div className="bg-violet-50 border border-violet-200 rounded p-2 text-xs text-violet-900">
+              Claude filled {filled.size} field{filled.size === 1 ? '' : 's'}
+              {scanResult.confidence !== null && ` (reading confidence ${Math.round(scanResult.confidence * 100)}%)`}.
+              Check each one against the paper; "[?]" marks words it could not read, and blank fields were not on the page.
+              <details className="mt-1">
+                <summary className="cursor-pointer font-medium">Transcription</summary>
+                <textarea value={transcript} onChange={(e) => setTranscript(e.target.value)} rows={8}
+                  className="mt-1 w-full px-2 py-1.5 border border-violet-200 rounded text-xs font-mono bg-white" />
+              </details>
+            </div>
+          )}
+        </div>
+      )}
+      {(!scan || scanResult) && (<>
       <SectionLabel>Patient</SectionLabel>
       <div className="grid grid-cols-2 gap-2 text-sm">
         <Inp label="Patient name *"            value={form.patient_name}            onChange={(v) => up('patient_name', v)} />
@@ -396,11 +503,21 @@ function ManualReceivedConsultModal({ onClose, onCreated }: { onClose: () => voi
         <textarea value={form.indication} onChange={(e) => up('indication', e.target.value)} rows={3}
           className="mt-1 w-full px-2 py-1.5 border border-gray-300 rounded text-sm" />
       </label>
+      <SectionLabel>Clinical details{scan ? ' (as written on the consult)' : ''}</SectionLabel>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {CLINICAL_FIELDS.map(([k, label]) => (
+          <label key={k} className="text-xs text-gray-600">{label}
+            <textarea value={form[k]} onChange={(e) => up(k, e.target.value)} rows={2}
+              className="mt-1 w-full px-2 py-1.5 border border-gray-300 rounded text-sm" />
+          </label>
+        ))}
+      </div>
+      </>)}
       {error && <Banner kind="error" message={error} />}
       <ModalFooter>
         <button onClick={onClose} className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded">Cancel</button>
         <button onClick={save} disabled={saving} className="px-4 py-1.5 bg-green-600 text-white rounded text-sm hover:bg-green-700 disabled:bg-gray-300">
-          {saving ? 'Saving…' : 'Create consult'}
+          {saving ? 'Saving…' : scan ? 'Save as received consult' : 'Create consult'}
         </button>
       </ModalFooter>
     </ModalShell>
