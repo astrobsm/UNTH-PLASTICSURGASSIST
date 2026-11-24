@@ -7,7 +7,7 @@
  */
 
 import { externalAiAllowed } from '../_lib/governance.js';
-import { chatJSON, getOpenAIKey } from '../_lib/openai.js';
+import { chatJSON, getAIKey, AI_MODEL } from '../_lib/claude.js';
 import { cors, authenticateRequest } from '../_lib/auth.js';
 
 // System prompt for structured note extraction
@@ -79,7 +79,7 @@ export default async function handler(req, res) {
   // Shared CORS helper (origin allowlist) instead of a wildcard origin.
   if (cors(req, res)) return;
 
-  // Spends the deployment's OPENAI_API_KEY — must not be callable anonymously.
+  // Spends the deployment's ANTHROPIC_API_KEY — must not be callable anonymously.
   // This endpoint also receives clinical transcripts, so anonymous access was
   // an inbound PHI path as well as a cost exposure.
   const auth = authenticateRequest(req);
@@ -103,7 +103,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Transcript is too short to process' });
     }
 
-    if (!getOpenAIKey() || !(await externalAiAllowed())) {
+    if (!getAIKey() || !(await externalAiAllowed())) {
       // Return a flag so the client knows to use local extraction
       return res.status(200).json({
         structuredNote: null,
@@ -124,12 +124,12 @@ export default async function handler(req, res) {
     userMessage += `Transcript:\n${transcript}`;
 
     // Scribe drives the most clinically sensitive free-text path, so use the
-    // full gpt-4o (not -mini) for best accuracy, via the shared helper
+    // Claude, via the shared helper
     // (timeout + retry on 429/5xx + JSON salvage).
     let structuredNote;
     try {
       structuredNote = await chatJSON({
-        model: 'gpt-4o',
+        model: AI_MODEL,
         messages: [
           { role: 'system', content: SCRIBE_SYSTEM_PROMPT },
           { role: 'user', content: userMessage }
@@ -180,7 +180,7 @@ export default async function handler(req, res) {
       confidence: typeof structuredNote.confidence === 'number' ? structuredNote.confidence : 0.85,
       raw_transcript: transcript,
       processed_at: new Date().toISOString(),
-      ai_model: 'gpt-4o'
+      ai_model: AI_MODEL
     };
 
     return res.status(200).json({

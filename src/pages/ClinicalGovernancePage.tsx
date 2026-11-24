@@ -182,8 +182,8 @@ function DecisionsTab({ meta, onSaved }: { meta: SettingsResponse; onSaved: () =
         ]} />
       </Decision>
 
-      <Decision code="D5" title="External AI (OpenAI)"
-        help="Whether clinical text may be sent to OpenAI. When enabled, patient names, hospital numbers, phone numbers and emails are removed on the server first, and every request is recorded in the clinical audit log.">
+      <Decision code="D5" title="External AI (Claude, Anthropic)"
+        help="Whether clinical text may be sent to Claude (Anthropic). When enabled, patient names, hospital numbers, phone numbers and emails are removed on the server first, and every request is recorded in the clinical audit log.">
         <Choice name="d5" value={draft.d5_external_ai} disabled={ro} onChange={(v) => set('d5_external_ai', v)} options={[
           ['enabled_deidentified', 'Enabled — identifiers removed', 'Scribe, OCR structuring, summaries and suggestions available. AI output is always a suggestion for clinician review.'],
           ['disabled', 'Disabled', 'No clinical text leaves the hospital system; AI features fall back to rule-based or manual entry.'],

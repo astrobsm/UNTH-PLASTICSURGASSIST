@@ -5,7 +5,7 @@ import { apiClient } from '../services/apiClient';
 
 interface AIStatus {
   enabled: boolean;
-  hasOpenAI: boolean;
+  hasKey: boolean;
   governanceAllows: boolean;
   model?: string;
   message?: string;
@@ -14,10 +14,11 @@ interface AIStatus {
 /**
  * AI status for administrators.
  *
- * The OpenAI key is configured on the server (OPENAI_API_KEY in Vercel) and is
+ * Every AI feature uses Claude (Anthropic). The key is configured on the server
+ * (ANTHROPIC_API_KEY in Vercel) and is
  * never shown to, entered in, or stored by the browser. This panel used to save
  * the key in localStorage, where any script on the page could read it. Whether
- * clinical text may be sent to OpenAI at all is decision D5 on the Clinical
+ * clinical text may be sent to Claude at all is decision D5 on the Clinical
  * Governance page.
  */
 export function AISettingsPanel() {
@@ -45,7 +46,7 @@ export function AISettingsPanel() {
     setTestResult(null);
     try {
       const r: any = await apiClient.post('/ai/chat', {
-        purpose: 'connection_test', model: 'gpt-4o-mini', max_tokens: 20,
+        purpose: 'connection_test', max_tokens: 20,
         messages: [{ role: 'user', content: 'Reply with the single word: ready' }],
       });
       setTestResult({ ok: true, message: `Connected (${r?.model || 'model'}): "${String(r?.response || '').trim()}"` });
@@ -73,7 +74,7 @@ export function AISettingsPanel() {
         <p className="text-sm text-red-600 flex items-center gap-1"><XCircle className="h-4 w-4" /> Could not reach the server.</p>
       ) : (
         <div className="space-y-2 text-sm">
-          <Row ok={status.hasOpenAI} label="Server key (OPENAI_API_KEY)" okText="Configured" badText="Not set — add it in Vercel project settings" />
+          <Row ok={status.hasKey} label="Claude key (ANTHROPIC_API_KEY)" okText="Configured" badText="Not set — add it in Vercel project settings" />
           <Row ok={status.governanceAllows} label="Unit decision D5 (external AI)" okText="Allowed, identifiers removed" badText="Switched off" />
           <div className={`flex items-start gap-2 p-3 rounded-lg ${status.enabled ? 'bg-green-50 text-green-800' : 'bg-amber-50 text-amber-800'}`}>
             {status.enabled ? <CheckCircle className="h-4 w-4 mt-0.5" /> : <AlertTriangle className="h-4 w-4 mt-0.5" />}
@@ -99,7 +100,7 @@ export function AISettingsPanel() {
       )}
       <p className="text-xs text-gray-500">
         Patient names, hospital numbers, phone numbers and emails are removed on the server before any text is sent to
-        OpenAI, and every AI request is recorded in the clinical audit log (model and purpose, not content).
+        Claude (Anthropic), and every AI request is recorded in the clinical audit log (model and purpose, not content).
       </p>
     </div>
   );

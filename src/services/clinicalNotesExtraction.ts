@@ -386,13 +386,13 @@ export async function extractClinicalNotesWithAI(
   text: string,
   _apiKey?: string
 ): Promise<ClinicalNotesExtractionResult | null> {
-  // Through the server (/api/ai/chat), never straight to OpenAI from the
-  // browser: that needed an OpenAI key in the client bundle
+  // Through the server (/api/ai/chat), never straight to an AI provider from the
+  // browser: that needed an AI key in the client bundle
   // (VITE_OPENAI_API_KEY), readable by anyone with the app. The server holds
   // the key, applies the unit's AI decision (D5) and removes identifiers.
   try {
     const result: any = await apiClient.post('/ai/chat', {
-      model: 'gpt-4o',
+      model: 'claude',
       purpose: 'clinical_notes_extraction',
       max_tokens: 4000,
       temperature: 0.1,

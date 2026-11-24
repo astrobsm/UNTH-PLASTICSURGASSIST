@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
-import { useState, useEffect, useCallback } from 'react';
+import { Fragment, useState, useEffect, useCallback } from 'react';
 import { db, Patient } from '../db/database';
 import { patientService } from '../services/patientService';
 import { admissionDischargeService, Admission } from '../services/admissionDischargeService';
@@ -49,6 +49,8 @@ import HOResponsibilitiesGuide, { HOResponsibilitiesCard } from '../components/H
 import { MyStatusBanner } from '../components/training/MyStatusBanner';
 import { CatchUpBanner } from '../components/onboarding/CatchUpBanner';
 import { careDuration, careDurationTone, CARE_TONE_CLASSES } from '../utils/careDuration';
+import { sortByWard, wardLabel } from '../utils/wardSort';
+import UnitAISummary from '../components/UnitAISummary';
 
 interface DashboardPatient {
   id: number | string;
@@ -1273,8 +1275,8 @@ export default function Dashboard() {
     ? 'Not under a unit'
     : currentUnits(unitConfig).find(u => u.key === openUnitKey)?.name || '';
 
-  // Filter the open unit's patients by search and ward
-  const filteredPatients = (openUnitKey ? admittedPatients.filter(p => unitKeyOf(p) === openUnitKey) : []).filter(p => {
+  // The open unit's patients, filtered by search and ward, in ward → bed order
+  const filteredPatients = sortByWard((openUnitKey ? admittedPatients.filter(p => unitKeyOf(p) === openUnitKey) : []).filter(p => {
     const matchesSearch = !patientSearch || 
       p.name.toLowerCase().includes(patientSearch.toLowerCase()) ||
       p.hospital_number.toLowerCase().includes(patientSearch.toLowerCase()) ||
@@ -1282,7 +1284,10 @@ export default function Dashboard() {
       p.resident.toLowerCase().includes(patientSearch.toLowerCase());
     const matchesWard = wardFilter === 'all' || p.ward === wardFilter;
     return matchesSearch && matchesWard;
-  });
+  }));
+  // A ward heading goes before the first patient of each ward.
+  const startsWard = (i: number) => i === 0 || wardLabel(filteredPatients[i - 1].ward) !== wardLabel(filteredPatients[i].ward);
+  const wardCount = (ward: string) => filteredPatients.filter(p => wardLabel(p.ward) === wardLabel(ward)).length;
 
   const statsDisplay = [
     {
@@ -1446,6 +1451,9 @@ export default function Dashboard() {
             )}
             {/* Search */}
             {openUnitKey && (<>
+            {!['student', 'lab'].includes(user?.role || '') && (
+              <UnitAISummary key={openUnitKey} unitName={openUnitName} patients={filteredPatients} onOpenPatient={(id) => navigate(`/patients/${id}`)} />
+            )}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <input
@@ -1559,9 +1567,16 @@ export default function Dashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {filteredPatients.map((p) => (
+                  {filteredPatients.map((p, i) => (
+                    <Fragment key={p.id}>
+                    {startsWard(i) && (
+                      <tr className="bg-primary-50/60">
+                        <td colSpan={isAdmin ? 11 : 6} className="px-3 py-1.5 text-xs font-semibold text-primary-800 uppercase tracking-wide">
+                          <span className="inline-flex items-center gap-1"><Building2 className="h-3.5 w-3.5" /> {wardLabel(p.ward)} · {wardCount(p.ward)}</span>
+                        </td>
+                      </tr>
+                    )}
                     <tr
-                      key={p.id}
                       className={`hover:bg-primary-50/50 cursor-pointer transition-colors ${selectedForDischarge.has(p.id) ? 'bg-red-50' : ''}`}
                       onClick={() => navigate(`/patients/${p.id}`)}
                     >
@@ -1624,6 +1639,7 @@ export default function Dashboard() {
                         </div>
                       </td>
                     </tr>
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
@@ -1631,9 +1647,14 @@ export default function Dashboard() {
 
             {/* Mobile Cards */}
             <div className="md:hidden space-y-2">
-              {filteredPatients.map((p) => (
+              {filteredPatients.map((p, i) => (
+                <Fragment key={p.id}>
+                {startsWard(i) && (
+                  <div className="pt-2 text-xs font-semibold text-primary-800 uppercase tracking-wide flex items-center gap-1">
+                    <Building2 className="h-3.5 w-3.5" /> {wardLabel(p.ward)} · {wardCount(p.ward)}
+                  </div>
+                )}
                 <div
-                  key={p.id}
                   className={`border rounded-lg p-3 hover:bg-primary-50/50 cursor-pointer transition-colors ${selectedForDischarge.has(p.id) ? 'border-red-300 bg-red-50' : 'border-gray-200'}`}
                   onClick={() => navigate(`/patients/${p.id}`)}
                 >
@@ -1679,6 +1700,7 @@ export default function Dashboard() {
                     </div>
                   )}
                 </div>
+                </Fragment>
               ))}
             </div>
           </>

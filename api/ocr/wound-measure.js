@@ -3,7 +3,7 @@
 import { externalAiAllowed } from '../_lib/governance.js';
 import { query } from '../_lib/db.js';
 import { cors, authenticateRequest } from '../_lib/auth.js';
-import { chatCompletion, getOpenAIKey } from '../_lib/openai.js';
+import { chatCompletion, getAIKey, AI_MODEL } from '../_lib/claude.js';
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
@@ -103,8 +103,8 @@ async function analyzeWound(body, user, res) {
     return res.status(400).json({ error: 'Image too large. Maximum 15MB.' });
   }
 
-  if (!getOpenAIKey() || !(await externalAiAllowed())) {
-    return res.status(500).json({ error: 'OpenAI API key not configured' });
+  if (!getAIKey() || !(await externalAiAllowed())) {
+    return res.status(500).json({ error: 'Claude API key not configured' });
   }
 
   // Build enhanced prompt with calibration context
@@ -118,7 +118,7 @@ async function analyzeWound(body, user, res) {
     let content;
     try {
       content = await chatCompletion({
-        model: 'gpt-4o',
+        model: AI_MODEL,
         messages: [
           { role: 'system', content: prompt },
           {
@@ -140,7 +140,7 @@ async function analyzeWound(body, user, res) {
         response_format: { type: 'json_object' },
       }, { timeoutMs: 90000 });
     } catch (aiErr) {
-      console.error('OpenAI API error:', aiErr.status, aiErr.message);
+      console.error('Claude API error:', aiErr.status, aiErr.message);
       return res.status(502).json({ error: 'AI analysis failed' });
     }
 

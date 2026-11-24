@@ -1,6 +1,6 @@
 // AI Settings endpoint - placeholder for AI configuration
 import { cors, authenticateRequest } from '../_lib/auth.js';
-import { getOpenAIKey } from '../_lib/openai.js';
+import { getAIKey, AI_MODEL, AI_PROVIDER } from '../_lib/claude.js';
 import { externalAiAllowed } from '../_lib/governance.js';
 
 export default async function handler(req, res) {
@@ -20,20 +20,20 @@ export default async function handler(req, res) {
   if (method === 'GET') {
     // The real state: a server key exists AND the unit allows external AI
     // (Clinical Governance, D5). The key itself never leaves the server.
-    const hasKey = !!getOpenAIKey();
+    const hasKey = !!getAIKey();
     const allowed = await externalAiAllowed();
     const enabled = hasKey && allowed;
     return res.status(200).json({
       enabled,
       configured: enabled,
-      hasOpenAI: hasKey,
+      hasKey,
       governanceAllows: allowed,
-      provider: 'openai',
-      model: 'gpt-4o',
+      provider: AI_PROVIDER,
+      model: AI_MODEL,
       deidentified: true,
-      message: !hasKey ? 'OPENAI_API_KEY is not set on the server.'
+      message: !hasKey ? 'ANTHROPIC_API_KEY is not set on the server.'
         : !allowed ? 'External AI is switched off in Clinical Governance (D5).'
-        : 'AI enabled. Patient identifiers are removed before text is sent.',
+        : 'Claude AI enabled. Patient identifiers are removed before text is sent.',
     });
   }
 
@@ -59,8 +59,8 @@ export default async function handler(req, res) {
     console.error('AI Settings API Error:', error);
     res.status(200).json({
       enabled: false,
-      provider: 'openai',
-      model: 'gpt-4',
+      provider: AI_PROVIDER,
+      model: AI_MODEL,
       features: {
         cmeGeneration: false,
         woundAnalysis: false,

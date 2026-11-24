@@ -465,7 +465,7 @@ class PreoperativeService {
               content: prompt
             }
           ],
-          model: 'gpt-4',
+          model: 'claude',
           max_tokens: 2000
         })
       });
@@ -603,7 +603,7 @@ Date: ${new Date().toLocaleDateString()}
               content: prompt
             }
           ],
-          model: 'gpt-4',
+          model: 'claude',
           max_tokens: 1500
         })
       });

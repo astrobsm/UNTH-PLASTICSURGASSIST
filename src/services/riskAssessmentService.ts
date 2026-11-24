@@ -749,7 +749,7 @@ class RiskAssessmentService {
       
       const prompt = this.buildAssessmentPrompt(assessmentType, assessment, patientData);
       
-      // This would use OpenAI API for advanced analysis
+      // This would use Claude for advanced analysis
       // For now, return structured evidence-based recommendations
       return this.getEvidenceBasedRecommendations(assessmentType, assessment);
       

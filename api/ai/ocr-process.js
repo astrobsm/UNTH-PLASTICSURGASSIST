@@ -8,7 +8,7 @@
  */
 
 import { externalAiAllowed } from '../_lib/governance.js';
-import { chatJSON, getOpenAIKey, OpenAIError } from '../_lib/openai.js';
+import { chatJSON, getAIKey, AIError, AI_MODEL } from '../_lib/claude.js';
 import { OCR_EXTRACTION_PROMPT } from '../_lib/ocrPrompts.js';
 import { cors, authenticateRequest } from '../_lib/auth.js';
 
@@ -19,7 +19,7 @@ export default async function handler(req, res) {
   // Shared CORS helper (origin allowlist) instead of a wildcard origin.
   if (cors(req, res)) return;
 
-  // Spends the deployment's OPENAI_API_KEY and receives OCR'd clinical
+  // Spends the deployment's ANTHROPIC_API_KEY and receives OCR'd clinical
   // documents — must not be callable anonymously.
   const auth = authenticateRequest(req);
   if (!auth.authenticated) {
@@ -62,8 +62,8 @@ export default async function handler(req, res) {
     // Trim excessively long OCR text to avoid token limits
     const trimmedText = cleanedText.length > 15000 ? cleanedText.substring(0, 15000) + '\n[...truncated]' : cleanedText;
 
-    if (!getOpenAIKey() || !(await externalAiAllowed())) {
-      return res.status(501).json({ error: 'AI not configured', fallback: true, message: 'No OPENAI_API_KEY — use client-side rule-based extraction' });
+    if (!getAIKey() || !(await externalAiAllowed())) {
+      return res.status(501).json({ error: 'AI not configured', fallback: true, message: 'No ANTHROPIC_API_KEY — use client-side rule-based extraction' });
     }
 
     const docType = documentType || 'general';
@@ -79,11 +79,11 @@ export default async function handler(req, res) {
 
     userMessage += '\n\nPlease extract and structure ALL medical data from this OCR text into the appropriate JSON schema for this document type. Correct obvious OCR errors in medical terminology.';
 
-    // Call OpenAI GPT-4o for maximum accuracy (shared helper: timeout + retry + JSON salvage).
+    // Call Claude for maximum accuracy (shared helper: timeout + retry + JSON salvage).
     let structured;
     try {
       structured = await chatJSON({
-        model: 'gpt-4o',
+        model: AI_MODEL,
         messages: [
           { role: 'system', content: OCR_SYSTEM_PROMPT },
           { role: 'user', content: userMessage },
@@ -93,7 +93,7 @@ export default async function handler(req, res) {
       });
     } catch (aiErr) {
       console.error('OCR AI processing error:', aiErr.status, aiErr.message);
-      const status = aiErr instanceof OpenAIError && aiErr.status >= 400 && aiErr.status < 600 ? aiErr.status : 502;
+      const status = aiErr instanceof AIError && aiErr.status >= 400 && aiErr.status < 600 ? aiErr.status : 502;
       return res.status(status).json({ error: 'AI processing failed', details: aiErr.message });
     }
 
@@ -103,7 +103,7 @@ export default async function handler(req, res) {
       structured,
       rawText: ocrText,
       processedAt: new Date().toISOString(),
-      model: 'gpt-4o',
+      model: AI_MODEL,
     });
   } catch (err) {
     console.error('OCR processing error:', err);

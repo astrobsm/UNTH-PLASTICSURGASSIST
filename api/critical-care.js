@@ -10,7 +10,7 @@
 import { cors, authenticateRequest } from './_lib/auth.js';
 import { auditClinical } from './_lib/clinicalRecords.js';
 import { externalAiAllowed } from './_lib/governance.js';
-import { chatJSON, getOpenAIKey, OpenAIError } from './_lib/openai.js';
+import { chatJSON, getAIKey, AIError, AI_MODEL } from './_lib/claude.js';
 import { deidentifyText, identifiersForPatient } from './_lib/deidentify.js';
 import { CRITICAL_CARE_SYSTEM_PROMPT, CRITICAL_CARE_PROMPT_VERSION } from './_lib/criticalCarePrompt.js';
 import { normaliseCriticalReview } from './_lib/criticalCareNormalise.js';
@@ -21,7 +21,7 @@ import { normaliseCriticalReview } from './_lib/criticalCareNormalise.js';
 
 const NO_ACCESS = ['student', 'lab'];
 const MAX_INPUT = 60000;
-const MODEL = 'gpt-4o';
+const MODEL = AI_MODEL;
 
 /** The app's own numbers, which the model must recompute (spec rule 4). */
 export function appCalculations(rule) {
@@ -65,7 +65,7 @@ export default async function handler(req, res) {
   if (!body.input || typeof body.input !== 'object') return res.status(400).json({ error: 'input is required' });
 
   if (!(await externalAiAllowed())) return res.status(403).json({ error: 'External AI is switched off by the unit (Clinical Governance, D5). The rule-based analysis is still shown.', code: 'AI_DISABLED' });
-  if (!getOpenAIKey()) return res.status(503).json({ error: 'AI is not configured on the server. The rule-based analysis is still shown.', code: 'AI_NOT_CONFIGURED' });
+  if (!getAIKey()) return res.status(503).json({ error: 'AI is not configured on the server. The rule-based analysis is still shown.', code: 'AI_NOT_CONFIGURED' });
 
   const payload = { ...body.input, app_calculations: { ...(body.input.app_calculations || {}), ...appCalculations(body.rule_report) } };
   let text = JSON.stringify(payload);
@@ -86,7 +86,7 @@ export default async function handler(req, res) {
     return res.status(200).json({ review, model: MODEL, prompt_version: CRITICAL_CARE_PROMPT_VERSION, deidentified: true, discrepancies: diffs });
   } catch (e) {
     await auditClinical(user, { action: 'ai_request', entity: 'critical_care_review', patientId: body.patient_id || null, detail: { purpose: 'critical_care_review', ok: false, status: e?.status || null } });
-    const status = e instanceof OpenAIError && e.status === 429 ? 429 : 502;
+    const status = e instanceof AIError && e.status === 429 ? 429 : 502;
     return res.status(status).json({ error: status === 429 ? 'The AI service is busy — try again shortly. The rule-based analysis is still shown.' : 'The AI review did not complete in time. The rule-based analysis is still shown.' });
   }
 }

@@ -30,7 +30,7 @@ export default async function handler(req, res) {
     envVars: {
       DATABASE_URL: !!process.env.DATABASE_URL ? '✅ Set' : '❌ Missing',
       JWT_SECRET: !!process.env.JWT_SECRET ? '✅ Set' : '❌ Missing (using fallback)',
-      OPENAI_API_KEY: !!process.env.OPENAI_API_KEY ? '✅ Set' : '⚠️ Not set (AI features disabled)',
+      ANTHROPIC_API_KEY: !!process.env.ANTHROPIC_API_KEY ? '✅ Set' : '⚠️ Not set (Claude AI features disabled)',
       INIT_ADMIN_SECRET: !!process.env.INIT_ADMIN_SECRET ? '✅ Set' : '⚠️ Not set'
     },
     

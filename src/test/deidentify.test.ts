@@ -1,6 +1,6 @@
 // @vitest-environment node
 /**
- * Identifiers are removed from text before it is sent to OpenAI (decision D5).
+ * Identifiers are removed from text before it is sent to Claude (decision D5).
  */
 import { describe, it, expect } from 'vitest';
 import { deidentifyText, deidentifyMessages } from '../../api/_lib/deidentify.js';

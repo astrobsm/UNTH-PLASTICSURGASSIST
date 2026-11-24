@@ -9,7 +9,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { emptyReport } from '../clinical/critical/types';
 
 const save = vi.fn(async (...a: any[]) => ({ patient: a[0], id: 5, version: 1 }));
-const aiReview = vi.fn(async () => ({ review: { ...emptyReport(), clinical_summary: 'AI consultant synthesis' }, model: 'gpt-4o', prompt_version: 'cc-1.0.0', deidentified: true, discrepancies: ['eGFR: app 26, AI 40'] }));
+const aiReview = vi.fn(async () => ({ review: { ...emptyReport(), clinical_summary: 'AI consultant synthesis' }, model: 'claude-opus-5-5', prompt_version: 'cc-1.0.0', deidentified: true, discrepancies: ['eGFR: app 26, AI 40'] }));
 vi.mock('../services/criticalCareService', () => ({
   criticalCareService: { aiReview: () => aiReview(), save: (...a: any[]) => save(...a), prefillFromRecord: vi.fn() },
 }));
@@ -37,6 +37,6 @@ describe('CriticalCareReview', () => {
     expect(pid).toBe('7');
     expect(savedInput.labs[0].test).toBe('Potassium');
     expect(rule.critical_alerts.length).toBeGreaterThan(0);
-    expect(ai.model).toBe('gpt-4o');
+    expect(ai.model).toBe('claude-opus-5-5');
   });
 });

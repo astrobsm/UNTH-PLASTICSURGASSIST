@@ -18,7 +18,7 @@
  */
 
 import { performOCR, OCRError } from '../_lib/ocrService.js';
-import { chatCompletion } from '../_lib/openai.js';
+import { chatCompletion, AI_MODEL, getAIKey } from '../_lib/claude.js';
 import { OCR_EXTRACTION_PROMPT } from '../_lib/ocrPrompts.js';
 import { cors, authenticateRequest } from '../_lib/auth.js';
 import { processDocument, isDocumentAiConfigured } from '../_lib/documentAi.js';
@@ -33,7 +33,7 @@ export default async function handler(req, res) {
   // Shared CORS helper (origin allowlist) instead of a wildcard origin.
   if (cors(req, res)) return;
 
-  // Highest-cost endpoint in the API (gpt-4o Vision, up to 8192 output tokens
+  // Highest-cost endpoint in the API (Claude vision, up to 8192 output tokens
   // per call) and it ingests images of clinical documents. It was reachable
   // anonymously from any origin — its sibling api/ocr/wound-measure.js already
   // authenticates, so this was an omission rather than a policy.
@@ -112,10 +112,10 @@ export default async function handler(req, res) {
     // ─── GPT-4o Vision Direct OCR (for handwriting) ──────────────
     // No key at all when the unit has switched external AI off (D5): the
     // Document AI / Cloud Vision transcription still runs.
-    const openaiApiKey = (await externalAiAllowed()) ? process.env.OPENAI_API_KEY : null;
-    if (useVisionOCR && openaiApiKey) {
+    const aiApiKey = (await externalAiAllowed()) ? getAIKey() : null;
+    if (useVisionOCR && aiApiKey) {
       try {
-        const visionResult = await runGPT4oVisionOCR(image, mimeType, documentType || 'handwritten_note', patientContext, openaiApiKey);
+        const visionResult = await runVisionOCR(image, mimeType, documentType || 'handwritten_note', patientContext, aiApiKey);
         return res.status(200).json({
           success: true,
           raw_text: visionResult.raw_text,
@@ -160,12 +160,12 @@ export default async function handler(req, res) {
 
     if (aiPostProcess) {
       try {
-        if (openaiApiKey) {
+        if (aiApiKey) {
           const aiResult = await runAIPostProcessing(
             ocrResult.raw_text,
             documentType || 'general',
             patientContext,
-            openaiApiKey
+            aiApiKey
           );
           structured = aiResult.structured;
           aiModel = aiResult.model;
@@ -348,7 +348,7 @@ Respond with ONLY valid JSON in this format:
 
 Typical headings: "Seen by", "Hx", "O/E", "Impression", "Imp", "Dx", "Plan", "P:", "Cons comment", "Approved", "Done", "Procedure". Text under "Plan"/"P:" goes to proposed_plan; text under O/E, Hx, Impression goes to review_notes. A note with no headings goes entirely into review_notes.`;
 
-async function runGPT4oVisionOCR(base64Image, mimeType, documentType, patientContext, apiKey) {
+async function runVisionOCR(base64Image, mimeType, documentType, patientContext, apiKey) {
   // Strip data URI prefix if present, then re-add for the API
   const cleanBase64 = base64Image.replace(/^data:[^;]+;base64,/, '');
   const dataUri = `data:${mimeType || 'image/jpeg'};base64,${cleanBase64}`;
@@ -382,7 +382,7 @@ async function runGPT4oVisionOCR(base64Image, mimeType, documentType, patientCon
   // Shared helper: hard timeout + retry on 429/5xx (image OCR is the most
   // rate-limit-prone call). Longer timeout since high-detail vision is slow.
   const content = await chatCompletion({
-    model: 'gpt-4o',
+    model: AI_MODEL,
     messages: [
       { role: 'system', content: systemPrompt },
       {
@@ -398,7 +398,7 @@ async function runGPT4oVisionOCR(base64Image, mimeType, documentType, patientCon
     response_format: { type: 'json_object' },
   }, { apiKey, timeoutMs: 90000 });
 
-  if (!content) throw new Error('Empty GPT-4o Vision response');
+  if (!content) throw new Error('Empty Claude vision response');
 
   const parsed = JSON.parse(content);
 
@@ -410,7 +410,7 @@ async function runGPT4oVisionOCR(base64Image, mimeType, documentType, patientCon
       confidence: parsed.confidence || 0.85,
       documentType: 'vital_signs_chart',
       handwritingDetected: parsed.handwriting_detected ?? true,
-      model: 'gpt-4o-vision',
+      model: AI_MODEL,
     };
   }
 
@@ -421,7 +421,7 @@ async function runGPT4oVisionOCR(base64Image, mimeType, documentType, patientCon
     // A consult review keeps its type: the client maps structured fields by it.
     documentType: isConsultReview ? 'consult_review' : (parsed.document_type || documentType),
     handwritingDetected: parsed.handwriting_detected || false,
-    model: 'gpt-4o-vision',
+    model: AI_MODEL,
   };
 }
 
@@ -442,7 +442,7 @@ async function runAIPostProcessing(rawText, documentType, patientContext, apiKey
 
   // Shared helper: timeout + retry on 429/5xx.
   const content = await chatCompletion({
-    model: 'gpt-4o',
+    model: AI_MODEL,
     messages: [
       { role: 'system', content: AI_SYSTEM_PROMPT },
       { role: 'user', content: userMessage },
@@ -456,7 +456,7 @@ async function runAIPostProcessing(rawText, documentType, patientContext, apiKey
 
   return {
     structured: JSON.parse(content),
-    model: 'gpt-4o',
+    model: AI_MODEL,
   };
 }
 

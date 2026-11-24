@@ -13,7 +13,7 @@
 import { cors, authenticateRequest } from './_lib/auth.js';
 import { auditClinical } from './_lib/clinicalRecords.js';
 import { externalAiAllowed } from './_lib/governance.js';
-import { chatJSON, getOpenAIKey, OpenAIError } from './_lib/openai.js';
+import { chatJSON, getAIKey, AIError, AI_MODEL } from './_lib/claude.js';
 import { deidentifyText, identifiersForPatient } from './_lib/deidentify.js';
 import {
   ensureEncounterTables, listForPatient, getEncounter, saveEncounter, submitEncounter, markEncounterInError,
@@ -84,21 +84,21 @@ export default async function handler(req, res) {
       if (!(await externalAiAllowed())) {
         return res.status(403).json({ error: 'External AI is switched off by the unit (Clinical Governance, D5). Rule-based suggestions are still shown.', code: 'AI_DISABLED' });
       }
-      if (!getOpenAIKey()) return res.status(503).json({ error: 'AI is not configured on the server.', code: 'AI_NOT_CONFIGURED' });
+      if (!getAIKey()) return res.status(503).json({ error: 'AI is not configured on the server.', code: 'AI_NOT_CONFIGURED' });
       if (!body.payload || typeof body.payload !== 'object') return res.status(400).json({ error: 'payload is required' });
       const text = JSON.stringify(body.payload).slice(0, 40000);
       const clean = deidentifyText(text, await identifiersForPatient(body.patient_id));
       try {
         const raw = await chatJSON({
-          model: 'gpt-4o', temperature: 0.2, max_tokens: 2500,
+          model: AI_MODEL, temperature: 0.2, max_tokens: 2500,
           messages: [{ role: 'system', content: AI_SYSTEM_PROMPT }, { role: 'user', content: clean }],
         });
         const out = normaliseAiSuggestions(raw);
-        await auditClinical(user, { action: 'ai_request', entity: 'clinical_encounters', patientId: body.patient_id || null, detail: { purpose: 'clerking_suggestions', model: 'gpt-4o', deidentified: true, ok: true, count: out.suggestions.length } });
-        return res.status(200).json({ ...out, model: 'gpt-4o', deidentified: true });
+        await auditClinical(user, { action: 'ai_request', entity: 'clinical_encounters', patientId: body.patient_id || null, detail: { purpose: 'clerking_suggestions', model: AI_MODEL, deidentified: true, ok: true, count: out.suggestions.length } });
+        return res.status(200).json({ ...out, model: AI_MODEL, deidentified: true });
       } catch (e) {
         await auditClinical(user, { action: 'ai_request', entity: 'clinical_encounters', patientId: body.patient_id || null, detail: { purpose: 'clerking_suggestions', ok: false, status: e?.status || null } });
-        const status = e instanceof OpenAIError && e.status === 429 ? 429 : 502;
+        const status = e instanceof AIError && e.status === 429 ? 429 : 502;
         return res.status(status).json({ error: 'The AI service did not respond. Rule-based suggestions are still available.' });
       }
     }

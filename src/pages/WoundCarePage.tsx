@@ -293,7 +293,7 @@ const WoundCarePage: React.FC = () => {
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const [lastMeasurementResult, setLastMeasurementResult] = useState<WoundMeasurementResult | null>(null);
   // Hybrid AI: enrich the on-device measurement with GPT-4o Vision (tissue %, wound
-  // type, healing stage, cross-check). Sends the photo to the server → OpenAI, so
+  // type, healing stage, cross-check). Sends the photo to the server → Claude, so
   // staff can toggle it off per session for privacy / offline use.
   const [useAiAssessment, setUseAiAssessment] = useState(true);
 

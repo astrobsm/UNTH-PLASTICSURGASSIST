@@ -13,8 +13,8 @@ const sent: any[] = [];
 const audits: any[] = [];
 vi.mock('../../api/_lib/auth.js', () => ({ cors: () => false, authenticateRequest: (req: any) => (req.headers.role ? { authenticated: true, user: { id: 1, role: req.headers.role } } : { authenticated: false, error: 'no' }) }));
 vi.mock('../../api/_lib/governance.js', () => ({ externalAiAllowed: async () => aiAllowed }));
-vi.mock('../../api/_lib/openai.js', () => ({
-  getOpenAIKey: () => 'k', OpenAIError: class extends Error { status = 500 },
+vi.mock('../../api/_lib/claude.js', () => ({
+  getAIKey: () => 'k', AI_MODEL: 'claude-opus-5-5', AIError: class extends Error { status = 500 },
   chatJSON: vi.fn(async (params: any) => { sent.push(params); return modelOut; }),
 }));
 vi.mock('../../api/_lib/deidentify.js', () => ({

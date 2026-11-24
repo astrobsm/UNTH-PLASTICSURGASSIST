@@ -125,7 +125,7 @@ class AIService {
       
       if (response.ok) {
         const data = await response.json();
-        this.isConfigured = data.configured || data.hasOpenAI;
+        this.isConfigured = !!data.configured;
       }
     } catch {
       this.isConfigured = false;
@@ -138,11 +138,11 @@ class AIService {
   }
 
   /**
-   * Call OpenAI API through backend proxy
+   * Call Claude through the backend proxy
    */
   private async callAI(
     messages: Array<{role: string, content: string}>, 
-    model: string = 'gpt-4',
+    model: string = 'claude',
     maxTokens: number = 2000
   ): Promise<string> {
     const response = await authenticatedFetch('/api/ai/chat', {
@@ -169,7 +169,7 @@ class AIService {
   async generateWeeklyCMETopic(clinicalData: ClinicalData): Promise<CMETopic> {
     const isReady = await this.isReady();
     if (!isReady) {
-      throw new Error('AI service not configured. Please set OpenAI API key in Admin settings.');
+      throw new Error('AI service not configured. Ask the administrator to set ANTHROPIC_API_KEY on the server.');
     }
 
     const prompt = this.buildCMETopicPrompt(clinicalData);
@@ -197,7 +197,7 @@ class AIService {
           role: "user",
           content: prompt
         }
-      ], 'gpt-4', 2000);
+      ], 'claude', 2000);
 
       if (!response) {
         throw new Error('No response from AI service');
@@ -274,7 +274,7 @@ class AIService {
           role: "user",
           content: prompt
         }
-      ], 'gpt-4', 2500);
+      ], 'claude', 2500);
 
       if (!response) {
         throw new Error('No response from AI');
@@ -327,7 +327,7 @@ class AIService {
           role: "user",
           content: prompt
         }
-      ], 'gpt-3.5-turbo', 800);
+      ], 'claude', 800);
 
       if (!response) {
         return this.getFallbackRecommendations(weakAreas);
@@ -401,7 +401,7 @@ class AIService {
    */
   async generateContent(prompt: string): Promise<string> {
     if (!(await this.ensureConfigured())) {
-      throw new Error('AI service not configured. Please set OpenAI API key.');
+      throw new Error('AI service not configured. Ask the administrator to set ANTHROPIC_API_KEY on the server.');
     }
 
     try {
@@ -414,7 +414,7 @@ class AIService {
           role: "user",
           content: prompt
         }
-      ], 'gpt-4', 1000);
+      ], 'claude', 1000);
 
       return response || 'Unable to generate content';
     } catch (error) {
@@ -428,7 +428,7 @@ class AIService {
    */
   async generateResponse(prompt: string): Promise<string> {
     if (!(await this.ensureConfigured())) {
-      throw new Error('AI service not configured. Please set OpenAI API key.');
+      throw new Error('AI service not configured. Ask the administrator to set ANTHROPIC_API_KEY on the server.');
     }
 
     try {
@@ -449,7 +449,7 @@ class AIService {
           role: "user",
           content: prompt
         }
-      ], 'gpt-4', 3000);
+      ], 'claude', 3000);
 
       return response || 'Unable to generate content';
     } catch (error) {

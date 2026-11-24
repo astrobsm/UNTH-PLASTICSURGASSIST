@@ -1,6 +1,6 @@
 // ============================================================================
 // Remove patient identifiers from text before it is sent to an external AI
-// service (decision D5: OpenAI permitted with identifiers removed).
+// service (decision D5: external AI permitted with identifiers removed).
 //
 // The model does not need to know who the patient is to summarise a note or
 // read a chart. What is removed:
@@ -57,7 +57,7 @@ export function deidentifyText(text, extraIdentifiers = []) {
   return out;
 }
 
-/** De-identify every string content in an OpenAI-style messages array. */
+/** De-identify every string content in a chat-style messages array. */
 export function deidentifyMessages(messages, extraIdentifiers = []) {
   return (messages || []).map(m => {
     if (typeof m.content === 'string') return { ...m, content: deidentifyText(m.content, extraIdentifiers) };

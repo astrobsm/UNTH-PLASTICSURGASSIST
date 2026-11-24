@@ -447,7 +447,7 @@ class UNTHPatientService {
       patient_id: patientId,
       summary_type: summaryType,
       generated_by: 'manual',
-      content: `Basic ${summaryType} summary. AI features are currently disabled. Please configure OpenAI API key for AI-powered summaries or enter summary manually.`,
+      content: `Basic ${summaryType} summary. AI features are currently disabled. Claude AI must be configured (ANTHROPIC_API_KEY) for AI-powered summaries or enter summary manually.`,
       key_points: [
         'AI summary generation not configured',
         'Manual summary entry recommended'
@@ -681,7 +681,7 @@ Admission: ${patientData.admission_date ? new Date(patientData.admission_date).t
 Chief Complaint: ${patientData.chief_complaint || 'Not documented'}
 Diagnosis: ${patientData.primary_diagnosis || 'Pending'}
 
-AI-powered detailed summary is currently unavailable. Please configure OpenAI API key in Admin settings to enable comprehensive AI-generated summaries.
+AI-powered detailed summary is currently unavailable. Claude AI must be configured (ANTHROPIC_API_KEY) to enable comprehensive AI-generated summaries.
 
 Current clinical data has been documented above. For full AI analysis, please complete the AI configuration.`,
           keyPoints: [
@@ -690,7 +690,7 @@ Current clinical data has been documented above. For full AI analysis, please co
             `Chief Complaint: ${patientData.chief_complaint || 'Not documented'}`,
             `Primary Diagnosis: ${patientData.primary_diagnosis || 'Pending'}`,
             `Consultant: ${patientData.consultant || 'Not assigned'}`,
-            'AI features require OpenAI configuration'
+            'AI features require Claude (ANTHROPIC_API_KEY) configuration'
           ],
           currentProblems: patientData.current_problems || [patientData.primary_diagnosis || 'Diagnosis pending'],
           medications: patientData.current_medications || ['Medications to be reviewed'],
@@ -714,7 +714,7 @@ Current clinical data has been documented above. For full AI analysis, please co
               content: prompt
             }
           ],
-          model: 'gpt-4',
+          model: 'claude',
           max_tokens: 2000
         })
       });

@@ -454,7 +454,7 @@ class BurnExpertAIService {
   }
 
   /**
-   * Get AI-powered clinical recommendations using OpenAI
+   * Get AI-powered clinical recommendations using Claude
    */
   async getAIClinicalRecommendations(
     totalTBSA: number,

@@ -29,7 +29,7 @@ export const GOVERNANCE_DEFAULTS = Object.freeze({
   d3_show_draft_profiles: true,
   // D4: terminology coding.
   d4_terminology: 'local_icd10_loinc',
-  // D5: external AI (OpenAI). Enabled by the unit 2026-10-14; identifiers are
+  // D5: external AI (Claude, Anthropic; OpenAI until 2026-11-24). Enabled by the unit 2026-10-14; identifiers are
   // removed before any text leaves the server.
   d5_external_ai: 'enabled_deidentified',
   // D6: who may sign / countersign / amend clinical documents.

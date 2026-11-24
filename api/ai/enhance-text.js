@@ -5,7 +5,7 @@
  */
 
 import { externalAiAllowed } from '../_lib/governance.js';
-import { chatCompletion, getOpenAIKey } from '../_lib/openai.js';
+import { chatCompletion, getAIKey, AI_MODEL } from '../_lib/claude.js';
 import { cors, authenticateRequest } from '../_lib/auth.js';
 
 // Context-specific prompts for medical documentation
@@ -67,7 +67,7 @@ export default async function handler(req, res) {
   // Shared CORS helper (origin allowlist) instead of a wildcard origin.
   if (cors(req, res)) return;
 
-  // Spends the deployment's OPENAI_API_KEY — must not be callable anonymously.
+  // Spends the deployment's ANTHROPIC_API_KEY — must not be callable anonymously.
   // Previously this endpoint had no auth and `Allow-Origin: *`, making it a
   // free public LLM proxy; exhausting the quota breaks real ward scans.
   const auth = authenticateRequest(req);
@@ -95,8 +95,8 @@ export default async function handler(req, res) {
 
     systemPrompt += '\n\nIMPORTANT: Preserve all numbers, measurements, vital signs, and medication names exactly as provided.';
 
-    // Check if OpenAI API key is configured
-    if (!getOpenAIKey() || !(await externalAiAllowed())) {
+    // Check if Claude API key is configured
+    if (!getAIKey() || !(await externalAiAllowed())) {
       // Fallback to basic local enhancement
       const enhancedText = enhanceTextLocally(text, context);
       return res.status(200).json({
@@ -107,11 +107,11 @@ export default async function handler(req, res) {
       });
     }
 
-    // Use OpenAI for enhancement (shared helper: timeout + retry on 429/5xx).
+    // Use Claude for enhancement (shared helper: timeout + retry on 429/5xx).
     let enhancedText;
     try {
       enhancedText = await chatCompletion({
-        model: 'gpt-4o-mini',
+        model: AI_MODEL,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: `Please improve the following medical text while preserving all factual information:\n\n${text}` }
@@ -120,7 +120,7 @@ export default async function handler(req, res) {
         max_tokens: 2000,
       });
     } catch (aiErr) {
-      console.error('OpenAI API error:', aiErr.status, aiErr.message);
+      console.error('Claude API error:', aiErr.status, aiErr.message);
       // Fallback to local enhancement
       const local = enhanceTextLocally(text, context);
       return res.status(200).json({
