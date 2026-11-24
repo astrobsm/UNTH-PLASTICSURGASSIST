@@ -301,8 +301,13 @@ function AssessmentForm({
   // A registered patient, picked — or the patient already selected elsewhere in the app.
   const { patient: contextPatient } = useSelectedPatient();
   const [picked, setPicked] = useState<{ id: string; name: string; hospitalNumber?: string } | null>(null);
+  // Suggest the app's selected patient ONCE. This used to re-run whenever the
+  // box was empty, so pressing × put the same patient straight back and no
+  // other patient could ever be chosen.
+  const suggested = React.useRef(false);
   useEffect(() => {
-    if (existingCase || picked || !contextPatient) return;
+    if (suggested.current || existingCase || picked || !contextPatient) return;
+    suggested.current = true;
     const cp: any = contextPatient;
     const sid = cp.serverId ?? cp.server_id ?? cp.id;
     if (sid != null) setPicked({ id: String(sid), name: (cp.full_name || `${cp.first_name || ''} ${cp.last_name || ''}`).trim(), hospitalNumber: cp.hospital_number });
